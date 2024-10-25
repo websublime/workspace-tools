@@ -265,6 +265,7 @@ impl Repository {
         footer: Option<String>,
     ) -> GitResult<bool> {
         let mut msg = message.to_string();
+        let root = &self.location.as_path();
 
         if let Some(body) = body {
             msg.push_str("\n\n");
@@ -288,11 +289,11 @@ impl Repository {
         let file_path = temp_file_path.as_path();
 
         execute_git(
-            &self.location,
+            root,
             [
                 "commit",
                 "-F",
-                file_path.to_str().expect("Failed to retrieve file_path"),
+                file_path.as_os_str().to_str().expect("Failed to convert path to string"),
                 "--no-verify",
             ],
             |_, output| {
