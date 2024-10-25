@@ -350,6 +350,8 @@ sort_commits = "newest"
             .create_branch("feature/package-bar")
             .expect("Failet to create branch feature/package-bar");
 
+        dbg!(self.repository.log().expect("Log"));
+
         create_dir_all(monorepo_package_bar_dir)?;
 
         let package_bar_json = r#"
