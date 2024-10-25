@@ -171,11 +171,19 @@ impl Repository {
 
     pub fn add(&self, path: &Path) -> GitResult<bool> {
         if path.to_str().is_some() {
-            execute_git(
+            let add = execute_git(
                 &self.location,
                 ["add", path.to_str().expect("Failed to convert path to str"), "--verbose"],
                 |_, output| Ok(output.status.success()),
-            )
+            );
+
+            let renormalize = execute_git(
+                &self.location,
+                ["add", path.to_str().expect("Failed to convert path to str"), "--renormalize"],
+                |_, output| Ok(output.status.success()),
+            );
+
+            Ok(add.is_ok() && renormalize.is_ok())
         } else {
             Ok(false)
         }
