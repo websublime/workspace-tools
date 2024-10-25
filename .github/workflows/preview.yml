@@ -31,7 +31,7 @@ jobs:
       - name: Move Binding Artifacts
         run: pnpm --filter @websublime/workspace-tools artifacts
 
-      - name: List Rolldown Bindings
+      - name: List Workspace Tools Bindings
         run: ls -R ./packages/workspace-tools/npm
         shell: bash
 

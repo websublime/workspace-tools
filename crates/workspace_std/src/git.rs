@@ -130,7 +130,7 @@ impl Repository {
     }
 
     pub fn add_all(&self) -> GitResult<bool> {
-        execute_git(&self.location, ["add", "."], |_, output| Ok(output.status.success()))
+        execute_git(&self.location, ["add", "--all"], |_, output| Ok(output.status.success()))
     }
 
     pub fn add(&self, path: &Path) -> GitResult<bool> {
