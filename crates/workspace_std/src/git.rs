@@ -158,21 +158,22 @@ impl Repository {
     }
 
     pub fn add_all(&self) -> GitResult<bool> {
-        execute_git(&self.location, ["add", "--all", "--verbose", "--renormalize"], |_, output| {
+        let add_all = execute_git(&self.location, ["add", "--all", "--verbose"], |_, output| {
             Ok(output.status.success())
-        })
+        });
+        let renormalize =
+            execute_git(&self.location, ["add", "--all", "--renormalize"], |_, output| {
+                Ok(output.status.success())
+            });
+
+        Ok(add_all.is_ok() && renormalize.is_ok())
     }
 
     pub fn add(&self, path: &Path) -> GitResult<bool> {
         if path.to_str().is_some() {
             execute_git(
                 &self.location,
-                [
-                    "add",
-                    path.to_str().expect("Failed to convert path to str"),
-                    "--verbose",
-                    "--renormalize",
-                ],
+                ["add", path.to_str().expect("Failed to convert path to str"), "--verbose"],
                 |_, output| Ok(output.status.success()),
             )
         } else {
