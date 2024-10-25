@@ -344,13 +344,9 @@ sort_commits = "newest"
         let monorepo_package_bar_dir = &monorepo_packages_dir.join("package-bar");
         let js_path = &monorepo_package_bar_dir.join("index.mjs");
 
-        dbg!(self.repository.log().expect("Log"));
-
         self.repository
             .create_branch("feature/package-bar")
             .expect("Failet to create branch feature/package-bar");
-
-        dbg!(self.repository.log().expect("Log"));
 
         create_dir_all(monorepo_package_bar_dir)?;
 
@@ -400,13 +396,15 @@ sort_commits = "newest"
         #[cfg(not(windows))]
         const LINE_ENDING: &str = "\n";
 
-        let mut js_file = File::create(js_path.as_path())?;
+        let mut js_file = OpenOptions::new()
+            .write(true)
+            .append(false)
+            .truncate(true)
+            .create(true)
+            .open(js_path.as_path())?;
         js_file.write_all(format!(r#"export const bar = "hello bar";{LINE_ENDING}"#).as_bytes())?;
 
-        self.repository
-            .add(monorepo_package_bar_dir.join("package.json").as_path())
-            .expect("Failed to add all files");
-        self.repository.add(js_path.as_path()).expect("Failed to add all files");
+        self.repository.add_all().expect("Failed to add all files");
         self.repository
             .commit("feat: add package bar", None, None)
             .expect("Failed to commit changes");
