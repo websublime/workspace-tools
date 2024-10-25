@@ -144,7 +144,7 @@ where
     }
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 #[allow(clippy::print_stdout)]
 mod tests {
 
@@ -415,4 +415,4 @@ mod tests {
             }
         }
     }
-}*/
+}

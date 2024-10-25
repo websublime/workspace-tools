@@ -282,12 +282,10 @@ mod tests {
     }
 
     #[test]
-    fn test_get_default_workspace_config() -> Result<(), std::io::Error> {
+    fn test_get_default_workspace_config() {
         let current_dir = PathBuf::from(".");
         let config = get_workspace_config(Some(current_dir.clone()));
 
-        assert_ne!(config.workspace_root, root.clone());
-
-        Ok(())
+        assert_ne!(config.workspace_root, current_dir);
     }
 }
