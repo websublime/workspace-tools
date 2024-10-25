@@ -62,7 +62,7 @@ pub fn detect_package_manager(path: &Path) -> Option<CorePackageManager> {
     None
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::test::MonorepoWorkspace;
@@ -149,4 +149,4 @@ mod tests {
     fn test_unknown_manager() {
         let _ = CorePackageManager::from("unknown".to_string());
     }
-}*/
+}

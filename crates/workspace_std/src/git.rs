@@ -615,7 +615,7 @@ where
     })
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::fs::{create_dir, remove_dir_all};
@@ -652,4 +652,4 @@ mod tests {
 
         Ok(())
     }
-}*/
+}
