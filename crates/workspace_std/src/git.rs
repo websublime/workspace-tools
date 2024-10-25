@@ -144,7 +144,9 @@ impl Repository {
     }
 
     pub fn add_all(&self) -> GitResult<bool> {
-        execute_git(&self.location, ["add", "--all"], |_, output| Ok(output.status.success()))
+        execute_git(&self.location, ["--verbose", "add", "--all"], |_, output| {
+            Ok(output.status.success())
+        })
     }
 
     pub fn add(&self, path: &Path) -> GitResult<bool> {
@@ -564,13 +566,9 @@ where
 {
     let root = adjust_canonicalization(path);
     let root = PathBuf::from(root);
-    let output = Command::new("git")
-        .current_dir(root.as_path())
-        .args(args)
-        .spawn()
-        .expect("Failed to execute git command");
+    let output = Command::new("git").current_dir(root.as_path()).args(args).output();
 
-    output.wait_with_output().map_err(|_| GitError::Execution).and_then(|output| {
+    output.map_err(|_| GitError::Execution).and_then(|output| {
         if output.status.success() {
             if let Ok(message) = str::from_utf8(&output.stdout) {
                 process(strip_trailing_newline(&message.to_string()).as_str(), &output)
