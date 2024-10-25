@@ -338,6 +338,7 @@ sort_commits = "newest"
         Ok(())
     }
 
+    #[allow(clippy::items_after_statements)]
     pub fn create_package_bar(&self) -> Result<(), std::io::Error> {
         self.repository
             .create_branch("feature/package-bar")
@@ -390,9 +391,14 @@ sort_commits = "newest"
         let monorepo_package_bar_json_writer = BufWriter::new(monorepo_package_bar_json_file);
         serde_json::to_writer_pretty(monorepo_package_bar_json_writer, &package_bar_json)?;
 
+        #[cfg(windows)]
+        const LINE_ENDING: &str = "\r\n";
+        #[cfg(not(windows))]
+        const LINE_ENDING: &str = "\n";
+
         let mut js_file = File::create(js_path.as_path()).expect("Failed to create index file");
         js_file
-            .write_all(r#"export const bar = "hello bar";"#.as_bytes())
+            .write_all(format!(r#"export const bar = "hello bar";{LINE_ENDING}"#).as_bytes())
             .expect("Failed to write to file");
 
         self.repository.add_all().expect("Failed to add all files");
