@@ -12,10 +12,6 @@ use std::{
 };
 
 #[cfg(test)]
-#[cfg(not(windows))]
-use std::path::Path;
-
-#[cfg(test)]
 use std::io::{BufWriter, Write};
 
 #[cfg(test)]
@@ -41,14 +37,10 @@ impl MonorepoWorkspace {
 
         create_dir_all(monorepo_root_dir).expect("Unable to create monorepo directory");
 
-        #[cfg(not(windows))]
-        let canonic_path =
-            &std::fs::canonicalize(Path::new(monorepo_root_dir.as_os_str())).unwrap();
-
-        #[cfg(windows)]
-        let canonic_path = monorepo_root_dir;
-
-        Self { root: canonic_path.clone(), repository: Repository::new(canonic_path.as_path()) }
+        Self {
+            root: monorepo_root_dir.clone(),
+            repository: Repository::new(monorepo_root_dir.as_path()),
+        }
     }
 
     #[allow(clippy::too_many_lines)]

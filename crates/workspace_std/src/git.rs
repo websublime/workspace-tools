@@ -3,9 +3,9 @@
 //! ```rust
 //! use workspace_std::git::Repository;
 //! ```
-use crate::errors::GitError;
 use crate::types::GitResult;
 use crate::utils::strip_trailing_newline;
+use crate::{errors::GitError, utils::adjust_canonicalization};
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -60,7 +60,8 @@ impl From<&str> for Repository {
 
 impl Repository {
     pub fn new(location: &Path) -> Self {
-        Self { location: location.to_path_buf() }
+        let root = std::fs::canonicalize(location.as_os_str()).expect("Invalid path");
+        Self { location: root }
     }
 
     pub fn get_repo_path(&self) -> &Path {
@@ -547,7 +548,9 @@ where
     S: AsRef<OsStr>,
     F: Fn(&str, &Output) -> GitResult<R>,
 {
-    let output = Command::new("git").current_dir(path).args(args).output();
+    let root = adjust_canonicalization(path);
+    let root = PathBuf::from(root);
+    let output = Command::new("git").current_dir(root.as_path()).args(args).output();
 
     output.map_err(|_| GitError::Execution).and_then(|output| {
         if output.status.success() {
