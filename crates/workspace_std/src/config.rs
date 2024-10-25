@@ -286,6 +286,13 @@ mod tests {
         let current_dir = PathBuf::from(".");
         let config = get_workspace_config(Some(current_dir.clone()));
 
-        assert_ne!(config.workspace_root, current_dir);
+        #[cfg(not(windows))]
+        let canonic_path = &std::fs::canonicalize(current_dir.as_path()).unwrap();
+        #[cfg(not(windows))]
+        let root = canonic_path.as_path();
+        #[cfg(windows)]
+        let root = current_dir.as_path();
+
+        assert_ne!(config.workspace_root.as_path(), root);
     }
 }
