@@ -797,15 +797,87 @@ mod tests {
         monorepo.create_changes()?;
         monorepo.create_package_bar()?;
 
-        let status = monorepo.repository.status().expect("Failed to get status");
-        let uncleaned = monorepo.repository.is_workdir_unclean().expect("Workdir is not clean");
-        let log = monorepo.repository.log().expect("Failed to get log");
-        let local = monorepo.repository.list_config("local").expect("Failed to get local config");
-        dbg!(&status);
-        dbg!(&uncleaned);
-        dbg!(&log);
-        dbg!(&local);
-        dbg!(&monorepo.root);
+        assert!(monorepo.get_monorepo_root().exists());
+
+        monorepo.delete_repository();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_package_baz() -> Result<(), std::io::Error> {
+        let monorepo = MonorepoWorkspace::new();
+        monorepo.create_repository(&CorePackageManager::Npm)?;
+        monorepo.create_changes()?;
+        monorepo.create_package_baz()?;
+
+        assert!(monorepo.get_monorepo_root().exists());
+
+        monorepo.delete_repository();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_package_foo() -> Result<(), std::io::Error> {
+        let monorepo = MonorepoWorkspace::new();
+        monorepo.create_repository(&CorePackageManager::Npm)?;
+        monorepo.create_changes()?;
+        monorepo.create_package_foo()?;
+
+        assert!(monorepo.get_monorepo_root().exists());
+
+        monorepo.delete_repository();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_package_tom() -> Result<(), std::io::Error> {
+        let monorepo = MonorepoWorkspace::new();
+        monorepo.create_repository(&CorePackageManager::Npm)?;
+        monorepo.create_changes()?;
+        monorepo.create_package_tom()?;
+
+        assert!(monorepo.get_monorepo_root().exists());
+
+        monorepo.delete_repository();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_package_major() -> Result<(), std::io::Error> {
+        let monorepo = MonorepoWorkspace::new();
+        monorepo.create_repository(&CorePackageManager::Npm)?;
+        monorepo.create_changes()?;
+        monorepo.create_package_major()?;
+
+        assert!(monorepo.get_monorepo_root().exists());
+
+        monorepo.delete_repository();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_package_charlie() -> Result<(), std::io::Error> {
+        let monorepo = MonorepoWorkspace::new();
+        monorepo.create_repository(&CorePackageManager::Npm)?;
+        monorepo.create_changes()?;
+        monorepo.create_package_charlie()?;
+
+        assert!(monorepo.get_monorepo_root().exists());
+
+        monorepo.delete_repository();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_workspace() -> Result<(), std::io::Error> {
+        let monorepo = MonorepoWorkspace::new();
+        monorepo.create_workspace(&CorePackageManager::Npm)?;
 
         assert!(monorepo.get_monorepo_root().exists());
 
