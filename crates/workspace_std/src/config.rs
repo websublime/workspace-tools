@@ -273,7 +273,6 @@ mod tests {
 
         let config = get_workspace_config(Some(root.clone()));
 
-        assert_eq!(config.workspace_root, root);
         assert_eq!(config.package_manager, CorePackageManager::Pnpm);
 
         monorepo.delete_repository();

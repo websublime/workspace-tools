@@ -316,7 +316,7 @@ impl Workspace {
     }
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::git::Repository;
@@ -399,4 +399,4 @@ mod tests {
 
         Ok(())
     }
-}*/
+}
