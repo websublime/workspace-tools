@@ -278,10 +278,7 @@ impl Repository {
         }
 
         let temp_dir = temp_dir();
-
-        let canonic_path =
-            &std::fs::canonicalize(Path::new(temp_dir.as_os_str())).expect("Invalid path");
-        let temp_file_path = canonic_path.join("commit_message.txt");
+        let temp_file_path = temp_dir.join("commit_message.txt");
 
         let mut file = File::create(temp_file_path.as_path()).expect("Failed to creat commit file");
         file.write_all(message.as_bytes()).expect("Failed to write commit message");
@@ -550,13 +547,9 @@ where
     S: AsRef<OsStr>,
     F: Fn(&str, &Output) -> GitResult<R>,
 {
-    let output = Command::new("git")
-        .current_dir(path)
-        .args(args)
-        .spawn()
-        .expect("Failed to execute git command");
+    let output = Command::new("git").current_dir(path).args(args).output();
 
-    output.wait_with_output().map_err(|_| GitError::Execution).and_then(|output| {
+    output.map_err(|_| GitError::Execution).and_then(|output| {
         if output.status.success() {
             if let Ok(message) = str::from_utf8(&output.stdout) {
                 process(strip_trailing_newline(&message.to_string()).as_str(), &output)
