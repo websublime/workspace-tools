@@ -399,15 +399,13 @@ sort_commits = "newest"
         let mut js_file = File::create(js_path.as_path())?;
         js_file.write_all(format!(r#"export const bar = "hello bar";{LINE_ENDING}"#).as_bytes())?;
 
-        self.repository.add_all().expect("Failed to add all files");
+        self.repository
+            .add(monorepo_package_bar_dir.join("package.json").as_path())
+            .expect("Failed to add all files");
+        self.repository.add(js_path.as_path()).expect("Failed to add all files");
         self.repository
             .commit("feat: add package bar", None, None)
             .expect("Failed to commit changes");
-
-        dbg!(self
-            .repository
-            .diff(Some("packages/package-bar/index.mjs".to_string()))
-            .expect("Failed to get diff"));
 
         self.repository.checkout("main").expect("Failed to checkout main branch");
         self.repository.merge("feature/package-bar").expect("Failed to merge branches");
