@@ -30,17 +30,15 @@ impl MonorepoWorkspace {
     pub fn new() -> Self {
         let temp_dir = temp_dir();
         let monorepo_root_dir = &temp_dir.join("monorepo-workspace");
+        let root = &std::fs::canonicalize(monorepo_root_dir.as_os_str()).expect("Invalid path");
 
-        if monorepo_root_dir.exists() {
-            remove_dir_all(monorepo_root_dir).expect("Unable to remove directory");
+        if root.exists() {
+            remove_dir_all(root).expect("Unable to remove directory");
         }
 
-        create_dir_all(monorepo_root_dir).expect("Unable to create monorepo directory");
+        create_dir_all(root).expect("Unable to create monorepo directory");
 
-        Self {
-            root: monorepo_root_dir.clone(),
-            repository: Repository::new(monorepo_root_dir.as_path()),
-        }
+        Self { root: root.clone(), repository: Repository::new(root.as_path()) }
     }
 
     #[allow(clippy::too_many_lines)]
