@@ -97,7 +97,7 @@ impl Repository {
             });
 
         let clrf_config =
-            execute_git(&self.location, ["config", "core.safecrlf", "false"], |_, output| {
+            execute_git(&self.location, ["config", "core.safecrlf", "input"], |_, output| {
                 Ok(output.status.success())
             });
 

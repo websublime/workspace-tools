@@ -50,6 +50,7 @@ impl MonorepoWorkspace {
     ) -> Result<(), std::io::Error> {
         let monorepo_package_json = &self.root.join("package.json");
         let monorepo_config_toml = &self.root.join(".config.toml");
+        let monorepo_gitattributes = &self.root.join(".gitattributes");
         let monorepo_packages_dir = &self.root.join("packages");
 
         create_dir_all(monorepo_packages_dir)?;
@@ -187,6 +188,13 @@ sort_commits = "newest"
 
         let mut monorepo_package_config_toml_file = File::create(monorepo_config_toml.as_path())?;
         monorepo_package_config_toml_file.write_all(monorepo_config_data.as_bytes())?;
+
+        let monorepo_config_gitattributes = String::from("* text=auto");
+
+        let mut monorepo_package_config_gitattributes_file =
+            File::create(monorepo_gitattributes.as_path())?;
+        monorepo_package_config_gitattributes_file
+            .write_all(monorepo_config_gitattributes.as_bytes())?;
 
         match package_manager {
             CorePackageManager::Yarn => {
