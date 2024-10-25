@@ -110,6 +110,15 @@ impl Repository {
         })
     }
 
+    pub fn diff(&self, diff: Option<String>) -> GitResult<String> {
+        let diff = match diff {
+            Some(diff) => diff,
+            None => ".".to_string(),
+        };
+
+        execute_git(&self.location, ["diff", diff.as_str()], |stdout, _| Ok(stdout.to_string()))
+    }
+
     pub fn list_config(&self, config_type: &str) -> GitResult<String> {
         execute_git(
             &self.location,

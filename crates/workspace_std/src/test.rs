@@ -405,6 +405,9 @@ sort_commits = "newest"
         self.repository
             .commit("feat: add package bar", None, None)
             .expect("Failed to commit changes");
+
+        dbg!(self.repository.diff(Some("--staged".to_string())).expect("Failed to get diff"));
+
         self.repository.checkout("main").expect("Failed to checkout main branch");
         self.repository.merge("feature/package-bar").expect("Failed to merge branches");
         self.repository
