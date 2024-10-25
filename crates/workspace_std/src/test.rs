@@ -406,7 +406,10 @@ sort_commits = "newest"
             .commit("feat: add package bar", None, None)
             .expect("Failed to commit changes");
 
-        dbg!(self.repository.diff(Some("--staged".to_string())).expect("Failed to get diff"));
+        dbg!(self
+            .repository
+            .diff(Some("packages/package-bar/index.mjs".to_string()))
+            .expect("Failed to get diff"));
 
         self.repository.checkout("main").expect("Failed to checkout main branch");
         self.repository.merge("feature/package-bar").expect("Failed to merge branches");
