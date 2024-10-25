@@ -340,13 +340,15 @@ sort_commits = "newest"
 
     #[allow(clippy::items_after_statements)]
     pub fn create_package_bar(&self) -> Result<(), std::io::Error> {
-        self.repository
-            .create_branch("feature/package-bar")
-            .expect("Failet to create branch feature/package-bar");
-
         let monorepo_packages_dir = &self.root.join("packages");
         let monorepo_package_bar_dir = &monorepo_packages_dir.join("package-bar");
         let js_path = &monorepo_package_bar_dir.join("index.mjs");
+
+        dbg!(self.repository.log().expect("Log"));
+
+        self.repository
+            .create_branch("feature/package-bar")
+            .expect("Failet to create branch feature/package-bar");
 
         create_dir_all(monorepo_package_bar_dir)?;
 
@@ -760,16 +762,6 @@ mod tests {
         let monorepo = MonorepoWorkspace::new();
         monorepo.create_repository(&CorePackageManager::Npm)?;
 
-        let status = monorepo.repository.status().expect("Failed to get status");
-        let uncleaned = monorepo.repository.is_workdir_unclean().expect("Workdir is not clean");
-        let log = monorepo.repository.log().expect("Failed to get log");
-        let local = monorepo.repository.list_config("local").expect("Failed to get local config");
-        dbg!(&status);
-        dbg!(&uncleaned);
-        dbg!(&log);
-        dbg!(&local);
-        dbg!(&monorepo.root);
-
         assert!(monorepo.get_monorepo_root().exists());
 
         monorepo.delete_repository();
@@ -782,16 +774,6 @@ mod tests {
         let monorepo = MonorepoWorkspace::new();
         monorepo.create_repository(&CorePackageManager::Npm)?;
         monorepo.create_changes()?;
-
-        let status = monorepo.repository.status().expect("Failed to get status");
-        let uncleaned = monorepo.repository.is_workdir_unclean().expect("Workdir is not clean");
-        let log = monorepo.repository.log().expect("Failed to get log");
-        let local = monorepo.repository.list_config("local").expect("Failed to get local config");
-        dbg!(&status);
-        dbg!(&uncleaned);
-        dbg!(&log);
-        dbg!(&local);
-        dbg!(&monorepo.root);
 
         assert!(monorepo.get_monorepo_root().exists());
 
