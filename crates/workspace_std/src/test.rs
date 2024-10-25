@@ -772,4 +772,51 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_create_changes() -> Result<(), std::io::Error> {
+        let monorepo = MonorepoWorkspace::new();
+        monorepo.create_repository(&CorePackageManager::Npm)?;
+        monorepo.create_changes()?;
+
+        let status = monorepo.repository.status().expect("Failed to get status");
+        let uncleaned = monorepo.repository.is_workdir_unclean().expect("Workdir is not clean");
+        let log = monorepo.repository.log().expect("Failed to get log");
+        let local = monorepo.repository.list_config("local").expect("Failed to get local config");
+        dbg!(&status);
+        dbg!(&uncleaned);
+        dbg!(&log);
+        dbg!(&local);
+        dbg!(&monorepo.root);
+
+        assert!(monorepo.get_monorepo_root().exists());
+
+        monorepo.delete_repository();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_package_bar() -> Result<(), std::io::Error> {
+        let monorepo = MonorepoWorkspace::new();
+        monorepo.create_repository(&CorePackageManager::Npm)?;
+        monorepo.create_changes()?;
+        monorepo.create_package_bar()?;
+
+        let status = monorepo.repository.status().expect("Failed to get status");
+        let uncleaned = monorepo.repository.is_workdir_unclean().expect("Workdir is not clean");
+        let log = monorepo.repository.log().expect("Failed to get log");
+        let local = monorepo.repository.list_config("local").expect("Failed to get local config");
+        dbg!(&status);
+        dbg!(&uncleaned);
+        dbg!(&log);
+        dbg!(&local);
+        dbg!(&monorepo.root);
+
+        assert!(monorepo.get_monorepo_root().exists());
+
+        monorepo.delete_repository();
+
+        Ok(())
+    }
 }
