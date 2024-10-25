@@ -260,7 +260,7 @@ pub fn get_workspace_config(cwd: Option<PathBuf>) -> WorkspaceConfig {
     }
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::test::MonorepoWorkspace;
@@ -284,21 +284,10 @@ mod tests {
     #[test]
     fn test_get_default_workspace_config() -> Result<(), std::io::Error> {
         let current_dir = PathBuf::from(".");
-
-        #[cfg(not(windows))]
-        let root = &std::fs::canonicalize(Path::new(current_dir.as_os_str()))?;
-
-        #[cfg(windows)]
-        let root = Path::new(current_dir.as_os_str());
-
         let config = get_workspace_config(Some(current_dir.clone()));
 
-        #[cfg(not(windows))]
         assert_ne!(config.workspace_root, root.clone());
-
-        #[cfg(windows)]
-        assert_eq!(config.workspace_root, root);
 
         Ok(())
     }
-}*/
+}
