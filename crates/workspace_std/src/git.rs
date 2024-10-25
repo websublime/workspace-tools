@@ -96,7 +96,12 @@ impl Repository {
                 Ok(output.status.success())
             });
 
-        Ok(user_config.is_ok() && email_config.is_ok())
+        let clrf_config =
+            execute_git(&self.location, ["config", "core.safecrlf", "false"], |_, output| {
+                Ok(output.status.success())
+            });
+
+        Ok(user_config.is_ok() && email_config.is_ok() && clrf_config.is_ok())
     }
 
     pub fn log(&self) -> GitResult<String> {
