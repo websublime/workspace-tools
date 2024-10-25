@@ -183,7 +183,7 @@ ignore_tags = "rc|v2.1.0|v2.1.1"
 topo_order = false
 # sort the commits inside sections by oldest/newest order
 sort_commits = "newest"
-        "#;
+"#;
 
         let mut monorepo_package_config_toml_file = File::create(monorepo_config_toml.as_path())?;
         monorepo_package_config_toml_file.write_all(monorepo_config_data.as_bytes())?;

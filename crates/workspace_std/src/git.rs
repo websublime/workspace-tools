@@ -550,9 +550,13 @@ where
 {
     let root = adjust_canonicalization(path);
     let root = PathBuf::from(root);
-    let output = Command::new("git").current_dir(root.as_path()).args(args).output();
+    let output = Command::new("git")
+        .current_dir(root.as_path())
+        .args(args)
+        .spawn()
+        .expect("Failed to execute git command");
 
-    output.map_err(|_| GitError::Execution).and_then(|output| {
+    output.wait_with_output().map_err(|_| GitError::Execution).and_then(|output| {
         if output.status.success() {
             if let Ok(message) = str::from_utf8(&output.stdout) {
                 process(strip_trailing_newline(&message.to_string()).as_str(), &output)
