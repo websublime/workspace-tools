@@ -103,7 +103,7 @@ impl Display for Package {
     }
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 #[allow(clippy::print_stdout)]
 #[allow(clippy::uninlined_format_args)]
 mod tests {
@@ -151,4 +151,4 @@ mod tests {
         let dot = Dot::new(&dependency_graph.graph);
         println!("{:?}", dot);
     }
-}*/
+}
