@@ -97,7 +97,7 @@ impl Repository {
             });
 
         let clrf_config =
-            execute_git(&self.location, ["config", "core.safecrlf", "false"], |_, output| {
+            execute_git(&self.location, ["config", "core.safecrlf", "true"], |_, output| {
                 Ok(output.status.success())
             });
 
@@ -158,7 +158,7 @@ impl Repository {
     }
 
     pub fn add_all(&self) -> GitResult<bool> {
-        execute_git(&self.location, ["add", "--all", "--verbose"], |_, output| {
+        execute_git(&self.location, ["add", "--all", "--verbose", "--renormalize"], |_, output| {
             Ok(output.status.success())
         })
     }
@@ -167,7 +167,12 @@ impl Repository {
         if path.to_str().is_some() {
             execute_git(
                 &self.location,
-                ["add", path.to_str().expect("Failed to convert path to str")],
+                [
+                    "add",
+                    path.to_str().expect("Failed to convert path to str"),
+                    "--verbose",
+                    "--renormalize",
+                ],
                 |_, output| Ok(output.status.success()),
             )
         } else {
