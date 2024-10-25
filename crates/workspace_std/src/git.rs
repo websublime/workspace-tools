@@ -144,7 +144,7 @@ impl Repository {
     }
 
     pub fn add_all(&self) -> GitResult<bool> {
-        execute_git(&self.location, ["--verbose", "add", "--all"], |_, output| {
+        execute_git(&self.location, ["add", "--all", "--verbose"], |_, output| {
             Ok(output.status.success())
         })
     }
