@@ -385,12 +385,8 @@ sort_commits = "newest"
           "license": "ISC"
       }"#;
         let package_bar_json = serde_json::from_str::<serde_json::Value>(package_bar_json)?;
-        let monorepo_package_bar_json_file = OpenOptions::new()
-            .write(true)
-            .append(false)
-            .truncate(true)
-            .create(true)
-            .open(monorepo_package_bar_dir.join("package.json").as_path())?;
+        let monorepo_package_bar_json_file =
+            File::create(monorepo_package_bar_dir.join("package.json").as_path())?;
         let monorepo_package_bar_json_writer = BufWriter::new(monorepo_package_bar_json_file);
         serde_json::to_writer_pretty(monorepo_package_bar_json_writer, &package_bar_json)?;
 
