@@ -396,10 +396,8 @@ sort_commits = "newest"
         #[cfg(not(windows))]
         const LINE_ENDING: &str = "\n";
 
-        let mut js_file = File::create(js_path.as_path()).expect("Failed to create index file");
-        js_file
-            .write_all(format!(r#"export const bar = "hello bar";{LINE_ENDING}"#).as_bytes())
-            .expect("Failed to write to file");
+        let mut js_file = File::create(js_path.as_path())?;
+        js_file.write_all(format!(r#"export const bar = "hello bar";{LINE_ENDING}"#).as_bytes())?;
 
         self.repository.add_all().expect("Failed to add all files");
         self.repository
