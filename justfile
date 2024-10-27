@@ -9,7 +9,7 @@ setup:
     cargo install cargo-binstall
     cargo binstall taplo-cli cargo-insta cargo-deny cargo-shear -y
     # Node.js related setup
-    corepack enable
+    corepack enable pnpm
     pnpm install
     @echo "✅✅✅ Setup complete!"
 
