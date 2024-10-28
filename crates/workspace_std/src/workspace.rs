@@ -90,6 +90,10 @@ impl Workspace {
                     .map(|_| pkg.to_owned())
                     .collect::<Vec<PackageInfo>>();
 
+                dbg!(pkg);
+                dbg!(&pkgs);
+                dbg!(&changed_files);
+
                 pkgs.dedup_by(|a, b| a.package.name == b.package.name);
 
                 pkgs
