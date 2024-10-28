@@ -324,7 +324,6 @@ mod tests {
     use crate::test::MonorepoWorkspace;
     use std::fs::File;
     use std::io::Write;
-    //use std::process::Command;
 
     #[test]
     fn test_get_npm_packages() -> Result<(), std::io::Error> {
@@ -376,12 +375,13 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(windows))]
     fn test_get_changed_packages() -> Result<(), std::io::Error> {
         let monorepo = MonorepoWorkspace::new();
         let root = monorepo.get_monorepo_root().clone();
         let js_path = root.join("packages/package-foo/main.mjs");
-        monorepo.create_workspace(&CorePackageManager::Pnpm)?;
+
+        monorepo.create_workspace(&CorePackageManager::Npm)?;
+
         let workspace = Workspace::new(root.clone());
         let repo = Repository::new(root.as_path());
 
@@ -394,8 +394,10 @@ mod tests {
         let _ = repo.commit("feat: message to the world", None, None).expect("Failed to commit");
 
         let packages = workspace.get_changed_packages(Some("main".to_string()));
+        let package = packages.as_slice().first().expect("No packages found");
 
         assert_eq!(packages.len(), 1);
+        assert_eq!(package.package.name, "@scope/package-foo");
 
         monorepo.delete_repository();
 
