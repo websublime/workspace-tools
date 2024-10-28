@@ -480,6 +480,8 @@ impl Repository {
                 .get_all_files_changed_since_sha(branch)
                 .expect("Failed to retrieve files changed since branch");
 
+            dbg!(&files);
+
             let pkg_files = files
                 .iter()
                 .filter(|file| file.starts_with(item.as_str()))
