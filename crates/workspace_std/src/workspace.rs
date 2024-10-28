@@ -359,6 +359,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(windows))]
     fn test_get_pnpm_packages() -> Result<(), std::io::Error> {
         let monorepo = MonorepoWorkspace::new();
         let root = monorepo.get_monorepo_root().clone();
@@ -375,6 +376,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(windows))]
     fn test_get_changed_packages() -> Result<(), std::io::Error> {
         let monorepo = MonorepoWorkspace::new();
         let root = monorepo.get_monorepo_root().clone();
