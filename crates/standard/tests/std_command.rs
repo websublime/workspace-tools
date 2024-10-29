@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod commands_tests {
-    use ws_std::command::execute;
+    use ws_std::{command::execute, error::CommandError};
 
     #[test]
-    fn test_git_command() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_git_command() -> Result<(), CommandError> {
         let result = execute("git", ".", ["--version"], |_message, output| {
             Ok(output.status.code().unwrap())
         })?;
@@ -13,7 +13,7 @@ mod commands_tests {
     }
 
     #[test]
-    fn test_git_version() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_git_version() -> Result<(), CommandError> {
         let result =
             execute("git", ".", ["--version"], |message, _output| Ok(message.to_string()))?;
 

@@ -6,7 +6,7 @@ use std::{
     str::from_utf8,
 };
 
-use crate::error::CommandError;
+use super::error::CommandError;
 
 pub type ComandResult<T> = Result<T, CommandError>;
 
