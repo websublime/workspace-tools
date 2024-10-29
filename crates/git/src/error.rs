@@ -8,4 +8,8 @@ pub enum RepositoryError {
     CommandFailure(#[from] ws_std::error::CommandError),
     #[error("Failure from IO entry")]
     IoFailure(#[from] std::io::Error),
+    #[error("Fail to config git user name")]
+    ConfigUsernameFailure,
+    #[error("Fail to config git user email")]
+    ConfigEmailFailure,
 }

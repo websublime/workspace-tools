@@ -31,7 +31,12 @@ impl Repository {
         &self.location
     }
 
-    pub fn init(&self, initial_branch: &str) -> Result<bool, RepositoryError> {
+    pub fn init(
+        &self,
+        initial_branch: &str,
+        username: &str,
+        email: &str,
+    ) -> Result<bool, RepositoryError> {
         let inited = execute(
             "git",
             self.location.as_path(),
@@ -43,6 +48,55 @@ impl Repository {
             return Err(RepositoryError::InitializeFailure);
         }
 
-        Ok(inited)
+        let configed = self.config(username, email)?;
+
+        Ok(inited && configed)
+    }
+
+    pub fn config(&self, username: &str, email: &str) -> Result<bool, RepositoryError> {
+        let user_config = execute(
+            "git",
+            self.location.as_path(),
+            ["config", "user.name", username],
+            |_, output| Ok(output.status.success()),
+        )?;
+
+        if !user_config {
+            return Err(RepositoryError::ConfigUsernameFailure);
+        }
+
+        let email_config = execute(
+            "git",
+            self.location.as_path(),
+            ["config", "user.email", email],
+            |_, output| Ok(output.status.success()),
+        )?;
+
+        if !email_config {
+            return Err(RepositoryError::ConfigEmailFailure);
+        }
+
+        let clrf_config = execute(
+            "git",
+            self.location.as_path(),
+            ["config", "core.safecrlf", "true"],
+            |_, output| Ok(output.status.success()),
+        )?;
+
+        let autocrlf_config = execute(
+            "git",
+            self.location.as_path(),
+            ["config", "core.autocrlf", "input"],
+            |_, output| Ok(output.status.success()),
+        )?;
+
+        let filemode_config = execute(
+            "git",
+            self.location.as_path(),
+            ["config", "core.filemode", "false"],
+            |_, output| Ok(output.status.success()),
+        )?;
+
+        Ok(user_config && email_config && clrf_config && autocrlf_config && filemode_config)
     }
 }

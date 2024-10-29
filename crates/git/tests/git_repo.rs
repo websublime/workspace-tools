@@ -10,6 +10,7 @@ mod repo_tests {
         path::PathBuf,
     };
     use ws_git::{error::RepositoryError, repo::Repository};
+    use ws_std::command::execute;
 
     fn create_monorepo() -> Result<PathBuf, std::io::Error> {
         let temp_dir = temp_dir();
@@ -46,9 +47,32 @@ mod repo_tests {
         let monorepo_root_dir = create_monorepo()?;
 
         let repo = Repository::new(monorepo_root_dir.as_path());
-        let inited = repo.init("main")?;
+        let inited = repo.init("main", "Sublime Machine", "machine@websublime.dev")?;
 
         assert!(inited);
+
+        remove_dir_all(&monorepo_root_dir)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_config_repo() -> Result<(), RepositoryError> {
+        let monorepo_root_dir = create_monorepo()?;
+
+        let repo = Repository::new(monorepo_root_dir.as_path());
+        let inited = repo.init("main", "Sublime Machine", "machine@websublime.dev")?;
+
+        let message = execute("git", repo.get_repo_path(), ["config", "--list"], |message, _| {
+            Ok(message.to_string())
+        })?;
+
+        let has_username = message.contains("user.name=Sublime Machine");
+        let has_email = message.contains("user.email=machine@websublime.dev");
+
+        assert!(inited);
+        assert!(has_username);
+        assert!(has_email);
 
         remove_dir_all(&monorepo_root_dir)?;
 
