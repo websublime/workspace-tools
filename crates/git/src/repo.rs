@@ -99,4 +99,13 @@ impl Repository {
 
         Ok(user_config && email_config && clrf_config && autocrlf_config && filemode_config)
     }
+
+    pub fn is_vcs(&self) -> Result<bool, RepositoryError> {
+        Ok(execute(
+            "git",
+            self.location.as_path(),
+            ["rev-parse", "--is-inside-work-tree"],
+            |stdout, _| Ok(stdout.trim() == "true"),
+        )?)
+    }
 }

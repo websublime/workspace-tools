@@ -78,4 +78,19 @@ mod repo_tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_vcs_repo() -> Result<(), RepositoryError> {
+        let monorepo_root_dir = create_monorepo()?;
+
+        let repo = Repository::new(monorepo_root_dir.as_path());
+        repo.init("main", "Sublime Machine", "machine@websublime.dev")?;
+        let is_vcs = repo.is_vcs()?;
+
+        assert!(is_vcs);
+
+        remove_dir_all(&monorepo_root_dir)?;
+
+        Ok(())
+    }
 }
