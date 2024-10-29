@@ -1,5 +1,5 @@
 [workspace]
-members = ["./crates/*"]
+members = ["crates/standard", "crates/git"]
 resolver = "2"
 
 [workspace.package]
@@ -21,7 +21,7 @@ inherits = "release"
 #   - https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-lints-section
 
 # --- restriction https://doc.rust-lang.org/clippy/usage.html#clippyrestriction
-#dbg_macro = "deny"
+dbg_macro = "deny"
 print_stdout = "deny"
 allow-dbg-in-tests = "allow"
 
@@ -69,7 +69,7 @@ single_match = "allow"
 single_match_else = "allow"
 
 [workspace.dependencies]
-workspace_std = { version = "0.1.0", path = "./crates/workspace_std" }
+#workspace_std = { version = "0.1.0", path = "./crates/workspace_std" }
 
 serde = "1.0.203"
 serde_json = "1.0.117"

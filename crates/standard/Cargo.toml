@@ -1,5 +1,5 @@
 [package]
-name = "workspace_std"
+name = "ws_std"
 version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -21,12 +21,3 @@ workspace = true
 
 [dependencies]
 thiserror = { workspace = true }
-serde_json = { workspace = true }
-regex = { workspace = true }
-toml = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
-git-cliff-core = "2.6.1"
-itertools = "0.13.0"
-petgraph = "0.6.5"
-semver = { version = "1.0.23", features = ["serde"] }
-wax = { version = "0.6.0", features = ["walk"] }
