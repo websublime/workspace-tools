@@ -108,4 +108,19 @@ impl Repository {
             |stdout, _| Ok(stdout.trim() == "true"),
         )?)
     }
+
+    pub fn create_branch(&self, branch_name: &str) -> Result<bool, RepositoryError> {
+        let branch_created = execute(
+            "git",
+            self.location.as_path(),
+            ["checkout", "-b", branch_name],
+            |_, output| Ok(output.status.success()),
+        )?;
+
+        if !branch_created {
+            return Err(RepositoryError::BranchCreationFailure);
+        }
+
+        Ok(branch_created)
+    }
 }

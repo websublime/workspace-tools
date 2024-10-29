@@ -93,4 +93,19 @@ mod repo_tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_create_branch_repo() -> Result<(), RepositoryError> {
+        let monorepo_root_dir = create_monorepo()?;
+
+        let repo = Repository::new(monorepo_root_dir.as_path());
+        repo.init("main", "Sublime Machine", "machine@websublime.dev")?;
+        let branch_created = repo.create_branch("feature/awesome")?;
+
+        assert!(branch_created);
+
+        remove_dir_all(&monorepo_root_dir)?;
+
+        Ok(())
+    }
 }

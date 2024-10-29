@@ -12,4 +12,6 @@ pub enum RepositoryError {
     ConfigUsernameFailure,
     #[error("Fail to config git user email")]
     ConfigEmailFailure,
+    #[error("Fail to create branch")]
+    BranchCreationFailure,
 }
