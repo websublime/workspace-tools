@@ -123,4 +123,28 @@ impl Repository {
 
         Ok(branch_created)
     }
+
+    pub fn list_branches(&self) -> Result<String, RepositoryError> {
+        let branches = execute(
+            "git",
+            self.location.as_path(),
+            ["--no-pager", "branch", "-a"],
+            |message, _| Ok(message.to_string()),
+        )?;
+
+        Ok(branches)
+    }
+
+    pub fn checkout(&self, branch_name: &str) -> Result<bool, RepositoryError> {
+        let branch_checkouted =
+            execute("git", self.location.as_path(), ["checkout", branch_name], |_, output| {
+                Ok(output.status.success())
+            })?;
+
+        if !branch_checkouted {
+            return Err(RepositoryError::BranchCheckoutFailure);
+        }
+
+        Ok(branch_checkouted)
+    }
 }

@@ -14,4 +14,6 @@ pub enum RepositoryError {
     ConfigEmailFailure,
     #[error("Fail to create branch")]
     BranchCreationFailure,
+    #[error("Fail to checkout branch")]
+    BranchCheckoutFailure,
 }

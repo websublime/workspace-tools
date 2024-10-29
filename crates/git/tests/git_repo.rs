@@ -6,7 +6,8 @@ mod repo_tests {
     use std::os::unix::fs::PermissionsExt;
     use std::{
         env::temp_dir,
-        fs::{canonicalize, create_dir, remove_dir_all},
+        fs::{canonicalize, create_dir, remove_dir_all, File},
+        io::Write,
         path::PathBuf,
     };
     use ws_git::{error::RepositoryError, repo::Repository};
@@ -21,6 +22,9 @@ mod repo_tests {
         }
 
         create_dir(&monorepo_root_dir)?;
+
+        let mut readme_file = File::create(monorepo_root_dir.join("README.md").as_path())?;
+        readme_file.write_all(b"HELLO WORLD")?;
 
         #[cfg(not(windows))]
         set_permissions(&monorepo_root_dir, std::fs::Permissions::from_mode(0o777))?;
@@ -63,6 +67,13 @@ mod repo_tests {
         let repo = Repository::new(monorepo_root_dir.as_path());
         let inited = repo.init("main", "Sublime Machine", "machine@websublime.dev")?;
 
+        execute(
+            "git",
+            monorepo_root_dir.as_path(),
+            ["remote", "add", "origin", monorepo_root_dir.to_str().unwrap()],
+            |_, stdout| Ok(stdout.status.success()),
+        )?;
+
         let message = execute("git", repo.get_repo_path(), ["config", "--list"], |message, _| {
             Ok(message.to_string())
         })?;
@@ -103,6 +114,43 @@ mod repo_tests {
         let branch_created = repo.create_branch("feature/awesome")?;
 
         assert!(branch_created);
+
+        remove_dir_all(&monorepo_root_dir)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_list_branch_repo() -> Result<(), RepositoryError> {
+        let monorepo_root_dir = create_monorepo()?;
+
+        let repo = Repository::new(monorepo_root_dir.as_path());
+        repo.init("main", "Sublime Machine", "machine@websublime.dev")?;
+
+        execute(
+            "git",
+            monorepo_root_dir.as_path(),
+            ["remote", "add", "origin", monorepo_root_dir.to_str().unwrap()],
+            |_, stdout| Ok(stdout.status.success()),
+        )?;
+
+        execute("git", monorepo_root_dir.as_path(), ["add", "."], |_, stdout| {
+            Ok(stdout.status.success())
+        })?;
+
+        execute(
+            "git",
+            monorepo_root_dir.as_path(),
+            ["commit", "-m", "chore: init project"],
+            |_, stdout| Ok(stdout.status.success()),
+        )?;
+
+        repo.create_branch("feature/awesome")?;
+
+        let branches = repo.list_branches()?;
+
+        assert!(branches.contains("main"));
+        assert!(branches.contains("feature/awesome"));
 
         remove_dir_all(&monorepo_root_dir)?;
 
