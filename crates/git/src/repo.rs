@@ -147,4 +147,31 @@ impl Repository {
 
         Ok(branch_checkouted)
     }
+
+    pub fn log(&self) -> Result<String, RepositoryError> {
+        let log = execute(
+            "git",
+            self.location.as_path(),
+            ["--no-pager", "log", "main..HEAD"],
+            |stdout, _| Ok(stdout.trim().to_string()),
+        )?;
+
+        Ok(log)
+    }
+
+    pub fn diff(&self, diff: Option<String>) -> Result<String, RepositoryError> {
+        let diff = match diff {
+            Some(diff) => diff,
+            None => ".".to_string(),
+        };
+
+        let diff = execute(
+            "git",
+            self.location.as_path(),
+            ["--no-pager", "diff", diff.as_str()],
+            |stdout, _| Ok(stdout.to_string()),
+        )?;
+
+        Ok(diff)
+    }
 }

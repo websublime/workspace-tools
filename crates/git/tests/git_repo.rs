@@ -13,7 +13,7 @@ mod repo_tests {
     use ws_git::{error::RepositoryError, repo::Repository};
     use ws_std::command::execute;
 
-    fn create_monorepo() -> Result<PathBuf, std::io::Error> {
+    fn create_workspace() -> Result<PathBuf, std::io::Error> {
         let temp_dir = temp_dir();
         let monorepo_root_dir = temp_dir.join("monorepo-workspace");
 
@@ -32,9 +32,35 @@ mod repo_tests {
         Ok(monorepo_root_dir)
     }
 
+    fn create_monorepo() -> Result<PathBuf, RepositoryError> {
+        let monorepo_root_dir = create_workspace()?;
+        let repo = Repository::new(monorepo_root_dir.as_path());
+        repo.init("main", "Sublime Machine", "machine@websublime.dev")?;
+
+        execute(
+            "git",
+            monorepo_root_dir.as_path(),
+            ["remote", "add", "origin", monorepo_root_dir.to_str().unwrap()],
+            |_, stdout| Ok(stdout.status.success()),
+        )?;
+
+        execute("git", monorepo_root_dir.as_path(), ["add", "."], |_, stdout| {
+            Ok(stdout.status.success())
+        })?;
+
+        execute(
+            "git",
+            monorepo_root_dir.as_path(),
+            ["commit", "-m", "chore: init project"],
+            |_, stdout| Ok(stdout.status.success()),
+        )?;
+
+        Ok(monorepo_root_dir)
+    }
+
     #[test]
     fn test_repo_path() -> Result<(), std::io::Error> {
-        let monorepo_root_dir = create_monorepo()?;
+        let monorepo_root_dir = create_workspace()?;
         let root_dir = canonicalize(monorepo_root_dir.as_os_str())?;
 
         let repo = Repository::new(monorepo_root_dir.as_path());
@@ -48,7 +74,7 @@ mod repo_tests {
 
     #[test]
     fn test_init_repo() -> Result<(), RepositoryError> {
-        let monorepo_root_dir = create_monorepo()?;
+        let monorepo_root_dir = create_workspace()?;
 
         let repo = Repository::new(monorepo_root_dir.as_path());
         let inited = repo.init("main", "Sublime Machine", "machine@websublime.dev")?;
@@ -62,7 +88,7 @@ mod repo_tests {
 
     #[test]
     fn test_config_repo() -> Result<(), RepositoryError> {
-        let monorepo_root_dir = create_monorepo()?;
+        let monorepo_root_dir = create_workspace()?;
 
         let repo = Repository::new(monorepo_root_dir.as_path());
         let inited = repo.init("main", "Sublime Machine", "machine@websublime.dev")?;
@@ -92,7 +118,7 @@ mod repo_tests {
 
     #[test]
     fn test_vcs_repo() -> Result<(), RepositoryError> {
-        let monorepo_root_dir = create_monorepo()?;
+        let monorepo_root_dir = create_workspace()?;
 
         let repo = Repository::new(monorepo_root_dir.as_path());
         repo.init("main", "Sublime Machine", "machine@websublime.dev")?;
@@ -107,7 +133,7 @@ mod repo_tests {
 
     #[test]
     fn test_create_branch_repo() -> Result<(), RepositoryError> {
-        let monorepo_root_dir = create_monorepo()?;
+        let monorepo_root_dir = create_workspace()?;
 
         let repo = Repository::new(monorepo_root_dir.as_path());
         repo.init("main", "Sublime Machine", "machine@websublime.dev")?;
@@ -121,18 +147,50 @@ mod repo_tests {
     }
 
     #[test]
+    fn test_checkout_branch_repo() -> Result<(), RepositoryError> {
+        let monorepo_root_dir = create_monorepo()?;
+
+        let repo = Repository::new(monorepo_root_dir.as_path());
+        repo.create_branch("feature/awesome")?;
+        let checkouted = repo.checkout("main")?;
+
+        let branches = repo.list_branches()?;
+
+        assert!(checkouted);
+        assert!(branches.contains("main"));
+        assert!(branches.contains("feature/awesome"));
+
+        remove_dir_all(&monorepo_root_dir)?;
+
+        Ok(())
+    }
+
+    #[test]
     fn test_list_branch_repo() -> Result<(), RepositoryError> {
         let monorepo_root_dir = create_monorepo()?;
 
         let repo = Repository::new(monorepo_root_dir.as_path());
-        repo.init("main", "Sublime Machine", "machine@websublime.dev")?;
+        repo.create_branch("feature/awesome")?;
 
-        execute(
-            "git",
-            monorepo_root_dir.as_path(),
-            ["remote", "add", "origin", monorepo_root_dir.to_str().unwrap()],
-            |_, stdout| Ok(stdout.status.success()),
-        )?;
+        let branches = repo.list_branches()?;
+
+        assert!(branches.contains("main"));
+        assert!(branches.contains("feature/awesome"));
+
+        remove_dir_all(&monorepo_root_dir)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_log_repo() -> Result<(), RepositoryError> {
+        let monorepo_root_dir = create_monorepo()?;
+
+        let repo = Repository::new(monorepo_root_dir.as_path());
+        repo.create_branch("feature/awesome")?;
+
+        let mut main_file = File::create(monorepo_root_dir.join("main.mjs").as_path())?;
+        main_file.write_all(b"const msg = 'Hello';")?;
 
         execute("git", monorepo_root_dir.as_path(), ["add", "."], |_, stdout| {
             Ok(stdout.status.success())
@@ -141,16 +199,52 @@ mod repo_tests {
         execute(
             "git",
             monorepo_root_dir.as_path(),
-            ["commit", "-m", "chore: init project"],
+            ["commit", "-m", "chore: add main.js"],
             |_, stdout| Ok(stdout.status.success()),
         )?;
 
+        let logs = repo.log()?;
+
+        assert!(logs.contains("chore: add main.js"));
+        assert!(logs.contains("HEAD -> feature/awesome"));
+
+        remove_dir_all(&monorepo_root_dir)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_diff_repo() -> Result<(), RepositoryError> {
+        let monorepo_root_dir = create_monorepo()?;
+
+        let repo = Repository::new(monorepo_root_dir.as_path());
+
+        let diff_all = repo.diff(None)?;
+
+        dbg!(diff_all);
+
         repo.create_branch("feature/awesome")?;
 
-        let branches = repo.list_branches()?;
+        let mut main_file = File::create(monorepo_root_dir.join("main.mjs").as_path())?;
+        main_file.write_all(b"const msg = 'Hello';")?;
 
-        assert!(branches.contains("main"));
-        assert!(branches.contains("feature/awesome"));
+        execute("git", monorepo_root_dir.as_path(), ["add", "."], |_, stdout| {
+            Ok(stdout.status.success())
+        })?;
+
+        execute(
+            "git",
+            monorepo_root_dir.as_path(),
+            ["commit", "-m", "chore: add main.js"],
+            |_, stdout| Ok(stdout.status.success()),
+        )?;
+
+        let diff_branch = repo.diff(None)?;
+
+        dbg!(diff_branch);
+
+        //assert!(logs.contains("chore: add main.js"));
+        //assert!(logs.contains("HEAD -> feature/awesome"));
 
         remove_dir_all(&monorepo_root_dir)?;
 
