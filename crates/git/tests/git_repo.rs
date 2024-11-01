@@ -218,14 +218,10 @@ mod repo_tests {
         let monorepo_root_dir = create_monorepo()?;
 
         let repo = Repository::new(monorepo_root_dir.as_path());
-
-        let diff_all = repo.diff(None)?;
-
-        dbg!(diff_all);
-
         repo.create_branch("feature/awesome")?;
 
-        let mut main_file = File::create(monorepo_root_dir.join("main.mjs").as_path())?;
+        let main_file_path = monorepo_root_dir.join("main.mjs");
+        let mut main_file = File::create(main_file_path.as_path())?;
         main_file.write_all(b"const msg = 'Hello';")?;
 
         execute("git", monorepo_root_dir.as_path(), ["add", "."], |_, stdout| {
@@ -239,12 +235,9 @@ mod repo_tests {
             |_, stdout| Ok(stdout.status.success()),
         )?;
 
-        let diff_branch = repo.diff(None)?;
+        let diff_branch = repo.diff(Some(main_file_path.to_str().unwrap().to_string()))?;
 
-        dbg!(diff_branch);
-
-        //assert!(logs.contains("chore: add main.js"));
-        //assert!(logs.contains("HEAD -> feature/awesome"));
+        assert!(diff_branch.is_empty());
 
         remove_dir_all(&monorepo_root_dir)?;
 
