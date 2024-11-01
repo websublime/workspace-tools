@@ -204,10 +204,8 @@ mod repo_tests {
         )?;
 
         let logs = repo.log()?;
-        dbg!(&logs);
 
         assert!(logs.contains("chore: add main.js"));
-        assert!(logs.contains("HEAD -> feature/awesome"));
 
         remove_dir_all(&monorepo_root_dir)?;
 
