@@ -376,7 +376,7 @@ mod repo_tests {
         let mut main_file = File::create(main_file_path.as_path())?;
         main_file.write_all(b"const msg = 'Hello';")?;
 
-        let added = repo.add(main_file_path.as_path())?;
+        repo.add(main_file_path.as_path())?;
 
         execute(
             "git",

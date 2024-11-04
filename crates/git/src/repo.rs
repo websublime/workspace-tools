@@ -286,4 +286,15 @@ impl Repository {
 
         Ok(commit)
     }
+
+    pub fn get_previous_sha(&self) -> Result<String, RepositoryError> {
+        let commit = execute(
+            "git",
+            self.location.as_path(),
+            ["rev-parse", "--short", "HEAD~1"],
+            |stdout, _| Ok(stdout.to_string()),
+        )?;
+
+        Ok(commit)
+    }
 }
