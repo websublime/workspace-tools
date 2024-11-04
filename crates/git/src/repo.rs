@@ -248,4 +248,42 @@ impl Repository {
             Ok(false)
         }
     }
+
+    pub fn fetch_all(&self, fetch_tags: Option<bool>) -> Result<bool, RepositoryError> {
+        let mut args = vec!["fetch", "origin"];
+
+        if fetch_tags.unwrap_or(false) {
+            args.push("--tags");
+            args.push("--force");
+        }
+
+        let fetched =
+            execute("git", self.location.as_path(), args, |_, output| Ok(output.status.success()))?;
+
+        if !fetched {
+            return Err(RepositoryError::FetchFailure);
+        }
+
+        Ok(fetched)
+    }
+
+    pub fn get_diverged_commit(&self, sha: &str) -> Result<String, RepositoryError> {
+        let commit =
+            execute("git", self.location.as_path(), ["merge-base", sha, "HEAD"], |stdout, _| {
+                Ok(stdout.to_string())
+            })?;
+
+        Ok(commit)
+    }
+
+    pub fn get_current_sha(&self) -> Result<String, RepositoryError> {
+        let commit = execute(
+            "git",
+            self.location.as_path(),
+            ["rev-parse", "--short", "HEAD"],
+            |stdout, _| Ok(stdout.to_string()),
+        )?;
+
+        Ok(commit)
+    }
 }

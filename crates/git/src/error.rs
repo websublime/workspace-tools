@@ -22,4 +22,6 @@ pub enum RepositoryError {
     AddAllFailure,
     #[error("Fail to add file")]
     AddFailure,
+    #[error("Fail to fetch remote")]
+    FetchFailure,
 }
