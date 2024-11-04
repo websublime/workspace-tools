@@ -236,6 +236,7 @@ mod repo_tests {
 
         let diff_branch = repo.diff(Some(main_file_path.to_str().unwrap().to_string()))?;
 
+        dbg!(&diff_branch);
         assert!(diff_branch.is_empty());
 
         remove_dir_all(&monorepo_root_dir)?;
