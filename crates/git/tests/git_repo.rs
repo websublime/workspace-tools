@@ -246,4 +246,18 @@ mod repo_tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_list_config_repo() -> Result<(), RepositoryError> {
+        let monorepo_root_dir = create_monorepo()?;
+
+        let repo = Repository::new(monorepo_root_dir.as_path());
+        let config = repo.list_config("local")?;
+
+        assert!(!config.is_empty());
+
+        remove_dir_all(&monorepo_root_dir)?;
+
+        Ok(())
+    }
 }

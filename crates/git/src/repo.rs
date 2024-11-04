@@ -135,6 +135,17 @@ impl Repository {
         Ok(branches)
     }
 
+    pub fn list_config(&self, config_type: &str) -> Result<String, RepositoryError> {
+        let list = execute(
+            "git",
+            self.location.as_path(),
+            ["--no-pager", "config", "--list", format!("--{config_type}").as_str()],
+            |stdout, _| Ok(stdout.to_string()),
+        )?;
+
+        Ok(list)
+    }
+
     pub fn checkout(&self, branch_name: &str) -> Result<bool, RepositoryError> {
         let branch_checkouted =
             execute("git", self.location.as_path(), ["checkout", branch_name], |_, output| {
