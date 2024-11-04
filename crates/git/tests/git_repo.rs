@@ -285,7 +285,7 @@ mod repo_tests {
         execute(
             "git",
             monorepo_root_dir.as_path(),
-            ["commit", "-m", "chore: add main.js"],
+            ["commit", "-m", "chore: add main.mjs"],
             |_, stdout| Ok(stdout.status.success()),
         )?;
 
@@ -294,7 +294,7 @@ mod repo_tests {
 
         let logs = repo.log(None)?;
 
-        assert!(logs.contains("chore: add main.js"));
+        assert!(logs.contains("chore: add main.mjs"));
 
         remove_dir_all(&monorepo_root_dir)?;
 
@@ -327,7 +327,7 @@ mod repo_tests {
 
         let logs = repo.log(Some(String::from("main..HEAD")))?;
 
-        dbg!(logs);
+        assert!(logs.contains("chore: add all files"));
         assert!(added);
 
         remove_dir_all(&monorepo_root_dir)?;
