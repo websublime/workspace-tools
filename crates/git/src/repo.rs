@@ -159,13 +159,18 @@ impl Repository {
         Ok(branch_checkouted)
     }
 
-    pub fn log(&self) -> Result<String, RepositoryError> {
-        let log = execute(
-            "git",
-            self.location.as_path(),
-            ["--no-pager", "log", "main..HEAD"],
-            |stdout, _| Ok(stdout.trim().to_string()),
-        )?;
+    pub fn log(&self, target: Option<String>) -> Result<String, RepositoryError> {
+        let mut args: Vec<String> = vec!["--no-pager".to_string(), "log".to_string()];
+
+        if let Some(target_branch) = target {
+            args.push(target_branch);
+        }
+
+        let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+
+        let log = execute("git", self.location.as_path(), args_ref, |stdout, _| {
+            Ok(stdout.trim().to_string())
+        })?;
 
         Ok(log)
     }
@@ -184,5 +189,18 @@ impl Repository {
         )?;
 
         Ok(diff)
+    }
+
+    pub fn merge(&self, branch_name: &str) -> Result<bool, RepositoryError> {
+        let merged =
+            execute("git", self.location.as_path(), ["merge", branch_name], |_, output| {
+                Ok(output.status.success())
+            })?;
+
+        if !merged {
+            return Err(RepositoryError::BranchMergeFailure);
+        }
+
+        Ok(merged)
     }
 }

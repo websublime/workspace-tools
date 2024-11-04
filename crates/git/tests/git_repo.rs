@@ -203,7 +203,7 @@ mod repo_tests {
             |_, stdout| Ok(stdout.status.success()),
         )?;
 
-        let logs = repo.log()?;
+        let logs = repo.log(Some(String::from("main..HEAD")))?;
 
         assert!(logs.contains("chore: add main.js"));
 
@@ -255,6 +255,40 @@ mod repo_tests {
         let config = repo.list_config("local")?;
 
         assert!(!config.is_empty());
+
+        remove_dir_all(&monorepo_root_dir)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_merge_repo() -> Result<(), RepositoryError> {
+        let monorepo_root_dir = create_monorepo()?;
+
+        let repo = Repository::new(monorepo_root_dir.as_path());
+        repo.create_branch("feature/awesome")?;
+
+        let main_file_path = monorepo_root_dir.join("main.mjs");
+        let mut main_file = File::create(main_file_path.as_path())?;
+        main_file.write_all(b"const msg = 'Hello';")?;
+
+        execute("git", monorepo_root_dir.as_path(), ["add", "."], |_, stdout| {
+            Ok(stdout.status.success())
+        })?;
+
+        execute(
+            "git",
+            monorepo_root_dir.as_path(),
+            ["commit", "-m", "chore: add main.js"],
+            |_, stdout| Ok(stdout.status.success()),
+        )?;
+
+        repo.checkout("main")?;
+        repo.merge("feature/awesome")?;
+
+        let logs = repo.log(None)?;
+
+        assert!(logs.contains("HEAD -> main, feature/awesome"));
 
         remove_dir_all(&monorepo_root_dir)?;
 

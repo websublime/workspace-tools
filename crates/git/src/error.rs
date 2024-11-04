@@ -16,4 +16,6 @@ pub enum RepositoryError {
     BranchCreationFailure,
     #[error("Fail to checkout branch")]
     BranchCheckoutFailure,
+    #[error("Fail to merge branch")]
+    BranchMergeFailure,
 }
