@@ -275,6 +275,12 @@ mod repo_tests {
         execute("git", monorepo_root_dir.as_path(), ["add", "."], |_, stdout| {
             Ok(stdout.status.success())
         })?;
+        execute(
+            "git",
+            monorepo_root_dir.as_path(),
+            ["add", "--all", "--renormalize"],
+            |_, output| Ok(output.status.success()),
+        )?;
 
         execute(
             "git",
@@ -288,8 +294,41 @@ mod repo_tests {
 
         let logs = repo.log(None)?;
 
-        dbg!(&logs);
         assert!(logs.contains("chore: add main.js"));
+
+        remove_dir_all(&monorepo_root_dir)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_all_repo() -> Result<(), RepositoryError> {
+        let monorepo_root_dir = create_monorepo()?;
+
+        let repo = Repository::new(monorepo_root_dir.as_path());
+        repo.create_branch("feature/awesome")?;
+
+        let main_file_path = monorepo_root_dir.join("main.mjs");
+        let mut main_file = File::create(main_file_path.as_path())?;
+        main_file.write_all(b"const msg = 'Hello';")?;
+
+        let main_file_path = monorepo_root_dir.join("utils.mjs");
+        let mut main_file = File::create(main_file_path.as_path())?;
+        main_file.write_all(b"const add = (value) => value + value;")?;
+
+        let added = repo.add_all()?;
+
+        execute(
+            "git",
+            monorepo_root_dir.as_path(),
+            ["commit", "-m", "chore: add all files"],
+            |_, stdout| Ok(stdout.status.success()),
+        )?;
+
+        let logs = repo.log(Some(String::from("main..HEAD")))?;
+
+        dbg!(logs);
+        assert!(added);
 
         remove_dir_all(&monorepo_root_dir)?;
 
