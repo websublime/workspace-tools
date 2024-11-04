@@ -20,4 +20,6 @@ pub enum RepositoryError {
     BranchMergeFailure,
     #[error("Fail to add all files")]
     AddAllFailure,
+    #[error("Fail to add file")]
+    AddFailure,
 }

@@ -222,4 +222,30 @@ impl Repository {
 
         Ok(add_all && renormalize)
     }
+
+    pub fn add(&self, path: &Path) -> Result<bool, RepositoryError> {
+        if path.exists() {
+            let add = execute(
+                "git",
+                self.location.as_path(),
+                ["add", path.to_str().expect("Failed to convert path to str"), "--verbose"],
+                |_, output| Ok(output.status.success()),
+            )?;
+
+            let renormalize = execute(
+                "git",
+                self.location.as_path(),
+                ["add", path.to_str().expect("Failed to convert path to str"), "--renormalize"],
+                |_, output| Ok(output.status.success()),
+            )?;
+
+            if !add || !renormalize {
+                return Err(RepositoryError::AddFailure);
+            }
+
+            Ok(add && renormalize)
+        } else {
+            Ok(false)
+        }
+    }
 }
