@@ -203,4 +203,23 @@ impl Repository {
 
         Ok(merged)
     }
+
+    pub fn add_all(&self) -> Result<bool, RepositoryError> {
+        let add_all =
+            execute("git", self.location.as_path(), ["add", "--all", "--verbose"], |_, output| {
+                Ok(output.status.success())
+            })?;
+        let renormalize = execute(
+            "git",
+            self.location.as_path(),
+            ["add", "--all", "--renormalize"],
+            |_, output| Ok(output.status.success()),
+        )?;
+
+        if !add_all || !renormalize {
+            return Err(RepositoryError::AddAllFailure);
+        }
+
+        Ok(add_all && renormalize)
+    }
 }
