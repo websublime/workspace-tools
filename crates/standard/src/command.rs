@@ -7,6 +7,7 @@ use std::{
 };
 
 use super::error::CommandError;
+use super::utils::strip_trailing_newline;
 
 pub type ComandResult<T> = Result<T, CommandError>;
 
@@ -23,7 +24,7 @@ where
     output.map_err(CommandError::Run).and_then(|output| {
         if output.status.success() {
             if let Ok(message) = from_utf8(&output.stdout) {
-                process(message, &output)
+                process(strip_trailing_newline(&message.to_string()).as_str(), &output)
             } else {
                 Err(CommandError::Execution)
             }

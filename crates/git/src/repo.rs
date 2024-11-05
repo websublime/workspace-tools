@@ -297,4 +297,29 @@ impl Repository {
 
         Ok(commit)
     }
+
+    pub fn get_first_sha(&self, branch: Option<String>) -> Result<String, RepositoryError> {
+        let branch = match branch {
+            Some(branch) => branch,
+            None => String::from("main"),
+        };
+
+        let commit = execute(
+            "git",
+            self.location.as_path(),
+            [
+                "log",
+                "--oneline",
+                format!("{}..HEAD", branch).as_str(),
+                "--",
+                "--pretty=format:%h",
+                "|",
+                "tail",
+                "-1",
+            ],
+            |stdout, _| Ok(stdout.to_string()),
+        )?;
+
+        Ok(commit)
+    }
 }
