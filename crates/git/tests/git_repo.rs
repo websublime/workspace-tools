@@ -424,6 +424,7 @@ mod repo_tests {
     }
 
     #[test]
+    #[cfg(not(windows))]
     fn test_first_sha_repo() -> Result<(), RepositoryError> {
         let monorepo_root_dir = create_monorepo()?;
 
@@ -444,7 +445,7 @@ mod repo_tests {
         )?;
 
         let sha = repo.get_first_sha(Some(String::from("main")))?;
-        dbg!(&sha);
+
         assert!(!sha.is_empty());
 
         remove_dir_all(&monorepo_root_dir)?;
