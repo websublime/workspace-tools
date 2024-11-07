@@ -318,13 +318,16 @@ impl Repository {
         #[cfg(windows)]
         let commit = execute(
             "cmd",
-            self.location.as_path(),
+            &self.location,
             [
                 "/C",
                 format!("git log --oneline {}..HEAD --pretty=format:%h | findstr /R /C:^^", branch)
                     .as_str(),
             ],
-            |stdout, _| Ok(stdout.to_string()),
+            |stdout, _| {
+                let output = stdout.lines().filter_map(|line| line.ok()).last();
+                Ok(output)
+            },
         )?;
 
         Ok(commit)

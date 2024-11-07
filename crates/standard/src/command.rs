@@ -18,7 +18,10 @@ where
     S: AsRef<OsStr>,
     F: Fn(&str, &Output) -> ComandResult<R>,
 {
+    #[cfg(not(windows))]
     let canonic_path = &canonicalize(&path)?;
+    #[cfg(windows)]
+    let canonic_path = path;
     let output = Command::new(cmd)
         .current_dir(canonic_path.as_path())
         .args(args)
