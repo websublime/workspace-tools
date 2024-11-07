@@ -2,7 +2,7 @@ use std::{
     ffi::OsStr,
     fs::canonicalize,
     path::Path,
-    process::{Command, Output},
+    process::{Command, Output, Stdio},
     str::from_utf8,
 };
 
@@ -19,9 +19,15 @@ where
     F: Fn(&str, &Output) -> ComandResult<R>,
 {
     let canonic_path = &canonicalize(&path)?;
-    let output = Command::new(cmd).current_dir(canonic_path.as_path()).args(args).output();
+    let output = Command::new(cmd)
+        .current_dir(canonic_path.as_path())
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to execute command");
 
-    output.map_err(CommandError::Run).and_then(|output| {
+    output.wait_with_output().map_err(CommandError::Run).and_then(|output| {
         if output.status.success() {
             if let Ok(message) = from_utf8(&output.stdout) {
                 process(strip_trailing_newline(&message.to_string()).as_str(), &output)

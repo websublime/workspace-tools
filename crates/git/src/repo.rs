@@ -304,18 +304,24 @@ impl Repository {
             None => String::from("main"),
         };
 
+        #[cfg(not(windows))]
         let commit = execute(
-            "git",
+            "sh",
             self.location.as_path(),
             [
-                "log",
-                "--oneline",
-                format!("{}..HEAD", branch).as_str(),
-                "--",
-                "--pretty=format:%h",
-                "|",
-                "tail",
-                "-1",
+                "-c",
+                format!("git log --oneline {}..HEAD --pretty=format:%h | tail -1", branch).as_str(),
+            ],
+            |stdout, _| Ok(stdout.to_string()),
+        )?;
+
+        #[cfg(windows)]
+        let commit = execute(
+            "cmd",
+            self.location.as_path(),
+            [
+                "/C",
+                format!("git log --oneline {}..HEAD --pretty=format:%h | tail -1", branch).as_str(),
             ],
             |stdout, _| Ok(stdout.to_string()),
         )?;
