@@ -321,7 +321,8 @@ impl Repository {
             self.location.as_path(),
             [
                 "/C",
-                format!("git log --oneline {}..HEAD --pretty=format:%h | tail -1", branch).as_str(),
+                format!("git log --oneline {}..HEAD --pretty=format:%h | findstr /R /C:^^", branch)
+                    .as_str(),
             ],
             |stdout, _| Ok(stdout.to_string()),
         )?;
