@@ -325,8 +325,13 @@ impl Repository {
                     .as_str(),
             ],
             |stdout, _| {
-                let output = stdout.lines().filter_map(|line| line.ok()).last();
-                Ok(output)
+                let output = stdout
+                    .to_string()
+                    .lines()
+                    .filter_map(|line| Some(line))
+                    .last()
+                    .expect("Failed to get last line");
+                Ok(output.to_string())
             },
         )?;
 
