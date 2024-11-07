@@ -424,7 +424,7 @@ mod repo_tests {
     }
 
     #[test]
-    #[cfg(not(windows))]
+    #[cfg_attr(target_os = "windows", ignore)]
     fn test_first_sha_repo() -> Result<(), RepositoryError> {
         let monorepo_root_dir = create_monorepo()?;
 
