@@ -444,7 +444,7 @@ mod repo_tests {
         )?;
 
         let sha = repo.get_first_sha(Some(String::from("main")))?;
-
+        dbg!(&sha);
         assert!(!sha.is_empty());
 
         remove_dir_all(&monorepo_root_dir)?;
