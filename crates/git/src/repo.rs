@@ -367,4 +367,30 @@ impl Repository {
 
         Ok(current_branch)
     }
+
+    pub fn get_branch_from_commit(&self, sha: &str) -> Result<Option<String>, RepositoryError> {
+        let branch = execute(
+            "git",
+            self.location.as_path(),
+            [
+                "--no-pager",
+                "branch",
+                "--no-color",
+                "--no-column",
+                "--format",
+                r#"%(refname:lstrip=2)"#,
+                "--contains",
+                sha,
+            ],
+            |stdout, _| {
+                if stdout.is_empty() {
+                    Ok(None)
+                } else {
+                    Ok(Some(stdout.to_string()))
+                }
+            },
+        )?;
+
+        Ok(branch)
+    }
 }
