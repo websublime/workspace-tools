@@ -452,4 +452,33 @@ mod repo_tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_diverged_commit_repo() -> Result<(), RepositoryError> {
+        let monorepo_root_dir = create_monorepo()?;
+
+        let repo = Repository::new(monorepo_root_dir.as_path());
+        repo.create_branch("feature/awesome")?;
+
+        let main_file_path = monorepo_root_dir.join("main.mjs");
+        let mut main_file = File::create(main_file_path.as_path())?;
+        main_file.write_all(b"const msg = 'Hello';")?;
+
+        repo.add_all()?;
+
+        execute(
+            "git",
+            monorepo_root_dir.as_path(),
+            ["commit", "-m", "chore: add main.mjs file"],
+            |_, stdout| Ok(stdout.status.success()),
+        )?;
+
+        let sha = repo.get_diverged_commit("main")?;
+
+        assert!(!sha.is_empty());
+
+        remove_dir_all(&monorepo_root_dir)?;
+
+        Ok(())
+    }
 }
