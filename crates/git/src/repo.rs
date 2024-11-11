@@ -404,4 +404,14 @@ impl Repository {
             |_, output| Ok(output.status.success()),
         )?)
     }
+
+    pub fn push(&self, follow_tags: Option<bool>) -> Result<bool, RepositoryError> {
+        let mut args = vec!["push", "--no-verify"];
+
+        if follow_tags.unwrap_or(false) {
+            args.push("--follow-tags");
+        }
+
+        Ok(execute("git", self.location.as_path(), args, |_, output| Ok(output.status.success()))?)
+    }
 }

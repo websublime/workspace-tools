@@ -591,6 +591,7 @@ mod repo_tests {
         let tagged = repo.tag("@scope/awesome@1.0.0", Some(String::from("feat: 1.0.0 version")))?;
         let log = repo.log(None)?;
 
+        dbg!(&log);
         assert!(tagged);
         assert!(log.contains("tag: @scope/awesome@1.0.0"));
 
