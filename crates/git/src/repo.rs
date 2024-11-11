@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::canonicalize,
+    env::temp_dir,
+    fs::{canonicalize, remove_file, File},
+    io::Write,
     path::{Path, PathBuf},
 };
 use ws_std::command::execute;
@@ -413,5 +415,49 @@ impl Repository {
         }
 
         Ok(execute("git", self.location.as_path(), args, |_, output| Ok(output.status.success()))?)
+    }
+
+    pub fn commit(
+        &self,
+        message: &str,
+        body: Option<String>,
+        footer: Option<String>,
+    ) -> Result<bool, RepositoryError> {
+        let mut msg = message.to_string();
+        let root = self.location.as_path();
+
+        if let Some(body) = body {
+            msg.push_str("\n\n");
+            msg.push_str(body.as_str());
+        }
+
+        if let Some(footer) = footer {
+            msg.push_str("\n\n");
+            msg.push_str(footer.as_str());
+        }
+
+        let temp_dir = temp_dir();
+        let temp_file_path = temp_dir.join("commit_message.txt");
+
+        let mut file = File::create(temp_file_path.as_path())?;
+        file.write_all(message.as_bytes())?;
+
+        let file_path = temp_file_path.as_path();
+
+        Ok(execute(
+            "git",
+            root,
+            [
+                "commit",
+                "-F",
+                file_path.as_os_str().to_str().expect("Failed to convert path to string"),
+                "--no-verify",
+            ],
+            |_, output| {
+                remove_file(file_path).expect("Commit file not deleted");
+
+                Ok(output.status.success())
+            },
+        )?)
     }
 }

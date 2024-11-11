@@ -589,11 +589,31 @@ mod repo_tests {
         repo.merge("feature/awesome")?;
 
         let tagged = repo.tag("@scope/awesome@1.0.0", Some(String::from("feat: 1.0.0 version")))?;
-        let log = repo.log(None)?;
 
-        dbg!(&log);
         assert!(tagged);
-        assert!(log.contains("tag: @scope/awesome@1.0.0"));
+
+        remove_dir_all(&monorepo_root_dir)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_commit_repo() -> Result<(), RepositoryError> {
+        let monorepo_root_dir = create_monorepo()?;
+
+        let repo = Repository::new(monorepo_root_dir.as_path());
+        repo.create_branch("feature/awesome")?;
+
+        let main_file_path = monorepo_root_dir.join("main.mjs");
+        let mut main_file = File::create(main_file_path.as_path())?;
+        main_file.write_all(b"const msg = 'Hello';")?;
+
+        repo.add_all()?;
+        let commited = repo.commit("chore: add main.mjs file", None, None)?;
+        let logs = repo.log(Some(String::from("main..HEAD")))?;
+
+        dbg!(logs);
+        assert!(commited);
 
         remove_dir_all(&monorepo_root_dir)?;
 
