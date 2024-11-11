@@ -460,4 +460,30 @@ impl Repository {
             },
         )?)
     }
+
+    pub fn get_all_files_changed_since_sha(
+        &self,
+        sha: &str,
+    ) -> Result<Vec<String>, RepositoryError> {
+        Ok(execute(
+            "git",
+            self.location.as_path(),
+            ["--no-pager", "diff", "--name-only", sha, "HEAD"],
+            |stdout, output| {
+                if !output.status.success() {
+                    return Ok(vec![]);
+                }
+
+                Ok(stdout
+                    .split('\n')
+                    .filter(|item| !item.trim().is_empty())
+                    .map(|item| self.location.join(item))
+                    .filter(|item| item.exists())
+                    .map(|item| {
+                        item.to_str().expect("Failed to convert path to string").to_string()
+                    })
+                    .collect::<Vec<String>>())
+            },
+        )?)
+    }
 }

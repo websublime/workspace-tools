@@ -612,8 +612,31 @@ mod repo_tests {
         let commited = repo.commit("chore: add main.mjs file", None, None)?;
         let logs = repo.log(Some(String::from("main..HEAD")))?;
 
-        dbg!(logs);
         assert!(commited);
+        assert!(logs.contains("chore: add main.mjs file"));
+
+        remove_dir_all(&monorepo_root_dir)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_all_files_changed_since_sha_repo() -> Result<(), RepositoryError> {
+        let monorepo_root_dir = create_monorepo()?;
+
+        let repo = Repository::new(monorepo_root_dir.as_path());
+        repo.create_branch("feature/awesome")?;
+
+        let main_file_path = monorepo_root_dir.join("main.mjs");
+        let mut main_file = File::create(main_file_path.as_path())?;
+        main_file.write_all(b"const msg = 'Hello';")?;
+
+        repo.add_all()?;
+        repo.commit("chore: add main.mjs file", None, None)?;
+        let changes = repo.get_all_files_changed_since_sha("main")?;
+
+        assert!(changes.len() > 0);
+        assert!(!changes.is_empty());
 
         remove_dir_all(&monorepo_root_dir)?;
 
