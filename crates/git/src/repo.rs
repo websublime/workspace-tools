@@ -350,4 +350,21 @@ impl Repository {
 
         Ok(status)
     }
+
+    pub fn get_current_branch(&self) -> Result<Option<String>, RepositoryError> {
+        let current_branch = execute(
+            "git",
+            self.location.as_path(),
+            ["rev-parse", "--abbrev-ref", "HEAD"],
+            |stdout, _| {
+                if stdout.is_empty() {
+                    Ok(None)
+                } else {
+                    Ok(Some(stdout.to_string()))
+                }
+            },
+        )?;
+
+        Ok(current_branch)
+    }
 }
