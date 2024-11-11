@@ -393,4 +393,15 @@ impl Repository {
 
         Ok(branch)
     }
+
+    pub fn tag(&self, tag: &str, message: Option<String>) -> Result<bool, RepositoryError> {
+        let msg = message.unwrap_or(tag.to_string());
+
+        Ok(execute(
+            "git",
+            self.location.as_path(),
+            ["tag", "-a", tag, "-m", msg.as_str()],
+            |_, output| Ok(output.status.success()),
+        )?)
+    }
 }
