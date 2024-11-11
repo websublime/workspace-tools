@@ -337,4 +337,17 @@ impl Repository {
 
         Ok(commit)
     }
+
+    pub fn status(&self) -> Result<Option<String>, RepositoryError> {
+        let status =
+            execute("git", self.location.as_path(), ["status", "--porcelain"], |stdout, _| {
+                if stdout.is_empty() {
+                    Ok(None)
+                } else {
+                    Ok(Some(stdout.to_string()))
+                }
+            })?;
+
+        Ok(status)
+    }
 }
