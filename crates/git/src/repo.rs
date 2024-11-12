@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashMap,
     env::temp_dir,
     fs::{canonicalize, remove_file, File},
     io::Write,
@@ -8,6 +9,28 @@ use std::{
 use ws_std::command::execute;
 
 use super::error::RepositoryError;
+
+#[allow(clippy::from_over_into)]
+impl Into<HashMap<String, String>> for RepositoryCommit {
+    fn into(self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("hash".to_string(), self.hash);
+        map.insert("author_name".to_string(), self.author_name);
+        map.insert("author_email".to_string(), self.author_email);
+        map.insert("author_date".to_string(), self.author_date);
+        map.insert("message".to_string(), self.message);
+        map
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RepositoryCommit {
+    hash: String,
+    author_name: String,
+    author_email: String,
+    author_date: String,
+    message: String,
+}
 
 impl From<&str> for Repository {
     fn from(root: &str) -> Self {
@@ -485,5 +508,56 @@ impl Repository {
                     .collect::<Vec<String>>())
             },
         )?)
+    }
+
+    #[allow(clippy::uninlined_format_args)]
+    pub fn get_commits_since(
+        &self,
+        since: Option<String>,
+        relative: Option<String>,
+    ) -> Result<Vec<RepositoryCommit>, RepositoryError> {
+        const DELIMITER: &str = r"#=#";
+        const BREAK_LINE: &str = r"#+#";
+
+        let log_format = format!(
+            "--format={}%H{}%an{}%ae{}%ad{}%B{}",
+            DELIMITER, DELIMITER, DELIMITER, DELIMITER, DELIMITER, BREAK_LINE
+        );
+
+        let mut args = vec!["--no-pager", "log", log_format.as_str(), "--date=rfc2822"];
+        let mut owned_strings = Vec::new();
+
+        if let Some(since) = since.as_deref() {
+            owned_strings.push(format!("{}..", since));
+            args.push(owned_strings.last().unwrap().as_str());
+        }
+
+        if let Some(relative) = relative.as_deref() {
+            args.push("--");
+            args.push(relative);
+        }
+
+        Ok(execute("git", self.location.as_path(), args, |stdout, output| {
+            if !output.status.success() {
+                return Ok(vec![]);
+            }
+
+            Ok(stdout
+                .split(BREAK_LINE)
+                .filter(|item| !item.trim().is_empty())
+                .map(|item| {
+                    let item_trimmed = item.trim();
+                    let items = item_trimmed.split(DELIMITER).collect::<Vec<&str>>();
+
+                    RepositoryCommit {
+                        hash: items[1].to_string(),
+                        author_name: items[2].to_string(),
+                        author_email: items[3].to_string(),
+                        author_date: items[4].to_string(),
+                        message: items[5].to_string(),
+                    }
+                })
+                .collect::<Vec<RepositoryCommit>>())
+        })?)
     }
 }
