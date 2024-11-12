@@ -1,3 +1,4 @@
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -9,6 +10,22 @@ use std::{
 use ws_std::command::execute;
 
 use super::error::RepositoryError;
+
+#[allow(clippy::from_over_into)]
+impl Into<HashMap<String, String>> for RepositoryTags {
+    fn into(self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("hash".to_string(), self.hash);
+        map.insert("tag".to_string(), self.tag);
+        map
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RepositoryTags {
+    hash: String,
+    tag: String,
+}
 
 #[allow(clippy::from_over_into)]
 impl Into<HashMap<String, String>> for RepositoryCommit {
@@ -558,6 +575,49 @@ impl Repository {
                     }
                 })
                 .collect::<Vec<RepositoryCommit>>())
+        })?)
+    }
+
+    #[allow(clippy::items_after_statements)]
+    pub fn get_remote_or_local_tags(
+        &self,
+        local: Option<bool>,
+    ) -> Result<Vec<RepositoryTags>, RepositoryError> {
+        let mut args = vec![];
+        let regex = Regex::new(r"\s+").expect("Failed to create regex");
+
+        match local {
+            Some(true) => {
+                args.push("show-ref");
+                args.push("--tags");
+            }
+            Some(false) | None => {
+                args.push("ls-remote");
+                args.push("--tags");
+                args.push("origin");
+            }
+        }
+
+        Ok(execute("git", self.location.as_path(), args, |stdout, output| {
+            if !output.status.success() {
+                return Ok(vec![]);
+            }
+
+            #[cfg(windows)]
+            const LINE_ENDING: &str = "\r\n";
+            #[cfg(not(windows))]
+            const LINE_ENDING: &str = "\n";
+
+            Ok(stdout
+                .trim()
+                .split(LINE_ENDING)
+                .filter(|tags| !tags.trim().is_empty())
+                .map(|tags| {
+                    let hash_tags = regex.split(tags).collect::<Vec<&str>>();
+
+                    RepositoryTags { hash: hash_tags[0].to_string(), tag: hash_tags[1].to_string() }
+                })
+                .collect::<Vec<RepositoryTags>>())
         })?)
     }
 }
