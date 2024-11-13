@@ -23,7 +23,7 @@ mod paths_tests {
 
         create_dir(&monorepo_root_dir)?;
 
-        let mut readme_file = File::create(monorepo_root_dir.join("package.json").as_path())?;
+        let mut readme_file = File::create(monorepo_root_dir.join("package-lock.json").as_path())?;
         readme_file.write_all(b"{}")?;
 
         #[cfg(not(windows))]
@@ -40,7 +40,11 @@ mod paths_tests {
 
         remove_dir_all(root)?;
 
-        assert!(result.is_some());
+        let root = root.display().to_string();
+        let project_root = result.unwrap().display().to_string();
+
+        assert_eq!(root, project_root);
+
         Ok(())
     }
 }
