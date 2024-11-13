@@ -663,4 +663,38 @@ mod repo_tests {
 
         Ok(())
     }
+
+    #[test]
+    #[allow(clippy::len_zero)]
+    fn test_local_remote_tag_repo() -> Result<(), RepositoryError> {
+        let monorepo_root_dir = create_monorepo()?;
+
+        let repo = Repository::new(monorepo_root_dir.as_path());
+        repo.create_branch("feature/awesome")?;
+
+        let main_file_path = monorepo_root_dir.join("main.mjs");
+        let mut main_file = File::create(main_file_path.as_path())?;
+        main_file.write_all(b"const msg = 'Hello';")?;
+
+        repo.add_all()?;
+
+        execute(
+            "git",
+            monorepo_root_dir.as_path(),
+            ["commit", "-m", "chore: add main.mjs file"],
+            |_, stdout| Ok(stdout.status.success()),
+        )?;
+
+        repo.checkout("main")?;
+        repo.merge("feature/awesome")?;
+
+        repo.tag("@scope/awesome@1.0.0", Some(String::from("feat: 1.0.0 version")))?;
+        let tags = repo.get_remote_or_local_tags(Some(true))?;
+
+        assert!(tags.len() > 0);
+
+        remove_dir_all(&monorepo_root_dir)?;
+
+        Ok(())
+    }
 }
