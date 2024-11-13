@@ -2,7 +2,6 @@ use super::command::execute;
 
 use std::{
     env,
-    ops::Deref,
     path::{Path, PathBuf},
 };
 
@@ -28,9 +27,7 @@ pub fn get_project_root_path(root: Option<PathBuf>) -> Option<PathBuf> {
         }
     };
 
-    let canonic_path = &std::fs::canonicalize(Path::new(&project_root)).unwrap();
-
-    Some(canonic_path.deref().to_path_buf())
+    Some(PathBuf::from(project_root))
 }
 
 /// Get the git root directory.
