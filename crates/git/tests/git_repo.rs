@@ -697,4 +697,29 @@ mod repo_tests {
 
         Ok(())
     }
+
+    #[test]
+    #[allow(clippy::len_zero)]
+    fn test_all_files_changed_since_branch_repo() -> Result<(), RepositoryError> {
+        let monorepo_root_dir = create_monorepo()?;
+        let pkg_dir = monorepo_root_dir.display().to_string();
+
+        let repo = Repository::new(monorepo_root_dir.as_path());
+        repo.create_branch("feature/awesome")?;
+
+        let main_file_path = monorepo_root_dir.join("main.mjs");
+        let mut main_file = File::create(main_file_path.as_path())?;
+        main_file.write_all(b"const msg = 'Hello';")?;
+
+        repo.add_all()?;
+        repo.commit("chore: add main.mjs file", None, None)?;
+
+        let files = repo.get_all_files_changed_since_branch(&[pkg_dir], "main")?;
+
+        assert!(files.len() > 0);
+
+        remove_dir_all(&monorepo_root_dir)?;
+
+        Ok(())
+    }
 }

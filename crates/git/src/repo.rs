@@ -620,4 +620,37 @@ impl Repository {
                 .collect::<Vec<RepositoryTags>>())
         })?)
     }
+
+    pub fn get_all_files_changed_since_branch(
+        &self,
+        packages_paths: &[String],
+        branch: &str,
+    ) -> Result<Vec<String>, RepositoryError> {
+        let mut all_files = vec![];
+
+        for item in packages_paths {
+            let files = self.get_all_files_changed_since_sha(branch)?;
+
+            let pkg_files = files
+                .iter()
+                .filter(|file| {
+                    let file_path_buf = PathBuf::from(file);
+                    let file_canonic = &canonicalize(file_path_buf).expect("Invalid file path");
+                    let file = file_canonic.to_str().expect("Failed to convert path to string");
+
+                    let item_path_buf = PathBuf::from(item);
+                    let item_canonic = &canonicalize(item_path_buf).expect("Invalid item path");
+                    let item = item_canonic.to_str().expect("Failed to convert path to string");
+
+                    file.starts_with(item)
+                })
+                .collect::<Vec<&String>>();
+
+            all_files.append(
+                &mut pkg_files.iter().map(|file| (*file).to_string()).collect::<Vec<String>>(),
+            );
+        }
+
+        Ok(all_files)
+    }
 }
