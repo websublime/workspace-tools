@@ -22,5 +22,6 @@ workspace = true
 [dependencies]
 thiserror = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 petgraph = "0.6.5"
 semver = { version = "1.0.23", features = ["serde"] }
