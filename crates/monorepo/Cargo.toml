@@ -21,6 +21,7 @@ workspace = true
 
 [dependencies]
 ws-std = { version = "~0.1.0", path = "../standard" }
+ws-git = { version = "~0.1.0", path = "../git" }
 thiserror = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

@@ -1,3 +1,4 @@
+use super::changes::ChangesConfig;
 use git_cliff_core::config::{
     Bump, ChangelogConfig, CommitParser, Config, GitConfig, RemoteConfig, TextProcessor,
 };
@@ -8,10 +9,8 @@ use std::fs::File;
 use std::io::BufReader;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-
-//use crate::changes::ChangesConfig;
-use ws_std::manager::CorePackageManager;
-//use ws_std::paths::get_project_root_path;
+use ws_std::manager::{detect_package_manager, CorePackageManager};
+use ws_std::paths::get_project_root_path;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ToolsConfig {
@@ -189,5 +188,72 @@ fn get_tools_config(root: &PathBuf) -> ToolsConfig {
         toml::from_str::<ToolsConfig>(buffer.as_str()).expect("Failed to parse config content")
     } else {
         default_tools_config
+    }
+}
+
+fn get_changes_config(root: &PathBuf) -> HashMap<String, String> {
+    let default_changes_config = HashMap::from([
+        ("message".to_string(), "chore(release): |---| release new version".to_string()),
+        ("git_user_name".to_string(), "github-actions[bot]".to_string()),
+        ("git_user_email".to_string(), "github-actions[bot]@users.noreply.git.com".to_string()),
+    ]);
+
+    let root_path = Path::new(root);
+    let changes_path = &root_path.join(String::from(".changes.json"));
+
+    if changes_path.exists() {
+        let changes_file = File::open(changes_path).expect("Failed to open changes file");
+        let changes_reader = BufReader::new(changes_file);
+
+        let changes_config: ChangesConfig =
+            serde_json::from_reader(changes_reader).expect("Failed to parse changes file");
+
+        HashMap::from([
+            (
+                "message".to_string(),
+                changes_config.message.expect("Failed to get message from changes file"),
+            ),
+            (
+                "git_user_name".to_string(),
+                changes_config
+                    .git_user_name
+                    .expect("Failed to get git user name from changes file"),
+            ),
+            (
+                "git_user_email".to_string(),
+                changes_config
+                    .git_user_email
+                    .expect("Failed to get git user email from changes file"),
+            ),
+        ])
+    } else {
+        default_changes_config
+    }
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn get_workspace_root(cwd: Option<PathBuf>) -> PathBuf {
+    let root = match cwd {
+        Some(ref dir) => {
+            get_project_root_path(Some(PathBuf::from(dir))).expect("Failed to get project root")
+        }
+        None => get_project_root_path(None).expect("Failed to get project root"),
+    };
+    PathBuf::from(&root)
+}
+
+pub fn get_workspace_config(cwd: Option<PathBuf>) -> WorkspaceConfig {
+    let root = &get_workspace_root(cwd);
+    let changes = get_changes_config(root);
+    let cliff = get_cliff_config(root);
+    let tools = get_tools_config(root);
+    let manager = detect_package_manager(root);
+
+    WorkspaceConfig {
+        changes_config: changes,
+        cliff_config: cliff,
+        tools_config: tools,
+        workspace_root: root.clone(),
+        package_manager: manager.unwrap_or(CorePackageManager::Npm),
     }
 }
