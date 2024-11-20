@@ -22,6 +22,7 @@ workspace = true
 [dependencies]
 ws-std = { version = "~0.1.0", path = "../standard" }
 ws-git = { version = "~0.1.0", path = "../git" }
+ws-pkg = { version = "~0.1.0", path = "../pkg" }
 thiserror = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
@@ -29,3 +30,4 @@ regex = { workspace = true }
 git-cliff-core = "2.6.1"
 toml = "^0.5"
 itertools = "0.13.0"
+wax = { version = "0.6.0", features = ["walk"] }
