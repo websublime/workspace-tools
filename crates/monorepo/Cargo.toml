@@ -25,6 +25,7 @@ ws-git = { version = "~0.1.0", path = "../git" }
 thiserror = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+regex = { workspace = true }
 git-cliff-core = "2.6.1"
 toml = "^0.5"
-regex = { workspace = true }
+itertools = "0.13.0"
