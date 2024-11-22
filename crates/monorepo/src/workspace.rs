@@ -1,16 +1,12 @@
 use serde::{Deserialize, Serialize};
+use std::fs::canonicalize;
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::{fs::File, io::BufReader, path::PathBuf};
 use wax::{CandidatePath, Glob, Pattern};
 use ws_git::repo::Repository;
 use ws_pkg::package::{Dependency, Package, PackageInfo, PackageJson};
 use ws_std::manager::CorePackageManager;
-
-#[cfg(not(windows))]
-use std::path::Path;
-
-#[cfg(not(windows))]
-use std::fs::canonicalize;
 
 use crate::config::{get_workspace_config, WorkspaceConfig};
 

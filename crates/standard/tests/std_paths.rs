@@ -2,7 +2,7 @@
 mod paths_tests {
     use std::{
         env::temp_dir,
-        fs::{create_dir, remove_dir_all, set_permissions, File},
+        fs::{create_dir, remove_dir_all, File},
         io::Write,
         ops::Deref,
         path::PathBuf,
@@ -10,6 +10,9 @@ mod paths_tests {
 
     #[cfg(not(windows))]
     use std::os::unix::fs::PermissionsExt;
+
+    #[cfg(not(windows))]
+    use std::fs::set_permissions;
 
     use ws_std::paths::get_project_root_path;
 

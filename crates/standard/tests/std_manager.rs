@@ -2,13 +2,16 @@
 mod manager_tests {
     use std::{
         env::temp_dir,
-        fs::{create_dir, remove_dir_all, set_permissions, File},
+        fs::{create_dir, remove_dir_all, File},
         io::Write,
         path::PathBuf,
     };
 
     #[cfg(not(windows))]
     use std::os::unix::fs::PermissionsExt;
+
+    #[cfg(not(windows))]
+    use std::fs::set_permissions;
 
     use ws_std::manager::{detect_package_manager, CorePackageManager};
 
