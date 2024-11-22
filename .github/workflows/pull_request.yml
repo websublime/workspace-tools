@@ -70,5 +70,8 @@ jobs:
           cache-key: debug-build
           components: clippy rustfmt
 
+      - name: Set Node
+        uses: ./.github/actions/setup-node
+
       - name: Run Tests
         run: cargo test --workspace -- --test-threads=1 --nocapture
