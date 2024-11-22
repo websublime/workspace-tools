@@ -76,15 +76,16 @@ impl Workspace {
             packages.iter().map(|pkg| pkg.package_path.to_string()).collect::<Vec<String>>();
 
         let repo = Repository::new(root);
-        let changed_files =
-            repo.get_all_files_changed_since_branch(&packages_paths, since.as_str());
+        let changed_files = repo
+            .get_all_files_changed_since_branch(&packages_paths, since.as_str())
+            .expect("Fail to get changed files");
 
         packages
             .iter()
             .flat_map(|pkg| {
                 let mut pkgs = changed_files
                     .iter()
-                    .filter(|file| file.starts_with(&[pkg.package_path.clone()]))
+                    .filter(|file| file.starts_with(pkg.package_path.as_str()))
                     .map(|_| pkg.to_owned())
                     .collect::<Vec<PackageInfo>>();
 
