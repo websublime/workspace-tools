@@ -8,7 +8,7 @@ use std::{
 };
 use ws_git::repo::Repository;
 
-use crate::config::get_workspace_config;
+use crate::config::{get_workspace_config, WorkspaceConfig};
 
 type ChangesData = BTreeMap<String, ChangeMeta>;
 
@@ -37,11 +37,11 @@ pub struct ChangesConfig {
     pub changes: ChangesData,
 }
 
-/*impl From<&WorkspaceConfig> for Changes {
+impl From<&WorkspaceConfig> for Changes {
     fn from(config: &WorkspaceConfig) -> Self {
         Changes { root: config.workspace_root.clone() }
     }
-}*/
+}
 
 impl From<&PathBuf> for Changes {
     fn from(root: &PathBuf) -> Self {

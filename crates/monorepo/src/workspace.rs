@@ -281,7 +281,9 @@ impl Workspace {
             .iter()
             .filter(|pkgs| pkgs.path != path.display().to_string())
             .map(|pkgs| {
-                let package_path = PathBuf::from(pkgs.path.clone());
+                let package_path =
+                    canonicalize(pkgs.path.clone()).expect("Failed to canonic package path");
+                //let package_path = PathBuf::from(pkgs.path.clone());
                 let package_json_path = package_path.join("package.json");
 
                 let package_json_file = File::open(&package_json_path).expect("File not found");

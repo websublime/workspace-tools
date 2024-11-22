@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod workspace_tests {
 
     use std::fs::File;
     use std::io::Write;

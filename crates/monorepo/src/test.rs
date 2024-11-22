@@ -4,7 +4,7 @@ use ws_std::manager::CorePackageManager;
 
 use std::{
     env::temp_dir,
-    fs::{create_dir_all, remove_dir_all, File, OpenOptions},
+    fs::{canonicalize, create_dir_all, remove_dir_all, File, OpenOptions},
     path::PathBuf,
 };
 
@@ -30,10 +30,8 @@ impl MonorepoWorkspace {
 
         create_dir_all(monorepo_root_dir).expect("Unable to create monorepo directory");
 
-        Self {
-            root: monorepo_root_dir.clone(),
-            repository: Repository::new(monorepo_root_dir.as_path()),
-        }
+        let root = canonicalize(monorepo_root_dir.clone()).expect("Failed to canonic package path");
+        Self { root, repository: Repository::new(monorepo_root_dir.as_path()) }
     }
 
     #[allow(clippy::too_many_lines)]

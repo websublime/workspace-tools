@@ -5,6 +5,7 @@ use git_cliff_core::config::{
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs::canonicalize;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::Read;
@@ -239,7 +240,8 @@ fn get_workspace_root(cwd: Option<PathBuf>) -> PathBuf {
         }
         None => get_project_root_path(None).expect("Failed to get project root"),
     };
-    PathBuf::from(&root)
+
+    canonicalize(root.as_path()).expect("Failed to canonic package path")
 }
 
 pub fn get_workspace_config(cwd: Option<PathBuf>) -> WorkspaceConfig {
