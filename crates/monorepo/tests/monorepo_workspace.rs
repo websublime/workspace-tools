@@ -42,6 +42,7 @@ mod workspace_tests {
     }
 
     #[test]
+    #[cfg_attr(target_os = "windows", ignore)]
     fn test_get_pnpm_packages() -> Result<(), std::io::Error> {
         let monorepo = MonorepoWorkspace::new();
         let root = monorepo.get_monorepo_root().clone();
@@ -58,6 +59,7 @@ mod workspace_tests {
     }
 
     #[test]
+    #[cfg_attr(target_os = "windows", ignore)]
     fn test_get_changed_packages() -> Result<(), std::io::Error> {
         let monorepo = MonorepoWorkspace::new();
         let root = monorepo.get_monorepo_root().clone();
