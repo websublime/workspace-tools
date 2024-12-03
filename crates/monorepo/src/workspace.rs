@@ -18,8 +18,10 @@ struct PnpmInfo {
     pub private: bool,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Workspace {
     pub config: WorkspaceConfig,
+    pub repo: Repository,
 }
 
 impl From<&str> for Workspace {
@@ -32,21 +34,25 @@ impl From<&str> for Workspace {
         #[cfg(windows)]
         let canonic_path = path_buff;
 
+        let repo = Repository::new(&canonic_path);
         let config = get_workspace_config(Some(canonic_path));
-        Workspace { config }
+
+        Workspace { config, repo }
     }
 }
 
 impl From<WorkspaceConfig> for Workspace {
     fn from(config: WorkspaceConfig) -> Self {
-        Workspace { config }
+        let repo = Repository::new(&config.workspace_root);
+        Workspace { config, repo }
     }
 }
 
 impl Workspace {
     pub fn new(root: PathBuf) -> Self {
         let config = get_workspace_config(Some(root));
-        Workspace { config }
+        let repo = Repository::new(&config.workspace_root);
+        Workspace { config, repo }
     }
 
     pub fn get_packages(&self) -> Vec<PackageInfo> {
