@@ -71,6 +71,7 @@ impl MonorepoWorkspace {
         let monorepo_config_data = r#"
 [tools]
 bump_sync = true
+repo_url = "https://github.com/websublime/workspace-node-tools"
 
 [cliff.changelog]
 # template for the changelog footer

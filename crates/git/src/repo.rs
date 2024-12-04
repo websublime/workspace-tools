@@ -42,11 +42,11 @@ impl Into<HashMap<String, String>> for RepositoryCommit {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RepositoryCommit {
-    hash: String,
-    author_name: String,
-    author_email: String,
-    author_date: String,
-    message: String,
+    pub hash: String,
+    pub author_name: String,
+    pub author_email: String,
+    pub author_date: String,
+    pub message: String,
 }
 
 impl From<&str> for Repository {

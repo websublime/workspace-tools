@@ -72,13 +72,12 @@ impl Workspace {
 
     pub fn get_changed_packages(&self, sha: Option<String>) -> Vec<PackageInfo> {
         let packages = &self.get_packages();
-        let root = &self.config.workspace_root.as_path();
         let since = sha.unwrap_or(String::from("main"));
         let packages_paths =
             packages.iter().map(|pkg| pkg.package_path.to_string()).collect::<Vec<String>>();
 
-        let repo = Repository::new(root);
-        let changed_files = repo
+        let changed_files = self
+            .repo
             .get_all_files_changed_since_branch(&packages_paths, since.as_str())
             .expect("Fail to get changed files");
 
