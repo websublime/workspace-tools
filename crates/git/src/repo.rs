@@ -23,8 +23,8 @@ impl Into<HashMap<String, String>> for RepositoryTags {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RepositoryTags {
-    hash: String,
-    tag: String,
+    pub hash: String,
+    pub tag: String,
 }
 
 #[allow(clippy::from_over_into)]

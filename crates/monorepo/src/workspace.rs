@@ -1,3 +1,4 @@
+use icu::collator::{Collator, CollatorOptions, Numeric, Strength};
 use serde::{Deserialize, Serialize};
 use std::fs::canonicalize;
 use std::path::Path;
@@ -95,6 +96,96 @@ impl Workspace {
                 pkgs
             })
             .collect::<Vec<PackageInfo>>()
+    }
+
+    #[allow(clippy::default_trait_access)]
+    pub fn get_last_known_publish_tag_info_for_package(&self, package_info: &PackageInfo) {
+        let mut remote_tags =
+            self.repo.get_remote_or_local_tags(Some(false)).expect("Error getting remote tags");
+        let mut local_tags =
+            self.repo.get_remote_or_local_tags(Some(true)).expect("Error getting local tags");
+
+        remote_tags.append(&mut local_tags);
+
+        let mut options = CollatorOptions::new();
+        options.strength = Some(Strength::Secondary);
+        options.numeric = Some(Numeric::On);
+
+        let collator = Collator::try_new(&Default::default(), options).unwrap();
+
+        remote_tags.sort_by(|a, b| {
+            let tag_a = a.tag.replace("refs/tags/", "");
+            let tag_b = b.tag.replace("refs/tags/", "");
+
+            collator.compare(&tag_b, &tag_a)
+        });
+
+        let package_tag =
+            format!("{}@{}", package_info.package.name, package_info.package.version.to_string());
+
+        let mut match_tag = remote_tags.iter().find(|item| {
+            let tag = item.tag.replace("refs/tags/", "");
+            let matches: Vec<&str> = tag.matches(&package_tag).collect();
+
+            !matches.is_empty()
+        });
+
+        todo!("Implementing")
+
+        /*if match_tag.is_none() {
+            let mut highest_tag = None;
+
+            remote_tags.iter().for_each(|item| {
+                let tag = &item.tag.replace("refs/tags/", "");
+
+                if tag.contains(&package_info.name) {
+                    if highest_tag.is_none() {
+                        highest_tag = Some(String::from(tag));
+                    }
+
+                    let high_tag = highest_tag.as_ref().unwrap();
+                    let current_tag_meta = package_scope_name_version(tag).unwrap();
+                    let highest_tag_meta = package_scope_name_version(high_tag).unwrap();
+
+                    let current_version = Version::from(&current_tag_meta.version).unwrap();
+                    let highest_version = Version::from(&highest_tag_meta.version).unwrap();
+
+                    if current_version.compare_to(&highest_version, Cmp::Gt) {
+                        highest_tag = Some(String::from(tag));
+                    }
+                }
+            });
+
+            if highest_tag.is_some() {
+                let highest_tag = highest_tag.unwrap();
+                let highest_tag_meta = package_scope_name_version(&highest_tag).unwrap();
+
+                match_tag = remote_tags.iter().find(|item| {
+                    let tag = item.tag.replace("refs/tags/", "");
+                    let matches: Vec<&str> = tag.matches(&highest_tag_meta.full).collect();
+
+                    if matches.len() > 0 {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                });
+            }
+        }
+
+        if match_tag.is_some() {
+            let hash = &match_tag.unwrap().hash;
+            let tag = &match_tag.unwrap().tag;
+            let package = &package_info.name;
+
+            return Some(PublishTagInfo {
+                hash: hash.to_string(),
+                tag: tag.to_string(),
+                package: package.to_string(),
+            });
+        }
+
+        None*/
     }
 
     fn get_root_package_json(&self) -> PackageJson {
