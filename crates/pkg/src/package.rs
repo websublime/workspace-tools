@@ -1,3 +1,4 @@
+use regex::Regex;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -59,6 +60,29 @@ pub struct PackageJson {
     pub scripts: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bin: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Package scope metadata extracted from a package name.
+pub struct PackageScopeMetadata {
+    pub full: String,
+    pub name: String,
+    pub version: String,
+    pub path: Option<String>,
+}
+
+/// Extracts the package scope name and version from a package name.
+pub fn package_scope_name_version(pkg_name: &str) -> Option<PackageScopeMetadata> {
+    let regex = Regex::new("^((?:@[^/@]+/)?[^/@]+)(?:@([^/]+))?(/.*)?$").expect("Invalid regex");
+
+    let matches = regex.captures(pkg_name).expect("Invalid package name");
+
+    Some(PackageScopeMetadata {
+        full: matches.get(0).map_or("", |m| m.as_str()).to_string(),
+        name: matches.get(1).map_or("", |m| m.as_str()).to_string(),
+        version: matches.get(2).map_or("", |m| m.as_str()).to_string(),
+        path: matches.get(3).map(|m| m.as_str().to_string()),
+    })
 }
 
 impl Node for PackageInfo {

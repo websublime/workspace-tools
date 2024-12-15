@@ -4,9 +4,10 @@ use std::fs::canonicalize;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::{fs::File, io::BufReader, path::PathBuf};
+use version_compare::{Cmp, Version};
 use wax::{CandidatePath, Glob, Pattern};
-use ws_git::repo::Repository;
-use ws_pkg::package::{Dependency, Package, PackageInfo, PackageJson};
+use ws_git::repo::{Repository, RepositoryPublishTagInfo};
+use ws_pkg::package::{package_scope_name_version, Dependency, Package, PackageInfo, PackageJson};
 use ws_std::manager::CorePackageManager;
 
 use crate::config::{get_workspace_config, WorkspaceConfig};
@@ -99,7 +100,10 @@ impl Workspace {
     }
 
     #[allow(clippy::default_trait_access)]
-    pub fn get_last_known_publish_tag_info_for_package(&self, package_info: &PackageInfo) {
+    pub fn get_last_known_publish_tag_info_for_package(
+        &self,
+        package_info: &PackageInfo,
+    ) -> Option<RepositoryPublishTagInfo> {
         let mut remote_tags =
             self.repo.get_remote_or_local_tags(Some(false)).expect("Error getting remote tags");
         let mut local_tags =
@@ -130,15 +134,13 @@ impl Workspace {
             !matches.is_empty()
         });
 
-        todo!("Implementing")
-
-        /*if match_tag.is_none() {
+        if match_tag.is_none() {
             let mut highest_tag = None;
 
             remote_tags.iter().for_each(|item| {
                 let tag = &item.tag.replace("refs/tags/", "");
 
-                if tag.contains(&package_info.name) {
+                if tag.contains(&package_info.package.name) {
                     if highest_tag.is_none() {
                         highest_tag = Some(String::from(tag));
                     }
@@ -164,11 +166,7 @@ impl Workspace {
                     let tag = item.tag.replace("refs/tags/", "");
                     let matches: Vec<&str> = tag.matches(&highest_tag_meta.full).collect();
 
-                    if matches.len() > 0 {
-                        return true;
-                    } else {
-                        return false;
-                    }
+                    !matches.is_empty()
                 });
             }
         }
@@ -176,16 +174,16 @@ impl Workspace {
         if match_tag.is_some() {
             let hash = &match_tag.unwrap().hash;
             let tag = &match_tag.unwrap().tag;
-            let package = &package_info.name;
+            let package = &package_info.package.name;
 
-            return Some(PublishTagInfo {
+            return Some(RepositoryPublishTagInfo {
                 hash: hash.to_string(),
                 tag: tag.to_string(),
                 package: package.to_string(),
             });
         }
 
-        None*/
+        None
     }
 
     fn get_root_package_json(&self) -> PackageJson {

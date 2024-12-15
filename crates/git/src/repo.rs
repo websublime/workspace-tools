@@ -22,6 +22,13 @@ impl Into<HashMap<String, String>> for RepositoryTags {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RepositoryPublishTagInfo {
+    pub hash: String,
+    pub tag: String,
+    pub package: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RepositoryTags {
     pub hash: String,
     pub tag: String,
