@@ -24,7 +24,7 @@ pub struct ChangeMeta {
     pub pkgs: Vec<Change>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Changes {
     root: PathBuf,
 }

@@ -10,6 +10,7 @@ use ws_git::repo::{Repository, RepositoryPublishTagInfo};
 use ws_pkg::package::{package_scope_name_version, Dependency, Package, PackageInfo, PackageJson};
 use ws_std::manager::CorePackageManager;
 
+use crate::changes::Changes;
 use crate::config::{get_workspace_config, WorkspaceConfig};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -24,6 +25,7 @@ struct PnpmInfo {
 pub struct Workspace {
     pub config: WorkspaceConfig,
     pub repo: Repository,
+    pub changes: Changes,
 }
 
 impl From<&str> for Workspace {
@@ -37,16 +39,18 @@ impl From<&str> for Workspace {
         let canonic_path = path_buff;
 
         let repo = Repository::new(&canonic_path);
+        let changes = Changes::new(&canonic_path);
         let config = get_workspace_config(Some(canonic_path));
 
-        Workspace { config, repo }
+        Workspace { config, repo, changes }
     }
 }
 
 impl From<WorkspaceConfig> for Workspace {
     fn from(config: WorkspaceConfig) -> Self {
         let repo = Repository::new(&config.workspace_root);
-        Workspace { config, repo }
+        let changes = Changes::new(&config.workspace_root);
+        Workspace { config, repo, changes }
     }
 }
 
@@ -54,7 +58,8 @@ impl Workspace {
     pub fn new(root: PathBuf) -> Self {
         let config = get_workspace_config(Some(root));
         let repo = Repository::new(&config.workspace_root);
-        Workspace { config, repo }
+        let changes = Changes::new(&config.workspace_root);
+        Workspace { config, repo, changes }
     }
 
     pub fn get_packages(&self) -> Vec<PackageInfo> {
@@ -97,6 +102,15 @@ impl Workspace {
                 pkgs
             })
             .collect::<Vec<PackageInfo>>()
+    }
+
+    pub fn get_package_recommend_bump(&self, package_info: &PackageInfo) {
+        let current_branch = match self.repo.get_current_branch().unwrap_or(None) {
+            Some(branch) => branch,
+            None => String::from("main"),
+        };
+        let package_name = &package_info.package.name;
+        let package_version = &package_info.package.version.to_string();
     }
 
     #[allow(clippy::default_trait_access)]
