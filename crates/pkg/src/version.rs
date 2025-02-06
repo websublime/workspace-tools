@@ -10,6 +10,17 @@ pub enum Version {
     Snapshot,
 }
 
+impl From<&str> for Version {
+    fn from(version: &str) -> Self {
+        match version {
+            "major" => Version::Major,
+            "minor" => Version::Minor,
+            "snapshot" => Version::Snapshot,
+            _ => Version::Patch,
+        }
+    }
+}
+
 impl Version {
     /// Bumps the version of the package to major.
     pub fn bump_major(version: &str) -> SemVersion {

@@ -8,9 +8,10 @@ use version_compare::{Cmp, Version};
 use wax::{CandidatePath, Glob, Pattern};
 use ws_git::repo::{Repository, RepositoryPublishTagInfo};
 use ws_pkg::package::{package_scope_name_version, Dependency, Package, PackageInfo, PackageJson};
+use ws_pkg::version::Version as BumpVersion;
 use ws_std::manager::CorePackageManager;
 
-use crate::changes::Changes;
+use crate::changes::{Change, Changes};
 use crate::config::{get_workspace_config, WorkspaceConfig};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -26,6 +27,16 @@ pub struct Workspace {
     pub config: WorkspaceConfig,
     pub repo: Repository,
     pub changes: Changes,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BumpOptions {
+    pub since: Option<String>,
+    pub release_as: Option<BumpVersion>,
+    pub fetch_all: Option<bool>,
+    pub fetch_tags: Option<bool>,
+    pub sync_deps: Option<bool>,
+    pub push: Option<bool>,
 }
 
 impl From<&str> for Workspace {
@@ -104,13 +115,37 @@ impl Workspace {
             .collect::<Vec<PackageInfo>>()
     }
 
-    pub fn get_package_recommend_bump(&self, package_info: &PackageInfo) {
+    pub fn get_package_recommend_bump(
+        &self,
+        package_info: &PackageInfo,
+        options: Option<BumpOptions>,
+    ) {
         let current_branch = match self.repo.get_current_branch().unwrap_or(None) {
             Some(branch) => branch,
             None => String::from("main"),
         };
         let package_name = &package_info.package.name;
         let package_version = &package_info.package.version.to_string();
+        let package_changes =
+            self.changes.changes_by_package(package_name, current_branch.as_str());
+
+        let settings = options.unwrap_or_else(|| BumpOptions {
+            since: None,
+            release_as: None,
+            fetch_all: None,
+            fetch_tags: None,
+            sync_deps: None,
+            push: None,
+        });
+
+        let since = &settings.since.unwrap_or(String::from("origin/main"));
+        let release_as = settings.release_as.unwrap_or_else(|| {
+            if let Some(change) = package_changes {
+                BumpVersion::from(change.release_as.as_str())
+            } else {
+                BumpVersion::Patch
+            }
+        });
     }
 
     #[allow(clippy::default_trait_access)]
