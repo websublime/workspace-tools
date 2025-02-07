@@ -128,8 +128,10 @@ impl Workspace {
         let package_version = &package_info.package.version.to_string();
         let package_changes =
             self.changes.changes_by_package(package_name, current_branch.as_str());
+        let branch_changes = self.changes.changes_by_branch(current_branch.as_str());
+        let sha = self.repo.get_current_sha().expect("Error getting current sha");
 
-        let settings = options.unwrap_or_else(|| BumpOptions {
+        let settings = options.unwrap_or(BumpOptions {
             since: None,
             release_as: None,
             fetch_all: None,
@@ -146,6 +148,23 @@ impl Workspace {
                 BumpVersion::Patch
             }
         });
+
+        let fetch_all = &settings.fetch_all.unwrap_or(false);
+
+        let sem_version = match release_as {
+            BumpVersion::Major => BumpVersion::bump_major(package_version.as_str()).to_string(),
+            BumpVersion::Minor => BumpVersion::bump_minor(package_version.as_str()).to_string(),
+            BumpVersion::Patch => BumpVersion::bump_patch(package_version.as_str()).to_string(),
+            BumpVersion::Snapshot => {
+                BumpVersion::bump_snapshot(package_version.as_str(), sha.as_str()).to_string()
+            }
+        };
+
+        let changed_files = self
+            .repo
+            .get_all_files_changed_since_sha(since.as_str())
+            .expect("Error getting changed files");
+        dbg!(changed_files);
     }
 
     #[allow(clippy::default_trait_access)]
