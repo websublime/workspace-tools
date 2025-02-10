@@ -1,3 +1,5 @@
+use std::{fs::read_to_string, path::PathBuf};
+
 use git_cliff_core::{
     changelog::Changelog,
     commit::{Commit as GitCommit, Signature},
@@ -5,22 +7,34 @@ use git_cliff_core::{
     release::Release,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use ws_git::repo::RepositoryCommit;
 use ws_pkg::package::PackageInfo;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ConventionalPackage {
     pub package_info: PackageInfo,
-    pub conventional_config: Value,
     pub conventional_commits: Value,
     pub changelog_output: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct ConventionalPackageOptions {
+    pub config: Config,
+    pub commits: Vec<RepositoryCommit>,
     pub version: Option<String>,
-    pub title: Option<String>,
+    pub tag: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+/// Struct representing the bump package.
+pub struct RecommendBumpPackage {
+    pub from: String,
+    pub to: String,
+    pub package_info: PackageInfo,
+    pub conventional: ConventionalPackage,
+    pub changed_files: Vec<String>,
+    pub deploy_to: Vec<String>,
 }
 
 fn generate_changelog(commits: &[GitCommit], config: &Config, version: Option<String>) -> String {
@@ -77,4 +91,38 @@ fn process_commits<'a>(commits: &[RepositoryCommit], config: &GitConfig) -> Vec<
             git_commit.process(config).unwrap()
         })
         .collect::<Vec<GitCommit>>()
+}
+
+pub fn get_conventional_by_package(
+    package_info: &PackageInfo,
+    options: &ConventionalPackageOptions,
+) -> ConventionalPackage {
+    let changelog_dir =
+        PathBuf::from(package_info.package_path.to_string()).join(String::from("CHANGELOG.md"));
+
+    let commits = process_commits(&options.commits, &options.config.git);
+
+    let mut conventional_package = ConventionalPackage {
+        package_info: package_info.to_owned(),
+        conventional_commits: json!([]),
+        changelog_output: String::new(),
+    };
+
+    let changelog_output = if changelog_dir.exists() {
+        let changelog_content = read_to_string(&changelog_dir).unwrap();
+        prepend_generate_changelog(
+            &commits,
+            &options.config,
+            &changelog_content,
+            options.version.clone(),
+        )
+    } else {
+        generate_changelog(&commits, &options.config, options.version.clone())
+    };
+
+    conventional_package.changelog_output = changelog_output.to_string();
+    conventional_package.conventional_commits =
+        serde_json::to_value(&commits).expect("Error convert conventional commits to Json");
+
+    conventional_package
 }

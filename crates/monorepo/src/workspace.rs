@@ -6,13 +6,18 @@ use std::process::{Command, Stdio};
 use std::{fs::File, io::BufReader, path::PathBuf};
 use version_compare::{Cmp, Version};
 use wax::{CandidatePath, Glob, Pattern};
-use ws_git::repo::{Repository, RepositoryPublishTagInfo};
+use ws_git::error::RepositoryError;
+use ws_git::repo::{Repository, RepositoryPublishTagInfo, RepositoryTags};
+use ws_pkg::bump::BumpOptions;
 use ws_pkg::package::{package_scope_name_version, Dependency, Package, PackageInfo, PackageJson};
 use ws_pkg::version::Version as BumpVersion;
 use ws_std::manager::CorePackageManager;
 
-use crate::changes::{Change, Changes};
+use crate::changes::Changes;
 use crate::config::{get_workspace_config, WorkspaceConfig};
+use crate::conventional::{
+    get_conventional_by_package, ConventionalPackageOptions, RecommendBumpPackage,
+};
 
 #[derive(Debug, Deserialize, Serialize)]
 /// A struct that represents a pnpm workspace.
@@ -27,16 +32,6 @@ pub struct Workspace {
     pub config: WorkspaceConfig,
     pub repo: Repository,
     pub changes: Changes,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BumpOptions {
-    pub since: Option<String>,
-    pub release_as: Option<BumpVersion>,
-    pub fetch_all: Option<bool>,
-    pub fetch_tags: Option<bool>,
-    pub sync_deps: Option<bool>,
-    pub push: Option<bool>,
 }
 
 impl From<&str> for Workspace {
@@ -119,7 +114,7 @@ impl Workspace {
         &self,
         package_info: &PackageInfo,
         options: Option<BumpOptions>,
-    ) {
+    ) -> RecommendBumpPackage {
         let current_branch = match self.repo.get_current_branch().unwrap_or(None) {
             Some(branch) => branch,
             None => String::from("main"),
@@ -149,9 +144,22 @@ impl Workspace {
             }
         });
 
-        let fetch_all = &settings.fetch_all.unwrap_or(false);
+        let deploy_to = match branch_changes {
+            Some(changes) => changes.deploy,
+            None => vec![],
+        };
 
-        let sem_version = match release_as {
+        let fetch_all = &settings.fetch_all.unwrap_or(false);
+        let fetch_tags = &settings.fetch_tags.unwrap_or(false);
+
+        if *fetch_all {
+            self.repo.fetch_all(Some(*fetch_tags)).expect("Error fetching all");
+        }
+
+        let tag_info = self.get_last_known_publish_tag_info_for_package(&package_info);
+        let tag_hash = tag_info.map(|t| t.hash);
+
+        let ref sem_version = match release_as {
             BumpVersion::Major => BumpVersion::bump_major(package_version.as_str()).to_string(),
             BumpVersion::Minor => BumpVersion::bump_minor(package_version.as_str()).to_string(),
             BumpVersion::Patch => BumpVersion::bump_patch(package_version.as_str()).to_string(),
@@ -164,7 +172,33 @@ impl Workspace {
             .repo
             .get_all_files_changed_since_sha(since.as_str())
             .expect("Error getting changed files");
-        dbg!(changed_files);
+
+        let commits_since = self
+            .repo
+            .get_commits_since(
+                tag_hash.clone(),
+                Some(package_info.package_relative_path.to_string()),
+            )
+            .expect("Error getting commits since");
+
+        let conventional_package = get_conventional_by_package(
+            &package_info,
+            &ConventionalPackageOptions {
+                config: self.config.cliff_config.clone(),
+                commits: commits_since,
+                version: Some(sem_version.to_string()),
+                tag: tag_hash,
+            },
+        );
+
+        RecommendBumpPackage {
+            from: package_version.to_string(),
+            to: sem_version.to_string(),
+            package_info: package_info.to_owned(),
+            conventional: conventional_package,
+            changed_files,
+            deploy_to,
+        }
     }
 
     #[allow(clippy::default_trait_access)]
@@ -172,10 +206,17 @@ impl Workspace {
         &self,
         package_info: &PackageInfo,
     ) -> Option<RepositoryPublishTagInfo> {
-        let mut remote_tags =
-            self.repo.get_remote_or_local_tags(Some(false)).expect("Error getting remote tags");
-        let mut local_tags =
-            self.repo.get_remote_or_local_tags(Some(true)).expect("Error getting local tags");
+        let mut remote_tags = self
+            .repo
+            .get_remote_or_local_tags(Some(false))
+            .or_else(|_| Ok::<Vec<RepositoryTags>, RepositoryError>(vec![]))
+            .expect("Error getting remote tags");
+
+        let mut local_tags = self
+            .repo
+            .get_remote_or_local_tags(Some(true))
+            .or_else(|_| Ok::<Vec<RepositoryTags>, RepositoryError>(vec![]))
+            .expect("Error getting local tags");
 
         remote_tags.append(&mut local_tags);
 

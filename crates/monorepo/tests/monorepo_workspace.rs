@@ -6,7 +6,8 @@ mod workspace_tests {
 
     use ws_git::repo::Repository;
     use ws_monorepo::test::MonorepoWorkspace;
-    use ws_monorepo::workspace::{BumpOptions, Workspace};
+    use ws_monorepo::workspace::Workspace;
+    use ws_pkg::bump::BumpOptions;
     use ws_pkg::version::Version;
     use ws_std::manager::CorePackageManager;
 
@@ -112,7 +113,7 @@ mod workspace_tests {
 
         let packages = workspace.get_changed_packages(Some("main".to_string()));
 
-        workspace.get_package_recommend_bump(
+        let recommended_bump = workspace.get_package_recommend_bump(
             &packages[0],
             Some(BumpOptions {
                 sync_deps: Some(false),
@@ -125,6 +126,7 @@ mod workspace_tests {
         );
 
         assert_eq!(1, 1);
+        dbg!(recommended_bump);
         //assert_eq!(package.package.name, "@scope/package-foo");
 
         monorepo.delete_repository();
