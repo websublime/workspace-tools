@@ -1,7 +1,8 @@
 use icu::collator::{Collator, CollatorOptions, Numeric, Strength};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::canonicalize;
+use std::fs::{canonicalize, OpenOptions};
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::{fs::File, io::BufReader, path::PathBuf};
@@ -216,11 +217,11 @@ impl Workspace {
             None => String::from("origin/main"),
         });
 
-        let _changes = self.changes.changes();
         let current_branch = match self.repo.get_current_branch().unwrap_or(None) {
             Some(branch) => branch,
             None => String::from("main"),
         };
+        // TODO: Wrong decision, should get changed packages before merge
         let changed_packages = self.get_changed_packages(Some(since.to_string()));
 
         if changed_packages.is_empty() {
@@ -364,6 +365,82 @@ impl Workspace {
                     }
                 }
             });
+        }
+
+        bumps
+    }
+
+    pub fn apply_bumps(&self, options: &BumpOptions) -> Vec<RecommendBumpPackage> {
+        let bumps = self.get_bumps(options);
+
+        if !bumps.is_empty() {
+            for bump in &bumps {
+                let git_message =
+                    self.config.changes_config.get("message").expect("Error getting git message");
+                let git_author = self
+                    .config
+                    .changes_config
+                    .get("git_user_name")
+                    .expect("Error getting git author");
+                let git_email = self
+                    .config
+                    .changes_config
+                    .get("git_user_email")
+                    .expect("Error getting git email");
+
+                let package_json_file_path =
+                    PathBuf::from(bump.package_info.package_json_path.to_string());
+                let changelog_file_path =
+                    PathBuf::from(bump.conventional.package_info.package_path.to_string())
+                        .join("CHANGELOG.md");
+
+                let package_json_file = OpenOptions::new()
+                    .write(true)
+                    .truncate(true)
+                    .open(&package_json_file_path)
+                    .expect("Error opening package.json file");
+                let package_json_writer = BufWriter::new(package_json_file);
+                serde_json::to_writer_pretty(package_json_writer, &bump.package_info.pkg_json)
+                    .expect("Error writing package.json file");
+
+                let mut changelog_file = OpenOptions::new()
+                    .write(true)
+                    .truncate(true)
+                    .create(true)
+                    .open(&changelog_file_path)
+                    .expect("Error opening CHANGELOG.md file");
+                changelog_file
+                    .write_all(bump.conventional.changelog_output.as_bytes())
+                    .expect("Error writing CHANGELOG.md file");
+
+                let package_tag = &format!("{}@{}", bump.package_info.package.name, bump.to);
+                let commit_body = format!(
+                    "Release of package {} with version: {}",
+                    bump.package_info.package.name, bump.to
+                );
+
+                self.repo
+                    .config(git_author.as_str(), git_email.as_str())
+                    .expect("Error configuring author name and email");
+                self.repo.add_all().expect("Error adding all files");
+                self.repo
+                    .commit(&git_message.replace("{tag}", package_tag), Some(commit_body), None)
+                    .expect("Error committing changes");
+
+                self.repo
+                    .tag(
+                        package_tag.as_str(),
+                        Some(format!(
+                            "chore: release {} to version {}",
+                            bump.package_info.package.name, bump.to
+                        )),
+                    )
+                    .expect("Error tagging package");
+
+                if options.push.unwrap_or(false) {
+                    self.repo.push(Some(true)).expect("Error pushing changes");
+                }
+            }
         }
 
         bumps

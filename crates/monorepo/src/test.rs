@@ -239,7 +239,7 @@ sort_commits = "newest"
 
         let monorepo_changes_json_data = r#"
       {
-          "message": "chore(release): release new version",
+          "message": "chore(release): release new version: {tag}",
           "git_user_name": "github-actions[bot]",
           "git_user_email": "github-actions[bot]@users.noreply.git.com",
           "changes": {}

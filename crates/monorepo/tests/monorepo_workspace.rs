@@ -3,6 +3,7 @@ mod workspace_tests {
 
     use std::fs::File;
     use std::io::Write;
+    use std::path::PathBuf;
 
     use ws_git::repo::Repository;
     use ws_monorepo::changes::Change;
@@ -171,6 +172,65 @@ mod workspace_tests {
             fetch_tags: Some(false),
             push: Some(false),
         });
+
+        assert_eq!(bumps.len(), 2);
+
+        monorepo.delete_repository();
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg_attr(target_os = "windows", ignore)]
+    fn test_apply_bumps() -> Result<(), std::io::Error> {
+        let monorepo = MonorepoWorkspace::new();
+        let root = monorepo.get_monorepo_root().clone();
+        let js_path = root.join("packages/package-foo/main.mjs");
+
+        monorepo.create_workspace(CorePackageManager::Npm)?;
+
+        let workspace = Workspace::new(root.clone());
+        let repo = Repository::new(root.as_path());
+
+        let _ = repo.create_branch("feat/message").expect("Failed to create branch");
+
+        let mut js_file = File::create(js_path.as_path()).expect("Failed to create main.js file");
+        js_file.write_all(r#"export const message = "hello";"#.as_bytes())?;
+
+        let change =
+            &Change { package: "@scope/package-foo".to_string(), release_as: "patch".to_string() };
+        workspace.changes.add(change, Some(vec!["production".to_string()]));
+
+        repo.add_all().expect("Failed to add files");
+        repo.commit("feat: message to the world", None, None).expect("Failed to commit");
+
+        repo.checkout("main").expect("Error checking out main branch");
+        repo.merge("feat/message").expect("Error merging branch");
+
+        let bumps = workspace.apply_bumps(&BumpOptions {
+            sync_deps: Some(true),
+            since: Some("main".to_string()),
+            release_as: None,
+            fetch_all: Some(false),
+            fetch_tags: Some(false),
+            push: Some(false),
+        });
+
+        dbg!(&bumps);
+
+        /*let first = bumps.first().expect("Error getting first bump");
+
+        let pkg_file_path =
+            PathBuf::from(first.package_info.package_path.clone()).join("package.json");
+        let pkg_file = File::open(pkg_file_path)?;
+        let pkg_info: ws_pkg::package::PackageJson = serde_json::from_reader(pkg_file)?;
+        let changelog_file_path =
+            PathBuf::from(first.package_info.package_path.clone()).join("CHANGELOG.md");
+        //let changelog_file = File::open(changelog_file_path.clone())?;
+        let changelog_content = std::fs::read_to_string(changelog_file_path.clone())?;
+
+        dbg!(pkg_info);
+        dbg!(changelog_content);*/
 
         assert_eq!(bumps.len(), 2);
 
