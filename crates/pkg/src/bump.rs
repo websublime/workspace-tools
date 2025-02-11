@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use super::package::PackageInfo;
 use super::version::Version;
 
 #[derive(Debug, Deserialize, Serialize)]

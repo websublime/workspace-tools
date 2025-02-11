@@ -5,6 +5,7 @@ mod workspace_tests {
     use std::io::Write;
 
     use ws_git::repo::Repository;
+    use ws_monorepo::changes::Change;
     use ws_monorepo::test::MonorepoWorkspace;
     use ws_monorepo::workspace::Workspace;
     use ws_pkg::bump::BumpOptions;
@@ -108,6 +109,10 @@ mod workspace_tests {
         let mut js_file = File::create(js_path.as_path()).expect("Failed to create main.js file");
         js_file.write_all(r#"export const message = "hello";"#.as_bytes())?;
 
+        let change =
+            &Change { package: "@scope/package-foo".to_string(), release_as: "patch".to_string() };
+        workspace.changes.add(change, Some(vec!["production".to_string()]));
+
         let _ = repo.add_all().expect("Failed to add files");
         let _ = repo.commit("feat: message to the world", None, None).expect("Failed to commit");
 
@@ -125,9 +130,9 @@ mod workspace_tests {
             }),
         );
 
-        assert_eq!(1, 1);
-        dbg!(recommended_bump);
-        //assert_eq!(package.package.name, "@scope/package-foo");
+        assert_eq!(recommended_bump.from, "1.0.0");
+        assert_eq!(recommended_bump.to, "2.0.0");
+        assert_eq!(recommended_bump.changed_files.len(), 2);
 
         monorepo.delete_repository();
 

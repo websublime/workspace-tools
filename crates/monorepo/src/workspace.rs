@@ -156,17 +156,17 @@ impl Workspace {
             self.repo.fetch_all(Some(*fetch_tags)).expect("Error fetching all");
         }
 
-        let tag_info = self.get_last_known_publish_tag_info_for_package(&package_info);
+        let tag_info = self.get_last_known_publish_tag_info_for_package(package_info);
         let tag_hash = tag_info.map(|t| t.hash);
 
-        let ref sem_version = match release_as {
+        let sem_version = &(match release_as {
             BumpVersion::Major => BumpVersion::bump_major(package_version.as_str()).to_string(),
             BumpVersion::Minor => BumpVersion::bump_minor(package_version.as_str()).to_string(),
             BumpVersion::Patch => BumpVersion::bump_patch(package_version.as_str()).to_string(),
             BumpVersion::Snapshot => {
                 BumpVersion::bump_snapshot(package_version.as_str(), sha.as_str()).to_string()
             }
-        };
+        });
 
         let changed_files = self
             .repo
@@ -182,7 +182,7 @@ impl Workspace {
             .expect("Error getting commits since");
 
         let conventional_package = get_conventional_by_package(
-            &package_info,
+            package_info,
             &ConventionalPackageOptions {
                 config: self.config.cliff_config.clone(),
                 commits: commits_since,
@@ -233,8 +233,9 @@ impl Workspace {
             collator.compare(&tag_b, &tag_a)
         });
 
-        let package_tag =
-            format!("{}@{}", package_info.package.name, package_info.package.version.to_string());
+        let package_name = &package_info.package.name;
+        let package_version = &package_info.package.version.to_string();
+        let package_tag = format!("{package_name}@{package_version}");
 
         let mut match_tag = remote_tags.iter().find(|item| {
             let tag = item.tag.replace("refs/tags/", "");
