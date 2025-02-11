@@ -1,5 +1,6 @@
 use semver::{BuildMetadata, Prerelease, Version as SemVersion};
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter, Result};
 
 #[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq)]
 /// Enum representing the type of version bump to be performed.
@@ -17,6 +18,17 @@ impl From<&str> for Version {
             "minor" => Version::Minor,
             "snapshot" => Version::Snapshot,
             _ => Version::Patch,
+        }
+    }
+}
+
+impl Display for Version {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match self {
+            Version::Major => write!(f, "major"),
+            Version::Minor => write!(f, "minor"),
+            Version::Patch => write!(f, "patch"),
+            Version::Snapshot => write!(f, "snapshot"),
         }
     }
 }

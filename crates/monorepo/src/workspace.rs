@@ -1,5 +1,6 @@
 use icu::collator::{Collator, CollatorOptions, Numeric, Strength};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs::canonicalize;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -13,7 +14,7 @@ use ws_pkg::package::{package_scope_name_version, Dependency, Package, PackageIn
 use ws_pkg::version::Version as BumpVersion;
 use ws_std::manager::CorePackageManager;
 
-use crate::changes::Changes;
+use crate::changes::{Change, Changes};
 use crate::config::{get_workspace_config, WorkspaceConfig};
 use crate::conventional::{
     get_conventional_by_package, ConventionalPackageOptions, RecommendBumpPackage,
@@ -199,6 +200,84 @@ impl Workspace {
             changed_files,
             deploy_to,
         }
+    }
+
+    pub fn get_bumps(&self, options: &BumpOptions) {
+        if options.fetch_all.unwrap_or(false) {
+            self.repo
+                .fetch_all(Some(options.fetch_tags.unwrap_or(false)))
+                .expect("Error fetching repository");
+        }
+
+        let since = match options.since {
+            Some(ref since) => since.to_string(),
+            None => String::from("origin/main"),
+        };
+
+        let _changes = self.changes.changes();
+        let current_branch = match self.repo.get_current_branch().unwrap_or(None) {
+            Some(branch) => branch,
+            None => String::from("main"),
+        };
+        let changed_packages = self.get_changed_packages(Some(since));
+
+        if changed_packages.is_empty() {
+            // return vec![];
+        }
+
+        let mut bump_changes = HashMap::new();
+        //let mut bump_dependencies = HashMap::new();
+        let packages = self.get_packages();
+
+        for changed_package in &changed_packages {
+            let package_name = &changed_package.package.name;
+
+            let change =
+                self.changes.changes_by_package(package_name.as_str(), current_branch.as_str());
+
+            if let Some(ref chg) = change {
+                let override_release_as = options.release_as;
+                let calculated_release_as = match Some(current_branch.contains("main")) {
+                    Some(true) => BumpVersion::from(chg.release_as.as_str()),
+                    Some(false) | None => BumpVersion::Snapshot,
+                };
+
+                let release_as = override_release_as.unwrap_or(calculated_release_as);
+
+                let package_change = Change {
+                    package: package_name.to_string(),
+                    release_as: release_as.to_string(),
+                };
+
+                bump_changes.insert(package_name.to_string(), package_change);
+            }
+
+            if options.sync_deps.unwrap_or(false) {
+                packages.iter().for_each(|pkg| {
+                    pkg.package.dependencies.iter().for_each(|dependency| {
+                        let release_as = match Some(current_branch.contains("main")) {
+                            Some(true) => BumpVersion::Patch,
+                            Some(false) | None => BumpVersion::Snapshot,
+                        };
+
+                        if dependency.name == changed_package.package.name
+                            && change.is_some()
+                            && !bump_changes.contains_key(&pkg.package.name)
+                        {
+                            bump_changes.insert(
+                                pkg.package.name.to_string(),
+                                Change {
+                                    package: pkg.package.name.to_string(),
+                                    release_as: release_as.to_string(),
+                                },
+                            );
+                        }
+                    });
+                });
+            }
+        }
+
+        dbg!(bump_changes);
     }
 
     #[allow(clippy::default_trait_access)]
