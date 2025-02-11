@@ -10,6 +10,7 @@ use wax::{CandidatePath, Glob, Pattern};
 use ws_git::error::RepositoryError;
 use ws_git::repo::{Repository, RepositoryPublishTagInfo, RepositoryTags};
 use ws_pkg::bump::BumpOptions;
+use ws_pkg::dependency::Node;
 use ws_pkg::package::{package_scope_name_version, Dependency, Package, PackageInfo, PackageJson};
 use ws_pkg::version::Version as BumpVersion;
 use ws_std::manager::CorePackageManager;
@@ -202,41 +203,41 @@ impl Workspace {
         }
     }
 
-    pub fn get_bumps(&self, options: &BumpOptions) {
+    #[allow(clippy::too_many_lines)]
+    pub fn get_bumps(&self, options: &BumpOptions) -> Vec<RecommendBumpPackage> {
         if options.fetch_all.unwrap_or(false) {
             self.repo
                 .fetch_all(Some(options.fetch_tags.unwrap_or(false)))
                 .expect("Error fetching repository");
         }
 
-        let since = match options.since {
+        let since = &(match options.since {
             Some(ref since) => since.to_string(),
             None => String::from("origin/main"),
-        };
+        });
 
         let _changes = self.changes.changes();
         let current_branch = match self.repo.get_current_branch().unwrap_or(None) {
             Some(branch) => branch,
             None => String::from("main"),
         };
-        let changed_packages = self.get_changed_packages(Some(since));
+        let changed_packages = self.get_changed_packages(Some(since.to_string()));
 
         if changed_packages.is_empty() {
-            // return vec![];
+            return vec![];
         }
 
         let mut bump_changes = HashMap::new();
-        //let mut bump_dependencies = HashMap::new();
+        let mut bump_dependencies = HashMap::new();
         let packages = self.get_packages();
 
         for changed_package in &changed_packages {
             let package_name = &changed_package.package.name;
-
+            let override_release_as = options.release_as;
             let change =
                 self.changes.changes_by_package(package_name.as_str(), current_branch.as_str());
 
             if let Some(ref chg) = change {
-                let override_release_as = options.release_as;
                 let calculated_release_as = match Some(current_branch.contains("main")) {
                     Some(true) => BumpVersion::from(chg.release_as.as_str()),
                     Some(false) | None => BumpVersion::Snapshot,
@@ -255,10 +256,11 @@ impl Workspace {
             if options.sync_deps.unwrap_or(false) {
                 packages.iter().for_each(|pkg| {
                     pkg.package.dependencies.iter().for_each(|dependency| {
-                        let release_as = match Some(current_branch.contains("main")) {
+                        let calculated_release_as = match Some(current_branch.contains("main")) {
                             Some(true) => BumpVersion::Patch,
                             Some(false) | None => BumpVersion::Snapshot,
                         };
+                        let release_as = override_release_as.unwrap_or(calculated_release_as);
 
                         if dependency.name == changed_package.package.name
                             && change.is_some()
@@ -277,7 +279,94 @@ impl Workspace {
             }
         }
 
-        dbg!(bump_changes);
+        let mut bumps = bump_changes
+            .iter()
+            .map(|(name, change)| {
+                let override_release_as = options.release_as;
+                let package =
+                    self.get_package_info(name).expect("Error getting package info on bump.");
+
+                let calculated_release_as = match Some(current_branch.contains("main")) {
+                    Some(true) => BumpVersion::from(change.release_as.as_str()),
+                    Some(false) | None => BumpVersion::Snapshot,
+                };
+
+                let release_as = override_release_as.unwrap_or(calculated_release_as);
+
+                let bump = self.get_package_recommend_bump(
+                    &package,
+                    Some(BumpOptions {
+                        since: Some(since.to_string()),
+                        release_as: Some(release_as),
+                        fetch_all: options.fetch_all,
+                        fetch_tags: options.fetch_tags,
+                        sync_deps: options.sync_deps,
+                        push: options.push,
+                    }),
+                );
+
+                if !bump.package_info.dependencies().is_empty() {
+                    bump_dependencies.insert(
+                        bump.package_info.package.name.to_string(),
+                        bump.package_info.dependencies().to_owned(),
+                    );
+                }
+
+                bump
+            })
+            .collect::<Vec<RecommendBumpPackage>>();
+
+        bumps.iter_mut().for_each(|bump| {
+            let version = bump.to.as_str();
+            bump.package_info.package.update_dependency(version);
+            bump.package_info.update_dependency(version);
+
+            bump.conventional.package_info.update_dependency(version);
+            bump.conventional.package_info.package.update_dependency(version);
+        });
+
+        if options.sync_deps.unwrap_or(false) {
+            bump_dependencies.iter().for_each(|(package_name, dependencies)| {
+                let temp_bumps = bumps.clone();
+                let bump = bumps
+                    .iter_mut()
+                    .find(|b| b.package_info.package.name == *package_name)
+                    .expect("Error finding bump dependency");
+
+                for dep in dependencies {
+                    let bump_dep =
+                        temp_bumps.iter().find(|pkgs| pkgs.package_info.package.name == dep.name);
+
+                    if let Some(dep_bump) = bump_dep {
+                        bump.package_info.update_dependency_version(&dep.name, &dep_bump.to);
+                        bump.conventional
+                            .package_info
+                            .update_dependency_version(&dep.name, &dep_bump.to);
+                        bump.package_info
+                            .package
+                            .update_dependency_version(&dep.name, &dep_bump.to);
+                        bump.conventional
+                            .package_info
+                            .package
+                            .update_dependency_version(&dep.name, &dep_bump.to);
+
+                        bump.package_info.update_dev_dependency_version(&dep.name, &dep_bump.to);
+                        bump.conventional
+                            .package_info
+                            .update_dev_dependency_version(&dep.name, &dep_bump.to);
+                        bump.package_info
+                            .package
+                            .update_dev_dependency_version(&dep.name, &dep_bump.to);
+                        bump.conventional
+                            .package_info
+                            .package
+                            .update_dev_dependency_version(&dep.name, &dep_bump.to);
+                    }
+                }
+            });
+        }
+
+        bumps
     }
 
     #[allow(clippy::default_trait_access)]

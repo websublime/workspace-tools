@@ -163,16 +163,16 @@ mod workspace_tests {
         let _ = repo.add_all().expect("Failed to add files");
         let _ = repo.commit("feat: message to the world", None, None).expect("Failed to commit");
 
-        workspace.get_bumps(&BumpOptions {
+        let bumps = workspace.get_bumps(&BumpOptions {
             sync_deps: Some(true),
             since: Some("main".to_string()),
-            release_as: Some(Version::Major),
+            release_as: None, //Some(Version::Major),
             fetch_all: Some(false),
             fetch_tags: Some(false),
             push: Some(false),
         });
 
-        assert_eq!("1.0.0", "1.0.0");
+        assert_eq!(bumps.len(), 2);
 
         monorepo.delete_repository();
 

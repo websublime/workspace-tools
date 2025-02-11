@@ -85,6 +85,74 @@ pub fn package_scope_name_version(pkg_name: &str) -> Option<PackageScopeMetadata
     })
 }
 
+impl Package {
+    pub fn update_dependency(&mut self, version: &str) {
+        let version = Version::parse(version).expect("Invalid version");
+
+        self.version = version;
+    }
+
+    pub fn update_dependency_version(&mut self, name: &str, version: &str) {
+        let version = Version::parse(version).expect("Invalid version");
+        let has_dependency = self.dependencies.iter().any(|dep| dep.name == name);
+
+        if has_dependency {
+            self.dependencies.iter_mut().for_each(|dep| {
+                if dep.name == name {
+                    dep.version = VersionReq::parse(&version.to_string()).unwrap();
+                }
+            });
+        }
+    }
+
+    pub fn update_dev_dependency_version(&mut self, name: &str, version: &str) {
+        let version = Version::parse(version).expect("Invalid version");
+        let has_dependency = self.dependencies.iter().any(|dep| dep.name == name);
+
+        if has_dependency {
+            self.dependencies.iter_mut().for_each(|dep| {
+                if dep.name == name {
+                    dep.version = VersionReq::parse(&version.to_string()).unwrap();
+                }
+            });
+        }
+    }
+}
+
+impl PackageInfo {
+    pub fn update_dependency(&mut self, version: &str) {
+        let version = Version::parse(version).expect("Invalid version");
+
+        self.pkg_json["version"] = serde_json::Value::String(version.to_string());
+    }
+
+    pub fn update_dependency_version(&mut self, name: &str, version: &str) {
+        let version = Version::parse(version).expect("Invalid version");
+
+        let dependencies = self.pkg_json["dependencies"].as_object_mut().unwrap();
+        let has_dependency = dependencies.contains_key(name);
+
+        if has_dependency {
+            dependencies.insert(name.to_string(), serde_json::Value::String(version.to_string()));
+        }
+    }
+
+    pub fn update_dev_dependency_version(&mut self, name: &str, version: &str) {
+        let version = Version::parse(version).expect("Invalid version");
+        let package_json = self.pkg_json.as_object().unwrap();
+
+        if package_json.contains_key("devDependencies") {
+            let dependencies = self.pkg_json["devDependencies"].as_object_mut().unwrap();
+            let has_dependency = dependencies.contains_key(name);
+
+            if has_dependency {
+                dependencies
+                    .insert(name.to_string(), serde_json::Value::String(version.to_string()));
+            }
+        }
+    }
+}
+
 impl Node for PackageInfo {
     type DependencyType = Dependency;
 
