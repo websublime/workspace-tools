@@ -224,20 +224,32 @@ impl Repository {
         Ok(log)
     }
 
-    pub fn diff(&self, diff: Option<String>) -> Result<String, RepositoryError> {
-        let diff = match diff {
-            Some(diff) => diff,
-            None => ".".to_string(),
-        };
+    pub fn diff(&self, diff: Option<Vec<String>>) -> Result<String, RepositoryError> {
+        let mut args: Vec<String> = vec!["--no-pager".to_string(), "diff".to_string()];
 
-        let diff = execute(
+        if let Some(diff) = diff {
+            args.extend(diff);
+        } else {
+            args.push(".".to_string());
+        }
+
+        let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+
+        let diff =
+            execute("git", self.location.as_path(), args_ref, |stdout, _| Ok(stdout.to_string()))?;
+
+        Ok(diff)
+    }
+
+    pub fn get_last_tag(&self) -> Result<String, RepositoryError> {
+        let tag = execute(
             "git",
             self.location.as_path(),
-            ["--no-pager", "diff", diff.as_str()],
+            ["describe", "--tags", "--abbrev=0"],
             |stdout, _| Ok(stdout.to_string()),
         )?;
 
-        Ok(diff)
+        Ok(tag)
     }
 
     pub fn merge(&self, branch_name: &str) -> Result<bool, RepositoryError> {

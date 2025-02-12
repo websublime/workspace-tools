@@ -234,7 +234,7 @@ mod repo_tests {
             |_, stdout| Ok(stdout.status.success()),
         )?;
 
-        let diff_branch = repo.diff(Some(main_file_path.to_str().unwrap().to_string()))?;
+        let diff_branch = repo.diff(Some(vec![main_file_path.to_str().unwrap().to_string()]))?;
 
         #[cfg(not(windows))]
         assert!(diff_branch.is_empty());

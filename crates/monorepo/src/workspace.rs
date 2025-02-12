@@ -92,10 +92,30 @@ impl Workspace {
         let packages_paths =
             packages.iter().map(|pkg| pkg.package_path.to_string()).collect::<Vec<String>>();
 
-        let changed_files = self
-            .repo
-            .get_all_files_changed_since_branch(&packages_paths, since.as_str())
-            .expect("Fail to get changed files");
+        let changed_files = match Some(since.contains("main")) {
+            Some(true) => {
+                let last_tag = self.repo.get_last_tag().expect("Error getting last tag");
+
+                let diff_files = self
+                    .repo
+                    .diff(Some(vec!["--name-only".to_string(), last_tag.to_string()]))
+                    .expect("Error get files diff from latest tag");
+
+                diff_files
+                    .split('\n')
+                    .filter(|item| !item.trim().is_empty())
+                    .map(|item| self.config.workspace_root.join(item))
+                    .filter(|item| item.exists())
+                    .map(|item| {
+                        item.to_str().expect("Failed to convert path to string").to_string()
+                    })
+                    .collect::<Vec<String>>()
+            }
+            Some(false) | None => self
+                .repo
+                .get_all_files_changed_since_branch(&packages_paths, since.as_str())
+                .expect("Fail to get changed files"),
+        };
 
         packages
             .iter()
@@ -221,7 +241,7 @@ impl Workspace {
             Some(branch) => branch,
             None => String::from("main"),
         };
-        // TODO: Wrong decision, should get changed packages before merge
+
         let changed_packages = self.get_changed_packages(Some(since.to_string()));
 
         if changed_packages.is_empty() {
@@ -235,6 +255,7 @@ impl Workspace {
         for changed_package in &changed_packages {
             let package_name = &changed_package.package.name;
             let override_release_as = options.release_as;
+            // TODO: fix here
             let change =
                 self.changes.changes_by_package(package_name.as_str(), current_branch.as_str());
 
