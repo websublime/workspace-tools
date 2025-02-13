@@ -1,5 +1,8 @@
 use petgraph::{stable_graph::StableDiGraph, Direction};
-use std::fmt::Display;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
 /// Must be implemented by the type you wish
 pub trait Node {
@@ -7,11 +10,15 @@ pub trait Node {
     /// It might also just be the exact same type as the one that implements the Node trait, in which case `Node::matches` can be implemented through simple equality.
     type DependencyType;
 
+    type Identifier: std::hash::Hash + Eq + Clone;
+
     /// Returns a slice of dependencies for this Node
     fn dependencies(&self) -> &[Self::DependencyType];
 
     /// Returns true if the `dependency` can be met by us.
     fn matches(&self, dependency: &Self::DependencyType) -> bool;
+
+    fn identifier(&self) -> Self::Identifier;
 }
 
 /// Wrapper around dependency graph nodes.
@@ -63,6 +70,10 @@ impl<'a, N: Node> Display for Step<'a, N> {
 #[derive(Debug, Clone)]
 pub struct DependencyGraph<'a, N: Node> {
     pub graph: StableDiGraph<Step<'a, N>, &'a N::DependencyType>,
+    // Map node identifiers to their indices
+    pub node_indices: HashMap<N::Identifier, petgraph::stable_graph::NodeIndex>,
+    // Map node identifiers to their dependents' identifiers
+    pub dependents: HashMap<N::Identifier, Vec<N::Identifier>>,
 }
 
 /// The only way to build a [`DependencyGraph`] is from a slice of objects implementing [`Node`].
@@ -74,20 +85,30 @@ where
 {
     fn from(nodes: &'a [N]) -> Self {
         let mut graph = StableDiGraph::<Step<'a, N>, &'a N::DependencyType>::new();
+        let mut node_indices = HashMap::new();
+        let mut dependents: HashMap<N::Identifier, Vec<N::Identifier>> = HashMap::new();
 
         // Insert the input nodes into the graph, and record their positions.
         // We'll be adding the edges next, and filling in any unresolved
         // steps we find along the way.
-        let nodes: Vec<(_, _)> =
-            nodes.iter().map(|node| (node, graph.add_node(Step::Resolved(node)))).collect();
+        let nodes: Vec<(_, _)> = nodes
+            .iter()
+            .map(|node| {
+                let index = graph.add_node(Step::Resolved(node));
+                node_indices.insert(node.identifier(), index);
+                (node, index)
+            })
+            .collect();
 
         for (node, index) in &nodes {
             for dependency in node.dependencies() {
                 // Check to see if we can resolve this dependency internally.
-                if let Some((_, dependent)) = nodes.iter().find(|(dep, _)| dep.matches(dependency))
+                if let Some((dep_node, dependent)) =
+                    nodes.iter().find(|(dep, _)| dep.matches(dependency))
                 {
                     // If we can, just add an edge between the two nodes.
                     graph.add_edge(*index, *dependent, dependency);
+                    dependents.entry(dep_node.identifier()).or_default().push(node.identifier());
                 } else {
                     // If not, create a new "Unresolved" node, and create an edge to that.
                     let unresolved = graph.add_node(Step::Unresolved(dependency));
@@ -96,7 +117,7 @@ where
             }
         }
 
-        Self { graph }
+        Self { graph, node_indices, dependents }
     }
 }
 
@@ -119,6 +140,48 @@ where
 
     pub fn resolved_dependencies(&self) -> impl Iterator<Item = &N> {
         self.graph.node_weights().filter_map(Step::as_resolved)
+    }
+
+    // Get node index by identifier
+    pub fn get_node_index(&self, id: &N::Identifier) -> Option<petgraph::stable_graph::NodeIndex> {
+        self.node_indices.get(id).copied()
+    }
+
+    // Get node by identifier
+    pub fn get_node(&self, id: &N::Identifier) -> Option<&Step<'a, N>> {
+        self.get_node_index(id).and_then(|idx| self.graph.node_weight(idx))
+    }
+
+    // Get dependents by identifier
+    pub fn get_dependents(&self, id: &N::Identifier) -> Option<&Vec<N::Identifier>> {
+        self.dependents.get(id)
+    }
+
+    // Propagate update starting from a node identified by its identifier
+    pub fn propagate_update<F>(&self, start_id: &N::Identifier, mut update_fn: F)
+    where
+        F: FnMut(&Step<'a, N>, &[N::Identifier]),
+    {
+        let mut visited = HashSet::new();
+        let mut stack = vec![start_id.clone()];
+
+        while let Some(current_id) = stack.pop() {
+            if visited.insert(current_id.clone()) {
+                if let Some(node_weight) = self.get_node(&current_id) {
+                    let empty_deps = vec![];
+                    // Get dependents for current node
+                    let deps = self.get_dependents(&current_id).unwrap_or(&empty_deps);
+
+                    // Apply update
+                    update_fn(node_weight, deps);
+
+                    // Add dependents to stack for processing
+                    if let Some(dependents) = self.get_dependents(&current_id) {
+                        stack.extend(dependents.iter().cloned());
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -11,7 +11,7 @@ use wax::{CandidatePath, Glob, Pattern};
 use ws_git::error::RepositoryError;
 use ws_git::repo::{Repository, RepositoryPublishTagInfo, RepositoryTags};
 use ws_pkg::bump::BumpOptions;
-use ws_pkg::dependency::Node;
+use ws_pkg::dependency::{DependencyGraph, Node};
 use ws_pkg::package::{package_scope_name_version, Dependency, Package, PackageInfo, PackageJson};
 use ws_pkg::version::Version as BumpVersion;
 use ws_std::manager::CorePackageManager;
@@ -86,7 +86,7 @@ impl Workspace {
         packages.into_iter().find(|p| p.package.name == package_name)
     }
 
-    pub fn get_changed_packages(&self, sha: Option<String>) -> Vec<PackageInfo> {
+    /*pub fn get_changed_packages(&self, sha: Option<String>) -> Vec<PackageInfo> {
         let packages = &self.get_packages();
         let since = sha.unwrap_or(String::from("main"));
         let packages_paths =
@@ -138,15 +138,12 @@ impl Workspace {
         package_info: &PackageInfo,
         options: Option<BumpOptions>,
     ) -> RecommendBumpPackage {
-        let current_branch = match self.repo.get_current_branch().unwrap_or(None) {
-            Some(branch) => branch,
-            None => String::from("main"),
-        };
         let package_name = &package_info.package.name;
         let package_version = &package_info.package.version.to_string();
-        let package_changes =
-            self.changes.changes_by_package(package_name, current_branch.as_str());
-        let branch_changes = self.changes.changes_by_branch(current_branch.as_str());
+        let package_changes_list = self.changes.changes_by_package_name(package_name);
+        let package_changes = package_changes_list.first().or(None);
+        let branch_meta_changes = self.changes.get_changes_meta_by_package_name(package_name);
+        let branch_changes = branch_meta_changes.first().or(None);
         let sha = self.repo.get_current_sha().expect("Error getting current sha");
 
         let settings = options.unwrap_or(BumpOptions {
@@ -168,7 +165,7 @@ impl Workspace {
         });
 
         let deploy_to = match branch_changes {
-            Some(changes) => changes.deploy,
+            Some(changes) => changes.deploy.clone(),
             None => vec![],
         };
 
@@ -225,7 +222,7 @@ impl Workspace {
     }
 
     #[allow(clippy::too_many_lines)]
-    pub fn get_bumps(&self, options: &BumpOptions) -> Vec<RecommendBumpPackage> {
+    pub fn get_bumps(&self, options: &BumpOptions, write: Option<bool>) -> Vec<RecommendBumpPackage> {
         if options.fetch_all.unwrap_or(false) {
             self.repo
                 .fetch_all(Some(options.fetch_tags.unwrap_or(false)))
@@ -256,10 +253,10 @@ impl Workspace {
             let package_name = &changed_package.package.name;
             let override_release_as = options.release_as;
             // TODO: fix here
-            let change =
-                self.changes.changes_by_package(package_name.as_str(), current_branch.as_str());
+            let changes = self.changes.changes_by_package_name(package_name.as_str());
+            let change = changes.first().or(None);
 
-            if let Some(ref chg) = change {
+            if let Some(chg) = change {
                 let calculated_release_as = match Some(current_branch.contains("main")) {
                     Some(true) => BumpVersion::from(chg.release_as.as_str()),
                     Some(false) | None => BumpVersion::Snapshot,
@@ -345,6 +342,18 @@ impl Workspace {
 
             bump.conventional.package_info.update_dependency(version);
             bump.conventional.package_info.package.update_dependency(version);
+
+            match write {
+                Some(true) => {
+                    bump.package_info.write_package_json();
+                    let body = format!("Package: {} updated to version: {}", &bump.package_info.package.name, &bump.to);
+                    self.repo.add(PathBuf::from(&bump.package_info.package_json_path).as_path()).expect("Failed to add package.json");
+                    self.repo.commit("chore: update package.json version", Some(body), None).expect("Failed to commit chore");
+                },
+                Some(false) | None => {
+                    // Nothing todo
+                },
+            }
         });
 
         if options.sync_deps.unwrap_or(false) {
@@ -383,6 +392,18 @@ impl Workspace {
                             .package_info
                             .package
                             .update_dev_dependency_version(&dep.name, &dep_bump.to);
+
+                        match write {
+                            Some(true) => {
+                                bump.package_info.write_package_json();
+                                let body = format!("Package: {} updated to version: {}", &bump.package_info.package.name, &bump.to);
+                                self.repo.add(PathBuf::from(&bump.package_info.package_json_path).as_path()).expect("Failed to add package.json");
+                                self.repo.commit("chore: update package.json version dependencies", Some(body), None).expect("Failed to commit chore");
+                            },
+                            Some(false) | None => {
+                                // Nothing todo
+                            },
+                        }
                     }
                 }
             });
@@ -392,23 +413,23 @@ impl Workspace {
     }
 
     pub fn apply_bumps(&self, options: &BumpOptions) -> Vec<RecommendBumpPackage> {
-        let bumps = self.get_bumps(options);
+        let bumps = self.get_bumps(options, Some(true));
 
         if !bumps.is_empty() {
-            for bump in &bumps {
-                let git_message =
-                    self.config.changes_config.get("message").expect("Error getting git message");
-                let git_author = self
-                    .config
-                    .changes_config
-                    .get("git_user_name")
-                    .expect("Error getting git author");
-                let git_email = self
-                    .config
-                    .changes_config
-                    .get("git_user_email")
-                    .expect("Error getting git email");
+            let git_message =
+                self.config.changes_config.get("message").expect("Error getting git message");
+            let git_author = self
+                .config
+                .changes_config
+                .get("git_user_name")
+                .expect("Error getting git author");
+            let git_email = self
+                .config
+                .changes_config
+                .get("git_user_email")
+                .expect("Error getting git email");
 
+            for bump in &bumps {
                 let package_json_file_path =
                     PathBuf::from(bump.package_info.package_json_path.to_string());
                 let changelog_file_path =
@@ -465,7 +486,7 @@ impl Workspace {
         }
 
         bumps
-    }
+    }*/
 
     #[allow(clippy::default_trait_access)]
     pub fn get_last_known_publish_tag_info_for_package(
@@ -710,11 +731,11 @@ impl Workspace {
 
                 let package_dependencies = self.aggregate_dependencies(&pkg_json);
 
-                let package = Package {
-                    name: pkg_json.name.clone(),
-                    version: pkg_json.version.parse().unwrap(),
-                    dependencies: package_dependencies,
-                };
+                let package = Package::new(
+                    pkg_json.name.as_str(),
+                    pkg_json.version.as_str(),
+                    Some(package_dependencies),
+                );
 
                 packages.push(PackageInfo {
                     package,
@@ -760,11 +781,11 @@ impl Workspace {
 
                 let package_dependencies = self.aggregate_dependencies(&pkg_json);
 
-                let package = Package {
-                    name: pkg_json.name.clone(),
-                    version: pkg_json.version.parse().unwrap(),
-                    dependencies: package_dependencies,
-                };
+                let package = Package::new(
+                    pkg_json.name.as_str(),
+                    pkg_json.version.as_str(),
+                    Some(package_dependencies),
+                );
 
                 PackageInfo {
                     package,

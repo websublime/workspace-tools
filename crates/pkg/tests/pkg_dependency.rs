@@ -24,12 +24,18 @@ mod dependency_tests {
     impl Node for Package {
         type DependencyType = Dependency;
 
+        type Identifier = String;
+
         fn dependencies(&self) -> &[Self::DependencyType] {
             &self.dependencies[..]
         }
 
         fn matches(&self, dependency: &Self::DependencyType) -> bool {
             self.name == dependency.name && dependency.version.matches(&self.version)
+        }
+
+        fn identifier(&self) -> Self::Identifier {
+            self.name.to_string()
         }
     }
 

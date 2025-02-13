@@ -223,6 +223,46 @@ impl Changes {
         None
     }
 
+    pub fn changes_by_package_name(&self, package_name: &str) -> Vec<Change> {
+        if self.file_exist() {
+            let changes_config = self.read_changes().expect("Failed to read changes file");
+
+            let changes = changes_config
+                .changes
+                .values()
+                .flat_map(|change| {
+                    change
+                        .pkgs
+                        .iter()
+                        .filter(|change| change.package == package_name)
+                        .cloned()
+                        .collect::<Vec<Change>>()
+                })
+                .collect::<Vec<Change>>();
+
+            return changes;
+        }
+
+        Vec::new()
+    }
+
+    pub fn get_changes_meta_by_package_name(&self, package_name: &str) -> Vec<ChangeMeta> {
+        if self.file_exist() {
+            let changes_config = self.read_changes().expect("Failed to read changes file");
+
+            let changes = changes_config
+                .changes
+                .values()
+                .filter(|change| change.pkgs.iter().any(|change| change.package == package_name))
+                .cloned()
+                .collect::<Vec<ChangeMeta>>();
+
+            return changes;
+        }
+
+        Vec::new()
+    }
+
     pub fn exist(&self, branch: &str, package_name: &str) -> bool {
         if self.file_exist() {
             let changes_config = self.read_changes().expect("Failed to read changes file");

@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt::Display;
 
+use crate::dependency::DependencyGraph;
+
 use super::dependency::Node;
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -16,7 +18,7 @@ pub struct Dependency {
 pub struct Package {
     pub name: String,
     pub version: Version,
-    pub dependencies: Vec<Dependency>,
+    dependencies: Vec<Dependency>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -86,6 +88,12 @@ pub fn package_scope_name_version(pkg_name: &str) -> Option<PackageScopeMetadata
 }
 
 impl Package {
+    pub fn new(name: &str, version: &str, deps: Option<Vec<Dependency>>) -> Self {
+        let version = Version::parse(version).expect("Invalid version");
+
+        Self { name: name.to_string(), version, dependencies: deps.unwrap_or_default() }
+    }
+
     pub fn update_dependency(&mut self, version: &str) {
         let version = Version::parse(version).expect("Invalid version");
 
@@ -120,6 +128,11 @@ impl Package {
 }
 
 impl PackageInfo {
+    pub fn get_dependency_graph(&self) -> DependencyGraph<'_, Package> {
+        let packages = std::slice::from_ref(&self.package);
+        DependencyGraph::from(packages)
+    }
+
     pub fn update_dependency(&mut self, version: &str) {
         let version = Version::parse(version).expect("Invalid version");
 
@@ -151,10 +164,21 @@ impl PackageInfo {
             }
         }
     }
+
+    pub fn write_package_json(&self) {
+        let package_json_file =
+            std::fs::File::create(&self.package_json_path).expect("Failed to open package.json");
+        let package_json_writer = std::io::BufWriter::new(package_json_file);
+
+        serde_json::to_writer_pretty(package_json_writer, &self.pkg_json)
+            .expect("Failed to write package.json");
+    }
 }
 
 impl Node for PackageInfo {
     type DependencyType = Dependency;
+
+    type Identifier = String;
 
     fn dependencies(&self) -> &[Self::DependencyType] {
         &self.package.dependencies[..]
@@ -169,10 +193,16 @@ impl Node for PackageInfo {
         // requirements are fulfilled by our own version
         self.package.name == dependency.name && dependency_version.matches(&self_version)
     }
+
+    fn identifier(&self) -> Self::Identifier {
+        self.package.name.clone()
+    }
 }
 
 impl Node for Package {
     type DependencyType = Dependency;
+
+    type Identifier = String;
 
     fn dependencies(&self) -> &[Self::DependencyType] {
         &self.dependencies[..]
@@ -186,6 +216,10 @@ impl Node for Package {
         // Check that name is an exact match, and that the dependency
         // requirements are fulfilled by our own version
         self.name == dependency.name && dependency_version.matches(&self_version)
+    }
+
+    fn identifier(&self) -> Self::Identifier {
+        self.name.clone()
     }
 }
 
