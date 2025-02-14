@@ -4,8 +4,8 @@
 mod package_tests {
     use petgraph::dot::Dot;
     use semver::Version;
-    use ws_pkg::dependency::{DependencyGraph, Node, Step};
-    use ws_pkg::package::{Dependency, Package};
+    use ws_pkg::dependency::DependencyGraph;
+    use ws_pkg::package::{Dependency, Package, PackageInfo};
 
     fn build_packages() -> Vec<Package> {
         vec![
@@ -42,30 +42,66 @@ mod package_tests {
         let dot = Dot::new(&dependency_graph.graph);
         println!("{:?}", dot);
     }
+
     #[test]
-    fn test_packages_dependents() {
-        let pkgs = &build_packages();
+    fn test_packages_dependencies_and_dependents() {
+        let pkgs = build_packages();
 
         let dependency_graph = DependencyGraph::from(&pkgs[..]);
-        let dep = dependency_graph.resolved_dependencies().map(|f| f).collect::<Vec<_>>();
-        let dependents = dependency_graph.get_dependents(&"@scope/foo".to_string());
+        let dep: Vec<&Package> = dependency_graph.resolved_dependencies().collect();
+        let dependents = dependency_graph
+            .get_dependents(&"@scope/foo".to_string())
+            .expect("Error getting dependents");
 
-        dependency_graph.propagate_update(&"@scope/foo".to_string(), |node, dependents| {
-            match node {
-                Step::Resolved(package) => {
-                    // Update the package and its dependents
-                    println!("Updating {} and its dependents: {:?}", package.name, dependents);
-                }
-                Step::Unresolved(_) => {
-                    println!("Cannot update unresolved dependency");
-                }
-            }
-        });
+        assert_eq!(dep.len(), 3);
 
-        for pkg in pkgs {
-            pkg.dependencies().iter().for_each(|dependency| {
-                println!("{:?}", dependency.name);
-            });
-        }
+        assert_eq!(dep[0].name, "@scope/bar");
+        assert_eq!(dep[0].version.to_string(), "1.0.0");
+        assert_eq!(dep[1].name, "@scope/foo");
+        assert_eq!(dep[1].version.to_string(), "2.0.0");
+        assert_eq!(dep[2].name, "@scope/baz");
+        assert_eq!(dep[2].version.to_string(), "3.0.0");
+
+        assert_eq!(dependents.len(), 2);
+        assert_eq!(dependents[0], "@scope/bar");
+        assert_eq!(dependents[1], "@scope/baz");
+    }
+
+    #[test]
+    fn test_build_dependency_graph_from_package_infos() {
+        let pkgs = build_packages();
+        let package_infos: Vec<PackageInfo> = pkgs
+            .iter()
+            .map(|pkg| PackageInfo {
+                package: pkg.clone(),
+                package_json_path: String::from("/root/package/package.json"),
+                package_path: String::from("/root/package"),
+                package_relative_path: String::from("package"),
+                pkg_json: serde_json::Value::String("{}".to_string()),
+            })
+            .collect();
+        let mut packages = Vec::new();
+
+        let dependency_graph = ws_pkg::package::build_dependency_graph_from_package_infos(
+            &package_infos,
+            &mut packages,
+        );
+        let dep: Vec<&Package> = dependency_graph.resolved_dependencies().collect();
+        let dependents = dependency_graph
+            .get_dependents(&"@scope/foo".to_string())
+            .expect("Error getting dependents");
+
+        assert_eq!(dep.len(), 3);
+
+        assert_eq!(dep[0].name, "@scope/bar");
+        assert_eq!(dep[0].version.to_string(), "1.0.0");
+        assert_eq!(dep[1].name, "@scope/foo");
+        assert_eq!(dep[1].version.to_string(), "2.0.0");
+        assert_eq!(dep[2].name, "@scope/baz");
+        assert_eq!(dep[2].version.to_string(), "3.0.0");
+
+        assert_eq!(dependents.len(), 2);
+        assert_eq!(dependents[0], "@scope/bar");
+        assert_eq!(dependents[1], "@scope/baz");
     }
 }

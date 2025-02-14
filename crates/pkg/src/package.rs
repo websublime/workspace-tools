@@ -87,6 +87,22 @@ pub fn package_scope_name_version(pkg_name: &str) -> Option<PackageScopeMetadata
     })
 }
 
+pub fn build_dependency_graph_from_packages(packages: &[Package]) -> DependencyGraph<'_, Package> {
+    DependencyGraph::from(packages)
+}
+
+pub fn build_dependency_graph_from_package_infos<'p>(
+    package_infos: &[PackageInfo],
+    packages: &'p mut Vec<Package>,
+) -> DependencyGraph<'p, Package> {
+    // Clear and refill the packages vector
+    packages.clear();
+    packages.extend(package_infos.iter().map(|pkg_info| pkg_info.package.clone()));
+
+    // Create the dependency graph from the packages slice
+    DependencyGraph::from(packages.as_slice())
+}
+
 impl Package {
     pub fn new(name: &str, version: &str, deps: Option<Vec<Dependency>>) -> Self {
         let version = Version::parse(version).expect("Invalid version");

@@ -86,7 +86,10 @@ impl Workspace {
         packages.into_iter().find(|p| p.package.name == package_name)
     }
 
-    /*pub fn get_changed_packages(&self, sha: Option<String>) -> Vec<PackageInfo> {
+    pub fn get_changed_packages(
+        &self,
+        sha: Option<String>,
+    ) -> (Vec<PackageInfo>, HashMap<String, Vec<String>>) {
         let packages = &self.get_packages();
         let since = sha.unwrap_or(String::from("main"));
         let packages_paths =
@@ -117,7 +120,9 @@ impl Workspace {
                 .expect("Fail to get changed files"),
         };
 
-        packages
+        let mut files_map = HashMap::new();
+
+        let changed_packages = packages
             .iter()
             .flat_map(|pkg| {
                 let mut pkgs = changed_files
@@ -130,10 +135,24 @@ impl Workspace {
 
                 pkgs
             })
-            .collect::<Vec<PackageInfo>>()
+            .collect::<Vec<PackageInfo>>();
+
+        for pkg in packages {
+            let pkg_files: Vec<String> = changed_files
+                .iter()
+                .filter(|file| file.starts_with(&pkg.package_path))
+                .cloned()
+                .collect();
+
+            if !pkg_files.is_empty() {
+                files_map.insert(pkg.package.name.clone(), pkg_files);
+            }
+        }
+
+        (changed_packages, files_map)
     }
 
-    pub fn get_package_recommend_bump(
+    /*pub fn get_package_recommend_bump(
         &self,
         package_info: &PackageInfo,
         options: Option<BumpOptions>,
