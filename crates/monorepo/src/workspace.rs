@@ -12,7 +12,10 @@ use ws_git::error::RepositoryError;
 use ws_git::repo::{Repository, RepositoryPublishTagInfo, RepositoryTags};
 use ws_pkg::bump::BumpOptions;
 use ws_pkg::dependency::{DependencyGraph, Node};
-use ws_pkg::package::{package_scope_name_version, Dependency, Package, PackageInfo, PackageJson};
+use ws_pkg::package::{
+    build_dependency_graph_from_package_infos, package_scope_name_version, Dependency, Package,
+    PackageInfo, PackageJson,
+};
 use ws_pkg::version::Version as BumpVersion;
 use ws_std::manager::CorePackageManager;
 
@@ -91,7 +94,7 @@ impl Workspace {
         sha: Option<String>,
     ) -> (Vec<PackageInfo>, HashMap<String, Vec<String>>) {
         let packages = &self.get_packages();
-        let since = sha.unwrap_or(String::from("main"));
+        let since = sha.unwrap_or(String::from("feature-branch"));
         let packages_paths =
             packages.iter().map(|pkg| pkg.package_path.to_string()).collect::<Vec<String>>();
 
@@ -116,7 +119,7 @@ impl Workspace {
             }
             Some(false) | None => self
                 .repo
-                .get_all_files_changed_since_branch(&packages_paths, since.as_str())
+                .get_all_files_changed_since_branch(&packages_paths, "main")
                 .expect("Fail to get changed files"),
         };
 
@@ -152,7 +155,7 @@ impl Workspace {
         (changed_packages, files_map)
     }
 
-    /*pub fn get_package_recommend_bump(
+    pub fn get_package_recommend_bump(
         &self,
         package_info: &PackageInfo,
         options: Option<BumpOptions>,
@@ -174,7 +177,7 @@ impl Workspace {
             push: None,
         });
 
-        let since = &settings.since.unwrap_or(String::from("origin/main"));
+        let since = settings.since;
         let release_as = settings.release_as.unwrap_or_else(|| {
             if let Some(change) = package_changes {
                 BumpVersion::from(change.release_as.as_str())
@@ -207,10 +210,8 @@ impl Workspace {
             }
         });
 
-        let changed_files = self
-            .repo
-            .get_all_files_changed_since_sha(since.as_str())
-            .expect("Error getting changed files");
+        let (_, packages_changed_files) = self.get_changed_packages(since);
+        let changed_files = packages_changed_files.get(package_name).unwrap_or(&vec![]).clone();
 
         let commits_since = self
             .repo
@@ -240,7 +241,75 @@ impl Workspace {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
+    pub fn get_bumps(&self, options: &BumpOptions) {
+        if options.fetch_all.unwrap_or(false) {
+            self.repo
+                .fetch_all(Some(options.fetch_tags.unwrap_or(false)))
+                .expect("Error fetching repository");
+        }
+
+        let since = options.since.clone();
+        let current_branch = self.repo.get_current_branch().expect("Error getting current branch");
+
+        let (repo_changed_packages, _packages_changed_files) = self.get_changed_packages(since.clone());
+
+        if repo_changed_packages.is_empty() {
+            //return vec![];
+        }
+
+        let changed_packages = repo_changed_packages
+            .into_iter()
+            .filter(|changed_package| {
+                !self
+                    .config
+                    .tools_config
+                    .tools
+                    .internal_packages
+                    .contains(&changed_package.package.name)
+            })
+            .collect::<Vec<PackageInfo>>();
+
+        let mut packages = Vec::new();
+        let all_packages = self.get_packages();
+        let dependency_graph =
+            build_dependency_graph_from_package_infos(&all_packages, &mut packages);
+
+        for changed_package in &changed_packages {
+            let package_name = &changed_package.package.name;
+            let dependents =
+                dependency_graph.get_dependents(package_name).expect("Error getting dependents");
+
+            let changes = self.changes.changes_by_package_name(package_name.as_str());
+            let change = changes.first().or(None);
+
+            if options.sync_deps.unwrap_or(false) {
+                for dependent_name in dependents {
+                    let dependent_package_info = self.get_package_info(dependent_name.as_str());
+
+                    if let Some(dependent_package_info) = dependent_package_info {
+                        let branch = current_branch.clone().unwrap_or(String::from("default-feature-branch"));
+
+                        let calculated_release_as = match Some(branch.contains("main")) {
+                            Some(true) => BumpVersion::Patch,
+                            Some(false) | None => BumpVersion::Snapshot,
+                        };
+
+                        self.get_package_recommend_bump(&dependent_package_info, Some(BumpOptions {
+                            since: since.clone(),
+                            release_as: Some(calculated_release_as),
+                            fetch_all: options.fetch_all,
+                            fetch_tags: options.fetch_tags,
+                            sync_deps: options.sync_deps,
+                            push: options.push,
+                        }));
+                    }
+
+
+                }
+            }
+        }
+    }
+    /*#[allow(clippy::too_many_lines)]
     pub fn get_bumps(&self, options: &BumpOptions, write: Option<bool>) -> Vec<RecommendBumpPackage> {
         if options.fetch_all.unwrap_or(false) {
             self.repo

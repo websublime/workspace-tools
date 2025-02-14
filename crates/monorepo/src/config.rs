@@ -22,6 +22,7 @@ pub struct ToolsConfig {
 pub struct ToolsConfigGroup {
     pub bump_sync: Option<bool>,
     pub repo_url: Option<String>,
+    pub internal_packages: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -175,8 +176,13 @@ fn get_cliff_config(root: &PathBuf) -> Config {
 }
 
 fn get_tools_config(root: &PathBuf) -> ToolsConfig {
-    let default_tools_config =
-        ToolsConfig { tools: ToolsConfigGroup { bump_sync: Some(true), repo_url: None } };
+    let default_tools_config = ToolsConfig {
+        tools: ToolsConfigGroup {
+            bump_sync: Some(true),
+            repo_url: None,
+            internal_packages: vec![],
+        },
+    };
 
     let root_path = Path::new(root);
     let tools_path = &root_path.join(String::from(".config.toml"));
