@@ -110,7 +110,7 @@ impl Package {
         Self { name: name.to_string(), version, dependencies: deps.unwrap_or_default() }
     }
 
-    pub fn update_dependency(&mut self, version: &str) {
+    pub fn update_version(&mut self, version: &str) {
         let version = Version::parse(version).expect("Invalid version");
 
         self.version = version;
@@ -149,7 +149,7 @@ impl PackageInfo {
         DependencyGraph::from(packages)
     }
 
-    pub fn update_dependency(&mut self, version: &str) {
+    pub fn update_version(&mut self, version: &str) {
         let version = Version::parse(version).expect("Invalid version");
 
         self.pkg_json["version"] = serde_json::Value::String(version.to_string());

@@ -210,6 +210,15 @@ impl Workspace {
             }
         });
 
+        // Create a mutable clone of package_info so we can update it
+        let mut updated_package_info = package_info.clone();
+
+        // Update the package version
+        updated_package_info.package.update_version(sem_version.as_str());
+
+        // Update the package.json version
+        updated_package_info.update_version(sem_version.as_str());
+
         let (_, packages_changed_files) = self.get_changed_packages(since);
         let changed_files = packages_changed_files.get(package_name).unwrap_or(&vec![]).clone();
 
@@ -222,7 +231,7 @@ impl Workspace {
             .expect("Error getting commits since");
 
         let conventional_package = get_conventional_by_package(
-            package_info,
+            &updated_package_info,
             &ConventionalPackageOptions {
                 config: self.config.cliff_config.clone(),
                 commits: commits_since,
@@ -234,14 +243,14 @@ impl Workspace {
         RecommendBumpPackage {
             from: package_version.to_string(),
             to: sem_version.to_string(),
-            package_info: package_info.to_owned(),
+            package_info: updated_package_info,
             conventional: conventional_package,
             changed_files,
             deploy_to,
         }
     }
 
-    pub fn get_bumps(&self, options: &BumpOptions) {
+    pub fn get_bumps(&self, options: &BumpOptions) -> Vec<RecommendBumpPackage> {
         if options.fetch_all.unwrap_or(false) {
             self.repo
                 .fetch_all(Some(options.fetch_tags.unwrap_or(false)))
@@ -249,12 +258,14 @@ impl Workspace {
         }
 
         let since = options.since.clone();
-        let current_branch = self.repo.get_current_branch().expect("Error getting current branch");
+        let current_branch = self.repo.get_current_branch().unwrap_or(None);
+        let branch = current_branch.unwrap_or(String::from("default-feature-branch"));
 
-        let (repo_changed_packages, _packages_changed_files) = self.get_changed_packages(since.clone());
+        let (repo_changed_packages, _packages_changed_files) =
+            self.get_changed_packages(since.clone());
 
         if repo_changed_packages.is_empty() {
-            //return vec![];
+            return vec![];
         }
 
         let changed_packages = repo_changed_packages
@@ -273,41 +284,93 @@ impl Workspace {
         let all_packages = self.get_packages();
         let dependency_graph =
             build_dependency_graph_from_package_infos(&all_packages, &mut packages);
+        let mut bumps = Vec::new();
+        let mut dependency_updates = HashMap::new();
 
+        // First pass: Process changed packages and collect their version updates
         for changed_package in &changed_packages {
             let package_name = &changed_package.package.name;
-            let dependents =
-                dependency_graph.get_dependents(package_name).expect("Error getting dependents");
+            let changes_vec = self.changes.changes_by_package_name(package_name.as_str());
+            let changes = changes_vec.iter().find(|change| change.package == *package_name);
 
-            let changes = self.changes.changes_by_package_name(package_name.as_str());
-            let change = changes.first().or(None);
+            let calculated_release_as = match Some(branch.contains("main")) {
+                Some(true) => match changes {
+                    Some(change) => BumpVersion::from(change.release_as.as_str()),
+                    None => BumpVersion::Patch,
+                },
+                Some(false) | None => BumpVersion::Snapshot,
+            };
 
-            if options.sync_deps.unwrap_or(false) {
+            let override_release_as = options.release_as.or(Some(calculated_release_as));
+
+            let bump = self.get_package_recommend_bump(
+                changed_package,
+                Some(BumpOptions {
+                    sync_deps: Some(false),
+                    since: since.clone(),
+                    release_as: override_release_as,
+                    fetch_all: options.fetch_all,
+                    fetch_tags: options.fetch_tags,
+                    push: options.push,
+                }),
+            );
+
+            dependency_updates.insert(package_name.clone(), bump.to.clone());
+            bumps.push(bump);
+        }
+
+        if options.sync_deps.unwrap_or(false) {
+            let mut dependent_bumps = Vec::new();
+
+            for changed_package in &changed_packages {
+                let package_name = &changed_package.package.name;
+                let dependents = dependency_graph
+                    .get_dependents(package_name)
+                    .expect("Error getting dependents");
+
                 for dependent_name in dependents {
-                    let dependent_package_info = self.get_package_info(dependent_name.as_str());
+                    // Skip if we already processed this package
+                    if bumps.iter().any(|b| b.package_info.package.name == *dependent_name) {
+                        continue;
+                    }
 
-                    if let Some(dependent_package_info) = dependent_package_info {
-                        let branch = current_branch.clone().unwrap_or(String::from("default-feature-branch"));
+                    let dependent_package_info = self.get_package_info(dependent_name);
+                    if let Some(mut dependent_package_info) = dependent_package_info {
+                        // Update dependency version in package.json and package info
+                        if let Some(new_version) = dependency_updates.get(package_name) {
+                            dependent_package_info
+                                .update_dependency_version(package_name, new_version);
+                            dependent_package_info
+                                .package
+                                .update_dependency_version(package_name, new_version);
+                        }
 
-                        let calculated_release_as = match Some(branch.contains("main")) {
+                        let calculated_dependent_release_as = match Some(branch.contains("main")) {
                             Some(true) => BumpVersion::Patch,
                             Some(false) | None => BumpVersion::Snapshot,
                         };
 
-                        self.get_package_recommend_bump(&dependent_package_info, Some(BumpOptions {
-                            since: since.clone(),
-                            release_as: Some(calculated_release_as),
-                            fetch_all: options.fetch_all,
-                            fetch_tags: options.fetch_tags,
-                            sync_deps: options.sync_deps,
-                            push: options.push,
-                        }));
+                        let dependent_bump = self.get_package_recommend_bump(
+                            &dependent_package_info,
+                            Some(BumpOptions {
+                                since: since.clone(),
+                                release_as: Some(calculated_dependent_release_as),
+                                fetch_all: options.fetch_all,
+                                fetch_tags: options.fetch_tags,
+                                sync_deps: options.sync_deps,
+                                push: options.push,
+                            }),
+                        );
+
+                        dependent_bumps.push(dependent_bump);
                     }
-
-
                 }
             }
+
+            bumps.extend(dependent_bumps);
         }
+
+        bumps
     }
     /*#[allow(clippy::too_many_lines)]
     pub fn get_bumps(&self, options: &BumpOptions, write: Option<bool>) -> Vec<RecommendBumpPackage> {
