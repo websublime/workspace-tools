@@ -164,15 +164,15 @@ commit_parsers = [
   { message = "^revert", group = "<!-- 9 -->◀️ Revert" },
 ]
 # protect breaking changes from being skipped due to matching a skipping commit_parser
-protect_breaking_commits = false
+protect_breaking_commits = true
 # filter out the commits that are not matched by commit parsers
-filter_commits = false
+filter_commits = true
 # regex for matching git tags
 tag_pattern = "v[0-9].*"
 # regex for skipping tags
-skip_tags = "beta|alpha"
+#skip_tags = "beta|alpha"
 # regex for ignoring tags
-ignore_tags = "rc|v2.1.0|v2.1.1"
+#ignore_tags = "rc|v2.1.0|v2.1.1"
 # sort the tags topologically
 topo_order = false
 # sort the commits inside sections by oldest/newest order
