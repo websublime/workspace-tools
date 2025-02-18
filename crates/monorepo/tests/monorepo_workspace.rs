@@ -304,8 +304,6 @@ mod workspace_tests {
             push: Some(false),
         });
 
-        dbg!(&bumps);
-
         assert_eq!(bumps.len(), 2);
 
         monorepo.delete_repository();
@@ -405,6 +403,49 @@ mod workspace_tests {
         repo.merge("feat/message").expect("Error merging branch");
 
         let bumps = workspace.get_bumps(&BumpOptions {
+            sync_deps: Some(true),
+            since: Some("main".to_string()),
+            release_as: Some(Version::Major),
+            fetch_all: Some(false),
+            fetch_tags: Some(false),
+            push: Some(false),
+        });
+
+        assert_eq!(bumps.len(), 2);
+
+        monorepo.delete_repository();
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg_attr(target_os = "windows", ignore)]
+    fn test_apply_bumps_for_main() -> Result<(), std::io::Error> {
+        let monorepo = MonorepoWorkspace::new();
+        let root = monorepo.get_monorepo_root().clone();
+        let js_path = root.join("packages/package-foo/main.mjs");
+
+        monorepo.create_workspace(CorePackageManager::Npm)?;
+
+        let workspace = Workspace::new(root.clone());
+        let repo = Repository::new(root.as_path());
+
+        repo.create_branch("feat/message").expect("Failed to create branch");
+
+        let mut js_file = File::create(js_path.as_path()).expect("Failed to create main.js file");
+        js_file.write_all(r#"export const message = "hello";"#.as_bytes())?;
+
+        let change =
+            &Change { package: "@scope/package-foo".to_string(), release_as: "patch".to_string() };
+        workspace.changes.add(change, Some(vec!["production".to_string()]));
+
+        repo.add_all().expect("Failed to add files");
+        repo.commit("feat: message to the world", None, None).expect("Failed to commit");
+
+        repo.checkout("main").expect("Error checking out main branch");
+        repo.merge("feat/message").expect("Error merging branch");
+
+        let bumps = workspace.apply_bumps(&BumpOptions {
             sync_deps: Some(true),
             since: Some("main".to_string()),
             release_as: Some(Version::Major),

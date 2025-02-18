@@ -1,7 +1,8 @@
 use icu::collator::{Collator, CollatorOptions, Numeric, Strength};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::canonicalize;
+use std::fs::{canonicalize, OpenOptions};
+use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::{fs::File, io::BufReader, path::PathBuf};
@@ -250,7 +251,6 @@ impl Workspace {
         }
     }
 
-    /** PROPOSAL */
     pub fn get_bumps(&self, options: &BumpOptions) -> Vec<RecommendBumpPackage> {
         if options.fetch_all.unwrap_or(false) {
             self.repo
@@ -296,6 +296,98 @@ impl Workspace {
                 options,
                 &dependency_graph,
             );
+        }
+
+        bumps
+    }
+
+    pub fn apply_bumps(&self, options: &BumpOptions) -> Vec<RecommendBumpPackage> {
+        let bumps = self.get_bumps(options);
+
+        if !bumps.is_empty() {
+            let git_message =
+                self.config.changes_config.get("message").expect("Error getting git message");
+            let git_author =
+                self.config.changes_config.get("git_user_name").expect("Error getting git author");
+            let git_email =
+                self.config.changes_config.get("git_user_email").expect("Error getting git email");
+
+            for bump in &bumps {
+                bump.package_info.write_package_json();
+
+                let package_tag = &format!("{}@{}", bump.package_info.package.name, bump.to);
+                let commit_body = format!(
+                    "Release of package {} with version: {}",
+                    bump.package_info.package.name, bump.to
+                );
+
+                self.repo
+                    .config(git_author.as_str(), git_email.as_str())
+                    .expect("Error configuring author name and email");
+                self.repo.add_all().expect("Error adding all files");
+                self.repo
+                    .commit(&git_message.replace("{tag}", package_tag), Some(commit_body), None)
+                    .expect("Error committing changes");
+
+                let tag_info = self.get_last_known_publish_tag_info_for_package(&bump.package_info);
+                let tag_hash = tag_info.map(|t| t.hash);
+
+                let commits_since = self
+                    .repo
+                    .get_commits_since(
+                        tag_hash.clone(),
+                        Some(bump.package_info.package_relative_path.to_string()),
+                    )
+                    .expect("Error getting commits since");
+
+                let conventional_package = get_conventional_by_package(
+                    &bump.package_info,
+                    &ConventionalPackageOptions {
+                        config: self.config.cliff_config.clone(),
+                        commits: commits_since,
+                        version: Some(bump.to.clone()),
+                        tag: tag_hash,
+                    },
+                );
+
+                let changelog_file_path =
+                    PathBuf::from(bump.conventional.package_info.package_path.to_string())
+                        .join("CHANGELOG.md");
+
+                let mut changelog_file = OpenOptions::new()
+                    .write(true)
+                    .truncate(true)
+                    .create(true)
+                    .open(&changelog_file_path)
+                    .expect("Error opening CHANGELOG.md file");
+                changelog_file
+                    .write_all(conventional_package.changelog_output.as_bytes())
+                    .expect("Error writing CHANGELOG.md file");
+
+                let changelog_commit_message = format!(
+                    "chore: changelog generated for package {} with version {}",
+                    bump.package_info.package.name, bump.to
+                );
+
+                self.repo.add_all().expect("Error adding all files");
+                self.repo
+                    .commit(&changelog_commit_message, None, None)
+                    .expect("Error committing changes");
+
+                self.repo
+                    .tag(
+                        package_tag.as_str(),
+                        Some(format!(
+                            "chore: release {} to version {}",
+                            bump.package_info.package.name, bump.to
+                        )),
+                    )
+                    .expect("Error tagging package");
+
+                if options.push.unwrap_or(false) {
+                    self.repo.push(Some(true)).expect("Error pushing changes");
+                }
+            }
         }
 
         bumps
@@ -427,222 +519,6 @@ impl Workspace {
 
         bumps.extend(dependent_bumps);
     }
-    /** END */
-
-    /*#[allow(clippy::too_many_lines)]
-    pub fn get_bumps(&self, options: &BumpOptions) -> Vec<RecommendBumpPackage> {
-        if options.fetch_all.unwrap_or(false) {
-            self.repo
-                .fetch_all(Some(options.fetch_tags.unwrap_or(false)))
-                .expect("Error fetching repository");
-        }
-
-        let since = options.since.clone();
-        let current_branch = self.repo.get_current_branch().unwrap_or(None);
-        let branch = current_branch.unwrap_or(String::from("default-feature-branch"));
-
-        let (repo_changed_packages, _packages_changed_files) =
-            self.get_changed_packages(since.clone());
-
-        if repo_changed_packages.is_empty() {
-            return vec![];
-        }
-
-        let changed_packages = repo_changed_packages
-            .into_iter()
-            .filter(|changed_package| {
-                !self
-                    .config
-                    .tools_config
-                    .tools
-                    .internal_packages
-                    .contains(&changed_package.package.name)
-            })
-            .collect::<Vec<PackageInfo>>();
-
-        let mut packages = Vec::new();
-        let all_packages = self.get_packages();
-        let dependency_graph =
-            build_dependency_graph_from_package_infos(&all_packages, &mut packages);
-        let mut bumps = Vec::new();
-        let mut dependency_updates = HashMap::new();
-
-        // First pass: Process changed packages and collect their version updates
-        for changed_package in &changed_packages {
-            let package_name = &changed_package.package.name;
-            let changes_vec = self.changes.changes_by_package_name(package_name.as_str());
-            let changes = changes_vec.iter().find(|change| change.package == *package_name);
-
-            let calculated_release_as = match Some(branch.contains("main")) {
-                Some(true) => match changes {
-                    Some(change) => BumpVersion::from(change.release_as.as_str()),
-                    None => BumpVersion::Patch,
-                },
-                Some(false) | None => BumpVersion::Snapshot,
-            };
-
-            let override_release_as = options.release_as.or(Some(calculated_release_as));
-
-            let bump = self.get_package_recommend_bump(
-                changed_package,
-                Some(BumpOptions {
-                    sync_deps: Some(false),
-                    since: since.clone(),
-                    release_as: override_release_as,
-                    fetch_all: options.fetch_all,
-                    fetch_tags: options.fetch_tags,
-                    push: options.push,
-                }),
-            );
-
-            dependency_updates.insert(package_name.clone(), bump.to.clone());
-            bumps.push(bump);
-        }
-
-        if options.sync_deps.unwrap_or(false) {
-            let mut dependent_bumps = Vec::new();
-
-            for changed_package in &changed_packages {
-                let empty_dependents = Vec::<String>::new();
-                let package_name = &changed_package.package.name;
-                let dependents =
-                    dependency_graph.get_dependents(package_name).unwrap_or(&empty_dependents);
-
-                for dependent_name in dependents {
-                    // Find existing bump or get package info
-                    let existing_bump_index =
-                        bumps.iter().position(|b| b.package_info.package.name == *dependent_name);
-
-                    let mut dependent_package_info = match existing_bump_index {
-                        Some(index) => bumps[index].package_info.clone(),
-                        None => self
-                            .get_package_info(dependent_name)
-                            .expect("Dependent package info not found"),
-                    };
-
-                    // Update dependency version in package.json and package info
-                    if let Some(new_version) = dependency_updates.get(package_name) {
-                        dependent_package_info.update_dependency_version(package_name, new_version);
-                        dependent_package_info
-                            .update_dev_dependency_version(package_name, new_version);
-                        dependent_package_info
-                            .package
-                            .update_dependency_version(package_name, new_version);
-                        dependent_package_info
-                            .package
-                            .update_dev_dependency_version(package_name, new_version);
-                    }
-
-                    let calculated_dependent_release_as = match Some(branch.contains("main")) {
-                        Some(true) => BumpVersion::Patch,
-                        Some(false) | None => BumpVersion::Snapshot,
-                    };
-
-                    let dependent_bump = self.get_package_recommend_bump(
-                        &dependent_package_info,
-                        Some(BumpOptions {
-                            since: since.clone(),
-                            release_as: Some(calculated_dependent_release_as),
-                            fetch_all: options.fetch_all,
-                            fetch_tags: options.fetch_tags,
-                            sync_deps: options.sync_deps,
-                            push: options.push,
-                        }),
-                    );
-
-                    // If we found an existing bump, update it; otherwise add new bump
-                    match existing_bump_index {
-                        Some(index) => {
-                            bumps[index] = dependent_bump;
-                        }
-                        None => {
-                            dependent_bumps.push(dependent_bump);
-                        }
-                    }
-                }
-            }
-
-            bumps.extend(dependent_bumps);
-        }
-
-        bumps
-    }*/
-
-    /*pub fn apply_bumps(&self, options: &BumpOptions) -> Vec<RecommendBumpPackage> {
-        let bumps = self.get_bumps(options, Some(true));
-
-        if !bumps.is_empty() {
-            let git_message =
-                self.config.changes_config.get("message").expect("Error getting git message");
-            let git_author = self
-                .config
-                .changes_config
-                .get("git_user_name")
-                .expect("Error getting git author");
-            let git_email = self
-                .config
-                .changes_config
-                .get("git_user_email")
-                .expect("Error getting git email");
-
-            for bump in &bumps {
-                let package_json_file_path =
-                    PathBuf::from(bump.package_info.package_json_path.to_string());
-                let changelog_file_path =
-                    PathBuf::from(bump.conventional.package_info.package_path.to_string())
-                        .join("CHANGELOG.md");
-
-                let package_json_file = OpenOptions::new()
-                    .write(true)
-                    .truncate(true)
-                    .open(&package_json_file_path)
-                    .expect("Error opening package.json file");
-                let package_json_writer = BufWriter::new(package_json_file);
-                serde_json::to_writer_pretty(package_json_writer, &bump.package_info.pkg_json)
-                    .expect("Error writing package.json file");
-
-                let mut changelog_file = OpenOptions::new()
-                    .write(true)
-                    .truncate(true)
-                    .create(true)
-                    .open(&changelog_file_path)
-                    .expect("Error opening CHANGELOG.md file");
-                changelog_file
-                    .write_all(bump.conventional.changelog_output.as_bytes())
-                    .expect("Error writing CHANGELOG.md file");
-
-                let package_tag = &format!("{}@{}", bump.package_info.package.name, bump.to);
-                let commit_body = format!(
-                    "Release of package {} with version: {}",
-                    bump.package_info.package.name, bump.to
-                );
-
-                self.repo
-                    .config(git_author.as_str(), git_email.as_str())
-                    .expect("Error configuring author name and email");
-                self.repo.add_all().expect("Error adding all files");
-                self.repo
-                    .commit(&git_message.replace("{tag}", package_tag), Some(commit_body), None)
-                    .expect("Error committing changes");
-
-                self.repo
-                    .tag(
-                        package_tag.as_str(),
-                        Some(format!(
-                            "chore: release {} to version {}",
-                            bump.package_info.package.name, bump.to
-                        )),
-                    )
-                    .expect("Error tagging package");
-
-                if options.push.unwrap_or(false) {
-                    self.repo.push(Some(true)).expect("Error pushing changes");
-                }
-            }
-        }
-
-        bumps
-    }*/
 
     #[allow(clippy::default_trait_access)]
     pub fn get_last_known_publish_tag_info_for_package(
