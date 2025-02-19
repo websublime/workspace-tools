@@ -1,0 +1,49 @@
+[package]
+name = "ws-binding"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lib]
+crate-type = ["cdylib"]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+ws-std = { workspace = true }
+ws-git = { workspace = true }
+ws-pkg = { workspace = true }
+ws-monorepo = { workspace = true }
+serde_json = { workspace = true }
+napi = { version = "3.0.0-alpha.28", features = [
+  "async",
+  "anyhow",
+  "napi9",
+  "serde-json",
+  "tokio_rt",
+] }
+napi-build = { version = "2.1.4" }
+napi-derive = { version = "3.0.0-alpha.26", default-features = false, features = [
+  "type-def",
+] }
+ctor = { version = "0.3.6" }
+
+[build-dependencies]
+napi-build = { version = "2.1.4" }
+
+[target.'cfg(all(not(target_os = "linux"), not(target_os = "freebsd"), not(target_family = "wasm")))'.dependencies]
+mimalloc = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+mimalloc = { workspace = true, features = ["local_dynamic_tls"] }

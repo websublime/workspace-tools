@@ -15,7 +15,8 @@
   },
   "scripts": {
     "prepare": "husky install",
-    "ci:build-release-binding": "pnpm --filter @websublime/workspace-tools run build-binding:release"
+    "ci:build-release-binding": "pnpm --filter @websublime/workspace-tools run build-binding:release",
+    "ci:build-binding": "pnpm --filter @websublime/workspace-tools run build-binding"
   },
   "devDependencies": {
     "@types/node": "22.5.2",

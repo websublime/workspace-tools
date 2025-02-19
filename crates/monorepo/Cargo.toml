@@ -20,9 +20,9 @@ doctest = false
 workspace = true
 
 [dependencies]
-ws-std = { version = "~0.1.0", path = "../standard" }
-ws-git = { version = "~0.1.0", path = "../git" }
-ws-pkg = { version = "~0.1.0", path = "../pkg" }
+ws-std = { workspace = true }
+ws-git = { workspace = true }
+ws-pkg = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/standard", "crates/git", "crates/pkg", "crates/monorepo"]
+members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
@@ -69,13 +69,19 @@ single_match = "allow"
 single_match_else = "allow"
 
 [workspace.dependencies]
-#workspace_std = { version = "0.1.0", path = "./crates/workspace_std" }
-
+ws-std = { version = "~0.1.0", path = "./crates/standard" }
+ws-pkg = { version = "~0.1.0", path = "./crates/pkg" }
+ws-monorepo = { version = "~0.1.0", path = "./crates/monorepo" }
+ws-git = { version = "~0.1.0", path = "./crates/git" }
+ws-binding = { version = "~0.1.0", path = "./crates/binding" }
+mimalloc = "0.1.42"
 serde = "1.0.203"
 serde_json = "1.0.117"
 toml = "^0.5"
 thiserror = "1.0.64"
 regex = "1.11.0"
+tokio = { version = "1.38.0", default-features = false }
+derive_more = { version = "2.0.1", features = ["debug"] }
 
 [profile.release]
 codegen-units = 1
@@ -83,3 +89,11 @@ debug = false     # Set to `true` for debug information
 lto = "fat"
 opt-level = 3
 strip = "symbols" # Set to `false` for debug information
+
+[profile.release-wasi]
+codegen-units = 16
+debug = 'full'
+inherits = "release"
+lto = "thin"
+opt-level = "z"
+strip = "none"
