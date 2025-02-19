@@ -33,6 +33,12 @@ export declare function addChange(change: Change, deploy_envs?: string[], cwd?: 
  */
 export declare function changeExists(branch: string, package: string, cwd?: string): boolean
 
+/**
+ * Detect the package manager.
+ *
+ * @param {string} cwd - The current working directory.
+ * @returns {string} The package manager.
+ */
 export declare function detectPackageManager(cwd: string): Result<PackageManager>
 
 /**
