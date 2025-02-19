@@ -370,6 +370,7 @@ module.exports.detectPackageManager = nativeBinding.detectPackageManager
 module.exports.getChanges = nativeBinding.getChanges
 module.exports.getChangesByBranch = nativeBinding.getChangesByBranch
 module.exports.getChangesByPackage = nativeBinding.getChangesByPackage
+module.exports.getChangesMetaByPackage = nativeBinding.getChangesMetaByPackage
 module.exports.getConfig = nativeBinding.getConfig
 module.exports.getProjectRootPath = nativeBinding.getProjectRootPath
 module.exports.initChanges = nativeBinding.initChanges

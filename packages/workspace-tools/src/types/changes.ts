@@ -1,4 +1,4 @@
-export type BumpType = 'major' | 'minor' | 'patch' | 'snapshot' | 'beta' | 'alpha' | 'rc'
+export type BumpType = 'major' | 'minor' | 'patch' | 'snapshot'
 
 export interface Change {
   package: string
@@ -6,8 +6,10 @@ export interface Change {
 }
 
 export interface Changes {
-  [key: string]: {
-    deploy: string[]
-    pkgs: Change[]
-  }
+  [key: string]: ChangeMeta
+}
+
+export interface ChangeMeta {
+  deploy: string[]
+  pkgs: Change[]
 }

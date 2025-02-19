@@ -5,6 +5,7 @@ import {
   getChanges,
   getChangesByBranch,
   getChangesByPackage,
+  getChangesMetaByPackage,
   getConfig,
   detectPackageManager,
 } from './binding.js'
@@ -30,20 +31,22 @@ const log = (() => {
 
 const root = process.cwd()
 
-log(initChanges(root))
+log('Init changes', initChanges(root))
 
-log(addChange({ package: '@scope/foo', releaseAs: 'patch' }, ['int'], root))
+log('Add Change', addChange({ package: '@scope/foo', releaseAs: 'patch' }, ['int'], root))
 
-log(getChanges(root))
+log('Get changes', getChanges(root))
 
-log(getChangesByBranch('feature/next', root))
+log('Get changes by branch', getChangesByBranch('feature/next', root))
 
-log(getChangesByBranch('unknown', root))
+log('Get an inexisting change', getChangesByBranch('unknown', root))
 
-log(getChangesByPackage('@scope/foo', 'feature/next', root))
+log('Get changes by package', getChangesByPackage('@scope/foo', 'feature/next', root))
 
-log(detectPackageManager(root))
+log('Get changes metadata by package', getChangesMetaByPackage('@scope/foo', root))
 
-log(getConfig(root))
+log('Detect package manager', detectPackageManager(root))
 
-log(removeChange('feature/next', root))
+log('Get workspace config', getConfig(root))
+
+log('Delete the change from changes file', removeChange('feature/next', root))

@@ -6,28 +6,101 @@ import type { WorkspaceConfig } from './types/config';
 
 import type { Result } from './types/general';
 
-import type { Changes, Change } from './types/changes';
+import type { Changes, Change, ChangeMeta } from './types/changes';
 
+/**
+ * Add a change to the changes file.
+ * If the change already exists, it will return false.
+ * If the change does not exist, it will add the change and return true.
+ *
+ * @param {Object} change - The change object.
+ * @param {string[]} deploy_envs - The deploy environments.
+ * @param {string} cwd - The current working directory.
+ * @returns {boolean} - If the change was added successfully.
+ * @throws {Error} - If it fails to get the package property.
+ */
 export declare function addChange(change: Change, deploy_envs?: string[], cwd?: string): Result<boolean>
 
+/**
+ * Check if a change exists in the changes file.
+ * If the change exists, it will return true.
+ * If the change does not exist, it will return false.
+ *
+ * @param {string} branch - The branch name.
+ * @param {string} package - The package name.
+ * @param {string} cwd - The current working directory.
+ * @returns {boolean} - If the change exists.
+ */
 export declare function changeExists(branch: string, package: string, cwd?: string): boolean
 
 export declare function detectPackageManager(cwd: string): Result<PackageManager>
 
+/**
+ * Get all changes from the changes file.
+ *
+ * @param {string} cwd - The current working directory.
+ * @returns {Object} - The changes object.
+ * @throws {Error} - If it fails to create the object.
+ */
 export declare function getChanges(cwd?: string): Result<Changes>
 
+/**
+ * Get all changes by branch from the changes file.
+ *
+ * @param {string} branch - The branch name.
+ * @param {string} cwd - The current working directory.
+ * @returns {Object} - The changes object.
+ * @throws {Error} - If it fails to create the object/parsing/invalid.
+ */
 export declare function getChangesByBranch(branch: string, cwd?: string): Result<{deploy: string[]; pkgs: Changes[]}|null>
 
+/**
+ * Get all changes by package from the changes file.
+ *
+ * @param {string} package - The package name.
+ * @param {string} branch - The branch name.
+ * @param {string} cwd - The current working directory.
+ * @returns {Object} - The changes object.
+ * @throws {Error} - If it fails to create the object/parsing/invalid.
+ */
 export declare function getChangesByPackage(package: string, branch: string, cwd?: string): Result<Change|null>
+
+/**
+ * Get all changes meta by package from the changes file.
+ * It will return an empty array if no changes are found.
+ *
+ * @param {string} package - The package name.
+ * @param {string} cwd - The current working directory.
+ * @returns {Array<ChangeMeta>} - The changes meta object.
+ * @throws {Error} - If it fails to create the object/parsing/invalid.
+ */
+export declare function getChangesMetaByPackage(package: string, cwd?: string): Result<Array<ChangeMeta>>
 
 export declare function getConfig(cwd?: string): Result<WorkspaceConfig>
 
 export declare function getProjectRootPath(cwd?: string | undefined | null): string | null
 
+/**
+ * Initialize the changes file. If the file does not exist, it will create it with the default message.
+ * If the file exists, it will return the content of the file.
+ *
+ * @param {string} cwd - The current working directory.
+ * @throws {Error} - If it fails to create the object.
+ */
 export declare function initChanges(cwd?: string | undefined | null): Result<Changes>
 
 export declare function isVcsRepository(cwd: string): Result<boolean>
 
+/**
+ * Remove a change from the changes file.
+ * If the change does not exist, it will return false.
+ * If the change exists, it will remove the change and return true.
+ *
+ * @param {string} branch - The branch name.
+ * @param {string} cwd - The current working directory.
+ * @returns {boolean} - If the change was removed successfully.
+ * @throws {Error} - If it fails to remove the change.
+ */
 export declare function removeChange(branch: string, cwd?: string): boolean
 
 export declare function repoAdd(filepath: string, cwd: string): Result<boolean>
