@@ -42,6 +42,18 @@ export declare function changeExists(branch: string, package: string, cwd?: stri
 export declare function detectPackageManager(cwd: string): Result<PackageManager>
 
 /**
+ * Execute a command.
+ *
+ * @param {string} cmd - The command to execute.
+ * @param {string} cwd - The command working directory.
+ * @param {string[]} args - The command arguments.
+ * @returns {string} The command output.
+ *
+ * @throws {Error} The error description.
+ */
+export declare function executeCmd(cmd: string, cwd: string, args?: Array<string> | undefined | null): Result<String>
+
+/**
  * Get all changes from the changes file.
  *
  * @param {string} cwd - The current working directory.

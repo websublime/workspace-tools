@@ -9,6 +9,7 @@ import {
   getConfig,
   detectPackageManager,
   getProjectRootPath,
+  executeCmd,
 } from './binding.js'
 import util from 'node:util'
 
@@ -53,5 +54,7 @@ log('Get workspace config', getConfig(root))
 log('Get project root path', getProjectRootPath(root))
 
 log('Get project root path without parameters', getProjectRootPath())
+
+log('Execute git command', executeCmd('git', '.', ['--version']))
 
 log('Delete the change from changes file', removeChange('feature/next', root))
