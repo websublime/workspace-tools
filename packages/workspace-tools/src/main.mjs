@@ -8,6 +8,7 @@ import {
   getChangesMetaByPackage,
   getConfig,
   detectPackageManager,
+  getProjectRootPath,
 } from './binding.js'
 import util from 'node:util'
 
@@ -48,5 +49,9 @@ log('Get changes metadata by package', getChangesMetaByPackage('@scope/foo', roo
 log('Detect package manager', detectPackageManager(root))
 
 log('Get workspace config', getConfig(root))
+
+log('Get project root path', getProjectRootPath(root))
+
+log('Get project root path without parameters', getProjectRootPath())
 
 log('Delete the change from changes file', removeChange('feature/next', root))

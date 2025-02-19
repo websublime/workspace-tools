@@ -3,6 +3,10 @@ use std::path::PathBuf;
 
 use ws_std::paths::get_project_root_path;
 
+/// Get the workspace root path.
+///
+/// @param {string} cwd - The current working directory.
+/// @returns {string} The project(workspace) root path.
 #[napi(js_name = "getProjectRootPath")]
 pub fn js_get_project_root_path(cwd: Option<String>) -> Option<String> {
     let root = match cwd {

@@ -78,6 +78,12 @@ export declare function getChangesMetaByPackage(package: string, cwd?: string): 
 
 export declare function getConfig(cwd?: string): Result<WorkspaceConfig>
 
+/**
+ * Get the workspace root path.
+ *
+ * @param {string} cwd - The current working directory.
+ * @returns {string} The project(workspace) root path.
+ */
 export declare function getProjectRootPath(cwd?: string | undefined | null): string | null
 
 /**
