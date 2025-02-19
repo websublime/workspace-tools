@@ -1,5 +1,5 @@
 [package]
-name = "ws-monorepo"
+name = "ws_monorepo"
 version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -20,9 +20,9 @@ doctest = false
 workspace = true
 
 [dependencies]
-ws-std = { workspace = true }
-ws-git = { workspace = true }
-ws-pkg = { workspace = true }
+ws_std = { workspace = true }
+ws_git = { workspace = true }
+ws_pkg = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

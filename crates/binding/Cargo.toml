@@ -1,5 +1,5 @@
 [package]
-name = "ws-binding"
+name = "ws_binding"
 version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -21,10 +21,10 @@ doctest = false
 workspace = true
 
 [dependencies]
-ws-std = { workspace = true }
-ws-git = { workspace = true }
-ws-pkg = { workspace = true }
-ws-monorepo = { workspace = true }
+ws_std = { workspace = true }
+ws_git = { workspace = true }
+ws_pkg = { workspace = true }
+ws_monorepo = { workspace = true }
 serde_json = { workspace = true }
 napi = { version = "3.0.0-alpha.28", features = [
   "async",

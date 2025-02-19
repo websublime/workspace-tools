@@ -69,11 +69,11 @@ single_match = "allow"
 single_match_else = "allow"
 
 [workspace.dependencies]
-ws-std = { version = "~0.1.0", path = "./crates/standard" }
-ws-pkg = { version = "~0.1.0", path = "./crates/pkg" }
-ws-monorepo = { version = "~0.1.0", path = "./crates/monorepo" }
-ws-git = { version = "~0.1.0", path = "./crates/git" }
-ws-binding = { version = "~0.1.0", path = "./crates/binding" }
+ws_std = { version = "~0.1.0", path = "./crates/standard" }
+ws_pkg = { version = "~0.1.0", path = "./crates/pkg" }
+ws_monorepo = { version = "~0.1.0", path = "./crates/monorepo" }
+ws_git = { version = "~0.1.0", path = "./crates/git" }
+ws_binding = { version = "~0.1.0", path = "./crates/binding" }
 mimalloc = "0.1.42"
 serde = "1.0.203"
 serde_json = "1.0.117"

@@ -68,9 +68,8 @@ export declare function repoGetTags(cwd: string, local?: boolean | undefined | n
 
 export declare function repoInit(initialBranch: string, username: string, email: string, cwd: string): Result<boolean>
 
-export declare function repoIsUnclean(cwd: string): Result<boolean>
+export declare function repoIsVcs(cwd: string): Result<boolean>
 
 export declare function repoMerge(branch: string, cwd: string): Result<boolean>
 
 export declare function repoPush(cwd: string, followTags?: boolean | undefined | null): Result<boolean>
-

@@ -2647,7 +2647,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ws-binding"
+name = "ws_binding"
 version = "0.1.0"
 dependencies = [
  "ctor",
@@ -2656,25 +2656,25 @@ dependencies = [
  "napi-build",
  "napi-derive",
  "serde_json",
- "ws-git",
- "ws-monorepo",
- "ws-pkg",
- "ws-std",
+ "ws_git",
+ "ws_monorepo",
+ "ws_pkg",
+ "ws_std",
 ]
 
 [[package]]
-name = "ws-git"
+name = "ws_git"
 version = "0.1.0"
 dependencies = [
  "regex",
  "serde",
  "serde_json",
  "thiserror",
- "ws-std",
+ "ws_std",
 ]
 
 [[package]]
-name = "ws-monorepo"
+name = "ws_monorepo"
 version = "0.1.0"
 dependencies = [
  "chrono",
@@ -2689,13 +2689,13 @@ dependencies = [
  "toml 0.5.11",
  "version-compare",
  "wax",
- "ws-git",
- "ws-pkg",
- "ws-std",
+ "ws_git",
+ "ws_pkg",
+ "ws_std",
 ]
 
 [[package]]
-name = "ws-pkg"
+name = "ws_pkg"
 version = "0.1.0"
 dependencies = [
  "petgraph",
@@ -2707,7 +2707,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ws-std"
+name = "ws_std"
 version = "0.1.0"
 dependencies = [
  "serde",
