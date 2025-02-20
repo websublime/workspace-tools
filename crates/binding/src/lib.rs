@@ -6,5 +6,6 @@ pub mod binding_command;
 pub mod binding_config;
 pub mod binding_git;
 pub mod binding_manager;
+pub mod binding_package;
 pub mod binding_paths;
 pub mod binding_version;

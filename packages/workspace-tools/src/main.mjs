@@ -14,6 +14,9 @@ import {
   bumpMinor,
   bumpPatch,
   bumpSnapshot,
+  getPackageScopeNameVersion,
+  Dependency,
+  Package,
 } from './binding.js'
 import util from 'node:util'
 
@@ -68,5 +71,24 @@ log('Bump version to minor', bumpMinor('1.0.0'))
 log('Bump version to patch', bumpPatch('1.0.0'))
 
 log('Bump version to snapshot', bumpSnapshot('1.0.0', 'a23d456h'))
+
+log('Get package namespace and version', getPackageScopeNameVersion('@scope/foo@1.0.0'))
+
+log('Get package namespace, version and path', getPackageScopeNameVersion('@scope/foo@1.0.0/lib/main.mjs'))
+
+log('An unknown package pattern string', getPackageScopeNameVersion('my-package-1.0.0'))
+
+const dependency = new Dependency('@scope/bar', '1.0.0')
+
+log('Dependency class', dependency, dependency.name, dependency.version)
+
+const pkg = new Package('@scope/foo', '1.0.0', [dependency])
+
+log('Package class', pkg, pkg.name, pkg.version, pkg.dependencies)
+
+pkg.updateVersion('2.0.0')
+pkg.updateDependencyVersion('@scope/bar', '2.0.0')
+
+log('Package class update version', pkg, pkg.name, pkg.version, pkg.dependencies[0].version)
 
 log('Delete the change from changes file', removeChange('feature/next', root))

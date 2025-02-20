@@ -8,6 +8,23 @@ import type { Result } from './types/general';
 
 import type { Changes, Change, ChangeMeta } from './types/changes';
 
+import type { PackageScopeMetadata } from './types/package';
+
+export declare class Dependency {
+  constructor(name: string, version: string)
+  get name(): string
+  get version(): string
+}
+
+export declare class Package {
+  constructor(name: string, version: string, deps?: Array<Dependency>)
+  updateVersion(version: string): void
+  updateDependencyVersion(name: string, version: string): void
+  get name(): string
+  get version(): string
+  get dependencies(): Array<Dependency>
+}
+
 /**
  * Add a change to the changes file.
  * If the change already exists, it will return false.
@@ -128,6 +145,14 @@ export declare function getChangesByPackage(package: string, branch: string, cwd
 export declare function getChangesMetaByPackage(package: string, cwd?: string): Result<Array<ChangeMeta>>
 
 export declare function getConfig(cwd?: string): Result<WorkspaceConfig>
+
+/**
+ * Get package scope name version and path
+ *
+ * @param {string} pk_name_scope_name_version - The package name, version and optional file path.
+ * @returns {Object} - The package scope name version and path.
+ */
+export declare function getPackageScopeNameVersion(pkNameScopeNameVersion: string): Result<PackageScopeMetadata>
 
 /**
  * Get the workspace root path.

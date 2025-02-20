@@ -364,6 +364,8 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
+module.exports.Dependency = nativeBinding.Dependency
+module.exports.Package = nativeBinding.Package
 module.exports.addChange = nativeBinding.addChange
 module.exports.bumpMajor = nativeBinding.bumpMajor
 module.exports.bumpMinor = nativeBinding.bumpMinor
@@ -377,6 +379,7 @@ module.exports.getChangesByBranch = nativeBinding.getChangesByBranch
 module.exports.getChangesByPackage = nativeBinding.getChangesByPackage
 module.exports.getChangesMetaByPackage = nativeBinding.getChangesMetaByPackage
 module.exports.getConfig = nativeBinding.getConfig
+module.exports.getPackageScopeNameVersion = nativeBinding.getPackageScopeNameVersion
 module.exports.getProjectRootPath = nativeBinding.getProjectRootPath
 module.exports.initChanges = nativeBinding.initChanges
 module.exports.isVcsRepository = nativeBinding.isVcsRepository
