@@ -10,6 +10,10 @@ import {
   detectPackageManager,
   getProjectRootPath,
   executeCmd,
+  bumpMajor,
+  bumpMinor,
+  bumpPatch,
+  bumpSnapshot,
 } from './binding.js'
 import util from 'node:util'
 
@@ -56,5 +60,13 @@ log('Get project root path', getProjectRootPath(root))
 log('Get project root path without parameters', getProjectRootPath())
 
 log('Execute git command', executeCmd('git', '.', ['--version']))
+
+log('Bump version to major', bumpMajor('1.0.0'))
+
+log('Bump version to minor', bumpMinor('1.0.0'))
+
+log('Bump version to patch', bumpPatch('1.0.0'))
+
+log('Bump version to snapshot', bumpSnapshot('1.0.0', 'a23d456h'))
 
 log('Delete the change from changes file', removeChange('feature/next', root))

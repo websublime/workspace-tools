@@ -22,6 +22,39 @@ import type { Changes, Change, ChangeMeta } from './types/changes';
 export declare function addChange(change: Change, deploy_envs?: string[], cwd?: string): Result<boolean>
 
 /**
+ * Bumps the version of the package to major.
+ *
+ * @param {string} version - The version of the package.
+ * @returns {string} The new version of the package.
+ */
+export declare function bumpMajor(version: string): string
+
+/**
+ * Bumps the version of the package to minor.
+ *
+ * @param {string} version - The version of the package.
+ * @returns {string} The new version of the package.
+ */
+export declare function bumpMinor(version: string): string
+
+/**
+ * Bumps the version of the package to patch.
+ *
+ * @param {string} version - The version of the package.
+ * @returns {string} The new version of the package.
+ */
+export declare function bumpPatch(version: string): string
+
+/**
+ * Bumps the version of the package to snapshot.
+ *
+ * @param {string} version - The version of the package.
+ * @param {string} snapshot - The snapshot.
+ * @returns {string} The new version of the package.
+ */
+export declare function bumpSnapshot(version: string, snapshot: string): string
+
+/**
  * Check if a change exists in the changes file.
  * If the change exists, it will return true.
  * If the change does not exist, it will return false.

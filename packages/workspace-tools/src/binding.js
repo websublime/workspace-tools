@@ -365,6 +365,10 @@ if (!nativeBinding) {
 }
 
 module.exports.addChange = nativeBinding.addChange
+module.exports.bumpMajor = nativeBinding.bumpMajor
+module.exports.bumpMinor = nativeBinding.bumpMinor
+module.exports.bumpPatch = nativeBinding.bumpPatch
+module.exports.bumpSnapshot = nativeBinding.bumpSnapshot
 module.exports.changeExists = nativeBinding.changeExists
 module.exports.detectPackageManager = nativeBinding.detectPackageManager
 module.exports.executeCmd = nativeBinding.executeCmd
