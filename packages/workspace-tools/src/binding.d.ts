@@ -10,6 +10,8 @@ import type { Changes, Change, ChangeMeta } from './types/changes';
 
 import type { PackageScopeMetadata } from './types/package';
 
+import type { PackageInfo } from './types/package';
+
 export declare class Dependency {
   constructor(name: string, version: string)
   get name(): string
@@ -23,6 +25,11 @@ export declare class Package {
   get name(): string
   get version(): string
   get dependencies(): Array<Dependency>
+}
+
+export declare class Workspace {
+  constructor(root: string)
+  getPackages(): Result<Array<PackageInfo>>
 }
 
 /**
@@ -101,7 +108,7 @@ export declare function detectPackageManager(cwd: string): Result<PackageManager
  *
  * @throws {Error} The error description.
  */
-export declare function executeCmd(cmd: string, cwd: string, args?: Array<string> | undefined | null): Result<String>
+export declare function executeCmd(cmd: string, cwd: string, args?: Array<string> | undefined | null): Result<string>
 
 /**
  * Get all changes from the changes file.
@@ -146,6 +153,12 @@ export declare function getChangesMetaByPackage(package: string, cwd?: string): 
 
 export declare function getConfig(cwd?: string): Result<WorkspaceConfig>
 
+/**
+ * Get package dependents
+ *
+ * @param {Array<Package>} packages - The packages to get dependents from.
+ * @returns {Object} - The package dependents.
+ */
 export declare function getPackageDependents(packages: Array<Package>): Record<string, Array<string>>
 
 /**
@@ -173,6 +186,12 @@ export declare function getProjectRootPath(cwd?: string | undefined | null): str
  */
 export declare function initChanges(cwd?: string | undefined | null): Result<Changes>
 
+/**
+ * Check if the current working directory is a VCS repository
+ *
+ * @param {string} cwd - The current working directory
+ * @returns {boolean} - True if the current working directory is a VCS repository
+ */
 export declare function isVcsRepository(cwd: string): Result<boolean>
 
 /**
@@ -187,46 +206,254 @@ export declare function isVcsRepository(cwd: string): Result<boolean>
  */
 export declare function removeChange(branch: string, cwd?: string): boolean
 
+/**
+ * Add a file in the repository
+ *
+ * @param {string} filepath - The file path to add
+ * @param {string} cwd - The current working directory
+ * @returns {boolean} - True if the file was added successfully
+ */
 export declare function repoAdd(filepath: string, cwd: string): Result<boolean>
 
+/**
+ * Add all files in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @returns {boolean} - True if all files were added successfully
+ */
 export declare function repoAddAll(cwd: string): Result<boolean>
 
+/**
+ * Checkout a branch in the repository
+ *
+ * @param {string} branch - The branch to checkout
+ * @param {string} cwd - The current working directory
+ * @returns {boolean} - True if the branch was checked out successfully
+ */
 export declare function repoCheckout(branch: string, cwd: string): Result<boolean>
 
+/**
+ * Commit changes in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @param {string} message - The message to use for the commit
+ * @param {string} body - The body to use for the commit
+ * @param {string} footer - The footer to use for the commit
+ * @returns {boolean} - True if the changes were committed successfully
+ */
 export declare function repoCommit(cwd: string, message: string, body?: string | undefined | null, footer?: string | undefined | null): Result<boolean>
 
+/**
+ * Configure the repository with the given username and email
+ *
+ * @param {string} username - The username to use for the repository
+ * @param {string} email - The email to use for the repository
+ * @param {string} cwd - The current working directory
+ * @returns {boolean} - True if the repository was configured successfully
+ */
 export declare function repoConfig(username: string, email: string, cwd: string): Result<boolean>
 
+/**
+ * Create a new branch in the repository
+ *
+ * @param {string} branch - The branch to create
+ * @param {string} cwd - The current working directory
+ * @returns {boolean} - True if the branch was created successfully
+ */
 export declare function repoCreateBranch(branch: string, cwd: string): Result<boolean>
 
+/**
+ * Create a tag in the repository
+ *
+ * @param {string} tag - The tag to create
+ * @param {string} cwd - The current working directory
+ * @param {string} message - The message to use for the tag
+ * @returns {boolean} - True if the tag was created successfully
+ */
 export declare function repoCreateTag(tag: string, cwd: string, message?: string | undefined | null): Result<boolean>
 
+/**
+ * Diff all changes in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @param {string[]} target - The target to diff
+ * @returns {string} - The diff of changes in the repository
+ */
+export declare function repoDiff(cwd: string, target?: Array<string> | undefined | null): Result<string>
+
+/**
+ * Fetch all changes in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @param {boolean} fetch_tags - The flag to fetch tags
+ * @returns {boolean} - True if all changes were fetched successfully
+ */
 export declare function repoFetchAll(cwd: string, fetchTags?: boolean | undefined | null): Result<boolean>
 
+/**
+ * Get all files changed since the branch in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @param {string[]} packages - The packages to get all files changed since the branch
+ * @param {string} branch - The branch to get all files changed since
+ * @returns {string[]} - The list of files changed since the branch in the repository
+ */
 export declare function repoGetAllFilesChangedSinceBranch(cwd: string, packages: Array<string>, branch: string): Result<string[]>
 
+/**
+ * Get all files changed since the sha in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @param {string} sha - The sha to get all files changed since
+ * @returns {string[]} - The list of files changed since the sha in the repository
+ */
 export declare function repoGetAllFilesChangedSinceSha(cwd: string, sha: string): Result<string[]>
 
+/**
+ * Get the branch from the commit in the repository
+ *
+ * @param {string} sha - The commit sha to get the branch
+ * @param {string} cwd - The current working directory
+ * @returns {string} - The branch from the commit in the repository
+ */
 export declare function repoGetBranchFromCommit(sha: string, cwd: string): Result<string|null>
 
+/**
+ * Get all commits since the sha in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @param {string} since - The sha to get all commits since
+ * @param {string} relative - The relative path to get all commits since
+ * @returns {RepositoryCommit[]} - The list of commits since the sha in the repository
+ */
 export declare function repoGetCommitsSince(cwd: string, since?: string | undefined | null, relative?: string | undefined | null): Result<RepositoryCommit[]>
 
+/**
+ * Get the current branch in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @returns {string} - The current branch in the repository
+ */
 export declare function repoGetCurrentBranch(cwd: string): Result<string|null>
 
+/**
+ * Get the current sha in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @returns {string} - The current sha in the repository
+ */
 export declare function repoGetCurrentSha(cwd: string): Result<string>
 
+/**
+ * Get the diverged commit in the repository
+ *
+ * @param {string} sha - The commit sha to get the diverged commit
+ * @param {string} cwd - The current working directory
+ * @returns {string} - The diverged commit in the repository
+ */
 export declare function repoGetDivergedCommit(sha: string, cwd: string): Result<string>
 
+/**
+ * Get the first sha in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @param {string} branch - The branch to get the first sha
+ * @returns {string} - The first sha in the repository
+ */
 export declare function repoGetFirstSha(cwd: string, branch?: string | undefined | null): Result<string>
 
+/**
+ * Get the last tag in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @returns {string} - The last tag in the repository
+ */
+export declare function repoGetLastTag(cwd: string): Result<string>
+
+/**
+ * Get the previous sha in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @returns {string} - The previous sha in the repository
+ */
 export declare function repoGetPreviousSha(cwd: string): Result<string>
 
+/**
+ * Get all local/remote tags in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @param {boolean} local - The flag to get local tags
+ * @returns {RepositoryRemoteTags[]} - The list of tags in the repository
+ */
 export declare function repoGetTags(cwd: string, local?: boolean | undefined | null): Result<RepositoryRemoteTags[]>
 
+/**
+ * Initialize a new repository
+ *
+ * @param {string} initial_branch - The initial branch to create
+ * @param {string} username - The username to use for the repository
+ * @param {string} email - The email to use for the repository
+ * @param {string} cwd - The current working directory
+ * @returns {boolean} - True if the repository was initialized successfully
+ */
 export declare function repoInit(initialBranch: string, username: string, email: string, cwd: string): Result<boolean>
 
+/**
+ * Check if the repository is a VCS repository
+ *
+ * @param {string} cwd - The current working directory
+ * @returns {boolean} - True if the repository is a VCS repository
+ */
 export declare function repoIsVcs(cwd: string): Result<boolean>
 
+/**
+ * List all branches in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @returns {string} - The list of branches in the repository
+ */
+export declare function repoListBranches(cwd: string): Result<string>
+
+/**
+ * List all configurations in the repository
+ *
+ * @param {string} config_type - The type of configuration to list
+ * @param {string} cwd - The current working directory
+ * @returns {string} - The list of configurations in the repository
+ */
+export declare function repoListConfig(configType: string, cwd: string): Result<string>
+
+/**
+ * Log all commits in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @param {string} target - The target to log
+ * @returns {string} - The log of commits in the repository
+ */
+export declare function repoLog(cwd: string, target?: string | undefined | null): Result<string>
+
+/**
+ * Merge a branch in the repository
+ *
+ * @param {string} branch - The branch to merge
+ * @param {string} cwd - The current working directory
+ * @returns {boolean} - True if the branch was merged successfully
+ */
 export declare function repoMerge(branch: string, cwd: string): Result<boolean>
 
+/**
+ * Push changes in the repository
+ *
+ * @param {string} cwd - The current working directory
+ * @param {boolean} follow_tags - The flag to follow tags
+ * @returns {boolean} - True if the changes were pushed successfully
+ */
 export declare function repoPush(cwd: string, followTags?: boolean | undefined | null): Result<boolean>
+
+/**
+ * Get the repository status
+ *
+ * @param {string} cwd - The current working directory
+ * @returns {string} - The repository status
+ */
+export declare function repoStatus(cwd: string): Result<string|null>

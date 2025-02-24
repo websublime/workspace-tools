@@ -9,3 +9,4 @@ pub mod binding_manager;
 pub mod binding_package;
 pub mod binding_paths;
 pub mod binding_version;
+pub mod binding_workspace;

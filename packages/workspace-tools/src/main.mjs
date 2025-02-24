@@ -17,7 +17,8 @@ import {
   getPackageScopeNameVersion,
   Dependency,
   Package,
-  getPackageDependents
+  getPackageDependents,
+  Workspace,
 } from './binding.js'
 import util from 'node:util'
 
@@ -94,5 +95,9 @@ pkgFoo.updateVersion('2.0.0')
 pkgFoo.updateDependencyVersion('@scope/bar', '2.0.0')
 
 log('Package class update version', pkgFoo, pkgFoo.name, pkgFoo.version, pkgFoo.dependencies[0].version)
+
+const workspace = new Workspace(root)
+
+log('Workspace packages', workspace.getPackages())
 
 log('Delete the change from changes file', removeChange('feature/next', root))
