@@ -121,6 +121,10 @@ impl FromNapiValue for Package {
     }
 }
 
+/// Get package dependents
+///
+/// @param {Array<Package>} packages - The packages to get dependents from.
+/// @returns {Object} - The package dependents.
 #[napi(js_name = "getPackageDependents")]
 pub fn js_get_dependents(packages: Vec<Package>) -> HashMap<String, Vec<String>> {
     let repo_packages: Vec<RepoPackage> = packages.into_iter().map(|p| p.instance).collect();

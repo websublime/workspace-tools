@@ -23,7 +23,7 @@ impl AsRef<str> for CommandError {
 /// @returns {string} The command output.
 ///
 /// @throws {Error} The error description.
-#[napi(js_name = "executeCmd", ts_return_type = "Result<String>")]
+#[napi(js_name = "executeCmd", ts_return_type = "Result<string>")]
 pub fn js_execute_command(
     cmd: String,
     cwd: String,
