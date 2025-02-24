@@ -19,7 +19,7 @@ mod changes_tests {
 
         assert_eq!(
             changes_config.message,
-            Some("chore(release): |---| release new version".to_string())
+            Some("chore(release): release new version {tag}".to_string())
         );
 
         monorepo.delete_repository();

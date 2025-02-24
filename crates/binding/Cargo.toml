@@ -17,8 +17,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 crate-type = ["cdylib"]
 doctest = false
 
-[lints]
-workspace = true
+[lints.clippy]
+bind_instead_of_map = "allow"
 
 [dependencies]
 ws_std = { workspace = true }

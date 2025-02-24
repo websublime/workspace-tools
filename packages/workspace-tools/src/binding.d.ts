@@ -146,6 +146,8 @@ export declare function getChangesMetaByPackage(package: string, cwd?: string): 
 
 export declare function getConfig(cwd?: string): Result<WorkspaceConfig>
 
+export declare function getPackageDependents(packages: Array<Package>): Record<string, Array<string>>
+
 /**
  * Get package scope name version and path
  *

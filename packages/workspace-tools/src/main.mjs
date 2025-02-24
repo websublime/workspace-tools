@@ -17,6 +17,7 @@ import {
   getPackageScopeNameVersion,
   Dependency,
   Package,
+  getPackageDependents
 } from './binding.js'
 import util from 'node:util'
 
@@ -78,17 +79,20 @@ log('Get package namespace, version and path', getPackageScopeNameVersion('@scop
 
 log('An unknown package pattern string', getPackageScopeNameVersion('my-package-1.0.0'))
 
-const dependency = new Dependency('@scope/bar', '1.0.0')
+const dependencyBar = new Dependency('@scope/bar', '1.0.0')
 
-log('Dependency class', dependency, dependency.name, dependency.version)
+log('Dependency class', dependencyBar, dependencyBar.name, dependencyBar.version)
 
-const pkg = new Package('@scope/foo', '1.0.0', [dependency])
+const pkgFoo = new Package('@scope/foo', '1.0.0', [dependencyBar])
+const pkgBar = new Package('@scope/bar', '1.0.0', [])
 
-log('Package class', pkg, pkg.name, pkg.version, pkg.dependencies)
+log('Get package dependents', getPackageDependents([pkgFoo, pkgBar]))
 
-pkg.updateVersion('2.0.0')
-pkg.updateDependencyVersion('@scope/bar', '2.0.0')
+log('Package class', pkgFoo, pkgFoo.name, pkgFoo.version, pkgFoo.dependencies)
 
-log('Package class update version', pkg, pkg.name, pkg.version, pkg.dependencies[0].version)
+pkgFoo.updateVersion('2.0.0')
+pkgFoo.updateDependencyVersion('@scope/bar', '2.0.0')
+
+log('Package class update version', pkgFoo, pkgFoo.name, pkgFoo.version, pkgFoo.dependencies[0].version)
 
 log('Delete the change from changes file', removeChange('feature/next', root))

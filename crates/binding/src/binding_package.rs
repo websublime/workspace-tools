@@ -3,10 +3,11 @@ use napi::{
     sys, Error, Result,
 };
 use napi::{Env, Status};
-use ws_pkg::dependency::Node;
+use std::collections::HashMap;
 use ws_pkg::package::{
     package_scope_name_version, Dependency as RepoDependency, Package as RepoPackage,
 };
+use ws_pkg::{dependency::Node, package::build_dependency_graph_from_packages};
 
 pub enum PackageError {
     InvalidPackageMetadata,
@@ -109,6 +110,24 @@ impl Package {
     }
 }
 
+impl FromNapiValue for Package {
+    unsafe fn from_napi_value(env: sys::napi_env, napi_val: sys::napi_value) -> Result<Self> {
+        // Implement conversion from napi value to PackageClass
+        let obj = Object::from_napi_value(env, napi_val)?;
+        let name: String = obj.get_named_property("name")?;
+        let version: String = obj.get_named_property("version")?;
+        let deps: Option<Vec<Dependency>> = obj.get_named_property("dependencies")?;
+        Ok(Package::new(name, version, deps))
+    }
+}
+
+#[napi(js_name = "getPackageDependents")]
+pub fn js_get_dependents(packages: Vec<Package>) -> HashMap<String, Vec<String>> {
+    let repo_packages: Vec<RepoPackage> = packages.into_iter().map(|p| p.instance).collect();
+    let dependency_graph = build_dependency_graph_from_packages(&repo_packages);
+    dependency_graph.dependents
+}
+
 /// Get package scope name version and path
 ///
 /// @param {string} pk_name_scope_name_version - The package name, version and optional file path.
@@ -169,8 +188,6 @@ pub fn js_package_scope_name_version(
 
             Ok(Some(scope_metadata_object))
         }
-        None => {
-            return Ok(None);
-        }
+        None => Ok(None),
     }
 }
