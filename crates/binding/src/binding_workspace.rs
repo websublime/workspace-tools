@@ -424,4 +424,118 @@ impl Workspace {
 
         Ok(pkg_object)
     }
+
+    #[napi(js_name = "getBumps", ts_return_type = "Result<Array<RecommendBumpPackage>>")]
+    pub fn get_bumps(
+        &self,
+        env: Env,
+        bump_options: Option<BumpOptions>,
+    ) -> Result<Object, WorkspaceError> {
+        let repo_bump_options = if let Some(options) = bump_options {
+            RepoBumpOptions {
+                since: options.since,
+                release_as: options.release_as.map(|s| Version::from(s.as_str())),
+                fetch_all: options.fetch_all,
+                fetch_tags: options.fetch_tags,
+                sync_deps: options.sync_deps,
+                push: options.push,
+            }
+        } else {
+            RepoBumpOptions {
+                since: None,
+                release_as: None,
+                fetch_all: None,
+                fetch_tags: None,
+                sync_deps: None,
+                push: None,
+            }
+        };
+
+        let bumps = self.instance.get_bumps(&repo_bump_options);
+
+        let mut bumps_list = env.create_array_with_length(bumps.len()).or_else(|_| {
+            Err(Error::new(
+                WorkspaceError::FailCreateObject,
+                "Failed to create recommended package bump array",
+            ))
+        })?;
+
+        for (i, bump) in bumps.iter().enumerate() {
+            let mut bump_object = env.create_object().or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailCreateObject,
+                    "Failed to create recommended package bump object",
+                ))
+            })?;
+
+            let from_value = serde_json::to_value(&bump.from).or_else(|_| {
+                Err(Error::new(WorkspaceError::FailParsing, "Failed to parse from value"))
+            })?;
+            bump_object.set("from", from_value).or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailSetObjectProperty,
+                    "Failed to set recommended package bump object property",
+                ))
+            })?;
+
+            let to_value = serde_json::to_value(&bump.to).or_else(|_| {
+                Err(Error::new(WorkspaceError::FailParsing, "Failed to parse to value"))
+            })?;
+            bump_object.set("to", to_value).or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailSetObjectProperty,
+                    "Failed to set recommended package bump object property",
+                ))
+            })?;
+
+            let package_info_value = serde_json::to_value(&bump.package_info).or_else(|_| {
+                Err(Error::new(WorkspaceError::FailParsing, "Failed to parse package info value"))
+            })?;
+            bump_object.set("packageInfo", package_info_value).or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailSetObjectProperty,
+                    "Failed to set recommended package bump object property",
+                ))
+            })?;
+
+            let conventional_value = serde_json::to_value(&bump.conventional).or_else(|_| {
+                Err(Error::new(WorkspaceError::FailParsing, "Failed to parse conventional value"))
+            })?;
+            bump_object.set("conventional", conventional_value).or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailSetObjectProperty,
+                    "Failed to set recommended package bump object property",
+                ))
+            })?;
+
+            let deploy_value = serde_json::to_value(&bump.deploy_to).or_else(|_| {
+                Err(Error::new(WorkspaceError::FailParsing, "Failed to parse deploy value"))
+            })?;
+            bump_object.set("deployTo", deploy_value).or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailSetObjectProperty,
+                    "Failed to set recommended package bump object property",
+                ))
+            })?;
+
+            let changed_files_value = serde_json::to_value(&bump.changed_files).or_else(|_| {
+                Err(Error::new(WorkspaceError::FailParsing, "Failed to parse changed files value"))
+            })?;
+            bump_object.set("changedFiles", changed_files_value).or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailSetObjectProperty,
+                    "Failed to set changed files object property",
+                ))
+            })?;
+
+            bumps_list.set_element(i as u32, bump_object).or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailSetObjectProperty,
+                    "Failed to set recommended package bump object property",
+                ))
+            })?;
+        }
+
+        Ok(bumps_list)
+    }
 }

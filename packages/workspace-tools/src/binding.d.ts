@@ -33,6 +33,7 @@ export declare class Workspace {
   getPackageInfo(packageName: string): Result<PackageInfo>
   getChangedPackages(sha?: string | undefined | null): Result<Array<PackageInfo>>
   getPackageRecommendBump(packageName: string, bumpOptions?: BumpOptions | undefined | null): Result<RecommendBumpPackage>
+  getBumps(bumpOptions?: BumpOptions | undefined | null): Result<Array<RecommendBumpPackage>>
 }
 
 /**

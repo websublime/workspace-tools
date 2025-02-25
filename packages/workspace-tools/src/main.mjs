@@ -108,4 +108,6 @@ log('Add Change', addChange({ package: '@websublime/workspace-tools', releaseAs:
 
 log('Workspace recommended package bump', workspace.getPackageRecommendBump('@websublime/workspace-tools'))
 
+log('Workspace get bumps', workspace.getBumps())
+
 log('Delete the change from changes file', removeChange('feature/next', root))
