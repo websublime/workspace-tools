@@ -10,7 +10,7 @@ import type { Changes, Change, ChangeMeta } from './types/changes';
 
 import type { PackageScopeMetadata } from './types/package';
 
-import type { PackageInfo } from './types/package';
+import type { PackageInfo, RecommendBumpPackage } from './types/package';
 
 export declare class Dependency {
   constructor(name: string, version: string)
@@ -30,6 +30,9 @@ export declare class Package {
 export declare class Workspace {
   constructor(root: string)
   getPackages(): Result<Array<PackageInfo>>
+  getPackageInfo(packageName: string): Result<PackageInfo>
+  getChangedPackages(sha?: string | undefined | null): Result<Array<PackageInfo>>
+  getPackageRecommendBump(packageName: string, bumpOptions?: BumpOptions | undefined | null): Result<RecommendBumpPackage>
 }
 
 /**
@@ -60,6 +63,15 @@ export declare function bumpMajor(version: string): string
  * @returns {string} The new version of the package.
  */
 export declare function bumpMinor(version: string): string
+
+export interface BumpOptions {
+  since?: string
+  releaseAs?: string
+  fetchAll?: boolean
+  fetchTags?: boolean
+  syncDeps?: boolean
+  push?: boolean
+}
 
 /**
  * Bumps the version of the package to patch.

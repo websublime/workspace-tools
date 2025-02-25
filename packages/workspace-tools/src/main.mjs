@@ -100,4 +100,12 @@ const workspace = new Workspace(root)
 
 log('Workspace packages', workspace.getPackages())
 
+log('Workspace package info', workspace.getPackageInfo('@websublime/workspace-tools'))
+
+log('Workspace changed packages', workspace.getChangedPackages())
+
+log('Add Change', addChange({ package: '@websublime/workspace-tools', releaseAs: 'patch' }, ['int'], root))
+
+log('Workspace recommended package bump', workspace.getPackageRecommendBump('@websublime/workspace-tools'))
+
 log('Delete the change from changes file', removeChange('feature/next', root))

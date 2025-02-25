@@ -26,6 +26,7 @@ ws_git = { workspace = true }
 ws_pkg = { workspace = true }
 ws_monorepo = { workspace = true }
 serde_json = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 napi = { version = "3.0.0-alpha.28", features = [
   "async",
   "anyhow",

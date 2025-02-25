@@ -14,4 +14,20 @@ export interface PackageInfo {
   packagePath: string
   packageRelativePath: string
   packageJson: PackageJson
+  changedFiles?: string[]
+}
+
+export interface ConventionalPackage {
+  packageInfo: PackageInfo,
+  conventionalCommits: Record<string, unknown>,
+  changelogOutput: string,
+}
+
+export interface RecommendBumpPackage {
+  from: string
+  to: string
+  packageInfo: PackageInfo
+  deployTo: string[]
+  changedFiles: string[]
+  conventional: ConventionalPackage
 }

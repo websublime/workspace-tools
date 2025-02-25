@@ -2655,6 +2655,7 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
+ "serde",
  "serde_json",
  "ws_git",
  "ws_monorepo",
