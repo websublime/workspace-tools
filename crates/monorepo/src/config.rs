@@ -202,7 +202,7 @@ fn get_tools_config(root: &PathBuf) -> ToolsConfig {
 
 fn get_changes_config(root: &PathBuf) -> HashMap<String, String> {
     let default_changes_config = HashMap::from([
-        ("message".to_string(), "chore(release): release new version: {tag}".to_string()),
+        ("message".to_string(), "chore(release): release new version {tag}".to_string()),
         ("git_user_name".to_string(), "github-actions[bot]".to_string()),
         ("git_user_email".to_string(), "github-actions[bot]@users.noreply.git.com".to_string()),
     ]);

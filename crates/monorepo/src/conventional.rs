@@ -13,7 +13,6 @@ use ws_pkg::package::PackageInfo;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ConventionalPackage {
-    pub package_info: PackageInfo,
     pub conventional_commits: Value,
     pub changelog_output: String,
 }
@@ -102,11 +101,8 @@ pub fn get_conventional_by_package(
 
     let commits = process_commits(&options.commits, &options.config.git);
 
-    let mut conventional_package = ConventionalPackage {
-        package_info: package_info.to_owned(),
-        conventional_commits: json!([]),
-        changelog_output: String::new(),
-    };
+    let mut conventional_package =
+        ConventionalPackage { conventional_commits: json!([]), changelog_output: String::new() };
 
     let changelog_output = if changelog_dir.exists() {
         let changelog_content = read_to_string(&changelog_dir).unwrap();

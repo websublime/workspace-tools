@@ -351,8 +351,7 @@ impl Workspace {
                 );
 
                 let changelog_file_path =
-                    PathBuf::from(bump.conventional.package_info.package_path.to_string())
-                        .join("CHANGELOG.md");
+                    PathBuf::from(bump.package_info.package_path.to_string()).join("CHANGELOG.md");
 
                 let mut changelog_file = OpenOptions::new()
                     .write(true)
@@ -484,9 +483,6 @@ impl Workspace {
                     dependent_package_info
                         .package
                         .update_dependency_version(package_name, new_version);
-                    dependent_package_info
-                        .package
-                        .update_dev_dependency_version(package_name, new_version);
                 }
 
                 let calculated_dependent_release_as = match Some(branch.contains("main")) {

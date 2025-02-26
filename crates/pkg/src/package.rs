@@ -128,19 +128,6 @@ impl Package {
             });
         }
     }
-
-    pub fn update_dev_dependency_version(&mut self, name: &str, version: &str) {
-        let version = Version::parse(version).expect("Invalid version");
-        let has_dependency = self.dependencies.iter().any(|dep| dep.name == name);
-
-        if has_dependency {
-            self.dependencies.iter_mut().for_each(|dep| {
-                if dep.name == name {
-                    dep.version = VersionReq::parse(&version.to_string()).unwrap();
-                }
-            });
-        }
-    }
 }
 
 impl PackageInfo {
@@ -153,6 +140,7 @@ impl PackageInfo {
         let version = Version::parse(version).expect("Invalid version");
 
         self.pkg_json["version"] = serde_json::Value::String(version.to_string());
+        self.package.update_version(version.to_string().as_str());
     }
 
     pub fn update_dependency_version(&mut self, name: &str, version: &str) {
@@ -163,6 +151,7 @@ impl PackageInfo {
 
         if has_dependency {
             dependencies.insert(name.to_string(), serde_json::Value::String(version.to_string()));
+            self.package.update_dependency_version(name, version.to_string().as_str());
         }
     }
 
@@ -177,6 +166,7 @@ impl PackageInfo {
             if has_dependency {
                 dependencies
                     .insert(name.to_string(), serde_json::Value::String(version.to_string()));
+                self.package.update_dependency_version(name, version.to_string().as_str());
             }
         }
     }

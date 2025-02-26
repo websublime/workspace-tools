@@ -4,7 +4,7 @@
 mod package_tests {
     use petgraph::dot::Dot;
     use semver::Version;
-    use ws_pkg::dependency::DependencyGraph;
+    use ws_pkg::dependency::{DependencyGraph, Node};
     use ws_pkg::package::{Dependency, Package, PackageInfo};
 
     fn build_packages() -> Vec<Package> {
@@ -103,5 +103,33 @@ mod package_tests {
         assert_eq!(dependents.len(), 2);
         assert_eq!(dependents[0], "@scope/bar");
         assert_eq!(dependents[1], "@scope/baz");
+    }
+
+    #[test]
+    fn test_packages_updates() {
+        let pkgs = build_packages();
+        let package_infos: Vec<PackageInfo> = pkgs
+            .iter()
+            .map(|pkg| {
+                let dependencies = pkg
+                    .dependencies()
+                    .iter()
+                    .map(|dep| {
+                        serde_json::json!({
+                            "name": dep.name,
+                            "version": dep.version.to_string(),
+                        })
+                    })
+                    .collect::<serde_json::Value>();
+
+                PackageInfo {
+                    package: pkg.clone(),
+                    package_json_path: String::from("/root/package/package.json"),
+                    package_path: String::from("/root/package"),
+                    package_relative_path: String::from("package"),
+                    pkg_json: dependencies,
+                }
+            })
+            .collect();
     }
 }
