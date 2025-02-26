@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use napi::{
     bindgen_prelude::{FromNapiValue, Object},
     sys, Error, Result,
@@ -5,8 +7,9 @@ use napi::{
 use napi::{Env, Status};
 use serde::{Deserialize, Serialize};
 use ws_monorepo::workspace::Workspace as RepoWorkspace;
-use ws_pkg::bump::BumpOptions as RepoBumpOptions;
+use ws_pkg::package::Package as RepoPackage;
 use ws_pkg::version::Version;
+use ws_pkg::{bump::BumpOptions as RepoBumpOptions, package::build_dependency_graph_from_packages};
 
 pub enum WorkspaceError {
     InvalidWorkspaceMetadata,
@@ -395,6 +398,7 @@ impl Workspace {
         let conventional_value = serde_json::to_value(&recommend.conventional).or_else(|_| {
             Err(Error::new(WorkspaceError::FailParsing, "Failed to parse conventional value"))
         })?;
+
         pkg_object.set("conventional", conventional_value).or_else(|_| {
             Err(Error::new(
                 WorkspaceError::FailSetObjectProperty,
@@ -537,5 +541,191 @@ impl Workspace {
         }
 
         Ok(bumps_list)
+    }
+
+    #[napi(js_name = "applyBumps", ts_return_type = "Result<Array<RecommendBumpPackage>>")]
+    pub fn apply_bumps(
+        &self,
+        env: Env,
+        bump_options: Option<BumpOptions>,
+    ) -> Result<Object, WorkspaceError> {
+        let repo_bump_options = if let Some(options) = bump_options {
+            RepoBumpOptions {
+                since: options.since,
+                release_as: options.release_as.map(|s| Version::from(s.as_str())),
+                fetch_all: options.fetch_all,
+                fetch_tags: options.fetch_tags,
+                sync_deps: options.sync_deps,
+                push: options.push,
+            }
+        } else {
+            RepoBumpOptions {
+                since: None,
+                release_as: None,
+                fetch_all: None,
+                fetch_tags: None,
+                sync_deps: None,
+                push: None,
+            }
+        };
+
+        let bumps = self.instance.apply_bumps(&repo_bump_options);
+
+        let mut bumps_list = env.create_array_with_length(bumps.len()).or_else(|_| {
+            Err(Error::new(
+                WorkspaceError::FailCreateObject,
+                "Failed to create recommended package bump array",
+            ))
+        })?;
+
+        for (i, bump) in bumps.iter().enumerate() {
+            let mut bump_object = env.create_object().or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailCreateObject,
+                    "Failed to create recommended package bump object",
+                ))
+            })?;
+
+            let from_value = serde_json::to_value(&bump.from).or_else(|_| {
+                Err(Error::new(WorkspaceError::FailParsing, "Failed to parse from value"))
+            })?;
+            bump_object.set("from", from_value).or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailSetObjectProperty,
+                    "Failed to set recommended package bump object property",
+                ))
+            })?;
+
+            let to_value = serde_json::to_value(&bump.to).or_else(|_| {
+                Err(Error::new(WorkspaceError::FailParsing, "Failed to parse to value"))
+            })?;
+            bump_object.set("to", to_value).or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailSetObjectProperty,
+                    "Failed to set recommended package bump object property",
+                ))
+            })?;
+
+            let package_info_value = serde_json::to_value(&bump.package_info).or_else(|_| {
+                Err(Error::new(WorkspaceError::FailParsing, "Failed to parse package info value"))
+            })?;
+            bump_object.set("packageInfo", package_info_value).or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailSetObjectProperty,
+                    "Failed to set recommended package bump object property",
+                ))
+            })?;
+
+            let conventional_value = serde_json::to_value(&bump.conventional).or_else(|_| {
+                Err(Error::new(WorkspaceError::FailParsing, "Failed to parse conventional value"))
+            })?;
+            bump_object.set("conventional", conventional_value).or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailSetObjectProperty,
+                    "Failed to set recommended package bump object property",
+                ))
+            })?;
+
+            let deploy_value = serde_json::to_value(&bump.deploy_to).or_else(|_| {
+                Err(Error::new(WorkspaceError::FailParsing, "Failed to parse deploy value"))
+            })?;
+            bump_object.set("deployTo", deploy_value).or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailSetObjectProperty,
+                    "Failed to set recommended package bump object property",
+                ))
+            })?;
+
+            let changed_files_value = serde_json::to_value(&bump.changed_files).or_else(|_| {
+                Err(Error::new(WorkspaceError::FailParsing, "Failed to parse changed files value"))
+            })?;
+            bump_object.set("changedFiles", changed_files_value).or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailSetObjectProperty,
+                    "Failed to set changed files object property",
+                ))
+            })?;
+
+            bumps_list.set_element(i as u32, bump_object).or_else(|_| {
+                Err(Error::new(
+                    WorkspaceError::FailSetObjectProperty,
+                    "Failed to set recommended package bump object property",
+                ))
+            })?;
+        }
+
+        Ok(bumps_list)
+    }
+
+    #[napi(
+        js_name = "getLastKnownPublishTagInfoForPackage",
+        ts_return_type = "Result<RepositoryPublishTagInfo|undefined>"
+    )]
+    pub fn get_last_known_publish_tag_info_for_package(
+        &self,
+        env: Env,
+        package_name: String,
+    ) -> Result<Option<Object>, WorkspaceError> {
+        let package_info =
+            self.instance.get_package_info(package_name.as_str()).ok_or_else(|| {
+                Error::new(WorkspaceError::PackageInfoNotFound, "Failed to get package info")
+            })?;
+
+        let repo_tag_info =
+            self.instance.get_last_known_publish_tag_info_for_package(&package_info);
+
+        match repo_tag_info {
+            Some(tag_info) => {
+                let mut tag_info_object = env.create_object().or_else(|_| {
+                    Err(Error::new(
+                        WorkspaceError::FailCreateObject,
+                        "Failed to create tag info object",
+                    ))
+                })?;
+
+                let tag_value = serde_json::to_value(tag_info.tag).or_else(|_| {
+                    Err(Error::new(WorkspaceError::FailParsing, "Failed to parse tag value"))
+                })?;
+                tag_info_object.set("tag", tag_value).or_else(|_| {
+                    Err(Error::new(
+                        WorkspaceError::FailSetObjectProperty,
+                        "Failed to set tag object property",
+                    ))
+                })?;
+
+                let hash_value = serde_json::to_value(tag_info.hash).or_else(|_| {
+                    Err(Error::new(WorkspaceError::FailParsing, "Failed to parse hash value"))
+                })?;
+                tag_info_object.set("hash", hash_value).or_else(|_| {
+                    Err(Error::new(
+                        WorkspaceError::FailSetObjectProperty,
+                        "Failed to set commit object property",
+                    ))
+                })?;
+
+                let package_value = serde_json::to_value(tag_info.package).or_else(|_| {
+                    Err(Error::new(WorkspaceError::FailParsing, "Failed to parse hash value"))
+                })?;
+                tag_info_object.set("package", package_value).or_else(|_| {
+                    Err(Error::new(
+                        WorkspaceError::FailSetObjectProperty,
+                        "Failed to set commit object property",
+                    ))
+                })?;
+
+                Ok(Some(tag_info_object))
+            }
+            None => Ok(None),
+        }
+    }
+
+    #[napi(js_name = "getDependents", ts_return_type = "Result<Record<string, Array<string>>>")]
+    pub fn get_dependents(&self) -> HashMap<String, Vec<String>> {
+        let packages_infos = self.instance.get_packages();
+        let repo_packages =
+            packages_infos.iter().map(|p| p.package.to_owned()).collect::<Vec<RepoPackage>>();
+
+        let dependency_graph = build_dependency_graph_from_packages(&repo_packages);
+        dependency_graph.dependents
     }
 }

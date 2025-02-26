@@ -153,9 +153,11 @@ impl PackageInfo {
             dependencies.insert(name.to_string(), serde_json::Value::String(version.to_string()));
             self.package.update_dependency_version(name, version.to_string().as_str());
         }
+
+        self.update_dev_dependency_version(name, version.to_string().as_str());
     }
 
-    pub fn update_dev_dependency_version(&mut self, name: &str, version: &str) {
+    pub(crate) fn update_dev_dependency_version(&mut self, name: &str, version: &str) {
         let version = Version::parse(version).expect("Invalid version");
         let package_json = self.pkg_json.as_object().unwrap();
 

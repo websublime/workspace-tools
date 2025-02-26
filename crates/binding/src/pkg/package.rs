@@ -1,12 +1,11 @@
+use super::dependency::Dependency;
 use napi::{
     bindgen_prelude::{FromNapiValue, Object},
-    sys, Error, Result,
+    sys, Error, JsUnknown, Result,
 };
 use napi::{Env, Status};
 use std::collections::HashMap;
-use ws_pkg::package::{
-    package_scope_name_version, Dependency as RepoDependency, Package as RepoPackage,
-};
+use ws_pkg::package::{package_scope_name_version, Package as RepoPackage};
 use ws_pkg::{dependency::Node, package::build_dependency_graph_from_packages};
 
 pub enum PackageError {
@@ -17,15 +16,25 @@ pub enum PackageError {
     NapiError(Error<Status>),
 }
 
+/// Package class.
+/// Represents a package.
+///
+/// @class Package - The Package class.
+/// @property {string} name - The name of the package.
+/// @property {string} version - The version of the package.
+/// @property {Optional<Array<Dependency>>} dependencies - The dependencies of the package.
+///
+/// @example
+///
+/// ```typescript
+/// const pkg = new Package("foo", "1.0.0", [new Dependency("bar", "2.0.0")]);
+/// console.log(pkg.name); // foo
+/// console.log(pkg.version); // 1.0.0
+/// console.log(pkg.dependencies); // [Dependency { name: 'bar', version: '2.0.0' }]
+/// ```
 #[napi(js_name = "Package")]
 pub struct Package {
-    instance: RepoPackage,
-}
-
-#[napi(js_name = "Dependency")]
-#[derive(Clone)]
-pub struct Dependency {
-    instance: RepoDependency,
+    pub(crate) instance: RepoPackage,
 }
 
 impl AsRef<str> for PackageError {
@@ -41,34 +50,6 @@ impl AsRef<str> for PackageError {
 }
 
 #[napi]
-impl Dependency {
-    #[napi(constructor)]
-    pub fn new(name: String, version: String) -> Self {
-        Self { instance: RepoDependency { name, version: version.parse().unwrap() } }
-    }
-
-    #[napi(getter)]
-    pub fn name(&self) -> String {
-        self.instance.name.to_string()
-    }
-
-    #[napi(getter)]
-    pub fn version(&self) -> String {
-        self.instance.version.to_string()
-    }
-}
-
-impl FromNapiValue for Dependency {
-    unsafe fn from_napi_value(env: sys::napi_env, napi_val: sys::napi_value) -> Result<Self> {
-        // Implement conversion from napi value to DependencyClass
-        let obj = Object::from_napi_value(env, napi_val)?;
-        let name: String = obj.get_named_property("name")?;
-        let version: String = obj.get_named_property("version")?;
-        Ok(Dependency { instance: RepoDependency { name, version: version.parse().unwrap() } })
-    }
-}
-
-#[napi]
 impl Package {
     #[napi(constructor)]
     pub fn new(
@@ -80,44 +61,70 @@ impl Package {
         Self { instance: RepoPackage::new(name.as_str(), version.as_str(), deps) }
     }
 
+    /// Update the package version.
+    ///
+    /// @param {string} version - The new version.
+    /// @returns {void}
     #[napi(js_name = "updateVersion")]
     pub fn update_version(&mut self, version: String) {
         self.instance.update_version(version.as_str());
     }
 
+    /// Update the dependency version.
+    ///
+    /// @param {string} name - The dependency name.
+    /// @param {string} version - The new version.
+    /// @returns {void}
     #[napi(js_name = "updateDependencyVersion")]
     pub fn update_dependency_version(&mut self, name: String, version: String) {
         self.instance.update_dependency_version(name.as_str(), version.as_str());
     }
 
+    /// Get package name.
+    ///
+    /// @returns {string} The package name.
     #[napi(getter)]
     pub fn name(&self) -> String {
         self.instance.name.to_string()
     }
 
+    /// Get package version.
+    ///
+    /// @returns {string} The package version.
     #[napi(getter)]
     pub fn version(&self) -> String {
         self.instance.version.to_string()
     }
 
+    /// Get package dependencies.
+    ///
+    /// @returns {Array<Dependency>} The package dependencies.
     #[napi(getter)]
     pub fn dependencies(&self) -> Vec<Dependency> {
         self.instance
             .dependencies()
             .iter()
-            .map(|dep| Dependency { instance: dep.to_owned() })
+            .map(|dep| Dependency { instance: dep.clone() })
             .collect()
     }
 }
 
 impl FromNapiValue for Package {
     unsafe fn from_napi_value(env: sys::napi_env, napi_val: sys::napi_value) -> Result<Self> {
-        // Implement conversion from napi value to PackageClass
-        let obj = Object::from_napi_value(env, napi_val)?;
+        /*let obj = Object::from_napi_value(env, napi_val)?;
         let name: String = obj.get_named_property("name")?;
         let version: String = obj.get_named_property("version")?;
         let deps: Option<Vec<Dependency>> = obj.get_named_property("dependencies")?;
-        Ok(Package::new(name, version, deps))
+        Ok(Package::new(name, version, deps))*/
+        unsafe {
+            let unknown = JsUnknown::from_napi_value(env, napi_val)?;
+            let object: Object = unknown.cast();
+            let name: String = object.get_named_property_unchecked("name")?;
+            let version: String = object.get_named_property_unchecked("version")?;
+            let deps: Option<Vec<Dependency>> =
+                object.get_named_property_unchecked("dependencies")?;
+            Ok(Self::new(name, version, deps))
+        }
     }
 }
 

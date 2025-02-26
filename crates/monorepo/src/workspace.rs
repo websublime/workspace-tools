@@ -213,11 +213,6 @@ impl Workspace {
 
         // Create a mutable clone of package_info so we can update it
         let mut updated_package_info = package_info.clone();
-
-        // Update the package version
-        updated_package_info.package.update_version(sem_version.as_str());
-
-        // Update the package.json version
         updated_package_info.update_version(sem_version.as_str());
 
         let (_, packages_changed_files) = self.get_changed_packages(since);
@@ -479,10 +474,6 @@ impl Workspace {
 
                 if let Some(new_version) = dependency_updates.get(package_name) {
                     dependent_package_info.update_dependency_version(package_name, new_version);
-                    dependent_package_info.update_dev_dependency_version(package_name, new_version);
-                    dependent_package_info
-                        .package
-                        .update_dependency_version(package_name, new_version);
                 }
 
                 let calculated_dependent_release_as = match Some(branch.contains("main")) {

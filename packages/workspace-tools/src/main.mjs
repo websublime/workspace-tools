@@ -1,12 +1,4 @@
 import {
-  initChanges,
-  addChange,
-  removeChange,
-  getChanges,
-  getChangesByBranch,
-  getChangesByPackage,
-  getChangesMetaByPackage,
-  getConfig,
   detectPackageManager,
   getProjectRootPath,
   executeCmd,
@@ -14,11 +6,8 @@ import {
   bumpMinor,
   bumpPatch,
   bumpSnapshot,
-  getPackageScopeNameVersion,
   Dependency,
   Package,
-  getPackageDependents,
-  Workspace,
 } from './binding.js'
 import util from 'node:util'
 
@@ -30,7 +19,7 @@ const log = (() => {
           colors: true,
           depth: null,
           getters: true,
-          showHidden: false,
+          showHidden: true,
           ...log.options,
         }),
       ),
@@ -42,7 +31,33 @@ const log = (() => {
 
 const root = process.cwd()
 
-log('Init changes', initChanges(root))
+log('Get project root path', getProjectRootPath())
+log('Detect package manager', detectPackageManager(root))
+log('Execute git command', executeCmd('git', '.', ['--version']))
+
+log('Bump version to major', bumpMajor('1.0.0'))
+log('Bump version to minor', bumpMinor('1.0.0'))
+log('Bump version to patch', bumpPatch('1.0.0'))
+log('Bump version to snapshot', bumpSnapshot('1.0.0', 'a23d456h'))
+
+const dependencyBar = new Dependency('@scope/bar', '1.0.0')
+const dependencyFoo = new Dependency('@scope/foo', '1.0.0')
+
+log('Dependency bar class', dependencyBar, dependencyBar.name, dependencyBar.version)
+log('Dependency foo class', dependencyFoo, dependencyFoo.name, dependencyFoo.version)
+
+const pkgFoo = new Package('@scope/foo', '1.0.0', [dependencyBar])
+const pkgBar = new Package('@scope/bar', '1.0.0', [])
+
+log('Package foo class', pkgFoo, pkgFoo.name, pkgFoo.version, pkgFoo.dependencies)
+log('Package bar class', pkgBar, pkgBar.name, pkgBar.version, pkgBar.dependencies)
+
+pkgFoo.updateVersion('2.0.0')
+pkgFoo.updateDependencyVersion('@scope/bar', '2.0.0')
+
+log('Package foo class update version', pkgFoo, pkgFoo.name, pkgFoo.version, dependencyBar.version, pkgFoo.dependencies)
+
+/*log('Init changes', initChanges(root))
 
 log('Add Change', addChange({ package: '@scope/foo', releaseAs: 'patch' }, ['int'], root))
 
@@ -97,8 +112,11 @@ pkgFoo.updateDependencyVersion('@scope/bar', '2.0.0')
 log('Package class update version', pkgFoo, pkgFoo.name, pkgFoo.version, pkgFoo.dependencies[0].version)
 
 const workspace = new Workspace(root)
+const pkgs = workspace.getPackages()
+const [pkg] = pkgs
 
-log('Workspace packages', workspace.getPackages())
+log('Workspace packages', pkgs)
+log('Workspace package info details', pkg, pkg.package.name, pkg.package.version, pkg.package.dependencies)
 
 log('Workspace package info', workspace.getPackageInfo('@websublime/workspace-tools'))
 
@@ -110,4 +128,6 @@ log('Workspace recommended package bump', workspace.getPackageRecommendBump('@we
 
 log('Workspace get bumps', workspace.getBumps())
 
-log('Delete the change from changes file', removeChange('feature/next', root))
+log('Workspace get dependents', workspace.getDependents())
+
+log('Delete the change from changes file', removeChange('feature/next', root))*/

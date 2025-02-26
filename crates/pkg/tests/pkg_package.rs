@@ -108,28 +108,65 @@ mod package_tests {
     #[test]
     fn test_packages_updates() {
         let pkgs = build_packages();
-        let package_infos: Vec<PackageInfo> = pkgs
+        let mut package_infos: Vec<PackageInfo> = pkgs
             .iter()
             .map(|pkg| {
-                let dependencies = pkg
-                    .dependencies()
-                    .iter()
-                    .map(|dep| {
-                        serde_json::json!({
-                            "name": dep.name,
-                            "version": dep.version.to_string(),
-                        })
-                    })
-                    .collect::<serde_json::Value>();
+                let mut pkg_json = serde_json::Map::new();
+                pkg_json
+                    .insert("name".to_string(), serde_json::Value::String(pkg.name.to_string()));
+                pkg_json.insert(
+                    "version".to_string(),
+                    serde_json::Value::String(pkg.version.to_string()),
+                );
+                pkg_json.insert("dependencies".to_string(), {
+                    let mut deps = serde_json::Map::new();
+                    for dep in pkg.dependencies() {
+                        deps.insert(
+                            dep.name.clone(),
+                            serde_json::Value::String(dep.version.to_string()),
+                        );
+                    }
+                    serde_json::Value::Object(deps)
+                });
 
                 PackageInfo {
                     package: pkg.clone(),
-                    package_json_path: String::from("/root/package/package.json"),
-                    package_path: String::from("/root/package"),
-                    package_relative_path: String::from("package"),
-                    pkg_json: dependencies,
+                    package_json_path: format!("/root/packages/{}/package.json", pkg.name),
+                    package_path: format!("/root/packages/{}", pkg.name),
+                    package_relative_path: format!("packages/{}", pkg.name),
+                    pkg_json: serde_json::Value::Object(pkg_json),
                 }
             })
             .collect();
+
+        for pkg_info in &mut package_infos {
+            if pkg_info.package.name == "@scope/foo" {
+                pkg_info.update_version("3.0.0");
+            }
+        }
+
+        for pkg_info in &mut package_infos {
+            pkg_info.update_dependency_version("@scope/foo", "3.0.0");
+        }
+
+        // find all changed packages
+        let changed_packages: Vec<&Package> = package_infos
+            .iter()
+            .filter(|pkg_info| {
+                let pkg = &pkg_info.package;
+                let pkg_json = &pkg_info.pkg_json;
+                let version = pkg_json["version"].as_str().unwrap();
+                let dependencies = pkg_json["dependencies"].as_object().unwrap();
+
+                pkg.version.to_string() != version
+                    || pkg.dependencies().iter().any(|dep| {
+                        let dep_version = dependencies[&dep.name].as_str().unwrap();
+                        dep.version.to_string() != dep_version
+                    })
+            })
+            .map(|pkg_info| &pkg_info.package)
+            .collect();
+
+        assert_eq!(changed_packages.len(), 2);
     }
 }
