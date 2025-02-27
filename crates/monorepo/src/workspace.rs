@@ -87,7 +87,7 @@ impl Workspace {
 
     pub fn get_package_info(&self, package_name: &str) -> Option<PackageInfo> {
         let packages = self.get_packages();
-        packages.into_iter().find(|p| p.package.name == package_name)
+        packages.into_iter().find(|p| p.package.name() == package_name)
     }
 
     pub fn get_changed_packages(
@@ -135,7 +135,7 @@ impl Workspace {
                     .map(|_| pkg.to_owned())
                     .collect::<Vec<PackageInfo>>();
 
-                pkgs.dedup_by(|a, b| a.package.name == b.package.name);
+                pkgs.dedup_by(|a, b| a.package.name() == b.package.name());
 
                 pkgs
             })
@@ -149,7 +149,7 @@ impl Workspace {
                 .collect();
 
             if !pkg_files.is_empty() {
-                files_map.insert(pkg.package.name.clone(), pkg_files);
+                files_map.insert(pkg.package.name().clone(), pkg_files);
             }
         }
 
@@ -161,8 +161,8 @@ impl Workspace {
         package_info: &PackageInfo,
         options: Option<BumpOptions>,
     ) -> RecommendBumpPackage {
-        let package_name = &package_info.package.name;
-        let package_version = &package_info.package.version.to_string();
+        let package_name = &package_info.package.name();
+        let package_version = &package_info.package.version().to_string();
         let package_changes_list = self.changes.changes_by_package_name(package_name);
         let package_changes = package_changes_list.first().or(None);
         let branch_meta_changes = self.changes.get_changes_meta_by_package_name(package_name);
@@ -308,12 +308,13 @@ impl Workspace {
                 self.config.changes_config.get("git_user_email").expect("Error getting git email");
 
             for bump in &bumps {
-                bump.package_info.write_package_json();
+                bump.package_info.write_package_json().expect("Error writing package.json");
 
-                let package_tag = &format!("{}@{}", bump.package_info.package.name, bump.to);
+                let package_tag = &format!("{}@{}", bump.package_info.package.name(), bump.to);
                 let commit_body = format!(
                     "Release of package {} with version: {}",
-                    bump.package_info.package.name, bump.to
+                    bump.package_info.package.name(),
+                    bump.to
                 );
 
                 self.repo
@@ -360,7 +361,8 @@ impl Workspace {
 
                 let changelog_commit_message = format!(
                     "chore: changelog generated for package {} with version {}",
-                    bump.package_info.package.name, bump.to
+                    bump.package_info.package.name(),
+                    bump.to
                 );
 
                 self.repo.add_all().expect("Error adding all files");
@@ -373,7 +375,8 @@ impl Workspace {
                         package_tag.as_str(),
                         Some(format!(
                             "chore: release {} to version {}",
-                            bump.package_info.package.name, bump.to
+                            bump.package_info.package.name(),
+                            bump.to
                         )),
                     )
                     .expect("Error tagging package");
@@ -396,7 +399,7 @@ impl Workspace {
                     .tools_config
                     .tools
                     .internal_packages
-                    .contains(&changed_package.package.name)
+                    .contains(&changed_package.package.name())
             })
             .collect()
     }
@@ -411,7 +414,7 @@ impl Workspace {
         options: &BumpOptions,
     ) {
         for changed_package in changed_packages {
-            let package_name = &changed_package.package.name;
+            let package_name = &changed_package.package.name();
             let changes_vec = self.changes.changes_by_package_name(package_name.as_str());
             let changes = changes_vec.iter().find(|change| change.package == *package_name);
 
@@ -457,13 +460,13 @@ impl Workspace {
 
         for changed_package in changed_packages {
             let empty_dependents = Vec::<String>::new();
-            let package_name = &changed_package.package.name;
+            let package_name = &changed_package.package.name();
             let dependents =
                 dependency_graph.get_dependents(package_name).unwrap_or(&empty_dependents);
 
             for dependent_name in dependents {
                 let existing_bump_index =
-                    bumps.iter().position(|b| b.package_info.package.name == *dependent_name);
+                    bumps.iter().position(|b| b.package_info.package.name() == *dependent_name);
 
                 let mut dependent_package_info = match existing_bump_index {
                     Some(index) => bumps[index].package_info.clone(),
@@ -539,8 +542,8 @@ impl Workspace {
             collator.compare(&tag_b, &tag_a)
         });
 
-        let package_name = &package_info.package.name;
-        let package_version = &package_info.package.version.to_string();
+        let package_name = &package_info.package.name();
+        let package_version = &package_info.package.version().to_string();
         let package_tag = format!("{package_name}@{package_version}");
 
         let mut match_tag = remote_tags.iter().find(|item| {
@@ -556,7 +559,7 @@ impl Workspace {
             remote_tags.iter().for_each(|item| {
                 let tag = &item.tag.replace("refs/tags/", "");
 
-                if tag.contains(&package_info.package.name) {
+                if tag.contains(&package_info.package.name()) {
                     if highest_tag.is_none() {
                         highest_tag = Some(String::from(tag));
                     }
@@ -590,7 +593,7 @@ impl Workspace {
         if match_tag.is_some() {
             let hash = &match_tag.unwrap().hash;
             let tag = &match_tag.unwrap().tag;
-            let package = &package_info.package.name;
+            let package = &package_info.package.name();
 
             return Some(RepositoryPublishTagInfo {
                 hash: hash.to_string(),
@@ -621,79 +624,47 @@ impl Workspace {
         let optional_dependencies = package_json.optional_dependencies.clone().unwrap_or_default();
 
         if dependencies.is_object() {
-            dependencies.as_object().iter().for_each(|dep| {
-                dep.keys().for_each(|key| {
-                    let dependency = Dependency {
-                        name: key.clone(),
-                        version: dep
-                            .get(key)
-                            .unwrap()
-                            .as_str()
-                            .unwrap()
-                            .to_string()
-                            .parse()
-                            .unwrap(),
-                    };
-                    package_dependencies.push(dependency);
-                });
-            });
+            if let Some(deps) = dependencies.as_object() {
+                for (key, value) in deps {
+                    if let Some(version_str) = value.as_str() {
+                        let dependency = Dependency::new(key, version_str);
+                        package_dependencies.push(dependency);
+                    }
+                }
+            }
         }
 
         if dev_dependencies.is_object() {
-            dev_dependencies.as_object().iter().for_each(|dep| {
-                dep.keys().for_each(|key| {
-                    let dependency = Dependency {
-                        name: key.clone(),
-                        version: dep
-                            .get(key)
-                            .unwrap()
-                            .as_str()
-                            .unwrap()
-                            .to_string()
-                            .parse()
-                            .unwrap(),
-                    };
-                    package_dependencies.push(dependency);
-                });
-            });
+            if let Some(deps) = dev_dependencies.as_object() {
+                for (key, value) in deps {
+                    if let Some(version_str) = value.as_str() {
+                        let dependency = Dependency::new(key, version_str);
+                        package_dependencies.push(dependency);
+                    }
+                }
+            }
         }
 
         if peer_dependencies.is_object() {
-            peer_dependencies.as_object().iter().for_each(|dep| {
-                dep.keys().for_each(|key| {
-                    let dependency = Dependency {
-                        name: key.clone(),
-                        version: dep
-                            .get(key)
-                            .unwrap()
-                            .as_str()
-                            .unwrap()
-                            .to_string()
-                            .parse()
-                            .unwrap(),
-                    };
-                    package_dependencies.push(dependency);
-                });
-            });
+            if let Some(deps) = peer_dependencies.as_object() {
+                for (key, value) in deps {
+                    if let Some(version_str) = value.as_str() {
+                        let dependency = Dependency::new(key, version_str);
+                        package_dependencies.push(dependency);
+                    }
+                }
+            }
         }
 
         if optional_dependencies.is_object() {
-            optional_dependencies.as_object().iter().for_each(|dep| {
-                dep.keys().for_each(|key| {
-                    let dependency = Dependency {
-                        name: key.clone(),
-                        version: dep
-                            .get(key)
-                            .unwrap()
-                            .as_str()
-                            .unwrap()
-                            .to_string()
-                            .parse()
-                            .unwrap(),
-                    };
-                    package_dependencies.push(dependency);
-                });
-            });
+            if let Some(deps) = optional_dependencies.as_object() {
+                for (key, value) in deps {
+                    if let Some(version_str) = value.as_str() {
+                        let dependency = Dependency::new(key, version_str);
+                        package_dependencies.push(dependency);
+                    }
+                }
+            }
         }
 
         package_dependencies

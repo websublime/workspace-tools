@@ -5,8 +5,8 @@ use napi::{
 };
 use napi::{Env, Status};
 use std::collections::HashMap;
+use ws_pkg::package::build_dependency_graph_from_packages;
 use ws_pkg::package::{package_scope_name_version, Package as RepoPackage};
-use ws_pkg::{dependency::Node, package::build_dependency_graph_from_packages};
 
 pub enum PackageError {
     InvalidPackageMetadata,
@@ -85,7 +85,7 @@ impl Package {
     /// @returns {string} The package name.
     #[napi(getter)]
     pub fn name(&self) -> String {
-        self.instance.name.to_string()
+        self.instance.name().to_string()
     }
 
     /// Get package version.
@@ -93,7 +93,7 @@ impl Package {
     /// @returns {string} The package version.
     #[napi(getter)]
     pub fn version(&self) -> String {
-        self.instance.version.to_string()
+        self.instance.version().to_string()
     }
 
     /// Get package dependencies.

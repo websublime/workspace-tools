@@ -14,7 +14,7 @@ pub trait Node {
 
     /// Returns a slice of dependencies for this Node
     fn dependencies(&self) -> &[Self::DependencyType];
-
+    fn dependencies_vec(&self) -> Vec<Self::DependencyType>;
     /// Returns true if the `dependency` can be met by us.
     fn matches(&self, dependency: &Self::DependencyType) -> bool;
 
@@ -79,6 +79,7 @@ pub struct DependencyGraph<'a, N: Node> {
 /// The only way to build a [`DependencyGraph`] is from a slice of objects implementing [`Node`].
 /// The graph references the original items, meaning the objects cannot be modified while
 /// the [`DependencyGraph`] holds a reference to them.
+#[allow(clippy::ref_as_ptr)]
 impl<'a, N> From<&'a [N]> for DependencyGraph<'a, N>
 where
     N: Node,
@@ -88,10 +89,11 @@ where
         let mut node_indices = HashMap::new();
         let mut dependents: HashMap<N::Identifier, Vec<N::Identifier>> = HashMap::new();
 
-        // Insert the input nodes into the graph, and record their positions.
-        // We'll be adding the edges next, and filling in any unresolved
-        // steps we find along the way.
-        let nodes: Vec<(_, _)> = nodes
+        // Store owned copies of dependencies to create safe references
+        let mut all_dependencies: Vec<Vec<N::DependencyType>> = Vec::new();
+
+        // Insert nodes
+        let nodes_with_indices: Vec<(_, _)> = nodes
             .iter()
             .map(|node| {
                 let index = graph.add_node(Step::Resolved(node));
@@ -100,19 +102,31 @@ where
             })
             .collect();
 
-        for (node, index) in &nodes {
-            for dependency in node.dependencies() {
-                // Check to see if we can resolve this dependency internally.
+        // Process dependencies
+        for (node, node_idx) in &nodes_with_indices {
+            // Get dependencies using the new method
+            let deps = node.dependencies_vec();
+            all_dependencies.push(deps);
+            let deps = all_dependencies.last().unwrap();
+
+            for dependency in deps {
+                // Try to find a matching node
                 if let Some((dep_node, dependent)) =
-                    nodes.iter().find(|(dep, _)| dep.matches(dependency))
+                    nodes_with_indices.iter().find(|(dep, _)| dep.matches(dependency))
                 {
-                    // If we can, just add an edge between the two nodes.
-                    graph.add_edge(*index, *dependent, dependency);
+                    // Create edge with a reference to the dependency
+                    let dep_ref: &N::DependencyType =
+                        unsafe { &*(dependency as *const N::DependencyType) };
+
+                    graph.add_edge(*node_idx, *dependent, dep_ref);
                     dependents.entry(dep_node.identifier()).or_default().push(node.identifier());
                 } else {
-                    // If not, create a new "Unresolved" node, and create an edge to that.
-                    let unresolved = graph.add_node(Step::Unresolved(dependency));
-                    graph.add_edge(*index, unresolved, dependency);
+                    // Create unresolved node
+                    let dep_ref: &N::DependencyType =
+                        unsafe { &*(dependency as *const N::DependencyType) };
+
+                    let unresolved = graph.add_node(Step::Unresolved(dep_ref));
+                    graph.add_edge(*node_idx, unresolved, dep_ref);
                 }
             }
         }
@@ -125,15 +139,10 @@ impl<'a, N> DependencyGraph<'a, N>
 where
     N: Node,
 {
-    /// True if all graph [`Node`]s have only references to other internal [`Node`]s.
-    /// That is, there are no unresolved dependencies between nodes.
     pub fn is_internally_resolvable(&self) -> bool {
         self.graph.node_weights().all(Step::is_resolved)
     }
 
-    /// Get an iterator over unresolved dependencies, without traversing the whole graph.
-    /// Useful for doing pre-validation or pre-fetching of external dependencies before
-    /// starting to resolve internal dependencies.
     pub fn unresolved_dependencies(&self) -> impl Iterator<Item = &N::DependencyType> {
         self.graph.node_weights().filter_map(Step::as_unresolved)
     }
@@ -142,46 +151,16 @@ where
         self.graph.node_weights().filter_map(Step::as_resolved)
     }
 
-    // Get node index by identifier
     pub fn get_node_index(&self, id: &N::Identifier) -> Option<petgraph::stable_graph::NodeIndex> {
         self.node_indices.get(id).copied()
     }
 
-    // Get node by identifier
     pub fn get_node(&self, id: &N::Identifier) -> Option<&Step<'a, N>> {
         self.get_node_index(id).and_then(|idx| self.graph.node_weight(idx))
     }
 
-    // Get dependents by identifier
     pub fn get_dependents(&self, id: &N::Identifier) -> Option<&Vec<N::Identifier>> {
         self.dependents.get(id)
-    }
-
-    // Propagate update starting from a node identified by its identifier
-    pub fn propagate_update<F>(&self, start_id: &N::Identifier, mut update_fn: F)
-    where
-        F: FnMut(&Step<'a, N>, &[N::Identifier]),
-    {
-        let mut visited = HashSet::new();
-        let mut stack = vec![start_id.clone()];
-
-        while let Some(current_id) = stack.pop() {
-            if visited.insert(current_id.clone()) {
-                if let Some(node_weight) = self.get_node(&current_id) {
-                    let empty_deps = vec![];
-                    // Get dependents for current node
-                    let deps = self.get_dependents(&current_id).unwrap_or(&empty_deps);
-
-                    // Apply update
-                    update_fn(node_weight, deps);
-
-                    // Add dependents to stack for processing
-                    if let Some(dependents) = self.get_dependents(&current_id) {
-                        stack.extend(dependents.iter().cloned());
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -195,8 +174,6 @@ where
     type Item = Step<'a, N>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // Returns the first node, which does not have any Outgoing
-        // edges, which means it is terminal.
         for index in self.graph.node_indices().rev() {
             if self.graph.neighbors_directed(index, Direction::Outgoing).count() == 0 {
                 return self.graph.remove_node(index);

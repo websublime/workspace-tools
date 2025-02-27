@@ -29,7 +29,7 @@ impl Dependency {
     #[napi(constructor)]
     pub fn new(name: String, version: String) -> Self {
         //Self { instance: RepoDependency { name, version: version.parse().unwrap() } }
-        Self { instance: RepoDependency { name, version: version.parse().unwrap() } }
+        Self { instance: RepoDependency::new(name.as_str(), version.as_str()) }
     }
 
     /// Gets the name of the dependency.
@@ -37,7 +37,7 @@ impl Dependency {
     /// @returns {string} The name of the dependency.
     #[napi(getter)]
     pub fn name(&self) -> String {
-        self.instance.name.clone()
+        self.instance.name().clone()
     }
 
     /// Gets the version of the dependency.
@@ -45,7 +45,7 @@ impl Dependency {
     /// @returns {string} The version of the dependency.
     #[napi(getter)]
     pub fn version(&self) -> String {
-        self.instance.version.to_string()
+        self.instance.version().to_string()
     }
 }
 
@@ -68,7 +68,7 @@ impl FromNapiValue for Dependency {
             let object: Object = unknown.cast();
             let name: String = object.get_named_property_unchecked("name")?;
             let version: String = object.get_named_property_unchecked("version")?;
-            Ok(Self { instance: RepoDependency { name, version: version.parse().unwrap() } })
+            Ok(Self { instance: RepoDependency::new(name.as_str(), version.as_str()) })
         }
     }
 }

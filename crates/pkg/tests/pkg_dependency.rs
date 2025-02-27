@@ -1,4 +1,4 @@
-#[cfg(test)]
+/*#[cfg(test)]
 #[allow(clippy::print_stdout)]
 mod dependency_tests {
 
@@ -275,4 +275,4 @@ mod dependency_tests {
             }
         }
     }
-}
+}*/

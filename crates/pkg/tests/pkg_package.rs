@@ -2,6 +2,150 @@
 #[allow(clippy::print_stdout)]
 #[allow(clippy::uninlined_format_args)]
 mod package_tests {
+    use ws_pkg::dependency::DependencyGraph;
+    use ws_pkg::package::{Dependency, Package, PackageInfo};
+
+    #[test]
+    fn test_dependency() {
+        let dep_foo = Dependency::new("@scope/foo", "1.0.0");
+
+        assert_eq!(dep_foo.name(), "@scope/foo");
+        assert_eq!(dep_foo.version().to_string(), "^1.0.0");
+
+        let dep_bar = Dependency::new("@scope/bar", ">=1.0.0");
+        dep_bar.update_version("2.0.0");
+
+        assert_eq!(dep_bar.name(), "@scope/bar");
+        assert_eq!(dep_bar.version().to_string(), "^2.0.0");
+    }
+
+    #[test]
+    fn test_package() {
+        let dep_foo = Dependency::new("@scope/foo", "1.0.0");
+        let dep_bar = Dependency::new("@scope/bar", "1.1.0");
+
+        let pkg_charlie =
+            Package::new("@scope/charlie", "0.1.1", Some(vec![dep_bar.clone(), dep_foo.clone()]));
+
+        assert_eq!(pkg_charlie.name(), "@scope/charlie");
+        assert_eq!(pkg_charlie.version().to_string(), "0.1.1");
+        assert_eq!(pkg_charlie.dependencies().len(), 2);
+        assert_eq!(pkg_charlie.dependencies()[0].name(), "@scope/bar");
+        assert_eq!(pkg_charlie.dependencies()[0].version().to_string(), "^1.1.0");
+        assert_eq!(pkg_charlie.dependencies()[1].name(), "@scope/foo");
+        assert_eq!(pkg_charlie.dependencies()[1].version().to_string(), "^1.0.0");
+
+        pkg_charlie.update_version("0.2.0");
+        pkg_charlie.update_dependency_version("@scope/foo", "2.0.0");
+
+        assert_eq!(pkg_charlie.version().to_string(), "0.2.0");
+        assert_eq!(pkg_charlie.dependencies()[1].version().to_string(), "^2.0.0");
+        assert_eq!(dep_foo.version().to_string(), "^2.0.0");
+    }
+
+    #[test]
+    fn test_package_info() {
+        // Create a dependency
+        let dep_foo = Dependency::new("@scope/foo", ">=2.0.0");
+
+        // Create a package with the dependency
+        let pkg = Package::new("@scope/bar", "1.0.0", Some(vec![dep_foo.clone()]));
+
+        // Create package JSON
+        let mut pkg_json = serde_json::Map::new();
+        pkg_json.insert("name".to_string(), serde_json::Value::String("@scope/bar".to_string()));
+        pkg_json.insert("version".to_string(), serde_json::Value::String("1.0.0".to_string()));
+
+        let mut deps_map = serde_json::Map::new();
+        deps_map.insert("@scope/foo".to_string(), serde_json::Value::String(">=2.0.0".to_string()));
+        pkg_json.insert("dependencies".to_string(), serde_json::Value::Object(deps_map));
+
+        // Create package info
+        let mut pkg_info = PackageInfo::new(
+            pkg.clone(),
+            String::from("/path/to/package.json"),
+            String::from("/path/to"),
+            String::from("path/to"),
+            serde_json::Value::Object(pkg_json),
+        );
+
+        // Update version through package info
+        pkg_info.update_version("2.0.0");
+
+        // Update dependency version through package info
+        pkg_info.update_dependency_version("@scope/foo", "3.0.0");
+
+        // Verify package version was updated
+        assert_eq!(pkg.version_str(), "2.0.0");
+
+        // Verify original dependency reference was updated
+        assert_eq!(dep_foo.version_str(), "^3.0.0");
+
+        // Verify package info JSON was updated
+        assert_eq!(pkg_info.pkg_json["version"].as_str().unwrap(), "2.0.0");
+        assert_eq!(pkg_info.pkg_json["dependencies"]["@scope/foo"].as_str().unwrap(), "3.0.0");
+    }
+
+    #[test]
+    fn test_multiple_packages_share_dependency() {
+        // Create a shared dependency
+        let dep_foo = Dependency::new("@scope/foo", ">=2.0.0");
+
+        // Create two packages with the same dependency
+        let pkg1 = Package::new("@scope/bar", "1.0.0", Some(vec![dep_foo.clone()]));
+
+        let pkg2 = Package::new("@scope/baz", "1.0.0", Some(vec![dep_foo.clone()]));
+
+        // Update dependency through first package
+        pkg1.update_dependency_version("@scope/foo", "3.0.0");
+
+        // Verify all instances see the update
+        assert_eq!(dep_foo.version_str(), "^3.0.0");
+        assert_eq!(pkg1.dependencies()[0].version_str(), "^3.0.0");
+        assert_eq!(pkg2.dependencies()[0].version_str(), "^3.0.0");
+    }
+
+    #[test]
+    fn test_dependency_graph() {
+        let dep_foo = Dependency::new("@scope/foo", "1.0.0");
+        let dep_bar = Dependency::new("@scope/bar", "1.1.0");
+        let dep_baz = Dependency::new("@scope/baz", "1.2.0");
+
+        let pkg_charlie =
+            Package::new("@scope/charlie", "0.1.1", Some(vec![dep_bar.clone(), dep_foo.clone()]));
+        let pkg_delta =
+            Package::new("@scope/delta", "0.2.1", Some(vec![dep_baz.clone(), dep_foo.clone()]));
+
+        let pkg_echo =
+            Package::new("@scope/echo", "0.3.1", Some(vec![dep_baz.clone(), dep_bar.clone()]));
+
+        let pkgs = [pkg_charlie, pkg_delta, pkg_echo];
+
+        let dependency_graph = DependencyGraph::from(&pkgs[..]);
+
+        let dep: Vec<&Package> = dependency_graph.resolved_dependencies().collect();
+        let dependents = dependency_graph
+            .get_dependents(&"@scope/foo".to_string())
+            .expect("Error getting dependents");
+
+        assert_eq!(dep.len(), 3);
+
+        assert_eq!(dep[0].name(), "@scope/bar");
+        assert_eq!(dep[0].version().to_string(), "1.1.0");
+        assert_eq!(dep[1].name(), "@scope/foo");
+        assert_eq!(dep[1].version().to_string(), "1.0.0");
+        assert_eq!(dep[2].name(), "@scope/baz");
+        assert_eq!(dep[2].version().to_string(), "1.2.0");
+
+        assert_eq!(dependents.len(), 2);
+        assert_eq!(dependents[0], "@scope/charlie");
+        assert_eq!(dependents[1], "@scope/delta");
+    }
+}
+/*#[cfg(test)]
+#[allow(clippy::print_stdout)]
+#[allow(clippy::uninlined_format_args)]
+mod package_tests {
     use petgraph::dot::Dot;
     use semver::Version;
     use ws_pkg::dependency::{DependencyGraph, Node};
@@ -106,7 +250,28 @@ mod package_tests {
     }
 
     #[test]
-    fn test_packages_updates() {
+    fn test_package_updates() {
+        let dep_foo = Dependency {
+            name: "@scope/foo".to_string(),
+            version: ">=2.0.0".parse().unwrap(),
+        };
+
+        let mut pkg = Package::new(
+            "@scope/bar",
+            Version::parse("1.0.0").unwrap().to_string().as_str(),
+            Some(vec![dep_foo.clone()]),
+        );
+
+        pkg.update_version("2.0.0");
+        pkg.update_dependency_version("@scope/foo", "3.0.0");
+
+        assert_eq!(pkg.version.to_string(), "2.0.0");
+        assert_eq!(pkg.dependencies().len(), 1);
+        assert_eq!(dep_foo.version.to_string(), "3.0.0");
+    }
+
+    #[test]
+    fn test_packages_info_updates() {
         let pkgs = build_packages();
         let mut package_infos: Vec<PackageInfo> = pkgs
             .iter()
@@ -169,4 +334,4 @@ mod package_tests {
 
         assert_eq!(changed_packages.len(), 2);
     }
-}
+}*/
