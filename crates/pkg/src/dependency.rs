@@ -1,14 +1,11 @@
 use petgraph::{stable_graph::StableDiGraph, Direction};
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Display,
-};
+use std::{collections::HashMap, fmt::Display};
 
 /// Must be implemented by the type you wish
 pub trait Node {
     /// Encodes a dependency relationship. In a Package Manager dependency graph for instance, this might be a (package name, version) tuple.
     /// It might also just be the exact same type as the one that implements the Node trait, in which case `Node::matches` can be implemented through simple equality.
-    type DependencyType;
+    type DependencyType: std::fmt::Debug + Clone;
 
     type Identifier: std::hash::Hash + Eq + Clone;
 
@@ -30,7 +27,7 @@ pub trait Node {
 #[derive(Debug, Clone)]
 pub enum Step<'a, N: Node> {
     Resolved(&'a N),
-    Unresolved(&'a N::DependencyType),
+    Unresolved(N::DependencyType), // Own the dependency info
 }
 
 impl<'a, N: Node> Step<'a, N> {
@@ -69,10 +66,8 @@ impl<'a, N: Node> Display for Step<'a, N> {
 /// in an order which ensures that dependent Nodes are visited before their parents.
 #[derive(Debug, Clone)]
 pub struct DependencyGraph<'a, N: Node> {
-    pub graph: StableDiGraph<Step<'a, N>, &'a N::DependencyType>,
-    // Map node identifiers to their indices
+    pub graph: StableDiGraph<Step<'a, N>, ()>, // Changed to unit type
     pub node_indices: HashMap<N::Identifier, petgraph::stable_graph::NodeIndex>,
-    // Map node identifiers to their dependents' identifiers
     pub dependents: HashMap<N::Identifier, Vec<N::Identifier>>,
 }
 
@@ -85,48 +80,50 @@ where
     N: Node,
 {
     fn from(nodes: &'a [N]) -> Self {
-        let mut graph = StableDiGraph::<Step<'a, N>, &'a N::DependencyType>::new();
+        let mut graph = StableDiGraph::<Step<'a, N>, ()>::new();
         let mut node_indices = HashMap::new();
         let mut dependents: HashMap<N::Identifier, Vec<N::Identifier>> = HashMap::new();
 
-        // Store owned copies of dependencies to create safe references
-        let mut all_dependencies: Vec<Vec<N::DependencyType>> = Vec::new();
+        // Insert nodes first
+        for node in nodes {
+            let idx = graph.add_node(Step::Resolved(node));
+            node_indices.insert(node.identifier(), idx);
+        }
 
-        // Insert nodes
-        let nodes_with_indices: Vec<(_, _)> = nodes
-            .iter()
-            .map(|node| {
-                let index = graph.add_node(Step::Resolved(node));
-                node_indices.insert(node.identifier(), index);
-                (node, index)
-            })
-            .collect();
+        // Now process dependencies
+        for node in nodes {
+            let node_idx = node_indices[&node.identifier()];
 
-        // Process dependencies
-        for (node, node_idx) in &nodes_with_indices {
-            // Get dependencies using the new method
-            let deps = node.dependencies_vec();
-            all_dependencies.push(deps);
-            let deps = all_dependencies.last().unwrap();
+            // Get dependencies for this node
+            for dep_info in node.dependencies_vec() {
+                // Try to find a matching node for this dependency
+                let mut found_match = false;
 
-            for dependency in deps {
-                // Try to find a matching node
-                if let Some((dep_node, dependent)) =
-                    nodes_with_indices.iter().find(|(dep, _)| dep.matches(dependency))
-                {
-                    // Create edge with a reference to the dependency
-                    let dep_ref: &N::DependencyType =
-                        unsafe { &*(dependency as *const N::DependencyType) };
+                for dep_node in nodes {
+                    if dep_node.matches(&dep_info) {
+                        let dep_idx = node_indices[&dep_node.identifier()];
 
-                    graph.add_edge(*node_idx, *dependent, dep_ref);
-                    dependents.entry(dep_node.identifier()).or_default().push(node.identifier());
-                } else {
-                    // Create unresolved node
-                    let dep_ref: &N::DependencyType =
-                        unsafe { &*(dependency as *const N::DependencyType) };
+                        // Add edge without storing dependency reference
+                        graph.add_edge(node_idx, dep_idx, ());
 
-                    let unresolved = graph.add_node(Step::Unresolved(dep_ref));
-                    graph.add_edge(*node_idx, unresolved, dep_ref);
+                        // Record dependent relationship
+                        dependents
+                            .entry(dep_node.identifier())
+                            .or_default()
+                            .push(node.identifier());
+
+                        found_match = true;
+                        break;
+                    }
+                }
+
+                // If no matching node was found, create an unresolved node
+                if !found_match {
+                    // Create a new unresolved node with owned data
+                    let unresolved = graph.add_node(Step::Unresolved(dep_info));
+
+                    // Add edge
+                    graph.add_edge(node_idx, unresolved, ());
                 }
             }
         }

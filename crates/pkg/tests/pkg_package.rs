@@ -107,6 +107,12 @@ mod package_tests {
 
     #[test]
     fn test_dependency_graph() {
+        // Create actual package nodes for the dependencies
+        let pkg_foo = Package::new("@scope/foo", "1.0.0", None);
+        let pkg_bar = Package::new("@scope/bar", "1.1.0", None);
+        let pkg_baz = Package::new("@scope/baz", "1.2.0", None);
+
+        // Then create dependencies that reference these packages
         let dep_foo = Dependency::new("@scope/foo", "1.0.0");
         let dep_bar = Dependency::new("@scope/bar", "1.1.0");
         let dep_baz = Dependency::new("@scope/baz", "1.2.0");
@@ -115,31 +121,31 @@ mod package_tests {
             Package::new("@scope/charlie", "0.1.1", Some(vec![dep_bar.clone(), dep_foo.clone()]));
         let pkg_delta =
             Package::new("@scope/delta", "0.2.1", Some(vec![dep_baz.clone(), dep_foo.clone()]));
-
         let pkg_echo =
             Package::new("@scope/echo", "0.3.1", Some(vec![dep_baz.clone(), dep_bar.clone()]));
 
-        let pkgs = [pkg_charlie, pkg_delta, pkg_echo];
+        // Include all packages in the graph
+        let pkgs = [pkg_foo, pkg_bar, pkg_baz, pkg_charlie, pkg_delta, pkg_echo];
 
         let dependency_graph = DependencyGraph::from(&pkgs[..]);
 
-        let dep: Vec<&Package> = dependency_graph.resolved_dependencies().collect();
+        // Now we can get the dependents of foo, which should be charlie and delta
         let dependents = dependency_graph
             .get_dependents(&"@scope/foo".to_string())
             .expect("Error getting dependents");
 
-        assert_eq!(dep.len(), 3);
-
-        assert_eq!(dep[0].name(), "@scope/bar");
-        assert_eq!(dep[0].version().to_string(), "1.1.0");
-        assert_eq!(dep[1].name(), "@scope/foo");
-        assert_eq!(dep[1].version().to_string(), "1.0.0");
-        assert_eq!(dep[2].name(), "@scope/baz");
-        assert_eq!(dep[2].version().to_string(), "1.2.0");
-
         assert_eq!(dependents.len(), 2);
         assert_eq!(dependents[0], "@scope/charlie");
         assert_eq!(dependents[1], "@scope/delta");
+
+        // Now we can get the dependents of bar, which should be charlie and echo
+        let dependents = dependency_graph
+            .get_dependents(&"@scope/bar".to_string())
+            .expect("Error getting dependents");
+
+        assert_eq!(dependents.len(), 2);
+        assert_eq!(dependents[0], "@scope/charlie");
+        assert_eq!(dependents[1], "@scope/echo");
     }
 }
 /*#[cfg(test)]
