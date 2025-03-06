@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod version_tests {
     use semver::Version;
-    use ws_pkg::version::Version as WsVersion;
+    use ws_pkg::Version as WsVersion;
 
     #[test]
     fn test_bump_major() {

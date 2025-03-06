@@ -1,6 +1,40 @@
+//! Version types and utilities.
+
 use semver::{BuildMetadata, Prerelease, Version as SemVersion};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter, Result};
+
+/// Version update strategy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VersionUpdateStrategy {
+    /// Only upgrade patch versions (0.0.x)
+    PatchOnly,
+    /// Upgrade patch and minor versions (0.x.y)
+    MinorAndPatch,
+    /// Upgrade all versions including major ones (x.y.z)
+    AllUpdates,
+}
+
+impl Default for VersionUpdateStrategy {
+    fn default() -> Self {
+        Self::MinorAndPatch
+    }
+}
+
+/// Version stability filter
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VersionStability {
+    /// Only include stable versions
+    StableOnly,
+    /// Include prereleases and stable versions
+    IncludePrerelease,
+}
+
+impl Default for VersionStability {
+    fn default() -> Self {
+        Self::StableOnly
+    }
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq)]
 /// Enum representing the type of version bump to be performed.

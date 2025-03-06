@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate napi_derive;
 
-pub mod pkg;
-pub mod standard;
+//pub mod pkg;
+//pub mod standard;
 /*pub mod binding_changes;
 pub mod binding_command;
 pub mod binding_config;

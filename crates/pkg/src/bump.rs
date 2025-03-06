@@ -1,6 +1,7 @@
-use serde::{Deserialize, Serialize};
+//! Version bumping functionality.
 
-use super::version::Version;
+use crate::types::version::Version;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BumpOptions {

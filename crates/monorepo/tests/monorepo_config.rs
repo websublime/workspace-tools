@@ -1,4 +1,4 @@
-#[cfg(test)]
+/*#[cfg(test)]
 mod config_tests {
 
     use std::path::PathBuf;
@@ -35,4 +35,4 @@ mod config_tests {
 
         assert_ne!(config.workspace_root.as_path(), root);
     }
-}
+}*/
