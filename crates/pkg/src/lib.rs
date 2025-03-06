@@ -16,8 +16,9 @@ pub use graph::{DependencyGraph, Node};
 pub use registry::{DependencyRegistry, ResolutionResult};
 pub use types::{
     dependency::Dependency,
+    diff::{ChangeType, DependencyChange, PackageDiff},
     package::Package,
-    version::{Version, VersionStability, VersionUpdateStrategy},
+    version::{Version, VersionRelationship, VersionStability, VersionUpdateStrategy},
 };
 pub use upgrader::{
     AvailableUpgrade, DependencyUpgrader, ExecutionMode, PackageRegistry, UpgradeConfig,

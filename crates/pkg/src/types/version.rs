@@ -36,6 +36,53 @@ impl Default for VersionStability {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum VersionRelationship {
+    /// Second version is a major upgrade (1.0.0 -> 2.0.0)
+    MajorUpgrade,
+    /// Second version is a minor upgrade (1.0.0 -> 1.1.0)
+    MinorUpgrade,
+    /// Second version is a patch upgrade (1.0.0 -> 1.0.1)
+    PatchUpgrade,
+    /// Moved from prerelease to stable (1.0.0-alpha -> 1.0.0)
+    PrereleaseToStable,
+    /// Newer prerelease version (1.0.0-alpha -> 1.0.0-beta)
+    NewerPrerelease,
+    /// Versions are identical (1.0.0 == 1.0.0)
+    Identical,
+    /// Second version is a major downgrade (2.0.0 -> 1.0.0)
+    MajorDowngrade,
+    /// Second version is a minor downgrade (1.1.0 -> 1.0.0)
+    MinorDowngrade,
+    /// Second version is a patch downgrade (1.0.1 -> 1.0.0)
+    PatchDowngrade,
+    /// Moved from stable to prerelease (1.0.0 -> 1.0.0-alpha)
+    StableToPrerelease,
+    /// Older prerelease version (1.0.0-beta -> 1.0.0-alpha)
+    OlderPrerelease,
+    /// Version comparison couldn't be determined (invalid versions)
+    Indeterminate,
+}
+
+impl std::fmt::Display for VersionRelationship {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MajorUpgrade => write!(f, "major upgrade"),
+            Self::MinorUpgrade => write!(f, "minor upgrade"),
+            Self::PatchUpgrade => write!(f, "patch upgrade"),
+            Self::PrereleaseToStable => write!(f, "prerelease to stable"),
+            Self::NewerPrerelease => write!(f, "newer prerelease"),
+            Self::Identical => write!(f, "identical"),
+            Self::MajorDowngrade => write!(f, "major downgrade"),
+            Self::MinorDowngrade => write!(f, "minor downgrade"),
+            Self::PatchDowngrade => write!(f, "patch downgrade"),
+            Self::StableToPrerelease => write!(f, "stable to prerelease"),
+            Self::OlderPrerelease => write!(f, "older prerelease"),
+            Self::Indeterminate => write!(f, "indeterminate"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq)]
 /// Enum representing the type of version bump to be performed.
 pub enum Version {
@@ -106,5 +153,52 @@ impl Version {
         sem_version.pre = Prerelease::new(alpha.as_str()).unwrap_or(Prerelease::EMPTY);
         sem_version.build = BuildMetadata::EMPTY;
         sem_version
+    }
+
+    /// Compare two version strings and return their relationship
+    pub fn compare_versions(v1: &str, v2: &str) -> VersionRelationship {
+        if let (Ok(ver1), Ok(ver2)) = (semver::Version::parse(v1), semver::Version::parse(v2)) {
+            match ver1.cmp(&ver2) {
+                std::cmp::Ordering::Less => {
+                    if ver1.major < ver2.major {
+                        VersionRelationship::MajorUpgrade
+                    } else if ver1.minor < ver2.minor {
+                        VersionRelationship::MinorUpgrade
+                    } else if ver1.patch < ver2.patch {
+                        VersionRelationship::PatchUpgrade
+                    } else if !ver1.pre.is_empty() && ver2.pre.is_empty() {
+                        VersionRelationship::PrereleaseToStable
+                    } else {
+                        VersionRelationship::NewerPrerelease
+                    }
+                }
+                std::cmp::Ordering::Equal => VersionRelationship::Identical,
+                std::cmp::Ordering::Greater => {
+                    if ver1.major > ver2.major {
+                        VersionRelationship::MajorDowngrade
+                    } else if ver1.minor > ver2.minor {
+                        VersionRelationship::MinorDowngrade
+                    } else if ver1.patch > ver2.patch {
+                        VersionRelationship::PatchDowngrade
+                    } else if ver1.pre.is_empty() && !ver2.pre.is_empty() {
+                        VersionRelationship::StableToPrerelease
+                    } else {
+                        VersionRelationship::OlderPrerelease
+                    }
+                }
+            }
+        } else {
+            VersionRelationship::Indeterminate
+        }
+    }
+
+    /// Check if moving from v1 to v2 is a breaking change according to semver
+    pub fn is_breaking_change(v1: &str, v2: &str) -> bool {
+        if let (Ok(ver1), Ok(ver2)) = (semver::Version::parse(v1), semver::Version::parse(v2)) {
+            ver2.major > ver1.major
+        } else {
+            // If we can't parse the versions, conservatively assume breaking
+            true
+        }
     }
 }
