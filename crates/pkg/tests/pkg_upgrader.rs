@@ -310,8 +310,7 @@ mod upgrader_tests {
         registry.add_package("@scope/foo", vec!["1.0.0", "1.1.0"]);
 
         // Create upgrader with Apply mode
-        let mut config = UpgradeConfig::default();
-        config.execution_mode = ExecutionMode::Apply;
+        let config = UpgradeConfig { execution_mode: ExecutionMode::Apply, ..Default::default() };
         let upgrader = DependencyUpgrader::with_config(registry, config);
 
         // Create dependency registry
@@ -424,8 +423,10 @@ mod upgrader_tests {
         registry.add_package("@scope/foo", vec!["1.0.0", "1.1.0-alpha.1", "1.1.0-beta.1"]);
 
         // Create upgrader that includes prereleases
-        let mut config = UpgradeConfig::default();
-        config.version_stability = VersionStability::IncludePrerelease;
+        let config = UpgradeConfig {
+            version_stability: VersionStability::IncludePrerelease,
+            ..Default::default()
+        };
         let mut upgrader = DependencyUpgrader::with_config(registry, config);
 
         // Create dependency registry

@@ -69,7 +69,7 @@ impl crate::Node for crate::Package {
             .iter()
             .filter_map(|dep| {
                 let borrowed = dep.borrow();
-                crate::Dependency::new(&borrowed.name(), &borrowed.version_str()).ok()
+                crate::Dependency::new(borrowed.name(), &borrowed.version_str()).ok()
             })
             .collect()
     }
