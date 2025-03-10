@@ -47,7 +47,7 @@ pub mod upgrader;
 
 // Re-export commonly used items for convenience
 pub use error::{PkgError, Result};
-pub use graph::{DependencyGraph, Node};
+pub use graph::{visualization, DependencyGraph, Node};
 pub use registry::{
     DependencyRegistry, LocalRegistry, NpmRegistry, RegistryAuth, RegistryManager, RegistryType,
     ResolutionResult,

@@ -3,6 +3,7 @@
 mod builder;
 mod node;
 mod validation;
+pub mod visualization;
 
 pub use builder::build_dependency_graph_from_package_infos;
 pub use builder::build_dependency_graph_from_packages;

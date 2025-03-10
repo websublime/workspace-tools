@@ -3210,7 +3210,6 @@ name = "ws_pkg"
 version = "0.1.0"
 dependencies = [
  "petgraph",
- "regex",
  "reqwest",
  "semver",
  "serde",

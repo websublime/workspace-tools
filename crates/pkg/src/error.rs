@@ -126,5 +126,11 @@ impl From<(String, reqwest::Error)> for PkgError {
     }
 }
 
+impl From<std::fmt::Error> for PkgError {
+    fn from(error: std::fmt::Error) -> Self {
+        PkgError::Other { message: format!("Formatting error: {error:?}") }
+    }
+}
+
 /// Result type for the pkg crate
 pub type Result<T> = std::result::Result<T, PkgError>;
