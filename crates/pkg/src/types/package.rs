@@ -230,10 +230,7 @@ impl PackageInfo {
     /// Apply dependency resolution across all packages
     pub fn apply_dependency_resolution(&self, resolution: &ResolutionResult) -> Result<()> {
         // First, update the package's dependencies (handles regular dependencies)
-        let updated_deps = {
-            let result = self.package.borrow().update_dependencies_from_resolution(resolution)?;
-            result
-        }; // Package borrow is dropped here
+        let _ = { self.package.borrow().update_dependencies_from_resolution(resolution)? }; // Package borrow is dropped here
 
         // Now update package.json for both dependencies and devDependencies
         if let Some(pkg_json_obj) = self.pkg_json.borrow_mut().as_object_mut() {
