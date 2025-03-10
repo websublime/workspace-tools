@@ -181,71 +181,79 @@ impl PackageInfo {
 
     /// Update a dependency version
     pub fn update_dependency_version(&self, dep_name: &str, new_version: &str) -> Result<()> {
-        // Update Package dependency version
-        match self.package.borrow().update_dependency_version(dep_name, new_version) {
-            Ok(()) => {
-                // Update JSON
-                if let Some(obj) = self.pkg_json.borrow_mut().as_object_mut() {
-                    if let Some(deps) = obj.get_mut("dependencies").and_then(|v| v.as_object_mut())
-                    {
-                        if deps.contains_key(dep_name) {
-                            deps.insert(
-                                dep_name.to_string(),
-                                Value::String(new_version.to_string()),
-                            );
-                        }
-                    }
-                }
-
-                self.update_dev_dependency_version(dep_name, new_version)?;
-                Ok(())
+        // First, modify the package dependency separately from JSON
+        {
+            let update_result =
+                self.package.borrow().update_dependency_version(dep_name, new_version);
+            if let Err(PkgError::DependencyNotFound { .. }) = update_result {
+                // If not found in regular dependencies, that's ok - it might be in devDependencies only
+            } else if let Err(e) = update_result {
+                // For any other error, return it
+                return Err(e);
             }
-            // Skip error if dependency not found in normal dependencies
-            Err(PkgError::DependencyNotFound { .. }) => {
-                // Still try to update in package.json in case it's only in devDependencies
-                self.update_dev_dependency_version(dep_name, new_version)
-            }
-            Err(e) => Err(e),
-        }
-    }
+        } // Package borrow is dropped here
 
-    #[allow(clippy::unnecessary_wraps)]
-    fn update_dev_dependency_version(&self, dep_name: &str, new_version: &str) -> Result<()> {
-        // Update JSON for devDependencies
+        // Now update the JSON, after the package borrow is dropped
+        let mut json_updated = false;
+
         if let Some(obj) = self.pkg_json.borrow_mut().as_object_mut() {
-            if let Some(deps) = obj.get_mut("devDependencies").and_then(|v| v.as_object_mut()) {
+            // Try updating in dependencies
+            if let Some(deps) = obj.get_mut("dependencies").and_then(|v| v.as_object_mut()) {
                 if deps.contains_key(dep_name) {
                     deps.insert(dep_name.to_string(), Value::String(new_version.to_string()));
+                    json_updated = true;
+                }
+            }
+
+            // Also try in devDependencies
+            if let Some(dev_deps) = obj.get_mut("devDependencies").and_then(|v| v.as_object_mut()) {
+                if dev_deps.contains_key(dep_name) {
+                    dev_deps.insert(dep_name.to_string(), Value::String(new_version.to_string()));
+                    json_updated = true;
                 }
             }
         }
+
+        // If we didn't update JSON but also didn't find it in package, it's a genuine "not found"
+        if !json_updated
+            && self.package.borrow().update_dependency_version(dep_name, new_version).is_err()
+        {
+            return Err(PkgError::DependencyNotFound {
+                name: dep_name.to_string(),
+                package: self.package.borrow().name().to_string(),
+            });
+        }
+
         Ok(())
     }
 
     /// Apply dependency resolution across all packages
     pub fn apply_dependency_resolution(&self, resolution: &ResolutionResult) -> Result<()> {
-        // Update the package's dependencies
-        let updated_deps = self.package.borrow().update_dependencies_from_resolution(resolution)?;
+        // First, update the package's dependencies (handles regular dependencies)
+        let updated_deps = {
+            let result = self.package.borrow().update_dependencies_from_resolution(resolution)?;
+            result
+        }; // Package borrow is dropped here
 
-        // Update package.json
+        // Now update package.json for both dependencies and devDependencies
         if let Some(pkg_json_obj) = self.pkg_json.borrow_mut().as_object_mut() {
-            // Update dependencies section
-            if let Some(deps) = pkg_json_obj.get_mut("dependencies").and_then(Value::as_object_mut)
-            {
-                for (name, _, new_version) in &updated_deps {
-                    if deps.contains_key(name) {
-                        deps.insert(name.clone(), Value::String(new_version.clone()));
+            // Update all dependencies in the resolved versions map
+            for (dep_name, new_version) in &resolution.resolved_versions {
+                // Check and update in dependencies section
+                if let Some(deps) =
+                    pkg_json_obj.get_mut("dependencies").and_then(Value::as_object_mut)
+                {
+                    if deps.contains_key(dep_name) {
+                        deps.insert(dep_name.clone(), Value::String(new_version.clone()));
                     }
                 }
-            }
 
-            // Also check devDependencies
-            if let Some(dev_deps) =
-                pkg_json_obj.get_mut("devDependencies").and_then(Value::as_object_mut)
-            {
-                for (name, _, new_version) in &updated_deps {
-                    if dev_deps.contains_key(name) {
-                        dev_deps.insert(name.clone(), Value::String(new_version.clone()));
+                // Also check and update in devDependencies section
+                if let Some(dev_deps) =
+                    pkg_json_obj.get_mut("devDependencies").and_then(Value::as_object_mut)
+                {
+                    if dev_deps.contains_key(dep_name) {
+                        dev_deps.insert(dep_name.clone(), Value::String(new_version.clone()));
                     }
                 }
             }
@@ -272,20 +280,46 @@ impl PackageInfo {
 
 /// Parse package scope, name, and version from a string
 pub fn package_scope_name_version(pkg_name: &str) -> Option<PackageScopeMetadata> {
-    // Implementation of parsing package name, scope, and version
-    let parts: Vec<&str> = pkg_name.split('@').collect();
-    if parts.len() < 2 {
+    // Must start with @ to be a scoped package
+    if !pkg_name.starts_with('@') {
         return None;
     }
 
     let full = pkg_name.to_string();
-    let name_parts: Vec<&str> = parts[1].split(':').collect();
-    let name = format!("@{}", name_parts[0]);
+    let mut name = String::new();
+    let mut version = "latest".to_string();
+    let mut path = None;
 
-    let version =
-        if name_parts.len() > 1 { name_parts[1].to_string() } else { "latest".to_string() };
+    // First check for colon format: @scope/name:version
+    if pkg_name.contains(':') {
+        let parts: Vec<&str> = pkg_name.split(':').collect();
+        name = parts[0].to_string();
+        if parts.len() > 1 {
+            version = parts[1].to_string();
+        }
+    }
+    // Handle @ format: @scope/name@version or @scope/name@version@path
+    else {
+        let parts: Vec<&str> = pkg_name.split('@').collect();
 
-    let path = if parts.len() > 2 { Some(parts[2].to_string()) } else { None };
+        // First part is empty because it starts with @
+        if parts.len() >= 2 {
+            // Format: @scope/name
+            name = format!("@{}", parts[1]);
+
+            // Check if there's a version
+            if parts.len() >= 3 {
+                // Format: @scope/name@version
+                version = parts[2].to_string();
+
+                // Check if there's a path
+                if parts.len() >= 4 {
+                    // Format: @scope/name@version@path
+                    path = Some(parts[3].to_string());
+                }
+            }
+        }
+    }
 
     Some(PackageScopeMetadata { full, name, version, path })
 }

@@ -74,7 +74,33 @@ impl DependencyRegistry {
 
     pub fn get_or_create(&mut self, name: &str, version: &str) -> Result<Rc<RefCell<Dependency>>> {
         if let Some(dep) = self.dependencies.get(name) {
-            // Do not update version when getting an existing dependency
+            // Update the version if needed - this is important for dependency resolution
+            let dep_borrowed = dep.borrow_mut();
+            let current_version = dep_borrowed.version_str();
+
+            // If the new version requirement is different, update it
+            // Note: We might want to keep the higher version when there's a conflict
+            if current_version != version {
+                // Parse both versions to compare them properly
+                let current_clean = current_version.trim_start_matches('^').trim_start_matches('~');
+                let new_clean = version.trim_start_matches('^').trim_start_matches('~');
+
+                if let (Ok(curr_ver), Ok(new_ver)) =
+                    (semver::Version::parse(current_clean), semver::Version::parse(new_clean))
+                {
+                    // Update to the higher version
+                    if new_ver > curr_ver {
+                        dep_borrowed.update_version(version)?;
+                    }
+                } else {
+                    // If we can't parse, just update to the new version
+                    dep_borrowed.update_version(version)?;
+                }
+            }
+
+            // Drop the mutable borrow before returning
+            drop(dep_borrowed);
+
             return Ok(Rc::clone(dep));
         }
 
@@ -94,6 +120,7 @@ impl DependencyRegistry {
     /// If conflicts are found, it attempts to resolve them by finding the highest
     /// compatible version.
     #[allow(clippy::uninlined_format_args)]
+    #[allow(clippy::inefficient_to_string)]
     pub fn resolve_version_conflicts(&self) -> Result<ResolutionResult> {
         let mut resolved_versions: HashMap<String, String> = HashMap::new();
         let mut updates_required: Vec<DependencyUpdate> = Vec::new();
@@ -114,31 +141,34 @@ impl DependencyRegistry {
 
         // For each dependency, find the highest available version that satisfies all requirements
         for (name, requirements) in &dependency_requirements {
-            // Extract just the version requirements
-            let _: Vec<&VersionReq> = requirements.iter().map(|(_, req)| req).collect();
+            // For test purposes, extract the underlying version numbers
+            let mut versions = Vec::new();
+            for (ver_str, _) in requirements {
+                // Clean up version string
+                let clean_ver = ver_str.trim_start_matches('^').trim_start_matches('~');
 
-            // For test purposes, just use the existing version strings to pick the highest one
-            let mut versions: Vec<&str> = requirements
-                .iter()
-                .map(|(ver_str, _)| ver_str.trim_start_matches('^').trim_start_matches('~'))
-                .collect();
+                // Parse into semver::Version for proper comparison
+                if let Ok(ver) = Version::parse(clean_ver) {
+                    versions.push((clean_ver, ver));
+                }
+            }
 
-            // Sort versions in ascending order
-            versions.sort_by(|a, b| Version::parse(a).unwrap().cmp(&Version::parse(b).unwrap()));
+            // Sort versions by the actual parsed Version objects
+            versions.sort_by(|(_, a), (_, b)| a.cmp(b));
 
-            // Take the highest version
-            if let Some(&highest) = versions.last() {
-                resolved_versions.insert(name.clone(), highest.to_string());
+            // Take the highest version (last after sorting)
+            if let Some((highest_str, _)) = versions.last() {
+                resolved_versions.insert(name.clone(), highest_str.to_string());
 
                 // Check if updates are required
                 for (version_str, _) in requirements {
                     let clean_version = version_str.trim_start_matches('^').trim_start_matches('~');
-                    if clean_version != highest {
+                    if clean_version != *highest_str {
                         updates_required.push(DependencyUpdate {
                             package_name: String::new(), // Can't know without more context
                             dependency_name: name.clone(),
                             current_version: version_str.clone(),
-                            new_version: highest.to_string(),
+                            new_version: highest_str.to_string(),
                         });
                     }
                 }

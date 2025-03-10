@@ -1,12 +1,13 @@
 //! The main dependency upgrader implementation.
 
 use crate::error::Result;
-use crate::registry::package::PackageRegistry;
+use crate::registry::RegistryManager;
 use crate::types::dependency::Dependency;
 use crate::types::package::Package;
 use crate::types::version::VersionStability;
 use crate::upgrader::config::{ExecutionMode, UpgradeConfig};
 use crate::upgrader::status::UpgradeStatus;
+use crate::VersionUpdateStrategy;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -49,21 +50,40 @@ impl fmt::Display for AvailableUpgrade {
 }
 
 /// The DependencyUpgrader provides methods to check and upgrade dependencies
-pub struct DependencyUpgrader<R: PackageRegistry> {
-    registry: R,
+pub struct DependencyUpgrader {
+    registry_manager: RegistryManager,
     config: UpgradeConfig,
     cache: HashMap<String, Vec<String>>,
 }
 
-impl<R: PackageRegistry> DependencyUpgrader<R> {
+impl DependencyUpgrader {
     /// Create a new dependency upgrader with the given registry and default configuration
-    pub fn new(registry: R) -> Self {
-        Self { registry, config: UpgradeConfig::default(), cache: HashMap::new() }
+    pub fn new() -> Self {
+        Self {
+            registry_manager: RegistryManager::new(),
+            config: UpgradeConfig::default(),
+            cache: HashMap::new(),
+        }
     }
 
     /// Create a new dependency upgrader with the given registry and configuration
-    pub fn with_config(registry: R, config: UpgradeConfig) -> Self {
-        Self { registry, config, cache: HashMap::new() }
+    pub fn with_config(config: UpgradeConfig) -> Self {
+        Self { registry_manager: RegistryManager::new(), config, cache: HashMap::new() }
+    }
+
+    /// Create with a specific registry manager
+    pub fn with_registry_manager(registry_manager: RegistryManager) -> Self {
+        Self { registry_manager, config: UpgradeConfig::default(), cache: HashMap::new() }
+    }
+
+    /// Get the registry manager
+    pub fn registry_manager(&self) -> &RegistryManager {
+        &self.registry_manager
+    }
+
+    /// Get a mutable reference to the registry manager
+    pub fn registry_manager_mut(&mut self) -> &mut RegistryManager {
+        &mut self.registry_manager
     }
 
     /// Set the configuration for the upgrader
@@ -79,7 +99,7 @@ impl<R: PackageRegistry> DependencyUpgrader<R> {
     /// Get all available versions of a package, using the cache if available
     fn get_cached_versions(&mut self, package_name: &str) -> Result<Vec<String>> {
         if !self.cache.contains_key(package_name) {
-            let versions = self.registry.get_all_versions(package_name)?;
+            let versions = self.registry_manager.get_all_versions(package_name)?;
             self.cache.insert(package_name.to_string(), versions);
         }
 
@@ -100,55 +120,47 @@ impl<R: PackageRegistry> DependencyUpgrader<R> {
         }
 
         let mut highest: Option<Version> = None;
-        let consider_major = matches!(
-            self.config.update_strategy,
-            crate::types::version::VersionUpdateStrategy::AllUpdates
-        );
 
-        // Parse the base version from the requirement to properly handle prereleases
-        // We'll consider a prerelease valid if it's for the same major.minor as what's allowed by the requirement
-        let binding = requirement.to_string();
-        let req_components = binding.trim_start_matches('^').trim_start_matches('~').split('.');
-        let req_base = req_components.collect::<Vec<&str>>();
+        // Get the strategy
+        let allow_major = matches!(self.config.update_strategy, VersionUpdateStrategy::AllUpdates);
+
+        // Parse the base version from requirement
+        let req_str = requirement.to_string();
+        let base_version = req_str
+            .trim_start_matches('^')
+            .trim_start_matches('~')
+            .split('.')
+            .collect::<Vec<&str>>();
+
+        let base_major = base_version.first().and_then(|v| v.parse::<u64>().ok());
 
         for version_str in all_versions {
-            // Parse the version
             let Ok(version) = Version::parse(&version_str) else { continue };
 
-            // Handle prereleases specially if we're including them
-            let satisfies_requirement = if !version.pre.is_empty() && include_prereleases {
-                // For prereleases, we need special handling
-                // A prerelease version satisfies a non-prerelease requirement if:
-                // 1. The major.minor.patch version satisfies the requirement
-                // 2. We've explicitly enabled prerelease versions
+            // Skip prereleases unless explicitly included
+            if !include_prereleases && !version.pre.is_empty() {
+                continue;
+            }
 
-                // Create a non-prerelease version for checking
-                let mut clean_version = version.clone();
-                clean_version.pre = semver::Prerelease::EMPTY;
+            // For MinorAndPatch strategy, skip versions with different major number
+            if !allow_major {
+                if let Some(base_maj) = base_major {
+                    if version.major != base_maj {
+                        continue;
+                    }
+                }
+            }
 
-                // If the clean version satisfies the requirement, the prerelease is acceptable
-                requirement.matches(&clean_version)
+            // Check if this version satisfies the requirement
+            let satisfies = if allow_major {
+                // When allowing major updates, we're more permissive
+                requirement.matches(&version)
+                    || version > Version::new(base_major.unwrap_or(0), 0, 0)
             } else {
-                // For non-prerelease versions or when not including prereleases, use standard matching
                 requirement.matches(&version)
             };
 
-            // Apply additional filters for major upgrades if configured
-            let passes_filters = if consider_major && !satisfies_requirement {
-                // When allowing major upgrades, we might still want to consider this version
-                // if it's higher than the requirement base
-
-                // Extract the base version from the requirement
-                match Version::parse(req_base.join(".").as_str()) {
-                    Ok(base_version) => version >= base_version,
-                    Err(_) => false,
-                }
-            } else {
-                satisfies_requirement
-            };
-
-            if passes_filters {
-                // If it's higher than our current highest, update it
+            if satisfies {
                 if let Some(ref current_highest) = highest {
                     if version > *current_highest {
                         highest = Some(version);
@@ -176,16 +188,35 @@ impl<R: PackageRegistry> DependencyUpgrader<R> {
 
         let mut highest: Option<Version> = None;
 
+        // Get the current update strategy
+        let allow_major = matches!(self.config.update_strategy, VersionUpdateStrategy::AllUpdates);
+
+        // If we're not allowing major updates, we need to know the current major version
+        let current_major = if allow_major {
+            None
+        } else {
+            // Try to find the lowest major version available
+            all_versions.iter().filter_map(|v| Version::parse(v).ok()).map(|v| v.major).min()
+        };
+
         for version_str in all_versions {
-            // Parse the version
             let Ok(version) = Version::parse(&version_str) else { continue };
 
-            // Skip prereleases if not including them
+            // Skip prereleases unless explicitly included
             if !include_prereleases && !version.pre.is_empty() {
                 continue;
             }
 
-            // If it's higher than our current highest, update it
+            // If we're not allowing major updates, skip versions with different major numbers
+            if !allow_major {
+                if let Some(base_major) = current_major {
+                    if version.major != base_major {
+                        continue;
+                    }
+                }
+            }
+
+            // Update highest version if this one is higher
             if let Some(ref current_highest) = highest {
                 if version > *current_highest {
                     highest = Some(version);
@@ -206,7 +237,7 @@ impl<R: PackageRegistry> DependencyUpgrader<R> {
         compatible_version: Option<&str>,
         latest_version: Option<&str>,
     ) -> UpgradeStatus {
-        // If there's no compatible version, we can't upgrade
+        // If there's no compatible version, we're up to date
         let Some(compatible) = compatible_version else {
             return UpgradeStatus::UpToDate;
         };
@@ -230,20 +261,24 @@ impl<R: PackageRegistry> DependencyUpgrader<R> {
 
         // Check if there's a latest version that's not compatible
         if let Some(latest) = latest_version {
-            if latest != compatible {
+            if latest != compatible
+                && !matches!(self.config.update_strategy, VersionUpdateStrategy::MinorAndPatch)
+            {
                 return UpgradeStatus::Constrained(latest.to_string());
             }
         }
 
-        // Determine update type (patch, minor, major)
+        // Determine update type
         if compatible_ver.major > current.major {
             UpgradeStatus::MajorAvailable(compatible.to_string())
         } else if compatible_ver.minor > current.minor {
             UpgradeStatus::MinorAvailable(compatible.to_string())
         } else if compatible_ver.patch > current.patch {
             UpgradeStatus::PatchAvailable(compatible.to_string())
+        } else if !current.pre.is_empty() && compatible_ver.pre.is_empty() {
+            // Handle prerelease to stable upgrade
+            UpgradeStatus::PatchAvailable(compatible.to_string())
         } else {
-            // This shouldn't happen if our version comparison logic is correct
             UpgradeStatus::UpToDate
         }
     }
@@ -284,7 +319,7 @@ impl<R: PackageRegistry> DependencyUpgrader<R> {
             include_prereleases,
         )?;
 
-        // Find the latest version overall
+        // Find the latest version overall (this will include major versions)
         let latest_version = self.find_latest_version(dependency_name, include_prereleases)?;
 
         // Clean the current version for comparison

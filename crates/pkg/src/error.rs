@@ -31,6 +31,15 @@ pub enum PkgError {
     /// Dependency resolution error
     DependencyResolutionError,
 
+    /// Network request failed
+    NetworkError { url: String, source: reqwest::Error },
+
+    /// Registry error
+    RegistryError { registry: String, message: String },
+
+    /// Authentication error
+    AuthError { registry: String, message: String },
+
     /// Generic error
     Other { message: String },
 }
@@ -64,6 +73,15 @@ impl fmt::Display for PkgError {
             PkgError::DependencyResolutionError => {
                 write!(f, "Error resolving dependencies")
             }
+            PkgError::NetworkError { url, source } => {
+                write!(f, "Network error requesting '{url}': {source}")
+            }
+            PkgError::RegistryError { registry, message } => {
+                write!(f, "Registry error from '{registry}': {message}")
+            }
+            PkgError::AuthError { registry, message } => {
+                write!(f, "Authentication error for registry '{registry}': {message}")
+            }
             PkgError::Other { message } => {
                 write!(f, "{message}")
             }
@@ -77,6 +95,7 @@ impl std::error::Error for PkgError {
             PkgError::VersionReqParseError { source, .. } => Some(source),
             PkgError::JsonParseError { source, .. } => Some(source),
             PkgError::IoError { source, .. } => Some(source),
+            PkgError::NetworkError { source, .. } => Some(source),
             _ => None,
         }
     }
@@ -97,6 +116,13 @@ impl From<semver::Error> for PkgError {
 impl From<serde_json::Error> for PkgError {
     fn from(error: serde_json::Error) -> Self {
         PkgError::JsonParseError { path: None, source: error }
+    }
+}
+
+// Implement conversion from reqwest::Error to PkgError
+impl From<(String, reqwest::Error)> for PkgError {
+    fn from((url, error): (String, reqwest::Error)) -> Self {
+        PkgError::NetworkError { url, source: error }
     }
 }
 
