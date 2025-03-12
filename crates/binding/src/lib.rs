@@ -1,14 +1,25 @@
 #[macro_use]
 extern crate napi_derive;
 
-//pub mod pkg;
-//pub mod standard;
-/*pub mod binding_changes;
-pub mod binding_command;
-pub mod binding_config;
-pub mod binding_git;
-pub mod binding_manager;
-pub mod binding_package;
-pub mod binding_paths;
-pub mod binding_version;
-pub mod binding_workspace;*/
+pub mod errors;
+
+#[cfg(all(not(target_os = "linux"), not(target_family = "wasm")))]
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+#[ctor::ctor]
+fn init() {
+    // Initialize any global state here if needed
+}
+
+#[napi]
+pub fn get_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+// Export the error handling utility for use in other modules
+pub use errors::{handle_pkg_result, pkg_error_to_napi_error, ErrorCode};

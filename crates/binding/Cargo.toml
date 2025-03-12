@@ -26,6 +26,7 @@ ws_git = { workspace = true }
 ws_pkg = { workspace = true }
 ws_monorepo = { workspace = true }
 serde_json = { workspace = true }
+semver = { version = "1.0.23", features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 napi = { version = "3.0.0-alpha.28", features = [
   "async",
@@ -39,6 +40,7 @@ napi-derive = { version = "3.0.0-alpha.26", default-features = false, features =
   "type-def",
 ] }
 ctor = { version = "0.3.6" }
+parking_lot = { version = "0.12.1" }
 
 [build-dependencies]
 napi-build = { version = "2.1.4" }
@@ -48,3 +50,7 @@ mimalloc = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
 mimalloc = { workspace = true, features = ["local_dynamic_tls"] }
+
+[dev-dependencies]
+reqwest = "0.11"
+ws_binding = { path = "." }
