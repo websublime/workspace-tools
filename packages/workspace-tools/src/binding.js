@@ -364,7 +364,9 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-module.exports.DependencyBindings = nativeBinding.DependencyBindings
-module.exports.DependencyRegistryBindings = nativeBinding.DependencyRegistryBindings
-module.exports.PackageBindings = nativeBinding.PackageBindings
+module.exports.Dependency = nativeBinding.Dependency
+module.exports.Package = nativeBinding.Package
+module.exports.VersionUtils = nativeBinding.VersionUtils
 module.exports.getVersion = nativeBinding.getVersion
+module.exports.Version = nativeBinding.Version
+module.exports.VersionComparisonResult = nativeBinding.VersionComparisonResult

@@ -2,6 +2,7 @@
 extern crate napi_derive;
 
 pub mod errors;
+pub mod types;
 
 #[cfg(all(not(target_os = "linux"), not(target_family = "wasm")))]
 #[global_allocator]
@@ -23,3 +24,8 @@ pub fn get_version() -> String {
 
 // Export the error handling utility for use in other modules
 pub use errors::{handle_pkg_result, pkg_error_to_napi_error, ErrorCode};
+
+// Re-export all the types for convenience
+pub use types::dependency::Dependency;
+pub use types::package::Package;
+pub use types::version::{Version, VersionComparisonResult, VersionUtils};
