@@ -51,7 +51,7 @@
         "fs": true
       }
     },
-    "dtsHeader": "import type { Result } from './types/general';\n\n"
+    "dtsHeader": "import type { Result } from './types/general';\n\nimport type { ScopedPackageInfo } from './types/package';\n\nimport type { DependencyInfo } from './types/dependency';\n\n"
   },
   "engines": {
     "node": ">= 10"

@@ -96,7 +96,7 @@ impl DependencyRegistry {
     /// @param {string} name - The name of the dependency
     /// @param {string} version - The version or version requirement
     /// @returns {Dependency} The dependency instance
-    #[napi(js_name = "getOrCreate")]
+    #[napi(js_name = "getOrCreate", ts_return_type = "Dependency")]
     pub fn get_or_create(&self, name: String, version: String) -> NapiResult<Dependency> {
         let mut registry = self.inner.borrow_mut();
         let dep_rc = handle_pkg_result(registry.get_or_create(&name, &version))?;
@@ -116,7 +116,7 @@ impl DependencyRegistry {
     /// Resolve version conflicts between dependencies
     ///
     /// @returns {ResolutionResult} The result of dependency resolution
-    #[napi(js_name = "resolveVersionConflicts")]
+    #[napi(js_name = "resolveVersionConflicts", ts_return_type = "ResolutionResult")]
     pub fn resolve_version_conflicts(&self, env: Env) -> NapiResult<ResolutionResult> {
         let registry = self.inner.borrow();
         let result = handle_pkg_result(registry.resolve_version_conflicts())?;
@@ -138,7 +138,7 @@ impl DependencyRegistry {
     ///
     /// @param {ResolutionResult} result - The resolution result to apply
     /// @returns {void}
-    #[napi(js_name = "applyResolutionResult")]
+    #[napi(js_name = "applyResolutionResult", ts_return_type = "void")]
     pub fn apply_resolution_result(&self, result: ResolutionResult) -> NapiResult<()> {
         let mut registry = self.inner.borrow_mut();
 
@@ -182,7 +182,7 @@ impl DependencyRegistry {
     /// @param {string} name - The name of the dependency
     /// @param {string[]} requirements - List of version requirements
     /// @returns {string | null} The highest compatible version, if any
-    #[napi(js_name = "findHighestCompatibleVersion")]
+    #[napi(js_name = "findHighestCompatibleVersion", ts_return_type = "string | null")]
     pub fn find_highest_compatible_version(
         &self,
         name: String,

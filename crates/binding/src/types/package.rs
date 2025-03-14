@@ -7,6 +7,7 @@ use napi::{Env, JsString, Result as NapiResult};
 use napi_derive::napi;
 use std::rc::Rc;
 use ws_pkg::registry::ResolutionResult as WsResolutionResult;
+use ws_pkg::types::package::package_scope_name_version;
 use ws_pkg::Package as WsPkgPackage;
 
 /// JavaScript binding for ws_pkg::Package
@@ -38,7 +39,7 @@ impl Package {
     /// @param {Array<[string, string]>} dependencies - Array of [name, version] tuples for dependencies
     /// @param {DependencyRegistry} registry - The dependency registry to use
     /// @returns {Package} The new package
-    #[napi]
+    #[napi(ts_return_type = "Package")]
     pub fn with_registry(
         name: String,
         version: String,
@@ -61,19 +62,25 @@ impl Package {
     }
 
     /// Get the package name
-    #[napi]
+    ///
+    /// @returns {string} The package name
+    #[napi(getter)]
     pub fn name(&self) -> String {
         self.inner.name().to_string()
     }
 
     /// Get the package version
-    #[napi]
+    ///
+    /// @returns {string} The package version
+    #[napi(getter)]
     pub fn version(&self) -> String {
         self.inner.version_str()
     }
 
     /// Update the package version
-    #[napi]
+    ///
+    /// @param {string} version - The new version to set
+    #[napi(ts_return_type = "void")]
     pub fn update_version(&self, version: String) -> NapiResult<()> {
         handle_pkg_result(self.inner.update_version(&version))
     }
@@ -82,6 +89,8 @@ impl Package {
     ///
     /// This method returns an array of Dependency objects that can be used in JavaScript.
     /// Note: Due to technical limitations, this method requires special handling in JavaScript.
+    ///
+    /// @returns {Array<Dependency>} An array of Dependency objects
     #[napi]
     pub fn dependencies(&self) -> Vec<Dependency> {
         let mut deps = Vec::new();
@@ -94,18 +103,26 @@ impl Package {
     }
 
     /// Add a dependency to this package
-    #[napi]
+    ///
+    /// @param {Dependency} dependency - The dependency to add
+    #[napi(ts_return_type = "void")]
     pub fn add_dependency(&mut self, dependency: &Dependency) {
         self.inner.add_dependency(Rc::clone(&dependency.inner));
     }
 
     /// Update a dependency's version
-    #[napi]
+    ///
+    /// @param {string} name - The name of the dependency to update
+    /// @param {string} version - The new version of the dependency
+    #[napi(ts_return_type = "void")]
     pub fn update_dependency_version(&self, name: String, version: String) -> NapiResult<()> {
         handle_pkg_result(self.inner.update_dependency_version(&name, &version))
     }
 
     /// Get a dependency by name
+    ///
+    /// @param {string} name - The name of the dependency to get
+    /// @returns {Dependency | null} A dependency or null if not found
     #[napi]
     pub fn get_dependency(&self, name: String) -> Option<Dependency> {
         for dep_rc in self.inner.dependencies() {
@@ -118,7 +135,9 @@ impl Package {
     }
 
     /// Get the number of dependencies
-    #[napi]
+    ///
+    /// @returns {number} The number of dependencies
+    #[napi(getter)]
     pub fn dependency_count(&self) -> u32 {
         self.inner.dependencies().len() as u32
     }
@@ -131,7 +150,10 @@ impl Package {
     /// @param {ResolutionResult} resolution - The resolution result to apply
     /// @param {Env} env - The NAPI environment
     /// @returns {Array<[string, string, string]>} Array of [name, oldVersion, newVersion] tuples for updated deps
-    #[napi(js_name = "updateDependenciesFromResolution")]
+    #[napi(
+        js_name = "updateDependenciesFromResolution",
+        ts_return_type = "Array<[string, string, string]>"
+    )]
     pub fn update_dependencies_from_resolution(
         &self,
         resolution: ResolutionResult,
@@ -173,7 +195,7 @@ impl Package {
     ///
     /// @param {DependencyRegistry} registry - The dependency registry to use
     /// @returns {Array<[string, Array<string>]>} Map of dependency names to conflicting version requirements
-    #[napi(js_name = "findVersionConflicts")]
+    #[napi(js_name = "findVersionConflicts", ts_return_type = "Array<[string, Array<string>]>")]
     pub fn find_version_conflicts(&self, env: Env) -> NapiResult<napi::bindgen_prelude::Object> {
         // Create a JavaScript object to hold the conflicts
         let mut conflicts_obj = env.create_object()?;
@@ -218,8 +240,8 @@ impl Package {
     ///
     /// @param {Package[]} packages - Array of packages to analyze
     /// @param {DependencyRegistry} registry - The dependency registry to use
-    /// @returns {Object} Object with dependency information
-    #[napi(js_name = "generateDependencyInfo")]
+    /// @returns {DependencyInfo} Object with dependency information
+    #[napi(js_name = "generateDependencyInfo", ts_return_type = "DependencyInfo")]
     pub fn generate_dependency_info(
         env: Env,
         packages: Vec<&Package>,
@@ -283,6 +305,45 @@ impl Package {
         result.set_named_property("totalDependencies", total_deps_count)?;
 
         Ok(result)
+    }
+}
+
+/// Parse a scoped package name with optional version and path
+///
+/// Handles formats like:
+/// - @scope/name
+/// - @scope/name@version
+/// - @scope/name@version@path
+/// - @scope/name:version
+///
+/// @param {string} pkg_name - The scoped package name to parse
+/// @returns {Object | null} An object with parsed components or null if not a valid scoped package
+#[napi(ts_return_type = "ScopedPackageInfo | null")]
+pub fn parse_scoped_package(
+    pkg_name: String,
+    env: Env,
+) -> NapiResult<Option<napi::bindgen_prelude::Object>> {
+    // Call ws_pkg function to parse the package name
+    if let Some(metadata) = package_scope_name_version(&pkg_name) {
+        // Create a JavaScript object for the result
+        let mut result = env.create_object()?;
+
+        // Set properties on the object
+        result.set_named_property("full", env.create_string(&metadata.full)?)?;
+        result.set_named_property("name", env.create_string(&metadata.name)?)?;
+        result.set_named_property("version", env.create_string(&metadata.version)?)?;
+
+        // Handle optional path
+        if let Some(path) = metadata.path {
+            result.set_named_property("path", env.create_string(&path)?)?;
+        } else {
+            result.set_named_property("path", env.get_null()?)?;
+        }
+
+        Ok(Some(result))
+    } else {
+        // Return null for non-scoped packages
+        Ok(None)
     }
 }
 
@@ -401,5 +462,36 @@ mod package_binding_tests {
         assert_eq!(dep1.version(), "^1.0.0");
         assert_eq!(dep2.name(), "dep2");
         assert_eq!(dep2.version(), "^2.0.0");
+    }
+
+    #[test]
+    fn test_underlying_package_scope_name_version() {
+        // Test successful parsing
+        let result = package_scope_name_version("@scope/name@1.0.0");
+        assert!(result.is_some());
+        let metadata = result.unwrap();
+        assert_eq!(metadata.full, "@scope/name@1.0.0");
+        assert_eq!(metadata.name, "@scope/name");
+        assert_eq!(metadata.version, "1.0.0");
+        assert_eq!(metadata.path, None);
+
+        // Test with path
+        let result = package_scope_name_version("@scope/name@1.0.0@/some/path");
+        assert!(result.is_some());
+        let metadata = result.unwrap();
+        assert_eq!(metadata.name, "@scope/name");
+        assert_eq!(metadata.version, "1.0.0");
+        assert_eq!(metadata.path, Some("/some/path".to_string()));
+
+        // Test colon format
+        let result = package_scope_name_version("@scope/name:1.0.0");
+        assert!(result.is_some());
+        let metadata = result.unwrap();
+        assert_eq!(metadata.name, "@scope/name");
+        assert_eq!(metadata.version, "1.0.0");
+
+        // Test non-scoped package - should return None
+        let result = package_scope_name_version("regular-package@1.0.0");
+        assert!(result.is_none());
     }
 }

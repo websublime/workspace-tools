@@ -365,8 +365,11 @@ if (!nativeBinding) {
 }
 
 module.exports.Dependency = nativeBinding.Dependency
+module.exports.DependencyRegistry = nativeBinding.DependencyRegistry
 module.exports.Package = nativeBinding.Package
 module.exports.VersionUtils = nativeBinding.VersionUtils
 module.exports.getVersion = nativeBinding.getVersion
+module.exports.parseScopedPackage = nativeBinding.parseScopedPackage
+module.exports.ResolutionErrorType = nativeBinding.ResolutionErrorType
 module.exports.Version = nativeBinding.Version
 module.exports.VersionComparisonResult = nativeBinding.VersionComparisonResult

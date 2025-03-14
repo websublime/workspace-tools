@@ -1,11 +1,11 @@
 import type { PackageJson } from 'type-fest'
 import type { Package } from '../binding'
 
-export interface PackageScopeMetadata {
+export interface ScopedPackageInfo {
   full: string
   name: string
   version: string
-  path?: string
+  path?: string | null
 }
 
 export interface PackageInfo {

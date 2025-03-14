@@ -1,5 +1,9 @@
 import type { Result } from './types/general';
 
+import type { ScopedPackageInfo } from './types/package';
+
+import type { DependencyInfo } from './types/dependency';
+
 /**
  * Dependency class.
  * Represents a package dependency.
@@ -17,7 +21,14 @@ import type { Result } from './types/general';
  * ```
  */
 export declare class Dependency {
-  /** Create a new dependency with a name and version */
+  /**
+   * Create a new dependency with a name and version
+   *
+   * @param {string} name - The name of the dependency package.
+   * @param {string} version - The version of the dependency.
+   *
+   * @returns {Dependency} The new dependency.
+   */
   constructor(name: string, version: string)
   /**
    * Gets the name of the dependency.
@@ -35,36 +46,165 @@ export declare class Dependency {
    * Updates dependency version
    *
    * @param {string} version - The new version of the dependency.
-   * @returns {Promise<void>} A promise that resolves when the version is updated.
    */
-  updateVersion(version: string): NapiResult<undefined>
+  updateVersion(version: string): void
+}
+
+/**
+ * DependencyRegistry class
+ * A registry to manage shared dependency instances
+ *
+ * @class DependencyRegistry - The DependencyRegistry class.
+ * @example
+ *
+ * ```typescript
+ * const registry = new DependencyRegistry();
+ * const dep1 = registry.getOrCreate("foo", "^1.0.0");
+ * const dep2 = registry.getOrCreate("bar", "^2.0.0");
+ *
+ * // Resolve version conflicts
+ * const result = registry.resolveVersionConflicts();
+ * console.log(result.resolvedVersions);
+ * ```
+ */
+export declare class DependencyRegistry {
+  /**
+   * Create a new dependency registry
+   *
+   * @returns {DependencyRegistry} A new empty registry
+   */
+  constructor()
+  /**
+   * Get or create a dependency in the registry
+   *
+   * @param {string} name - The name of the dependency
+   * @param {string} version - The version or version requirement
+   * @returns {Dependency} The dependency instance
+   */
+  getOrCreate(name: string, version: string): Dependency
+  /**
+   * Get a dependency by name
+   *
+   * @param {string} name - The name of the dependency
+   * @returns {Dependency | null} The dependency instance if found, null otherwise
+   */
+  get(name: string): Dependency | null
+  /**
+   * Resolve version conflicts between dependencies
+   *
+   * @returns {ResolutionResult} The result of dependency resolution
+   */
+  resolveVersionConflicts(): ResolutionResult
+  /**
+   * Apply a resolution result to update all dependencies
+   *
+   * @param {ResolutionResult} result - The resolution result to apply
+   * @returns {void}
+   */
+  applyResolutionResult(result: ResolutionResult): void
+  /**
+   * Find highest version that is compatible with all requirements
+   *
+   * @param {string} name - The name of the dependency
+   * @param {string[]} requirements - List of version requirements
+   * @returns {string | null} The highest compatible version, if any
+   */
+  findHighestCompatibleVersion(name: string, requirements: Array<string>): string | null
 }
 
 /** JavaScript binding for ws_pkg::Package */
 export declare class Package {
   /** Create a new package with a name and version */
   constructor(name: string, version: string)
-  /** Get the package name */
-  name(): string
-  /** Get the package version */
-  version(): string
-  /** Update the package version */
-  updateVersion(version: string): NapiResult<undefined>
+  /**
+   * Create a new package with dependencies using the dependency registry
+   *
+   * @param {string} name - The name of the package
+   * @param {string} version - The version of the package
+   * @param {Array<[string, string]>} dependencies - Array of [name, version] tuples for dependencies
+   * @param {DependencyRegistry} registry - The dependency registry to use
+   * @returns {Package} The new package
+   */
+  static withRegistry(name: string, version: string, dependencies: Array<[string, string]> | undefined | null, registry: DependencyRegistry): Package
+  /**
+   * Get the package name
+   *
+   * @returns {string} The package name
+   */
+  get name(): string
+  /**
+   * Get the package version
+   *
+   * @returns {string} The package version
+   */
+  get version(): string
+  /**
+   * Update the package version
+   *
+   * @param {string} version - The new version to set
+   */
+  updateVersion(version: string): void
   /**
    * Get all dependencies of this package
    *
    * This method returns an array of Dependency objects that can be used in JavaScript.
    * Note: Due to technical limitations, this method requires special handling in JavaScript.
+   *
+   * @returns {Array<Dependency>} An array of Dependency objects
    */
   dependencies(): Array<Dependency>
-  /** Add a dependency to this package */
+  /**
+   * Add a dependency to this package
+   *
+   * @param {Dependency} dependency - The dependency to add
+   */
   addDependency(dependency: Dependency): void
-  /** Update a dependency's version */
-  updateDependencyVersion(name: string, version: string): NapiResult<undefined>
-  /** Get a dependency by name */
+  /**
+   * Update a dependency's version
+   *
+   * @param {string} name - The name of the dependency to update
+   * @param {string} version - The new version of the dependency
+   */
+  updateDependencyVersion(name: string, version: string): void
+  /**
+   * Get a dependency by name
+   *
+   * @param {string} name - The name of the dependency to get
+   * @returns {Dependency | null} A dependency or null if not found
+   */
   getDependency(name: string): Dependency | null
-  /** Get the number of dependencies */
-  dependencyCount(): number
+  /**
+   * Get the number of dependencies
+   *
+   * @returns {number} The number of dependencies
+   */
+  get dependencyCount(): number
+  /**
+   * Update dependencies based on a resolution result
+   *
+   * This method updates all dependencies in the package according to the
+   * resolution result.
+   *
+   * @param {ResolutionResult} resolution - The resolution result to apply
+   * @param {Env} env - The NAPI environment
+   * @returns {Array<[string, string, string]>} Array of [name, oldVersion, newVersion] tuples for updated deps
+   */
+  updateDependenciesFromResolution(resolution: ResolutionResult): Array<[string, string, string]>
+  /**
+   * Check for dependency version conflicts in this package
+   *
+   * @param {DependencyRegistry} registry - The dependency registry to use
+   * @returns {Array<[string, Array<string>]>} Map of dependency names to conflicting version requirements
+   */
+  findVersionConflicts(): Array<[string, Array<string>]>
+  /**
+   * Generate combined dependency information for all packages
+   *
+   * @param {Package[]} packages - Array of packages to analyze
+   * @param {DependencyRegistry} registry - The dependency registry to use
+   * @returns {Object} Object with dependency information
+   */
+  static generateDependencyInfo(packages: Array<Package>): DependencyInfo
 }
 
 /** JavaScript binding for version utilities */
@@ -83,7 +223,51 @@ export declare class VersionUtils {
   static isBreakingChange(v1: string, v2: string): boolean
 }
 
+/** JavaScript binding for dependency update information */
+export interface DependencyUpdateInfo {
+  /** Package containing the dependency */
+  packageName: string
+  /** Dependency name */
+  dependencyName: string
+  /** Current version */
+  currentVersion: string
+  /** New version to update to */
+  newVersion: string
+}
+
 export declare function getVersion(): string
+
+/**
+ * Parse a scoped package name with optional version and path
+ *
+ * Handles formats like:
+ * - @scope/name
+ * - @scope/name@version
+ * - @scope/name@version@path
+ * - @scope/name:version
+ *
+ * @param {string} pkg_name - The scoped package name to parse
+ * @returns {Object | null} An object with parsed components or null if not a valid scoped package
+ */
+export declare function parseScopedPackage(pkgName: string): ScopedPackageInfo | null
+
+/** JavaScript binding for DependencyResolutionError */
+export declare enum ResolutionErrorType {
+  /** Error parsing a version */
+  VersionParseError = 0,
+  /** Incompatible versions of the same dependency */
+  IncompatibleVersions = 1,
+  /** No valid version found */
+  NoValidVersion = 2
+}
+
+/** JavaScript binding for the result of dependency resolution */
+export interface ResolutionResult {
+  /** Resolved versions for each package */
+  resolvedVersions: object
+  /** Dependencies that need updates */
+  updatesRequired: Array<DependencyUpdateInfo>
+}
 
 /** JavaScript binding for ws_pkg::types::version::Version enum */
 export declare enum Version {

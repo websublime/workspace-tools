@@ -64,8 +64,7 @@ impl Dependency {
     /// Updates dependency version
     ///
     /// @param {string} version - The new version of the dependency.
-    /// @returns {Promise<void>} A promise that resolves when the version is updated.
-    #[napi]
+    #[napi(ts_return_type = "void")]
     pub fn update_version(&self, version: String) -> NapiResult<()> {
         handle_pkg_result(self.inner.borrow().update_version(&version))
     }
