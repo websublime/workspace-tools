@@ -19,8 +19,8 @@ import {
   DependencyUpgrader,
   ExecutionMode,
   UpgradeStatus,
-  VersionStability,
-  VersionUpdateStrategy,
+  /*VersionStability,
+  VersionUpdateStrategy,*/
   bumpSnapshotVersion,
   bumpVersion,
   createDefaultUpgradeConfig,
@@ -38,6 +38,36 @@ import util from 'node:util'
 import chalk from 'chalk'
 import boxen from 'boxen'
 import Table from 'cli-table3'
+
+const VersionUpdateStrategy = {
+  Latest: 0,
+  Compatible: 1,
+  Minimal: 2,
+}
+
+const VersionStability = {
+  Stable: 0,
+  PreRelease: 1,
+  Snapshot: 2,
+}
+
+function versionUpdateStrategyToString(strategy) {
+  const mapping = {
+    [VersionUpdateStrategy.Latest]: 'Latest',
+    [VersionUpdateStrategy.Compatible]: 'Compatible',
+    [VersionUpdateStrategy.Minimal]: 'Minimal',
+  }
+  return mapping[strategy] || `Unknown (${strategy})`
+}
+
+function versionStabilityToString(stability) {
+  const mapping = {
+    [VersionStability.Stable]: 'Stable',
+    [VersionStability.PreRelease]: 'PreRelease',
+    [VersionStability.Snapshot]: 'Snapshot',
+  }
+  return mapping[stability] || `Unknown (${stability})`
+}
 
 // ===== Helper functions for enum mapping =====
 function versionComparisonToString(result) {
@@ -615,7 +645,7 @@ const demoDependencyRegistry = () => {
   return { registry }
 }
 
-const { registry } = demoDependencyRegistry()
+demoDependencyRegistry()
 
 // ===== Example 8: Package Diff =====
 printHeader('Package Diff')
@@ -1549,7 +1579,7 @@ console.log(\`Team package: \${teamPkg}\`);        // From private registry
   return { manager }
 }
 
-const { manager } = demoRegistryManager()
+demoRegistryManager()
 
 // ===== Example 14: Integration Across Features =====
 printHeader('Complete Package Management Workflow')
@@ -1824,7 +1854,7 @@ Run 'git diff' to see the changes
   return { appPkg, dashboardPkg, resolution }
 }
 
-const { appPkg, dashboardPkg, resolution } = demoCompleteWorkflow()
+demoCompleteWorkflow()
 
 // ===== Example 15: Package Registry Comparison =====
 printHeader('Package Registry Comparison')
@@ -2079,7 +2109,7 @@ const companyPackage = await manager.getLatestVersion('@company/api-client'); //
   return { testRegistry }
 }
 
-const { testRegistry } = demoRegistryComparison()
+demoRegistryComparison()
 
 // ===== Example 16: Using Registry Manager with Multiple Registries =====
 printHeader('Multi-Registry Dependency Resolution')
@@ -2269,7 +2299,7 @@ const demoMultiRegistry = () => {
   return { regManager, appPackage }
 }
 
-const { regManager, appPackage } = demoMultiRegistry()
+demoMultiRegistry()
 
 // Final completion message with a summary of registry features
 console.log(
@@ -2679,7 +2709,7 @@ console.log(\`Found \${warnings.length} warnings\`)`)
   return { validationGraph, validationReport }
 }
 
-const { validationGraph, validationReport } = demoValidationAndNode()
+demoValidationAndNode()
 
 // ===== Example 19: DependencyFilter Usage =====
 printHeader('DependencyFilter Enum')
@@ -3766,6 +3796,268 @@ console.log(
       },
     ),
 )
+
+// ===== Example 22: Advanced Dependency Upgrading =====
+printHeader('Advanced Dependency Upgrading')
+
+const demoDependencyUpgrader = () => {
+  printSubHeader('Understanding Upgrade Components', '🔄')
+
+  // Show the ExecutionMode enum
+  const executionModeTable = new Table({
+    head: [chalk.bold.white('Execution Mode'), chalk.bold.white('Description')],
+    colWidths: [20, 70],
+  })
+
+  executionModeTable.push(
+    [chalk.blue('DryRun'), 'Simulate upgrades without making changes'],
+    [chalk.blue('Apply'), 'Apply upgrades to package files'],
+    [chalk.blue('Interactive'), 'Prompt for confirmation before each change'],
+  )
+
+  console.log(executionModeTable.toString())
+
+  // Show the VersionStability enum
+  printSubHeader('Version Stability Levels', '📊')
+
+  const stabilityTable = new Table({
+    head: [chalk.bold.white('Stability Level'), chalk.bold.white('Description')],
+    colWidths: [20, 70],
+  })
+
+  stabilityTable.push(
+    [chalk.green('Stable'), 'Released versions without pre-release tags'],
+    [chalk.yellow('PreRelease'), 'Alpha, beta, or release candidate versions'],
+    [chalk.red('Snapshot'), 'Development snapshots or nightly builds'],
+  )
+
+  console.log(stabilityTable.toString())
+
+  printSubHeader('Creating Upgrade Configuration', '⚙️')
+
+  // Create different types of upgrade configs
+  printCode(`
+  // Create default upgrade configuration
+  const defaultConfig = createDefaultUpgradeConfig()
+
+  // Create config with specific strategy
+  const strategyConfig = createUpgradeConfigFromStrategy(
+    VersionUpdateStrategy.Latest,  // Using enum value 0
+    VersionStability.Stable       // Using enum value 0
+  )
+
+  // Create config with custom registries
+  const registryConfig = createUpgradeConfigWithRegistries(
+    ['https://registry.npmjs.org', 'https://local-registry'],  // Use registry URLs
+    VersionUpdateStrategy.Compatible,
+    VersionStability.PreRelease
+  )`)
+
+  const defaultConfig = createDefaultUpgradeConfig()
+
+  const strategyConfig = createUpgradeConfigFromStrategy(VersionUpdateStrategy.Latest, VersionStability.Stable)
+
+  const registryUrls = [
+    npmRegistry?.url || 'https://registry.npmjs.org',
+    localRegistry?.url || 'https://local-registry',
+  ].filter(Boolean)
+
+  const registryConfig = createUpgradeConfigWithRegistries(
+    registryUrls,
+    VersionUpdateStrategy.Compatible,
+    VersionStability.PreRelease,
+  )
+
+  // Display configurations
+  const configTable = new Table({
+    head: [chalk.bold.white('Config Type'), chalk.bold.white('Strategy'), chalk.bold.white('Stability')],
+    colWidths: [20, 30, 30],
+  })
+
+  configTable.push(
+    [
+      'Default',
+      versionUpdateStrategyToString(defaultConfig.strategy),
+      versionStabilityToString(defaultConfig.stability),
+    ],
+    [
+      'Strategy',
+      versionUpdateStrategyToString(strategyConfig.strategy),
+      versionStabilityToString(strategyConfig.stability),
+    ],
+    [
+      'Registry',
+      versionUpdateStrategyToString(registryConfig.strategy),
+      versionStabilityToString(registryConfig.stability),
+    ],
+  )
+
+  console.log(configTable.toString())
+
+  printSubHeader('Version Update Strategies', '📈')
+
+  const strategyTable = new Table({
+    head: [chalk.bold.white('Strategy'), chalk.bold.white('Description'), chalk.bold.white('Use Case')],
+    colWidths: [20, 40, 30],
+  })
+
+  strategyTable.push(
+    [chalk.blue('Latest'), 'Always update to the latest available version', 'When staying current is critical'],
+    [chalk.blue('Compatible'), 'Update within semver compatibility rules', 'Safe updates for production'],
+    [chalk.blue('Minimal'), 'Make minimal required version changes', 'Conservative update approach'],
+  )
+
+  console.log(strategyTable.toString())
+
+  printSubHeader('Working with DependencyUpgrader', '🛠️')
+
+  // Create an example package for upgrading
+  const targetPkg = new Package('target-app', '1.0.0')
+  targetPkg.addDependency(new Dependency('react', '^17.0.2'))
+  targetPkg.addDependency(new Dependency('lodash', '^4.17.21'))
+  targetPkg.addDependency(new Dependency('typescript', '~4.5.4'))
+
+  printCode(`
+  // Create package for upgrade
+  const targetPkg = new Package('target-app', '1.0.0')
+  targetPkg.addDependency(new Dependency('react', '^17.0.2'))
+  targetPkg.addDependency(new Dependency('lodash', '^4.17.21'))
+  targetPkg.addDependency(new Dependency('typescript', '~4.5.4'))
+
+  // Create DependencyUpgrader with config
+  const upgrader = new DependencyUpgrader()
+  upgrader.setConfig(registryConfig)
+
+  // Check for upgrades
+  const upgrades = upgrader.checkPackageUpgrades(targetPkg)
+
+  // Generate upgrade report
+  const report = upgrader.generateUpgradeReport(upgrades)`)
+
+  const upgrader = new DependencyUpgrader()
+  upgrader.setConfig(registryConfig)
+
+  try {
+    // Check for upgrades
+    const upgrades = upgrader.checkPackageUpgrades(targetPkg)
+
+    const upgradesTable = new Table({
+      head: [
+        chalk.bold.white('Package'),
+        chalk.bold.white('Dependency'),
+        chalk.bold.white('Current'),
+        chalk.bold.white('Available'),
+        chalk.bold.white('Status'),
+      ],
+      colWidths: [15, 15, 15, 15, 20],
+    })
+
+    for (const upgrade of upgrades) {
+      upgradesTable.push([
+        chalk.blue(upgrade.package_name),
+        chalk.yellow(upgrade.dependency_name),
+        chalk.red(upgrade.current_version),
+        chalk.green(upgrade.compatible_version || 'N/A'),
+        getUpgradeStatusString(upgrade.status),
+      ])
+    }
+
+    console.log(upgradesTable.toString())
+
+    // Generate and show report
+    const report = upgrader.generateUpgradeReport(upgrades)
+
+    console.log(
+      boxen(chalk.cyan(report), {
+        padding: 1,
+        borderStyle: 'round',
+        borderColor: 'blue',
+        title: 'Upgrade Report',
+        titleAlignment: 'center',
+      }),
+    )
+  } catch (e) {
+    printError(`Error during upgrade process: ${e.message}`)
+  }
+
+  function getUpgradeStatusString(status) {
+    switch (status) {
+      case UpgradeStatus.UpToDate:
+        return chalk.green('Up to date')
+      case UpgradeStatus.PatchAvailable:
+        return chalk.blue('Patch available')
+      case UpgradeStatus.MinorAvailable:
+        return chalk.yellow('Minor available')
+      case UpgradeStatus.MajorAvailable:
+        return chalk.red('Major available')
+      case UpgradeStatus.Constrained:
+        return chalk.yellow('Constrained')
+      case UpgradeStatus.CheckFailed:
+        return chalk.red('Check failed')
+      default:
+        return chalk.gray('Unknown')
+    }
+  }
+
+  printSubHeader('Best Practices for Upgrading', '✅')
+
+  const bestPracticesTable = new Table({
+    head: [chalk.bold.white('Practice'), chalk.bold.white('Description')],
+    colWidths: [30, 60],
+  })
+
+  bestPracticesTable.push(
+    [chalk.blue('Use Dry Run First'), 'Always perform a dry run to review changes before applying'],
+    [chalk.blue('Consider Stability Level'), 'Choose appropriate stability level based on environment'],
+    [chalk.blue('Review Breaking Changes'), 'Carefully evaluate and plan for breaking changes'],
+    [chalk.blue('Update Strategy Selection'), 'Pick strategy based on project requirements and risk tolerance'],
+    [chalk.blue('Validate After Upgrade'), 'Run tests and validation after applying upgrades'],
+  )
+
+  console.log(bestPracticesTable.toString())
+
+  return {
+    upgrader,
+    targetPkg,
+    defaultConfig,
+    strategyConfig,
+    registryConfig,
+  }
+}
+
+const upgradeDemo = demoDependencyUpgrader()
+
+// Final completion message for upgrade functionality
+console.log(
+  '\n' +
+    boxen(
+      chalk.bold.white('Dependency Upgrade Framework Summary:') +
+        '\n\n' +
+        chalk.blue('• Configuration:') +
+        ' Multiple ways to configure upgrade behavior\n' +
+        chalk.blue('• Strategies:') +
+        ' Different approaches for version selection\n' +
+        chalk.blue('• Analysis:') +
+        ' Pre-upgrade dependency analysis\n' +
+        chalk.blue('• Execution Modes:') +
+        ' Dry run and interactive options\n' +
+        chalk.blue('• Version Bumping:') +
+        ' Utilities for version management\n' +
+        chalk.blue('• Safety:') +
+        ' Breaking change detection and stability levels\n\n' +
+        chalk.bold.green('Dependency upgrade functionality successfully demonstrated!'),
+      {
+        padding: 1,
+        margin: 1,
+        borderStyle: 'double',
+        borderColor: 'cyan',
+        align: 'left',
+        title: '🎉 Dependency Upgrade Framework Complete 🎉',
+        titleAlignment: 'center',
+      },
+    ),
+)
+
 // Final completion message
 console.log(
   '\n' +
