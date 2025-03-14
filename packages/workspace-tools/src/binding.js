@@ -365,17 +365,27 @@ if (!nativeBinding) {
 }
 
 module.exports.Dependency = nativeBinding.Dependency
+module.exports.DependencyGraph = nativeBinding.DependencyGraph
 module.exports.DependencyRegistry = nativeBinding.DependencyRegistry
+module.exports.Node = nativeBinding.Node
 module.exports.Package = nativeBinding.Package
 module.exports.PackageDiff = nativeBinding.PackageDiff
 module.exports.PackageInfo = nativeBinding.PackageInfo
 module.exports.PackageRegistry = nativeBinding.PackageRegistry
 module.exports.RegistryManager = nativeBinding.RegistryManager
+module.exports.ValidationReport = nativeBinding.ValidationReport
 module.exports.VersionUtils = nativeBinding.VersionUtils
+module.exports.buildDependencyGraphFromPackageInfos = nativeBinding.buildDependencyGraphFromPackageInfos
+module.exports.buildDependencyGraphFromPackages = nativeBinding.buildDependencyGraphFromPackages
 module.exports.ChangeType = nativeBinding.ChangeType
+module.exports.DependencyFilter = nativeBinding.DependencyFilter
+module.exports.generateAscii = nativeBinding.generateAscii
+module.exports.generateDot = nativeBinding.generateDot
 module.exports.getVersion = nativeBinding.getVersion
 module.exports.parseScopedPackage = nativeBinding.parseScopedPackage
 module.exports.RegistryType = nativeBinding.RegistryType
 module.exports.ResolutionErrorType = nativeBinding.ResolutionErrorType
+module.exports.saveDotToFile = nativeBinding.saveDotToFile
+module.exports.ValidationIssueType = nativeBinding.ValidationIssueType
 module.exports.Version = nativeBinding.Version
 module.exports.VersionComparisonResult = nativeBinding.VersionComparisonResult

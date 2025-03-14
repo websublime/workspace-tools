@@ -3218,6 +3218,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "tempfile",
  "ws_binding",
  "ws_git",
  "ws_monorepo",

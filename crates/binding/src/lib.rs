@@ -2,6 +2,7 @@
 extern crate napi_derive;
 
 pub mod errors;
+pub mod graph;
 pub mod registry;
 pub mod types;
 
@@ -27,6 +28,11 @@ pub fn get_version() -> String {
 pub use errors::{handle_pkg_result, pkg_error_to_napi_error, ErrorCode};
 
 // Re-export all the types for convenience
+pub use graph::{
+    build_dependency_graph_from_package_infos, build_dependency_graph_from_packages,
+    generate_ascii, generate_dot, save_dot_to_file, DependencyFilter, DependencyGraph, DotOptions,
+    ValidationIssueInfo, ValidationIssueType, ValidationReport,
+};
 pub use registry::{
     DependencyRegistry, DependencyUpdateInfo, PackageRegistry, RegistryAuthConfig, RegistryManager,
     RegistryType, ResolutionErrorType, ResolutionResult,

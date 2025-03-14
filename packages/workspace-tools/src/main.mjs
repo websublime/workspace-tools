@@ -12,6 +12,15 @@ import {
   PackageRegistry,
   RegistryManager,
   RegistryType,
+  DependencyFilter,
+  DependencyGraph,
+  ValidationIssueType,
+  ValidationReport,
+  buildDependencyGraphFromPackageInfos,
+  buildDependencyGraphFromPackages,
+  generateAscii,
+  generateDot,
+  saveDotToFile,
   getVersion,
   parseScopedPackage,
 } from './binding.js'
@@ -2281,6 +2290,1472 @@ console.log(
     ),
 )
 
+// ===== Example 17: Dependency Graphs =====
+printHeader('Dependency Graphs')
+
+const demoDependencyGraph = () => {
+  printSubHeader('Exploring DependencyGraph Class', '📊')
+
+  // Create packages with dependencies to build a graph
+  printCode(`
+// Create packages with dependencies
+const pkg1 = new Package('app', '1.0.0')
+const pkg2 = new Package('ui-lib', '2.0.0')
+const pkg3 = new Package('utils', '1.5.0')
+const pkg4 = new Package('config', '0.8.0')
+
+// Add dependencies between packages
+pkg1.addDependency(new Dependency('ui-lib', '^2.0.0'))
+pkg1.addDependency(new Dependency('utils', '^1.0.0'))
+pkg2.addDependency(new Dependency('utils', '^1.5.0'))
+pkg3.addDependency(new Dependency('config', '^0.8.0'))
+
+// Build the dependency graph
+const graph = buildDependencyGraphFromPackages([pkg1, pkg2, pkg3, pkg4])
+  `)
+
+  // Create packages with dependencies
+  const pkg1 = new Package('app', '1.0.0')
+  const pkg2 = new Package('ui-lib', '2.0.0')
+  const pkg3 = new Package('utils', '1.5.0')
+  const pkg4 = new Package('config', '0.8.0')
+
+  // Add dependencies between packages
+  pkg1.addDependency(new Dependency('ui-lib', '^2.0.0'))
+  pkg1.addDependency(new Dependency('utils', '^1.0.0'))
+  pkg2.addDependency(new Dependency('utils', '^1.5.0'))
+  pkg3.addDependency(new Dependency('config', '^0.8.0'))
+
+  // Build graph from packages
+  const graph = buildDependencyGraphFromPackages([pkg1, pkg2, pkg3, pkg4])
+
+  printSuccess('DependencyGraph created successfully')
+  printProperty('Graph Type', 'DependencyGraph')
+
+  // Show that the result is a DependencyGraph instance
+  printCode(`console.log(graph instanceof DependencyGraph) // true`)
+  console.log(`Result is DependencyGraph instance: ${chalk.green(graph instanceof DependencyGraph ? 'Yes' : 'No')}`)
+
+  printSubHeader('DependencyGraph Methods', '🧰')
+
+  // Display methods available on DependencyGraph
+  const methodsTable = new Table({
+    head: [chalk.bold.white('Method'), chalk.bold.white('Purpose'), chalk.bold.white('Example')],
+    colWidths: [25, 30, 35],
+  })
+
+  methodsTable.push(
+    [
+      chalk.blue('isInternallyResolvable()'),
+      'Check if all dependencies can be resolved within the workspace',
+      chalk.yellow(`graph.isInternallyResolvable()`),
+    ],
+    [
+      chalk.blue('findMissingDependencies()'),
+      "Find dependencies that aren't in the workspace",
+      chalk.yellow(`graph.findMissingDependencies()`),
+    ],
+    [
+      chalk.blue('findVersionConflicts()'),
+      'Find version requirement conflicts',
+      chalk.yellow(`graph.findVersionConflicts()`),
+    ],
+    [
+      chalk.blue('detectCircularDependencies()'),
+      'Find circular dependency paths',
+      chalk.yellow(`graph.detectCircularDependencies()`),
+    ],
+    [chalk.blue('getNode(id)'), 'Get a package node by identifier', chalk.yellow(`graph.getNode("app")`)],
+    [
+      chalk.blue('getDependents(id)'),
+      'Get packages that depend on a specific package',
+      chalk.yellow(`graph.getDependents("utils")`),
+    ],
+    [
+      chalk.blue('validatePackageDependencies()'),
+      'Run full validation and get report',
+      chalk.yellow(`graph.validatePackageDependencies()`),
+    ],
+  )
+
+  console.log(methodsTable.toString())
+
+  // Display the graph structure
+  printSubHeader('Graph Structure', '🌳')
+
+  const asciiGraph = generateAscii(graph)
+  console.log(
+    boxen(chalk.cyan(asciiGraph), {
+      padding: 1,
+      borderStyle: 'round',
+      borderColor: 'blue',
+      title: 'ASCII Graph Visualization',
+      titleAlignment: 'center',
+    }),
+  )
+
+  // Demo using the methods
+  printSubHeader('Using DependencyGraph Methods', '💻')
+
+  printCode(`// Check if internally resolvable
+const resolvable = graph.isInternallyResolvable()
+console.log("Internally Resolvable:", resolvable)
+
+// Find missing dependencies
+const missing = graph.findMissingDependencies()
+console.log("Missing Dependencies:", missing)
+
+// Get a node by ID
+const utilsNode = graph.getNode("utils")
+console.log("Utils Node:", utilsNode && utilsNode.name)
+
+// Get dependents
+const utilsDependents = graph.getDependents("utils")
+console.log("Utils Dependents:", utilsDependents)`)
+
+  console.log(chalk.gray('// Results:'))
+  console.log(chalk.gray(`Internally Resolvable: ${graph.isInternallyResolvable()}`))
+  console.log(chalk.gray(`Missing Dependencies: ${JSON.stringify(graph.findMissingDependencies())}`))
+
+  const utilsNode = graph.getNode('utils')
+  console.log(chalk.gray(`Utils Node: ${utilsNode ? utilsNode.name : 'Not found'}`))
+
+  let utilsDependents
+  try {
+    utilsDependents = graph.getDependents('utils')
+    console.log(chalk.gray(`Utils Dependents: ${JSON.stringify(utilsDependents)}`))
+  } catch (e) {
+    console.log(chalk.gray(`Error getting dependents: ${e.message}`))
+  }
+
+  return { graph, pkg1, pkg2, pkg3, pkg4 }
+}
+
+demoDependencyGraph()
+
+// ===== Example 18: Dependency Graph Validation and Node =====
+printHeader('ValidationReport and Node')
+
+const demoValidationAndNode = () => {
+  printSubHeader('Understanding the Node Interface', '🧩')
+
+  // Explain the Node interface concept
+  printCode(`// Node is a conceptual interface that defines what a node in the dependency graph looks like
+// In the Rust implementation, Package implements the Node trait
+// In JavaScript, we use the Package class directly
+
+// Creating a new Node (actually a Package instance)
+const nodeInstance = new Package('example-node', '1.0.0')
+console.log(nodeInstance.name)  // 'example-node'
+
+// The Node interface defines requirements like:
+// - Having a unique identifier
+// - Managing dependencies
+// - Matching against dependency requirements`)
+
+  // Demonstrate with a table
+  const nodeInterfaceTable = new Table({
+    head: [chalk.bold.white('Node Requirement'), chalk.bold.white('Implementation in Package')],
+    colWidths: [30, 60],
+  })
+
+  nodeInterfaceTable.push(
+    [chalk.blue('Unique Identifier'), 'Package.name property'],
+    [chalk.blue('Dependencies List'), 'Package.dependencies() method'],
+    [chalk.blue('Version Information'), 'Package.version property'],
+    [chalk.blue('Dependency Matching'), 'Internal semver compatibility checking'],
+  )
+
+  console.log(nodeInterfaceTable.toString())
+
+  printSubHeader('Creating a Graph with Issues', '⚠️')
+
+  // Create packages with various issues
+  const validationPkg1 = new Package('service-a', '1.0.0')
+  const validationPkg2 = new Package('service-b', '1.0.0')
+  const validationPkg3 = new Package('service-c', '1.0.0')
+  const validationPkg4 = new Package('service-d', '1.0.0')
+
+  // Create circular dependency: service-a -> service-b -> service-a
+  validationPkg1.addDependency(new Dependency('service-b', '^1.0.0'))
+  validationPkg2.addDependency(new Dependency('service-a', '^1.0.0'))
+
+  // Create conflicting version requirements
+  validationPkg1.addDependency(new Dependency('shared-lib', '^1.0.0'))
+  validationPkg3.addDependency(new Dependency('shared-lib', '^2.0.0'))
+
+  // Create dependency to a non-existent package
+  validationPkg4.addDependency(new Dependency('missing-pkg', '^1.0.0'))
+
+  // Build the problematic graph
+  const validationGraph = buildDependencyGraphFromPackages([
+    validationPkg1,
+    validationPkg2,
+    validationPkg3,
+    validationPkg4,
+  ])
+
+  printSuccess('Created a dependency graph with various issues for validation')
+
+  printSubHeader('ValidationReport Class', '📋')
+
+  // Run validation on the graph
+  printCode(`// Get a validation report from the graph
+const validationReport = validationGraph.validatePackageDependencies()
+console.log(validationReport instanceof ValidationReport) // true`)
+
+  // Validate the graph
+  let validationReport
+  try {
+    validationReport = validationGraph.validatePackageDependencies()
+
+    // Show that the result is a ValidationReport instance
+    console.log(
+      `Result is ValidationReport instance: ${chalk.green(validationReport instanceof ValidationReport ? 'Yes' : 'No')}`,
+    )
+
+    // Print ValidationReport properties
+    printSubHeader('ValidationReport Properties', '📊')
+
+    const reportPropsTable = new Table({
+      head: [chalk.bold.white('Property'), chalk.bold.white('Value'), chalk.bold.white('Description')],
+      colWidths: [25, 15, 50],
+    })
+
+    reportPropsTable.push(
+      [
+        chalk.blue('hasIssues'),
+        validationReport.hasIssues ? chalk.red('true') : chalk.green('false'),
+        'Whether the graph has any validation issues',
+      ],
+      [
+        chalk.blue('hasCriticalIssues'),
+        validationReport.hasCriticalIssues ? chalk.red('true') : chalk.green('false'),
+        'Whether the graph has critical issues that must be fixed',
+      ],
+      [
+        chalk.blue('hasWarnings'),
+        validationReport.hasWarnings ? chalk.yellow('true') : chalk.green('false'),
+        'Whether the graph has non-critical warning issues',
+      ],
+    )
+
+    console.log(reportPropsTable.toString())
+
+    // Print ValidationReport methods
+    printSubHeader('ValidationReport Methods', '🔍')
+
+    const reportMethodsTable = new Table({
+      head: [chalk.bold.white('Method'), chalk.bold.white('Purpose'), chalk.bold.white('Example')],
+      colWidths: [25, 30, 35],
+    })
+
+    reportMethodsTable.push(
+      [chalk.blue('getIssues()'), 'Get all validation issues', chalk.yellow(`validationReport.getIssues()`)],
+      [
+        chalk.blue('getCriticalIssues()'),
+        'Get only critical issues',
+        chalk.yellow(`validationReport.getCriticalIssues()`),
+      ],
+      [chalk.blue('getWarnings()'), 'Get only warning issues', chalk.yellow(`validationReport.getWarnings()`)],
+    )
+
+    console.log(reportMethodsTable.toString())
+  } catch (e) {
+    printError(`Error during validation: ${e.message}`)
+    return { validationGraph }
+  }
+
+  printSubHeader('Validation Issue Types', '❌')
+
+  // Show ValidationIssueType enum
+  printCode(`// ValidationIssueType enum defines the types of validation issues
+console.log(ValidationIssueType.CircularDependency)  // 0
+console.log(ValidationIssueType.UnresolvedDependency)  // 1
+console.log(ValidationIssueType.VersionConflict)  // 2`)
+
+  // Create a table showing ValidationIssueType enum values
+  const issueTypesTable = new Table({
+    head: [chalk.bold.white('Issue Type'), chalk.bold.white('Value'), chalk.bold.white('Description')],
+    colWidths: [30, 10, 50],
+  })
+
+  issueTypesTable.push(
+    [
+      chalk.red('ValidationIssueType.CircularDependency'),
+      ValidationIssueType.CircularDependency,
+      'Circular dependency between packages',
+    ],
+    [
+      chalk.yellow('ValidationIssueType.UnresolvedDependency'),
+      ValidationIssueType.UnresolvedDependency,
+      'Dependency that cannot be resolved in the workspace',
+    ],
+    [
+      chalk.blue('ValidationIssueType.VersionConflict'),
+      ValidationIssueType.VersionConflict,
+      'Conflicting version requirements for a package',
+    ],
+  )
+
+  console.log(issueTypesTable.toString())
+
+  // Get all issues from the report
+  const issues = validationReport.getIssues()
+
+  if (issues.length === 0) {
+    printWarning('No issues found during validation (unexpected!)')
+  } else {
+    printSubHeader('ValidationReport Issues', '📄')
+
+    const issuesTable = new Table({
+      head: [chalk.bold.white('Issue Type'), chalk.bold.white('Critical'), chalk.bold.white('Details')],
+      colWidths: [20, 12, 60],
+    })
+
+    for (const issue of issues) {
+      let details = issue.message
+      let issueTypeStr
+
+      switch (issue.issueType) {
+        case ValidationIssueType.CircularDependency:
+          issueTypeStr = chalk.red('Circular')
+          details = `Cycle path: ${issue.path ? issue.path.join(' → ') : 'N/A'}`
+          break
+        case ValidationIssueType.UnresolvedDependency:
+          issueTypeStr = chalk.yellow('Unresolved')
+          details = `Missing: ${issue.dependencyName || 'unknown'} (${issue.versionReq || 'any'})`
+          break
+        case ValidationIssueType.VersionConflict:
+          issueTypeStr = chalk.blue('Version Conflict')
+          details = `For: ${issue.dependencyName || 'unknown'}\nVersions: ${issue.conflictingVersions ? issue.conflictingVersions.join(', ') : 'unknown'}`
+          break
+        default:
+          issueTypeStr = chalk.gray('Unknown')
+      }
+
+      issuesTable.push([issueTypeStr, issue.critical ? chalk.red('Yes') : chalk.green('No'), details])
+    }
+
+    console.log(issuesTable.toString())
+  }
+
+  // Demonstrate getting critical issues vs warnings
+  printSubHeader('Critical Issues vs Warnings', '⚠️')
+
+  printCode(`// Get only critical issues
+const criticalIssues = validationReport.getCriticalIssues()
+console.log(\`Found \${criticalIssues.length} critical issues\`)
+
+// Get only warnings (non-critical issues)
+const warnings = validationReport.getWarnings()
+console.log(\`Found \${warnings.length} warnings\`)`)
+
+  const criticalIssues = validationReport.getCriticalIssues()
+  const warnings = validationReport.getWarnings()
+
+  const issueStatsTable = new Table({
+    head: [chalk.bold.white('Issue Category'), chalk.bold.white('Count'), chalk.bold.white('Action Required')],
+    colWidths: [20, 10, 60],
+  })
+
+  issueStatsTable.push(
+    [chalk.red('Critical Issues'), criticalIssues.length, 'Must be fixed before proceeding'],
+    [chalk.yellow('Warnings'), warnings.length, "Should be reviewed but don't block progress"],
+  )
+
+  console.log(issueStatsTable.toString())
+
+  return { validationGraph, validationReport }
+}
+
+const { validationGraph, validationReport } = demoValidationAndNode()
+
+// ===== Example 19: DependencyFilter Usage =====
+printHeader('DependencyFilter Enum')
+
+const demoDependencyFilter = () => {
+  printSubHeader('Understanding DependencyFilter', '🔍')
+
+  // Create a table explaining DependencyFilter enum
+  const filterTypesTable = new Table({
+    head: [chalk.bold.white('Filter Type'), chalk.bold.white('Value'), chalk.bold.white('Description')],
+    colWidths: [30, 10, 50],
+  })
+
+  filterTypesTable.push(
+    [
+      chalk.blue('DependencyFilter.ProductionOnly'),
+      DependencyFilter.ProductionOnly,
+      'Includes only dependencies from the "dependencies" section',
+    ],
+    [
+      chalk.blue('DependencyFilter.WithDevelopment'),
+      DependencyFilter.WithDevelopment,
+      'Includes both "dependencies" and "devDependencies"',
+    ],
+    [
+      chalk.blue('DependencyFilter.AllDependencies'),
+      DependencyFilter.AllDependencies,
+      'Includes all dependency types including optional',
+    ],
+  )
+
+  console.log(filterTypesTable.toString())
+
+  printSubHeader('Using DependencyFilter', '⚙️')
+
+  // Show example usage of DependencyFilter
+  printCode(`// DependencyFilter is used when building dependency graphs
+// from package.json files to control which dependencies are included
+
+// In a real application, you would use this in options:
+const options = {
+  dependencyFilter: DependencyFilter.WithDevelopment
+}
+
+// Default is DependencyFilter.WithDevelopment if not specified
+
+// Production-only example (conceptual)
+scanWorkspace({
+  dependencyFilter: DependencyFilter.ProductionOnly
+})
+
+// Include all dependencies example (conceptual)
+scanWorkspace({
+  dependencyFilter: DependencyFilter.AllDependencies
+})`)
+
+  printSubHeader('Filter Impact on Graph Size', '📏')
+
+  // Show impact of different filters on graph size
+  const impactTable = new Table({
+    head: [chalk.bold.white('Filter'), chalk.bold.white('Dependencies Included'), chalk.bold.white('Typical Impact')],
+    colWidths: [25, 40, 25],
+  })
+
+  impactTable.push(
+    [chalk.blue('ProductionOnly'), '- Regular dependencies', chalk.green('Smaller graph\nFewer edges')],
+    [
+      chalk.blue('WithDevelopment'),
+      '- Regular dependencies\n- Dev dependencies',
+      chalk.yellow('Medium graph\nModerate edges'),
+    ],
+    [
+      chalk.blue('AllDependencies'),
+      '- Regular dependencies\n- Dev dependencies\n- Optional dependencies\n- Peer dependencies',
+      chalk.red('Larger graph\nMany edges'),
+    ],
+  )
+
+  console.log(impactTable.toString())
+
+  printSubHeader('Practical Application', '🛠️')
+
+  // Create a conceptual example showing how each filter might be used
+  const useCaseTable = new Table({
+    head: [chalk.bold.white('Filter'), chalk.bold.white('Use Case')],
+    colWidths: [25, 65],
+  })
+
+  useCaseTable.push(
+    [
+      chalk.blue('ProductionOnly'),
+      '- Analyzing production deployment size\n- Identifying runtime dependencies\n- Optimizing for production',
+    ],
+    [
+      chalk.blue('WithDevelopment'),
+      '- Normal development workflows\n- CI/CD pipeline analysis\n- Standard dependency validation',
+    ],
+    [
+      chalk.blue('AllDependencies'),
+      '- Complete dependency audits\n- Security vulnerability scanning\n- License compliance checks',
+    ],
+  )
+
+  console.log(useCaseTable.toString())
+
+  printSubHeader('Filter Selection Logic', '🧠')
+
+  // Explain how to select the appropriate filter
+  const selectionLogic = `
+// Decision Tree for Selecting DependencyFilter
+
+if (analyzing_for_production_deployment) {
+  // Focus only on what will be deployed
+  return DependencyFilter.ProductionOnly;
+}
+
+if (doing_standard_development_work) {
+  // Include dev tools and testing frameworks
+  return DependencyFilter.WithDevelopment;
+}
+
+if (performing_security_audit || license_check) {
+  // Include absolutely everything
+  return DependencyFilter.AllDependencies;
+}
+
+// Default case for most scenarios
+return DependencyFilter.WithDevelopment;
+`
+
+  console.log(
+    boxen(chalk.cyan(selectionLogic), {
+      padding: 1,
+      borderStyle: 'round',
+      borderColor: 'blue',
+      title: 'Filter Selection Logic',
+      titleAlignment: 'center',
+    }),
+  )
+
+  // Include an example of code that would use different filters
+  return {
+    filterTypes: [DependencyFilter.ProductionOnly, DependencyFilter.WithDevelopment, DependencyFilter.AllDependencies],
+  }
+}
+
+demoDependencyFilter()
+
+// ===== Example 21: Integrated Monorepo Management =====
+printHeader('Integrated Monorepo Management')
+
+const demoIntegratedMonorepo = () => {
+  printSubHeader('Monorepo Management Scenario', '🏗️')
+
+  // Set up the scenario
+  console.log(
+    boxen(
+      chalk.white(`
+In this comprehensive example, we'll simulate managing a monorepo with multiple packages.
+We'll perform the following operations:
+- Set up a registry environment
+- Create packages and define dependencies
+- Build and validate the dependency graph
+- Detect and resolve dependency issues
+- Generate visualizations
+- Plan package updates based on analysis
+  `),
+      {
+        padding: 1,
+        borderStyle: 'round',
+        borderColor: 'blue',
+        title: 'Scenario Overview',
+        titleAlignment: 'center',
+      },
+    ),
+  )
+
+  printSubHeader('Setting Up Registry Environment', '📚')
+
+  // Initialize registry manager and local registry for testing
+  printCode(`
+// Set up registry manager and local registry
+const registryManager = new RegistryManager()
+const localRegistry = PackageRegistry.createLocalRegistry()
+
+// Add packages to the local registry
+localRegistry.addPackage('shared-ui', ['1.0.0', '1.5.0', '2.0.0'])
+localRegistry.addPackage('shared-utils', ['1.0.0', '1.1.0'])
+localRegistry.addPackage('api-client', ['0.9.0', '1.0.0'])
+localRegistry.addPackage('logger', ['1.0.0'])
+localRegistry.addPackage('config', ['0.5.0', '1.0.0'])
+localRegistry.addPackage('react', ['16.8.0', '17.0.2', '18.0.0'])
+localRegistry.addPackage('lodash', ['4.17.21'])
+
+// Set up package dependencies in the registry
+localRegistry.setDependencies('shared-ui', '2.0.0', {
+  'react': '^17.0.2',
+  'lodash': '^4.17.21'
+})
+
+localRegistry.setDependencies('shared-utils', '1.1.0', {
+  'lodash': '^4.17.21'
+})
+
+localRegistry.setDependencies('api-client', '1.0.0', {
+  'shared-utils': '^1.0.0',
+  'logger': '^1.0.0'
+})
+
+// Add registry to manager and set as default
+registryManager.addRegistry('https://local-registry', RegistryType.Custom, 'local-client')
+registryManager.setDefaultRegistry('https://local-registry')
+  `)
+
+  // Initialize registry manager and local registry for testing
+  const registryManager = new RegistryManager()
+  const localRegistry = PackageRegistry.createLocalRegistry()
+
+  // Add packages to the local registry
+  localRegistry.addPackage('shared-ui', ['1.0.0', '1.5.0', '2.0.0'])
+  localRegistry.addPackage('shared-utils', ['1.0.0', '1.1.0'])
+  localRegistry.addPackage('api-client', ['0.9.0', '1.0.0'])
+  localRegistry.addPackage('logger', ['1.0.0'])
+  localRegistry.addPackage('config', ['0.5.0', '1.0.0'])
+  localRegistry.addPackage('react', ['16.8.0', '17.0.2', '18.0.0'])
+  localRegistry.addPackage('lodash', ['4.17.21'])
+
+  // Set up package dependencies in the registry
+  localRegistry.setDependencies('shared-ui', '2.0.0', {
+    react: '^17.0.2',
+    lodash: '^4.17.21',
+  })
+
+  localRegistry.setDependencies('shared-utils', '1.1.0', {
+    lodash: '^4.17.21',
+  })
+
+  localRegistry.setDependencies('api-client', '1.0.0', {
+    'shared-utils': '^1.0.0',
+    logger: '^1.0.0',
+  })
+
+  // Add registry to manager and set as default
+  registryManager.addRegistry('https://local-registry', RegistryType.Custom, 'local-client')
+  registryManager.setDefaultRegistry('https://local-registry')
+
+  // Show available packages in registry
+  const packagesTable = new Table({
+    head: [chalk.bold.white('Package'), chalk.bold.white('Available Versions')],
+    colWidths: [20, 70],
+  })
+
+  const allPackages = localRegistry.getAllPackages()
+  for (const pkg of allPackages) {
+    const versions = localRegistry.getAllVersions(pkg)
+    packagesTable.push([chalk.blue(pkg), chalk.green(versions.join(', '))])
+  }
+
+  console.log(packagesTable.toString())
+  printSuccess('Registry environment set up successfully')
+
+  printSubHeader('Creating Workspace Packages', '📦')
+
+  // Create dependency registry for our workspace
+  printCode(`
+// Create dependency registry for our workspace
+const depRegistry = new DependencyRegistry()
+
+// Create packages for our monorepo workspace with appropriate dependencies
+const mainApp = Package.withRegistry(
+  'main-app',
+  '1.0.0',
+  [
+    ['shared-ui', '^2.0.0'],
+    ['api-client', '^1.0.0'],
+    ['config', '^0.5.0']  // Note: Using older version
+  ],
+  depRegistry
+)
+
+const adminDashboard = Package.withRegistry(
+  'admin-dashboard',
+  '0.9.0',
+  [
+    ['shared-ui', '^1.5.0'],  // Note: Different version from main-app
+    ['shared-utils', '^1.0.0'],
+    ['config', '^1.0.0']  // Note: Newer version than main-app
+  ],
+  depRegistry
+)
+
+const landingPage = Package.withRegistry(
+  'landing-page',
+  '1.2.0',
+  [
+    ['shared-ui', '^2.0.0'],
+    ['logger', '^1.0.0']
+  ],
+  depRegistry
+)
+
+// Package with circular dependency
+const analytics = Package.withRegistry(
+  'analytics',
+  '0.5.0',
+  [
+    ['reports', '^0.1.0']  // Will create circular dependency
+  ],
+  depRegistry
+)
+
+// Second part of circular dependency
+const reports = Package.withRegistry(
+  'reports',
+  '0.1.0',
+  [
+    ['analytics', '^0.5.0']  // Circular dependency with analytics
+  ],
+  depRegistry
+)
+
+// Create workspace packages array
+const workspacePackages = [mainApp, adminDashboard, landingPage, analytics, reports]
+  `)
+
+  // Create dependency registry for our workspace
+  const depRegistry = new DependencyRegistry()
+
+  // Create packages for our monorepo workspace with appropriate dependencies
+  const mainApp = Package.withRegistry(
+    'main-app',
+    '1.0.0',
+    [
+      ['shared-ui', '^2.0.0'],
+      ['api-client', '^1.0.0'],
+      ['config', '^0.5.0'], // Note: Using older version
+    ],
+    depRegistry,
+  )
+
+  const adminDashboard = Package.withRegistry(
+    'admin-dashboard',
+    '0.9.0',
+    [
+      ['shared-ui', '^1.5.0'], // Note: Different version from main-app
+      ['shared-utils', '^1.0.0'],
+      ['config', '^1.0.0'], // Note: Newer version than main-app
+    ],
+    depRegistry,
+  )
+
+  const landingPage = Package.withRegistry(
+    'landing-page',
+    '1.2.0',
+    [
+      ['shared-ui', '^2.0.0'],
+      ['logger', '^1.0.0'],
+    ],
+    depRegistry,
+  )
+
+  // Package with circular dependency
+  const analytics = Package.withRegistry(
+    'analytics',
+    '0.5.0',
+    [
+      ['reports', '^0.1.0'], // Will create circular dependency
+    ],
+    depRegistry,
+  )
+
+  // Second part of circular dependency
+  const reports = Package.withRegistry(
+    'reports',
+    '0.1.0',
+    [
+      ['analytics', '^0.5.0'], // Circular dependency with analytics
+    ],
+    depRegistry,
+  )
+
+  // Create workspace packages array
+  const workspacePackages = [mainApp, adminDashboard, landingPage, analytics, reports]
+
+  // Display created packages
+  const workspaceTable = new Table({
+    head: [chalk.bold.white('Package'), chalk.bold.white('Version'), chalk.bold.white('Dependencies')],
+    colWidths: [20, 12, 60],
+  })
+
+  for (const pkg of workspacePackages) {
+    const deps = pkg
+      .dependencies()
+      .map((d) => `${d.name}@${d.version}`)
+      .join(', ')
+    workspaceTable.push([chalk.blue(pkg.name), chalk.green(pkg.version), chalk.yellow(deps)])
+  }
+
+  console.log(workspaceTable.toString())
+  printSuccess('Workspace packages created successfully')
+
+  printSubHeader('Building Dependency Graph', '🔍')
+
+  // Build and analyze dependency graph
+  printCode(`
+// Build dependency graph from workspace packages
+const dependencyGraph = buildDependencyGraphFromPackages(workspacePackages)
+
+// Check if graph is internally resolvable
+const resolvable = dependencyGraph.isInternallyResolvable()
+console.log(\`Graph is internally resolvable: \${resolvable}\`)
+
+// Find missing dependencies
+const missingDeps = dependencyGraph.findMissingDependencies()
+console.log(\`Missing dependencies: \${missingDeps.length > 0 ? missingDeps.join(', ') : 'None'}\`)
+
+// Check for circular dependencies
+const circularDeps = dependencyGraph.detectCircularDependencies()
+console.log(\`Circular dependencies: \${circularDeps ? 'Yes' : 'No'}\`)
+  `)
+
+  // Build dependency graph from workspace packages
+  const dependencyGraph = buildDependencyGraphFromPackages(workspacePackages)
+
+  // Check if graph is internally resolvable
+  const resolvable = dependencyGraph.isInternallyResolvable()
+
+  // Find missing dependencies
+  const missingDeps = dependencyGraph.findMissingDependencies()
+
+  // Check for circular dependencies
+  const circularDeps = dependencyGraph.detectCircularDependencies()
+
+  // Display results in a table
+  const graphAnalysisTable = new Table({
+    head: [chalk.bold.white('Analysis'), chalk.bold.white('Result'), chalk.bold.white('Details')],
+    colWidths: [20, 15, 55],
+  })
+
+  graphAnalysisTable.push(
+    [
+      chalk.blue('Internally Resolvable'),
+      resolvable ? chalk.green('Yes') : chalk.red('No'),
+      'Some dependencies may not be available in the workspace',
+    ],
+    [
+      chalk.blue('Missing Dependencies'),
+      missingDeps.length > 0 ? chalk.yellow(missingDeps.length.toString()) : chalk.green('None'),
+      missingDeps.length > 0 ? chalk.yellow(missingDeps.join(', ')) : 'All dependencies found in workspace',
+    ],
+    [
+      chalk.blue('Circular Dependencies'),
+      circularDeps ? chalk.red('Yes') : chalk.green('No'),
+      circularDeps ? chalk.red(circularDeps.join(' → ')) : 'No circular dependencies detected',
+    ],
+  )
+
+  console.log(graphAnalysisTable.toString())
+
+  printSubHeader('Visualizing Dependency Graph', '📊')
+
+  // Generate graph visualizations
+  printCode(`
+// Generate ASCII visualization of the graph
+const asciiGraph = generateAscii(dependencyGraph)
+console.log(asciiGraph)
+
+// Generate DOT graph for more detailed visualization
+const dotOptions = {
+  title: "Monorepo Dependency Graph",
+  showExternal: true,
+  highlightCycles: true
+}
+const dotGraph = generateDot(dependencyGraph, dotOptions)
+
+// Save DOT graph to file
+saveDotToFile(dotGraph, "./monorepo-dependencies.dot")
+  `)
+
+  // Generate ASCII visualization
+  const asciiGraph = generateAscii(dependencyGraph)
+
+  console.log(
+    boxen(chalk.cyan(asciiGraph), {
+      padding: 1,
+      borderStyle: 'round',
+      borderColor: 'blue',
+      title: 'ASCII Dependency Graph',
+      titleAlignment: 'center',
+    }),
+  )
+
+  // Generate DOT graph
+  const dotOptions = {
+    title: 'Monorepo Dependency Graph',
+    showExternal: true,
+    highlightCycles: true,
+  }
+
+  try {
+    const dotGraph = generateDot(dependencyGraph, dotOptions)
+    printSuccess('DOT graph generated successfully')
+    printProperty('DOT Output Size', `${dotGraph.length} characters`)
+
+    // Show the first few lines
+    const previewLines = dotGraph.split('\n').slice(0, 8).join('\n') + '\n...'
+    console.log(
+      boxen(chalk.gray(previewLines), {
+        padding: 1,
+        borderStyle: 'round',
+        borderColor: 'gray',
+        title: 'DOT Graph Preview',
+        titleAlignment: 'center',
+      }),
+    )
+  } catch (e) {
+    printError(`Error generating DOT graph: ${e.message}`)
+  }
+
+  printSubHeader('Validating Dependencies', '✅')
+
+  // Validate the dependency graph
+  printCode(`
+// Run complete validation on dependency graph
+const validationReport = dependencyGraph.validatePackageDependencies()
+
+// Check if there are any issues
+if (validationReport.hasIssues) {
+  console.log("Validation found issues in the dependency graph:")
+
+  // Get all issues
+  const allIssues = validationReport.getIssues()
+
+  // Get critical issues
+  const criticalIssues = validationReport.getCriticalIssues()
+
+  // Get warnings
+  const warnings = validationReport.getWarnings()
+
+  console.log(\`Found \${criticalIssues.length} critical issues and \${warnings.length} warnings\`)
+
+  // Display issues by type
+  for (const issue of allIssues) {
+    // Handle each issue based on type
+    switch (issue.issueType) {
+      case ValidationIssueType.CircularDependency:
+        console.log(\`Circular dependency: \${issue.path.join(' → ')}\`)
+        break
+      case ValidationIssueType.UnresolvedDependency:
+        console.log(\`Unresolved dependency: \${issue.dependencyName} \${issue.versionReq}\`)
+        break
+      case ValidationIssueType.VersionConflict:
+        console.log(\`Version conflict: \${issue.dependencyName} - \${issue.conflictingVersions.join(', ')}\`)
+        break
+    }
+  }
+}
+  `)
+
+  // Run validation
+  let validationReport
+  try {
+    validationReport = dependencyGraph.validatePackageDependencies()
+
+    // Display validation summary
+    const validationSummaryTable = new Table({
+      head: [chalk.bold.white('Validation Status'), chalk.bold.white('Count'), chalk.bold.white('Status')],
+      colWidths: [30, 10, 50],
+    })
+
+    const criticalIssues = validationReport.getCriticalIssues()
+    const warnings = validationReport.getWarnings()
+
+    validationSummaryTable.push(
+      [
+        chalk.blue('Total Issues'),
+        validationReport.getIssues().length,
+        validationReport.hasIssues ? chalk.yellow('⚠️ Issues Found') : chalk.green('✓ No Issues'),
+      ],
+      [
+        chalk.red('Critical Issues'),
+        criticalIssues.length,
+        criticalIssues.length > 0 ? chalk.red('❌ Must Fix') : chalk.green('✓ None'),
+      ],
+      [
+        chalk.yellow('Warnings'),
+        warnings.length,
+        warnings.length > 0 ? chalk.yellow('⚠️ Review') : chalk.green('✓ None'),
+      ],
+    )
+
+    console.log(validationSummaryTable.toString())
+
+    // If there are issues, display them in detail
+    if (validationReport.hasIssues) {
+      printSubHeader('Validation Issues Detail', '❌')
+
+      const issuesTable = new Table({
+        head: [chalk.bold.white('Type'), chalk.bold.white('Critical'), chalk.bold.white('Details')],
+        colWidths: [15, 12, 65],
+      })
+
+      for (const issue of validationReport.getIssues()) {
+        let issueDetails
+        let issueType
+
+        switch (issue.issueType) {
+          case ValidationIssueType.CircularDependency:
+            issueType = chalk.red('Circular')
+            issueDetails = `Path: ${issue.path ? issue.path.join(' → ') : 'unknown'}`
+            break
+          case ValidationIssueType.UnresolvedDependency:
+            issueType = chalk.yellow('Unresolved')
+            issueDetails = `Missing: ${issue.dependencyName}@${issue.versionReq}`
+            break
+          case ValidationIssueType.VersionConflict:
+            issueType = chalk.blue('Version')
+            issueDetails = `Package: ${issue.dependencyName}\nVersions: ${issue.conflictingVersions ? issue.conflictingVersions.join(', ') : 'unknown'}`
+            break
+          default:
+            issueType = chalk.gray('Unknown')
+            issueDetails = issue.message
+        }
+
+        issuesTable.push([issueType, issue.critical ? chalk.red('Yes') : chalk.green('No'), chalk.white(issueDetails)])
+      }
+
+      console.log(issuesTable.toString())
+    }
+  } catch (e) {
+    printError(`Error validating dependency graph: ${e.message}`)
+  }
+
+  printSubHeader('Resolving Dependency Conflicts', '🔧')
+
+  // Resolve dependency conflicts
+  printCode(`
+// Resolve version conflicts through dependency registry
+const resolutionResult = depRegistry.resolveVersionConflicts()
+
+// Display resolved versions
+console.log("Resolved dependency versions:")
+for (const [dep, version] of Object.entries(resolutionResult.resolvedVersions)) {
+  console.log(\`- \${dep}: \${version}\`)
+}
+
+// Apply resolution to all packages
+console.log("\\nApplying updates to packages:")
+for (const pkg of workspacePackages) {
+  const updates = pkg.updateDependenciesFromResolution(resolutionResult)
+  for (const [name, oldVersion, newVersion] of updates) {
+    console.log(\`- \${pkg.name}: \${name} \${oldVersion} → \${newVersion}\`)
+  }
+}
+
+// Apply resolution result to dependency registry
+depRegistry.applyResolutionResult(resolutionResult)
+
+// Re-validate the graph after resolution
+const updatedGraph = buildDependencyGraphFromPackages(workspacePackages)
+const updatedReport = updatedGraph.validatePackageDependencies()
+
+console.log(\`\\nAfter resolution:\\n- Critical issues: \${updatedReport.getCriticalIssues().length}\`)
+console.log(\`- Version conflicts: \${updatedReport.getWarnings().filter(i => i.issueType === ValidationIssueType.VersionConflict).length}\`)
+  `)
+
+  // Resolve version conflicts
+  const resolutionResult = depRegistry.resolveVersionConflicts()
+
+  // Display resolved versions
+  const resolvedVersionsTable = new Table({
+    head: [chalk.bold.white('Dependency'), chalk.bold.white('Resolved Version')],
+    colWidths: [30, 30],
+  })
+
+  for (const [dep, version] of Object.entries(resolutionResult.resolvedVersions)) {
+    resolvedVersionsTable.push([chalk.blue(dep), chalk.green(version)])
+  }
+
+  console.log(resolvedVersionsTable.toString())
+
+  // Apply resolution to all packages
+  const updatesTable = new Table({
+    head: [
+      chalk.bold.white('Package'),
+      chalk.bold.white('Dependency'),
+      chalk.bold.white('From'),
+      chalk.bold.white('To'),
+    ],
+    colWidths: [20, 20, 20, 20],
+  })
+
+  for (const pkg of workspacePackages) {
+    const updates = pkg.updateDependenciesFromResolution(resolutionResult)
+    for (const [name, oldVersion, newVersion] of updates) {
+      updatesTable.push([chalk.blue(pkg.name), chalk.yellow(name), chalk.red(oldVersion), chalk.green(newVersion)])
+    }
+  }
+
+  if (updatesTable.length > 0) {
+    console.log(updatesTable.toString())
+  } else {
+    printWarning('No dependency updates required')
+  }
+
+  // Apply resolution result to dependency registry
+  depRegistry.applyResolutionResult(resolutionResult)
+
+  // Re-validate the graph after resolution
+  const updatedGraph = buildDependencyGraphFromPackages(workspacePackages)
+  let updatedReport
+
+  try {
+    updatedReport = updatedGraph.validatePackageDependencies()
+
+    const afterResolutionTable = new Table({
+      head: [
+        chalk.bold.white('Issue Type'),
+        chalk.bold.white('Before'),
+        chalk.bold.white('After'),
+        chalk.bold.white('Status'),
+      ],
+      colWidths: [25, 15, 15, 35],
+    })
+
+    const versionConflictsBefore = validationReport
+      .getWarnings()
+      .filter((i) => i.issueType === ValidationIssueType.VersionConflict).length
+    const versionConflictsAfter = updatedReport
+      .getWarnings()
+      .filter((i) => i.issueType === ValidationIssueType.VersionConflict).length
+
+    const circularBefore = validationReport
+      .getCriticalIssues()
+      .filter((i) => i.issueType === ValidationIssueType.CircularDependency).length
+    const circularAfter = updatedReport
+      .getCriticalIssues()
+      .filter((i) => i.issueType === ValidationIssueType.CircularDependency).length
+
+    const unresolvedBefore = validationReport
+      .getCriticalIssues()
+      .filter((i) => i.issueType === ValidationIssueType.UnresolvedDependency).length
+    const unresolvedAfter = updatedReport
+      .getCriticalIssues()
+      .filter((i) => i.issueType === ValidationIssueType.UnresolvedDependency).length
+
+    afterResolutionTable.push(
+      [
+        chalk.yellow('Version Conflicts'),
+        versionConflictsBefore,
+        versionConflictsAfter,
+        versionConflictsBefore > versionConflictsAfter
+          ? chalk.green('✓ Improved')
+          : versionConflictsBefore === versionConflictsAfter
+            ? chalk.yellow('⚠️ No Change')
+            : chalk.red('❌ Worse'),
+      ],
+      [
+        chalk.red('Circular Dependencies'),
+        circularBefore,
+        circularAfter,
+        circularBefore > circularAfter
+          ? chalk.green('✓ Improved')
+          : circularBefore === circularAfter
+            ? chalk.yellow('⚠️ No Change')
+            : chalk.red('❌ Worse'),
+      ],
+      [
+        chalk.blue('Unresolved Dependencies'),
+        unresolvedBefore,
+        unresolvedAfter,
+        unresolvedBefore > unresolvedAfter
+          ? chalk.green('✓ Improved')
+          : unresolvedBefore === unresolvedAfter
+            ? chalk.yellow('⚠️ No Change')
+            : chalk.red('❌ Worse'),
+      ],
+    )
+
+    console.log(afterResolutionTable.toString())
+  } catch (e) {
+    printError(`Error validating updated dependency graph: ${e.message}`)
+  }
+
+  printSubHeader('Action Plan Based on Analysis', '📝')
+
+  // Generate action plan based on validation results
+  const actionPlanTable = new Table({
+    head: [chalk.bold.white('Issue'), chalk.bold.white('Action'), chalk.bold.white('Priority')],
+    colWidths: [25, 55, 12],
+  })
+
+  if (updatedReport) {
+    // Check for remaining circular dependencies
+    const circularIssues = updatedReport
+      .getCriticalIssues()
+      .filter((i) => i.issueType === ValidationIssueType.CircularDependency)
+    if (circularIssues.length > 0) {
+      for (const issue of circularIssues) {
+        actionPlanTable.push([
+          chalk.red('Circular Dependency'),
+          `Refactor ${issue.path ? issue.path.join(' and ') : 'affected packages'} to break the cycle`,
+          chalk.red('HIGH'),
+        ])
+      }
+    }
+
+    // Check for remaining unresolved dependencies
+    const unresolvedIssues = updatedReport
+      .getCriticalIssues()
+      .filter((i) => i.issueType === ValidationIssueType.UnresolvedDependency)
+    if (unresolvedIssues.length > 0) {
+      for (const issue of unresolvedIssues) {
+        actionPlanTable.push([
+          chalk.yellow('Unresolved Dependency'),
+          `Add ${issue.dependencyName}@${issue.versionReq} to workspace or update reference`,
+          chalk.red('HIGH'),
+        ])
+      }
+    }
+
+    // Check for remaining version conflicts
+    const versionIssues = updatedReport.getWarnings().filter((i) => i.issueType === ValidationIssueType.VersionConflict)
+    if (versionIssues.length > 0) {
+      for (const issue of versionIssues) {
+        actionPlanTable.push([
+          chalk.blue('Version Conflict'),
+          `Standardize ${issue.dependencyName} to single version across packages`,
+          chalk.yellow('MEDIUM'),
+        ])
+      }
+    }
+  }
+
+  // Add generic recommendations if no specific issues
+  if (actionPlanTable.length === 0) {
+    actionPlanTable.push(
+      [chalk.green('No Critical Issues'), 'Proceed with development', chalk.green('LOW')],
+      [chalk.blue('Maintenance'), 'Keep dependencies up to date with regular audits', chalk.yellow('MEDIUM')],
+    )
+  }
+
+  console.log(actionPlanTable.toString())
+
+  printSubHeader('Simulating Package Upgrade', '🚀')
+
+  // Simulate updating a package version
+  printCode(`
+// Simulate upgrading shared-ui to v3.0.0
+// First, update the registry with new version
+localRegistry.addPackage('shared-ui', ['3.0.0'])
+localRegistry.setDependencies('shared-ui', '3.0.0', {
+  'react': '^18.0.0',  // Note: Now requires React 18
+  'lodash': '^4.17.21'
+})
+
+// Create packages with old and new versions for diff
+const sharedUiOld = new Package('shared-ui', '2.0.0')
+sharedUiOld.addDependency(new Dependency('react', '^17.0.2'))
+sharedUiOld.addDependency(new Dependency('lodash', '^4.17.21'))
+
+const sharedUiNew = new Package('shared-ui', '3.0.0')
+sharedUiNew.addDependency(new Dependency('react', '^18.0.0'))
+sharedUiNew.addDependency(new Dependency('lodash', '^4.17.21'))
+
+// Generate diff between versions
+const packageDiff = PackageDiff.between(sharedUiOld, sharedUiNew)
+
+// Analyze impact of the upgrade
+console.log(\`Upgrading shared-ui from \${packageDiff.previousVersion} to \${packageDiff.currentVersion}\`)
+console.log(\`Is breaking change? \${packageDiff.breakingChange ? 'Yes' : 'No'}\`)
+
+const changes = packageDiff.dependencyChanges
+console.log(\`Found \${changes.length} dependency changes\`)
+for (const change of changes) {
+  console.log(\`- \${change.name}: \${change.previousVersion || 'none'} → \${change.currentVersion || 'none'} (\${changeTypeToString(change.changeType)})\`)
+}
+
+// Analyze impact on consuming packages
+console.log("\\nImpact on consuming packages:")
+let affectedPackages = 0
+for (const pkg of workspacePackages) {
+  const uiDep = pkg.getDependency('shared-ui')
+  if (uiDep) {
+    console.log(\`- \${pkg.name} requires shared-ui@\${uiDep.version}\`)
+    affectedPackages++
+  }
+}
+console.log(\`Total affected packages: \${affectedPackages}\`)
+  `)
+
+  // Simulate upgrading shared-ui to v3.0.0
+  // First, update the registry with new version
+  localRegistry.addPackage('shared-ui', ['3.0.0'])
+  localRegistry.setDependencies('shared-ui', '3.0.0', {
+    react: '^18.0.0', // Note: Now requires React 18
+    lodash: '^4.17.21',
+  })
+
+  // Create packages with old and new versions for diff
+  const sharedUiOld = new Package('shared-ui', '2.0.0')
+  sharedUiOld.addDependency(new Dependency('react', '^17.0.2'))
+  sharedUiOld.addDependency(new Dependency('lodash', '^4.17.21'))
+
+  const sharedUiNew = new Package('shared-ui', '3.0.0')
+  sharedUiNew.addDependency(new Dependency('react', '^18.0.0'))
+  sharedUiNew.addDependency(new Dependency('lodash', '^4.17.21'))
+
+  // Generate diff between versions
+  let packageDiff
+  try {
+    packageDiff = PackageDiff.between(sharedUiOld, sharedUiNew)
+
+    // Display diff info
+    const diffTable = new Table({
+      head: [chalk.bold.white('Property'), chalk.bold.white('Value')],
+      colWidths: [30, 60],
+    })
+
+    diffTable.push(
+      [chalk.blue('Package'), chalk.green(packageDiff.packageName)],
+      [chalk.blue('Previous Version'), chalk.yellow(packageDiff.previousVersion)],
+      [chalk.blue('New Version'), chalk.yellow(packageDiff.currentVersion)],
+      [chalk.blue('Breaking Change'), packageDiff.breakingChange ? chalk.red('Yes') : chalk.green('No')],
+      [chalk.blue('Total Changes'), packageDiff.dependencyChanges.length.toString()],
+    )
+
+    console.log(diffTable.toString())
+
+    // If there are changes, show details
+    if (packageDiff.dependencyChanges.length > 0) {
+      const changesTable = new Table({
+        head: [
+          chalk.bold.white('Dependency'),
+          chalk.bold.white('Change Type'),
+          chalk.bold.white('From'),
+          chalk.bold.white('To'),
+          chalk.bold.white('Breaking'),
+        ],
+        colWidths: [15, 15, 15, 15, 10],
+      })
+
+      for (const change of packageDiff.dependencyChanges) {
+        let changeTypeStr = changeTypeToString(change.changeType)
+        let changeTypeColored
+
+        if (changeTypeStr === 'Added') {
+          changeTypeColored = chalk.green(changeTypeStr)
+        } else if (changeTypeStr === 'Removed') {
+          changeTypeColored = chalk.red(changeTypeStr)
+        } else if (changeTypeStr === 'Updated') {
+          changeTypeColored = chalk.yellow(changeTypeStr)
+        } else {
+          changeTypeColored = chalk.blue(changeTypeStr)
+        }
+
+        changesTable.push([
+          chalk.blue(change.name),
+          changeTypeColored,
+          change.previousVersion ? chalk.yellow(change.previousVersion) : chalk.gray('none'),
+          change.currentVersion ? chalk.green(change.currentVersion) : chalk.gray('none'),
+          change.breaking ? chalk.red('Yes') : chalk.green('No'),
+        ])
+      }
+
+      console.log(changesTable.toString())
+    }
+
+    // Analyze impact on consuming packages
+    const affectedTable = new Table({
+      head: [
+        chalk.bold.white('Affected Package'),
+        chalk.bold.white('Current Requirement'),
+        chalk.bold.white('Compatible?'),
+      ],
+      colWidths: [20, 25, 15],
+    })
+
+    let affectedCount = 0
+
+    for (const pkg of workspacePackages) {
+      const uiDep = pkg.getDependency('shared-ui')
+      if (uiDep) {
+        affectedCount++
+
+        // Determine if the current requirement is compatible with the new version
+        const requirement = uiDep.version
+        const isCompatible =
+          requirement.startsWith('^') && !requirement.startsWith('^1.') && !packageDiff.breakingChange
+
+        affectedTable.push([
+          chalk.blue(pkg.name),
+          chalk.yellow(requirement),
+          isCompatible ? chalk.green('Yes') : chalk.red('No'),
+        ])
+      }
+    }
+
+    if (affectedCount > 0) {
+      console.log(affectedTable.toString())
+      printProperty('Total Affected Packages', affectedCount)
+    } else {
+      printWarning('No packages in the workspace depend on shared-ui')
+    }
+  } catch (e) {
+    printError(`Error generating package diff: ${e.message}`)
+  }
+
+  printSubHeader('Final Recommendations', '📋')
+
+  // Generate final recommendations
+  const recommendationsTable = new Table({
+    head: [chalk.bold.white('Category'), chalk.bold.white('Recommendation')],
+    colWidths: [20, 70],
+  })
+
+  // Add custom recommendations based on our analysis
+  recommendationsTable.push(
+    [
+      chalk.red('Critical Issues'),
+      '1. Fix circular dependency between analytics and reports packages\n' +
+        '2. Consider extracting shared functionality to break the cycle',
+    ],
+    [
+      chalk.yellow('Version Conflicts'),
+      '1. Standardize shared-ui version across all packages\n' + '2. Upgrade config package to v1.0.0 in main-app',
+    ],
+    [
+      chalk.blue('Upgrade Strategy'),
+      '1. Upgrade React to v18 before updating to shared-ui v3.0.0\n' +
+        '2. Plan for breaking changes when upgrading shared-ui',
+    ],
+    [
+      chalk.green('Graph Management'),
+      '1. Run dependency validation regularly as part of CI\n' +
+        '2. Generate graph visualizations for team documentation\n' +
+        '3. Use Version, DependencyGraph and ValidationReport APIs to automate dependency management',
+    ],
+  )
+
+  console.log(recommendationsTable.toString())
+
+  return {
+    registryManager,
+    localRegistry,
+    dependencyGraph,
+    workspacePackages,
+    validationReport,
+  }
+}
+
+// Run the integrated demo
+demoIntegratedMonorepo()
+
+// Final completion message with a summary of integrated functionality
+console.log(
+  '\n' +
+    boxen(
+      chalk.bold.white('Integrated Monorepo Management Summary:') +
+        '\n\n' +
+        chalk.blue('• Registry Management:') +
+        ' Used PackageRegistry and RegistryManager to manage package sources\n' +
+        chalk.blue('• Dependency Tracking:') +
+        ' Used Dependency and Package classes to model workspace structure\n' +
+        chalk.blue('• Graph Analysis:') +
+        ' Used DependencyGraph to analyze relationships between packages\n' +
+        chalk.blue('• Validation:') +
+        ' Used ValidationReport to identify and report dependency issues\n' +
+        chalk.blue('• Conflict Resolution:') +
+        ' Resolved version conflicts using DependencyRegistry\n' +
+        chalk.blue('• Impact Analysis:') +
+        ' Analyzed upgrade impacts using PackageDiff\n' +
+        chalk.blue('• Visualization:') +
+        ' Generated ASCII and DOT graph visualizations\n\n' +
+        chalk.bold.green('All major package management APIs successfully demonstrated in an integrated workflow!'),
+      {
+        padding: 1,
+        margin: 1,
+        borderStyle: 'double',
+        borderColor: 'magenta',
+        align: 'left',
+        title: '🎉 Integrated Monorepo Management Complete 🎉',
+        titleAlignment: 'center',
+      },
+    ),
+)
 // Final completion message
 console.log(
   '\n' +

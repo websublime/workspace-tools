@@ -50,6 +50,55 @@ export declare class Dependency {
   updateVersion(version: string): void
 }
 
+/** JavaScript binding for ws_pkg::graph::DependencyGraph */
+export declare class DependencyGraph {
+  /**
+   * Check if all dependencies in the graph can be resolved internally
+   *
+   * @returns {boolean} True if all dependencies can be resolved within the workspace
+   */
+  isInternallyResolvable(): boolean
+  /**
+   * Find missing (unresolved) dependencies in the workspace
+   *
+   * @returns {string[]} Array of missing dependency names
+   */
+  findMissingDependencies(): Array<string>
+  /**
+   * Find version conflicts in the dependency graph
+   *
+   * @returns {Object | null} Map of dependency names to arrays of conflicting versions,
+   *                         or null if no conflicts found
+   */
+  findVersionConflicts(): NapiResult<object | undefined | null>
+  /**
+   * Detect circular dependencies in the graph
+   *
+   * @returns {string[] | null} Path of the cycle if found, null otherwise
+   */
+  detectCircularDependencies(): Array<string> | null
+  /**
+   * Get a node by its identifier
+   *
+   * @param {string} id - The node identifier
+   * @returns {Package | null} The package if found, null otherwise
+   */
+  getNode(id: string): Package | null
+  /**
+   * Get dependents of a package
+   *
+   * @param {string} id - The package identifier
+   * @returns {string[]} Array of package names that depend on this package
+   */
+  getDependents(id: string): NapiResult<Array<string>>
+  /**
+   * Validate dependencies in the graph
+   *
+   * @returns {ValidationReport} A report of validation issues
+   */
+  validatePackageDependencies(): NapiResult<ValidationReport>
+}
+
 /**
  * DependencyRegistry class
  * A registry to manage shared dependency instances
@@ -110,6 +159,21 @@ export declare class DependencyRegistry {
    * @returns {string | null} The highest compatible version, if any
    */
   findHighestCompatibleVersion(name: string, requirements: Array<string>): string | null
+}
+
+/**
+ * Represents a node in a dependency graph
+ *
+ * This is a marker interface in JavaScript - the actual Node trait
+ * is implemented by Package in Rust.
+ */
+export declare class Node {
+  /**
+   * Create a new Node instance
+   *
+   * @returns {Node} a new Node instance
+   */
+  constructor()
 }
 
 /** JavaScript binding for ws_pkg::Package */
@@ -541,6 +605,46 @@ export declare class RegistryManager {
   addRegistryInstance(url: string, registry: PackageRegistry): void
 }
 
+/** JavaScript binding for validation report */
+export declare class ValidationReport {
+  /**
+   * Check if there are any issues in the report
+   *
+   * @returns {boolean} True if there are any issues
+   */
+  get hasIssues(): boolean
+  /**
+   * Check if there are any critical issues
+   *
+   * @returns {boolean} True if there are critical issues
+   */
+  get hasCriticalIssues(): boolean
+  /**
+   * Check if there are any warnings (non-critical issues)
+   *
+   * @returns {boolean} True if there are warnings
+   */
+  get hasWarnings(): boolean
+  /**
+   * Get all issues in the report
+   *
+   * @returns {ValidationIssueInfo[]} Array of validation issues
+   */
+  getIssues(): Array<ValidationIssueInfo>
+  /**
+   * Get critical issues only
+   *
+   * @returns {ValidationIssueInfo[]} Array of critical validation issues
+   */
+  getCriticalIssues(): Array<ValidationIssueInfo>
+  /**
+   * Get warnings only (non-critical issues)
+   *
+   * @returns {ValidationIssueInfo[]} Array of warning validation issues
+   */
+  getWarnings(): Array<ValidationIssueInfo>
+}
+
 /** JavaScript binding for version utilities */
 export declare class VersionUtils {
   /** Bump a version to the next major version */
@@ -556,6 +660,22 @@ export declare class VersionUtils {
   /** Check if moving from v1 to v2 is a breaking change */
   static isBreakingChange(v1: string, v2: string): boolean
 }
+
+/**
+ * Build a dependency graph from package infos
+ *
+ * @param {PackageInfo[]} packageInfos - Array of package infos
+ * @returns {DependencyGraph} The constructed dependency graph
+ */
+export declare function buildDependencyGraphFromPackageInfos(packageInfos: Array<PackageInfo>): DependencyGraph
+
+/**
+ * Build a dependency graph from packages
+ *
+ * @param {Package[]} packages - Array of packages to include in the graph
+ * @returns {DependencyGraph} The constructed dependency graph
+ */
+export declare function buildDependencyGraphFromPackages(packages: Array<Package>): DependencyGraph
 
 /** JavaScript binding for ws_pkg::types::diff::ChangeType enum */
 export declare enum ChangeType {
@@ -586,6 +706,16 @@ export interface DependencyChange {
   breaking: boolean
 }
 
+/** JavaScript binding for ws_pkg::graph::DependencyFilter */
+export declare enum DependencyFilter {
+  /** Include only production dependencies */
+  ProductionOnly = 0,
+  /** Include production and development dependencies */
+  WithDevelopment = 1,
+  /** Include production, development, and optional dependencies */
+  AllDependencies = 2
+}
+
 /** JavaScript binding for dependency update information */
 export interface DependencyUpdateInfo {
   /** Package containing the dependency */
@@ -597,6 +727,33 @@ export interface DependencyUpdateInfo {
   /** New version to update to */
   newVersion: string
 }
+
+/** JavaScript binding for ws_pkg::graph::visualization::DotOptions */
+export interface DotOptions {
+  /** Title of the graph */
+  title: string
+  /** Whether to include external (unresolved) dependencies */
+  showExternal: boolean
+  /** Whether to highlight circular dependencies */
+  highlightCycles: boolean
+}
+
+/**
+ * Generate an ASCII representation of the dependency graph
+ *
+ * @param {DependencyGraph} graph - The dependency graph to visualize
+ * @returns {string} ASCII representation of the graph
+ */
+export declare function generateAscii(graph: DependencyGraph): NapiResult<string>
+
+/**
+ * Generate DOT format representation of a dependency graph
+ *
+ * @param {DependencyGraph} graph - The dependency graph to visualize
+ * @param {DotOptions} options - Options for generating the DOT output
+ * @returns {string} DOT format graph representation
+ */
+export declare function generateDot(graph: DependencyGraph, options: DotOptions): NapiResult<string>
 
 export declare function getVersion(): string
 
@@ -650,6 +807,43 @@ export interface ResolutionResult {
   resolvedVersions: object
   /** Dependencies that need updates */
   updatesRequired: Array<DependencyUpdateInfo>
+}
+
+/**
+ * Save DOT output to a file
+ *
+ * @param {string} dotContent - The DOT content to save
+ * @param {string} filePath - Path to save the file
+ * @returns {void}
+ */
+export declare function saveDotToFile(dotContent: string, filePath: string): NapiResult<undefined>
+
+/** JavaScript binding for validation issue */
+export interface ValidationIssueInfo {
+  /** Type of the issue */
+  issueType: ValidationIssueType
+  /** Human-readable message describing the issue */
+  message: string
+  /** Whether this is a critical issue */
+  critical: boolean
+  /** Additional data for circular dependency */
+  path?: Array<string>
+  /** Additional data for unresolved dependency */
+  dependencyName?: string
+  /** Additional data for unresolved dependency */
+  versionReq?: string
+  /** Additional data for version conflict */
+  conflictingVersions?: Array<string>
+}
+
+/** JavaScript binding for types of validation issues */
+export declare enum ValidationIssueType {
+  /** Circular dependency detected */
+  CircularDependency = 0,
+  /** Unresolved dependency */
+  UnresolvedDependency = 1,
+  /** Version conflict */
+  VersionConflict = 2
 }
 
 /** JavaScript binding for ws_pkg::types::version::Version enum */
