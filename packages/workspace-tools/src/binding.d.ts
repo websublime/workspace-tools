@@ -202,9 +202,93 @@ export declare class Package {
    *
    * @param {Package[]} packages - Array of packages to analyze
    * @param {DependencyRegistry} registry - The dependency registry to use
-   * @returns {Object} Object with dependency information
+   * @returns {DependencyInfo} Object with dependency information
    */
   static generateDependencyInfo(packages: Array<Package>): DependencyInfo
+}
+
+/**
+ * JavaScript binding for ws_pkg::PackageInfo
+ * Represents a package with its metadata
+ *
+ * @class PackageInfo - The PackageInfo class.
+ * @example
+ *
+ * ```typescript
+ * const pkgInfo = new PackageInfo(package, "/path/to/package.json", "/path/to/package", "./relative/path", packageJson);
+ * console.log(pkgInfo.packageJsonPath); // /path/to/package.json
+ * ```
+ */
+export declare class PackageInfo {
+  /**
+   * Create a new package info object
+   *
+   * @param {Package} package - The package object
+   * @param {string} packageJsonPath - Path to the package.json file
+   * @param {string} packagePath - Path to the package directory
+   * @param {string} packageRelativePath - Relative path to the package directory
+   * @param {Object} packageJson - The package.json content
+   * @returns {PackageInfo} The new package info
+   */
+  constructor(package: Package, packageJsonPath: string, packagePath: string, packageRelativePath: string, packageJson: object)
+  /**
+   * Get the package json path
+   *
+   * @returns {string} The path to package.json
+   */
+  get packageJsonPath(): string
+  /**
+   * Get the package path
+   *
+   * @returns {string} The path to the package
+   */
+  get packagePath(): string
+  /**
+   * Get the relative package path
+   *
+   * @returns {string} The relative path to the package
+   */
+  get packageRelativePath(): string
+  /**
+   * Get the package
+   *
+   * @returns {Package} The package
+   */
+  get package(): Package
+  /**
+   * Update the package version
+   *
+   * @param {string} newVersion - The new version to set
+   * @returns {void}
+   */
+  updateVersion(newVersion: string): void
+  /**
+   * Update a dependency version
+   *
+   * @param {string} depName - The name of the dependency to update
+   * @param {string} newVersion - The new version to set
+   * @returns {void}
+   */
+  updateDependencyVersion(depName: string, newVersion: string): void
+  /**
+   * Apply dependency resolution across all packages
+   *
+   * @param {ResolutionResult} resolution - The resolution result to apply
+   * @returns {void}
+   */
+  applyDependencyResolution(resolution: ResolutionResult): void
+  /**
+   * Write the package.json file to disk
+   *
+   * @returns {void}
+   */
+  writePackageJson(): void
+  /**
+   * Get the package.json content
+   *
+   * @returns {Object} The package.json content
+   */
+  get packageJson(): NapiResult<object>
 }
 
 /** JavaScript binding for version utilities */

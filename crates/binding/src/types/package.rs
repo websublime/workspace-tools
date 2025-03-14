@@ -5,9 +5,11 @@ use crate::registry::dependency::{DependencyRegistry, ResolutionResult};
 use crate::types::dependency::Dependency;
 use napi::{Env, JsString, Result as NapiResult};
 use napi_derive::napi;
+use std::cell::RefCell;
 use std::rc::Rc;
 use ws_pkg::registry::ResolutionResult as WsResolutionResult;
 use ws_pkg::types::package::package_scope_name_version;
+use ws_pkg::types::package::PackageInfo as WsPackageInfo;
 use ws_pkg::Package as WsPkgPackage;
 
 /// JavaScript binding for ws_pkg::Package
@@ -305,6 +307,188 @@ impl Package {
         result.set_named_property("totalDependencies", total_deps_count)?;
 
         Ok(result)
+    }
+}
+
+/// JavaScript binding for ws_pkg::PackageInfo
+/// Represents a package with its metadata
+///
+/// @class PackageInfo - The PackageInfo class.
+/// @example
+///
+/// ```typescript
+/// const pkgInfo = new PackageInfo(package, "/path/to/package.json", "/path/to/package", "./relative/path", packageJson);
+/// console.log(pkgInfo.packageJsonPath); // /path/to/package.json
+/// ```
+#[napi]
+pub struct PackageInfo {
+    pub(crate) inner: Rc<RefCell<WsPackageInfo>>,
+}
+
+#[napi]
+impl PackageInfo {
+    /// Create a new package info object
+    ///
+    /// @param {Package} package - The package object
+    /// @param {string} packageJsonPath - Path to the package.json file
+    /// @param {string} packagePath - Path to the package directory
+    /// @param {string} packageRelativePath - Relative path to the package directory
+    /// @param {Object} packageJson - The package.json content
+    /// @returns {PackageInfo} The new package info
+    #[napi(constructor)]
+    pub fn new(
+        package: &Package,
+        package_json_path: String,
+        package_path: String,
+        package_relative_path: String,
+        package_json: napi::bindgen_prelude::Object,
+        env: Env,
+    ) -> Self {
+        // Handle conversion safely, panic on error since constructors can't return Result
+        let js_unknown = package_json.into_unknown();
+
+        // Convert to serde_json::Value, using our error handling
+        let pkg_json_value: serde_json::Value = match env.from_js_value(js_unknown) {
+            Ok(val) => val,
+            Err(e) => {
+                let pkg_error = ws_pkg::PkgError::Other {
+                    message: format!("Failed to convert package_json to serde_json::Value: {}", e),
+                };
+                let js_error = crate::pkg_error_to_napi_error(pkg_error);
+                panic!("{}", js_error.reason);
+            }
+        };
+
+        // Create a new WsPackageInfo
+        let ws_package_info = WsPackageInfo::new(
+            package.inner.clone(),
+            package_json_path,
+            package_path,
+            package_relative_path,
+            pkg_json_value,
+        );
+
+        Self { inner: Rc::new(RefCell::new(ws_package_info)) }
+    }
+
+    /// Get the package json path
+    ///
+    /// @returns {string} The path to package.json
+    #[napi(getter)]
+    pub fn package_json_path(&self) -> String {
+        self.inner.borrow().package_json_path.clone()
+    }
+
+    /// Get the package path
+    ///
+    /// @returns {string} The path to the package
+    #[napi(getter)]
+    pub fn package_path(&self) -> String {
+        self.inner.borrow().package_path.clone()
+    }
+
+    /// Get the relative package path
+    ///
+    /// @returns {string} The relative path to the package
+    #[napi(getter)]
+    pub fn package_relative_path(&self) -> String {
+        self.inner.borrow().package_relative_path.clone()
+    }
+
+    /// Get the package
+    ///
+    /// @returns {Package} The package
+    #[napi(getter)]
+    pub fn package(&self) -> Package {
+        Package { inner: self.inner.borrow().package.borrow().clone() }
+    }
+
+    /// Update the package version
+    ///
+    /// @param {string} newVersion - The new version to set
+    /// @returns {void}
+    #[napi(ts_return_type = "void")]
+    pub fn update_version(&self, new_version: String) -> NapiResult<()> {
+        handle_pkg_result(self.inner.borrow().update_version(&new_version))
+    }
+
+    /// Update a dependency version
+    ///
+    /// @param {string} depName - The name of the dependency to update
+    /// @param {string} newVersion - The new version to set
+    /// @returns {void}
+    #[napi(ts_return_type = "void")]
+    pub fn update_dependency_version(
+        &self,
+        dep_name: String,
+        new_version: String,
+    ) -> NapiResult<()> {
+        handle_pkg_result(self.inner.borrow().update_dependency_version(&dep_name, &new_version))
+    }
+
+    /// Apply dependency resolution across all packages
+    ///
+    /// @param {ResolutionResult} resolution - The resolution result to apply
+    /// @returns {void}
+    #[napi(js_name = "applyDependencyResolution", ts_return_type = "void")]
+    pub fn apply_dependency_resolution(&self, resolution: ResolutionResult) -> NapiResult<()> {
+        // Extract resolved versions from JS Object into HashMap
+        let mut resolved_versions = std::collections::HashMap::new();
+        let prop_names = resolution.resolved_versions.get_property_names()?;
+        let length = prop_names.get_array_length()?;
+
+        for i in 0..length {
+            // Get the property name as a JavaScript string first
+            let js_key = prop_names.get_element::<JsString>(i)?;
+            // Convert JavaScript string to Rust String
+            let key = js_key.into_utf8()?.into_owned()?;
+            // Get the value as a JavaScript string
+            let js_value =
+                resolution.resolved_versions.get_named_property::<JsString>(key.as_str())?;
+            // Convert JavaScript string to Rust String
+            let value = js_value.into_utf8()?.into_owned()?;
+            // Store in our HashMap
+            resolved_versions.insert(key, value);
+        }
+
+        // Convert updates to DependencyUpdate structs
+        let updates_required = resolution
+            .updates_required
+            .into_iter()
+            .map(|update| ws_pkg::registry::DependencyUpdate {
+                package_name: update.package_name,
+                dependency_name: update.dependency_name,
+                current_version: update.current_version,
+                new_version: update.new_version,
+            })
+            .collect();
+
+        let ws_result = WsResolutionResult { resolved_versions, updates_required };
+
+        handle_pkg_result(self.inner.borrow().apply_dependency_resolution(&ws_result))
+    }
+
+    /// Write the package.json file to disk
+    ///
+    /// @returns {void}
+    #[napi(js_name = "writePackageJson", ts_return_type = "void")]
+    pub fn write_package_json(&self) -> NapiResult<()> {
+        handle_pkg_result(self.inner.borrow().write_package_json())
+    }
+
+    /// Get the package.json content
+    ///
+    /// @returns {Object} The package.json content
+    #[napi(getter)]
+    pub fn package_json(&self, env: Env) -> NapiResult<napi::bindgen_prelude::Object> {
+        // Get the package.json content as a serde_json::Value
+        let pkg_json = self.inner.borrow().pkg_json.borrow().clone();
+
+        // Convert the serde_json::Value to a JavaScript object
+        let js_value = env.to_js_value(&pkg_json)?;
+
+        // Convert to a JavaScript object
+        js_value.coerce_to_object()
     }
 }
 
