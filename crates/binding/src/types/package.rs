@@ -329,7 +329,7 @@ pub struct PackageInfo {
 impl PackageInfo {
     /// Create a new package info object
     ///
-    /// @param {Package} package - The package object
+    /// @param {Package} pkg - The package object
     /// @param {string} packageJsonPath - Path to the package.json file
     /// @param {string} packagePath - Path to the package directory
     /// @param {string} packageRelativePath - Relative path to the package directory
@@ -337,7 +337,7 @@ impl PackageInfo {
     /// @returns {PackageInfo} The new package info
     #[napi(constructor)]
     pub fn new(
-        package: &Package,
+        pkg: &Package,
         package_json_path: String,
         package_path: String,
         package_relative_path: String,
@@ -361,7 +361,7 @@ impl PackageInfo {
 
         // Create a new WsPackageInfo
         let ws_package_info = WsPackageInfo::new(
-            package.inner.clone(),
+            pkg.inner.clone(),
             package_json_path,
             package_path,
             package_relative_path,
@@ -479,7 +479,7 @@ impl PackageInfo {
     /// Get the package.json content
     ///
     /// @returns {Object} The package.json content
-    #[napi(getter)]
+    #[napi(getter, ts_return_type = "Result<string, unknown>")]
     pub fn package_json(&self, env: Env) -> NapiResult<napi::bindgen_prelude::Object> {
         // Get the package.json content as a serde_json::Value
         let pkg_json = self.inner.borrow().pkg_json.borrow().clone();

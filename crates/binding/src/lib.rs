@@ -31,5 +31,6 @@ pub use registry::dependency::{
     DependencyRegistry, DependencyUpdateInfo, ResolutionErrorType, ResolutionResult,
 };
 pub use types::dependency::Dependency;
+pub use types::diff::{ChangeType, DependencyChange, PackageDiff};
 pub use types::package::{Package, PackageInfo};
 pub use types::version::{Version, VersionComparisonResult, VersionUtils};

@@ -208,6 +208,69 @@ export declare class Package {
 }
 
 /**
+ * JavaScript binding for ws_pkg::types::diff::PackageDiff
+ * The complete diff between two package versions
+ */
+export declare class PackageDiff {
+  /**
+   * Create a new package diff between two packages
+   *
+   * @param {Package} previous - The previous package version
+   * @param {Package} current - The current package version
+   * @returns {PackageDiff} A diff of the changes between packages
+   */
+  static between(previous: Package, current: Package): PackageDiff
+  /**
+   * Get the package name
+   *
+   * @returns {string} The package name
+   */
+  get packageName(): string
+  /**
+   * Get the previous version
+   *
+   * @returns {string} The previous version
+   */
+  get previousVersion(): string
+  /**
+   * Get the current version
+   *
+   * @returns {string} The current version
+   */
+  get currentVersion(): string
+  /**
+   * Get dependency changes
+   *
+   * @returns {DependencyChange[]} The dependency changes
+   */
+  get dependencyChanges(): Array<DependencyChange>
+  /**
+   * Get whether this diff is a breaking change
+   *
+   * @returns {boolean} True if this is a breaking change (major version bump)
+   */
+  get breakingChange(): boolean
+  /**
+   * Count the number of breaking changes in dependencies
+   *
+   * @returns {number} The count of breaking changes
+   */
+  countBreakingChanges(): number
+  /**
+   * Count the changes by type
+   *
+   * @returns {Object} Map of change types to counts
+   */
+  countChangesByType(): Record<string, number>
+  /**
+   * Get a human-readable string representation of the diff
+   *
+   * @returns {string} A formatted string representation of the diff
+   */
+  toString(): string
+}
+
+/**
  * JavaScript binding for ws_pkg::PackageInfo
  * Represents a package with its metadata
  *
@@ -223,14 +286,14 @@ export declare class PackageInfo {
   /**
    * Create a new package info object
    *
-   * @param {Package} package - The package object
+   * @param {Package} pkg - The package object
    * @param {string} packageJsonPath - Path to the package.json file
    * @param {string} packagePath - Path to the package directory
    * @param {string} packageRelativePath - Relative path to the package directory
    * @param {Object} packageJson - The package.json content
    * @returns {PackageInfo} The new package info
    */
-  constructor(package: Package, packageJsonPath: string, packagePath: string, packageRelativePath: string, packageJson: object)
+  constructor(pkg: Package, packageJsonPath: string, packagePath: string, packageRelativePath: string, packageJson: object)
   /**
    * Get the package json path
    *
@@ -288,7 +351,7 @@ export declare class PackageInfo {
    *
    * @returns {Object} The package.json content
    */
-  get packageJson(): NapiResult<object>
+  get packageJson(): Result<string, unknown>
 }
 
 /** JavaScript binding for version utilities */
@@ -305,6 +368,35 @@ export declare class VersionUtils {
   static compareVersions(v1: string, v2: string): VersionComparisonResult
   /** Check if moving from v1 to v2 is a breaking change */
   static isBreakingChange(v1: string, v2: string): boolean
+}
+
+/** JavaScript binding for ws_pkg::types::diff::ChangeType enum */
+export declare enum ChangeType {
+  /** Package was added */
+  Added = 0,
+  /** Package was removed */
+  Removed = 1,
+  /** Package version was updated */
+  Updated = 2,
+  /** No change detected */
+  Unchanged = 3
+}
+
+/**
+ * JavaScript binding for ws_pkg::types::diff::DependencyChange
+ * Represents a change in a dependency
+ */
+export interface DependencyChange {
+  /** Name of the dependency */
+  name: string
+  /** Previous version (null if newly added) */
+  previousVersion?: string
+  /** Current version (null if removed) */
+  currentVersion?: string
+  /** Type of change */
+  changeType: ChangeType
+  /** Whether this is a breaking change based on semver */
+  breaking: boolean
 }
 
 /** JavaScript binding for dependency update information */

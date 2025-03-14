@@ -367,8 +367,10 @@ if (!nativeBinding) {
 module.exports.Dependency = nativeBinding.Dependency
 module.exports.DependencyRegistry = nativeBinding.DependencyRegistry
 module.exports.Package = nativeBinding.Package
+module.exports.PackageDiff = nativeBinding.PackageDiff
 module.exports.PackageInfo = nativeBinding.PackageInfo
 module.exports.VersionUtils = nativeBinding.VersionUtils
+module.exports.ChangeType = nativeBinding.ChangeType
 module.exports.getVersion = nativeBinding.getVersion
 module.exports.parseScopedPackage = nativeBinding.parseScopedPackage
 module.exports.ResolutionErrorType = nativeBinding.ResolutionErrorType
