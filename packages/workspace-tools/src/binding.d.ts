@@ -354,6 +354,193 @@ export declare class PackageInfo {
   get packageJson(): Result<string, unknown>
 }
 
+/** JavaScript binding for package registry interface */
+export declare class PackageRegistry {
+  /**
+   * Create a new npm registry
+   *
+   * @param {string} baseUrl - The base URL for the npm registry
+   * @returns {PackageRegistry} A new npm registry
+   */
+  static createNpmRegistry(baseUrl: string): PackageRegistry
+  /**
+   * Create a new local registry (for testing)
+   *
+   * @returns {PackageRegistry} A new local registry
+   */
+  static createLocalRegistry(): PackageRegistry
+  /**
+   * Get the latest version of a package
+   *
+   * @param {string} packageName - The name of the package
+   * @returns {string | null} The latest version, or null if not found
+   */
+  getLatestVersion(packageName: string): NapiResult<string | undefined | null>
+  /**
+   * Get all available versions of a package
+   *
+   * @param {string} packageName - The name of the package
+   * @returns {string[]} Array of available versions
+   */
+  getAllVersions(packageName: string): NapiResult<Array<string>>
+  /**
+   * Get metadata about a package
+   *
+   * @param {string} packageName - The name of the package
+   * @param {string} version - The version to get info for
+   * @returns {Object} Package metadata
+   */
+  getPackageInfo(packageName: string, version: string): NapiResult<object>
+  /**
+   * Set authentication for the registry
+   *
+   * @param {RegistryAuthConfig} auth - The authentication configuration
+   * @returns {void}
+   */
+  setAuth(auth: RegistryAuthConfig): NapiResult<undefined>
+  /**
+   * Set the user agent string
+   *
+   * @param {string} userAgent - The user agent string
+   * @returns {void}
+   */
+  setUserAgent(userAgent: string): NapiResult<undefined>
+  /**
+   * Clear the registry cache
+   *
+   * @returns {void}
+   */
+  clearCache(): NapiResult<undefined>
+  /**
+   * Add a package to a local registry (only works with local registries)
+   *
+   * @param {string} name - The package name
+   * @param {string[]} versions - Array of versions to add
+   * @returns {void}
+   */
+  addPackage(name: string, versions: Array<string>): NapiResult<undefined>
+  /**
+   * Set dependencies for a specific package version in a local registry
+   *
+   * @param {string} name - The package name
+   * @param {string} version - The version
+   * @param {Object} dependencies - Map of dependency names to versions
+   * @returns {void}
+   */
+  setDependencies(name: string, version: string, dependencies: object): NapiResult<undefined>
+  /**
+   * Get all packages in a local registry
+   *
+   * @returns {string[]} Array of all package names
+   */
+  getAllPackages(): NapiResult<Array<string>>
+}
+
+/** JavaScript binding for registry manager */
+export declare class RegistryManager {
+  /**
+   * Create a new registry manager
+   *
+   * @returns {RegistryManager} A new registry manager
+   */
+  constructor()
+  /**
+   * Add a registry
+   *
+   * @param {string} url - The registry URL
+   * @param {RegistryType} registryType - The type of registry
+   * @param {string} [clientName] - The client name for custom registries
+   * @returns {void}
+   */
+  addRegistry(url: string, registryType: RegistryType, clientName?: string | undefined | null): void
+  /**
+   * Set authentication for a registry
+   *
+   * @param {string} registryUrl - The registry URL
+   * @param {RegistryAuthConfig} auth - The authentication configuration
+   * @returns {void}
+   */
+  setAuth(registryUrl: string, auth: RegistryAuthConfig): void
+  /**
+   * Associate a scope with a specific registry
+   *
+   * @param {string} scope - The package scope (with or without @ prefix)
+   * @param {string} registryUrl - The registry URL
+   * @returns {void}
+   */
+  associateScope(scope: string, registryUrl: string): void
+  /**
+   * Set the default registry
+   *
+   * @param {string} registryUrl - The registry URL
+   * @returns {void}
+   */
+  setDefaultRegistry(registryUrl: string): void
+  /**
+   * Get the latest version of a package
+   *
+   * @param {string} packageName - The name of the package
+   * @returns {string | null} The latest version, or null if not found
+   */
+  getLatestVersion(packageName: string): NapiResult<string | undefined | null>
+  /**
+   * Get all available versions of a package
+   *
+   * @param {string} packageName - The name of the package
+   * @returns {string[]} Array of available versions
+   */
+  getAllVersions(packageName: string): NapiResult<Array<string>>
+  /**
+   * Get metadata about a package
+   *
+   * @param {string} packageName - The name of the package
+   * @param {string} version - The version to get info for
+   * @returns {Object} Package metadata
+   */
+  getPackageInfo(packageName: string, version: string): NapiResult<object>
+  /**
+   * Load configuration from .npmrc file
+   *
+   * @param {string} [npmrcPath] - Optional path to .npmrc file
+   * @returns {void}
+   */
+  loadFromNpmrc(npmrcPath?: string | undefined | null): void
+  /**
+   * Get the default registry URL
+   *
+   * @returns {string} The default registry URL
+   */
+  get defaultRegistry(): string
+  /**
+   * Check if a scope is associated with a registry
+   *
+   * @param {string} scope - The package scope
+   * @returns {boolean} True if the scope is associated with a registry
+   */
+  hasScope(scope: string): boolean
+  /**
+   * Get the registry URL associated with a scope
+   *
+   * @param {string} scope - The package scope
+   * @returns {string | null} The registry URL, or null if not found
+   */
+  getRegistryForScope(scope: string): string | null
+  /**
+   * Get all registry URLs
+   *
+   * @returns {string[]} Array of all registry URLs
+   */
+  registryUrls(): Array<string>
+  /**
+   * Add a registry instance directly
+   *
+   * @param {string} url - The registry URL
+   * @param {PackageRegistry} registry - The registry instance
+   * @returns {void}
+   */
+  addRegistryInstance(url: string, registry: PackageRegistry): void
+}
+
 /** JavaScript binding for version utilities */
 export declare class VersionUtils {
   /** Bump a version to the next major version */
@@ -426,6 +613,26 @@ export declare function getVersion(): string
  * @returns {Object | null} An object with parsed components or null if not a valid scoped package
  */
 export declare function parseScopedPackage(pkgName: string): ScopedPackageInfo | null
+
+/** JavaScript binding for registry authentication */
+export interface RegistryAuthConfig {
+  /** Auth token */
+  token: string
+  /** Token type (bearer, basic, etc) */
+  tokenType: string
+  /** Whether to always use this auth */
+  always: boolean
+}
+
+/** JavaScript binding for registry types */
+export declare enum RegistryType {
+  /** npm registry */
+  Npm = 0,
+  /** GitHub packages registry */
+  GitHub = 1,
+  /** Custom registry */
+  Custom = 2
+}
 
 /** JavaScript binding for DependencyResolutionError */
 export declare enum ResolutionErrorType {

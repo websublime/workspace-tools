@@ -3,10 +3,12 @@
 pub mod dependency;
 // We'll implement these later as needed
 // pub mod local;
-// pub mod manager;
-// pub mod package;
+pub mod manager;
+pub mod package;
 
 // Re-export main types for convenience
 pub use dependency::{
     DependencyRegistry, DependencyUpdateInfo, ResolutionErrorType, ResolutionResult,
 };
+pub use manager::RegistryManager;
+pub use package::{PackageRegistry, RegistryAuthConfig, RegistryType};

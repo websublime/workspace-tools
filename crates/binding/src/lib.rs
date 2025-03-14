@@ -27,8 +27,9 @@ pub fn get_version() -> String {
 pub use errors::{handle_pkg_result, pkg_error_to_napi_error, ErrorCode};
 
 // Re-export all the types for convenience
-pub use registry::dependency::{
-    DependencyRegistry, DependencyUpdateInfo, ResolutionErrorType, ResolutionResult,
+pub use registry::{
+    DependencyRegistry, DependencyUpdateInfo, PackageRegistry, RegistryAuthConfig, RegistryManager,
+    RegistryType, ResolutionErrorType, ResolutionResult,
 };
 pub use types::dependency::Dependency;
 pub use types::diff::{ChangeType, DependencyChange, PackageDiff};
