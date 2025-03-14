@@ -12,6 +12,7 @@ use ws_pkg::graph::{
 
 /// JavaScript binding for ws_pkg::graph::DependencyFilter
 #[napi]
+#[derive(Clone)]
 pub enum DependencyFilter {
     /// Include only production dependencies
     ProductionOnly,

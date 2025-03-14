@@ -161,6 +161,66 @@ export declare class DependencyRegistry {
   findHighestCompatibleVersion(name: string, requirements: Array<string>): string | null
 }
 
+/** JavaScript binding for ws_pkg::upgrader::DependencyUpgrader */
+export declare class DependencyUpgrader {
+  /**
+   * Create a new dependency upgrader with default configuration
+   *
+   * @returns {DependencyUpgrader} A new dependency upgrader
+   */
+  constructor()
+  /**
+   * Create a new dependency upgrader with the given configuration
+   *
+   * @param {UpgradeConfig} config - The upgrade configuration
+   * @returns {DependencyUpgrader} A new dependency upgrader
+   */
+  static withConfig(config: UpgradeConfig): DependencyUpgrader
+  /**
+   * Set the configuration for the upgrader
+   *
+   * @param {UpgradeConfig} config - The upgrade configuration
+   */
+  setConfig(config: UpgradeConfig): void
+  /**
+   * Check for upgrades for a single dependency
+   *
+   * @param {string} packageName - The name of the package containing the dependency
+   * @param {Dependency} dependency - The dependency to check for upgrades
+   * @returns {AvailableUpgrade} Information about available upgrades
+   */
+  checkDependencyUpgrade(packageName: string, dependency: Dependency): AvailableUpgrade
+  /**
+   * Check all dependencies in a package for available upgrades
+   *
+   * @param {Package} package - The package to check for upgrades
+   * @returns {AvailableUpgrade[]} Array of available upgrades
+   */
+  checkPackageUpgrades(package: Package): AvailableUpgrade[]
+  /**
+   * Check all packages in a collection for available upgrades
+   *
+   * @param {Package[]} packages - The packages to check for upgrades
+   * @returns {AvailableUpgrade[]} Array of available upgrades
+   */
+  checkAllUpgrades(packages: Array<Package>): AvailableUpgrade[]
+  /**
+   * Apply upgrades to packages based on what was found
+   *
+   * @param {Package[]} packages - The packages to apply upgrades to
+   * @param {AvailableUpgrade[]} upgrades - The upgrades to apply
+   * @returns {AvailableUpgrade[]} The upgrades that were applied
+   */
+  applyUpgrades(packages: Array<Package>, upgrades: Array<AvailableUpgrade>): AvailableUpgrade[]
+  /**
+   * Generate a report of upgrades in a human-readable format
+   *
+   * @param {AvailableUpgrade[]} upgrades - The upgrades to report
+   * @returns {string} A human-readable report
+   */
+  generateUpgradeReport(upgrades: Array<AvailableUpgrade>): string
+}
+
 /**
  * Represents a node in a dependency graph
  *
@@ -661,6 +721,22 @@ export declare class VersionUtils {
   static isBreakingChange(v1: string, v2: string): boolean
 }
 
+/** JavaScript binding for ws_pkg::upgrader::AvailableUpgrade */
+export interface AvailableUpgrade {
+  /** Package name containing the dependency */
+  packageName: string
+  /** Dependency name */
+  dependencyName: string
+  /** Current version of the dependency */
+  currentVersion: string
+  /** Latest available version that's compatible with requirements */
+  compatibleVersion?: string
+  /** Latest overall version (may not be compatible with current requirements) */
+  latestVersion?: string
+  /** Status of this dependency's upgradability */
+  status: UpgradeStatus
+}
+
 /**
  * Build a dependency graph from package infos
  *
@@ -677,6 +753,28 @@ export declare function buildDependencyGraphFromPackageInfos(packageInfos: Array
  */
 export declare function buildDependencyGraphFromPackages(packages: Array<Package>): DependencyGraph
 
+/** JavaScript binding for ws_pkg::bump::BumpOptions */
+export interface BumpOptions {
+  /** Git reference to start from */
+  since?: string
+  /** Explicitly bump to a specific version type */
+  releaseAs?: Version
+  /** Fetch all branches */
+  fetchAll?: boolean
+  /** Fetch tags */
+  fetchTags?: boolean
+  /** Synchronize dependencies */
+  syncDeps?: boolean
+  /** Push changes to remote */
+  push?: boolean
+}
+
+/** Bump a package version to a snapshot version with the given SHA */
+export declare function bumpSnapshotVersion(version: string, sha: string): NapiResult<string>
+
+/** Bump a package version */
+export declare function bumpVersion(version: string, bumpType: Version): NapiResult<string>
+
 /** JavaScript binding for ws_pkg::types::diff::ChangeType enum */
 export declare enum ChangeType {
   /** Package was added */
@@ -688,6 +786,12 @@ export declare enum ChangeType {
   /** No change detected */
   Unchanged = 3
 }
+
+export declare function createDefaultUpgradeConfig(): UpgradeConfig
+
+export declare function createUpgradeConfigFromStrategy(strategy: VersionUpdateStrategy): UpgradeConfig
+
+export declare function createUpgradeConfigWithRegistries(registries: Array<string>): UpgradeConfig
 
 /**
  * JavaScript binding for ws_pkg::types::diff::DependencyChange
@@ -736,6 +840,14 @@ export interface DotOptions {
   showExternal: boolean
   /** Whether to highlight circular dependencies */
   highlightCycles: boolean
+}
+
+/** JavaScript binding for ws_pkg::upgrader::config::ExecutionMode */
+export declare enum ExecutionMode {
+  /** Only report potential upgrades without applying them */
+  DryRun = 0,
+  /** Apply upgrades to packages */
+  Apply = 1
 }
 
 /**
@@ -818,6 +930,40 @@ export interface ResolutionResult {
  */
 export declare function saveDotToFile(dotContent: string, filePath: string): NapiResult<undefined>
 
+/** JavaScript binding for ws_pkg::upgrader::config::UpgradeConfig */
+export interface UpgradeConfig {
+  /** Which types of dependencies to include */
+  dependencyTypes: DependencyFilter
+  /** Which types of version updates to include */
+  updateStrategy: VersionUpdateStrategy
+  /** Whether to include prerelease versions */
+  versionStability: VersionStability
+  /** Specific packages to upgrade (if empty, upgrade all) */
+  targetPackages: Array<string>
+  /** Specific dependencies to upgrade (if empty, upgrade all) */
+  targetDependencies: Array<string>
+  /** Additional registries to check for updates */
+  registries: Array<string>
+  /** Whether to actually apply the upgrades or just report them */
+  executionMode: ExecutionMode
+}
+
+/** JavaScript binding for ws_pkg::upgrader::status::UpgradeStatus */
+export declare enum UpgradeStatus {
+  /** Dependency is up to date */
+  UpToDate = 0,
+  /** Patch update available (0.0.x) */
+  PatchAvailable = 1,
+  /** Minor update available (0.x.0) */
+  MinorAvailable = 2,
+  /** Major update available (x.0.0) */
+  MajorAvailable = 3,
+  /** Version requirements don't allow update */
+  Constrained = 4,
+  /** Failed to check for updates */
+  CheckFailed = 5
+}
+
 /** JavaScript binding for validation issue */
 export interface ValidationIssueInfo {
   /** Type of the issue */
@@ -884,4 +1030,22 @@ export declare enum VersionComparisonResult {
   OlderPrerelease = 10,
   /** Version comparison couldn't be determined (invalid versions) */
   Indeterminate = 11
+}
+
+/** JavaScript binding for ws_pkg::types::version::VersionStability */
+export declare enum VersionStability {
+  /** Only include stable versions */
+  StableOnly = 0,
+  /** Include prereleases and stable versions */
+  IncludePrerelease = 1
+}
+
+/** JavaScript binding for ws_pkg::types::version::VersionUpdateStrategy */
+export declare enum VersionUpdateStrategy {
+  /** Only upgrade patch versions (0.0.x) */
+  PatchOnly = 0,
+  /** Upgrade patch and minor versions (0.x.y) */
+  MinorAndPatch = 1,
+  /** Upgrade all versions including major ones (x.y.z) */
+  AllUpdates = 2
 }

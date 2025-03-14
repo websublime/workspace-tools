@@ -6,6 +6,7 @@ use ws_pkg::types::version::{Version as WsVersion, VersionRelationship};
 
 /// JavaScript binding for ws_pkg::types::version::Version enum
 #[napi]
+#[derive(Clone)]
 pub enum Version {
     /// Major version bump
     Major,
@@ -143,6 +144,101 @@ impl VersionUtils {
     #[napi]
     pub fn is_breaking_change(v1: String, v2: String) -> bool {
         WsVersion::is_breaking_change(&v1, &v2)
+    }
+}
+
+/// JavaScript binding for ws_pkg::types::version::VersionUpdateStrategy
+#[napi]
+#[derive(Clone)]
+pub enum VersionUpdateStrategy {
+    /// Only upgrade patch versions (0.0.x)
+    PatchOnly,
+    /// Upgrade patch and minor versions (0.x.y)
+    MinorAndPatch,
+    /// Upgrade all versions including major ones (x.y.z)
+    AllUpdates,
+}
+
+impl From<VersionUpdateStrategy> for ws_pkg::types::version::VersionUpdateStrategy {
+    fn from(strategy: VersionUpdateStrategy) -> Self {
+        match strategy {
+            VersionUpdateStrategy::PatchOnly => Self::PatchOnly,
+            VersionUpdateStrategy::MinorAndPatch => Self::MinorAndPatch,
+            VersionUpdateStrategy::AllUpdates => Self::AllUpdates,
+        }
+    }
+}
+
+impl From<ws_pkg::types::version::VersionUpdateStrategy> for VersionUpdateStrategy {
+    fn from(strategy: ws_pkg::types::version::VersionUpdateStrategy) -> Self {
+        match strategy {
+            ws_pkg::types::version::VersionUpdateStrategy::PatchOnly => Self::PatchOnly,
+            ws_pkg::types::version::VersionUpdateStrategy::MinorAndPatch => Self::MinorAndPatch,
+            ws_pkg::types::version::VersionUpdateStrategy::AllUpdates => Self::AllUpdates,
+        }
+    }
+}
+
+/// JavaScript binding for ws_pkg::types::version::VersionStability
+#[napi]
+#[derive(Clone)]
+pub enum VersionStability {
+    /// Only include stable versions
+    StableOnly,
+    /// Include prereleases and stable versions
+    IncludePrerelease,
+}
+
+impl From<VersionStability> for ws_pkg::types::version::VersionStability {
+    fn from(stability: VersionStability) -> Self {
+        match stability {
+            VersionStability::StableOnly => Self::StableOnly,
+            VersionStability::IncludePrerelease => Self::IncludePrerelease,
+        }
+    }
+}
+
+impl From<ws_pkg::types::version::VersionStability> for VersionStability {
+    fn from(stability: ws_pkg::types::version::VersionStability) -> Self {
+        match stability {
+            ws_pkg::types::version::VersionStability::StableOnly => Self::StableOnly,
+            ws_pkg::types::version::VersionStability::IncludePrerelease => Self::IncludePrerelease,
+        }
+    }
+}
+
+#[cfg(test)]
+mod version_types_tests {
+    use super::*;
+
+    #[test]
+    fn test_version_update_strategy_conversion() {
+        // Test conversion from VersionUpdateStrategy to ws_pkg::types::version::VersionUpdateStrategy
+        let strategy = VersionUpdateStrategy::MinorAndPatch;
+        let ws_strategy = ws_pkg::types::version::VersionUpdateStrategy::from(strategy);
+        assert!(matches!(
+            ws_strategy,
+            ws_pkg::types::version::VersionUpdateStrategy::MinorAndPatch
+        ));
+
+        // Test conversion from ws_pkg::types::version::VersionUpdateStrategy to VersionUpdateStrategy
+        let strategy_back = VersionUpdateStrategy::from(ws_strategy);
+        assert!(matches!(strategy_back, VersionUpdateStrategy::MinorAndPatch));
+    }
+
+    #[test]
+    fn test_version_stability_conversion() {
+        // Test conversion from VersionStability to ws_pkg::types::version::VersionStability
+        let stability = VersionStability::IncludePrerelease;
+        let ws_stability = ws_pkg::types::version::VersionStability::from(stability);
+        assert!(matches!(
+            ws_stability,
+            ws_pkg::types::version::VersionStability::IncludePrerelease
+        ));
+
+        // Test conversion from ws_pkg::types::version::VersionStability to VersionStability
+        let stability_back = VersionStability::from(ws_stability);
+        assert!(matches!(stability_back, VersionStability::IncludePrerelease));
     }
 }
 
