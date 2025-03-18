@@ -67,7 +67,7 @@ impl PackageRegistry {
     ///
     /// @param {string} packageName - The name of the package
     /// @returns {string | null} The latest version, or null if not found
-    #[napi]
+    #[napi(ts_return_type = "string|null")]
     pub fn get_latest_version(&self, package_name: String) -> NapiResult<Option<String>> {
         handle_pkg_result(self.inner.get_latest_version(&package_name))
     }
@@ -76,7 +76,7 @@ impl PackageRegistry {
     ///
     /// @param {string} packageName - The name of the package
     /// @returns {string[]} Array of available versions
-    #[napi]
+    #[napi(ts_return_type = "string[]")]
     pub fn get_all_versions(&self, package_name: String) -> NapiResult<Vec<String>> {
         handle_pkg_result(self.inner.get_all_versions(&package_name))
     }
@@ -86,7 +86,9 @@ impl PackageRegistry {
     /// @param {string} packageName - The name of the package
     /// @param {string} version - The version to get info for
     /// @returns {Object} Package metadata
-    #[napi]
+    #[napi(
+        ts_return_type = "{package: Package,packageJsonPath: string,packagePath: string, pkgJson: Record<string, unknown>}"
+    )]
     pub fn get_package_info(
         &self,
         package_name: String,
@@ -105,7 +107,7 @@ impl PackageRegistry {
     ///
     /// @param {RegistryAuthConfig} auth - The authentication configuration
     /// @returns {void}
-    #[napi]
+    #[napi(ts_return_type = "void")]
     pub fn set_auth(&mut self, auth: RegistryAuthConfig) -> NapiResult<()> {
         // We need to downcast the Arc to the specific registry type
         // This only works for NpmRegistry currently
@@ -126,7 +128,7 @@ impl PackageRegistry {
     ///
     /// @param {string} userAgent - The user agent string
     /// @returns {void}
-    #[napi]
+    #[napi(ts_return_type = "void")]
     pub fn set_user_agent(&mut self, user_agent: String) -> NapiResult<()> {
         // We need to downcast the Arc to the specific registry type
         // This only works for NpmRegistry currently
@@ -146,7 +148,7 @@ impl PackageRegistry {
     /// Clear the registry cache
     ///
     /// @returns {void}
-    #[napi]
+    #[napi(ts_return_type = "void")]
     pub fn clear_cache(&mut self) -> NapiResult<()> {
         // We need to downcast the Arc to the specific registry type
         // This only works for NpmRegistry currently
@@ -168,7 +170,7 @@ impl PackageRegistry {
     /// @param {string} name - The package name
     /// @param {string[]} versions - Array of versions to add
     /// @returns {void}
-    #[napi]
+    #[napi(ts_return_type = "void")]
     pub fn add_package(&self, name: String, versions: Vec<String>) -> NapiResult<()> {
         // We need to downcast to a LocalRegistry
         if let Some(local_registry) = self.inner.as_any().downcast_ref::<LocalRegistry>() {
@@ -189,7 +191,7 @@ impl PackageRegistry {
     /// @param {string} version - The version
     /// @param {Object} dependencies - Map of dependency names to versions
     /// @returns {void}
-    #[napi]
+    #[napi(ts_return_type = "void")]
     pub fn set_dependencies(
         &self,
         name: String,
@@ -228,7 +230,7 @@ impl PackageRegistry {
     /// Get all packages in a local registry
     ///
     /// @returns {string[]} Array of all package names
-    #[napi]
+    #[napi(ts_return_type = "string[]")]
     pub fn get_all_packages(&self) -> NapiResult<Vec<String>> {
         // We need to downcast to a LocalRegistry
         if let Some(local_registry) = self.inner.as_any().downcast_ref::<LocalRegistry>() {

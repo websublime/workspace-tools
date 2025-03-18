@@ -28,15 +28,15 @@ ws_monorepo = { workspace = true }
 serde_json = { workspace = true }
 semver = { version = "1.0.23", features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
-napi = { version = "3.0.0-alpha.28", features = [
+napi = { version = "3.0.0-alpha.33", features = [
   "async",
   "anyhow",
   "napi9",
   "serde-json",
   "tokio_rt",
 ] }
-napi-build = { version = "2.1.4" }
-napi-derive = { version = "3.0.0-alpha.26", default-features = false, features = [
+napi-build = { version = "2.1.5" }
+napi-derive = { version = "3.0.0-alpha.28", default-features = false, features = [
   "type-def",
 ] }
 ctor = { version = "0.3.6" }

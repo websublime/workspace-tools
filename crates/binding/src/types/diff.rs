@@ -1,7 +1,7 @@
 use crate::errors::handle_pkg_result;
 use crate::types::package::Package;
 use napi::bindgen_prelude::*;
-use napi::Result as NapiResult;
+use napi::{JsBoolean, JsNumber, JsString, Result as NapiResult};
 use napi_derive::napi;
 use ws_pkg::types::diff::{
     ChangeType as WsChangeType, DependencyChange as WsDependencyChange,
@@ -10,6 +10,7 @@ use ws_pkg::types::diff::{
 
 /// JavaScript binding for ws_pkg::types::diff::ChangeType enum
 #[napi]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ChangeType {
     /// Package was added
     Added,
@@ -43,9 +44,36 @@ impl From<ChangeType> for WsChangeType {
     }
 }
 
+// Internal struct for representing dependency changes - not directly exposed
+struct DependencyChangeInternal {
+    /// Name of the dependency
+    pub name: String,
+    /// Previous version (null if newly added)
+    pub previous_version: Option<String>,
+    /// Current version (null if removed)
+    pub current_version: Option<String>,
+    /// Type of change
+    pub change_type: ChangeType,
+    /// Whether this is a breaking change based on semver
+    pub breaking: bool,
+}
+
+impl From<WsDependencyChange> for DependencyChangeInternal {
+    fn from(change: WsDependencyChange) -> Self {
+        Self {
+            name: change.name,
+            previous_version: change.previous_version,
+            current_version: change.current_version,
+            change_type: change.change_type.into(),
+            breaking: change.breaking,
+        }
+    }
+}
+
 /// JavaScript binding for ws_pkg::types::diff::DependencyChange
 /// Represents a change in a dependency
-#[napi(object)]
+#[napi]
+#[derive(Clone, Debug)]
 pub struct DependencyChange {
     /// Name of the dependency
     pub name: String,
@@ -59,15 +87,101 @@ pub struct DependencyChange {
     pub breaking: bool,
 }
 
-impl From<WsDependencyChange> for DependencyChange {
-    fn from(change: WsDependencyChange) -> Self {
+#[napi]
+impl DependencyChange {
+    /// Create a new dependency change
+    #[napi(constructor)]
+    pub fn new(
+        name: String,
+        previous_version: Option<String>,
+        current_version: Option<String>,
+        change_type: ChangeType,
+        breaking: bool,
+    ) -> Self {
+        Self { name, previous_version, current_version, change_type, breaking }
+    }
+
+    /// Create a new dependency change from a JavaScript object
+    #[napi(factory, ts_return_type = "DependencyChange")]
+    pub fn from_object(props: Object) -> napi::Result<Self> {
+        let name = props.get_named_property::<JsString>("name")?.into_utf8()?.into_owned()?;
+
+        // For optional properties, first check if they exist
+        let previous_version = if props.has_named_property("previousVersion")? {
+            let prop = props.get_named_property::<JsString>("previousVersion");
+            match prop {
+                Ok(val) => Some(val.into_utf8()?.into_owned()?),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
+        let current_version = if props.has_named_property("currentVersion")? {
+            let prop = props.get_named_property::<JsString>("currentVersion");
+            match prop {
+                Ok(val) => Some(val.into_utf8()?.into_owned()?),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
+        let change_type_num = props.get_named_property::<JsNumber>("changeType")?.get_uint32()?;
+        let change_type = match change_type_num {
+            0 => ChangeType::Added,
+            1 => ChangeType::Removed,
+            2 => ChangeType::Updated,
+            _ => ChangeType::Unchanged,
+        };
+
+        let breaking = props.get_named_property::<JsBoolean>("breaking")?.get_value()?;
+
+        Ok(Self { name, previous_version, current_version, change_type, breaking })
+    }
+
+    #[napi(getter)]
+    pub fn get_name(&self) -> String {
+        self.name.clone()
+    }
+
+    #[napi(getter)]
+    pub fn get_previous_version(&self) -> Option<String> {
+        self.previous_version.clone()
+    }
+
+    #[napi(getter)]
+    pub fn get_current_version(&self) -> Option<String> {
+        self.current_version.clone()
+    }
+
+    #[napi(getter)]
+    pub fn get_change_type(&self) -> ChangeType {
+        self.change_type
+    }
+
+    #[napi(getter)]
+    pub fn get_breaking(&self) -> bool {
+        self.breaking
+    }
+}
+
+impl From<DependencyChangeInternal> for DependencyChange {
+    fn from(change: DependencyChangeInternal) -> Self {
         Self {
             name: change.name,
             previous_version: change.previous_version,
             current_version: change.current_version,
-            change_type: change.change_type.into(),
+            change_type: change.change_type,
             breaking: change.breaking,
         }
+    }
+}
+
+impl From<WsDependencyChange> for DependencyChange {
+    fn from(change: WsDependencyChange) -> Self {
+        let internal = DependencyChangeInternal::from(change);
+        Self::from(internal)
     }
 }
 
@@ -290,5 +404,134 @@ mod diff_binding_tests {
         assert!(diff_str.contains("2.0.0"));
         assert!(diff_str.contains("Breaking change"));
         assert!(diff_str.contains("dep1"));
+    }
+
+    #[test]
+    fn test_dependency_change_constructor() {
+        // Create a DependencyChange using the constructor
+        let change = DependencyChange::new(
+            "lodash".to_string(),
+            Some("4.17.20".to_string()),
+            Some("4.17.21".to_string()),
+            ChangeType::Updated,
+            false,
+        );
+
+        // Verify properties
+        assert_eq!(change.name, "lodash");
+        assert_eq!(change.get_name(), "lodash");
+
+        assert_eq!(change.previous_version, Some("4.17.20".to_string()));
+        assert_eq!(change.get_previous_version(), Some("4.17.20".to_string()));
+
+        assert_eq!(change.current_version, Some("4.17.21".to_string()));
+        assert_eq!(change.get_current_version(), Some("4.17.21".to_string()));
+
+        assert_eq!(change.change_type, ChangeType::Updated);
+        assert_eq!(change.get_change_type(), ChangeType::Updated);
+
+        assert!(!change.breaking);
+        assert!(!change.get_breaking());
+    }
+
+    #[test]
+    fn test_dependency_change_for_added_dependency() {
+        // Create a DependencyChange for an added dependency (no previous version)
+        let change = DependencyChange::new(
+            "jest".to_string(),
+            None,
+            Some("27.5.1".to_string()),
+            ChangeType::Added,
+            false,
+        );
+
+        assert_eq!(change.name, "jest");
+        assert_eq!(change.previous_version, None);
+        assert_eq!(change.current_version, Some("27.5.1".to_string()));
+        assert_eq!(change.change_type, ChangeType::Added);
+        assert!(!change.breaking);
+    }
+
+    #[test]
+    fn test_dependency_change_for_removed_dependency() {
+        // Create a DependencyChange for a removed dependency (no current version)
+        let change = DependencyChange::new(
+            "deprecated-pkg".to_string(),
+            Some("1.2.3".to_string()),
+            None,
+            ChangeType::Removed,
+            true,
+        );
+
+        assert_eq!(change.name, "deprecated-pkg");
+        assert_eq!(change.previous_version, Some("1.2.3".to_string()));
+        assert_eq!(change.current_version, None);
+        assert_eq!(change.change_type, ChangeType::Removed);
+        assert!(change.breaking);
+    }
+
+    #[test]
+    fn test_dependency_change_for_breaking_update() {
+        // Create a DependencyChange for a breaking update
+        let change = DependencyChange::new(
+            "react".to_string(),
+            Some("17.0.2".to_string()),
+            Some("18.0.0".to_string()),
+            ChangeType::Updated,
+            true,
+        );
+
+        assert_eq!(change.name, "react");
+        assert_eq!(change.previous_version, Some("17.0.2".to_string()));
+        assert_eq!(change.current_version, Some("18.0.0".to_string()));
+        assert_eq!(change.change_type, ChangeType::Updated);
+        assert!(change.breaking);
+    }
+
+    #[test]
+    fn test_dependency_change_to_ws_dependency_change() {
+        // Create a DependencyChange
+        let change = DependencyChange::new(
+            "lodash".to_string(),
+            Some("4.17.20".to_string()),
+            Some("4.17.21".to_string()),
+            ChangeType::Updated,
+            false,
+        );
+
+        // Convert to WsDependencyChange (not directly possible due to private implementation)
+        // This would be a good case for adding a conversion method if needed
+
+        // Instead, create a WsDependencyChange directly and test properties match
+        let ws_change = WsDependencyChange::new(
+            "lodash",
+            Some("4.17.20"),
+            Some("4.17.21"),
+            WsChangeType::Updated,
+        );
+
+        // Verify key properties match
+        assert_eq!(change.name, ws_change.name);
+        assert_eq!(change.previous_version, ws_change.previous_version);
+        assert_eq!(change.current_version, ws_change.current_version);
+        assert_eq!(WsChangeType::from(change.change_type), ws_change.change_type);
+    }
+
+    // We can't directly test the from_object method in unit tests
+    // since it requires a JavaScript Object, but we can at least test
+    // the constructor and other conversion methods
+
+    #[test]
+    fn test_change_type_mapping() {
+        // Test mapping between WsChangeType and ChangeType
+        assert_eq!(WsChangeType::from(ChangeType::Added), WsChangeType::Added);
+        assert_eq!(WsChangeType::from(ChangeType::Removed), WsChangeType::Removed);
+        assert_eq!(WsChangeType::from(ChangeType::Updated), WsChangeType::Updated);
+        assert_eq!(WsChangeType::from(ChangeType::Unchanged), WsChangeType::Unchanged);
+
+        assert_eq!(ChangeType::from(WsChangeType::Added), ChangeType::Added);
+        assert_eq!(ChangeType::from(WsChangeType::Removed), ChangeType::Removed);
+        assert_eq!(ChangeType::from(WsChangeType::Updated), ChangeType::Updated);
+        assert_eq!(ChangeType::from(WsChangeType::Unchanged), ChangeType::Unchanged);
     }
 }

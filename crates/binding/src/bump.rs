@@ -50,7 +50,7 @@ impl From<WsBumpOptions> for BumpOptions {
 }
 
 /// Bump a package version
-#[napi]
+#[napi(ts_return_type = "string")]
 pub fn bump_version(version: String, bump_type: Version) -> NapiResult<String> {
     match bump_type {
         Version::Major => Ok(ws_pkg::types::version::Version::bump_major(&version).to_string()),
@@ -66,7 +66,7 @@ pub fn bump_version(version: String, bump_type: Version) -> NapiResult<String> {
 }
 
 /// Bump a package version to a snapshot version with the given SHA
-#[napi]
+#[napi(ts_return_type = "string")]
 pub fn bump_snapshot_version(version: String, sha: String) -> NapiResult<String> {
     Ok(ws_pkg::types::version::Version::bump_snapshot(&version, &sha).to_string())
 }

@@ -16,7 +16,10 @@
   "scripts": {
     "prepare": "husky install",
     "ci:build-release-binding": "pnpm --filter @websublime/workspace-tools run build-binding:release",
-    "ci:build-binding": "pnpm --filter @websublime/workspace-tools run build-binding"
+    "ci:build-binding": "pnpm --filter @websublime/workspace-tools run build-binding",
+    "ci:build-node": "pnpm --filter @websublime/workspace-tools run build:node",
+    "ci:build-types": "pnpm --filter @websublime/workspace-tools run build-types",
+    "ci:build": "pnpm ci:build-binding && pnpm ci:build-node && pnpm ci:build-types"
   },
   "devDependencies": {
     "@taplo/cli": "^0.7.0",

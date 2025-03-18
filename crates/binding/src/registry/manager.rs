@@ -89,7 +89,7 @@ impl RegistryManager {
     ///
     /// @param {string} packageName - The name of the package
     /// @returns {string | null} The latest version, or null if not found
-    #[napi]
+    #[napi(ts_return_type = "string|null")]
     pub fn get_latest_version(&self, package_name: String) -> NapiResult<Option<String>> {
         handle_pkg_result(self.inner.get_latest_version(&package_name))
     }
@@ -98,7 +98,7 @@ impl RegistryManager {
     ///
     /// @param {string} packageName - The name of the package
     /// @returns {string[]} Array of available versions
-    #[napi]
+    #[napi(ts_return_type = "string[]")]
     pub fn get_all_versions(&self, package_name: String) -> NapiResult<Vec<String>> {
         handle_pkg_result(self.inner.get_all_versions(&package_name))
     }
@@ -108,7 +108,9 @@ impl RegistryManager {
     /// @param {string} packageName - The name of the package
     /// @param {string} version - The version to get info for
     /// @returns {Object} Package metadata
-    #[napi]
+    #[napi(
+        ts_return_type = "{package: Package,packageJsonPath: string,packagePath: string, pkgJson: Record<string, unknown>}"
+    )]
     pub fn get_package_info(
         &self,
         package_name: String,

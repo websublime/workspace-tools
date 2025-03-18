@@ -1,19 +1,14 @@
 {
+  "extends": "../../tsconfig.json",
+  "include": ["./src/**/*"],
+  "exclude": ["*.js", "*.mjs", "*.cjs", "dist", "lib"],
   "compilerOptions": {
-    "target": "ESNext",
-    "strict": true,
-    "allowJs": true,
-    "checkJs": false,
-    "noEmit": true,
-    "moduleResolution": "Bundler",
-    "module": "ESNext",
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "baseUrl": "./",
-    "types": ["node", "vite/client"]
-  },
-  "include": ["."],
-  "exclude": ["src/*.js", "src/*.mjs", "src/*.cjs"]
+    "composite": true,
+    "rootDir": "./src",
+    "outDir": "./dist/types",
+    "resolveJsonModule": true,
+    "noEmit": false,
+    "tsBuildInfoFile": ".tsbuildinfo",
+    "emitDeclarationOnly": true
+  }
 }

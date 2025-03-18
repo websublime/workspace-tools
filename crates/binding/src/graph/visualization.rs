@@ -35,7 +35,7 @@ impl From<DotOptions> for WsDotOptions {
 /// @param {DependencyGraph} graph - The dependency graph to visualize
 /// @param {DotOptions} options - Options for generating the DOT output
 /// @returns {string} DOT format graph representation
-#[napi]
+#[napi(ts_return_type = "string")]
 pub fn generate_dot(graph: &DependencyGraph, options: DotOptions) -> NapiResult<String> {
     let ws_options = WsDotOptions::from(options);
     handle_pkg_result(ws_generate_dot(&graph.inner, &ws_options))
@@ -45,7 +45,7 @@ pub fn generate_dot(graph: &DependencyGraph, options: DotOptions) -> NapiResult<
 ///
 /// @param {DependencyGraph} graph - The dependency graph to visualize
 /// @returns {string} ASCII representation of the graph
-#[napi]
+#[napi(ts_return_type = "string")]
 pub fn generate_ascii(graph: &DependencyGraph) -> NapiResult<String> {
     handle_pkg_result(ws_generate_ascii(&graph.inner))
 }
@@ -55,7 +55,7 @@ pub fn generate_ascii(graph: &DependencyGraph) -> NapiResult<String> {
 /// @param {string} dotContent - The DOT content to save
 /// @param {string} filePath - Path to save the file
 /// @returns {void}
-#[napi]
+#[napi(ts_return_type = "void")]
 pub fn save_dot_to_file(dot_content: String, file_path: String) -> NapiResult<()> {
     handle_pkg_result(ws_save_dot_to_file(&dot_content, &file_path))
 }

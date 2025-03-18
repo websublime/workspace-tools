@@ -365,6 +365,7 @@ if (!nativeBinding) {
 }
 
 module.exports.Dependency = nativeBinding.Dependency
+module.exports.DependencyChange = nativeBinding.DependencyChange
 module.exports.DependencyGraph = nativeBinding.DependencyGraph
 module.exports.DependencyRegistry = nativeBinding.DependencyRegistry
 module.exports.DependencyUpgrader = nativeBinding.DependencyUpgrader

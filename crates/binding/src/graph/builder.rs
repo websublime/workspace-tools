@@ -73,7 +73,7 @@ impl DependencyGraph {
     ///
     /// @returns {Object | null} Map of dependency names to arrays of conflicting versions,
     ///                         or null if no conflicts found
-    #[napi]
+    #[napi(ts_return_type = "Record<string,string>|null")]
     pub fn find_version_conflicts(&self, env: Env) -> NapiResult<Option<Object>> {
         let conflicts_opt = self.inner.find_version_conflicts();
 
@@ -129,7 +129,7 @@ impl DependencyGraph {
     ///
     /// @param {string} id - The package identifier
     /// @returns {string[]} Array of package names that depend on this package
-    #[napi]
+    #[napi(ts_return_type = "string[]")]
     pub fn get_dependents(&self, id: String) -> NapiResult<Vec<String>> {
         // Build dependents map manually for safety
         let mut dependents = Vec::new();
@@ -159,7 +159,7 @@ impl DependencyGraph {
     /// Validate dependencies in the graph
     ///
     /// @returns {ValidationReport} A report of validation issues
-    #[napi]
+    #[napi(ts_return_type = "ValidationReport")]
     pub fn validate_package_dependencies(&self) -> NapiResult<ValidationReport> {
         // Use the pkg_try! macro to handle errors
         let ws_report = crate::pkg_try!(self.inner.validate_package_dependencies());
