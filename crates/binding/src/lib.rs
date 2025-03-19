@@ -5,6 +5,7 @@ pub mod bump;
 pub mod errors;
 pub mod graph;
 pub mod registry;
+pub mod standard;
 pub mod types;
 pub mod upgrader;
 
@@ -27,7 +28,10 @@ pub fn get_version() -> String {
 }
 
 // Export the error handling utility for use in other modules
-pub use errors::{handle_pkg_result, pkg_error_to_napi_error, ErrorCode};
+pub use errors::{
+    command_error_to_napi_error, handle_command_result, handle_pkg_result, pkg_error_to_napi_error,
+    ErrorCode,
+};
 pub use graph::{
     build_dependency_graph_from_package_infos, build_dependency_graph_from_packages,
     generate_ascii, generate_dot, save_dot_to_file, DependencyFilter, DependencyGraph, DotOptions,
@@ -43,6 +47,10 @@ pub use types::package::{Package, PackageInfo};
 pub use types::version::{Version, VersionComparisonResult, VersionUtils};
 // Add the new exports
 pub use bump::{bump_snapshot_version, bump_version, BumpOptions};
+pub use standard::{
+    detect_package_manager, execute, execute_with_status, get_project_root_path,
+    strip_trailing_newline, CorePackageManager,
+};
 pub use upgrader::{
     create_default_upgrade_config, create_upgrade_config_from_strategy,
     create_upgrade_config_with_registries, AvailableUpgrade, DependencyUpgrader, ExecutionMode,

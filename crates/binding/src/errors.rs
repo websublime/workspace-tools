@@ -1,6 +1,48 @@
 use napi::{Error, Result as NapiResult, Status};
 use std::fmt;
 use ws_pkg::PkgError;
+use ws_std::error::CommandError as WsCommandError;
+
+/// JavaScript binding for ws_std::error::CommandError
+#[napi]
+#[derive(Debug)]
+pub enum CommandError {
+    /// Failed to run command
+    Run,
+    /// Failed to execute command
+    Execution,
+    /// Command failed with specific error
+    Failure,
+}
+
+/// Convert a ws_std::error::CommandError to a NAPI Error
+pub fn command_error_to_napi_error(error: WsCommandError) -> Error {
+    let (status, message) = match error {
+        WsCommandError::Run(io_err) => {
+            (Status::GenericFailure, format!("Failed to run command: {}", io_err))
+        }
+        WsCommandError::Execution => {
+            (Status::GenericFailure, "Failed to execute command".to_string())
+        }
+        WsCommandError::Failure { stdout, stderr } => (
+            Status::GenericFailure,
+            format!("Command failed with: stdout={}, stderr={}", stdout, stderr),
+        ),
+    };
+
+    // Create error with the appropriate status and message
+    let mut error = Error::new(status, message);
+    error.status = status;
+
+    error
+}
+
+/// Wraps a Result<T, CommandError> and converts it to a NAPI Result
+pub fn handle_command_result<T>(
+    result: std::result::Result<T, ws_std::error::CommandError>,
+) -> NapiResult<T> {
+    result.map_err(command_error_to_napi_error)
+}
 
 /// Custom JavaScript error codes for package errors
 pub enum ErrorCode {
@@ -150,6 +192,16 @@ macro_rules! pkg_some {
         match $expr {
             Some(val) => val,
             None => return Err(napi::Error::new(napi::Status::GenericFailure, $msg)),
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! cmd_try {
+    ($expr:expr) => {
+        match $expr {
+            Ok(val) => val,
+            Err(err) => return Err(command_error_to_napi_error(err)),
         }
     };
 }

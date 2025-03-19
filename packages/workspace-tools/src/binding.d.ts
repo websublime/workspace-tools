@@ -792,10 +792,10 @@ export interface BumpOptions {
 }
 
 /** Bump a package version to a snapshot version with the given SHA */
-export declare function bumpSnapshotVersion(version: string, sha: string): NapiResult<string>
+export declare function bumpSnapshotVersion(version: string, sha: string): string
 
 /** Bump a package version */
-export declare function bumpVersion(version: string, bumpType: Version): NapiResult<string>
+export declare function bumpVersion(version: string, bumpType: Version): string
 
 /** JavaScript binding for ws_pkg::types::diff::ChangeType enum */
 export declare enum ChangeType {
@@ -807,6 +807,28 @@ export declare enum ChangeType {
   Updated = 2,
   /** No change detected */
   Unchanged = 3
+}
+
+/** JavaScript binding for ws_std::error::CommandError */
+export declare enum CommandError {
+  /** Failed to run command */
+  Run = 0,
+  /** Failed to execute command */
+  Execution = 1,
+  /** Command failed with specific error */
+  Failure = 2
+}
+
+/** JavaScript binding for ws_std::manager::CorePackageManager */
+export declare enum CorePackageManager {
+  /** npm package manager */
+  Npm = 0,
+  /** Yarn package manager */
+  Yarn = 1,
+  /** pnpm package manager */
+  Pnpm = 2,
+  /** Bun package manager */
+  Bun = 3
 }
 
 export declare function createDefaultUpgradeConfig(): UpgradeConfig
@@ -837,6 +859,14 @@ export interface DependencyUpdateInfo {
   newVersion: string
 }
 
+/**
+ * Detect which package manager is available in the workspace
+ *
+ * @param {string} path - Directory path to check for package manager files
+ * @returns {CorePackageManager | null} The detected package manager or null if none found
+ */
+export declare function detectPackageManager(path: string): CorePackageManager | null
+
 /** JavaScript binding for ws_pkg::graph::visualization::DotOptions */
 export interface DotOptions {
   /** Title of the graph */
@@ -846,6 +876,26 @@ export interface DotOptions {
   /** Whether to highlight circular dependencies */
   highlightCycles: boolean
 }
+
+/**
+ * Execute a command and process its output
+ *
+ * @param {string} cmd - The command to execute
+ * @param {string} path - The directory to run the command in
+ * @param {string[]} args - The command arguments
+ * @returns {string} The command output
+ */
+export declare function execute(cmd: string, path: string, args: Array<string>): string
+
+/**
+ * Execute a command and get both stdout and exit code
+ *
+ * @param {string} cmd - The command to execute
+ * @param {string} path - The directory to run the command in
+ * @param {string[]} args - The command arguments
+ * @returns {Object} Object containing stdout and exit code
+ */
+export declare function executeWithStatus(cmd: string, path: string, args: Array<string>): { stdout: string, code: number }
 
 /** JavaScript binding for ws_pkg::upgrader::config::ExecutionMode */
 export declare enum ExecutionMode {
@@ -871,6 +921,14 @@ export declare function generateAscii(graph: DependencyGraph): string
  * @returns {string} DOT format graph representation
  */
 export declare function generateDot(graph: DependencyGraph, options: DotOptions): string
+
+/**
+ * Get the project root path
+ *
+ * @param {string} [root] - Optional starting directory
+ * @returns {string | null} The project root path or null if not found
+ */
+export declare function getProjectRootPath(root?: string | undefined | null): string | null
 
 export declare function getVersion(): string
 
@@ -934,6 +992,14 @@ export interface ResolutionResult {
  * @returns {void}
  */
 export declare function saveDotToFile(dotContent: string, filePath: string): void
+
+/**
+ * Strips the trailing newline from a string
+ *
+ * @param {string} input - The input string
+ * @returns {string} String with trailing newline removed
+ */
+export declare function stripTrailingNewline(input: string): string
 
 /** JavaScript binding for ws_pkg::upgrader::config::UpgradeConfig */
 export interface UpgradeConfig {

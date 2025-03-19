@@ -43,6 +43,13 @@ import {
   parseScopedPackage,
   saveDotToFile,
   getVersion,
+  CommandError,
+  CorePackageManager,
+  detectPackageManager,
+  execute,
+  executeWithStatus,
+  getProjectRootPath,
+  stripTrailingNewline
 } from './binding'
 
 export type {
@@ -93,4 +100,11 @@ export {
   parseScopedPackage,
   saveDotToFile,
   getVersion,
+  CommandError,
+  CorePackageManager,
+  detectPackageManager,
+  execute,
+  executeWithStatus,
+  getProjectRootPath,
+  stripTrailingNewline
 }
