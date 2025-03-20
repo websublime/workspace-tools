@@ -1,10 +1,14 @@
 // @ts-check
-import { getProjectRootPath } from '../dist/esm/index.mjs';
+import { getProjectRootPath, executeCommand, detectPackageManager } from '../dist/esm/index.mjs';
 
 /**
- * Use the getProjectRootPath function
- * @type {import('../dist/types').getProjectRootPath}
+ * @typedef {import('../dist/types').executeCommand} executeCommand
+ * @typedef {import('../dist/types').getProjectRootPath} getProjectRootPath
  */
+
 const rootPath = getProjectRootPath();
 
 console.log(rootPath);
+
+console.log(executeCommand("git", ".", ["status"]));
+console.log(detectPackageManager(rootPath));
