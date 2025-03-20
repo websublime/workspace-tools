@@ -1,0 +1,57 @@
+[package]
+name = "sublime_node_tools"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lib]
+crate-type = ["cdylib"]
+doctest = false
+
+[lints.clippy]
+bind_instead_of_map = "allow"
+
+[dependencies]
+sublime_standard_tools = { workspace = true }
+#ws_git = { workspace = true }
+#ws_pkg = { workspace = true }
+#ws_monorepo = { workspace = true }
+serde_json = { workspace = true }
+semver = { version = "1.0.23", features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+napi = { version = "3.0.0-alpha.33", features = [
+  "async",
+  "anyhow",
+  "napi9",
+  "serde-json",
+  "tokio_rt",
+] }
+napi-build = { version = "2.1.5" }
+napi-derive = { version = "3.0.0-alpha.28", default-features = false, features = [
+  "type-def",
+] }
+ctor = { version = "0.3.6" }
+parking_lot = { version = "0.12.1" }
+
+[build-dependencies]
+napi-build = { version = "2.1.4" }
+
+[target.'cfg(all(not(target_os = "linux"), not(target_os = "freebsd"), not(target_family = "wasm")))'.dependencies]
+mimalloc = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+mimalloc = { workspace = true, features = ["local_dynamic_tls"] }
+
+[dev-dependencies]
+reqwest = "0.11"
+sublime_node_tools = { path = "." }
+tempfile = "3.8.0"

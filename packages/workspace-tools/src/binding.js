@@ -364,46 +364,5 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-module.exports.Dependency = nativeBinding.Dependency
-module.exports.DependencyChange = nativeBinding.DependencyChange
-module.exports.DependencyGraph = nativeBinding.DependencyGraph
-module.exports.DependencyRegistry = nativeBinding.DependencyRegistry
-module.exports.DependencyUpgrader = nativeBinding.DependencyUpgrader
-module.exports.Node = nativeBinding.Node
-module.exports.Package = nativeBinding.Package
-module.exports.PackageDiff = nativeBinding.PackageDiff
-module.exports.PackageInfo = nativeBinding.PackageInfo
-module.exports.PackageRegistry = nativeBinding.PackageRegistry
-module.exports.RegistryManager = nativeBinding.RegistryManager
-module.exports.ValidationReport = nativeBinding.ValidationReport
-module.exports.VersionUtils = nativeBinding.VersionUtils
-module.exports.buildDependencyGraphFromPackageInfos = nativeBinding.buildDependencyGraphFromPackageInfos
-module.exports.buildDependencyGraphFromPackages = nativeBinding.buildDependencyGraphFromPackages
-module.exports.bumpSnapshotVersion = nativeBinding.bumpSnapshotVersion
-module.exports.bumpVersion = nativeBinding.bumpVersion
-module.exports.ChangeType = nativeBinding.ChangeType
-module.exports.CommandError = nativeBinding.CommandError
-module.exports.CorePackageManager = nativeBinding.CorePackageManager
-module.exports.createDefaultUpgradeConfig = nativeBinding.createDefaultUpgradeConfig
-module.exports.createUpgradeConfigFromStrategy = nativeBinding.createUpgradeConfigFromStrategy
-module.exports.createUpgradeConfigWithRegistries = nativeBinding.createUpgradeConfigWithRegistries
-module.exports.DependencyFilter = nativeBinding.DependencyFilter
-module.exports.detectPackageManager = nativeBinding.detectPackageManager
-module.exports.execute = nativeBinding.execute
-module.exports.executeWithStatus = nativeBinding.executeWithStatus
-module.exports.ExecutionMode = nativeBinding.ExecutionMode
-module.exports.generateAscii = nativeBinding.generateAscii
-module.exports.generateDot = nativeBinding.generateDot
 module.exports.getProjectRootPath = nativeBinding.getProjectRootPath
 module.exports.getVersion = nativeBinding.getVersion
-module.exports.parseScopedPackage = nativeBinding.parseScopedPackage
-module.exports.RegistryType = nativeBinding.RegistryType
-module.exports.ResolutionErrorType = nativeBinding.ResolutionErrorType
-module.exports.saveDotToFile = nativeBinding.saveDotToFile
-module.exports.stripTrailingNewline = nativeBinding.stripTrailingNewline
-module.exports.UpgradeStatus = nativeBinding.UpgradeStatus
-module.exports.ValidationIssueType = nativeBinding.ValidationIssueType
-module.exports.Version = nativeBinding.Version
-module.exports.VersionComparisonResult = nativeBinding.VersionComparisonResult
-module.exports.VersionStability = nativeBinding.VersionStability
-module.exports.VersionUpdateStrategy = nativeBinding.VersionUpdateStrategy

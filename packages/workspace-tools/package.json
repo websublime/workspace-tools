@@ -62,7 +62,7 @@
   "scripts": {
     "artifacts": "napi artifacts --cwd ./src --package-json-path ../package.json -o=../artifacts --npm-dir ../npm",
     "bench": "node -r @swc-node/register benchmark/bench.ts",
-    "build-binding": "napi build -o=./src --manifest-path ../../crates/binding/Cargo.toml --platform -p ws_binding --js binding.js --dts binding.d.ts --no-const-enum --no-dts-cache",
+    "build-binding": "napi build -o=./src --manifest-path ../../crates/node/Cargo.toml --platform -p sublime_node_tools --js binding.js --dts binding.d.ts --no-const-enum --no-dts-cache",
     "build-binding:release": "pnpm build-binding --release",
     "build-binding:wasi": "pnpm build-binding --target wasm32-wasip1-threads",
     "build-types": "tsc -p ./tsconfig.json",
