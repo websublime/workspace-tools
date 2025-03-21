@@ -34,3 +34,7 @@ libgit2-sys = { version = "*", features = [
   "vendored",
   "vendored-openssl",
 ] }
+
+[dev-dependencies]
+tempfile = "3.19.1"
+sublime_standard_tools = { workspace = true }
