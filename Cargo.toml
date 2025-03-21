@@ -71,6 +71,7 @@ single_match_else = "allow"
 [workspace.dependencies]
 sublime_standard_tools = { version = "~0.1.0", path = "./crates/standard" }
 sublime_node_tools = { version = "~0.1.0", path = "./crates/node" }
+sublime_git_tools = { version = "~0.1.0", path = "./crates/git" }
 
 mimalloc = "0.1.42"
 serde = "1.0.203"

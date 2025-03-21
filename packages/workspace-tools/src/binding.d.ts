@@ -6,6 +6,28 @@ export const COMMAND_ERROR_RUN: string
 
 export const COMMAND_FAILURE_ZERO_CODE: string
 
+/**
+ * Detects the package manager used in a project directory.
+ *
+ * This function analyzes the given directory to determine which package manager
+ * is being used in the project. It looks for specific files and patterns that
+ * indicate the presence of npm, yarn, pnpm, or other package managers.
+ *
+ * @param {string} [root_path] - Optional path to the project directory to analyze.
+ *                              If not provided, the current working directory is used.
+ * @returns {string} The detected package manager name (e.g., "npm", "yarn", "pnpm").
+ * @throws {Error} If no package manager could be detected in the specified directory.
+ *
+ * @example
+ * // Detect package manager in the current directory
+ * const packageManager = detectPackageManager();
+ * console.log(packageManager); // Outputs: "npm", "yarn", etc.
+ *
+ * @example
+ * // Detect package manager in a specific directory
+ * const packageManager = detectPackageManager("/path/to/project");
+ * console.log(packageManager);
+ */
 export declare function detectPackageManager(root_path?: string): string
 
 /**

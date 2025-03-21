@@ -1,0 +1,36 @@
+[package]
+name = "sublime_git_tools"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+chrono = "0.4"
+git2 = { version = "0.20", features = [
+  "default",
+  "vendored-libgit2",
+  "vendored-openssl",
+] }
+libgit2-sys = { version = "*", features = [
+  "ssh",
+  "https",
+  "vendored",
+  "vendored-openssl",
+] }
