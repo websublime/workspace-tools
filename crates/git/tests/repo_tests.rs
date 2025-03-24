@@ -44,7 +44,11 @@ mod repo_tests {
         let repo = Repo::open(project_root.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
 
-        assert_eq!(repo.get_repo_path().display().to_string(), project_root.display().to_string());
+        // Compare canonical paths to handle different string formats
+        let repo_path = std::fs::canonicalize(repo.get_repo_path()).unwrap();
+        let expected_path = std::fs::canonicalize(&project_root).unwrap();
+
+        assert_eq!(repo_path, expected_path);
 
         Ok(())
     }
@@ -84,8 +88,6 @@ mod repo_tests {
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         let config = repo.config("Sublime Git Bot", "git-boot@websublime.com")?.list_config()?;
-
-        dbg!(&config);
 
         assert!(!config.is_empty());
 
