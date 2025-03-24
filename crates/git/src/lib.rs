@@ -1,3 +1,3 @@
 mod repo;
 
-pub use repo::{Repo, RepoError};
+pub use repo::{GitChangedFile, GitFileStatus, Repo, RepoCommit, RepoError, RepoTags};
