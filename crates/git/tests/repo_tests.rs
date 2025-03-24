@@ -37,13 +37,16 @@ mod repo_tests {
     }
 
     #[test]
-    fn test_repo_open() {
+    fn test_repo_open() -> Result<(), RepoError> {
         let current_dir = std::env::current_dir().unwrap();
         let project_root = get_project_root_path(Some(current_dir)).unwrap();
 
-        let repo = Repo::open(project_root.display().to_string().as_str()).unwrap();
+        let repo = Repo::open(project_root.display().to_string().as_str())?;
+        repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
 
         assert_eq!(repo.get_repo_path().display().to_string(), project_root.display().to_string());
+
+        Ok(())
     }
 
     #[test]
@@ -51,6 +54,7 @@ mod repo_tests {
         let workspace_path = &create_workspace().unwrap();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
+        repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
         let result = repo.create_branch("feat/my-new-feature");
 
         assert!(result.is_ok());
@@ -63,6 +67,7 @@ mod repo_tests {
         let workspace_path = &create_workspace().unwrap();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
+        repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
         repo.create_branch("feat/my-new-feature")?;
         let branches = repo.list_branches()?;
 
@@ -78,6 +83,7 @@ mod repo_tests {
         let workspace_path = &create_workspace().unwrap();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
+        repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
         let config = repo.list_config()?;
 
         assert!(!config.is_empty());
@@ -90,6 +96,7 @@ mod repo_tests {
         let workspace_path = &create_workspace().unwrap();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
+        repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
         repo.create_branch("feat/my-new-feature")?;
         repo.checkout("feat/my-new-feature")?;
 
@@ -105,6 +112,7 @@ mod repo_tests {
         let workspace_path = &create_workspace().unwrap();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
+        repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
         let current_branch = repo.get_current_branch()?;
 
         assert_eq!(current_branch, String::from("main"));
@@ -117,6 +125,7 @@ mod repo_tests {
         let workspace_path = &create_workspace().unwrap();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
+        repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
         repo.create_tag("v1.0.0", None)?;
         repo.create_tag("v1.1.0", Some("chore: tag".to_string()))?;
         let last_tag = repo.get_last_tag()?;
@@ -131,6 +140,7 @@ mod repo_tests {
         let workspace_path = &create_workspace().unwrap();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
+        repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
         let current_sha = repo.get_current_sha()?;
 
         assert!(!current_sha.is_empty());
