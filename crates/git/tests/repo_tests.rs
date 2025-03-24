@@ -83,8 +83,9 @@ mod repo_tests {
         let workspace_path = &create_workspace().unwrap();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
-        repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
-        let config = repo.list_config()?;
+        let config = repo.config("Sublime Git Bot", "git-boot@websublime.com")?.list_config()?;
+
+        dbg!(&config);
 
         assert!(!config.is_empty());
 

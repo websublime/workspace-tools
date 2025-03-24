@@ -1,0 +1,68 @@
+name: 'Setup Git Config'
+description: 'Setup git config'
+branding:
+  icon: git-commit
+  color: black
+inputs:
+  user:
+    description: |
+      User to setup.
+        - `bot`    => github-actions[bot]
+        - `actor`  => github.actor
+        - `commit` => user from `HEAD` commit
+        - `USER_NAME <USER_EMAIL>`
+    required: true
+    default: 'bot'
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup User Config
+      shell: bash
+      env:
+        INPUT_USER: ${{ inputs.user }}
+      run: |
+        # Setup User Config
+
+        user_name=
+        user_email=
+
+        case "$INPUT_USER" in
+          bot)
+            user_name='github-actions[bot]'
+            user_email='41898282+github-actions[bot]@users.noreply.github.com'
+            ;;
+          actor)
+            user_name="${GITHUB_ACTOR}"
+            user_email="${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
+            ;;
+          committer)
+            user_name="$(git log -n 1 --format=%cn)"
+            user_email="$(git log -n 1 --format=%ce)"
+            ;;
+          *)
+            user_name="$(echo "$INPUT_USER" | sed -E '/^(.*) *<(.*)> *$/!d;s//\1/')"
+            user_email="$(echo "$INPUT_USER" | sed -E '/^(.*) *<(.*)> *$/!d;s//\2/')"
+            ;;
+        esac
+
+        if [ -z "$user_name" ] || [ -z "$user_email" ]
+        then
+          echo "::error::Unexpected user value '$INPUT_USER'" \
+            "Valid user values are bot, actor, committer or 'USER_NAME <USER_EMAIL>'"
+          exit 1
+        fi
+
+        git config --global user.name  "$user_name"  \
+          && echo "user.name:  ${user_name}"
+        git config --global user.email "$user_email" \
+          && echo "user.email: ${user_email}"
+
+    - name: Setup Push Config
+      shell: bash
+      run: |
+        # Setup Push Config
+
+        push_autoSetupRemote=true
+
+        git config --global push.autoSetupRemote "$push_autoSetupRemote" \
+          && echo "push.autoSetupRemote: ${push_autoSetupRemote}"

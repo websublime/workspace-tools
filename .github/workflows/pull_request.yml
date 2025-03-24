@@ -73,5 +73,10 @@ jobs:
       - name: Set Node
         uses: ./.github/actions/setup-node
 
+      - name: Set up Git
+        uses: ./.github/actions/setup-git
+        with:
+          user: committer
+
       - name: Run Tests
         run: cargo test --workspace -- --test-threads=1 --nocapture

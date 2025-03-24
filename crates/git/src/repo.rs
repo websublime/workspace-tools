@@ -4,6 +4,7 @@ use git2::{
     PushOptions, RemoteCallbacks, Repository, RepositoryInitOptions, StatusOptions, StatusShow,
     TreeWalkMode, TreeWalkResult,
 };
+use std::collections::HashMap;
 use std::fs::canonicalize;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -386,14 +387,14 @@ impl Repo {
         self.local_path.as_path()
     }
 
-    pub fn config(&self, username: &str, email: &str) -> Result<(), RepoError> {
+    pub fn config(&self, username: &str, email: &str) -> Result<&Self, RepoError> {
         let mut config = self.repo.config().map_err(RepoError::ConfigError)?;
         config.set_str("user.name", username)?;
         config.set_str("user.email", email)?;
         config.set_bool("core.safecrlf", true)?;
         config.set_str("core.autocrlf", "input")?;
         config.set_bool("core.filemode", false)?;
-        Ok(())
+        Ok(self)
     }
 
     pub fn create_branch(&self, branch_name: &str) -> Result<&Self, RepoError> {
@@ -423,23 +424,23 @@ impl Repo {
         Ok(branch_names)
     }
 
-    pub fn list_config(&self) -> Result<Vec<String>, RepoError> {
+    pub fn list_config(&self) -> Result<HashMap<String, String>, RepoError> {
         let config = self.repo.config().map_err(RepoError::ConfigError)?;
-        let mut config_names = Vec::new();
+        let mut config_map = HashMap::new();
 
         let mut entries = config.entries(None).map_err(RepoError::ConfigEntriesError)?;
-        while let Some(entry) = entries.next() {
-            match entry {
-                Ok(entry) => {
-                    if let Some(name) = entry.name() {
-                        config_names.push(name.to_string());
+        while let Some(entry_result) = entries.next() {
+            if let Ok(entry) = entry_result {
+                if let Some(name) = entry.name() {
+                    // Try to get the value as a string
+                    if let Ok(value) = config.get_string(name) {
+                        config_map.insert(name.to_string(), value);
                     }
                 }
-                Err(_) => continue,
             }
         }
 
-        Ok(config_names)
+        Ok(config_map)
     }
 
     pub fn checkout(&self, branch_name: &str) -> Result<&Self, RepoError> {
