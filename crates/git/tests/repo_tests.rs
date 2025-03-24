@@ -504,6 +504,7 @@ mod repo_tests {
     }
 
     #[test]
+    #[allow(clippy::items_after_statements)]
     fn test_get_all_files_changed_since_branch() -> Result<(), RepoError> {
         let workspace_path = &create_workspace().unwrap();
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
@@ -550,8 +551,7 @@ mod repo_tests {
             .expect("Failed to write shared/utils.js");
 
         // Initial commit with all files
-        repo.add_all()?;
-        repo.commit("feat: initial commit")?;
+        repo.add_all()?.commit("feat: initial commit")?;
 
         // Create a feature branch from this point
         repo.create_branch("feature-branch")?;
@@ -587,11 +587,18 @@ mod repo_tests {
         // Should include all package changes (3 files) but not root-file.txt
         assert_eq!(changes.len(), 3, "Should find 3 changed files in packages");
 
+        // Cross-platform path checking function
+        fn path_contains(path: &str, component: &str) -> bool {
+            // Normalize path separators for comparison
+            let normalized_path = path.replace('\\', "/");
+            normalized_path.contains(component.replace('\\', "/").as_str())
+        }
+
         // Check for expected files
-        let has_pkg1_index = changes.iter().any(|f| f.contains("pkg1/src/index.js"));
-        let has_pkg2_new_file = changes.iter().any(|f| f.contains("pkg2/src/new-file.js"));
-        let has_shared_utils = changes.iter().any(|f| f.contains("shared/utils.js"));
-        let has_root_file = changes.iter().any(|f| f.contains("root-file.txt"));
+        let has_pkg1_index = changes.iter().any(|f| path_contains(f, "pkg1/src/index.js"));
+        let has_pkg2_new_file = changes.iter().any(|f| path_contains(f, "pkg2/src/new-file.js"));
+        let has_shared_utils = changes.iter().any(|f| path_contains(f, "shared/utils.js"));
+        let has_root_file = changes.iter().any(|f| path_contains(f, "root-file.txt"));
 
         assert!(has_pkg1_index, "Should include modified pkg1/src/index.js");
         assert!(has_pkg2_new_file, "Should include new pkg2/src/new-file.js");
@@ -605,7 +612,7 @@ mod repo_tests {
             repo.get_all_files_changed_since_branch(&pkg1_paths, "feature-branch")?;
 
         assert_eq!(pkg1_changes.len(), 1, "Should find 1 changed file in pkg1");
-        assert!(pkg1_changes.iter().any(|f| f.contains("pkg1/src/index.js")));
+        assert!(pkg1_changes.iter().any(|f| path_contains(f, "pkg1/src/index.js")));
 
         // Test 3: Get changes for multiple specific packages
         let specific_paths =
@@ -615,9 +622,9 @@ mod repo_tests {
             repo.get_all_files_changed_since_branch(&specific_paths, "feature-branch")?;
 
         assert_eq!(specific_changes.len(), 2, "Should find 2 changed files in pkg1 and pkg2");
-        assert!(specific_changes.iter().any(|f| f.contains("pkg1/src/index.js")));
-        assert!(specific_changes.iter().any(|f| f.contains("pkg2/src/new-file.js")));
-        assert!(!specific_changes.iter().any(|f| f.contains("shared/utils.js")));
+        assert!(specific_changes.iter().any(|f| path_contains(f, "pkg1/src/index.js")));
+        assert!(specific_changes.iter().any(|f| path_contains(f, "pkg2/src/new-file.js")));
+        assert!(!specific_changes.iter().any(|f| path_contains(f, "shared/utils.js")));
 
         // Test 4: Non-existent package path
         let non_existent = vec![workspace_path.join("non-existent").to_string_lossy().to_string()];
