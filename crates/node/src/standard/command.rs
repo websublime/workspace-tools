@@ -1,15 +1,6 @@
 use napi::bindgen_prelude::*;
 use sublime_standard_tools::{execute, CommandError};
 
-#[napi]
-pub const COMMAND_ERROR_RUN: &str = "CommandErrorRun";
-
-#[napi]
-pub const COMMAND_ERROR_EXECUTION: &str = "CommandErrorExecution";
-
-#[napi]
-pub const COMMAND_FAILURE_ZERO_CODE: &str = "CommandFailureZeroCode";
-
 /// Custom error type for handling JavaScript-facing command execution errors
 ///
 /// This enum represents different types of errors that can occur during command execution:
