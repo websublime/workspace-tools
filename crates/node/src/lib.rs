@@ -2,6 +2,7 @@
 extern crate napi_derive;
 
 mod git;
+mod pkg;
 mod standard;
 
 #[cfg(all(not(target_os = "linux"), not(target_family = "wasm")))]
@@ -23,6 +24,7 @@ pub fn get_version() -> String {
 }
 
 pub use git::repository::GitRepository;
+pub use pkg::types::version::{bump_major, bump_minor, bump_patch, bump_snapshot};
 pub use standard::command::js_execute;
 pub use standard::manager::js_detect_package_manager;
 pub use standard::path::js_get_project_root_path;

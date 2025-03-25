@@ -560,11 +560,13 @@ export declare class GitTag {
   tag: string
 }
 
-export const COMMAND_ERROR_EXECUTION: string
+export declare function bumpMajor(version: string): string | null
 
-export const COMMAND_ERROR_RUN: string
+export declare function bumpMinor(version: string): string | null
 
-export const COMMAND_FAILURE_ZERO_CODE: string
+export declare function bumpPatch(version: string): string | null
+
+export declare function bumpSnapshot(version: string, suffix: string): string | null
 
 /**
  * Detects the package manager used in a project directory.

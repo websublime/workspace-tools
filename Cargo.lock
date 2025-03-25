@@ -1316,6 +1316,7 @@ dependencies = [
  "serde_json",
  "sublime_git_tools",
  "sublime_node_tools",
+ "sublime_package_tools",
  "sublime_standard_tools",
  "tempfile",
 ]

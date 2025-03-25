@@ -23,7 +23,7 @@ bind_instead_of_map = "allow"
 [dependencies]
 sublime_standard_tools = { workspace = true }
 sublime_git_tools = { workspace = true }
-#ws_pkg = { workspace = true }
+sublime_package_tools = { workspace = true }
 #ws_monorepo = { workspace = true }
 serde_json = { workspace = true }
 semver = { version = "1.0.23", features = ["serde"] }

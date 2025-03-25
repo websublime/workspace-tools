@@ -3,9 +3,10 @@ import {
   detectPackageManager,
   executeCommand,
   GitRepository,
-  COMMAND_ERROR_EXECUTION,
-  COMMAND_ERROR_RUN,
-  COMMAND_FAILURE_ZERO_CODE,
+  bumpMajor,
+  bumpMinor,
+  bumpPatch,
+  bumpSnapshot,
 } from './binding'
 
 export {
@@ -13,7 +14,8 @@ export {
   detectPackageManager,
   executeCommand,
   GitRepository,
-  COMMAND_ERROR_EXECUTION,
-  COMMAND_ERROR_RUN,
-  COMMAND_FAILURE_ZERO_CODE,
+  bumpMajor,
+  bumpMinor,
+  bumpPatch,
+  bumpSnapshot,
 }
