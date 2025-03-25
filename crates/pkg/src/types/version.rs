@@ -203,4 +203,9 @@ impl Version {
             true
         }
     }
+
+    pub fn parse(version: &str) -> Result<SemVersion, VersionError> {
+        let version = semver::Version::parse(version)?;
+        Ok(version)
+    }
 }

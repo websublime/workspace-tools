@@ -8,6 +8,8 @@ pub enum VersionError {
         error: semver::Error,
         message: String,
     },
+    #[error("Invalid version: {0}")]
+    InvalidVersion(String),
 }
 
 impl From<semver::Error> for VersionError {
@@ -24,6 +26,7 @@ impl Clone for VersionError {
                 let error = semver::Version::parse("invalid-version").unwrap_err();
                 VersionError::Parse { error, message: message.clone() }
             }
+            VersionError::InvalidVersion(message) => VersionError::InvalidVersion(message.clone()),
         }
     }
 }
@@ -32,6 +35,7 @@ impl AsRef<str> for VersionError {
     fn as_ref(&self) -> &str {
         match self {
             VersionError::Parse { error: _, message: _ } => "VersionErrorParse",
+            VersionError::InvalidVersion(_) => "VersionErrorInvalidVersion",
         }
     }
 }
