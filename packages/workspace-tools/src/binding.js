@@ -364,6 +364,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
+module.exports.GitRepository = nativeBinding.GitRepository
 module.exports.COMMAND_ERROR_EXECUTION = nativeBinding.COMMAND_ERROR_EXECUTION
 module.exports.COMMAND_ERROR_RUN = nativeBinding.COMMAND_ERROR_RUN
 module.exports.COMMAND_FAILURE_ZERO_CODE = nativeBinding.COMMAND_FAILURE_ZERO_CODE

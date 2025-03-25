@@ -22,7 +22,7 @@ bind_instead_of_map = "allow"
 
 [dependencies]
 sublime_standard_tools = { workspace = true }
-#ws_git = { workspace = true }
+sublime_git_tools = { workspace = true }
 #ws_pkg = { workspace = true }
 #ws_monorepo = { workspace = true }
 serde_json = { workspace = true }
