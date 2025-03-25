@@ -3,10 +3,12 @@ import { getProjectRootPath, executeCommand, detectPackageManager, GitRepository
 
 /**
  * @typedef {import('../dist/types').executeCommand} executeCommand
+ * @typedef {import('../dist/types').detectPackageManager} detectPackageManager
  * @typedef {import('../dist/types').getProjectRootPath} getProjectRootPath
  * @typedef {import('../dist/types').GitRepository} GitRepository
  */
 
+/** @type {getProjectRootPath} */
 const rootPath = getProjectRootPath();
 
 console.log(rootPath);
@@ -14,5 +16,8 @@ console.log(rootPath);
 console.log(executeCommand("git", ".", ["status"]));
 console.log(detectPackageManager(rootPath));
 
-const gitRepo = GitRepository.open(rootPath);
-console.log(gitRepo.path);
+/**
+ * @type {GitRepository}
+ */
+const gitRepo = GitRepository.open(rootPath)
+console.log(gitRepo.currentBranch);

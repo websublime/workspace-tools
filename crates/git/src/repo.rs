@@ -7,6 +7,7 @@ use git2::{
 use std::collections::HashMap;
 use std::fs::canonicalize;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use thiserror::Error;
 
 /// Canonicalizes a path string to its absolute form
@@ -53,8 +54,9 @@ fn canonicalize_path(path: &str) -> Result<String, RepoError> {
 /// repo.add_all().expect("Failed to stage changes");
 /// let commit_id = repo.commit("feat: add new feature").expect("Failed to commit");
 /// ```
+#[derive(Clone)]
 pub struct Repo {
-    repo: Repository,
+    repo: Rc<Repository>,
     local_path: PathBuf,
 }
 
@@ -548,7 +550,7 @@ impl Repo {
         .map_err(RepoError::CreateRepoFailure)?;
 
         // Just return the repo without making any commits
-        let result = Self { repo, local_path: location_buf };
+        let result = Self { repo: Rc::new(repo), local_path: location_buf };
 
         // Now make the initial commit using our new instance
         result.make_initial_commit()?;
@@ -579,7 +581,7 @@ impl Repo {
         let local_path = canonicalize_path(path)?;
         let repo = Repository::open(path).map_err(RepoError::OpenRepoFailure)?;
 
-        Ok(Self { repo, local_path: PathBuf::from(local_path) })
+        Ok(Self { repo: Rc::new(repo), local_path: PathBuf::from(local_path) })
     }
 
     /// Clones a Git repository from a URL to a local path
@@ -605,7 +607,7 @@ impl Repo {
         let local_path = canonicalize_path(path)?;
         let repo = Repository::clone(url, path).map_err(RepoError::CloneRepoFailure)?;
 
-        Ok(Self { repo, local_path: PathBuf::from(local_path) })
+        Ok(Self { repo: Rc::new(repo), local_path: PathBuf::from(local_path) })
     }
 
     /// Gets the local path of the repository
@@ -834,7 +836,7 @@ impl Repo {
     /// repo.create_tag("v1.0.0", Some("Version 1.0.0 release".to_string()))
     ///     .expect("Failed to create tag");
     /// ```
-    pub fn create_tag(&self, tag: &str, message: Option<String>) -> Result<(), RepoError> {
+    pub fn create_tag(&self, tag: &str, message: Option<String>) -> Result<&Self, RepoError> {
         let signature = self.repo.signature().map_err(RepoError::SignatureError)?;
         let tag_message = match message {
             Some(msg) => msg,
@@ -857,7 +859,7 @@ impl Repo {
             .tag(tag, &target_object, &signature, &tag_message, false)
             .map_err(RepoError::CreateTagError)?;
 
-        Ok(())
+        Ok(self)
     }
 
     /// Adds a file to the Git index
