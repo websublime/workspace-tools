@@ -15,6 +15,8 @@ pub enum PackageError {
         #[source]
         error: io::Error,
     },
+    #[error("Failed to diff package between: {0}")]
+    PackageBetweenFailure(String),
 }
 
 impl From<serde_json::Error> for PackageError {
@@ -36,6 +38,7 @@ impl AsRef<str> for PackageError {
                 "PackageJsonParseFailure"
             }
             PackageError::PackageJsonIoFailure { path: _, error: _ } => "PackageJsonIoFailure",
+            PackageError::PackageBetweenFailure(_) => "PackageBetweenFailure",
         }
     }
 }
