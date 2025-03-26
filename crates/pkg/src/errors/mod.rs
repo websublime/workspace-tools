@@ -1,3 +1,3 @@
 pub mod dependency;
-pub mod error;
+pub mod package;
 pub mod version;
