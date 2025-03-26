@@ -1,6 +1,7 @@
 use crate::VersionError;
 use semver::{Version, VersionReq};
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::rc::Rc;
 
@@ -19,7 +20,7 @@ impl Display for Dependency {
 
 impl Dependency {
     pub fn new(name: &str, version: &str) -> Result<Self, VersionError> {
-        if version.starts_with('*') {
+        if version.starts_with('*') | version.contains("workspace:*") {
             return Err(VersionError::InvalidVersion(format!(
                 "Looks like you are trying to update a internal package: {version}"
             )));
@@ -39,8 +40,23 @@ impl Dependency {
         self.version.borrow().clone()
     }
 
+    pub fn fixed_version(&self) -> Result<Version, VersionError> {
+        let req_str = self.version.borrow().to_string();
+        // Remove operators and parse
+        let clean_version = req_str.trim_start_matches(|c| "^~=".contains(c)).trim();
+
+        Version::parse(clean_version).map_err(VersionError::from)
+    }
+
+    pub fn compare_versions(&self, other: &str) -> Result<Ordering, VersionError> {
+        let self_version = self.fixed_version()?;
+        let other_version = Version::parse(other)?;
+
+        Ok(self_version.cmp(&other_version))
+    }
+
     pub fn update_version(&self, new_version: &str) -> Result<(), VersionError> {
-        if new_version.starts_with('*') {
+        if new_version.starts_with('*') | new_version.contains("workspace:*") {
             return Err(VersionError::InvalidVersion(format!(
                 "Looks like you are trying to update a internal package: {new_version}"
             )));

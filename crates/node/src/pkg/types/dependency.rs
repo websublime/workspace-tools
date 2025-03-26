@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use napi::bindgen_prelude::*;
 use sublime_package_tools::Dependency as SublimeDependency;
 
@@ -10,6 +12,23 @@ use super::error::{version_format_napi_error, JsVersionError};
 #[napi]
 pub struct Dependency {
     pub(crate) inner: SublimeDependency,
+}
+
+#[napi]
+pub enum DependencyOrdering {
+    Less = 0,
+    Equal = 1,
+    Greater = 2,
+}
+
+impl From<Ordering> for DependencyOrdering {
+    fn from(ordering: Ordering) -> Self {
+        match ordering {
+            Ordering::Less => DependencyOrdering::Less,
+            Ordering::Equal => DependencyOrdering::Equal,
+            Ordering::Greater => DependencyOrdering::Greater,
+        }
+    }
 }
 
 #[napi]
@@ -120,5 +139,47 @@ impl Dependency {
     #[napi]
     pub fn matches(&self, other: String) -> Result<bool, JsVersionError> {
         self.inner.matches(&other).map_err(version_format_napi_error)
+    }
+
+    /// Returns the fixed version of this dependency if it exists.
+    ///
+    /// ```js
+    /// const dep = new Dependency('package-name', '1.0.0');
+    /// console.log(dep.fixed_version());  // Outputs: '1.0.0'
+    /// ```
+    ///
+    /// @returns {string | undefined} The fixed version of this dependency if it exists
+    #[napi(getter, ts_type = "string | undefined")]
+    pub fn fixed_version(&self) -> Option<String> {
+        if let Ok(version) = self.inner.fixed_version() {
+            Some(version.to_string())
+        } else {
+            None
+        }
+    }
+
+    /// Compares this dependency's version requirement with another version.
+    ///
+    /// ```js
+    /// const dep = new Dependency('package-name', '>=1.0.0');
+    ///
+    /// try {
+    ///   console.log(dep.compare_version('1.0.0'));  // Outputs: DependencyOrdering.Equal
+    ///   console.log(dep.compare_version('0.9.0'));  // Outputs: DependencyOrdering.Less
+    ///   console.log(dep.compare_version('2.0.0'));  // Outputs: DependencyOrdering.Greater
+    /// } catch (err) {
+    ///   console.error('Invalid version format:', err.message);
+    /// }
+    /// ```
+    ///
+    /// @param {string} other - The version to compare against this dependency's requirement
+    /// @returns {DependencyOrdering} The result of the comparison
+    /// @throws {JsVersionError} - If the version format is invalid
+    #[napi]
+    pub fn compare_version(&self, other: String) -> Result<DependencyOrdering, JsVersionError> {
+        self.inner
+            .compare_versions(&other)
+            .map(DependencyOrdering::from)
+            .map_err(version_format_napi_error)
     }
 }

@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod dependency_tests {
+    use std::cmp::Ordering;
+
     use semver::{Version, VersionReq};
     use sublime_package_tools::{Dependency, VersionError};
 
@@ -382,5 +384,21 @@ mod dependency_tests {
         assert!(dep1.matches("2.1.0").unwrap());
         assert!(!dep2.matches("1.1.0").unwrap());
         assert!(dep2.matches("2.1.0").unwrap());
+    }
+
+    #[test]
+    fn test_fixed_version() {
+        let dep = Dependency::new("shared", "^1.0.0").unwrap();
+
+        assert_eq!(dep.fixed_version().unwrap().to_string(), "1.0.0");
+        assert_eq!(dep.version().to_string(), "^1.0.0");
+    }
+
+    #[test]
+    fn test_compare_version() {
+        let dep = Dependency::new("shared", "^1.0.0").unwrap();
+        let order = dep.compare_versions("1.1.0").unwrap();
+
+        assert_eq!(order, Ordering::Less);
     }
 }
