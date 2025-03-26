@@ -364,6 +364,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
+module.exports.Dependency = nativeBinding.Dependency
 module.exports.GitChangedFile = nativeBinding.GitChangedFile
 module.exports.GitCommit = nativeBinding.GitCommit
 module.exports.GitRepository = nativeBinding.GitRepository

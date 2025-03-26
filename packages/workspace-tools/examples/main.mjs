@@ -1,5 +1,5 @@
 // @ts-check
-import { getProjectRootPath, executeCommand, detectPackageManager, GitRepository, bumpMajor, bumpMinor, bumpPatch, bumpSnapshot } from '../dist/esm/index.mjs';
+import { getProjectRootPath, executeCommand, detectPackageManager, GitRepository, Dependency, bumpMajor, bumpMinor, bumpPatch, bumpSnapshot } from '../dist/esm/index.mjs';
 
 /**
  * @typedef {import('../dist/types').executeCommand} executeCommand
@@ -10,6 +10,7 @@ import { getProjectRootPath, executeCommand, detectPackageManager, GitRepository
  * @typedef {import('../dist/types').bumpMinor} bumpMinor
  * @typedef {import('../dist/types').bumpPatch} bumpPatch
  * @typedef {import('../dist/types').bumpSnapshot} bumpSnapshot
+ * @typedef {import('../dist/types').Dependency} Dependency
  */
 
 /** @type {getProjectRootPath} */
@@ -49,3 +50,12 @@ console.log(patchVersion);
  */
 const majorVersion = bumpMajor('0.0.1');
 console.log(majorVersion);
+
+/**
+ * @type {Dependency}
+ */
+const dependency = new Dependency('react', '1.0.0');
+console.log(dependency.version, dependency.name, dependency.toString());
+
+dependency.updateVersion("1.5");
+console.log(dependency.matches(dependency.version));

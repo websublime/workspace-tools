@@ -24,6 +24,7 @@ pub fn get_version() -> String {
 }
 
 pub use git::repository::GitRepository;
+pub use pkg::types::dependency::Dependency;
 pub use pkg::types::version::{bump_major, bump_minor, bump_patch, bump_snapshot};
 pub use standard::command::js_execute;
 pub use standard::manager::js_detect_package_manager;
