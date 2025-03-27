@@ -1,6 +1,7 @@
 {
   "words": [
     "DependencyResolutionError",
-    "DependencyResolutionError"
+    "DependencyResolutionError",
+    "&vec![pkg.clone()]"
   ]
 }

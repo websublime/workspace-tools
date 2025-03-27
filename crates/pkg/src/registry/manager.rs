@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{NpmRegistry, PackageRegistry, PackageRegistryError, RegistryError};
@@ -36,6 +37,18 @@ pub struct RegistryManager {
 impl Default for RegistryManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl fmt::Debug for RegistryManager {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RegistryManager")
+            .field("default_registry", &self.default_registry)
+            .field("registry_urls", &self.registry_urls())
+            .field("scopes", &self.scopes)
+            .field("auth_configs_count", &self.auth_configs.len())
+            // Indicate that we're intentionally not including all fields
+            .finish_non_exhaustive()
     }
 }
 

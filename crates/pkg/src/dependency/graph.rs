@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     Dependency, DependencyResolutionError, Node, PackageError, Step, ValidationIssue,
-    ValidationReport,
+    ValidationOptions, ValidationReport,
 };
 use petgraph::algo::is_cyclic_directed;
 use petgraph::stable_graph::NodeIndex;
@@ -293,5 +293,55 @@ where
     {
         // This would check a package registry for newer versions
         HashMap::new()
+    }
+}
+
+impl<'a, N> DependencyGraph<'a, N>
+where
+    N: Node,
+{
+    /// Validates the dependency graph for Package nodes with custom options
+    pub fn validate_with_options(
+        &self,
+        options: &ValidationOptions,
+    ) -> Result<ValidationReport, DependencyResolutionError>
+    where
+        N: Node<DependencyType = Dependency>,
+    {
+        let mut report = ValidationReport::new();
+
+        // Check for circular dependencies
+        if let Err(e) = self.detect_circular_dependencies() {
+            if let DependencyResolutionError::CircularDependency { path } = e {
+                report.add_issue(ValidationIssue::CircularDependency { path });
+            } else {
+                // Unexpected error type
+                return Err(e);
+            }
+        }
+
+        // Check for unresolved dependencies
+        for dep in self.unresolved_dependencies() {
+            // Only add unresolved dependency issues if:
+            // 1. We're not treating unresolved as external, OR
+            // 2. This specific dependency is explicitly marked as internal
+            let name = dep.name().to_string();
+
+            if !options.treat_unresolved_as_external || options.is_internal_dependency(&name) {
+                report.add_issue(ValidationIssue::UnresolvedDependency {
+                    name,
+                    version_req: dep.version().to_string(),
+                });
+            }
+        }
+
+        // Find version conflicts
+        if let Some(conflicts) = self.find_version_conflicts() {
+            for (name, versions) in conflicts {
+                report.add_issue(ValidationIssue::VersionConflict { name, versions });
+            }
+        }
+
+        Ok(report)
     }
 }

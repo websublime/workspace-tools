@@ -73,3 +73,43 @@ impl ValidationReport {
         self.issues.iter().filter(|issue| !issue.is_critical()).collect()
     }
 }
+
+#[derive(Debug, Clone, Default)]
+pub struct ValidationOptions {
+    /// If true, unresolved dependencies are treated as external and not flagged as errors
+    pub treat_unresolved_as_external: bool,
+
+    /// Optional list of specific packages to consider internal (only used when treat_unresolved_as_external is true)
+    /// Any unresolved dependency in this list will still be flagged as an error
+    pub internal_packages: Vec<String>,
+}
+
+impl ValidationOptions {
+    /// Create new validation options with default settings (flag all unresolved dependencies)
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Treat unresolved dependencies as external (don't flag them as errors)
+    #[must_use]
+    pub fn treat_unresolved_as_external(mut self, value: bool) -> Self {
+        self.treat_unresolved_as_external = value;
+        self
+    }
+
+    /// Set list of packages that should be considered internal
+    #[must_use]
+    pub fn with_internal_packages<I, S>(mut self, packages: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.internal_packages = packages.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Check if a dependency should be treated as internal
+    pub fn is_internal_dependency(&self, name: &str) -> bool {
+        self.internal_packages.iter().any(|pkg| pkg == name)
+    }
+}
