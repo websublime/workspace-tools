@@ -1,5 +1,5 @@
 use serde::ser::Error as SerError;
-use std::io;
+use std::{io, sync::PoisonError};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -86,6 +86,8 @@ pub enum PackageRegistryError {
     JsonParseFailure(#[source] reqwest::Error),
     #[error("Failed to found package: {package_name}@{version}")]
     NotFound { package_name: String, version: String },
+    #[error("Failed to acquire lock on packages")]
+    LockFailure,
 }
 
 impl AsRef<str> for PackageRegistryError {
@@ -94,6 +96,7 @@ impl AsRef<str> for PackageRegistryError {
             PackageRegistryError::FetchFailure(_) => "FetchFailure",
             PackageRegistryError::JsonParseFailure(_) => "JsonParseFailure",
             PackageRegistryError::NotFound { package_name: _, version: _ } => "NotFound",
+            PackageRegistryError::LockFailure => "LockFailure",
         }
     }
 }
@@ -105,5 +108,11 @@ impl From<reqwest::Error> for PackageRegistryError {
         } else {
             PackageRegistryError::FetchFailure(error)
         }
+    }
+}
+
+impl<T> From<PoisonError<T>> for PackageRegistryError {
+    fn from(_: PoisonError<T>) -> Self {
+        PackageRegistryError::LockFailure
     }
 }

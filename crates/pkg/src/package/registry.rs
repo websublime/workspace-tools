@@ -50,80 +50,6 @@ impl Default for NpmRegistry {
     }
 }
 
-impl NpmRegistry {
-    /// Create a new npm registry client with the given base URL
-    pub fn new(base_url: &str) -> Self {
-        Self {
-            base_url: base_url.to_string(),
-            client: Client::new(),
-            user_agent: "ws-pkg/0.1.0".to_string(),
-            cache_ttl: Duration::from_secs(300), // 5 minutes default
-            versions_cache: Arc::new(Mutex::new(HashMap::new())),
-            latest_version_cache: Arc::new(Mutex::new(HashMap::new())),
-            auth_token: None,
-            auth_type: None,
-        }
-    }
-
-    /// Set the user agent string
-    pub fn set_user_agent(&mut self, user_agent: &str) -> &mut Self {
-        self.user_agent = user_agent.to_string();
-        self
-    }
-
-    /// Set authentication
-    pub fn set_auth(&mut self, token: &str, auth_type: &str) -> &mut Self {
-        self.auth_token = Some(token.to_string());
-        self.auth_type = Some(auth_type.to_string());
-        self
-    }
-
-    /// Set cache TTL
-    pub fn set_cache_ttl(&mut self, ttl: Duration) -> &mut Self {
-        self.cache_ttl = ttl;
-        self
-    }
-
-    /// Clear all caches
-    pub fn clear_cache(&mut self) {
-        self.versions_cache = Arc::new(Mutex::new(HashMap::new()));
-        self.latest_version_cache = Arc::new(Mutex::new(HashMap::new()));
-    }
-
-    /// Build a URL for the package
-    fn package_url(&self, package_name: &str) -> String {
-        // Handle scoped packages correctly
-        let encoded_name = if package_name.starts_with('@') {
-            // URL encode the @ character and the / character
-            package_name.replace('@', "%40").replace('/', "%2F")
-        } else {
-            package_name.to_string()
-        };
-
-        format!("{}/{}", self.base_url, encoded_name)
-    }
-
-    /// Build a request with appropriate headers
-    fn build_request(&self, url: &str) -> RequestBuilder {
-        let mut builder = self.client.get(url).header("User-Agent", &self.user_agent);
-
-        // Add auth if configured
-        if let (Some(token), Some(auth_type)) = (&self.auth_token, &self.auth_type) {
-            let auth_header = if auth_type.eq_ignore_ascii_case("bearer") {
-                format!("Bearer {token}")
-            } else if auth_type.eq_ignore_ascii_case("basic") {
-                format!("Basic {token}")
-            } else {
-                token.clone()
-            };
-
-            builder = builder.header("Authorization", auth_header);
-        }
-
-        builder
-    }
-}
-
 impl PackageRegistry for NpmRegistry {
     fn get_latest_version(
         &self,
@@ -224,5 +150,79 @@ impl PackageRegistry for NpmRegistry {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+}
+
+impl NpmRegistry {
+    /// Create a new npm registry client with the given base URL
+    pub fn new(base_url: &str) -> Self {
+        Self {
+            base_url: base_url.to_string(),
+            client: Client::new(),
+            user_agent: "ws-pkg/0.1.0".to_string(),
+            cache_ttl: Duration::from_secs(300), // 5 minutes default
+            versions_cache: Arc::new(Mutex::new(HashMap::new())),
+            latest_version_cache: Arc::new(Mutex::new(HashMap::new())),
+            auth_token: None,
+            auth_type: None,
+        }
+    }
+
+    /// Set the user agent string
+    pub fn set_user_agent(&mut self, user_agent: &str) -> &mut Self {
+        self.user_agent = user_agent.to_string();
+        self
+    }
+
+    /// Set authentication
+    pub fn set_auth(&mut self, token: &str, auth_type: &str) -> &mut Self {
+        self.auth_token = Some(token.to_string());
+        self.auth_type = Some(auth_type.to_string());
+        self
+    }
+
+    /// Set cache TTL
+    pub fn set_cache_ttl(&mut self, ttl: Duration) -> &mut Self {
+        self.cache_ttl = ttl;
+        self
+    }
+
+    /// Clear all caches
+    pub fn clear_cache(&mut self) {
+        self.versions_cache = Arc::new(Mutex::new(HashMap::new()));
+        self.latest_version_cache = Arc::new(Mutex::new(HashMap::new()));
+    }
+
+    /// Build a URL for the package
+    fn package_url(&self, package_name: &str) -> String {
+        // Handle scoped packages correctly
+        let encoded_name = if package_name.starts_with('@') {
+            // URL encode the @ character and the / character
+            package_name.replace('@', "%40").replace('/', "%2F")
+        } else {
+            package_name.to_string()
+        };
+
+        format!("{}/{}", self.base_url, encoded_name)
+    }
+
+    /// Build a request with appropriate headers
+    fn build_request(&self, url: &str) -> RequestBuilder {
+        let mut builder = self.client.get(url).header("User-Agent", &self.user_agent);
+
+        // Add auth if configured
+        if let (Some(token), Some(auth_type)) = (&self.auth_token, &self.auth_type) {
+            let auth_header = if auth_type.eq_ignore_ascii_case("bearer") {
+                format!("Bearer {token}")
+            } else if auth_type.eq_ignore_ascii_case("basic") {
+                format!("Basic {token}")
+            } else {
+                token.clone()
+            };
+
+            builder = builder.header("Authorization", auth_header);
+        }
+
+        builder
     }
 }

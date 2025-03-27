@@ -1,6 +1,7 @@
 mod dependency;
 mod errors;
 mod package;
+mod registry;
 mod version;
 
 pub use package::{
@@ -21,7 +22,10 @@ pub use dependency::{
 pub use errors::{
     dependency::DependencyResolutionError,
     package::{PackageError, PackageRegistryError},
+    registry::RegistryError,
     version::VersionError,
 };
+
+pub use registry::manager::RegistryManager;
 
 pub use version::version::{Version, VersionRelationship, VersionStability, VersionUpdateStrategy};
