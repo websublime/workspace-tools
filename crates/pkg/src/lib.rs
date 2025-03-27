@@ -36,4 +36,5 @@ pub use graph::{
     builder::{build_dependency_graph_from_package_infos, build_dependency_graph_from_packages},
     node::{Node, Step},
     validation::{ValidationIssue, ValidationReport},
+    visualization::{generate_ascii, generate_dot, save_dot_to_file},
 };
