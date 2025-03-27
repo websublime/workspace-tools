@@ -19,7 +19,7 @@ pub use package::{
 pub use dependency::{
     change::DependencyChange, dependency::Dependency, filter::DependencyFilter,
     graph::DependencyGraph, registry::DependencyRegistry, resolution::ResolutionResult,
-    update::DependencyUpdate, upgrader::DependencyUpgrader,
+    update::DependencyUpdate,
 };
 
 pub use errors::{
@@ -41,6 +41,7 @@ pub use graph::{
 };
 
 pub use upgrader::{
+    builder::Upgrader,
     config::{ExecutionMode, UpgradeConfig},
     status::{AvailableUpgrade, UpgradeStatus},
 };

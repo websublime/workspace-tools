@@ -5,4 +5,3 @@ pub mod graph;
 pub mod registry;
 pub mod resolution;
 pub mod update;
-pub mod upgrader;

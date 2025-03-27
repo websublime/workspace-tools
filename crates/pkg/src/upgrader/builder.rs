@@ -9,13 +9,13 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct DependencyUpgrader {
+pub struct Upgrader {
     registry_manager: RegistryManager,
     config: UpgradeConfig,
     cache: HashMap<String, Vec<String>>,
 }
 
-impl DependencyUpgrader {
+impl Upgrader {
     /// Create a new dependency upgrader with the given registry and default configuration
     pub fn new() -> Self {
         Self {
@@ -23,6 +23,10 @@ impl DependencyUpgrader {
             config: UpgradeConfig::default(),
             cache: HashMap::new(),
         }
+    }
+
+    pub fn create(config: UpgradeConfig, registry_manager: RegistryManager) -> Self {
+        Self { registry_manager, config, cache: HashMap::new() }
     }
 
     /// Create a new dependency upgrader with the given registry and configuration
