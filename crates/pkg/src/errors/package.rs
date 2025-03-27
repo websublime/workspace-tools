@@ -18,6 +18,8 @@ pub enum PackageError {
     },
     #[error("Failed to diff package between: {0}")]
     PackageBetweenFailure(String),
+    #[error("Failed to found package: {0}")]
+    PackageNotFound(String),
 }
 
 impl From<serde_json::Error> for PackageError {
@@ -40,6 +42,7 @@ impl AsRef<str> for PackageError {
             }
             PackageError::PackageJsonIoFailure { path: _, error: _ } => "PackageJsonIoFailure",
             PackageError::PackageBetweenFailure(_) => "PackageBetweenFailure",
+            PackageError::PackageNotFound(_) => "PackageNotFound",
         }
     }
 }
@@ -64,6 +67,7 @@ impl Clone for PackageError {
             PackageError::PackageBetweenFailure(msg) => {
                 PackageError::PackageBetweenFailure(msg.clone())
             }
+            PackageError::PackageNotFound(msg) => PackageError::PackageNotFound(msg.clone()),
         }
     }
 }

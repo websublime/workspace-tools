@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use semver::Version;
 
 use crate::{
-    Dependency, DependencyRegistry, DependencyResolutionError, ResolutionResult, VersionError,
+    Dependency, DependencyRegistry, DependencyResolutionError, Node, ResolutionResult, VersionError,
 };
 
 #[derive(Debug, Clone)]
@@ -11,6 +11,38 @@ pub struct Package {
     name: String,
     version: Rc<RefCell<Version>>,
     dependencies: Vec<Rc<RefCell<Dependency>>>,
+}
+
+impl Node for Package {
+    type DependencyType = crate::Dependency;
+    type Identifier = String;
+
+    fn dependencies(&self) -> Vec<&Self::DependencyType> {
+        // Since we use Rc<RefCell<Dependency>>, we can't return direct references
+        // Instead, return empty vec and use dependencies_vec
+        Vec::new()
+    }
+
+    fn dependencies_vec(&self) -> Vec<Self::DependencyType> {
+        self.dependencies()
+            .iter()
+            .filter_map(|dep| {
+                let borrowed = dep.borrow();
+                match borrowed.fixed_version() {
+                    Ok(version) => Dependency::new(borrowed.name(), &version.to_string()).ok(),
+                    _ => None,
+                }
+            })
+            .collect()
+    }
+
+    fn matches(&self, dependency: &Self::DependencyType) -> bool {
+        self.name() == dependency.name() && dependency.version().matches(&self.version())
+    }
+
+    fn identifier(&self) -> Self::Identifier {
+        self.name().to_string()
+    }
 }
 
 impl Package {

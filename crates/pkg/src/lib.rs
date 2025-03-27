@@ -1,5 +1,6 @@
 mod dependency;
 mod errors;
+mod graph;
 mod package;
 mod registry;
 mod version;
@@ -15,8 +16,9 @@ pub use package::{
 };
 
 pub use dependency::{
-    change::DependencyChange, dependency::Dependency, registry::DependencyRegistry,
-    resolution::ResolutionResult, update::DependencyUpdate,
+    change::DependencyChange, dependency::Dependency, filter::DependencyFilter,
+    graph::DependencyGraph, registry::DependencyRegistry, resolution::ResolutionResult,
+    update::DependencyUpdate,
 };
 
 pub use errors::{
@@ -26,6 +28,8 @@ pub use errors::{
     version::VersionError,
 };
 
-pub use registry::manager::RegistryManager;
+pub use registry::{local::LocalRegistry, manager::RegistryManager};
 
 pub use version::version::{Version, VersionRelationship, VersionStability, VersionUpdateStrategy};
+
+pub use graph::node::{Node, Step};
