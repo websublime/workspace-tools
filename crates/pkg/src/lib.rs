@@ -32,4 +32,8 @@ pub use registry::{local::LocalRegistry, manager::RegistryManager};
 
 pub use version::version::{Version, VersionRelationship, VersionStability, VersionUpdateStrategy};
 
-pub use graph::node::{Node, Step};
+pub use graph::{
+    builder::{build_dependency_graph_from_package_infos, build_dependency_graph_from_packages},
+    node::{Node, Step},
+    validation::{ValidationIssue, ValidationReport},
+};

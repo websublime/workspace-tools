@@ -1,7 +1,12 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use crate::{Node, PackageError, Step};
+use crate::{
+    Dependency, DependencyResolutionError, Node, PackageError, Step, ValidationIssue,
+    ValidationReport,
+};
+use petgraph::algo::is_cyclic_directed;
 use petgraph::stable_graph::NodeIndex;
+use petgraph::visit::Dfs;
 use petgraph::{stable_graph::StableDiGraph, Direction};
 
 #[derive(Debug, Clone)]
@@ -110,5 +115,183 @@ where
 
     pub fn get_dependents(&self, id: &N::Identifier) -> Result<&Vec<N::Identifier>, PackageError> {
         self.dependents.get(id).ok_or_else(|| PackageError::PackageNotFound(id.to_string()))
+    }
+}
+
+impl<'a, N> DependencyGraph<'a, N>
+where
+    N: Node,
+{
+    /// Check for circular dependencies in the graph
+    pub fn detect_circular_dependencies(&self) -> Result<&Self, DependencyResolutionError> {
+        if is_cyclic_directed(&self.graph) {
+            // Find one of the cycles for more detailed error reporting
+            let cycle = self.find_cycle();
+
+            // Convert identifiers to strings for error reporting
+            let cycle_strings: Vec<String> = cycle.into_iter().map(|id| id.to_string()).collect();
+
+            return Err(DependencyResolutionError::CircularDependency { path: cycle_strings });
+        }
+
+        Ok(self)
+    }
+
+    /// Find a cycle in the graph, if one exists
+    fn find_cycle(&self) -> Vec<N::Identifier> {
+        let mut cycle = Vec::new();
+
+        // Use Petgraph's cycle detection algorithm
+        // A simpler approach that works for our needs
+        for node_idx in self.graph.node_indices() {
+            let node_weight = self.graph.node_weight(node_idx).expect("Node should exist");
+            if let Step::Resolved(node) = node_weight {
+                // Check if this node is part of a cycle
+                let mut dfs = Dfs::new(&self.graph, node_idx);
+
+                // Start a DFS from this node
+                while let Some(next_idx) = dfs.next(&self.graph) {
+                    // If we can follow edges and get back to our source, we have a cycle
+                    for neighbor in self.graph.neighbors(next_idx) {
+                        if neighbor == node_idx && next_idx != node_idx {
+                            // Found a cycle
+                            cycle.push(node.identifier());
+
+                            // Add the immediate successor to the cycle as well
+                            if let Some(Step::Resolved(next_node)) =
+                                self.graph.node_weight(next_idx)
+                            {
+                                cycle.push(next_node.identifier());
+                            }
+
+                            // Return early - we found a cycle
+                            return cycle;
+                        }
+                    }
+                }
+            }
+        }
+
+        cycle
+    }
+
+    /// Find all missing dependencies in the workspace
+    pub fn find_missing_dependencies(&self) -> Vec<String>
+    where
+        N: Node<DependencyType = Dependency>,
+    {
+        let mut missing = Vec::new();
+
+        // Get all package names in the graph
+        let resolved_node_names: HashSet<String> =
+            self.resolved_dependencies().map(|node| node.identifier().to_string()).collect();
+
+        // Check each unresolved dependency
+        for dep in self.unresolved_dependencies() {
+            let name = dep.name().to_string();
+            if !resolved_node_names.contains(&name) {
+                missing.push(name);
+            }
+        }
+
+        missing
+    }
+
+    /// Find all version conflicts in the graph
+    ///
+    /// This implementation requires that N::DependencyType implements a way to get
+    /// name and version strings. For the Package implementation, we know this is Dependency,
+    /// but we can't access those methods directly with the generic type.
+    pub fn find_version_conflicts_for_package(&self) -> HashMap<String, Vec<String>>
+    where
+        N: Node<DependencyType = Dependency>,
+    {
+        let mut conflicts = HashMap::new();
+
+        // Group all dependencies by name
+        let mut requirements_by_name: HashMap<String, Vec<String>> = HashMap::new();
+
+        // Collect dependencies from all nodes in the graph
+        for node_idx in self.graph.node_indices() {
+            if let Some(Step::Resolved(node)) = self.graph.node_weight(node_idx) {
+                for dep in node.dependencies_vec() {
+                    requirements_by_name.entry(dep.name().to_string()).or_default().push(
+                        dep.fixed_version().map_or("no-version".to_string(), |v| v.to_string()),
+                    );
+                }
+            }
+        }
+
+        // Find conflicting requirements
+        for (name, reqs) in requirements_by_name {
+            // Count unique version requirements
+            let unique_reqs: HashSet<_> = reqs.iter().collect();
+
+            // If there's more than one unique requirement, it's a conflict
+            if unique_reqs.len() > 1 {
+                conflicts.insert(name, reqs);
+            }
+        }
+
+        conflicts
+    }
+
+    /// Find all version conflicts in the dependency graph
+    pub fn find_version_conflicts(&self) -> Option<HashMap<String, Vec<String>>>
+    where
+        N: Node<DependencyType = Dependency>,
+    {
+        let conflicts = self.find_version_conflicts_for_package();
+        if conflicts.is_empty() {
+            None
+        } else {
+            Some(conflicts)
+        }
+    }
+
+    /// Validates the dependency graph for Package nodes, checking for various issues
+    pub fn validate_package_dependencies(
+        &self,
+    ) -> Result<ValidationReport, DependencyResolutionError>
+    where
+        N: Node<DependencyType = Dependency>,
+    {
+        let mut report = ValidationReport::new();
+
+        // Check for circular dependencies
+        if let Err(e) = self.detect_circular_dependencies() {
+            if let DependencyResolutionError::CircularDependency { path } = e {
+                report.add_issue(ValidationIssue::CircularDependency { path });
+            } else {
+                // Unexpected error type
+                return Err(e);
+            }
+        }
+
+        // Check for unresolved dependencies
+        for dep in self.unresolved_dependencies() {
+            report.add_issue(ValidationIssue::UnresolvedDependency {
+                name: dep.name().to_string(),
+                version_req: dep.version().to_string(),
+            });
+        }
+
+        // Find version conflicts
+        if let Some(conflicts) = self.find_version_conflicts() {
+            for (name, versions) in conflicts {
+                report.add_issue(ValidationIssue::VersionConflict { name, versions });
+            }
+        }
+
+        Ok(report)
+    }
+
+    /// Check if dependencies can be upgraded to newer compatible versions
+    pub fn check_upgradable_dependencies(&self) -> HashMap<String, Vec<(String, String)>>
+    where
+        N: Node<DependencyType = Dependency>,
+    {
+        // This would check a package registry for newer versions
+        HashMap::new()
     }
 }

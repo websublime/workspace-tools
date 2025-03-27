@@ -12,6 +12,8 @@ pub enum DependencyResolutionError {
     NoValidVersion { name: String, requirements: Vec<String> },
     #[error("Dependency {name} not found in package {package}")]
     DependencyNotFound { name: String, package: String },
+    #[error("Circular dependencies founded: {path:?}")]
+    CircularDependency { path: Vec<String> },
 }
 
 impl AsRef<str> for DependencyResolutionError {
@@ -29,6 +31,7 @@ impl AsRef<str> for DependencyResolutionError {
             DependencyResolutionError::DependencyNotFound { name: _, package: _ } => {
                 "DependencyNotFound"
             }
+            DependencyResolutionError::CircularDependency { path: _ } => "CircularDependency",
         }
     }
 }
