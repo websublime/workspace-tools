@@ -1,3 +1,4 @@
+use serde::ser::Error as SerError;
 use std::io;
 use thiserror::Error;
 
@@ -43,6 +44,30 @@ impl AsRef<str> for PackageError {
     }
 }
 
+impl Clone for PackageError {
+    fn clone(&self) -> Self {
+        match self {
+            PackageError::PackageJsonParseFailure { path, error } => {
+                PackageError::PackageJsonParseFailure {
+                    path: path.clone(),
+                    // Convert error to string and parse it back
+                    error: serde_json::Error::custom(error.to_string()),
+                }
+            }
+            PackageError::PackageJsonIoFailure { path, error } => {
+                PackageError::PackageJsonIoFailure {
+                    path: path.clone(),
+                    // Create a new io::Error with the same kind and message
+                    error: io::Error::new(error.kind(), error.to_string()),
+                }
+            }
+            PackageError::PackageBetweenFailure(msg) => {
+                PackageError::PackageBetweenFailure(msg.clone())
+            }
+        }
+    }
+}
+
 impl PackageError {
     pub fn into_parse_error(error: serde_json::Error, path: String) -> PackageError {
         PackageError::PackageJsonParseFailure { path, error }
@@ -50,5 +75,35 @@ impl PackageError {
 
     pub fn into_io_error(error: io::Error, path: String) -> PackageError {
         PackageError::PackageJsonIoFailure { path, error }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum PackageRegistryError {
+    #[error("Failed to fetch: {0:?}")]
+    FetchFailure(#[source] reqwest::Error),
+    #[error("Failed to parse json response: {0:?}")]
+    JsonParseFailure(#[source] reqwest::Error),
+    #[error("Failed to found package: {package_name}@{version}")]
+    NotFound { package_name: String, version: String },
+}
+
+impl AsRef<str> for PackageRegistryError {
+    fn as_ref(&self) -> &str {
+        match self {
+            PackageRegistryError::FetchFailure(_) => "FetchFailure",
+            PackageRegistryError::JsonParseFailure(_) => "JsonParseFailure",
+            PackageRegistryError::NotFound { package_name: _, version: _ } => "NotFound",
+        }
+    }
+}
+
+impl From<reqwest::Error> for PackageRegistryError {
+    fn from(error: reqwest::Error) -> Self {
+        if error.is_decode() {
+            PackageRegistryError::JsonParseFailure(error)
+        } else {
+            PackageRegistryError::FetchFailure(error)
+        }
     }
 }

@@ -4,10 +4,12 @@ mod package;
 mod version;
 
 pub use package::{
+    cache::CacheEntry,
     change::ChangeType,
     diff::PackageDiff,
     info::PackageInfo,
     package::Package,
+    registry::{NpmRegistry, PackageRegistry},
     scope::{package_scope_name_version, PackageScopeMetadata},
 };
 
@@ -17,7 +19,9 @@ pub use dependency::{
 };
 
 pub use errors::{
-    dependency::DependencyResolutionError, package::PackageError, version::VersionError,
+    dependency::DependencyResolutionError,
+    package::{PackageError, PackageRegistryError},
+    version::VersionError,
 };
 
 pub use version::version::{Version, VersionRelationship, VersionStability, VersionUpdateStrategy};
