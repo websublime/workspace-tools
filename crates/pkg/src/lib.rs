@@ -3,6 +3,7 @@ mod errors;
 mod graph;
 mod package;
 mod registry;
+mod upgrader;
 mod version;
 
 pub use package::{
@@ -18,7 +19,7 @@ pub use package::{
 pub use dependency::{
     change::DependencyChange, dependency::Dependency, filter::DependencyFilter,
     graph::DependencyGraph, registry::DependencyRegistry, resolution::ResolutionResult,
-    update::DependencyUpdate,
+    update::DependencyUpdate, upgrader::DependencyUpgrader,
 };
 
 pub use errors::{
@@ -37,4 +38,9 @@ pub use graph::{
     node::{Node, Step},
     validation::{ValidationIssue, ValidationReport},
     visualization::{generate_ascii, generate_dot, save_dot_to_file},
+};
+
+pub use upgrader::{
+    config::{ExecutionMode, UpgradeConfig},
+    status::{AvailableUpgrade, UpgradeStatus},
 };
