@@ -71,6 +71,10 @@ pub enum ChangeType {
     Style,
     /// Custom change type.
     Custom(String),
+    /// Unknown change type.
+    Unknown,
+    /// Breaking change type.
+    Breaking,
 }
 
 impl fmt::Display for ChangeType {
@@ -88,6 +92,8 @@ impl fmt::Display for ChangeType {
             ChangeType::Revert => write!(f, "revert"),
             ChangeType::Style => write!(f, "style"),
             ChangeType::Custom(s) => write!(f, "{s}"),
+            ChangeType::Unknown => write!(f, "unknown"),
+            ChangeType::Breaking => write!(f, "breaking"),
         }
     }
 }

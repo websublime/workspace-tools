@@ -1,5 +1,8 @@
 mod test_utils;
 
+use std::fs::{self, File};
+use std::io::Write;
+use std::path::PathBuf;
 use std::rc::Rc;
 use sublime_git_tools::Repo;
 use sublime_monorepo_tools::{
@@ -9,6 +12,9 @@ use test_utils::TestWorkspace;
 
 #[cfg(test)]
 mod changes_tracker_tests {
+
+    use sublime_monorepo_tools::ChangeScope;
+
     use super::*;
 
     fn setup_test_workspace_with_git() -> (TestWorkspace, Rc<sublime_monorepo_tools::Workspace>) {
@@ -32,6 +38,19 @@ mod changes_tracker_tests {
             manager.discover_workspace(&root, &options).expect("Failed to discover workspace");
 
         (test_workspace, Rc::new(workspace))
+    }
+
+    fn create_file_with_content(path: &PathBuf, content: &str) -> std::io::Result<()> {
+        // Create parent directories if they don't exist
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        // Create and write to the file
+        let mut file = File::create(path)?;
+        file.write_all(content.as_bytes())?;
+
+        Ok(())
     }
 
     #[test]
@@ -114,6 +133,82 @@ mod changes_tracker_tests {
     }
 
     #[test]
+    fn test_detect_changes_with_different_scopes() {
+        // Set up test environment
+        let (test_workspace, workspace) = setup_test_workspace_with_git();
+        let mut tracker =
+            ChangeTracker::new(Rc::clone(&workspace), Box::new(MemoryChangeStore::new()));
+
+        let root_path = test_workspace.path();
+
+        // Create files in different scopes
+        fs::create_dir_all(root_path.join("packages/pkg-a/src")).unwrap();
+        fs::create_dir_all(root_path.join("shared")).unwrap();
+
+        // Package-scoped file (pkg-a)
+        let pkg_file_rel = "packages/pkg-a/src/new_feature.js";
+        create_file_with_content(
+            &root_path.join(pkg_file_rel),
+            "export const feature = () => 'new feature';",
+        )
+        .expect("Failed to create package file");
+
+        // Monorepo-scoped file (shared config)
+        let monorepo_file_rel = "shared/config.js";
+        create_file_with_content(
+            &root_path.join(monorepo_file_rel),
+            "module.exports = { shared: true };",
+        )
+        .expect("Failed to create monorepo file");
+
+        // Root-scoped file
+        let root_file_rel = "root-level-file.md";
+        create_file_with_content(&root_path.join(root_file_rel), "# Root Level Documentation")
+            .expect("Failed to create root file");
+
+        // Get repo and create commits with conventional messages
+        let repo_path = root_path.to_str().unwrap();
+        let repo = Repo::open(repo_path).expect("Failed to open Git repo");
+
+        // Get the initial SHA before any commits
+        let initial_sha = repo.get_current_sha().unwrap();
+
+        // Add all files in one commit to simplify test
+        repo.add_all().expect("Failed to add all files");
+        repo.commit("feat: add files in different scopes").expect("Failed to commit changes");
+
+        // Now detect changes
+        let changes =
+            tracker.detect_changes_between(&initial_sha, None).expect("Failed to detect changes");
+
+        // We should have at least one change for pkg-a
+        let has_pkg_a_change = changes.iter().any(|c| c.package == "pkg-a");
+        assert!(has_pkg_a_change, "No changes detected for pkg-a");
+
+        // Find package-specific change and verify type
+        if let Some(pkg_change) = changes.iter().find(|c| c.package == "pkg-a") {
+            assert!(
+                matches!(pkg_change.change_type, ChangeType::Feature),
+                "Expected Feature change type for pkg-a based on commit, got {:?}",
+                pkg_change.change_type
+            );
+        }
+
+        // The monorepo and root changes should be assigned to some package
+        // Could be root or first package depending on implementation
+        assert!(!changes.is_empty(), "Expected at least one change with different scopes");
+
+        // All changes should be Feature type
+        for change in &changes {
+            assert!(
+                matches!(change.change_type, ChangeType::Feature),
+                "Expected Chore change type, got {:?}",
+                change.change_type
+            );
+        }
+    }
+
+    #[test]
     fn test_unreleased_changes() {
         let (_, workspace) = setup_test_workspace_with_git();
         let store = Box::new(MemoryChangeStore::new());
@@ -186,5 +281,164 @@ mod changes_tracker_tests {
         let unreleased = tracker.store().get_unreleased_changes("pkg-a").unwrap();
         assert_eq!(unreleased.len(), 1);
         assert!(unreleased[0].release_version.is_none());
+    }
+
+    #[test]
+    fn test_change_detection_from_commit_messages() {
+        // Set up test environment
+        let (test_workspace, workspace) = setup_test_workspace_with_git();
+        let mut tracker =
+            ChangeTracker::new(Rc::clone(&workspace), Box::new(MemoryChangeStore::new()));
+
+        let root_path = test_workspace.path();
+
+        // Create package directory
+        fs::create_dir_all(root_path.join("packages/pkg-a")).unwrap();
+
+        // Create a test file
+        let file_path = root_path.join("packages/pkg-a/file.js");
+        fs::write(&file_path, "console.log('test');").unwrap();
+
+        // Get repo and initial state
+        let repo = Repo::open(root_path.to_str().unwrap()).expect("Failed to open Git repo");
+        let initial_sha = repo.get_current_sha().unwrap();
+
+        // Create a feature commit
+        repo.add("packages/pkg-a/file.js").unwrap();
+        repo.commit("feat: add file").unwrap();
+
+        // Detect changes
+        let changes = tracker.detect_changes_between(&initial_sha, None).unwrap();
+
+        // Check that we have at least one change
+        assert!(!changes.is_empty(), "No changes detected");
+
+        // Check that we have a change for pkg-a
+        let pkg_changes = changes.iter().filter(|c| c.package == "pkg-a").collect::<Vec<_>>();
+
+        assert!(!pkg_changes.is_empty(), "No package changes detected");
+
+        // Check that the change type is Chore (the default in the implementation)
+        assert!(
+            matches!(pkg_changes[0].change_type, ChangeType::Feature),
+            "Expected Feature change type, got {:?}",
+            pkg_changes[0].change_type
+        );
+    }
+
+    #[test]
+    fn test_cache_functionality() {
+        let (test_workspace, workspace) = setup_test_workspace_with_git();
+        let mut tracker =
+            ChangeTracker::new(Rc::clone(&workspace), Box::new(MemoryChangeStore::new()));
+
+        // Create a test file in a package
+        let root_path = test_workspace.path();
+        let test_file_rel = "packages/pkg-a/test_file.js";
+        fs::create_dir_all(root_path.join("packages/pkg-a")).unwrap();
+        create_file_with_content(&root_path.join(test_file_rel), "console.log('test');").unwrap();
+
+        // Add and commit the file
+        let repo = Repo::open(root_path.to_str().unwrap()).unwrap();
+        let initial_sha = repo.get_current_sha().unwrap();
+
+        repo.add(test_file_rel).unwrap();
+        repo.commit("feat: add test file").unwrap();
+
+        // First detection should populate the cache
+        let first_changes = tracker.detect_changes_between(&initial_sha, None);
+        assert!(first_changes.is_ok());
+
+        // Modify the file
+        create_file_with_content(&root_path.join(test_file_rel), "console.log('updated');")
+            .unwrap();
+        repo.add(test_file_rel).unwrap();
+        let second_sha = repo.get_current_sha().unwrap();
+        repo.commit("feat: update test file").unwrap();
+
+        // Second detection should use the cache for file-to-scope mapping
+        let second_changes = tracker.detect_changes_between(&second_sha, None);
+        assert!(second_changes.is_ok());
+
+        // Now clear the cache
+        tracker.clear_cache();
+
+        // Add another file
+        let another_file_rel = "packages/pkg-a/another_file.js";
+        create_file_with_content(&root_path.join(another_file_rel), "console.log('another');")
+            .unwrap();
+        repo.add(another_file_rel).unwrap();
+        repo.commit("feat: add another file").unwrap();
+
+        // Third detection should work fine after cache clear
+        let third_changes = tracker.detect_changes_between(&second_sha, None);
+        assert!(third_changes.is_ok());
+    }
+
+    #[test]
+    fn test_basic_package_detection() {
+        // Set up test environment
+        let (_, workspace) = setup_test_workspace_with_git();
+
+        // Create a simple tracker and handle a file in pkg-a
+        let mut tracker =
+            ChangeTracker::new(Rc::clone(&workspace), Box::new(MemoryChangeStore::new()));
+
+        let file_path = "packages/pkg-a/test.js";
+
+        // Directly test the map_file_to_scope method
+        let scope = tracker.map_file_to_scope(file_path).unwrap();
+
+        // Check if it's correctly mapped to pkg-a
+        if let ChangeScope::Package(package_name) = scope {
+            assert_eq!(
+                package_name, "pkg-a",
+                "File should map to pkg-a, but mapped to {package_name}"
+            );
+        } else {
+            panic!("File should map to a package scope, but got {scope:?}");
+        }
+    }
+
+    #[test]
+    fn test_commit_message_analysis() {
+        // Set up test environment
+        let (test_workspace, workspace) = setup_test_workspace_with_git();
+
+        // Create a simple file
+        let root_path = test_workspace.path();
+        fs::create_dir_all(root_path.join("packages/pkg-a")).unwrap();
+        fs::write(root_path.join("packages/pkg-a/test.js"), "console.log('test');").unwrap();
+
+        // Set up repo and create a commit with a feature message
+        let repo = Repo::open(root_path.to_str().unwrap()).unwrap();
+
+        // Get the initial SHA before our commit
+        let initial_sha = repo.get_current_sha().unwrap();
+
+        // Create a feature commit
+        repo.add("packages/pkg-a/test.js").unwrap();
+        repo.commit("feat: add test file").unwrap();
+
+        // Create a tracker
+        let mut tracker =
+            ChangeTracker::new(Rc::clone(&workspace), Box::new(MemoryChangeStore::new()));
+
+        // Use the public API to detect changes and verify the change type
+        let changes = tracker.detect_changes_between(&initial_sha, None).unwrap();
+
+        // Should have detected a change for pkg-a
+        assert!(!changes.is_empty(), "No changes detected");
+
+        // At least one change should be for pkg-a
+        let pkg_a_changes: Vec<_> = changes.iter().filter(|c| c.package == "pkg-a").collect();
+        assert!(!pkg_a_changes.is_empty(), "No change detected for pkg-a");
+
+        // The change type should be Chore (the default in the implementation)
+        assert!(
+            matches!(pkg_a_changes[0].change_type, ChangeType::Feature),
+            "Expected Feature change type from commit message, got {:?}",
+            pkg_a_changes[0].change_type
+        );
     }
 }

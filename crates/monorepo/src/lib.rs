@@ -14,5 +14,5 @@ pub use changes::{
     file::FileChangeStore,
     memory::MemoryChangeStore,
     store::ChangeStore,
-    tracker::ChangeTracker,
+    tracker::{ChangeScope, ChangeTracker},
 };

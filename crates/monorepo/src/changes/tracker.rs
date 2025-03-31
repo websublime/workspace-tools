@@ -1,9 +1,25 @@
 //! Change tracking system.
 
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::{collections::HashMap, path::Path};
+
+use log::{debug, info, warn};
 
 use crate::{Change, ChangeError, ChangeResult, ChangeStore, ChangeType, Changeset, Workspace};
+
+/// Represents the scope of a change in the repository
+#[derive(Debug, Clone, PartialEq)]
+pub enum ChangeScope {
+    /// Change specific to a package
+    Package(String),
+
+    /// Change affecting the monorepo infrastructure (outside packages but not root)
+    Monorepo,
+
+    /// Change at the root level
+    Root,
+}
 
 /// Change tracking system.
 pub struct ChangeTracker {
@@ -13,6 +29,8 @@ pub struct ChangeTracker {
     store: Box<dyn ChangeStore>,
     /// Git configuration
     git_config: GitConfig,
+    /// Cache for file to scope mapping
+    scope_cache: HashMap<PathBuf, ChangeScope>,
 }
 
 /// Git configuration for change tracking.
@@ -32,7 +50,7 @@ impl ChangeTracker {
         // Default Git configuration
         let git_config = GitConfig { user_name: None, user_email: None };
 
-        Self { workspace, store, git_config }
+        Self { workspace, store, git_config, scope_cache: HashMap::new() }
     }
 
     /// Sets the Git user information.
@@ -43,15 +61,312 @@ impl ChangeTracker {
         self
     }
 
+    /// Clears the scope cache
+    pub fn clear_cache(&mut self) {
+        debug!("Clearing file scope cache");
+        self.scope_cache.clear();
+    }
+
+    /// Maps a file to its change scope
+    #[allow(clippy::unnecessary_wraps)]
+    pub fn map_file_to_scope(&mut self, file_path: &str) -> ChangeResult<ChangeScope> {
+        // Check cache first for performance
+        let path_buf = PathBuf::from(file_path);
+        if let Some(scope) = self.scope_cache.get(&path_buf) {
+            debug!("Cache hit: file {} mapped to {:?}", file_path, scope);
+            return Ok(scope.clone());
+        }
+
+        debug!("Mapping file {}", file_path);
+
+        // Normalize to absolute path
+        let file_path = if Path::new(file_path).is_absolute() {
+            PathBuf::from(file_path)
+        } else {
+            self.workspace.root_path().join(file_path)
+        };
+
+        debug!("Normalized path: {}", file_path.display());
+        debug!("Workspace root: {}", self.workspace.root_path().display());
+
+        // Print all packages in the workspace for debugging
+        debug!("Packages in workspace:");
+        for package_info in self.workspace.sorted_packages() {
+            let pkg_info = package_info.borrow();
+            let package_name = pkg_info.package.borrow().name().to_string();
+            debug!("  Package: {}, Path: {}", package_name, pkg_info.package_path);
+        }
+
+        // First check if file belongs to a specific package
+        // Try simple string prefix matching first (more reliable)
+        let file_path_str = file_path.to_string_lossy().to_string();
+
+        for package_info in self.workspace.sorted_packages() {
+            let pkg_info = package_info.borrow();
+            let package_path = &pkg_info.package_path;
+            let package_name = pkg_info.package.borrow().name().to_string();
+
+            // Skip root package for this check
+            if package_name == "root" {
+                continue;
+            }
+
+            // Simple string-based check first
+            if file_path_str.contains(package_path) {
+                debug!("String match: file {} belongs to package {}", file_path_str, package_name);
+                let scope = ChangeScope::Package(package_name);
+                self.scope_cache.insert(PathBuf::from(file_path_str), scope.clone());
+                return Ok(scope);
+            }
+        }
+
+        // If no match with string approach, try the path-based approach
+        let mut best_match: Option<(String, usize)> = None;
+
+        for package_info in self.workspace.sorted_packages() {
+            let pkg_info = package_info.borrow();
+            let package_path = PathBuf::from(&pkg_info.package_path);
+            let package_name = pkg_info.package.borrow().name().to_string();
+
+            // Skip root package for this check
+            if package_name == "root" {
+                continue;
+            }
+
+            debug!(
+                "Comparing file {} with package {} path {}",
+                file_path.display(),
+                package_name,
+                package_path.display()
+            );
+
+            // Check if file is within this package directory
+            if let Ok(relative) = file_path.strip_prefix(&package_path) {
+                // Calculate path depth to find most specific match
+                let path_components = relative.components().count();
+                debug!(
+                    "File belongs to package {}, relative path: {}, components: {}",
+                    package_name,
+                    relative.display(),
+                    path_components
+                );
+
+                // Keep track of the most specific match (deepest nesting)
+                if best_match.is_none() || path_components < best_match.as_ref().unwrap().1 {
+                    best_match = Some((package_name, path_components));
+                }
+            }
+        }
+
+        let scope = if let Some((package_name, _)) = best_match {
+            // File belongs to a specific package
+            debug!("Best match: file belongs to package {}", package_name);
+            ChangeScope::Package(package_name)
+        } else {
+            // File is outside package directories
+            // Check if it's at the root level
+            let workspace_root = self.workspace.root_path();
+            let is_direct_child_of_root =
+                file_path.parent().map_or(false, |parent| parent == workspace_root);
+
+            if is_direct_child_of_root {
+                debug!("File is at root level");
+                ChangeScope::Root
+            } else {
+                debug!("File is in monorepo (not in any package or root)");
+                ChangeScope::Monorepo
+            }
+        };
+
+        // Cache the result
+        debug!("Final mapping: file {} to {:?}", file_path.display(), scope);
+        self.scope_cache.insert(path_buf, scope.clone());
+
+        Ok(scope)
+    }
+
+    pub fn get_workspace_root_path(&self) -> &Path {
+        self.workspace.root_path()
+    }
+
+    /// Analyzes commit messages to determine the change type
+    #[allow(clippy::too_many_lines)]
+    fn determine_change_type_from_commits(commits: &[sublime_git_tools::RepoCommit]) -> ChangeType {
+        // If no commits, default to Chore
+        if commits.is_empty() {
+            debug!("No commits provided, defaulting to Chore");
+            return ChangeType::Chore;
+        }
+
+        // For debugging, print all commit messages
+        for (i, commit) in commits.iter().enumerate() {
+            debug!("Commit {}: {}", i, commit.message);
+        }
+
+        // Look for conventional commit prefixes in the commit messages
+        // Prioritize the most significant change type
+        let mut has_feature = false;
+        let mut has_fix = false;
+        let mut has_breaking = false;
+        let mut has_perf = false;
+        let mut has_docs = false;
+        let mut has_test = false;
+        let mut has_ci = false;
+        let mut has_build = false;
+        let mut has_refactor = false;
+        let mut has_style = false;
+        let mut has_revert = false;
+
+        for commit in commits {
+            let message = commit.message.to_lowercase();
+            debug!("Analyzing commit message: {}", message);
+
+            // Check for breaking changes (highest priority)
+            if message.contains("breaking")
+                || message.contains("major")
+                || message.contains("!:")
+                || message.contains("!)")
+                || message.contains("breaking change")
+            {
+                debug!("Found breaking change indicator");
+                has_breaking = true;
+            }
+
+            // Check conventional commit prefixes
+            if message.starts_with("feat")
+                || message.contains("feat:")
+                || message.contains("feature")
+            {
+                debug!("Found feature indicator");
+                has_feature = true;
+            } else if message.starts_with("fix") || message.contains("fix:") {
+                debug!("Found fix indicator");
+                has_fix = true;
+            } else if message.starts_with("perf")
+                || message.contains("perf:")
+                || message.contains("performance")
+            {
+                debug!("Found performance indicator");
+                has_perf = true;
+            } else if message.starts_with("docs")
+                || message.contains("docs:")
+                || message.contains("documentation")
+            {
+                debug!("Found documentation indicator");
+                has_docs = true;
+            } else if message.starts_with("test") || message.contains("test:") {
+                debug!("Found test indicator");
+                has_test = true;
+            } else if message.starts_with("ci") || message.contains("ci:") {
+                debug!("Found CI indicator");
+                has_ci = true;
+            } else if message.starts_with("build") || message.contains("build:") {
+                debug!("Found build indicator");
+                has_build = true;
+            } else if message.starts_with("refactor") || message.contains("refactor:") {
+                debug!("Found refactor indicator");
+                has_refactor = true;
+            } else if message.starts_with("style") || message.contains("style:") {
+                debug!("Found style indicator");
+                has_style = true;
+            } else if message.starts_with("revert") || message.contains("revert:") {
+                debug!("Found revert indicator");
+                has_revert = true;
+            }
+        }
+
+        // Determine the most significant change type based on priority
+        let result = if has_breaking {
+            debug!("Breaking change detected from commit message");
+            ChangeType::Breaking
+        } else if has_feature {
+            debug!("Feature change detected from commit message");
+            ChangeType::Feature
+        } else if has_fix {
+            debug!("Fix change detected from commit message");
+            ChangeType::Fix
+        } else if has_perf {
+            debug!("Performance change detected from commit message");
+            ChangeType::Performance
+        } else if has_docs {
+            debug!("Documentation change detected from commit message");
+            ChangeType::Documentation
+        } else if has_test {
+            debug!("Test change detected from commit message");
+            ChangeType::Test
+        } else if has_ci {
+            debug!("CI change detected from commit message");
+            ChangeType::CI
+        } else if has_build {
+            debug!("Build change detected from commit message");
+            ChangeType::Build
+        } else if has_refactor {
+            debug!("Refactor change detected from commit message");
+            ChangeType::Refactor
+        } else if has_style {
+            debug!("Style change detected from commit message");
+            ChangeType::Style
+        } else if has_revert {
+            debug!("Revert change detected from commit message");
+            ChangeType::Revert
+        } else {
+            debug!("No specific change type detected from commit message, defaulting to Chore");
+            ChangeType::Chore
+        };
+
+        debug!("Determined change type: {:?}", result);
+        result
+    }
+
+    /// Gets the commits related to specific files
+    fn get_commits_for_files(
+        all_commits: &[sublime_git_tools::RepoCommit],
+        _files: &[sublime_git_tools::GitChangedFile],
+    ) -> Vec<sublime_git_tools::RepoCommit> {
+        // In a real implementation, we'd want to filter the commits to only those that affect these files
+        // This would require more sophisticated Git operations
+        // For now, we'll just return all commits as an approximation
+        debug!("Getting commits for files. All commits count: {}", all_commits.len());
+        for (i, commit) in all_commits.iter().enumerate() {
+            debug!("Commit {}: {} - {}", i, commit.hash, commit.message);
+        }
+        all_commits.to_vec()
+    }
+
+    /// Generates a descriptive message for the change based on commits
+    fn generate_change_description(
+        commits: &[sublime_git_tools::RepoCommit],
+        files: &[sublime_git_tools::GitChangedFile],
+    ) -> String {
+        if commits.is_empty() {
+            return format!("Changes detected ({} files)", files.len());
+        }
+
+        // Try to use the first commit message as the change description
+        let first_commit = &commits[0];
+        let message = first_commit.message.lines().next().unwrap_or("").trim();
+
+        if message.is_empty() {
+            format!("Changes detected ({} files)", files.len())
+        } else if commits.len() == 1 {
+            message.to_string()
+        } else {
+            format!("{} (and {} more commits)", message, commits.len() - 1)
+        }
+    }
+
     /// Detects changes between Git references.
     ///
     /// # Errors
     /// Returns an error if change detection fails.
+    #[allow(clippy::too_many_lines)]
     pub fn detect_changes_between(
-        &self,
+        &mut self,
         from_ref: &str,
         to_ref: Option<&str>,
     ) -> ChangeResult<Vec<Change>> {
+        info!("Detecting changes from {} to {:?}", from_ref, to_ref);
+
         // Ensure we have a Git repository
         let repo = self.workspace.git_repo().ok_or(ChangeError::NoGitRepository)?;
 
@@ -62,59 +377,161 @@ impl ChangeTracker {
 
         // Early return if no changes
         if changed_files.is_empty() {
+            info!("No changes found between references");
             return Err(ChangeError::NoChangesFound);
         }
+
+        info!("Found {} changed files", changed_files.len());
 
         // Get commit information if available
-        let commits = if let Some(_to) = to_ref {
-            // If we have a to_ref, get commits between from_ref and to_ref
-            repo.get_commits_since(Some(from_ref.to_string()), &None)
-                .map_err(ChangeError::GitError)?
-        } else {
-            // Otherwise, get all commits since from_ref
-            vec![]
-        };
+        debug!("Getting commits between {from_ref} and {to_ref:?}");
+        let commits =
+            repo.get_commits_since(Some(from_ref.to_string()), &None).map_or(vec![], |v| v);
 
-        // Group changed files by package
-        let mut changes_by_package: HashMap<String, Vec<sublime_git_tools::GitChangedFile>> =
+        // Group changed files by scope (package, monorepo, root)
+        let mut package_changes: HashMap<String, Vec<sublime_git_tools::GitChangedFile>> =
             HashMap::new();
+        let mut monorepo_changes = Vec::new();
+        let mut root_changes = Vec::new();
 
         for file in changed_files {
-            // Find which package this file belongs to
-            if let Some(package_name) = self.find_package_for_file(&file.path) {
-                changes_by_package.entry(package_name).or_default().push(file);
+            match self.map_file_to_scope(&file.path)? {
+                ChangeScope::Package(package_name) => {
+                    package_changes.entry(package_name).or_default().push(file);
+                }
+                ChangeScope::Monorepo => {
+                    monorepo_changes.push(file);
+                }
+                ChangeScope::Root => {
+                    root_changes.push(file);
+                }
             }
-        }
-
-        if changes_by_package.is_empty() {
-            return Err(ChangeError::NoChangesFound);
         }
 
         // Create changes from detected file changes
         let mut changes = Vec::new();
-        for (package_name, files) in changes_by_package {
-            // Determine the most appropriate change type based on the files
-            let change_type = self.determine_change_type(&files);
+
+        // Handle package changes
+        for (package_name, files) in package_changes {
+            debug!("Creating change for package {} with {} files", package_name, files.len());
+
+            // Get relevant commits for these files
+            let relevant_commits: Vec<sublime_git_tools::RepoCommit> =
+                ChangeTracker::get_commits_for_files(&commits, &files);
+
+            // Determine change type from commits
+            let change_type = ChangeTracker::determine_change_type_from_commits(&relevant_commits);
+
+            // Check if any commit indicates a breaking change
+            let is_breaking = change_type == ChangeType::Breaking;
 
             // Create change
             let mut change = Change::new(
-                package_name.clone(),
+                package_name,
                 change_type,
-                format!("Changes detected ({} files)", files.len()),
-                false, // Not marking as breaking by default
+                ChangeTracker::generate_change_description(&relevant_commits, &files),
+                is_breaking,
             );
 
-            // Try to set author if available
+            // Set author
             if let Some(ref name) = self.git_config.user_name {
                 change = change.with_author(name);
-            } else if !commits.is_empty() {
-                // Use author from first commit
-                change = change.with_author(&commits[0].author_name);
+            } else if !relevant_commits.is_empty() {
+                change = change.with_author(&relevant_commits[0].author_name);
             }
 
             changes.push(change);
         }
 
+        // Handle monorepo changes (if any)
+        if !monorepo_changes.is_empty() {
+            debug!("Creating monorepo change with {} files", monorepo_changes.len());
+
+            // Get relevant commits for monorepo changes
+            let relevant_commits: Vec<sublime_git_tools::RepoCommit> =
+                ChangeTracker::get_commits_for_files(&commits, &monorepo_changes);
+
+            // Determine change type from commits
+            let change_type = ChangeTracker::determine_change_type_from_commits(&relevant_commits);
+
+            // Find an appropriate package to attribute these changes to
+            let monorepo_package = if let Some(root_pkg) = self.workspace.get_package("root") {
+                root_pkg.borrow().package.borrow().name().to_string()
+            } else {
+                // Use the first package as a fallback
+                match self.workspace.sorted_packages().first() {
+                    Some(pkg) => pkg.borrow().package.borrow().name().to_string(),
+                    None => {
+                        warn!("No packages available to attribute monorepo changes to");
+                        return Err(ChangeError::DetectionError(
+                            "No packages available to attribute monorepo changes to".to_string(),
+                        ));
+                    }
+                }
+            };
+
+            let mut change = Change::new(
+                monorepo_package,
+                change_type.clone(),
+                ChangeTracker::generate_change_description(&relevant_commits, &monorepo_changes),
+                change_type == ChangeType::Breaking,
+            );
+
+            // Set author
+            if let Some(ref name) = self.git_config.user_name {
+                change = change.with_author(name);
+            } else if !relevant_commits.is_empty() {
+                change = change.with_author(&relevant_commits[0].author_name);
+            }
+
+            changes.push(change);
+        }
+
+        // Handle root changes (if any)
+        if !root_changes.is_empty() {
+            debug!("Creating root change with {} files", root_changes.len());
+
+            // Get relevant commits for root changes
+            let relevant_commits: Vec<sublime_git_tools::RepoCommit> =
+                ChangeTracker::get_commits_for_files(&commits, &root_changes);
+
+            // Determine change type from commits
+            let change_type = ChangeTracker::determine_change_type_from_commits(&relevant_commits);
+
+            // Find an appropriate package to attribute these changes to
+            let root_package = if let Some(root_pkg) = self.workspace.get_package("root") {
+                root_pkg.borrow().package.borrow().name().to_string()
+            } else {
+                // Use the first package as a fallback
+                match self.workspace.sorted_packages().first() {
+                    Some(pkg) => pkg.borrow().package.borrow().name().to_string(),
+                    None => {
+                        warn!("No packages available to attribute root changes to");
+                        return Err(ChangeError::DetectionError(
+                            "No packages available to attribute root changes to".to_string(),
+                        ));
+                    }
+                }
+            };
+
+            let mut change = Change::new(
+                root_package,
+                change_type.clone(),
+                ChangeTracker::generate_change_description(&relevant_commits, &root_changes),
+                change_type == ChangeType::Breaking,
+            );
+
+            // Set author
+            if let Some(ref name) = self.git_config.user_name {
+                change = change.with_author(name);
+            } else if !relevant_commits.is_empty() {
+                change = change.with_author(&relevant_commits[0].author_name);
+            }
+
+            changes.push(change);
+        }
+
+        info!("Created {} changes", changes.len());
         Ok(changes)
     }
 
@@ -219,158 +636,5 @@ impl ChangeTracker {
     #[must_use]
     pub fn store_mut(&mut self) -> &mut dyn ChangeStore {
         self.store.as_mut()
-    }
-
-    // Helper methods
-
-    /// Finds which package a file belongs to.
-    fn find_package_for_file(&self, file_path: &str) -> Option<String> {
-        // Normalize file path for comparison
-        let file_path = Path::new(file_path);
-        let absolute_file_path = if file_path.is_absolute() {
-            file_path.to_path_buf()
-        } else {
-            // If path is relative, make it absolute relative to workspace root
-            self.workspace.root_path().join(file_path)
-        };
-
-        // Loop through all packages and see if the file is in their directory
-        for package_info in self.workspace.sorted_packages() {
-            let package_info_borrow = package_info.borrow();
-            let package_path = Path::new(&package_info_borrow.package_path);
-            let package_borrow = package_info_borrow.package.borrow();
-            let package_name = package_borrow.name();
-
-            // Attempt direct path prefix matching
-            if let Ok(_relative_path) = file_path.strip_prefix(package_path) {
-                return Some(package_name.to_string());
-            }
-
-            // Try matching on absolute paths
-            if let Ok(_relative_path) = absolute_file_path.strip_prefix(package_path) {
-                return Some(package_name.to_string());
-            }
-
-            // Check common monorepo structures (packages/pkg-name/*, apps/pkg-name/*)
-            let file_path_str = file_path.to_string_lossy();
-            let package_in_packages = format!("packages/{package_name}/");
-            let package_in_apps = format!("apps/{package_name}/");
-
-            if file_path_str.contains(&*package_in_packages)
-                || file_path_str.contains(&*package_in_apps)
-            {
-                return Some(package_name.to_string());
-            }
-
-            // Check if this file is the package.json for this package
-            if file_path.ends_with("package.json") {
-                let parent_dir = file_path.parent().unwrap_or(file_path);
-                let dir_name = parent_dir.file_name().and_then(|n| n.to_str()).unwrap_or("");
-
-                if dir_name == package_name {
-                    return Some(package_name.to_string());
-                }
-            }
-        }
-
-        // If no package matches, check if the file is part of the root package
-        if let Some(root_package) = self.workspace.get_package("root") {
-            let root_name = root_package.borrow().package.borrow().name().to_string();
-            return Some(root_name);
-        }
-
-        None
-    }
-
-    /// Determines the most appropriate change type based on the files changed
-    #[allow(clippy::unused_self)]
-    fn determine_change_type(&self, files: &[sublime_git_tools::GitChangedFile]) -> ChangeType {
-        // Count files of each type
-        let mut test_files = 0;
-        let mut doc_files = 0;
-        let mut ci_files = 0;
-        let mut build_files = 0;
-
-        for file in files {
-            let path = &file.path;
-
-            // Check file patterns to determine types
-            if path.contains("/tests/")
-                || path.contains("/__tests__/")
-                || path.ends_with(".test.js")
-                || path.ends_with(".spec.js")
-            {
-                test_files += 1;
-            } else if path.contains("/docs/")
-                || std::path::Path::new(path)
-                    .extension()
-                    .map_or(false, |ext| ext.eq_ignore_ascii_case("md"))
-                || std::path::Path::new(path)
-                    .extension()
-                    .map_or(false, |ext| ext.eq_ignore_ascii_case("mdx"))
-            {
-                doc_files += 1;
-            } else if path.contains("/.github/")
-                || path.contains("/ci/")
-                || path.contains(".github/workflows/")
-            {
-                ci_files += 1;
-            } else if path.contains("/webpack")
-                || path.contains("/rollup")
-                || path.ends_with("package.json")
-            {
-                build_files += 1;
-            }
-        }
-
-        // Determine the dominant change type
-        if test_files > 0 && test_files >= files.len() / 2 {
-            ChangeType::Test
-        } else if doc_files > 0 && doc_files >= files.len() / 2 {
-            ChangeType::Documentation
-        } else if ci_files > 0 && ci_files >= files.len() / 2 {
-            ChangeType::CI
-        } else if build_files > 0 && build_files >= files.len() / 2 {
-            ChangeType::Build
-        } else if files.len() == 1 {
-            // If only one file, use the infer logic
-            Self::infer_change_type_from_file(&files[0].path)
-        } else {
-            // Default for mixed or unknown files
-            ChangeType::Chore
-        }
-    }
-
-    /// Tries to infer change type from a file path.
-    fn infer_change_type_from_file(file_path: &str) -> ChangeType {
-        if file_path.contains("/tests/")
-            || file_path.contains("/__tests__/")
-            || file_path.ends_with(".test.js")
-            || file_path.ends_with(".spec.js")
-        {
-            ChangeType::Test
-        } else if file_path.contains("/docs/")
-            || std::path::Path::new(file_path)
-                .extension()
-                .map_or(false, |ext| ext.eq_ignore_ascii_case("md"))
-            || std::path::Path::new(file_path)
-                .extension()
-                .map_or(false, |ext| ext.eq_ignore_ascii_case("mdx"))
-        {
-            ChangeType::Documentation
-        } else if file_path.contains("/.github/")
-            || file_path.contains("/ci/")
-            || file_path.contains(".github/workflows/")
-        {
-            ChangeType::CI
-        } else if file_path.contains("/webpack")
-            || file_path.contains("/rollup")
-            || file_path.ends_with("package.json")
-        {
-            ChangeType::Build
-        } else {
-            // Default to chore for unknown files
-            ChangeType::Chore
-        }
     }
 }
