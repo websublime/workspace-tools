@@ -6,7 +6,9 @@ use std::rc::Rc;
 
 use log::{debug, info, warn};
 
-use crate::{Change, ChangeError, ChangeResult, ChangeStore, ChangeType, Changeset, Workspace};
+use crate::{
+    Change, ChangeError, ChangeId, ChangeResult, ChangeStore, ChangeType, Changeset, Workspace,
+};
 
 /// Represents the scope of a change in the repository
 #[derive(Debug, Clone, PartialEq)]
@@ -187,172 +189,6 @@ impl ChangeTracker {
 
     pub fn get_workspace_root_path(&self) -> &Path {
         self.workspace.root_path()
-    }
-
-    /// Analyzes commit messages to determine the change type
-    #[allow(clippy::too_many_lines)]
-    fn determine_change_type_from_commits(commits: &[sublime_git_tools::RepoCommit]) -> ChangeType {
-        // If no commits, default to Chore
-        if commits.is_empty() {
-            debug!("No commits provided, defaulting to Chore");
-            return ChangeType::Chore;
-        }
-
-        // For debugging, print all commit messages
-        for (i, commit) in commits.iter().enumerate() {
-            debug!("Commit {}: {}", i, commit.message);
-        }
-
-        // Look for conventional commit prefixes in the commit messages
-        // Prioritize the most significant change type
-        let mut has_feature = false;
-        let mut has_fix = false;
-        let mut has_breaking = false;
-        let mut has_perf = false;
-        let mut has_docs = false;
-        let mut has_test = false;
-        let mut has_ci = false;
-        let mut has_build = false;
-        let mut has_refactor = false;
-        let mut has_style = false;
-        let mut has_revert = false;
-
-        for commit in commits {
-            let message = commit.message.to_lowercase();
-            debug!("Analyzing commit message: {}", message);
-
-            // Check for breaking changes (highest priority)
-            if message.contains("breaking")
-                || message.contains("major")
-                || message.contains("!:")
-                || message.contains("!)")
-                || message.contains("breaking change")
-            {
-                debug!("Found breaking change indicator");
-                has_breaking = true;
-            }
-
-            // Check conventional commit prefixes
-            if message.starts_with("feat")
-                || message.contains("feat:")
-                || message.contains("feature")
-            {
-                debug!("Found feature indicator");
-                has_feature = true;
-            } else if message.starts_with("fix") || message.contains("fix:") {
-                debug!("Found fix indicator");
-                has_fix = true;
-            } else if message.starts_with("perf")
-                || message.contains("perf:")
-                || message.contains("performance")
-            {
-                debug!("Found performance indicator");
-                has_perf = true;
-            } else if message.starts_with("docs")
-                || message.contains("docs:")
-                || message.contains("documentation")
-            {
-                debug!("Found documentation indicator");
-                has_docs = true;
-            } else if message.starts_with("test") || message.contains("test:") {
-                debug!("Found test indicator");
-                has_test = true;
-            } else if message.starts_with("ci") || message.contains("ci:") {
-                debug!("Found CI indicator");
-                has_ci = true;
-            } else if message.starts_with("build") || message.contains("build:") {
-                debug!("Found build indicator");
-                has_build = true;
-            } else if message.starts_with("refactor") || message.contains("refactor:") {
-                debug!("Found refactor indicator");
-                has_refactor = true;
-            } else if message.starts_with("style") || message.contains("style:") {
-                debug!("Found style indicator");
-                has_style = true;
-            } else if message.starts_with("revert") || message.contains("revert:") {
-                debug!("Found revert indicator");
-                has_revert = true;
-            }
-        }
-
-        // Determine the most significant change type based on priority
-        let result = if has_breaking {
-            debug!("Breaking change detected from commit message");
-            ChangeType::Breaking
-        } else if has_feature {
-            debug!("Feature change detected from commit message");
-            ChangeType::Feature
-        } else if has_fix {
-            debug!("Fix change detected from commit message");
-            ChangeType::Fix
-        } else if has_perf {
-            debug!("Performance change detected from commit message");
-            ChangeType::Performance
-        } else if has_docs {
-            debug!("Documentation change detected from commit message");
-            ChangeType::Documentation
-        } else if has_test {
-            debug!("Test change detected from commit message");
-            ChangeType::Test
-        } else if has_ci {
-            debug!("CI change detected from commit message");
-            ChangeType::CI
-        } else if has_build {
-            debug!("Build change detected from commit message");
-            ChangeType::Build
-        } else if has_refactor {
-            debug!("Refactor change detected from commit message");
-            ChangeType::Refactor
-        } else if has_style {
-            debug!("Style change detected from commit message");
-            ChangeType::Style
-        } else if has_revert {
-            debug!("Revert change detected from commit message");
-            ChangeType::Revert
-        } else {
-            debug!("No specific change type detected from commit message, defaulting to Chore");
-            ChangeType::Chore
-        };
-
-        debug!("Determined change type: {:?}", result);
-        result
-    }
-
-    /// Gets the commits related to specific files
-    fn get_commits_for_files(
-        all_commits: &[sublime_git_tools::RepoCommit],
-        _files: &[sublime_git_tools::GitChangedFile],
-    ) -> Vec<sublime_git_tools::RepoCommit> {
-        // In a real implementation, we'd want to filter the commits to only those that affect these files
-        // This would require more sophisticated Git operations
-        // For now, we'll just return all commits as an approximation
-        debug!("Getting commits for files. All commits count: {}", all_commits.len());
-        for (i, commit) in all_commits.iter().enumerate() {
-            debug!("Commit {}: {} - {}", i, commit.hash, commit.message);
-        }
-        all_commits.to_vec()
-    }
-
-    /// Generates a descriptive message for the change based on commits
-    fn generate_change_description(
-        commits: &[sublime_git_tools::RepoCommit],
-        files: &[sublime_git_tools::GitChangedFile],
-    ) -> String {
-        if commits.is_empty() {
-            return format!("Changes detected ({} files)", files.len());
-        }
-
-        // Try to use the first commit message as the change description
-        let first_commit = &commits[0];
-        let message = first_commit.message.lines().next().unwrap_or("").trim();
-
-        if message.is_empty() {
-            format!("Changes detected ({} files)", files.len())
-        } else if commits.len() == 1 {
-            message.to_string()
-        } else {
-            format!("{} (and {} more commits)", message, commits.len() - 1)
-        }
     }
 
     /// Detects changes between Git references.
@@ -626,6 +462,115 @@ impl ChangeTracker {
         self.store.mark_changes_as_released(package, version, dry_run)
     }
 
+    /// Gets unreleased changes for all packages filtered by environment.
+    ///
+    /// # Errors
+    /// Returns an error if retrieving unreleased changes fails.
+    pub fn unreleased_changes_for_environment(
+        &self,
+        environment: &str,
+    ) -> ChangeResult<HashMap<String, Vec<Change>>> {
+        let all_unreleased = self.unreleased_changes()?;
+
+        let mut filtered = HashMap::new();
+        for (package, changes) in all_unreleased {
+            let env_changes: Vec<Change> =
+                changes.into_iter().filter(|c| c.applies_to_environment(environment)).collect();
+
+            if !env_changes.is_empty() {
+                filtered.insert(package, env_changes);
+            }
+        }
+
+        Ok(filtered)
+    }
+
+    /// Marks changes as released for a specific environment.
+    ///
+    /// # Errors
+    /// Returns an error if marking changes as released fails.
+    pub fn mark_released_for_environment(
+        &mut self,
+        package: &str,
+        version: &str,
+        environment: &str,
+        dry_run: bool,
+    ) -> ChangeResult<Vec<Change>> {
+        // Get all unreleased changes for this package
+        let unreleased = self.store().get_unreleased_changes(package)?;
+
+        // Filter to only those that apply to this environment
+        let applicable_changes: Vec<Change> =
+            unreleased.into_iter().filter(|c| c.applies_to_environment(environment)).collect();
+
+        if applicable_changes.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Get the IDs of changes to mark as released
+        let change_ids: Vec<ChangeId> = applicable_changes.iter().map(|c| c.id.clone()).collect();
+
+        // Mark these specific changes as released
+        self.mark_specific_changes_as_released(package, version, &change_ids, dry_run)
+    }
+
+    /// Marks specific changes as released by ID.
+    ///
+    /// # Errors
+    /// Returns an error if marking changes as released fails.
+    pub fn mark_specific_changes_as_released(
+        &mut self,
+        package: &str,
+        version: &str,
+        change_ids: &[ChangeId],
+        dry_run: bool,
+    ) -> ChangeResult<Vec<Change>> {
+        // Validate package exists
+        if self.workspace.get_package(package).is_none() {
+            return Err(ChangeError::InvalidPackage(format!(
+                "Package '{package}' not found in workspace"
+            )));
+        }
+
+        // Mark only the specified changes as released
+        let mut updated_changes = Vec::new();
+        let mut updated_changesets = Vec::new();
+
+        // Find all changesets with these specific changes
+        let all_changesets = self.store.get_all_changesets()?;
+
+        for changeset in all_changesets {
+            let mut has_updates = false;
+            let mut updated_changeset = changeset.clone();
+
+            // Update changes within this changeset
+            for change in &mut updated_changeset.changes {
+                if change.package == package
+                    && change.release_version.is_none()
+                    && change_ids.contains(&change.id)
+                {
+                    change.release_version = Some(version.to_string());
+                    updated_changes.push(change.clone());
+                    has_updates = true;
+                }
+            }
+
+            // If changes were updated, queue for storage
+            if has_updates {
+                updated_changesets.push(updated_changeset);
+            }
+        }
+
+        // Store updated changesets if not a dry run
+        if !dry_run {
+            for changeset in updated_changesets {
+                self.store.store_changeset(&changeset)?;
+            }
+        }
+
+        Ok(updated_changes)
+    }
+
     /// Gets the change store.
     #[must_use]
     pub fn store(&self) -> &dyn ChangeStore {
@@ -636,5 +581,171 @@ impl ChangeTracker {
     #[must_use]
     pub fn store_mut(&mut self) -> &mut dyn ChangeStore {
         self.store.as_mut()
+    }
+
+    /// Analyzes commit messages to determine the change type
+    #[allow(clippy::too_many_lines)]
+    fn determine_change_type_from_commits(commits: &[sublime_git_tools::RepoCommit]) -> ChangeType {
+        // If no commits, default to Chore
+        if commits.is_empty() {
+            debug!("No commits provided, defaulting to Chore");
+            return ChangeType::Chore;
+        }
+
+        // For debugging, print all commit messages
+        for (i, commit) in commits.iter().enumerate() {
+            debug!("Commit {}: {}", i, commit.message);
+        }
+
+        // Look for conventional commit prefixes in the commit messages
+        // Prioritize the most significant change type
+        let mut has_feature = false;
+        let mut has_fix = false;
+        let mut has_breaking = false;
+        let mut has_perf = false;
+        let mut has_docs = false;
+        let mut has_test = false;
+        let mut has_ci = false;
+        let mut has_build = false;
+        let mut has_refactor = false;
+        let mut has_style = false;
+        let mut has_revert = false;
+
+        for commit in commits {
+            let message = commit.message.to_lowercase();
+            debug!("Analyzing commit message: {}", message);
+
+            // Check for breaking changes (highest priority)
+            if message.contains("breaking")
+                || message.contains("major")
+                || message.contains("!:")
+                || message.contains("!)")
+                || message.contains("breaking change")
+            {
+                debug!("Found breaking change indicator");
+                has_breaking = true;
+            }
+
+            // Check conventional commit prefixes
+            if message.starts_with("feat")
+                || message.contains("feat:")
+                || message.contains("feature")
+            {
+                debug!("Found feature indicator");
+                has_feature = true;
+            } else if message.starts_with("fix") || message.contains("fix:") {
+                debug!("Found fix indicator");
+                has_fix = true;
+            } else if message.starts_with("perf")
+                || message.contains("perf:")
+                || message.contains("performance")
+            {
+                debug!("Found performance indicator");
+                has_perf = true;
+            } else if message.starts_with("docs")
+                || message.contains("docs:")
+                || message.contains("documentation")
+            {
+                debug!("Found documentation indicator");
+                has_docs = true;
+            } else if message.starts_with("test") || message.contains("test:") {
+                debug!("Found test indicator");
+                has_test = true;
+            } else if message.starts_with("ci") || message.contains("ci:") {
+                debug!("Found CI indicator");
+                has_ci = true;
+            } else if message.starts_with("build") || message.contains("build:") {
+                debug!("Found build indicator");
+                has_build = true;
+            } else if message.starts_with("refactor") || message.contains("refactor:") {
+                debug!("Found refactor indicator");
+                has_refactor = true;
+            } else if message.starts_with("style") || message.contains("style:") {
+                debug!("Found style indicator");
+                has_style = true;
+            } else if message.starts_with("revert") || message.contains("revert:") {
+                debug!("Found revert indicator");
+                has_revert = true;
+            }
+        }
+
+        // Determine the most significant change type based on priority
+        let result = if has_breaking {
+            debug!("Breaking change detected from commit message");
+            ChangeType::Breaking
+        } else if has_feature {
+            debug!("Feature change detected from commit message");
+            ChangeType::Feature
+        } else if has_fix {
+            debug!("Fix change detected from commit message");
+            ChangeType::Fix
+        } else if has_perf {
+            debug!("Performance change detected from commit message");
+            ChangeType::Performance
+        } else if has_docs {
+            debug!("Documentation change detected from commit message");
+            ChangeType::Documentation
+        } else if has_test {
+            debug!("Test change detected from commit message");
+            ChangeType::Test
+        } else if has_ci {
+            debug!("CI change detected from commit message");
+            ChangeType::CI
+        } else if has_build {
+            debug!("Build change detected from commit message");
+            ChangeType::Build
+        } else if has_refactor {
+            debug!("Refactor change detected from commit message");
+            ChangeType::Refactor
+        } else if has_style {
+            debug!("Style change detected from commit message");
+            ChangeType::Style
+        } else if has_revert {
+            debug!("Revert change detected from commit message");
+            ChangeType::Revert
+        } else {
+            debug!("No specific change type detected from commit message, defaulting to Chore");
+            ChangeType::Chore
+        };
+
+        debug!("Determined change type: {:?}", result);
+        result
+    }
+
+    /// Gets the commits related to specific files
+    fn get_commits_for_files(
+        all_commits: &[sublime_git_tools::RepoCommit],
+        _files: &[sublime_git_tools::GitChangedFile],
+    ) -> Vec<sublime_git_tools::RepoCommit> {
+        // In a real implementation, we'd want to filter the commits to only those that affect these files
+        // This would require more sophisticated Git operations
+        // For now, we'll just return all commits as an approximation
+        debug!("Getting commits for files. All commits count: {}", all_commits.len());
+        for (i, commit) in all_commits.iter().enumerate() {
+            debug!("Commit {}: {} - {}", i, commit.hash, commit.message);
+        }
+        all_commits.to_vec()
+    }
+
+    /// Generates a descriptive message for the change based on commits
+    fn generate_change_description(
+        commits: &[sublime_git_tools::RepoCommit],
+        files: &[sublime_git_tools::GitChangedFile],
+    ) -> String {
+        if commits.is_empty() {
+            return format!("Changes detected ({} files)", files.len());
+        }
+
+        // Try to use the first commit message as the change description
+        let first_commit = &commits[0];
+        let message = first_commit.message.lines().next().unwrap_or("").trim();
+
+        if message.is_empty() {
+            format!("Changes detected ({} files)", files.len())
+        } else if commits.len() == 1 {
+            message.to_string()
+        } else {
+            format!("{} (and {} more commits)", message, commits.len() - 1)
+        }
     }
 }

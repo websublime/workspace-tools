@@ -133,6 +133,9 @@ pub struct Change {
     /// Release version (None if unreleased)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub release_version: Option<String>,
+
+    #[serde(default)]
+    pub environments: Vec<String>,
 }
 
 impl Change {
@@ -154,6 +157,7 @@ impl Change {
             author: None,
             issues: Vec::new(),
             release_version: None,
+            environments: Vec::new(),
         }
     }
 
@@ -182,10 +186,33 @@ impl Change {
         self
     }
 
+    /// Sets the target environments for this change.
+    #[must_use]
+    pub fn with_environments<I, S>(mut self, environments: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.environments = environments.into_iter().map(Into::into).collect();
+        self
+    }
+
     /// Checks whether this change is released.
     #[must_use]
     pub fn is_released(&self) -> bool {
         self.release_version.is_some()
+    }
+
+    /// Checks whether this change applies to a specific environment.
+    #[must_use]
+    pub fn applies_to_environment(&self, environment: &str) -> bool {
+        // If environments is empty, the change applies to all environments
+        if self.environments.is_empty() {
+            return true;
+        }
+
+        // Otherwise, check if the environment is in the list
+        self.environments.iter().any(|env| env == environment)
     }
 
     /// Gets a summary of the change.
