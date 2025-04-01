@@ -1384,6 +1384,7 @@ dependencies = [
  "log",
  "pathdiff",
  "petgraph",
+ "semver",
  "serde",
  "serde_json",
  "sublime_git_tools",

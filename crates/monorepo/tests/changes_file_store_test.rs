@@ -10,12 +10,12 @@ mod changes_file_store_tests {
 
     fn setup_test_store() -> (TempDir, FileChangeStore) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let store_path = temp_dir.path().to_path_buf();
 
         // Ensure the directory exists
-        fs::create_dir_all(temp_dir.path()).expect("Failed to create directory structure");
+        fs::create_dir_all(&store_path).expect("Failed to create directory structure");
 
-        let store =
-            FileChangeStore::new(temp_dir.path()).expect("Failed to create FileChangeStore");
+        let store = FileChangeStore::new(&store_path).expect("Failed to create FileChangeStore");
         (temp_dir, store)
     }
 

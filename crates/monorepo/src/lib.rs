@@ -1,4 +1,5 @@
 mod changes;
+mod versioning;
 mod workspace;
 
 pub use workspace::{
@@ -15,4 +16,14 @@ pub use changes::{
     memory::MemoryChangeStore,
     store::ChangeStore,
     tracker::{ChangeScope, ChangeTracker},
+};
+
+pub use versioning::{
+    bump::{VersionInconsistency, VersionManager, VersionValidation},
+    error::{VersioningError, VersioningResult},
+    strategy::{BumpReason, BumpType, ChangelogOptions, PackageVersionChange, VersionBumpStrategy},
+    suggest::{
+        determine_bump_type_from_change, suggest_version_bumps, VersionBumpPreview,
+        VersionSuggestion,
+    },
 };
