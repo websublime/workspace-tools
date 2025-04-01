@@ -5,7 +5,7 @@ use petgraph::algo::toposort;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::Arc;
 use sublime_git_tools::Repo;
 use sublime_package_tools::{DependencyGraph, Node, Package, PackageInfo, ValidationReport};
 use sublime_standard_tools::CorePackageManager;
@@ -16,13 +16,13 @@ use crate::{DiscoveryOptions, ValidationOptions, WorkspaceConfig, WorkspaceError
 #[derive(Clone)]
 pub struct Workspace {
     /// Root path of the workspace
-    root_path: PathBuf,
+    pub root_path: PathBuf,
     /// Information about all packages in the workspace
-    package_infos: Vec<Rc<RefCell<PackageInfo>>>,
+    package_infos: Vec<Arc<RefCell<PackageInfo>>>,
     /// Package manager used in the workspace
     package_manager: Option<CorePackageManager>,
     /// Git repository
-    git_repo: Option<Rc<Repo>>,
+    git_repo: Option<Arc<Repo>>,
     /// Configuration for the workspace
     config: WorkspaceConfig,
 }
@@ -39,8 +39,8 @@ impl Workspace {
     ) -> Result<Self, WorkspaceError> {
         let package_manager = config.package_manager.as_deref().and_then(|pm| pm.try_into().ok());
 
-        // Convert git_repo to Rc if present
-        let git_repo = git_repo.map(Rc::new);
+        // Convert git_repo to Arc if present
+        let git_repo = git_repo.map(Arc::new);
 
         Ok(Self { root_path, package_infos: Vec::new(), package_manager, git_repo, config })
     }
@@ -153,11 +153,11 @@ impl Workspace {
 
     /// Gets a package by name.
     #[must_use]
-    pub fn get_package(&self, name: &str) -> Option<Rc<RefCell<PackageInfo>>> {
+    pub fn get_package(&self, name: &str) -> Option<Arc<RefCell<PackageInfo>>> {
         self.package_infos
             .iter()
             .find(|p| p.borrow().package.borrow().name() == name)
-            .map(Rc::clone) // Fixed: Using Rc::clone instead of .clone()
+            .map(Arc::clone) // Fixed: Using Arc::clone instead of Rc::clone()
     }
 
     /// Gets packages in topological order, excluding the root workspace package.
@@ -168,9 +168,9 @@ impl Workspace {
     /// The root package of the workspace (located directly at the workspace root path)
     /// is automatically excluded from the result.
     #[must_use]
-    pub fn sorted_packages(&self) -> Vec<Rc<RefCell<PackageInfo>>> {
+    pub fn sorted_packages(&self) -> Vec<Arc<RefCell<PackageInfo>>> {
         // Extract non-root packages
-        let non_root_packages: Vec<Rc<RefCell<PackageInfo>>> = self
+        let non_root_packages: Vec<Arc<RefCell<PackageInfo>>> = self
             .package_infos
             .iter()
             .filter(|info| {
@@ -181,7 +181,7 @@ impl Workspace {
                 // A non-root package will be in a subdirectory of the workspace
                 package_path != self.root_path
             })
-            .map(Rc::clone)
+            .map(Arc::clone)
             .collect();
 
         // Nothing to sort if we have 0 or 1 packages
@@ -199,9 +199,9 @@ impl Workspace {
         let graph = DependencyGraph::from(packages.as_slice());
 
         // Create a map of package names to package info references
-        let package_map: HashMap<String, Rc<RefCell<PackageInfo>>> = non_root_packages
+        let package_map: HashMap<String, Arc<RefCell<PackageInfo>>> = non_root_packages
             .iter()
-            .map(|p| (p.borrow().package.borrow().name().to_string(), Rc::clone(p)))
+            .map(|p| (p.borrow().package.borrow().name().to_string(), Arc::clone(p)))
             .collect();
 
         // If there are cycles, just return unsorted non-root packages
@@ -221,7 +221,7 @@ impl Workspace {
                         let node = graph.graph.node_weight(idx)?;
                         let resolved = node.as_resolved()?;
                         let name = resolved.identifier().to_string();
-                        package_map.get(&name).map(Rc::clone)
+                        package_map.get(&name).map(Arc::clone)
                     })
                     .collect();
 
@@ -239,7 +239,7 @@ impl Workspace {
 
     /// Gets packages affected by changes in the specified packages.
     #[must_use]
-    pub fn affected_packages(&self, changed_packages: &[&str]) -> Vec<Rc<RefCell<PackageInfo>>> {
+    pub fn affected_packages(&self, changed_packages: &[&str]) -> Vec<Arc<RefCell<PackageInfo>>> {
         let packages: Vec<Package> =
             self.package_infos.iter().map(|info| info.borrow().package.borrow().clone()).collect();
 
@@ -268,7 +268,7 @@ impl Workspace {
                     let dep_name_str = dep_name.to_string();
                     if !processed_packages.contains(&dep_name_str) {
                         if let Some(pkg) = self.get_package(&dep_name_str) {
-                            affected.push(Rc::clone(&pkg));
+                            affected.push(Arc::clone(&pkg));
                             processed_packages.insert(dep_name_str.clone());
                             pending.push(dep_name_str);
                         }
@@ -282,7 +282,7 @@ impl Workspace {
 
     /// Gets packages that depend on a specific package.
     #[must_use]
-    pub fn dependents_of(&self, package_name: &str) -> Vec<Rc<RefCell<PackageInfo>>> {
+    pub fn dependents_of(&self, package_name: &str) -> Vec<Arc<RefCell<PackageInfo>>> {
         let packages: Vec<Package> =
             self.package_infos.iter().map(|info| info.borrow().package.borrow().clone()).collect();
 
@@ -300,7 +300,7 @@ impl Workspace {
 
     /// Gets direct dependencies of a package.
     #[must_use]
-    pub fn dependencies_of(&self, package_name: &str) -> Vec<Rc<RefCell<PackageInfo>>> {
+    pub fn dependencies_of(&self, package_name: &str) -> Vec<Arc<RefCell<PackageInfo>>> {
         // Find the package - using let...else pattern
         let Some(package) = self.get_package(package_name) else {
             // Fixed: Using let...else
@@ -435,7 +435,7 @@ impl Workspace {
     fn process_package_json(
         &self,
         path: &Path,
-    ) -> Result<Option<Rc<RefCell<PackageInfo>>>, WorkspaceError> {
+    ) -> Result<Option<Arc<RefCell<PackageInfo>>>, WorkspaceError> {
         // Read package.json
         let content = std::fs::read_to_string(path).map_err(|e| {
             WorkspaceError::ManifestReadError { path: path.to_path_buf(), error: e }
@@ -489,7 +489,9 @@ impl Workspace {
                     // Create a dependency object - propagate any errors
                     let dep = sublime_package_tools::Dependency::new(dep_name, dep_version_str)
                         .map_err(WorkspaceError::VersionError)?;
-                    dependencies.push(Rc::new(RefCell::new(dep)));
+                    
+                    // Use Rc instead of Arc here for compatibility with Package::new
+                    dependencies.push(std::rc::Rc::new(RefCell::new(dep)));
                 } else {
                     // Non-string version is invalid
                     return Err(WorkspaceError::InvalidConfiguration(format!(
@@ -514,6 +516,6 @@ impl Workspace {
             pkg_json,
         );
 
-        Ok(Some(Rc::new(RefCell::new(package_info))))
+        Ok(Some(Arc::new(RefCell::new(package_info))))
     }
 }
