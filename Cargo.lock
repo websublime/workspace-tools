@@ -1363,18 +1363,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sublime_hooks_tools"
-version = "0.1.0"
-dependencies = [
- "glob",
- "serde",
- "sublime_git_tools",
- "sublime_monorepo_tools",
- "sublime_package_tools",
- "thiserror",
-]
-
-[[package]]
 name = "sublime_monorepo_tools"
 version = "0.1.0"
 dependencies = [
