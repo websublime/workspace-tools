@@ -1,0 +1,12 @@
+[package]
+name = "sublime_hooks_tools"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sublime_git_tools = { path = "../git" }
+sublime_monorepo_tools = { path = "../monorepo" }
+sublime_package_tools = { path = "../pkg" }
+serde = { version = "1.0", features = ["derive"] }
+glob = "0.3"
+thiserror = "1.0" 

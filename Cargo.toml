@@ -74,6 +74,7 @@ sublime_node_tools = { version = "~0.1.0", path = "./crates/node" }
 sublime_git_tools = { version = "~0.1.0", path = "./crates/git" }
 sublime_package_tools = { version = "~0.1.0", path = "./crates/pkg" }
 sublime_monorepo_tools = { version = "~0.1.0", path = "./crates/monorepo" }
+sublime_hooks_tools = { version = "~0.1.0", path = "./crates/hooks" }
 
 mimalloc = "0.1.42"
 serde = "1.0.203"
