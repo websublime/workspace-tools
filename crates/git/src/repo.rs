@@ -1270,6 +1270,161 @@ impl Repo {
         Ok(containing_branches)
     }
 
+    /// Merges the specified branch into the current HEAD
+    ///
+    /// This function attempts to merge the given `branch_name` into the currently
+    /// checked out branch. It handles fast-forward merges and normal merges.
+    /// If merge conflicts occur, it returns a `MergeConflictError`.
+    ///
+    /// # Arguments
+    ///
+    /// * `branch_name` - The name of the branch to merge into the current branch.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<(), RepoError>` - Success or an error, including `MergeConflictError`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run // Example needs a repo setup
+    /// use git::repo::Repo;
+    ///
+    /// # fn example() -> Result<(), git::repo::RepoError> {
+    /// let repo = Repo::open("./my-repo")?;
+    /// repo.checkout("main")?; // Ensure we are on the target branch
+    /// repo.merge("feature-branch")?; // Merge feature-branch into main
+    /// println!("Merge successful!");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn merge(&self, branch_name: &str) -> Result<(), RepoError> {
+        // 1. Get HEAD commit (the branch we are merging INTO)
+        let head_ref = self.repo.head().map_err(RepoError::HeadError)?;
+        let head_oid = head_ref.target().ok_or_else(|| {
+            RepoError::HeadError(Git2Error::from_str("HEAD reference has no target OID"))
+        })?;
+        let head_commit = self.repo.find_commit(head_oid).map_err(RepoError::PeelError)?;
+
+        // 2. Resolve the branch to merge (the branch we are merging FROM)
+        // Use revparse to handle branch names, tags, or commit SHAs flexibly
+        let source_object =
+            self.repo.revparse_single(branch_name).map_err(RepoError::ReferenceError)?;
+        let source_commit = source_object.peel_to_commit().map_err(RepoError::PeelError)?;
+
+        // We need an AnnotatedCommit for merge operations
+        let annotated_commit =
+            self.repo.find_annotated_commit(source_commit.id()).map_err(RepoError::CommitError)?;
+
+        // 3. Perform Merge Analysis
+        let (analysis, preference) =
+            self.repo.merge_analysis(&[&annotated_commit]).map_err(RepoError::MergeError)?;
+
+        // 4. Handle Merge Scenarios
+
+        // -- Up-to-date --
+        if analysis.is_up_to_date() {
+            // Nothing to do
+            return Ok(());
+        }
+
+        // -- Fast-forward --
+        if analysis.is_fast_forward() && preference.is_fastforward_only() {
+            // Perform fast-forward
+            let target_oid = annotated_commit.id();
+            let ref_name = head_ref.name().ok_or_else(|| {
+                RepoError::HeadError(Git2Error::from_str("Cannot get HEAD reference name"))
+            })?;
+
+            // Update the reference directly
+            let mut reference = self.repo.find_reference(ref_name).map_err(RepoError::HeadError)?;
+            reference
+                .set_target(target_oid, &format!("Fast-forward {branch_name} into HEAD"))
+                .map_err(RepoError::ReferenceError)?;
+
+            // Update the working directory to match the new HEAD
+            let mut checkout_builder = CheckoutBuilder::new();
+            checkout_builder.force(); // Use force to sync working dir with index/HEAD
+            self.repo
+                .checkout_head(Some(&mut checkout_builder))
+                .map_err(RepoError::CheckoutError)?;
+
+            return Ok(());
+        }
+
+        // -- Normal Merge --
+        if analysis.is_normal() {
+            // Set up merge options
+            let mut merge_opts = MergeOptions::new();
+            merge_opts.fail_on_conflict(true); // Fail if conflicts can't be automatically resolved
+
+            // Set up checkout options for the merge (how to handle the working dir)
+            let mut checkout_builder = CheckoutBuilder::new();
+            checkout_builder
+                .allow_conflicts(true) // Allow checkout to proceed even if conflicts exist
+                .conflict_style_merge(true); // Create standard <<< === >>> conflict markers
+
+            // Perform the merge operation (this updates the index)
+            self.repo
+                .merge(
+                    &[&annotated_commit],
+                    Some(&mut merge_opts),
+                    Some(&mut checkout_builder), // Checkout during merge
+                )
+                .map_err(RepoError::MergeError)?;
+
+            // Check index for conflicts after merge attempt
+            let mut index = self.repo.index().map_err(RepoError::IndexError)?;
+            if index.has_conflicts() {
+                // Conflicts detected. The working dir and index are in a conflicted state.
+                // We *could* try to clean up, but it's often better to let the user resolve.
+                // The repo state is MERGING. `cleanup_state` would abort the merge.
+                // We return a specific error.
+                return Err(RepoError::MergeConflictError(Git2Error::from_str(&format!(
+                        "Merge conflict detected when merging '{branch_name}'. Resolve conflicts and commit."
+                    ))));
+            }
+
+            // --- No Conflicts - Create Merge Commit ---
+
+            // Write the index state to a tree
+            let tree_oid = index.write_tree().map_err(RepoError::WriteTreeError)?;
+            let tree = self.repo.find_tree(tree_oid).map_err(RepoError::TreeError)?;
+
+            // Get the signature for the committer
+            let signature = self.repo.signature().map_err(RepoError::SignatureError)?;
+
+            // Create the merge commit message
+            let msg = format!("chore: merge branch '{branch_name}'");
+
+            // Create the merge commit with two parents: HEAD and the merged commit
+            self.repo
+                .commit(
+                    Some("HEAD"),                    // Update the HEAD reference
+                    &signature,                      // Author
+                    &signature,                      // Committer
+                    &msg,                            // Commit message
+                    &tree,                           // Tree representing the merged state
+                    &[&head_commit, &source_commit], // Parents
+                )
+                .map_err(RepoError::CommitError)?;
+
+            // Merge successful, clean up the MERGE_HEAD state
+            self.repo.cleanup_state().map_err(RepoError::MergeError)?;
+
+            return Ok(());
+        }
+
+        // -- Handle other analysis results if necessary (e.g., unborn HEAD) --
+        if analysis.is_unborn() {
+            return Err(RepoError::MergeError(Git2Error::from_str(
+                    "Cannot merge into an unborn HEAD (repository might be empty or branch doesn't exist)",
+                )));
+        }
+
+        // Default error if none of the above conditions were met (shouldn't usually happen)
+        Err(RepoError::MergeError(Git2Error::from_str("Unhandled merge analysis result")))
+    }
+
     /// Pushes the current branch to a remote repository
     ///
     /// # Arguments

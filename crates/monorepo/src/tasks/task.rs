@@ -93,18 +93,21 @@ impl Task {
     }
 
     /// Set the package for this task
+    #[must_use]
     pub fn with_package(mut self, package: impl Into<String>) -> Self {
         self.package = Some(package.into());
         self
     }
 
     /// Add a dependency on another task
+    #[must_use]
     pub fn with_dependency(mut self, dependency: impl Into<String>) -> Self {
         self.dependencies.push(dependency.into());
         self
     }
 
     /// Add multiple dependencies
+    #[must_use]
     pub fn with_dependencies(mut self, dependencies: Vec<impl Into<String>>) -> Self {
         for dep in dependencies {
             self.dependencies.push(dep.into());
@@ -113,32 +116,37 @@ impl Task {
     }
 
     /// Set working directory
+    #[must_use]
     pub fn with_cwd(mut self, cwd: impl Into<PathBuf>) -> Self {
         self.config.cwd = Some(cwd.into());
         self
     }
 
     /// Add environment variable
+    #[must_use]
     pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.config.env.insert(key.into(), value.into());
         self
     }
 
     /// Set timeout
+    #[must_use]
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.config.timeout = Some(timeout);
         self
     }
 
     /// Set whether to ignore errors
+    #[must_use]
     pub fn ignore_error(mut self, ignore: bool) -> Self {
         self.config.ignore_error = ignore;
         self
     }
 
     /// Set whether to show live output
+    #[must_use]
     pub fn live_output(mut self, live: bool) -> Self {
         self.config.live_output = live;
         self
     }
-} 
+}

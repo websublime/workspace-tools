@@ -30,10 +30,14 @@ pub use versioning::{
 };
 
 pub use tasks::{
-    error::{TaskError, TaskResult, TaskResultInfo},
+    error::{TaskError, TaskResult},
     filter::TaskFilter,
     graph::{TaskGraph, TaskSortMode},
-    parallel::{ParallelExecutionConfig, ParallelExecutor, default_parallel_config, parallel_config_with_concurrency, fail_fast_parallel_config},
+    info::TaskResultInfo,
+    parallel::{
+        default_parallel_config, fail_fast_parallel_config, parallel_config_with_concurrency,
+        ParallelExecutionConfig, ParallelExecutor,
+    },
     runner::TaskRunner,
     task::{Task, TaskConfig, TaskExecution, TaskStatus},
 };
