@@ -51,6 +51,7 @@ impl WorkspaceManager {
         // Discover packages using the provided options
         workspace.discover_packages_with_options(options)?;
 
+        // Make sure we have at least one package
         if workspace.is_empty() {
             return Err(WorkspaceError::NoPackagesFound(workspace.root_path().to_path_buf()));
         }

@@ -12,6 +12,14 @@ use sublime_standard_tools::CorePackageManager;
 
 use crate::{DiscoveryOptions, ValidationOptions, WorkspaceConfig, WorkspaceError, WorkspaceGraph};
 
+#[derive(Debug, Clone)]
+pub struct SortedPackages {
+    /// Packages that can be topologically sorted (no cycles)
+    pub sorted: Vec<Rc<RefCell<PackageInfo>>>,
+    /// Groups of packages involved in circular dependencies
+    pub circular: Vec<Vec<Rc<RefCell<PackageInfo>>>>,
+}
+
 /// Complete workspace representation.
 #[derive(Clone)]
 pub struct Workspace {
@@ -25,6 +33,19 @@ pub struct Workspace {
     git_repo: Option<Rc<Repo>>,
     /// Configuration for the workspace
     config: WorkspaceConfig,
+}
+
+// Can we implement std::fmt::Debug to Workspace struct?
+impl std::fmt::Debug for Workspace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Workspace")
+            .field("root_path", &self.root_path)
+            .field("package_infos", &self.package_infos)
+            .field("package_manager", &self.package_manager)
+            .field("git_repo", &self.git_repo)
+            .field("config", &self.config)
+            .finish()
+    }
 }
 
 impl Workspace {
@@ -52,7 +73,7 @@ impl Workspace {
     pub fn discover_packages_with_options(
         &mut self,
         options: &DiscoveryOptions,
-    ) -> Result<(), WorkspaceError> {
+    ) -> Result<&Self, WorkspaceError> {
         let mut package_infos = Vec::new();
 
         // Compile exclude patterns into a globset
@@ -104,9 +125,37 @@ impl Workspace {
                     continue;
                 }
 
+                // Calculate the directory depth from the root path and apply max_depth filter
+                let depth = relative_path.components().count();
+                if depth > options.max_depth {
+                    // Skip if beyond max_depth
+                    continue;
+                }
+
                 // If it's a package.json file, process it
                 if path.file_name().map_or(false, |n| n == "package.json") {
                     if let Some(package_info) = self.process_package_json(&path)? {
+                        // Check if this is a private package that should be excluded
+                        if !options.include_private {
+                            // Parse the package.json to check for private flag
+                            let pkg_json: serde_json::Value = serde_json::from_str(
+                                &std::fs::read_to_string(&path)?,
+                            )
+                            .map_err(|e| WorkspaceError::ManifestParseError {
+                                path: path.clone(),
+                                error: e,
+                            })?;
+
+                            // Skip private packages if include_private is false
+                            if pkg_json
+                                .get("private")
+                                .and_then(serde_json::Value::as_bool)
+                                .unwrap_or(false)
+                            {
+                                continue;
+                            }
+                        }
+
                         package_infos.push(package_info);
                     }
                 }
@@ -114,7 +163,7 @@ impl Workspace {
         }
 
         self.package_infos = package_infos;
-        Ok(())
+        Ok(self)
     }
 
     /// Analyzes workspace dependencies.
@@ -169,6 +218,14 @@ impl Workspace {
     /// is automatically excluded from the result.
     #[must_use]
     pub fn sorted_packages(&self) -> Vec<Rc<RefCell<PackageInfo>>> {
+        self.get_sorted_packages_with_circulars().sorted
+    }
+
+    // New method that provides more detailed information
+    #[must_use]
+    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::items_after_statements)]
+    pub fn get_sorted_packages_with_circulars(&self) -> SortedPackages {
         // Extract non-root packages
         let non_root_packages: Vec<Rc<RefCell<PackageInfo>>> = self
             .package_infos
@@ -176,9 +233,7 @@ impl Workspace {
             .filter(|info| {
                 // Get the package's path
                 let package_path = PathBuf::from(&info.borrow().package_path);
-
                 // Check if the package path is different from the workspace root path
-                // A non-root package will be in a subdirectory of the workspace
                 package_path != self.root_path
             })
             .map(Rc::clone)
@@ -186,12 +241,12 @@ impl Workspace {
 
         // Nothing to sort if we have 0 or 1 packages
         if non_root_packages.is_empty() {
-            return Vec::new();
+            return SortedPackages { sorted: Vec::new(), circular: Vec::new() };
         } else if non_root_packages.len() == 1 {
-            return non_root_packages;
+            return SortedPackages { sorted: non_root_packages, circular: Vec::new() };
         }
 
-        // Extract the Package objects for the dependency graph
+        // Extract the Package objects
         let packages: Vec<Package> =
             non_root_packages.iter().map(|info| info.borrow().package.borrow().clone()).collect();
 
@@ -204,18 +259,111 @@ impl Workspace {
             .map(|p| (p.borrow().package.borrow().name().to_string(), Rc::clone(p)))
             .collect();
 
-        // If there are cycles, just return unsorted non-root packages
-        if graph.detect_circular_dependencies().is_err() {
-            return non_root_packages;
+        // Check for cycles
+        let has_cycles = graph.detect_circular_dependencies().is_err();
+
+        if has_cycles {
+            // With cycles, we need to identify the components involved
+
+            // For a proper implementation, we would use Tarjan's algorithm to find
+            // strongly connected components (SCCs) which represent cycles.
+
+            // For now, we'll use a simplified approach:
+            // 1. Identify packages involved in dependencies
+            // 2. Put those in the circular group
+            // 3. Put the rest in sorted
+
+            // This will need to be replaced with proper SCC detection
+            let mut circular_packages = HashSet::new();
+
+            // Basic cycle detection - this should be replaced with proper SCC
+            let mut dependency_map: HashMap<String, HashSet<String>> = HashMap::new();
+
+            // Build dependency map
+            for pkg in &packages {
+                let name = pkg.name().to_string();
+                let deps: HashSet<String> = pkg
+                    .dependencies()
+                    .iter()
+                    .map(|d| d.borrow().name().to_string())
+                    .filter(|d| package_map.contains_key(d)) // Only include workspace packages
+                    .collect();
+
+                dependency_map.insert(name, deps);
+            }
+
+            // Simple cycle detection - mark packages in cycles
+            for pkg_name in dependency_map.keys() {
+                let mut visited = HashSet::new();
+                let mut path = HashSet::new();
+
+                fn has_cycle(
+                    node: &str,
+                    deps_map: &HashMap<String, HashSet<String>>,
+                    visited: &mut HashSet<String>,
+                    path: &mut HashSet<String>,
+                    cycles: &mut HashSet<String>,
+                ) -> bool {
+                    if !visited.contains(node) {
+                        visited.insert(node.to_string());
+                        path.insert(node.to_string());
+
+                        if let Some(deps) = deps_map.get(node) {
+                            for dep in deps {
+                                if !visited.contains(dep) {
+                                    if has_cycle(dep, deps_map, visited, path, cycles) {
+                                        cycles.insert(node.to_string());
+                                        cycles.insert(dep.to_string());
+                                        return true;
+                                    }
+                                } else if path.contains(dep) {
+                                    // Found a cycle
+                                    cycles.insert(node.to_string());
+                                    cycles.insert(dep.to_string());
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+
+                    path.remove(node);
+                    false
+                }
+
+                has_cycle(
+                    pkg_name,
+                    &dependency_map,
+                    &mut visited,
+                    &mut path,
+                    &mut circular_packages,
+                );
+            }
+
+            // Separate circular and non-circular packages
+            let mut circular_group = Vec::new();
+            let mut sorted = Vec::new();
+
+            for pkg in non_root_packages {
+                let name = pkg.borrow().package.borrow().name().to_string();
+                if circular_packages.contains(&name) {
+                    circular_group.push(pkg);
+                } else {
+                    sorted.push(pkg);
+                }
+            }
+
+            // We would need multiple circular groups based on SCCs
+            let circular =
+                if circular_group.is_empty() { Vec::new() } else { vec![circular_group] };
+
+            return SortedPackages { sorted, circular };
         }
 
-        // Perform topological sort
+        // If no cycles, we can do a simple topological sort
         match toposort(&graph.graph, None) {
             Ok(sorted_indices) => {
                 // Map sorted indices to package info references
-                // The result of toposort has dependents before dependencies,
-                // so we need to reverse it to get the correct order
-                let mut result: Vec<_> = sorted_indices
+                let sorted: Vec<_> = sorted_indices
                     .into_iter()
                     .filter_map(|idx| {
                         let node = graph.graph.node_weight(idx)?;
@@ -225,27 +373,37 @@ impl Workspace {
                     })
                     .collect();
 
-                // Reverse to get dependencies before dependents
-                result.reverse();
-                result
+                // The natural output of toposort needs to be reversed
+                // to get dependencies before dependents
+                let mut reversed = Vec::new();
+                for i in (0..sorted.len()).rev() {
+                    reversed.push(Rc::clone(&sorted[i]));
+                }
+
+                SortedPackages { sorted: reversed, circular: Vec::new() }
             }
             Err(_) => {
-                // This shouldn't happen since we already checked for cycles,
-                // but just in case, return unsorted packages
-                non_root_packages
+                // This should never happen since we checked for cycles
+                SortedPackages { sorted: non_root_packages, circular: Vec::new() }
             }
         }
     }
 
     /// Gets packages affected by changes in the specified packages.
     #[must_use]
-    pub fn affected_packages(&self, changed_packages: &[&str]) -> Vec<Rc<RefCell<PackageInfo>>> {
+    pub fn affected_packages(
+        &self,
+        changed_packages: &[&str],
+        check_circular: Option<bool>,
+    ) -> Vec<Rc<RefCell<PackageInfo>>> {
+        let check = check_circular.unwrap_or(true); // Default to true for backward compatibility
+
         let packages: Vec<Package> =
             self.package_infos.iter().map(|info| info.borrow().package.borrow().clone()).collect();
 
         let graph = DependencyGraph::from(packages.as_slice());
 
-        if graph.detect_circular_dependencies().is_err() {
+        if check && graph.detect_circular_dependencies().is_err() {
             return Vec::new();
         }
 
@@ -282,13 +440,20 @@ impl Workspace {
 
     /// Gets packages that depend on a specific package.
     #[must_use]
-    pub fn dependents_of(&self, package_name: &str) -> Vec<Rc<RefCell<PackageInfo>>> {
+    pub fn dependents_of(
+        &self,
+        package_name: &str,
+        check_circular: Option<bool>,
+    ) -> Vec<Rc<RefCell<PackageInfo>>> {
+        let check = check_circular.unwrap_or(true); // Default to true for backward compatibility
+
         let packages: Vec<Package> =
             self.package_infos.iter().map(|info| info.borrow().package.borrow().clone()).collect();
 
         let graph = DependencyGraph::from(packages.as_slice());
 
-        if graph.detect_circular_dependencies().is_err() {
+        // Only check for cycles if the caller wants it
+        if check && graph.detect_circular_dependencies().is_err() {
             return Vec::new();
         }
 
@@ -446,7 +611,7 @@ impl Workspace {
             WorkspaceError::ManifestParseError { path: path.to_path_buf(), error: e }
         })?;
 
-        // Extract name and version using let...else pattern
+        // Extract name and version
         let Some(name) = pkg_json["name"].as_str() else {
             return Err(WorkspaceError::InvalidConfiguration(format!(
                 "Missing name in {}",
@@ -461,7 +626,7 @@ impl Workspace {
             )));
         };
 
-        // Get package path using let...else pattern
+        // Get package path
         let Some(package_path) = path.parent() else {
             return Err(WorkspaceError::InvalidConfiguration(format!(
                 "Invalid package path: {}",
@@ -469,6 +634,11 @@ impl Workspace {
             )));
         };
         let package_path = package_path.to_path_buf();
+
+        // Skip the root package.json - don't count it as a package
+        if package_path == self.root_path {
+            return Ok(None);
+        }
 
         // Get relative path from workspace root
         let Some(relative_path) = diff_paths(&package_path, &self.root_path) else {

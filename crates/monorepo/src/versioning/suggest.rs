@@ -294,7 +294,8 @@ fn handle_dependency_updates(
     // For each package with changes, find packages that depend on it
     for changed_package in &packages_with_changes {
         // Find packages that depend on the changed package
-        let dependents = workspace.dependents_of(changed_package);
+        // TODO: circular check can be passed by
+        let dependents = workspace.dependents_of(changed_package, None);
 
         for dependent_info in dependents {
             let dep_info = dependent_info.borrow();

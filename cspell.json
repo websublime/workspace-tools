@@ -2,6 +2,7 @@
   "words": [
     "DependencyResolutionError",
     "DependencyResolutionError",
-    "&vec![pkg.clone()]"
+    "&vec![pkg.clone()]",
+    "if !circular_group.is_empty() { vec![circular_group] } else { Vec::new() }"
   ]
 }

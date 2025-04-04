@@ -1,8 +1,8 @@
 use git2::{
     build::CheckoutBuilder, BranchType, Commit, Cred, CredentialType, Delta, DiffOptions,
     Direction, Error as Git2Error, FetchOptions, FetchPrune, IndexAddOption, MergeOptions, Oid,
-    PushOptions, RemoteCallbacks, Repository, RepositoryInitOptions, StatusOptions, StatusShow,
-    TreeWalkMode, TreeWalkResult,
+    PushOptions, RemoteCallbacks, Repository, RepositoryInitOptions, StatusOptions, TreeWalkMode,
+    TreeWalkResult,
 };
 use std::collections::HashMap;
 use std::fs::canonicalize;
@@ -514,6 +514,16 @@ impl AsRef<str> for RepoError {
             RepoError::CheckoutError(_) => "CheckoutError",
             RepoError::MergeConflictError(_) => "MergeConflictError",
         }
+    }
+}
+
+// Implementation of Debug that avoids using the Repository field since it doesn't implement Debug
+impl std::fmt::Debug for Repo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Repo")
+            .field("local_path", &self.local_path)
+            // Skip printing the repo field as Repository doesn't implement Debug
+            .finish_non_exhaustive()
     }
 }
 
@@ -1117,9 +1127,11 @@ impl Repo {
     pub fn status_porcelain(&self) -> Result<Vec<String>, RepoError> {
         let mut status_options = StatusOptions::new();
         status_options
-            .include_ignored(false)
             .include_untracked(true)
-            .show(StatusShow::IndexAndWorkdir);
+            .include_ignored(false)
+            .include_unmodified(false)
+            .recurse_untracked_dirs(true)
+            .show(git2::StatusShow::IndexAndWorkdir);
 
         let statuses =
             self.repo.statuses(Some(&mut status_options)).map_err(RepoError::StatusError)?;
