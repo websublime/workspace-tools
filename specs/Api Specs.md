@@ -287,6 +287,9 @@ impl Repo {
         since: Option<String>, 
         relative: &Option<String>
     ) -> Result<Vec<RepoCommit>, RepoError>;
+    
+    // Merges a branch into to head (main)
+    pub fn merge(&self, branch_name: &str) -> Result<(), RepoError>
 }
 ```
 

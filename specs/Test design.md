@@ -435,25 +435,41 @@ Merge and tag: '@scope/package-major@1.0.0', 'chore: release package-major@1.0.0
 
 
 
-For cycle dependecies use 3 of them and put in a cycle dependency.
+For cycle dependecies use 3 of them and put in a cycle dependency function fixture.
 
+Mandatory:
 
+Use rstest crate to create all the fixtures functionality, so that i can reuse them in the real tests that we will generate.
 
 Now the folder skeleton of tests should be:
 
 ```
 tests/
-|-changes
-|--changes_..._test.rs
-|--etc
-|-workspace
-|--workspace..._test.rs
+|-fixtures
+|--mod.rs
+|--... (fixtures files)
+|-changes_..._test.rs
+|-workspace..._test.rs
+|-versioning..._test.rs
+|-utils..._test.rs
+|-tasks..._test.rs
+...
 ```
 
-Basically each feature in is own folder with the set of tests for that feature, prefixed with module name like example above.
+Basically each feature is prefixed with module name like example above, fixtures should exist in fixtures folders and have a common for monorepo structure and them if needed fixtures for each module by file. We can use rstest for generating fixtures.
 
 
 
 Reminder:
 
 Because we use TempDir dependency the temporary folder should live until the end of the tests. If need for each group the recreation of this skeleton just do it.
+
+Request to generate tests:
+
+Based in the test design spec i would like to generate tests for the changes module. I will need a detail implemetation for each step, files location, follow clippy rules and cover all apis exported by the module. I think the best is to not produce everything in one shot but step by step. Let's start by the fixtures then in each prompt we generate each feature. Put the list of steps here so that i can tell you to proceed to the next step. I will provide for your context also all the available apis for the crates:
+- sublime_git_tools
+- sublime_standard_tools
+- sublime_package_tools
+- sublime_monorepo_tools
+
+Do not make assumptions of anything in those crates, follow the api spec for your usage, meaning do not invent methods that are not specified in the doc.
