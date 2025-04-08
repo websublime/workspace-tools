@@ -1,8 +1,7 @@
 //! Change tracking system.
 
-use log::{debug, info, warn};
+use log::{debug, info};
 use std::collections::HashMap;
-use std::fs::canonicalize;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -91,14 +90,13 @@ impl ChangeTracker {
             workspace_root.join(file_path)
         };
 
-        debug!("Normalized absolute path: {}", file_abs_path.display());
+        // NEW: Canonicalize the file path to resolve symlinks
+        let file_canonical_path = match std::fs::canonicalize(&file_abs_path) {
+            Ok(p) => p,
+            Err(_) => file_abs_path.clone(), // Fallback to original if we can't canonicalize
+        };
 
-        // Print all packages and their paths
-        debug!("Available packages:");
-        for pkg_info in self.workspace.sorted_packages() {
-            let pkg = pkg_info.borrow();
-            debug!("  Package {} at {}", pkg.package.borrow().name(), pkg.package_path);
-        }
+        debug!("Canonical path: {}", file_canonical_path.display());
 
         // Try to find the package this file belongs to
         for pkg_info in self.workspace.sorted_packages() {
@@ -114,44 +112,44 @@ impl ChangeTracker {
                 workspace_root.join(pkg_path_str)
             };
 
-            debug!("Checking against package {} at {}", pkg_name, pkg_abs_path.display());
+            // NEW: Canonicalize the package path
+            let pkg_canonical_path = match std::fs::canonicalize(&pkg_abs_path) {
+                Ok(p) => p,
+                Err(_) => pkg_abs_path.clone(), // Fallback to original if we can't canonicalize
+            };
 
-            // Check if file path starts with package path
-            if file_abs_path.starts_with(&pkg_abs_path) {
+            debug!("Checking against package {} at {}", pkg_name, pkg_canonical_path.display());
+
+            // Check if canonical file path starts with canonical package path
+            if file_canonical_path.starts_with(&pkg_canonical_path) {
                 debug!("Match found! File belongs to package {}", pkg_name);
                 let scope = ChangeScope::Package(pkg_name.to_string());
                 self.scope_cache.insert(path_buf, scope.clone());
                 return Ok(scope);
             }
 
-            // Try direct string prefix matching as fallback
-            let file_str = file_abs_path.to_string_lossy().to_string();
-            let pkg_str = pkg_abs_path.to_string_lossy().to_string();
+            // Try string prefix matching as fallback
+            let file_str = file_canonical_path.to_string_lossy().to_string();
+            let pkg_str = pkg_canonical_path.to_string_lossy().to_string();
             if file_str.starts_with(&pkg_str) {
                 debug!("String match found for package {}", pkg_name);
                 let scope = ChangeScope::Package(pkg_name.to_string());
                 self.scope_cache.insert(path_buf, scope.clone());
                 return Ok(scope);
             }
-
-            // Last resort: check if the file_path contains the package path's basename
-            if let Some(pkg_basename) = pkg_abs_path.file_name() {
-                let pkg_basename_str = pkg_basename.to_string_lossy().to_string();
-                if file_path.contains(&pkg_basename_str) {
-                    debug!("Basename match found for package {}", pkg_name);
-                    let scope = ChangeScope::Package(pkg_name.to_string());
-                    self.scope_cache.insert(path_buf, scope.clone());
-                    return Ok(scope);
-                }
-            }
         }
 
-        // If we get here, file doesn't belong to any package
+        // Rest of the existing method...
         debug!("No package match found, checking if at root level");
 
-        // Check if file is direct child of workspace root
-        if let Some(parent) = file_abs_path.parent() {
-            if parent == workspace_root {
+        // Canonicalize the workspace root too for consistency
+        let root_canonical = match std::fs::canonicalize(workspace_root) {
+            Ok(p) => p,
+            Err(_) => workspace_root.to_path_buf(),
+        };
+
+        if let Some(parent) = file_canonical_path.parent() {
+            if parent == root_canonical {
                 debug!("File is at root level");
                 let scope = ChangeScope::Root;
                 self.scope_cache.insert(path_buf, scope.clone());
@@ -159,7 +157,6 @@ impl ChangeTracker {
             }
         }
 
-        // Default case: file is somewhere in monorepo but not in a specific package
         debug!("File is in monorepo infrastructure (not in any package or at root)");
         let scope = ChangeScope::Monorepo;
         self.scope_cache.insert(path_buf, scope.clone());
@@ -181,6 +178,9 @@ impl ChangeTracker {
         from_ref: &str,
         to_ref: Option<&str>,
     ) -> ChangeResult<Vec<Change>> {
+        // Clear cache first to avoid borrowing issues
+        self.clear_cache();
+
         info!("Detecting changes from {} to {:?}", from_ref, to_ref);
 
         // Ensure we have a Git repository
@@ -199,41 +199,59 @@ impl ChangeTracker {
 
         info!("Found {} changed files", changed_files.len());
 
-        // Print all changed files for debugging
-        for file in &changed_files {
-            debug!("Changed file: {}", file.path);
-        }
-
         // Get commit information if available
         debug!("Getting commits between {from_ref} and {to_ref:?}");
         let commits =
             repo.get_commits_since(Some(from_ref.to_string()), &None).map_or(vec![], |v| v);
 
-        // Group changed files by scope (package, monorepo, root)
+        // Group changed files by package
         let mut package_changes: HashMap<String, Vec<sublime_git_tools::GitChangedFile>> =
             HashMap::new();
         let mut monorepo_changes = Vec::new();
         let mut root_changes = Vec::new();
 
-        // Clear cache to ensure fresh mappings
-        self.clear_cache();
+        let workspace_root = self.workspace.root_path().to_path_buf();
 
+        // Map files to packages
         for file in changed_files {
-            debug!("Mapping file to scope: {}", file.path);
-            match self.map_file_to_scope(&file.path)? {
-                ChangeScope::Package(package_name) => {
-                    debug!("File {} mapped to package {}", file.path, package_name);
-                    package_changes.entry(package_name).or_default().push(file);
+            debug!("Processing changed file: {}", file.path);
+
+            // Convert to absolute path
+            let file_abs_path = if Path::new(&file.path).is_absolute() {
+                PathBuf::from(&file.path)
+            } else {
+                workspace_root.join(&file.path)
+            };
+
+            // First try direct mapping to discovered packages
+            match self.map_file_to_scope(&file.path) {
+                Ok(ChangeScope::Package(pkg_name)) => {
+                    debug!("File {} directly mapped to package {}", file.path, pkg_name);
+                    package_changes.entry(pkg_name).or_default().push(file);
+                    continue;
                 }
-                ChangeScope::Monorepo => {
-                    debug!("File {} mapped to monorepo", file.path);
-                    monorepo_changes.push(file);
-                }
-                ChangeScope::Root => {
-                    debug!("File {} mapped to root", file.path);
+                Ok(ChangeScope::Root) => {
+                    debug!("File {} is at root level", file.path);
                     root_changes.push(file);
+                    continue;
+                }
+                _ => {
+                    // Continue with more attempts to assign to a package
                 }
             }
+
+            // If direct mapping failed, try to find the nearest package.json
+            if let Some(package_name) =
+                Self::find_package_name_from_nearest_package_json(&file_abs_path)
+            {
+                debug!("File {} inferred to belong to package {}", file.path, package_name);
+                package_changes.entry(package_name).or_default().push(file);
+                continue;
+            }
+
+            // If that also failed, it's a monorepo file
+            debug!("File {} is a monorepo file", file.path);
+            monorepo_changes.push(file);
         }
 
         // Create changes from detected file changes
@@ -271,8 +289,54 @@ impl ChangeTracker {
             changes.push(change);
         }
 
-        // Handle monorepo and root changes similarly...
-        // (rest of the method remains unchanged)
+        // Handle monorepo changes
+        if !monorepo_changes.is_empty() {
+            debug!("Creating monorepo change with {} files", monorepo_changes.len());
+
+            let relevant_commits =
+                ChangeTracker::get_commits_for_files(&commits, &monorepo_changes);
+            let change_type = ChangeTracker::determine_change_type_from_commits(&relevant_commits);
+            let is_breaking = change_type == ChangeType::Breaking;
+
+            let mut change = Change::new(
+                "monorepo",
+                change_type,
+                &ChangeTracker::generate_change_description(&relevant_commits, &monorepo_changes),
+                is_breaking,
+            );
+
+            if let Some(ref name) = self.git_config.user_name {
+                change = change.with_author(name);
+            } else if !relevant_commits.is_empty() {
+                change = change.with_author(&relevant_commits[0].author_name);
+            }
+
+            changes.push(change);
+        }
+
+        // Handle root changes
+        if !root_changes.is_empty() {
+            debug!("Creating root change with {} files", root_changes.len());
+
+            let relevant_commits = ChangeTracker::get_commits_for_files(&commits, &root_changes);
+            let change_type = ChangeTracker::determine_change_type_from_commits(&relevant_commits);
+            let is_breaking = change_type == ChangeType::Breaking;
+
+            let mut change = Change::new(
+                "root",
+                change_type,
+                &ChangeTracker::generate_change_description(&relevant_commits, &root_changes),
+                is_breaking,
+            );
+
+            if let Some(ref name) = self.git_config.user_name {
+                change = change.with_author(name);
+            } else if !relevant_commits.is_empty() {
+                change = change.with_author(&relevant_commits[0].author_name);
+            }
+
+            changes.push(change);
+        }
 
         info!("Created {} changes", changes.len());
         Ok(changes)
@@ -488,6 +552,37 @@ impl ChangeTracker {
     #[must_use]
     pub fn store_mut(&mut self) -> &mut dyn ChangeStore {
         self.store.as_mut()
+    }
+
+    // Helper method to find the nearest package.json and extract its name
+    fn find_package_name_from_nearest_package_json(file_path: &Path) -> Option<String> {
+        let mut current = file_path;
+
+        // Traverse up the directory tree looking for package.json
+        while let Some(parent) = current.parent() {
+            let package_json_path = parent.join("package.json");
+
+            if package_json_path.exists() {
+                // Found a package.json, try to read it
+                if let Ok(content) = std::fs::read_to_string(&package_json_path) {
+                    // Try to parse as JSON
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                        // Check if it has a name field
+                        if let Some(name) = json.get("name").and_then(|n| n.as_str()) {
+                            return Some(name.to_string());
+                        }
+                    }
+                }
+
+                // If we found a package.json but couldn't get a name, stop looking
+                break;
+            }
+
+            // Move up one level
+            current = parent;
+        }
+
+        None
     }
 
     /// Analyzes commit messages to determine the change type

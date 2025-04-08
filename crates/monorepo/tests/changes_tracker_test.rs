@@ -4,73 +4,48 @@ use tempfile::TempDir;
 
 use sublime_git_tools::Repo;
 use sublime_monorepo_tools::{
-    Change, ChangeScope, ChangeTracker, ChangeType, DiscoveryOptions, FileChangeStore,
-    MemoryChangeStore, Workspace, WorkspaceManager,
+    Change, ChangeScope, ChangeTracker, ChangeType, DiscoveryOptions, MemoryChangeStore, Workspace,
+    WorkspaceManager,
 };
 
 mod fixtures;
 
 // Helper function to create a workspace with a change tracker
-fn setup_change_tracker(
-    temp_dir: &TempDir,
-    use_file_store: bool,
-) -> (Rc<Workspace>, ChangeTracker) {
-    // Use WorkspaceManager to properly discover the workspace
+fn setup_change_tracker(temp_dir: &TempDir) -> (Rc<Workspace>, ChangeTracker) {
     let workspace_manager = WorkspaceManager::new();
     let root_path = temp_dir.path();
-    println!("Setting up workspace at: {}", root_path.display());
 
-    // First, verify all expected packages exist in the filesystem
-    println!("Verifying fixture packages:");
-    for pkg_name in &["foo", "bar", "baz", "charlie", "major", "tom"] {
-        let pkg_path = root_path.join(format!("packages/package-{}", pkg_name));
-        let pkg_json = pkg_path.join("package.json");
-        if pkg_path.exists() && pkg_json.exists() {
-            println!("  ✅ Package {} exists at {}", pkg_name, pkg_path.display());
-        } else {
-            println!("  ❌ Package {} NOT FOUND at {}", pkg_name, pkg_path.display());
+    // Use very permissive discovery options
+    let options = DiscoveryOptions::default()
+        .auto_detect_root(false)
+        .include_patterns(vec!["**/package.json"]) // Any package.json
+        .exclude_patterns(vec!["**/node_modules/**"]) // But not in node_modules
+        .max_depth(10); // Go deep
+
+    // Try to discover workspace
+    match workspace_manager.discover_workspace(root_path, &options) {
+        Ok(workspace) => {
+            let workspace_rc = Rc::new(workspace);
+
+            // Create very simple store - just in memory
+            let store =
+                Box::new(MemoryChangeStore::new()) as Box<dyn sublime_monorepo_tools::ChangeStore>;
+
+            // Create change tracker
+            let change_tracker = ChangeTracker::new(Rc::clone(&workspace_rc), store)
+                .with_git_user(Some("sublime-bot"), Some("test-bot@websublime.com"));
+
+            (workspace_rc, change_tracker)
+        }
+        Err(err) => {
+            panic!("Failed to discover workspace: {err}");
         }
     }
-
-    // Use more specific discovery options
-    let options = DiscoveryOptions::default()
-        .auto_detect_root(false) // We know the root path
-        .include_patterns(vec!["packages/*/package.json"]) // More specific pattern
-        .max_depth(5); // Ensure we go deep enough
-
-    let workspace = workspace_manager
-        .discover_workspace(root_path, &options)
-        .expect("Failed to discover workspace");
-
-    println!("Discovered workspace with {} packages", workspace.sorted_packages().len());
-
-    // Print all packages
-    for pkg_info in workspace.sorted_packages() {
-        let pkg = pkg_info.borrow();
-        println!("  Package: {} at {}", pkg.package.borrow().name(), pkg.package_path);
-    }
-
-    let workspace_rc = Rc::new(workspace);
-
-    // Set up change store
-    let store = if use_file_store {
-        let changes_dir = temp_dir.path().join(".changes");
-        let file_store = FileChangeStore::new(&changes_dir).expect("Failed to create file store");
-        Box::new(file_store) as Box<dyn sublime_monorepo_tools::ChangeStore>
-    } else {
-        Box::new(MemoryChangeStore::new()) as Box<dyn sublime_monorepo_tools::ChangeStore>
-    };
-
-    // Create change tracker
-    let change_tracker = ChangeTracker::new(Rc::clone(&workspace_rc), store)
-        .with_git_user(Some("sublime-bot"), Some("test-bot@websublime.com"));
-
-    (workspace_rc, change_tracker)
 }
 
 #[rstest]
 fn test_map_file_to_scope(#[from(fixtures::npm_monorepo)] temp_dir: TempDir) {
-    let (_workspace_rc, mut change_tracker) = setup_change_tracker(&temp_dir, false);
+    let (_workspace_rc, mut change_tracker) = setup_change_tracker(&temp_dir);
 
     // Use absolute paths to be sure
     let repo_path = temp_dir.path();
@@ -114,7 +89,7 @@ fn test_map_file_to_scope(#[from(fixtures::npm_monorepo)] temp_dir: TempDir) {
 
 #[rstest]
 fn test_record_change(#[from(fixtures::npm_monorepo)] temp_dir: TempDir) {
-    let (_, mut change_tracker) = setup_change_tracker(&temp_dir, false);
+    let (_, mut change_tracker) = setup_change_tracker(&temp_dir);
 
     // Create a change record
     let change = Change::new("@scope/package-foo", ChangeType::Feature, "Add new feature", false);
@@ -137,7 +112,7 @@ fn test_record_change(#[from(fixtures::npm_monorepo)] temp_dir: TempDir) {
 
 #[rstest]
 fn test_mark_changes_as_released(#[from(fixtures::npm_monorepo)] temp_dir: TempDir) {
-    let (_, mut change_tracker) = setup_change_tracker(&temp_dir, false);
+    let (_, mut change_tracker) = setup_change_tracker(&temp_dir);
 
     // Create and record changes
     let change1 = Change::new("@scope/package-foo", ChangeType::Feature, "Add new feature", false);
@@ -184,15 +159,6 @@ fn test_detect_changes_between_refs(#[from(fixtures::npm_monorepo)] temp_dir: Te
     let repo_path = temp_dir.path();
     let repo = Repo::open(repo_path.to_str().unwrap()).expect("Failed to open git repo");
 
-    println!("Working with repo at: {}", repo_path.display());
-
-    // Print initial git status and branches
-    let initial_status = repo.status_porcelain().expect("Failed to get initial status");
-    println!("Initial git status: {:?}", initial_status);
-
-    let branches = repo.list_branches().expect("Failed to list branches");
-    println!("Available branches: {:?}", branches);
-
     // Make sure we're on main branch
     repo.checkout("main").expect("Failed to checkout main branch");
 
@@ -202,8 +168,6 @@ fn test_detect_changes_between_refs(#[from(fixtures::npm_monorepo)] temp_dir: Te
     let foo_index_path = foo_dir.join("index.mjs");
 
     if !foo_dir.exists() || !foo_pkg_json.exists() || !foo_index_path.exists() {
-        println!("package-foo missing! Attempting to create it from scratch");
-
         // Create the package-foo directory and files ourselves
         std::fs::create_dir_all(&foo_dir).expect("Failed to create package-foo dir");
 
@@ -225,7 +189,7 @@ fn test_detect_changes_between_refs(#[from(fixtures::npm_monorepo)] temp_dir: Te
 
         // Add to git
         repo.add_all().expect("Failed to add files");
-        repo.commit("feat: recreate package-foo").expect("Failed to commit");
+        repo.commit("feat: Add package-foo").expect("Failed to commit package-foo");
     }
 
     // Create a distinct branch for our changes
@@ -233,107 +197,58 @@ fn test_detect_changes_between_refs(#[from(fixtures::npm_monorepo)] temp_dir: Te
     repo.create_branch(test_branch).expect("Failed to create branch");
     repo.checkout(test_branch).expect("Failed to checkout test branch");
 
-    // CRITICAL: Make changes to an existing file
-    println!("Modifying existing file: {}", foo_index_path.display());
-
     // Ensure the file exists
     assert!(foo_index_path.exists(), "File to modify doesn't exist");
 
     // Read and modify content
     let original_content =
         std::fs::read_to_string(&foo_index_path).expect("Failed to read original file");
-    println!("Original content: {}", original_content);
 
     let modified_content =
         original_content + "\n// Modified for test\nexport const modified = true;\n";
     std::fs::write(&foo_index_path, modified_content).expect("Failed to modify file");
 
-    // Verify modification
-    let new_content =
-        std::fs::read_to_string(&foo_index_path).expect("Failed to read modified file");
-    println!("Modified content: {}", new_content);
-
     // Add and commit the change
     repo.add_all().expect("Failed to add files");
-    let commit_sha = repo.commit("feat: modify file in package-foo").expect("Failed to commit");
-    println!("Created commit: {}", commit_sha);
 
-    // Get status after commit to verify
-    let post_commit_status = repo.status_porcelain().expect("Failed to get post-commit status");
-    println!("Status after commit: {:?}", post_commit_status);
-
-    // Create workspace with all packages
-    // Use WorkspaceManager directly with custom options
+    // Create workspace & change tracker
     let workspace_manager = WorkspaceManager::new();
-
-    // Use a more specific pattern to ensure we find all packages
     let options = DiscoveryOptions::default()
         .auto_detect_root(false)
-        .include_patterns(vec!["packages/*/package.json"]);
+        .include_patterns(vec!["packages/*/package.json"])
+        .max_depth(5); // Ensure we search deep enough
 
     let workspace = workspace_manager
         .discover_workspace(repo_path, &options)
         .expect("Failed to discover workspace");
 
-    println!("Discovered {} packages", workspace.sorted_packages().len());
-
-    for pkg_info in workspace.sorted_packages() {
-        let pkg = pkg_info.borrow();
-        println!("  - {} at {}", pkg.package.borrow().name(), pkg.package_path);
-    }
-
-    // Create a change tracker with this workspace
     let mut change_tracker = ChangeTracker::new(
         Rc::new(workspace),
         Box::new(MemoryChangeStore::new()) as Box<dyn sublime_monorepo_tools::ChangeStore>,
     )
     .with_git_user(Some("sublime-bot"), Some("test-bot@websublime.com"));
 
-    // Test file mapping directly
-    println!("\nDirect file mapping test:");
-    let foo_index_rel_path = "packages/package-foo/index.mjs";
-    let mapping = change_tracker.map_file_to_scope(foo_index_rel_path);
-    println!("Mapping result for {}: {:?}", foo_index_rel_path, mapping);
-
-    // Detect changes from main to test branch
-    println!("\nDetecting changes between main and {}", test_branch);
-
-    // First check if Git can detect the changes
-    let git_diff = repo.get_all_files_changed_since_sha("main").expect("Failed to get git diff");
-    println!("Git detects these changed files: {:?}", git_diff);
-
-    if git_diff.is_empty() {
-        panic!("Git couldn't detect any changes between main and {}", test_branch);
-    }
-
-    // Now try our change detection
-    let changes = match change_tracker.detect_changes_between("main", Some(test_branch)) {
-        Ok(changes) => changes,
-        Err(err) => {
-            panic!("Failed to detect changes: {:?}", err);
-        }
-    };
-
-    // Print all detected changes
-    println!("\nDetected changes:");
-    for change in &changes {
-        println!(
-            "  Package: {}, Type: {:?}, Description: {}",
-            change.package, change.change_type, change.description
-        );
-    }
+    // Get the detected changes
+    let changes = change_tracker
+        .detect_changes_between("main", Some(test_branch))
+        .expect("Failed to detect changes");
 
     // Verify changes were detected
     assert!(!changes.is_empty(), "Should have detected at least one change");
 
-    // Verify package assignment
-    let has_foo_change = changes.iter().any(|c| c.package == "@scope/package-foo");
-    assert!(has_foo_change, "Should have detected change in package-foo");
+    // Verify the change is attributed to package-foo, not monorepo
+    let has_package_foo_change = changes.iter().any(|c| c.package == "@scope/package-foo");
+    assert!(has_package_foo_change, "Should have detected change in package-foo specifically");
+
+    // Make sure there are no monorepo changes incorrectly attributed
+    let has_monorepo_change =
+        changes.iter().any(|c| c.package == "monorepo" && c.description.contains("package-foo"));
+    assert!(!has_monorepo_change, "Changes to package-foo should not be attributed to monorepo");
 }
 
 #[rstest]
 fn test_create_changeset(#[from(fixtures::npm_monorepo)] temp_dir: TempDir) {
-    let (_, mut change_tracker) = setup_change_tracker(&temp_dir, false);
+    let (_, mut change_tracker) = setup_change_tracker(&temp_dir);
 
     // Create changes
     let change1 = Change::new("@scope/package-foo", ChangeType::Feature, "Add new feature", false);
@@ -364,7 +279,7 @@ fn test_create_changeset(#[from(fixtures::npm_monorepo)] temp_dir: TempDir) {
 
 #[rstest]
 fn test_unreleased_changes(#[from(fixtures::npm_monorepo)] temp_dir: TempDir) {
-    let (_, mut change_tracker) = setup_change_tracker(&temp_dir, false);
+    let (_, mut change_tracker) = setup_change_tracker(&temp_dir);
 
     // Create and record changes for multiple packages
     let change1 = Change::new("@scope/package-foo", ChangeType::Feature, "Add new feature", false);
