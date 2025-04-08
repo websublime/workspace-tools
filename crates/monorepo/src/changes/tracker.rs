@@ -139,7 +139,6 @@ impl ChangeTracker {
             }
         }
 
-        // Rest of the existing method...
         debug!("No package match found, checking if at root level");
 
         // Canonicalize the workspace root too for consistency

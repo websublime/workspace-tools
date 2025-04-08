@@ -1,6 +1,6 @@
 //! Logic for suggesting version bumps based on changes.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use log::debug;
 
@@ -291,11 +291,17 @@ fn handle_dependency_updates(
 
     let mut dependent_updates = Vec::new();
 
+    // Track packages we've already processed to avoid infinite loops in circular deps
+    let mut processed_packages = HashSet::new();
+    for pkg in suggestions.keys() {
+        processed_packages.insert(pkg.clone());
+    }
+
     // For each package with changes, find packages that depend on it
     for changed_package in &packages_with_changes {
         // Find packages that depend on the changed package
-        // TODO: circular check can be passed by
-        let dependents = workspace.dependents_of(changed_package, None);
+        // IMPORTANT: Pass false to skip cycle detection
+        let dependents = workspace.dependents_of(changed_package, Some(false));
 
         for dependent_info in dependents {
             let dep_info = dependent_info.borrow();
@@ -306,9 +312,15 @@ fn handle_dependency_updates(
                 continue;
             }
 
+            // Skip if we've already processed this package in this recursion
+            if processed_packages.contains(&dependent_name) {
+                continue;
+            }
+
+            processed_packages.insert(dependent_name.clone());
+
             // This dependent needs to be updated because its dependency changed
             let current_version = dep_info.package.borrow().version_str();
-
             let new_version = sublime_package_tools::Version::bump_patch(&current_version)?;
 
             // Create suggestion for the dependent package

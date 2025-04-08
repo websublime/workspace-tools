@@ -1,13 +1,13 @@
 use glob::glob;
 use globset::{Glob, GlobSetBuilder};
 use pathdiff::diff_paths;
-use petgraph::algo::toposort;
+use petgraph::graph::DiGraph;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use sublime_git_tools::Repo;
-use sublime_package_tools::{DependencyGraph, Node, Package, PackageInfo, ValidationReport};
+use sublime_package_tools::{DependencyGraph, Package, PackageInfo, ValidationReport};
 use sublime_standard_tools::CorePackageManager;
 
 use crate::{DiscoveryOptions, ValidationOptions, WorkspaceConfig, WorkspaceError, WorkspaceGraph};
@@ -94,7 +94,15 @@ impl Workspace {
         let patterns = if self.config.packages.is_empty() {
             &options.include_patterns
         } else {
-            &self.config.packages
+            // Check if we're using the default options and have workspaces in package.json
+            // If so, prefer options.include_patterns which will match more patterns
+            if options.include_patterns.contains(&"**/package.json".to_string())
+                && !options.include_patterns.is_empty()
+            {
+                &options.include_patterns
+            } else {
+                &self.config.packages
+            }
         };
 
         for pattern in patterns {
@@ -218,7 +226,17 @@ impl Workspace {
     /// is automatically excluded from the result.
     #[must_use]
     pub fn sorted_packages(&self) -> Vec<Rc<RefCell<PackageInfo>>> {
-        self.get_sorted_packages_with_circulars().sorted
+        let result = self.get_sorted_packages_with_circulars();
+
+        // Combine sorted packages and packages in circular dependencies
+        let mut all_packages = result.sorted;
+
+        // Add all packages from circular dependency groups
+        for group in result.circular {
+            all_packages.extend(group);
+        }
+
+        all_packages
     }
 
     // New method that provides more detailed information
@@ -230,13 +248,26 @@ impl Workspace {
         let non_root_packages: Vec<Rc<RefCell<PackageInfo>>> = self
             .package_infos
             .iter()
-            .filter(|info| {
-                // Get the package's path
-                let package_path = PathBuf::from(&info.borrow().package_path);
-                // Check if the package path is different from the workspace root path
-                package_path != self.root_path
+            .filter_map(|info| {
+                let pkg_info = info.borrow();
+                let pkg_path_str = &pkg_info.package_path;
+
+                // Convert to absolute path
+                let pkg_path = if Path::new(pkg_path_str).is_absolute() {
+                    PathBuf::from(pkg_path_str)
+                } else {
+                    self.root_path.join(pkg_path_str)
+                };
+
+                // Include if within a subdirectory of the root
+                if let Some(rel_path) = pathdiff::diff_paths(&pkg_path, &self.root_path) {
+                    let components = rel_path.components().count();
+                    if components > 0 {
+                        return Some(Rc::clone(info));
+                    }
+                }
+                None
             })
-            .map(Rc::clone)
             .collect();
 
         // Nothing to sort if we have 0 or 1 packages
@@ -246,147 +277,107 @@ impl Workspace {
             return SortedPackages { sorted: non_root_packages, circular: Vec::new() };
         }
 
-        // Extract the Package objects
-        let packages: Vec<Package> =
-            non_root_packages.iter().map(|info| info.borrow().package.borrow().clone()).collect();
-
-        // Create the dependency graph
-        let graph = DependencyGraph::from(packages.as_slice());
-
-        // Create a map of package names to package info references
+        // Create a package name to package info map for quick lookups
         let package_map: HashMap<String, Rc<RefCell<PackageInfo>>> = non_root_packages
             .iter()
             .map(|p| (p.borrow().package.borrow().name().to_string(), Rc::clone(p)))
             .collect();
 
-        // Check for cycles
-        let has_cycles = graph.detect_circular_dependencies().is_err();
+        // Build a directed graph for internal dependencies only
+        let mut graph = DiGraph::<String, ()>::new();
+        let mut node_indices = HashMap::new();
 
-        if has_cycles {
-            // With cycles, we need to identify the components involved
+        // Add all packages as nodes
+        for pkg in &non_root_packages {
+            let name = pkg.borrow().package.borrow().name().to_string();
+            let idx = graph.add_node(name.clone());
+            node_indices.insert(name, idx);
+        }
 
-            // For a proper implementation, we would use Tarjan's algorithm to find
-            // strongly connected components (SCCs) which represent cycles.
+        // Add internal dependencies as edges
+        for pkg in &non_root_packages {
+            let from_name = pkg.borrow().package.borrow().name().to_string();
+            let from_idx = node_indices[&from_name];
 
-            // For now, we'll use a simplified approach:
-            // 1. Identify packages involved in dependencies
-            // 2. Put those in the circular group
-            // 3. Put the rest in sorted
+            // Get all dependencies of this package
+            let pkg_borrow = pkg.borrow();
+            let package_borrow = pkg_borrow.package.borrow();
+            let deps = package_borrow.dependencies();
 
-            // This will need to be replaced with proper SCC detection
-            let mut circular_packages = HashSet::new();
+            for dep in deps {
+                let dep_name = dep.borrow().name().to_string();
 
-            // Basic cycle detection - this should be replaced with proper SCC
-            let mut dependency_map: HashMap<String, HashSet<String>> = HashMap::new();
-
-            // Build dependency map
-            for pkg in &packages {
-                let name = pkg.name().to_string();
-                let deps: HashSet<String> = pkg
-                    .dependencies()
-                    .iter()
-                    .map(|d| d.borrow().name().to_string())
-                    .filter(|d| package_map.contains_key(d)) // Only include workspace packages
-                    .collect();
-
-                dependency_map.insert(name, deps);
+                // Only add edge if dependency is an internal package
+                if let Some(to_idx) = node_indices.get(&dep_name) {
+                    graph.add_edge(*to_idx, from_idx, ()); // Dependency points to dependent
+                }
+                // External dependencies are ignored for cycle detection
             }
+        }
 
-            // Simple cycle detection - mark packages in cycles
-            for pkg_name in dependency_map.keys() {
-                let mut visited = HashSet::new();
-                let mut path = HashSet::new();
+        // Use Kosaraju's algorithm to find strongly connected components (cycles)
+        let mut sccs = Vec::new();
+        let scc_result = petgraph::algo::kosaraju_scc(&graph);
 
-                fn has_cycle(
-                    node: &str,
-                    deps_map: &HashMap<String, HashSet<String>>,
-                    visited: &mut HashSet<String>,
-                    path: &mut HashSet<String>,
-                    cycles: &mut HashSet<String>,
-                ) -> bool {
-                    if !visited.contains(node) {
-                        visited.insert(node.to_string());
-                        path.insert(node.to_string());
-
-                        if let Some(deps) = deps_map.get(node) {
-                            for dep in deps {
-                                if !visited.contains(dep) {
-                                    if has_cycle(dep, deps_map, visited, path, cycles) {
-                                        cycles.insert(node.to_string());
-                                        cycles.insert(dep.to_string());
-                                        return true;
-                                    }
-                                } else if path.contains(dep) {
-                                    // Found a cycle
-                                    cycles.insert(node.to_string());
-                                    cycles.insert(dep.to_string());
-                                    return true;
-                                }
-                            }
-                        }
+        for component in scc_result {
+            // Only components with more than one node represent cycles
+            if component.len() > 1 {
+                let mut cycle_group = Vec::new();
+                for &node_idx in &component {
+                    let pkg_name = &graph[node_idx];
+                    if let Some(pkg) = package_map.get(pkg_name) {
+                        cycle_group.push(Rc::clone(pkg));
                     }
-
-                    path.remove(node);
-                    false
                 }
-
-                has_cycle(
-                    pkg_name,
-                    &dependency_map,
-                    &mut visited,
-                    &mut path,
-                    &mut circular_packages,
-                );
-            }
-
-            // Separate circular and non-circular packages
-            let mut circular_group = Vec::new();
-            let mut sorted = Vec::new();
-
-            for pkg in non_root_packages {
-                let name = pkg.borrow().package.borrow().name().to_string();
-                if circular_packages.contains(&name) {
-                    circular_group.push(pkg);
-                } else {
-                    sorted.push(pkg);
+                if !cycle_group.is_empty() {
+                    sccs.push(cycle_group);
                 }
             }
-
-            // We would need multiple circular groups based on SCCs
-            let circular =
-                if circular_group.is_empty() { Vec::new() } else { vec![circular_group] };
-
-            return SortedPackages { sorted, circular };
         }
 
-        // If no cycles, we can do a simple topological sort
-        match toposort(&graph.graph, None) {
-            Ok(sorted_indices) => {
-                // Map sorted indices to package info references
-                let sorted: Vec<_> = sorted_indices
-                    .into_iter()
-                    .filter_map(|idx| {
-                        let node = graph.graph.node_weight(idx)?;
-                        let resolved = node.as_resolved()?;
-                        let name = resolved.identifier().to_string();
-                        package_map.get(&name).map(Rc::clone)
-                    })
-                    .collect();
+        // Try to perform a topological sort on the graph
+        let mut sorted = Vec::new();
 
-                // The natural output of toposort needs to be reversed
-                // to get dependencies before dependents
-                let mut reversed = Vec::new();
-                for i in (0..sorted.len()).rev() {
-                    reversed.push(Rc::clone(&sorted[i]));
-                }
-
-                SortedPackages { sorted: reversed, circular: Vec::new() }
-            }
-            Err(_) => {
-                // This should never happen since we checked for cycles
-                SortedPackages { sorted: non_root_packages, circular: Vec::new() }
+        // If we found cycles, we need to exclude those nodes from the sort
+        let mut cycle_nodes = HashSet::new();
+        for component in &sccs {
+            for pkg in component {
+                cycle_nodes.insert(pkg.borrow().package.borrow().name().to_string());
             }
         }
+
+        // Create a subgraph without cycle nodes
+        let mut acyclic_graph = graph.clone();
+        let nodes_to_remove: Vec<_> =
+            graph.node_indices().filter(|&idx| cycle_nodes.contains(&graph[idx])).collect();
+
+        // Remove nodes in reverse order to maintain indices
+        for idx in nodes_to_remove.into_iter().rev() {
+            acyclic_graph.remove_node(idx);
+        }
+
+        // Perform toposort on acyclic portion
+        if let Ok(ordered) = petgraph::algo::toposort(&acyclic_graph, None) {
+            for idx in ordered {
+                let pkg_name = &acyclic_graph[idx];
+                if let Some(pkg) = package_map.get(pkg_name) {
+                    sorted.push(Rc::clone(pkg));
+                }
+            }
+        }
+
+        // Add remaining non-cycle packages
+        for pkg in &non_root_packages {
+            let name = pkg.borrow().package.borrow().name().to_string();
+            if !cycle_nodes.contains(&name)
+                && !sorted.iter().any(|p| p.borrow().package.borrow().name() == name)
+            {
+                sorted.push(Rc::clone(pkg));
+            }
+        }
+
+        // Return both sorted packages and cycle groups
+        SortedPackages { sorted, circular: sccs }
     }
 
     /// Gets packages affected by changes in the specified packages.

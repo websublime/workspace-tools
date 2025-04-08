@@ -55,6 +55,19 @@ impl<'a> VersionManager<'a> {
             info!(
                 "Cycle detected in dependencies. Synchronized versioning may not work correctly."
             );
+
+            // Add more detailed info about the cycles
+            let sorted_with_cycles = self.workspace.get_sorted_packages_with_circulars();
+            if !sorted_with_cycles.circular.is_empty() {
+                info!("Circular dependency groups found:");
+                for (i, group) in sorted_with_cycles.circular.iter().enumerate() {
+                    let names: Vec<String> = group
+                        .iter()
+                        .map(|p| p.borrow().package.borrow().name().to_string())
+                        .collect();
+                    info!("  Group {}: {}", i + 1, names.join(" → "));
+                }
+            }
         }
 
         Ok(VersionBumpPreview { changes: suggestions.into_values().collect(), cycle_detected })

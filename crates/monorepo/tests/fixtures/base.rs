@@ -98,3 +98,44 @@ pub fn create_complete_monorepo(package_manager: Option<&str>) -> TempDir {
 
     temp_dir
 }
+
+#[allow(dead_code)]
+#[allow(clippy::print_stdout)]
+pub fn verify_fixtures(temp_dir: &TempDir) {
+    let path = temp_dir.path();
+    println!("Fixture verification:");
+
+    // Verify all expected packages exist
+    let packages = [
+        "package-foo",
+        "package-bar",
+        "package-baz",
+        "package-charlie",
+        "package-major",
+        "package-tom",
+    ];
+
+    for pkg in packages {
+        let pkg_dir = path.join("packages").join(pkg);
+        let pkg_json = pkg_dir.join("package.json");
+
+        println!(
+            "Package {}: dir exists={}, package.json exists={}",
+            pkg,
+            pkg_dir.exists(),
+            pkg_json.exists()
+        );
+
+        // If package.json exists, print its content
+        if pkg_json.exists() {
+            match fs::read_to_string(&pkg_json) {
+                Ok(content) => {
+                    println!("  package.json content: {content}");
+                }
+                Err(e) => {
+                    println!("  Error reading package.json: {e}");
+                }
+            }
+        }
+    }
+}
