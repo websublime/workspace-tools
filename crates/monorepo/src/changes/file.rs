@@ -1,3 +1,10 @@
+//! File-based change store implementation.
+//!
+//! This module provides a file-based implementation of the `ChangeStore` trait,
+//! allowing changes and changesets to be persisted to and loaded from the filesystem.
+//! Each changeset is stored as a separate JSON file.
+
+use crate::{Change, ChangeError, ChangeId, ChangeResult, ChangeStore, Changeset};
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -5,8 +12,29 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{Change, ChangeError, ChangeId, ChangeResult, ChangeStore, Changeset};
-
+/// File-based implementation of `ChangeStore`.
+///
+/// This implementation stores changesets as individual JSON files in a specified directory.
+/// It provides in-memory caching to improve performance while ensuring changes are
+/// safely persisted to disk.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::path::Path;
+/// use sublime_monorepo_tools::{FileChangeStore, ChangeStore, Change, ChangeType, Changeset};
+///
+/// // Create a file-based store
+/// let mut store = FileChangeStore::new(Path::new(".changes")).unwrap();
+///
+/// // Create and store a change
+/// let change = Change::new("ui", ChangeType::Feature, "Add button", false);
+/// let changeset = Changeset::new::<String>(None, vec![change]);
+/// store.store_changeset(&changeset).unwrap();
+///
+/// // Retrieve the change later
+/// let retrieved = store.get_changeset(&changeset.id).unwrap().unwrap();
+/// ```
 pub struct FileChangeStore {
     /// Path to the directory containing changesets.
     changeset_dir: PathBuf,
@@ -17,8 +45,30 @@ pub struct FileChangeStore {
 impl FileChangeStore {
     /// Creates a new file-based change store.
     ///
+    /// # Arguments
+    ///
+    /// * `changeset_dir` - Path to the directory where changesets will be stored
+    ///
+    /// # Returns
+    ///
+    /// A new `FileChangeStore` instance, or an error if the directory cannot be created.
+    ///
     /// # Errors
+    ///
     /// Returns an error if the changeset directory cannot be created.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::path::Path;
+    /// use sublime_monorepo_tools::FileChangeStore;
+    ///
+    /// // Create store in .changes directory
+    /// let store = FileChangeStore::new(Path::new(".changes")).unwrap();
+    ///
+    /// // Create store in a custom directory
+    /// let custom_store = FileChangeStore::new(Path::new("custom/path/to/changes")).unwrap();
+    /// ```
     pub fn new<P: AsRef<Path>>(changeset_dir: P) -> ChangeResult<Self> {
         let changeset_dir = changeset_dir.as_ref().to_path_buf();
 
@@ -38,6 +88,14 @@ impl FileChangeStore {
     }
 
     /// Loads all changesets from the changeset directory.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if loading fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if reading the directory or parsing any changeset file fails.
     fn load_changesets(&mut self) -> ChangeResult<()> {
         // Clear the cache
         self.changesets.clear();
@@ -69,6 +127,18 @@ impl FileChangeStore {
     }
 
     /// Loads a changeset from a file.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the changeset file
+    ///
+    /// # Returns
+    ///
+    /// The loaded `Changeset`, or an error if reading or parsing fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or if parsing the JSON fails.
     fn load_changeset_from_file(path: &Path) -> ChangeResult<Changeset> {
         // Open the file
         let file = File::open(path)
@@ -83,6 +153,18 @@ impl FileChangeStore {
     }
 
     /// Saves a changeset to a file.
+    ///
+    /// # Arguments
+    ///
+    /// * `changeset` - The changeset to save
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if writing fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be created or if serializing the changeset fails.
     fn save_changeset_to_file(&self, changeset: &Changeset) -> ChangeResult<()> {
         // Create filename from changeset ID
         let filename = format!("{}.json", changeset.id);
@@ -100,6 +182,18 @@ impl FileChangeStore {
     }
 
     /// Removes a changeset file.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - ID of the changeset to remove
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if removing the file fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be removed.
     fn remove_changeset_file(&self, id: &ChangeId) -> ChangeResult<()> {
         // Create filename from changeset ID
         let filename = format!("{id}.json");
@@ -116,14 +210,49 @@ impl FileChangeStore {
 }
 
 impl ChangeStore for FileChangeStore {
+    /// Gets a changeset by ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - ID of the changeset to retrieve
+    ///
+    /// # Returns
+    ///
+    /// The changeset if found, or `None` if not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if accessing the store fails.
     fn get_changeset(&self, id: &ChangeId) -> ChangeResult<Option<Changeset>> {
         Ok(self.changesets.get(id).cloned())
     }
 
+    /// Gets all changesets.
+    ///
+    /// # Returns
+    ///
+    /// A vector of all changesets in the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if accessing the store fails.
     fn get_all_changesets(&self) -> ChangeResult<Vec<Changeset>> {
         Ok(self.changesets.values().cloned().collect())
     }
 
+    /// Stores a changeset.
+    ///
+    /// # Arguments
+    ///
+    /// * `changeset` - The changeset to store
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if storing fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing the changeset to disk fails.
     fn store_changeset(&mut self, changeset: &Changeset) -> ChangeResult<()> {
         // Save to file
         self.save_changeset_to_file(changeset)?;
@@ -134,6 +263,19 @@ impl ChangeStore for FileChangeStore {
         Ok(())
     }
 
+    /// Removes a changeset.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - ID of the changeset to remove
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if removal fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if removing the changeset file fails.
     fn remove_changeset(&mut self, id: &ChangeId) -> ChangeResult<()> {
         // Remove from file system
         self.remove_changeset_file(id)?;
@@ -144,6 +286,19 @@ impl ChangeStore for FileChangeStore {
         Ok(())
     }
 
+    /// Gets all unreleased changes for a package.
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - Name of the package
+    ///
+    /// # Returns
+    ///
+    /// A vector of unreleased changes for the specified package.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if accessing the store fails.
     fn get_unreleased_changes(&self, package: &str) -> ChangeResult<Vec<Change>> {
         // Collect all unreleased changes for the specified package
         let changes: Vec<Change> = self
@@ -161,6 +316,19 @@ impl ChangeStore for FileChangeStore {
         Ok(changes)
     }
 
+    /// Gets all released changes for a package.
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - Name of the package
+    ///
+    /// # Returns
+    ///
+    /// A vector of released changes for the specified package.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if accessing the store fails.
     fn get_released_changes(&self, package: &str) -> ChangeResult<Vec<Change>> {
         // Collect all released changes for the specified package
         let changes: Vec<Change> = self
@@ -178,6 +346,20 @@ impl ChangeStore for FileChangeStore {
         Ok(changes)
     }
 
+    /// Gets all changes for a package grouped by version.
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - Name of the package
+    ///
+    /// # Returns
+    ///
+    /// A hashmap where keys are version strings and values are vectors of changes.
+    /// Unreleased changes are grouped under the key "unreleased".
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if accessing the store fails.
     fn get_changes_by_version(&self, package: &str) -> ChangeResult<HashMap<String, Vec<Change>>> {
         let mut result: HashMap<String, Vec<Change>> = HashMap::new();
 
@@ -200,6 +382,21 @@ impl ChangeStore for FileChangeStore {
         Ok(result)
     }
 
+    /// Marks changes as released.
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - Name of the package to mark changes for
+    /// * `version` - Version string to assign to the changes
+    /// * `dry_run` - If true, only preview changes without applying them
+    ///
+    /// # Returns
+    ///
+    /// A vector of changes that were or would be marked as released.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if accessing or updating the store fails.
     fn mark_changes_as_released(
         &mut self,
         package: &str,
@@ -239,6 +436,16 @@ impl ChangeStore for FileChangeStore {
         Ok(updated_changes)
     }
 
+    /// Gets all changes grouped by package.
+    ///
+    /// # Returns
+    ///
+    /// A hashmap where keys are package names and values are vectors of all changes
+    /// for that package.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if accessing the store fails.
     fn get_all_changes_by_package(&self) -> ChangeResult<HashMap<String, Vec<Change>>> {
         let mut result: HashMap<String, Vec<Change>> = HashMap::new();
 

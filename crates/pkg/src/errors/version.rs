@@ -31,18 +31,43 @@ use thiserror::Error;
 ///
 /// This enum represents the various error conditions that can arise when
 /// parsing, validating, or comparing semantic versions.
+///
+/// # Variants
+///
+/// - `Parse` - Represents errors that occur when parsing a version string fails
+/// - `InvalidVersion` - Represents errors from business logic validation
+///
+/// # Examples
+///
+/// ```
+/// use sublime_package_tools::{Version, VersionError};
+///
+/// // Handle parse errors
+/// let result = Version::parse("not-a-version");
+/// if let Err(e) = result {
+///     match e {
+///         VersionError::Parse { message, .. } => {
+///             println!("Failed to parse version: {}", message);
+///         }
+///         VersionError::InvalidVersion(msg) => {
+///             println!("Invalid version: {}", msg);
+///         }
+///     }
+/// }
+/// ```
 #[derive(Error, Debug)]
 pub enum VersionError {
     /// Indicates that a version string couldn't be parsed according to semver rules.
     ///
-    /// # Example
+    /// Contains the original error and a human-readable message.
     ///
-    /// ```rust
-    /// # use your_crate::VersionError;
-    /// # use semver::Version;
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::Version;
+    ///
     /// let result = Version::parse("1.x");
-    /// assert!(matches!(result.map_err(VersionError::from),
-    ///                  Err(VersionError::Parse { .. })));
+    /// assert!(result.is_err());
     /// ```
     #[error("Failed to parse version: {message}")]
     Parse {
@@ -53,19 +78,20 @@ pub enum VersionError {
         message: String,
     },
 
-    /// Indicates that a version is invalid for reasons other than semver parsing.
+    /// Indicates that a version is invalid for business logic reasons.
     ///
-    /// # Example
+    /// This could be due to:
+    /// - Version containing special markers like "workspace:*"
+    /// - Version not meeting specific format requirements
+    /// - Version being incompatible with other constraints
     ///
-    /// ```rust
-    /// # use your_crate::VersionError;
-    /// fn validate_version(version: &str) -> Result<(), VersionError> {
-    ///     if version.starts_with("0.0.") {
-    ///         return Err(VersionError::InvalidVersion(
-    ///             "Zero-prefixed versions are not allowed".to_string()));
-    ///     }
-    ///     Ok(())
-    /// }
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::{Dependency, VersionError};
+    ///
+    /// let result = Dependency::new("pkg", "workspace:*");
+    /// assert!(matches!(result, Err(VersionError::InvalidVersion(_))));
     /// ```
     #[error("Invalid version: {0}")]
     InvalidVersion(String),
@@ -77,13 +103,14 @@ impl From<semver::Error> for VersionError {
     /// This allows semver parsing errors to be easily converted into
     /// the application's error type using the `?` operator.
     ///
-    /// # Example
+    /// # Examples
     ///
-    /// ```rust
-    /// # use your_crate::VersionError;
-    /// # use semver::Version;
-    /// fn get_version(input: &str) -> Result<Version, VersionError> {
-    ///     let version = Version::parse(input)?; // semver::Error converts to VersionError
+    /// ```
+    /// use sublime_package_tools::{Version, VersionError};
+    /// use semver::Version as SemVersion;
+    ///
+    /// fn get_version(input: &str) -> Result<SemVersion, VersionError> {
+    ///     let version = SemVersion::parse(input)?; // semver::Error converts to VersionError
     ///     Ok(version)
     /// }
     /// ```
@@ -114,14 +141,17 @@ impl AsRef<str> for VersionError {
     ///
     /// This is useful for error categorization and reporting.
     ///
-    /// # Example
+    /// # Examples
     ///
-    /// ```rust
-    /// # use your_crate::VersionError;
-    /// # use std::convert::AsRef;
-    /// fn report_error_type(err: &VersionError) {
-    ///     let type_name = err.as_ref();
-    ///     println!("Error type: {}", type_name);
+    /// ```
+    /// use sublime_package_tools::{Version, VersionError};
+    /// use std::convert::AsRef;
+    ///
+    /// let error = Version::parse("invalid").unwrap_err();
+    /// match error.as_ref() {
+    ///     "VersionErrorParse" => println!("Got a parse error"),
+    ///     "VersionErrorInvalidVersion" => println!("Got an invalid version error"),
+    ///     _ => println!("Unknown error type"),
     /// }
     /// ```
     fn as_ref(&self) -> &str {

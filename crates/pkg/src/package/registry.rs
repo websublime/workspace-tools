@@ -1,3 +1,9 @@
+//! Package registry client implementations
+//!
+//! This module provides implementations for accessing package registries like npm,
+//! retrieving package metadata, and managing version information.
+
+use crate::{CacheEntry, PackageRegistryError};
 use reqwest::blocking::{Client, RequestBuilder};
 use serde_json::Value;
 use std::{
@@ -7,19 +13,49 @@ use std::{
     time::Duration,
 };
 
-use crate::{CacheEntry, PackageRegistryError};
-
+/// Interface for package registry operations
+///
+/// This trait defines the common operations expected from a package registry,
+/// such as retrieving version information and package metadata.
+///
+/// Implementors should provide efficient caching and appropriate error handling.
 pub trait PackageRegistry {
     /// Get the latest version of a package
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to query
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Some(version))` if the package exists, `Ok(None)` if the package doesn't exist,
+    /// or a `PackageRegistryError` if the query fails
     fn get_latest_version(
         &self,
         package_name: &str,
     ) -> Result<Option<String>, PackageRegistryError>;
 
     /// Get all available versions of a package
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to query
+    ///
+    /// # Returns
+    ///
+    /// A list of version strings, or a `PackageRegistryError` if the query fails
     fn get_all_versions(&self, package_name: &str) -> Result<Vec<String>, PackageRegistryError>;
 
     /// Get metadata about a package
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to query
+    /// * `version` - Specific version to retrieve
+    ///
+    /// # Returns
+    ///
+    /// Package metadata as JSON, or a `PackageRegistryError` if the query fails
     fn get_package_info(
         &self,
         package_name: &str,
@@ -33,6 +69,22 @@ pub trait PackageRegistry {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
+/// NPM registry client implementation
+///
+/// Provides access to the NPM package registry and implements caching
+/// for efficient queries.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_package_tools::NpmRegistry;
+///
+/// // Create with the default npm registry URL
+/// let registry = NpmRegistry::default();
+///
+/// // Or with a custom registry URL
+/// let custom_registry = NpmRegistry::new("https://my-custom-registry.example.com");
+/// ```
 pub struct NpmRegistry {
     base_url: String,
     client: Client,
@@ -155,6 +207,22 @@ impl PackageRegistry for NpmRegistry {
 
 impl NpmRegistry {
     /// Create a new npm registry client with the given base URL
+    ///
+    /// # Arguments
+    ///
+    /// * `base_url` - Base URL of the npm registry
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::NpmRegistry;
+    ///
+    /// // Connect to the standard npm registry
+    /// let registry = NpmRegistry::new("https://registry.npmjs.org");
+    ///
+    /// // Connect to a private registry
+    /// let private_registry = NpmRegistry::new("https://npm.my-company.com");
+    /// ```
     pub fn new(base_url: &str) -> Self {
         Self {
             base_url: base_url.to_string(),
@@ -169,12 +237,29 @@ impl NpmRegistry {
     }
 
     /// Set the user agent string
+    ///
+    /// # Arguments
+    ///
+    /// * `user_agent` - The User-Agent header value to use for requests
+    ///
+    /// # Returns
+    ///
+    /// Mutable reference to self for method chaining
     pub fn set_user_agent(&mut self, user_agent: &str) -> &mut Self {
         self.user_agent = user_agent.to_string();
         self
     }
 
     /// Set authentication
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - Authentication token
+    /// * `auth_type` - Type of authentication (e.g., "bearer", "basic", etc.)
+    ///
+    /// # Returns
+    ///
+    /// Mutable reference to self for method chaining
     pub fn set_auth(&mut self, token: &str, auth_type: &str) -> &mut Self {
         self.auth_token = Some(token.to_string());
         self.auth_type = Some(auth_type.to_string());
@@ -182,6 +267,14 @@ impl NpmRegistry {
     }
 
     /// Set cache TTL
+    ///
+    /// # Arguments
+    ///
+    /// * `ttl` - Time-to-live duration for cached items
+    ///
+    /// # Returns
+    ///
+    /// Mutable reference to self for method chaining
     pub fn set_cache_ttl(&mut self, ttl: Duration) -> &mut Self {
         self.cache_ttl = ttl;
         self

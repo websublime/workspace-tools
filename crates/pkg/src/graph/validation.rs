@@ -1,3 +1,54 @@
+//! # Dependency Graph Validation Module
+//!
+//! This module provides functionality for validating dependency graphs and reporting issues.
+//!
+//! The main structures are `ValidationIssue`, which represents different types of
+//! dependency issues (circular dependencies, unresolved dependencies, version conflicts),
+//! and `ValidationReport`, which collects these issues.
+//!
+//! ## Key Features
+//!
+//! - Detection of circular dependencies
+//! - Identification of unresolved dependencies
+//! - Discovery of version conflicts
+//! - Customizable validation with `ValidationOptions`
+//! - Classification of issues as critical or warnings
+//!
+//! ## Examples
+//!
+//! ```
+//! use sublime_package_tools::{build_dependency_graph_from_packages, ValidationOptions};
+//!
+//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! # let packages = vec![];
+//! // Build a dependency graph
+//! let graph = build_dependency_graph_from_packages(&packages);
+//!
+//! // Create custom validation options
+//! let options = ValidationOptions::new()
+//!     .treat_unresolved_as_external(true)
+//!     .with_internal_packages(vec!["@company/ui", "@company/core"]);
+//!
+//! // Validate with custom options
+//! let report = graph.validate_with_options(&options)?;
+//!
+//! if report.has_critical_issues() {
+//!     println!("Found critical issues:");
+//!     for issue in report.critical_issues() {
+//!         println!("  - {}", issue.message());
+//!     }
+//! }
+//!
+//! if report.has_warnings() {
+//!     println!("Found warnings:");
+//!     for warning in report.warnings() {
+//!         println!("  - {}", warning.message());
+//!     }
+//! }
+//! # Ok(())
+//! # }
+//! ```
+
 #[derive(Debug)]
 pub enum ValidationIssue {
     /// Circular dependency detected - now just an issue, not a blocker

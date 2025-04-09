@@ -1,4 +1,8 @@
 //! Logic for suggesting version bumps based on changes.
+//!
+//! This module implements the algorithms for determining appropriate version
+//! bumps based on changes, dependencies, and cycle relationships between packages.
+//! It handles the complex logic of propagating version bumps through the dependency graph.
 
 use crate::{
     BumpReason, BumpType, Change, ChangeTracker, ChangeType, VersionBumpStrategy, VersioningError,
@@ -8,9 +12,30 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-const MAX_WAVES: usize = 10; // Prevent infinite loops in pathological cases
+/// Maximum number of update propagation waves to prevent infinite loops
+const MAX_WAVES: usize = 10;
 
 /// Version bump suggestion for a package.
+///
+/// Contains information about a suggested version bump, including
+/// the current and suggested versions, bump type, and reasons for the bump.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_monorepo_tools::{BumpReason, BumpType, VersionSuggestion};
+///
+/// let suggestion = VersionSuggestion::new(
+///     "ui".to_string(),
+///     "1.0.0".to_string(),
+///     "1.1.0".to_string(),
+///     BumpType::Minor
+/// )
+/// .with_reason(BumpReason::Feature("Add button component".to_string()));
+///
+/// assert_eq!(suggestion.current_version, "1.0.0");
+/// assert_eq!(suggestion.suggested_version, "1.1.0");
+/// ```
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VersionSuggestion {
     /// Package name
@@ -29,6 +54,30 @@ pub struct VersionSuggestion {
 
 impl VersionSuggestion {
     /// Create a new version suggestion.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package
+    /// * `current_version` - Current version string
+    /// * `suggested_version` - Suggested new version string
+    /// * `bump_type` - Type of version bump
+    ///
+    /// # Returns
+    ///
+    /// A new version suggestion.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_monorepo_tools::{BumpType, VersionSuggestion};
+    ///
+    /// let suggestion = VersionSuggestion::new(
+    ///     "api".to_string(),
+    ///     "1.0.0".to_string(),
+    ///     "2.0.0".to_string(),
+    ///     BumpType::Major
+    /// );
+    /// ```
     pub fn new(
         package_name: String,
         current_version: String,
@@ -46,6 +95,28 @@ impl VersionSuggestion {
     }
 
     /// Add a reason for this version bump.
+    ///
+    /// # Arguments
+    ///
+    /// * `reason` - Reason for the bump
+    ///
+    /// # Returns
+    ///
+    /// The modified suggestion.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_monorepo_tools::{BumpReason, BumpType, VersionSuggestion};
+    ///
+    /// let suggestion = VersionSuggestion::new(
+    ///     "api".to_string(),
+    ///     "1.0.0".to_string(),
+    ///     "2.0.0".to_string(),
+    ///     BumpType::Major
+    /// )
+    /// .with_reason(BumpReason::Breaking("Changed authentication API".to_string()));
+    /// ```
     #[must_use]
     pub fn with_reason(mut self, reason: BumpReason) -> Self {
         self.reasons.push(reason);
@@ -53,6 +124,31 @@ impl VersionSuggestion {
     }
 
     /// Add multiple reasons for this version bump.
+    ///
+    /// # Arguments
+    ///
+    /// * `reasons` - Reasons for the bump
+    ///
+    /// # Returns
+    ///
+    /// The modified suggestion.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_monorepo_tools::{BumpReason, BumpType, VersionSuggestion};
+    ///
+    /// let suggestion = VersionSuggestion::new(
+    ///     "api".to_string(),
+    ///     "1.0.0".to_string(),
+    ///     "2.0.0".to_string(),
+    ///     BumpType::Major
+    /// )
+    /// .with_reasons(vec![
+    ///     BumpReason::Breaking("Changed authentication API".to_string()),
+    ///     BumpReason::Feature("Added user profiles".to_string())
+    /// ]);
+    /// ```
     #[must_use]
     pub fn with_reasons(mut self, reasons: Vec<BumpReason>) -> Self {
         self.reasons.extend(reasons);
@@ -60,6 +156,28 @@ impl VersionSuggestion {
     }
 
     /// Set the cycle group information
+    ///
+    /// # Arguments
+    ///
+    /// * `group` - List of package names in the cycle group
+    ///
+    /// # Returns
+    ///
+    /// The modified suggestion.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_monorepo_tools::{BumpType, VersionSuggestion};
+    ///
+    /// let suggestion = VersionSuggestion::new(
+    ///     "ui".to_string(),
+    ///     "1.0.0".to_string(),
+    ///     "1.1.0".to_string(),
+    ///     BumpType::Minor
+    /// )
+    /// .with_cycle_group(vec!["ui".to_string(), "core".to_string()]);
+    /// ```
     #[must_use]
     pub fn with_cycle_group(mut self, group: Vec<String>) -> Self {
         self.cycle_group = Some(group);
@@ -68,6 +186,28 @@ impl VersionSuggestion {
 }
 
 /// Preview of version bumps to be applied.
+///
+/// Contains information about version changes suggested by the version bump algorithm,
+/// including cycle information for better understanding of dependency relationships.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_monorepo_tools::{BumpType, VersionBumpPreview, VersionSuggestion};
+///
+/// let preview = VersionBumpPreview {
+///     changes: vec![
+///         VersionSuggestion::new(
+///             "ui".to_string(),
+///             "1.0.0".to_string(),
+///             "1.1.0".to_string(),
+///             BumpType::Minor
+///         )
+///     ],
+///     cycle_detected: false,
+///     cycle_groups: Vec::new(),
+/// };
+/// ```
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct VersionBumpPreview {
     /// Version changes to be applied
@@ -80,6 +220,43 @@ pub struct VersionBumpPreview {
 }
 
 /// Determine the bump type based on a change type.
+///
+/// Maps change types to version bump types according to the specified strategy.
+///
+/// # Arguments
+///
+/// * `change` - The change to analyze
+/// * `strategy` - The version bump strategy to use
+///
+/// # Returns
+///
+/// The appropriate bump type for the change.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_monorepo_tools::{
+///     BumpType, Change, ChangeType, VersionBumpStrategy, determine_bump_type_from_change
+/// };
+///
+/// let strategy = VersionBumpStrategy::Independent {
+///     major_if_breaking: true,
+///     minor_if_feature: true,
+///     patch_otherwise: true,
+/// };
+///
+/// // Breaking change -> Major bump
+/// let breaking_change = Change::new("api", ChangeType::Fix, "Fix auth", true);
+/// assert_eq!(determine_bump_type_from_change(&breaking_change, &strategy), BumpType::Major);
+///
+/// // Feature change -> Minor bump
+/// let feature_change = Change::new("api", ChangeType::Feature, "Add endpoint", false);
+/// assert_eq!(determine_bump_type_from_change(&feature_change, &strategy), BumpType::Minor);
+///
+/// // Fix change -> Patch bump
+/// let fix_change = Change::new("api", ChangeType::Fix, "Fix bug", false);
+/// assert_eq!(determine_bump_type_from_change(&fix_change, &strategy), BumpType::Patch);
+/// ```
 #[allow(clippy::wildcard_in_or_patterns)]
 pub fn determine_bump_type_from_change(
     change: &Change,
@@ -125,6 +302,31 @@ pub fn determine_bump_type_from_change(
 }
 
 /// Get the highest bump type from a collection of changes.
+///
+/// Analyzes a set of changes and returns the highest priority bump type needed.
+///
+/// # Arguments
+///
+/// * `changes` - Collection of changes to analyze
+/// * `strategy` - The version bump strategy to use
+///
+/// # Returns
+///
+/// The highest priority bump type needed.
+///
+/// # Examples
+///
+/// ```
+/// # use sublime_monorepo_tools::{Change, ChangeType, VersionBumpStrategy, get_highest_bump_type};
+/// # // This function is private, so we can't actually test it directly in examples
+/// # fn example() {
+/// #    let strategy = VersionBumpStrategy::default();
+/// #    let changes = vec![
+/// #        &Change::new("api", ChangeType::Feature, "Add endpoint", false),
+/// #        &Change::new("api", ChangeType::Fix, "Fix bug", false),
+/// #    ];
+/// # }
+/// ```
 fn get_highest_bump_type(changes: &[&Change], strategy: &VersionBumpStrategy) -> BumpType {
     let mut highest = BumpType::None;
 
@@ -143,6 +345,42 @@ fn get_highest_bump_type(changes: &[&Change], strategy: &VersionBumpStrategy) ->
 }
 
 /// Generate version suggestions for packages based on their changes.
+///
+/// Analyzes changes and the dependency graph to suggest appropriate version
+/// bumps for packages in the workspace, with cycle harmonization enabled by default.
+///
+/// # Arguments
+///
+/// * `workspace` - The workspace to analyze
+/// * `change_tracker` - The change tracker containing change history
+/// * `strategy` - The version bump strategy to use
+///
+/// # Returns
+///
+/// A map of package names to version suggestions.
+///
+/// # Errors
+///
+/// Returns an error if generating suggestions fails.
+///
+/// # Examples
+///
+/// ```no_run
+/// use sublime_monorepo_tools::{ChangeTracker, VersionBumpStrategy, Workspace, suggest_version_bumps};
+///
+/// # fn example(workspace: &Workspace, tracker: &ChangeTracker) -> Result<(), Box<dyn std::error::Error>> {
+/// let strategy = VersionBumpStrategy::default();
+///
+/// // Get version suggestions
+/// let suggestions = suggest_version_bumps(workspace, tracker, &strategy)?;
+///
+/// // Process suggestions
+/// for (package, suggestion) in &suggestions {
+///     println!("{}: {} -> {}", package, suggestion.current_version, suggestion.suggested_version);
+/// }
+/// # Ok(())
+/// # }
+/// ```
 pub fn suggest_version_bumps(
     workspace: &Workspace,
     change_tracker: &ChangeTracker,
@@ -152,6 +390,39 @@ pub fn suggest_version_bumps(
 }
 
 /// Generate version suggestions for packages based on their changes, with options for cycle handling.
+///
+/// Similar to `suggest_version_bumps`, but with additional control over cycle harmonization.
+///
+/// # Arguments
+///
+/// * `workspace` - The workspace to analyze
+/// * `change_tracker` - The change tracker containing change history
+/// * `strategy` - The version bump strategy to use
+/// * `harmonize_cycles` - Whether to ensure packages in the same cycle get consistent version bumps
+///
+/// # Returns
+///
+/// A map of package names to version suggestions.
+///
+/// # Errors
+///
+/// Returns an error if generating suggestions fails.
+///
+/// # Examples
+///
+/// ```no_run
+/// use sublime_monorepo_tools::{
+///     ChangeTracker, VersionBumpStrategy, Workspace, suggest_version_bumps_with_options
+/// };
+///
+/// # fn example(workspace: &Workspace, tracker: &ChangeTracker) -> Result<(), Box<dyn std::error::Error>> {
+/// let strategy = VersionBumpStrategy::default();
+///
+/// // Get version suggestions without cycle harmonization
+/// let suggestions = suggest_version_bumps_with_options(workspace, tracker, &strategy, false)?;
+/// # Ok(())
+/// # }
+/// ```
 #[allow(clippy::too_many_lines)]
 pub fn suggest_version_bumps_with_options(
     workspace: &Workspace,
@@ -411,6 +682,22 @@ pub fn suggest_version_bumps_with_options(
 }
 
 /// Update packages that depend on packages with version changes.
+///
+/// Propagates version bumps through the dependency graph, ensuring that
+/// packages depending on updated packages are also updated appropriately.
+///
+/// # Arguments
+///
+/// * `workspace` - The workspace to analyze
+/// * `suggestions` - Map of existing version suggestions to update
+///
+/// # Returns
+///
+/// `Ok(())` if propagation succeeds.
+///
+/// # Errors
+///
+/// Returns an error if propagation fails.
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::wildcard_in_or_patterns)]
 fn handle_dependency_updates(
@@ -575,6 +862,24 @@ fn handle_dependency_updates(
     Ok(())
 }
 
+/// Prints a version bump preview to stdout.
+///
+/// Helper function for displaying a formatted representation of version changes.
+///
+/// # Arguments
+///
+/// * `preview` - The version bump preview to display
+///
+/// # Examples
+///
+/// ```no_run
+/// use sublime_monorepo_tools::{VersionBumpPreview, print_version_bump_preview};
+///
+/// # fn example(preview: VersionBumpPreview) {
+/// // Print the preview
+/// print_version_bump_preview(&preview);
+/// # }
+/// ```
 #[allow(clippy::print_stdout)]
 pub fn print_version_bump_preview(preview: &VersionBumpPreview) {
     println!("Version Bump Preview:");
@@ -675,7 +980,30 @@ pub fn print_version_bump_preview(preview: &VersionBumpPreview) {
     }
 }
 
-// Helper function to compare bump types
+/// Compares bump types to determine which has higher priority.
+///
+/// Helper function for comparing bump types according to semantic versioning principles.
+///
+/// # Arguments
+///
+/// * `a` - First bump type
+/// * `b` - Second bump type
+///
+/// # Returns
+///
+/// `true` if `a` has higher priority than `b`, `false` otherwise.
+///
+/// # Examples
+///
+/// ```
+/// # use sublime_monorepo_tools::BumpType;
+/// # // This function is private, so we can't actually test it directly in examples
+/// # fn example() {
+/// #    // Major > Minor > Patch > Snapshot > None
+/// #    // assert!(bump_higher_than(BumpType::Major, BumpType::Minor));
+/// #    // assert!(bump_higher_than(BumpType::Minor, BumpType::Patch));
+/// # }
+/// ```
 fn bump_higher_than(a: BumpType, b: BumpType) -> bool {
     matches!(
         (a, b),

@@ -1,13 +1,76 @@
+//! # Package Diff Module
+//!
+//! This module provides functionality for comparing different versions of packages.
+//!
+//! When working with package updates or version changes, it's important to understand
+//! what has changed between versions. The `PackageDiff` struct captures differences
+//! between package versions, including version changes and dependency modifications.
+//!
+//! This is particularly useful for:
+//! - Generating changelogs
+//! - Determining the impact of package updates
+//! - Identifying breaking changes
+//! - Tracking dependency evolution
+
 use std::{
     collections::{HashMap, HashSet},
     fmt,
 };
 
+use crate::{ChangeType, DependencyChange, Package, PackageError};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 
-use crate::{ChangeType, DependencyChange, Package, PackageError};
-
+/// Represents the differences between two versions of a package.
+///
+/// This structure captures the changes between two package versions,
+/// including version changes and all dependency modifications (additions,
+/// removals, and updates).
+///
+/// # Examples
+///
+/// ```
+/// use sublime_package_tools::{Package, PackageDiff, Dependency};
+/// use std::cell::RefCell;
+/// use std::rc::Rc;
+///
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// // Create two package versions for comparison
+/// let old_pkg = Package::new(
+///     "my-app",
+///     "1.0.0",
+///     Some(vec![
+///         Rc::new(RefCell::new(Dependency::new("react", "^16.0.0")?)),
+///         Rc::new(RefCell::new(Dependency::new("express", "^4.16.0")?)),
+///     ])
+/// )?;
+///
+/// let new_pkg = Package::new(
+///     "my-app",
+///     "2.0.0",
+///     Some(vec![
+///         Rc::new(RefCell::new(Dependency::new("react", "^17.0.0")?)),
+///         Rc::new(RefCell::new(Dependency::new("lodash", "^4.17.21")?)), // Added
+///         // express removed
+///     ])
+/// )?;
+///
+/// // Generate diff
+/// let diff = PackageDiff::between(&old_pkg, &new_pkg)?;
+///
+/// // Use diff information
+/// println!("Package {} updated from {} to {}",
+///          diff.package_name, diff.previous_version, diff.current_version);
+///
+/// if diff.breaking_change {
+///     println!("Warning: Breaking change detected!");
+/// }
+///
+/// // Display dependency changes
+/// println!("{}", diff);
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageDiff {
     /// Name of the package
@@ -23,6 +86,31 @@ pub struct PackageDiff {
 }
 
 impl fmt::Display for PackageDiff {
+    /// Formats the package diff as a human-readable string.
+    ///
+    /// Includes package name, version changes, breaking change warning,
+    /// and a list of all dependency modifications.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::{Package, PackageDiff};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let old_pkg = Package::new("pkg", "1.0.0", None)?;
+    /// # let new_pkg = Package::new("pkg", "2.0.0", None)?;
+    /// let diff = PackageDiff::between(&old_pkg, &new_pkg)?;
+    /// println!("{}", diff);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// Output format:
+    /// ```text
+    /// Package: pkg (1.0.0→2.0.0)
+    /// ⚠️  Breaking change: Major version bump
+    /// No dependency changes
+    /// ```
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
@@ -87,7 +175,62 @@ impl fmt::Display for PackageDiff {
 }
 
 impl PackageDiff {
-    /// Generate a diff between two packages
+    /// Generate a diff between two packages.
+    ///
+    /// Compares two packages and identifies all differences between them,
+    /// including version changes and dependency modifications.
+    ///
+    /// # Arguments
+    ///
+    /// * `previous` - The previous version of the package
+    /// * `current` - The current version of the package
+    ///
+    /// # Returns
+    ///
+    /// A `PackageDiff` containing all identified differences between the packages.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PackageError::PackageBetweenFailure` if the packages have different names,
+    /// as diffs can only be generated for different versions of the same package.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::{Package, PackageDiff, Dependency};
+    /// use std::cell::RefCell;
+    /// use std::rc::Rc;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Create two package versions
+    /// let old_pkg = Package::new(
+    ///     "my-lib",
+    ///     "0.1.0",
+    ///     Some(vec![
+    ///         Rc::new(RefCell::new(Dependency::new("dep1", "^1.0.0")?)),
+    ///     ])
+    /// )?;
+    ///
+    /// let new_pkg = Package::new(
+    ///     "my-lib",
+    ///     "0.2.0",
+    ///     Some(vec![
+    ///         Rc::new(RefCell::new(Dependency::new("dep1", "^1.5.0")?)),
+    ///         Rc::new(RefCell::new(Dependency::new("dep2", "^2.0.0")?)),
+    ///     ])
+    /// )?;
+    ///
+    /// // Generate diff
+    /// let diff = PackageDiff::between(&old_pkg, &new_pkg)?;
+    ///
+    /// // Check diff contents
+    /// assert_eq!(diff.package_name, "my-lib");
+    /// assert_eq!(diff.previous_version, "0.1.0");
+    /// assert_eq!(diff.current_version, "0.2.0");
+    /// assert_eq!(diff.dependency_changes.len(), 2); // 1 updated, 1 added
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn between(previous: &Package, current: &Package) -> Result<Self, PackageError> {
         if previous.name() != current.name() {
             return Err(PackageError::PackageBetweenFailure(format!(
@@ -179,12 +322,101 @@ impl PackageDiff {
         })
     }
 
-    /// Count the number of breaking changes in dependencies
+    /// Count the number of breaking changes in dependencies.
+    ///
+    /// Returns the count of dependency changes that are marked as breaking.
+    /// A dependency change is considered breaking if:
+    /// - It's a removal
+    /// - It's an update that increases the major version number
+    ///
+    /// # Returns
+    ///
+    /// The number of breaking dependency changes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::{Package, PackageDiff, Dependency};
+    /// use std::cell::RefCell;
+    /// use std::rc::Rc;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Create packages with breaking dependency changes
+    /// let old_pkg = Package::new(
+    ///     "my-app",
+    ///     "1.0.0",
+    ///     Some(vec![
+    ///         Rc::new(RefCell::new(Dependency::new("react", "^16.0.0")?)),
+    ///         Rc::new(RefCell::new(Dependency::new("dep-to-remove", "^1.0.0")?)),
+    ///     ])
+    /// )?;
+    ///
+    /// let new_pkg = Package::new(
+    ///     "my-app",
+    ///     "1.1.0",
+    ///     Some(vec![
+    ///         Rc::new(RefCell::new(Dependency::new("react", "^17.0.0")?)), // Major bump (breaking)
+    ///         // dep-to-remove is removed (breaking)
+    ///     ])
+    /// )?;
+    ///
+    /// let diff = PackageDiff::between(&old_pkg, &new_pkg)?;
+    /// assert_eq!(diff.count_breaking_changes(), 2); // 1 major update, 1 removal
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn count_breaking_changes(&self) -> usize {
         self.dependency_changes.iter().filter(|c| c.breaking).count()
     }
 
-    /// Count the changes by type
+    /// Count the changes by type.
+    ///
+    /// Groups dependency changes by their type (added, removed, updated)
+    /// and returns a count for each type.
+    ///
+    /// # Returns
+    ///
+    /// A hashmap with counts for each change type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::{Package, PackageDiff, ChangeType, Dependency};
+    /// use std::cell::RefCell;
+    /// use std::rc::Rc;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Create packages with multiple types of changes
+    /// let old_pkg = Package::new(
+    ///     "my-app",
+    ///     "1.0.0",
+    ///     Some(vec![
+    ///         Rc::new(RefCell::new(Dependency::new("dep1", "^1.0.0")?)),
+    ///         Rc::new(RefCell::new(Dependency::new("dep2", "^1.0.0")?)),
+    ///         Rc::new(RefCell::new(Dependency::new("dep-to-remove", "^1.0.0")?)),
+    ///     ])
+    /// )?;
+    ///
+    /// let new_pkg = Package::new(
+    ///     "my-app",
+    ///     "1.1.0",
+    ///     Some(vec![
+    ///         Rc::new(RefCell::new(Dependency::new("dep1", "^1.5.0")?)), // Updated
+    ///         Rc::new(RefCell::new(Dependency::new("dep2", "^1.0.0")?)), // Unchanged (not included)
+    ///         Rc::new(RefCell::new(Dependency::new("new-dep", "^1.0.0")?)), // Added
+    ///         // dep-to-remove is removed
+    ///     ])
+    /// )?;
+    ///
+    /// let diff = PackageDiff::between(&old_pkg, &new_pkg)?;
+    /// let counts = diff.count_changes_by_type();
+    ///
+    /// assert_eq!(*counts.get(&ChangeType::Added).unwrap_or(&0), 1);
+    /// assert_eq!(*counts.get(&ChangeType::Removed).unwrap_or(&0), 1);
+    /// assert_eq!(*counts.get(&ChangeType::Updated).unwrap_or(&0), 1);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn count_changes_by_type(&self) -> HashMap<ChangeType, usize> {
         let mut counts = HashMap::new();
 

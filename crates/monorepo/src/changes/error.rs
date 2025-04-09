@@ -1,12 +1,34 @@
 //! Error types for change tracking.
+//!
+//! This module defines error types that can occur during change tracking operations,
+//! such as reading, writing, parsing, and serializing changesets.
 
+use crate::WorkspaceError;
 use std::io;
 use std::path::PathBuf;
 use thiserror::Error;
 
-use crate::WorkspaceError;
-
 /// Errors that can occur during change tracking operations.
+///
+/// This enum represents all possible errors that might occur when working
+/// with changes and changesets, including file I/O errors, parsing errors,
+/// and workspace-related errors.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::PathBuf;
+/// use sublime_monorepo_tools::ChangeError;
+///
+/// // Create a read error
+/// let read_error = ChangeError::ReadError {
+///     path: PathBuf::from("/path/to/changes"),
+///     error: std::io::Error::new(std::io::ErrorKind::NotFound, "File not found"),
+/// };
+///
+/// // Get error string representation
+/// assert_eq!(read_error.as_ref(), "ReadError");
+/// ```
 #[derive(Debug, Error)]
 pub enum ChangeError {
     /// Failed to read a changeset file

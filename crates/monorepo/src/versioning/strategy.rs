@@ -1,10 +1,45 @@
 //! Version bump strategies for monorepo versioning.
-
-use std::collections::HashMap;
+//!
+//! This module defines the strategies that determine how package versions should
+//! be updated based on changes. It provides different approaches for version bumping,
+//! including independent versioning, synchronized versioning, and conventional commits.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Strategy for determining how package versions should be bumped.
+///
+/// Defines different approaches to determining version bumps for packages
+/// in a monorepo, ranging from synchronized versioning to independent, change-based bumps.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_monorepo_tools::VersionBumpStrategy;
+///
+/// // Independent versioning based on changes
+/// let independent = VersionBumpStrategy::Independent {
+///     major_if_breaking: true,
+///     minor_if_feature: true,
+///     patch_otherwise: true,
+/// };
+///
+/// // All packages get the same version
+/// let synchronized = VersionBumpStrategy::Synchronized {
+///     version: "1.2.0".to_string(),
+/// };
+///
+/// // Use conventional commits to determine bump type
+/// let conventional = VersionBumpStrategy::ConventionalCommits {
+///     from_ref: Some("v1.0.0".to_string()),
+/// };
+///
+/// // Manually specified versions
+/// let mut versions = std::collections::HashMap::new();
+/// versions.insert("ui".to_string(), "2.0.0".to_string());
+/// versions.insert("api".to_string(), "1.5.0".to_string());
+/// let manual = VersionBumpStrategy::Manual(versions);
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", tag = "type")]
 pub enum VersionBumpStrategy {
@@ -25,12 +60,34 @@ pub enum VersionBumpStrategy {
 }
 
 impl Default for VersionBumpStrategy {
+    /// Creates a default version bump strategy.
+    ///
+    /// The default is `Independent` with all bump options enabled.
+    ///
+    /// # Returns
+    ///
+    /// The default version bump strategy.
     fn default() -> Self {
         Self::Independent { major_if_breaking: true, minor_if_feature: true, patch_otherwise: true }
     }
 }
 
 /// Type of version bump to perform.
+///
+/// Represents the semantic version component that should be incremented.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_monorepo_tools::BumpType;
+///
+/// let major = BumpType::Major;
+/// let minor = BumpType::Minor;
+/// let patch = BumpType::Patch;
+///
+/// // Convert to string
+/// assert_eq!(major.to_string(), "major");
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BumpType {
     /// Major version bump (x.0.0)
@@ -46,6 +103,15 @@ pub enum BumpType {
 }
 
 impl From<BumpType> for sublime_package_tools::Version {
+    /// Converts a `BumpType` to a `sublime_package_tools::Version`.
+    ///
+    /// # Arguments
+    ///
+    /// * `bump_type` - The bump type to convert
+    ///
+    /// # Returns
+    ///
+    /// The corresponding `Version` enum variant.
     fn from(bump_type: BumpType) -> Self {
         match bump_type {
             BumpType::Major => sublime_package_tools::Version::Major,
@@ -57,6 +123,15 @@ impl From<BumpType> for sublime_package_tools::Version {
 }
 
 impl std::fmt::Display for BumpType {
+    /// Formats the bump type for display.
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - Formatter
+    ///
+    /// # Returns
+    ///
+    /// Format result.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             BumpType::Major => write!(f, "major"),
@@ -69,6 +144,20 @@ impl std::fmt::Display for BumpType {
 }
 
 /// Reason for a version bump.
+///
+/// Explains why a particular version bump is being suggested or applied.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_monorepo_tools::BumpReason;
+///
+/// let reasons = vec![
+///     BumpReason::Breaking("API change".to_string()),
+///     BumpReason::Feature("New button component".to_string()),
+///     BumpReason::DependencyUpdate("Dependency ui-core updated".to_string()),
+/// ];
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BumpReason {
     /// Breaking change
@@ -86,6 +175,25 @@ pub enum BumpReason {
 }
 
 /// Represents the result of a version bump for a package.
+///
+/// Contains information about a version change, including the previous and new
+/// versions, the type of bump, and whether it was driven by dependency changes.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_monorepo_tools::{BumpType, PackageVersionChange};
+///
+/// let change = PackageVersionChange {
+///     package_name: "ui".to_string(),
+///     previous_version: "1.0.0".to_string(),
+///     new_version: "1.1.0".to_string(),
+///     bump_type: BumpType::Minor,
+///     is_dependency_update: false,
+///     is_cycle_update: false,
+///     cycle_group: None,
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageVersionChange {
     /// Package name
@@ -108,6 +216,14 @@ pub struct PackageVersionChange {
 
 // Implement default for backward compatibility
 impl Default for PackageVersionChange {
+    /// Creates a default (empty) package version change.
+    ///
+    /// This is provided for backward compatibility and should generally
+    /// not be used directly.
+    ///
+    /// # Returns
+    ///
+    /// An empty `PackageVersionChange`.
     fn default() -> Self {
         Self {
             package_name: String::new(),
@@ -122,6 +238,28 @@ impl Default for PackageVersionChange {
 }
 
 /// Settings for changelog generation.
+///
+/// Configures how changelogs are generated, including formatting, file naming,
+/// and content structure.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_monorepo_tools::ChangelogOptions;
+///
+/// // Create with defaults
+/// let default_options = ChangelogOptions::default();
+///
+/// // Create with custom settings
+/// let custom_options = ChangelogOptions {
+///     update_existing: true,
+///     filename: "CHANGES.md".to_string(),
+///     include_version_details: true,
+///     include_release_date: true,
+///     header_template: "# Release History\n\n".to_string(),
+///     change_template: "* {type}: {description} {breaking}\n".to_string(),
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangelogOptions {
     /// Whether to update existing changelog files
@@ -150,6 +288,19 @@ pub struct ChangelogOptions {
 }
 
 impl Default for ChangelogOptions {
+    /// Creates default changelog options.
+    ///
+    /// Default settings:
+    /// - update_existing: true
+    /// - filename: "CHANGELOG.md"
+    /// - include_version_details: true
+    /// - include_release_date: true
+    /// - header_template: "# Changelog\n\n"
+    /// - change_template: "- {type}: {description} {breaking}\n"
+    ///
+    /// # Returns
+    ///
+    /// Default changelog options.
     fn default() -> Self {
         Self {
             update_existing: true,
@@ -164,6 +315,18 @@ impl Default for ChangelogOptions {
 
 impl ChangelogOptions {
     /// Create a new changelog options object with defaults.
+    ///
+    /// # Returns
+    ///
+    /// New changelog options with default settings.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_monorepo_tools::ChangelogOptions;
+    ///
+    /// let options = ChangelogOptions::new();
+    /// ```
     pub fn new() -> Self {
         Self::default()
     }

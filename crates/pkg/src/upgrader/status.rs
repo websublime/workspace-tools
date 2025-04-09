@@ -1,10 +1,15 @@
-//! Status of dependency upgrades.
-
-use std::fmt;
+//! Status of dependency upgrades
+//!
+//! Defines types for representing the current status of dependencies
+//! with respect to available upgrades.
 
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// Status of a dependency in relation to available updates
+///
+/// Indicates what kind of upgrade is available for a dependency,
+/// or why it can't be upgraded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UpgradeStatus {
     /// Dependency is up to date
@@ -21,12 +26,18 @@ pub enum UpgradeStatus {
     CheckFailed(String),
 }
 
+/// Default implementation for UpgradeStatus
+///
+/// Defaults to UpToDate.
 impl Default for UpgradeStatus {
     fn default() -> Self {
         Self::UpToDate
     }
 }
 
+/// Display implementation for UpgradeStatus
+///
+/// Provides a human-readable description of the upgrade status.
 impl fmt::Display for UpgradeStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -41,6 +52,9 @@ impl fmt::Display for UpgradeStatus {
 }
 
 /// Represents an available upgrade for a dependency
+///
+/// Contains detailed information about an available upgrade, including
+/// the current version, compatible versions, and upgrade status.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AvailableUpgrade {
     /// Package name containing the dependency
@@ -58,6 +72,9 @@ pub struct AvailableUpgrade {
     pub status: UpgradeStatus,
 }
 
+/// Display implementation for AvailableUpgrade
+///
+/// Provides a summary of the upgrade.
 impl fmt::Display for AvailableUpgrade {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(

@@ -1,14 +1,35 @@
+//! Local package registry implementation
+//!
+//! This module provides a local in-memory package registry implementation, primarily
+//! useful for testing and simulating registry behavior without network calls.
+
+use crate::{PackageRegistry, PackageRegistryError};
+use semver::Version;
+use serde_json::Value;
 use std::{
     any::Any,
     collections::HashMap,
     sync::{Arc, Mutex},
 };
 
-use semver::Version;
-use serde_json::Value;
-
-use crate::{PackageRegistry, PackageRegistryError};
-
+/// In-memory package registry implementation
+///
+/// This registry stores package information locally in memory, making it suitable
+/// for testing or creating mocks without requiring actual registry calls.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_package_tools::{LocalRegistry, PackageRegistry};
+/// use serde_json::json;
+///
+/// // Create a local registry
+/// let registry = LocalRegistry::default();
+///
+/// // Query (will be empty until populated)
+/// let versions = registry.get_all_versions("test-package").unwrap();
+/// assert!(versions.is_empty());
+/// ```
 #[derive(Debug, Clone)]
 pub struct LocalRegistry {
     packages: Arc<Mutex<HashMap<String, HashMap<String, Value>>>>,

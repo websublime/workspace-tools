@@ -1,3 +1,8 @@
+//! Error types for workspace operations.
+//!
+//! This module defines the error types that can occur during workspace operations,
+//! such as discovery, validation, and package dependency resolution.
+
 use std::io;
 use std::path::PathBuf;
 use sublime_git_tools::RepoError;
@@ -5,6 +10,23 @@ use sublime_package_tools::{DependencyResolutionError, PackageError, VersionErro
 use thiserror::Error;
 
 /// Errors that can occur during workspace operations.
+///
+/// This enum represents all possible errors that might occur when working with
+/// workspaces, including IO errors, parsing errors, Git repository errors,
+/// and package-related errors.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_monorepo_tools::WorkspaceError;
+/// use std::path::PathBuf;
+///
+/// // Create a specific error
+/// let error = WorkspaceError::NoPackagesFound(PathBuf::from("/path/to/workspace"));
+///
+/// // Get error type as string
+/// assert_eq!(error.as_ref(), "NoPackagesFound");
+/// ```
 #[derive(Debug, Error)]
 pub enum WorkspaceError {
     /// Failed to find workspace root
@@ -57,6 +79,23 @@ pub enum WorkspaceError {
 }
 
 impl AsRef<str> for WorkspaceError {
+    /// Gets a string representation of the error type.
+    ///
+    /// This method provides a simple way to get the error variant name without
+    /// the associated values, useful for categorizing errors.
+    ///
+    /// # Returns
+    ///
+    /// A string slice representing the error type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_monorepo_tools::WorkspaceError;
+    ///
+    /// let error = WorkspaceError::RootNotFound;
+    /// assert_eq!(error.as_ref(), "RootNotFound");
+    /// ```
     fn as_ref(&self) -> &str {
         match self {
             WorkspaceError::RootNotFound => "RootNotFound",

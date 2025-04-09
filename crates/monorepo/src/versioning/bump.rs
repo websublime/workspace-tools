@@ -1,3 +1,9 @@
+use super::suggest::suggest_version_bumps_with_options;
+use crate::{
+    suggest_version_bumps, ChangeTracker, PackageVersionChange, VersionBumpPreview,
+    VersionBumpStrategy, VersionSuggestion, VersioningError, VersioningResult, Workspace,
+};
+use log::{debug, info};
 /// Manages version operations across a workspace.
 ///
 /// The VersionManager provides functionality for suggesting and applying version bumps
@@ -34,16 +40,50 @@
 ///
 use std::collections::HashMap;
 
-use log::{debug, info};
-
-use crate::{
-    suggest_version_bumps, ChangeTracker, PackageVersionChange, VersionBumpPreview,
-    VersionBumpStrategy, VersionSuggestion, VersioningError, VersioningResult, Workspace,
-};
-
-use super::suggest::suggest_version_bumps_with_options;
-
 /// Manages version operations across a workspace.
+///
+/// The VersionManager provides functionality for suggesting and applying version bumps
+/// across packages in a workspace, with special handling for circular dependencies.
+///
+/// # Cycle Handling
+///
+/// The version manager handles circular dependencies in several ways:
+///
+/// - **Detection**: Cycles are detected and reported during version bumping
+/// - **Harmonization**: By default, packages in the same cycle receive consistent version bumps
+/// - **Visualization**: Tools are provided to visualize and understand cycles
+/// - **Control**: Options allow customizing how cycles are handled during versioning
+///
+/// # Examples
+///
+/// ```no_run
+/// use sublime_monorepo_tools::{
+///     ChangeTracker, VersionBumpStrategy, VersionManager, Workspace
+/// };
+///
+/// # fn example(workspace: &Workspace, tracker: &ChangeTracker) -> Result<(), Box<dyn std::error::Error>> {
+/// // Create version manager
+/// let manager = VersionManager::new(workspace, Some(tracker));
+///
+/// // Check for cycles
+/// if manager.has_cycles() {
+///     println!("Cycles detected: {}", manager.visualize_cycles());
+/// }
+///
+/// // Create a version bump strategy
+/// let strategy = VersionBumpStrategy::Independent {
+///     major_if_breaking: true,
+///     minor_if_feature: true,
+///     patch_otherwise: true,
+/// };
+///
+/// // Apply version bumps (dry run)
+/// let dry_run = true;
+/// let changes = manager.apply_bumps(&strategy, dry_run)?;
+/// println!("Would update {} packages", changes.len());
+/// # Ok(())
+/// # }
+/// ```
 pub struct VersionManager<'a> {
     /// Reference to the workspace
     workspace: &'a Workspace,
@@ -53,11 +93,73 @@ pub struct VersionManager<'a> {
 
 impl<'a> VersionManager<'a> {
     /// Create a new version manager.
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace` - Reference to the workspace containing package information
+    /// * `change_tracker` - Optional reference to a change tracker for change-based version suggestions
+    ///
+    /// # Returns
+    ///
+    /// A new `VersionManager` instance.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_monorepo_tools::{ChangeTracker, VersionManager, Workspace};
+    ///
+    /// # fn example(workspace: &Workspace, tracker: &ChangeTracker) {
+    /// // Create with change tracker
+    /// let manager = VersionManager::new(workspace, Some(tracker));
+    ///
+    /// // Create without change tracker (limited functionality)
+    /// let manager = VersionManager::new(workspace, None);
+    /// # }
+    /// ```
     pub fn new(workspace: &'a Workspace, change_tracker: Option<&'a ChangeTracker>) -> Self {
         Self { workspace, change_tracker }
     }
 
     /// Suggest version bumps based on changes.
+    ///
+    /// Analyzes changes and dependencies to suggest appropriate version bumps
+    /// for packages in the workspace.
+    ///
+    /// # Arguments
+    ///
+    /// * `strategy` - The version bump strategy to use
+    ///
+    /// # Returns
+    ///
+    /// A map of package names to version suggestions.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no change tracker was provided or suggestion generation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_monorepo_tools::{VersionBumpStrategy, VersionManager};
+    ///
+    /// # fn example(manager: &VersionManager) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Define strategy
+    /// let strategy = VersionBumpStrategy::default();
+    ///
+    /// // Get suggestions
+    /// let suggestions = manager.suggest_bumps(&strategy)?;
+    ///
+    /// // Process suggestions
+    /// for (package, suggestion) in suggestions {
+    ///     println!("Suggest bumping {} from {} to {}",
+    ///         package,
+    ///         suggestion.current_version,
+    ///         suggestion.suggested_version
+    ///     );
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn suggest_bumps(
         &self,
         strategy: &VersionBumpStrategy,
@@ -75,12 +177,34 @@ impl<'a> VersionManager<'a> {
 
     /// Suggests version bumps with options for handling cycles.
     ///
+    /// Similar to `suggest_bumps`, but with additional control over cycle harmonization.
+    ///
+    /// # Arguments
+    ///
     /// * `strategy` - The version bump strategy to use
     /// * `harmonize_cycles` - Whether to ensure packages in the same cycle get consistent version bumps
     ///
-    /// If `harmonize_cycles` is set to false, packages in cycles may receive different
-    /// version bumps based on their individual changes. This can lead to version inconsistencies
-    /// within cycles but might be desired in specific scenarios.
+    /// # Returns
+    ///
+    /// A map of package names to version suggestions.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no change tracker was provided or suggestion generation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_monorepo_tools::{VersionBumpStrategy, VersionManager};
+    ///
+    /// # fn example(manager: &VersionManager) -> Result<(), Box<dyn std::error::Error>> {
+    /// let strategy = VersionBumpStrategy::default();
+    ///
+    /// // Get suggestions without cycle harmonization
+    /// let suggestions = manager.suggest_bumps_with_options(&strategy, false)?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn suggest_bumps_with_options(
         &self,
         strategy: &VersionBumpStrategy,
@@ -99,6 +223,52 @@ impl<'a> VersionManager<'a> {
     }
 
     /// Preview version bumps without applying.
+    ///
+    /// Generates a preview of version bumps that would be applied based on the strategy,
+    /// without actually modifying any files.
+    ///
+    /// # Arguments
+    ///
+    /// * `strategy` - The version bump strategy to use
+    ///
+    /// # Returns
+    ///
+    /// A preview of version changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no change tracker was provided or preview generation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_monorepo_tools::{VersionBumpStrategy, VersionManager};
+    ///
+    /// # fn example(manager: &VersionManager) -> Result<(), Box<dyn std::error::Error>> {
+    /// let strategy = VersionBumpStrategy::default();
+    ///
+    /// // Generate preview
+    /// let preview = manager.preview_bumps(&strategy)?;
+    ///
+    /// // Check for cycles
+    /// if preview.cycle_detected {
+    ///     println!("Cycle detected - harmonizing versions");
+    ///     for group in &preview.cycle_groups {
+    ///         println!("Cycle group: {}", group.join(" → "));
+    ///     }
+    /// }
+    ///
+    /// // Show changes
+    /// for change in &preview.changes {
+    ///     println!("{}: {} → {}",
+    ///         change.package_name,
+    ///         change.current_version,
+    ///         change.suggested_version
+    ///     );
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn preview_bumps(
         &self,
         strategy: &VersionBumpStrategy,
@@ -146,9 +316,39 @@ impl<'a> VersionManager<'a> {
 
     /// Apply version bumps.
     ///
-    /// Note: If `mark_as_released` is true, you must separately call
-    /// `mark_changes_as_released` on the change tracker with the results
-    /// of this function, as the change tracker is not mutable here.
+    /// Updates package versions according to the provided strategy.
+    ///
+    /// # Arguments
+    ///
+    /// * `strategy` - The version bump strategy to use
+    /// * `dry_run` - If true, preview changes without applying them
+    ///
+    /// # Returns
+    ///
+    /// A list of version changes that were or would be applied.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no change tracker was provided or version application fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_monorepo_tools::{VersionBumpStrategy, VersionManager};
+    ///
+    /// # fn example(manager: &VersionManager) -> Result<(), Box<dyn std::error::Error>> {
+    /// let strategy = VersionBumpStrategy::default();
+    ///
+    /// // Dry run first
+    /// let dry_run_changes = manager.apply_bumps(&strategy, true)?;
+    /// println!("Would update {} packages", dry_run_changes.len());
+    ///
+    /// // Actually apply changes
+    /// let changes = manager.apply_bumps(&strategy, false)?;
+    /// println!("Updated {} packages", changes.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn apply_bumps(
         &self,
         strategy: &VersionBumpStrategy,
@@ -215,7 +415,39 @@ impl<'a> VersionManager<'a> {
 
     /// Mark changes as released in the change tracker.
     ///
+    /// Updates the change tracker to mark changes as released with the specified versions.
     /// This should be called after `apply_bumps` if you want to mark changes as released.
+    ///
+    /// # Arguments
+    ///
+    /// * `change_tracker` - Mutable reference to the change tracker
+    /// * `version_changes` - List of version changes to mark as released
+    /// * `dry_run` - If true, preview changes without applying them
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if marking changes fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if marking changes fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_monorepo_tools::{VersionManager, VersionBumpStrategy};
+    ///
+    /// # fn example(manager: &VersionManager, mut tracker: &mut sublime_monorepo_tools::ChangeTracker) -> Result<(), Box<dyn std::error::Error>> {
+    /// let strategy = VersionBumpStrategy::default();
+    ///
+    /// // Apply version bumps
+    /// let changes = manager.apply_bumps(&strategy, false)?;
+    ///
+    /// // Mark changes as released
+    /// VersionManager::mark_changes_as_released(&mut tracker, &changes, false)?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn mark_changes_as_released(
         change_tracker: &mut ChangeTracker,
         version_changes: &[PackageVersionChange],
@@ -228,6 +460,41 @@ impl<'a> VersionManager<'a> {
     }
 
     /// Validate version consistency in the workspace.
+    ///
+    /// Checks for inconsistencies between package versions and their references
+    /// in dependency declarations.
+    ///
+    /// # Returns
+    ///
+    /// Validation results containing cycle information and version inconsistencies.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if validation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_monorepo_tools::VersionManager;
+    ///
+    /// # fn example(manager: &VersionManager) -> Result<(), Box<dyn std::error::Error>> {
+    /// let validation = manager.validate_versions()?;
+    ///
+    /// if validation.has_cycles {
+    ///     println!("Dependency cycles detected");
+    /// }
+    ///
+    /// for inconsistency in validation.inconsistencies {
+    ///     println!("{} requires {} @ {}, but actual version is {}",
+    ///         inconsistency.package_name,
+    ///         inconsistency.dependency_name,
+    ///         inconsistency.required_version,
+    ///         inconsistency.actual_version
+    ///     );
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn validate_versions(&self) -> VersioningResult<VersionValidation> {
         // First, check for cycles in the dependency graph
         let dependency_analysis = self.workspace.analyze_dependencies()?;
@@ -274,11 +541,23 @@ impl<'a> VersionManager<'a> {
     }
 
     /// Get the workspace reference
+    ///
+    /// # Returns
+    ///
+    /// Reference to the workspace.
     pub(crate) fn get_workspace(&self) -> &'a Workspace {
         self.workspace
     }
 
     /// Get the change tracker reference, returning an error if not available
+    ///
+    /// # Returns
+    ///
+    /// Reference to the change tracker.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no change tracker was provided.
     pub(crate) fn get_change_tracker(&self) -> VersioningResult<&'a ChangeTracker> {
         self.change_tracker.ok_or_else(|| {
             VersioningError::InvalidBumpStrategy(
@@ -287,12 +566,47 @@ impl<'a> VersionManager<'a> {
         })
     }
 
+    /// Gets all cycle groups in the workspace dependency graph.
+    ///
+    /// # Returns
+    ///
+    /// List of cycle groups, where each group is a list of package names
+    /// that form a circular dependency chain.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_monorepo_tools::VersionManager;
+    ///
+    /// # fn example(manager: &VersionManager) {
+    /// let cycles = manager.get_cycle_groups();
+    /// for (i, cycle) in cycles.iter().enumerate() {
+    ///     println!("Cycle group {}: {}", i + 1, cycle.join(" → "));
+    /// }
+    /// # }
+    /// ```
     #[must_use]
     pub fn get_cycle_groups(&self) -> Vec<Vec<String>> {
         self.workspace.get_circular_dependencies()
     }
 
     /// Checks if the workspace has cyclic dependencies.
+    ///
+    /// # Returns
+    ///
+    /// `true` if circular dependencies were detected, `false` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_monorepo_tools::VersionManager;
+    ///
+    /// # fn example(manager: &VersionManager) {
+    /// if manager.has_cycles() {
+    ///     println!("Circular dependencies detected - special handling required");
+    /// }
+    /// # }
+    /// ```
     #[must_use]
     pub fn has_cycles(&self) -> bool {
         !self.get_cycle_groups().is_empty()
@@ -300,7 +614,25 @@ impl<'a> VersionManager<'a> {
 
     /// Visualizes cycles in the dependency graph.
     ///
-    /// Returns a formatted string showing all circular dependencies.
+    /// Creates a formatted string representation of all circular dependencies
+    /// in the workspace, showing both simple cycle paths and detailed
+    /// dependencies within each cycle.
+    ///
+    /// # Returns
+    ///
+    /// A formatted string showing all circular dependencies.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_monorepo_tools::VersionManager;
+    ///
+    /// # fn example(manager: &VersionManager) {
+    /// if manager.has_cycles() {
+    ///     println!("{}", manager.visualize_cycles());
+    /// }
+    /// # }
+    /// ```
     pub fn visualize_cycles(&self) -> String {
         let circles = self.workspace.get_circular_dependencies();
         if circles.is_empty() {
@@ -344,6 +676,33 @@ impl<'a> VersionManager<'a> {
     }
 
     /// Generate a detailed report of version bumps including cycle information
+    ///
+    /// Creates a formatted report showing all version changes, with special
+    /// sections for direct changes, dependency-driven updates, and cycle-harmonized updates.
+    ///
+    /// # Arguments
+    ///
+    /// * `changes` - List of version changes to include in the report
+    ///
+    /// # Returns
+    ///
+    /// A formatted string report.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_monorepo_tools::{VersionBumpStrategy, VersionManager};
+    ///
+    /// # fn example(manager: &VersionManager) -> Result<(), Box<dyn std::error::Error>> {
+    /// let strategy = VersionBumpStrategy::default();
+    /// let changes = manager.apply_bumps(&strategy, true)?;
+    ///
+    /// // Generate and print the report
+    /// let report = manager.generate_version_report(&changes);
+    /// println!("{}", report);
+    /// # Ok(())
+    /// # }
+    /// ```
     #[allow(clippy::too_many_lines)]
     pub fn generate_version_report(&self, changes: &[PackageVersionChange]) -> String {
         let mut report = String::new();
@@ -485,6 +844,33 @@ impl<'a> VersionManager<'a> {
 }
 
 /// Validation result for workspace version consistency.
+///
+/// Contains information about dependency cycles and version inconsistencies
+/// between packages and their dependencies.
+///
+/// # Examples
+///
+/// ```no_run
+/// use sublime_monorepo_tools::VersionManager;
+///
+/// # fn example(manager: &VersionManager) -> Result<(), Box<dyn std::error::Error>> {
+/// let validation = manager.validate_versions()?;
+///
+/// if validation.has_cycles {
+///     println!("Workspace contains circular dependencies");
+/// }
+///
+/// for issue in &validation.inconsistencies {
+///     println!("{} requires {} @ {}, but actual version is {}",
+///         issue.package_name,
+///         issue.dependency_name,
+///         issue.required_version,
+///         issue.actual_version
+///     );
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone)]
 pub struct VersionValidation {
     /// Whether the dependency graph has cycles
@@ -494,6 +880,30 @@ pub struct VersionValidation {
 }
 
 /// Represents an inconsistency between a package's dependency and the actual package version.
+///
+/// This occurs when a package requires a specific version of a dependency,
+/// but the actual version of that dependency in the workspace is different.
+///
+/// # Examples
+///
+/// ```no_run
+/// use sublime_monorepo_tools::{VersionInconsistency, VersionManager};
+///
+/// # fn example(manager: &VersionManager) -> Result<(), Box<dyn std::error::Error>> {
+/// let validation = manager.validate_versions()?;
+///
+/// // Process inconsistencies
+/// for issue in validation.inconsistencies {
+///     println!("Inconsistency: {} requires {} @ {}, but actual is {}",
+///         issue.package_name,
+///         issue.dependency_name,
+///         issue.required_version,
+///         issue.actual_version
+///     );
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone)]
 pub struct VersionInconsistency {
     /// The package with the inconsistent dependency

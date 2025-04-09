@@ -1,18 +1,60 @@
 //! Functionality for generating changelogs from tracked changes.
+//!
+//! This module extends the VersionManager with functionality to generate Markdown
+//! changelogs based on changes tracked in the change tracker. It supports
+//! customizable formatting, updating existing changelogs, and organizing
+//! changes by version and type.
 
+use crate::{Change, ChangelogOptions, VersionManager, VersioningResult};
+use chrono::Utc;
+use log::warn;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::Path;
 
-use chrono::Utc;
-use log::warn;
-
-use crate::{Change, ChangelogOptions, VersionManager, VersioningResult};
-
 /// Implementation of changelog generation functionality for VersionManager
 impl<'a> VersionManager<'a> {
     /// Generate changelogs for packages.
+    ///
+    /// Creates or updates changelog files for packages with changes.
+    /// Changes are organized by version and type, with customizable formatting.
+    ///
+    /// # Arguments
+    ///
+    /// * `options` - Configuration options for changelog generation
+    /// * `dry_run` - If true, generate changelogs without writing to disk
+    ///
+    /// # Returns
+    ///
+    /// A map of package names to changelog content.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no change tracker was provided or changelog generation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_monorepo_tools::{ChangelogOptions, VersionManager};
+    ///
+    /// # fn example(manager: &VersionManager) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Create custom options
+    /// let options = ChangelogOptions {
+    ///     update_existing: true,
+    ///     filename: "CHANGELOG.md".to_string(),
+    ///     include_version_details: true,
+    ///     include_release_date: true,
+    ///     header_template: "# Changelog\n\n".to_string(),
+    ///     change_template: "- {type}: {description} {breaking}\n".to_string(),
+    /// };
+    ///
+    /// // Generate changelogs
+    /// let changelogs = manager.generate_changelogs(&options, false)?;
+    /// println!("Generated {} changelogs", changelogs.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     #[allow(clippy::manual_let_else)]
     pub fn generate_changelogs(
         &self,
@@ -69,6 +111,18 @@ impl<'a> VersionManager<'a> {
 }
 
 /// Generate changelog content from changes.
+///
+/// Creates formatted changelog content from a collection of changes,
+/// organized by version and change type.
+///
+/// # Arguments
+///
+/// * `changes_by_version` - Map of version strings to changes
+/// * `options` - Changelog formatting options
+///
+/// # Returns
+///
+/// Formatted changelog content as a string.
 fn generate_changelog_content(
     changes_by_version: &HashMap<String, Vec<Change>>,
     options: &ChangelogOptions,
@@ -157,6 +211,14 @@ fn generate_changelog_content(
 }
 
 /// Capitalize the first letter of a string.
+///
+/// # Arguments
+///
+/// * `s` - String to capitalize
+///
+/// # Returns
+///
+/// String with first letter capitalized.
 fn capitalize(s: &str) -> String {
     let mut chars = s.chars();
     match chars.next() {
@@ -166,6 +228,20 @@ fn capitalize(s: &str) -> String {
 }
 
 /// Write changelog content to a file, updating existing if needed.
+///
+/// # Arguments
+///
+/// * `path` - Path to write to
+/// * `content` - Content to write
+/// * `update_existing` - Whether to update existing file
+///
+/// # Returns
+///
+/// `Ok(())` if successful, or an error if writing fails.
+///
+/// # Errors
+///
+/// Returns an error if reading or writing the file fails.
 fn write_changelog_file(path: &Path, content: &str, update_existing: bool) -> VersioningResult<()> {
     if update_existing && path.exists() {
         // Read existing content
@@ -189,6 +265,17 @@ fn write_changelog_file(path: &Path, content: &str, update_existing: bool) -> Ve
 }
 
 /// Merge existing and new changelog content.
+///
+/// Preserves the existing header while adding new content.
+///
+/// # Arguments
+///
+/// * `existing` - Existing changelog content
+/// * `new` - New changelog content
+///
+/// # Returns
+///
+/// Merged changelog content.
 fn merge_changelog_content(existing: &str, new: &str) -> String {
     // Simple approach: Find the first version header in the existing content
     if let Some(pos) = existing.find("## ") {

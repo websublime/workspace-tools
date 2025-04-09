@@ -1,3 +1,59 @@
+//! # Git Repository Module
+//!
+//! This module provides the main functionality for working with Git repositories.
+//! It offers a high-level, user-friendly API that wraps the libgit2 library.
+//!
+//! The main struct is `Repo`, which represents a Git repository and provides methods
+//! for performing common Git operations like creating repositories, managing branches,
+//! committing changes, tracking file changes, and interacting with remotes.
+//!
+//! ## Key Features
+//!
+//! - Repository creation, opening, and cloning
+//! - Branch creation, listing, and checkout
+//! - Commit operations and history tracking
+//! - File change detection between commits or branches
+//! - Remote operations (push, fetch, pull)
+//! - Tag management
+//! - Comprehensive error handling with detailed error types
+//!
+//! ## Examples
+//!
+//! ### Opening and configuring a repository
+//!
+//! ```no_run
+//! use sublime_git_tools::Repo;
+//!
+//! let repo = Repo::open("./my-project").expect("Failed to open repository");
+//! repo.config("John Doe", "john@example.com").expect("Failed to configure repository");
+//! ```
+//!
+//! ### Creating commits
+//!
+//! ```no_run
+//! use sublime_git_tools::Repo;
+//!
+//! let repo = Repo::open("./my-project").expect("Failed to open repository");
+//! repo.add("README.md").expect("Failed to add file");
+//! let commit_id = repo.commit("docs: update README").expect("Failed to commit");
+//! println!("Created commit: {}", commit_id);
+//! ```
+//!
+//! ### Finding changes
+//!
+//! ```no_run
+//! use sublime_git_tools::Repo;
+//!
+//! let repo = Repo::open("./my-project").expect("Failed to open repository");
+//! let changed_files = repo.get_all_files_changed_since_sha("v1.0.0")
+//!     .expect("Failed to get changed files");
+//!
+//! println!("Files changed since v1.0.0:");
+//! for file in changed_files {
+//!     println!("- {}", file);
+//! }
+//! ```
+
 use git2::{
     build::CheckoutBuilder, BranchType, Commit, Cred, CredentialType, Delta, DiffOptions,
     Direction, Error as Git2Error, FetchOptions, FetchPrune, IndexAddOption, MergeOptions, Oid,

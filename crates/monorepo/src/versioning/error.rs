@@ -1,12 +1,31 @@
 //! Error types for versioning operations.
-
-use std::io;
-use thiserror::Error;
+//!
+//! This module defines the error types and result type aliases used throughout
+//! the versioning system. It provides structured error reporting for various
+//! failure modes that can occur during version operations.
 
 use crate::{ChangeError, WorkspaceError};
+use std::io;
 use sublime_package_tools::{DependencyResolutionError, PackageError, VersionError};
+use thiserror::Error;
 
 /// Errors that can occur during versioning operations.
+///
+/// This enum represents all possible errors that might occur when working with
+/// versioning functionality, including workspace issues, change tracking problems,
+/// version parsing errors, and I/O failures.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_monorepo_tools::VersioningError;
+///
+/// // Create a specific error
+/// let error = VersioningError::NoChangesFound("ui-components".to_string());
+///
+/// // Get error type as string
+/// assert_eq!(error.as_ref(), "NoChangesFound");
+/// ```
 #[derive(Debug, Error)]
 pub enum VersioningError {
     /// Failed to load or parse workspace data
@@ -59,6 +78,23 @@ pub enum VersioningError {
 }
 
 impl AsRef<str> for VersioningError {
+    /// Gets a string representation of the error type.
+    ///
+    /// This method provides a simple way to get the error variant name without
+    /// the associated values, useful for categorizing errors.
+    ///
+    /// # Returns
+    ///
+    /// A string slice representing the error type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_monorepo_tools::VersioningError;
+    ///
+    /// let error = VersioningError::PackageNotFound("ui".to_string());
+    /// assert_eq!(error.as_ref(), "PackageNotFound");
+    /// ```
     fn as_ref(&self) -> &str {
         match self {
             VersioningError::WorkspaceError(_) => "WorkspaceError",
@@ -78,4 +114,7 @@ impl AsRef<str> for VersioningError {
 }
 
 /// Type alias for versioning operation results.
+///
+/// This type alias is used throughout the versioning system for functions
+/// that can return errors.
 pub type VersioningResult<T> = Result<T, VersioningError>;

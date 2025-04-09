@@ -1,15 +1,38 @@
 //! Change tracking system.
+//!
+//! This module provides the `ChangeTracker` type, which is the central component
+//! for detecting, recording, and managing changes across packages in a monorepo.
+//! It integrates with Git to automatically detect changes between commits and
+//! provides utilities to map files to the packages they belong to.
 
+use crate::{
+    Change, ChangeError, ChangeId, ChangeResult, ChangeStore, ChangeType, Changeset, Workspace,
+};
 use log::{debug, info};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use crate::{
-    Change, ChangeError, ChangeId, ChangeResult, ChangeStore, ChangeType, Changeset, Workspace,
-};
-
 /// Represents the scope of a change in the repository
+///
+/// This enum categorizes where in the repository a change occurred,
+/// differentiating between changes to specific packages, monorepo
+/// infrastructure, or the root level.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_monorepo_tools::ChangeScope;
+///
+/// // Change to a specific package
+/// let package_change = ChangeScope::Package("ui-components".to_string());
+///
+/// // Change to monorepo infrastructure
+/// let infra_change = ChangeScope::Monorepo;
+///
+/// // Change at the root level
+/// let root_change = ChangeScope::Root;
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChangeScope {
     /// Change specific to a package
@@ -23,6 +46,43 @@ pub enum ChangeScope {
 }
 
 /// Change tracking system.
+///
+/// The `ChangeTracker` provides functionality for:
+/// - Detecting changes between Git commits or branches
+/// - Mapping files to packages
+/// - Recording changes manually or automatically
+/// - Managing the lifecycle of changes from creation to release
+///
+/// It works with a pluggable `ChangeStore` implementation for persistence.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::rc::Rc;
+/// use sublime_monorepo_tools::{ChangeTracker, MemoryChangeStore, Workspace};
+/// use sublime_git_tools::Repo;
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// // Create workspace
+/// let workspace = Workspace::new(std::path::Path::new(".").to_path_buf(), Default::default(), None)?;
+/// let workspace_rc = Rc::new(workspace);
+///
+/// // Create change store and tracker
+/// let store = Box::new(MemoryChangeStore::new());
+/// let mut tracker = ChangeTracker::new(workspace_rc, store);
+///
+/// // Detect changes since last tag
+/// let changes = tracker.detect_changes_between("v1.0.0", None)?;
+/// println!("Detected {} changes", changes.len());
+///
+/// // Get unreleased changes
+/// let unreleased = tracker.unreleased_changes()?;
+/// for (package, changes) in unreleased {
+///     println!("Package {} has {} unreleased changes", package, changes.len());
+/// }
+/// # Ok(())
+/// # }
+/// ```
 pub struct ChangeTracker {
     /// Workspace reference
     workspace: Rc<Workspace>,
@@ -35,6 +95,8 @@ pub struct ChangeTracker {
 }
 
 /// Git configuration for change tracking.
+///
+/// Stores Git user information that may be used when creating changes.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct GitConfig {
@@ -46,6 +108,33 @@ struct GitConfig {
 
 impl ChangeTracker {
     /// Creates a new change tracker.
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace` - Reference to the monorepo workspace
+    /// * `store` - Change store implementation for persistence
+    ///
+    /// # Returns
+    ///
+    /// A new `ChangeTracker` instance.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::rc::Rc;
+    /// use sublime_monorepo_tools::{ChangeTracker, MemoryChangeStore, Workspace};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Create workspace
+    /// let workspace = Workspace::new(std::path::Path::new(".").to_path_buf(), Default::default(), None)?;
+    /// let workspace_rc = Rc::new(workspace);
+    ///
+    /// // Create tracker with memory store
+    /// let store = Box::new(MemoryChangeStore::new());
+    /// let tracker = ChangeTracker::new(workspace_rc, store);
+    /// # Ok(())
+    /// # }
+    /// ```
     #[must_use]
     pub fn new(workspace: Rc<Workspace>, store: Box<dyn ChangeStore>) -> Self {
         // Default Git configuration
@@ -55,6 +144,30 @@ impl ChangeTracker {
     }
 
     /// Sets the Git user information.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Optional Git user name
+    /// * `email` - Optional Git user email
+    ///
+    /// # Returns
+    ///
+    /// The modified `ChangeTracker` instance.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::rc::Rc;
+    /// use sublime_monorepo_tools::{ChangeTracker, MemoryChangeStore, Workspace};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let workspace = Rc::new(Workspace::new(std::path::Path::new(".").to_path_buf(), Default::default(), None)?);
+    /// # let store = Box::new(MemoryChangeStore::new());
+    /// let tracker = ChangeTracker::new(workspace, store)
+    ///     .with_git_user(Some("John Doe"), Some("john@example.com"));
+    /// # Ok(())
+    /// # }
+    /// ```
     #[must_use]
     pub fn with_git_user<S: Into<String>>(mut self, name: Option<S>, email: Option<S>) -> Self {
         self.git_config =
@@ -63,12 +176,61 @@ impl ChangeTracker {
     }
 
     /// Clears the scope cache
+    ///
+    /// Clears the internal cache that maps file paths to package scopes.
+    /// This is useful after file system changes to ensure fresh mapping.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use std::rc::Rc;
+    /// # use sublime_monorepo_tools::{ChangeTracker, MemoryChangeStore, Workspace};
+    /// # fn example(mut tracker: ChangeTracker) {
+    /// // Clear the cache after file changes
+    /// tracker.clear_cache();
+    /// # }
+    /// ```
     pub fn clear_cache(&mut self) {
         debug!("Clearing file scope cache");
         self.scope_cache.clear();
     }
 
     /// Maps a file to its change scope
+    ///
+    /// Determines whether a file belongs to a specific package,
+    /// the monorepo infrastructure, or the root level.
+    ///
+    /// # Arguments
+    ///
+    /// * `file_path` - Path to the file to map
+    ///
+    /// # Returns
+    ///
+    /// The `ChangeScope` for the file.
+    ///
+    /// # Errors
+    ///
+    /// While technically this can return a `ChangeError`, the implementation
+    /// currently always returns `Ok`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use std::rc::Rc;
+    /// # use sublime_monorepo_tools::{ChangeTracker, MemoryChangeStore, Workspace, ChangeScope};
+    /// # fn example(mut tracker: ChangeTracker) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Map a file path to its scope
+    /// let scope = tracker.map_file_to_scope("packages/ui/package.json")?;
+    ///
+    /// // Check the scope type
+    /// match scope {
+    ///     ChangeScope::Package(name) => println!("File belongs to package: {}", name),
+    ///     ChangeScope::Monorepo => println!("File belongs to monorepo infrastructure"),
+    ///     ChangeScope::Root => println!("File is at root level"),
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     #[allow(clippy::unnecessary_wraps)]
     pub fn map_file_to_scope(&mut self, file_path: &str) -> ChangeResult<ChangeScope> {
         // Convert input to PathBuf for cache lookup
@@ -163,14 +325,48 @@ impl ChangeTracker {
         Ok(scope)
     }
 
+    /// Gets the workspace root path
+    ///
+    /// # Returns
+    ///
+    /// The path to the workspace root directory.
     pub fn get_workspace_root_path(&self) -> &Path {
         self.workspace.root_path()
     }
 
     /// Detects changes between Git references.
     ///
+    /// Analyzes the changes between two Git references (commits, tags, or branches)
+    /// and generates change records.
+    ///
+    /// # Arguments
+    ///
+    /// * `from_ref` - The starting Git reference (e.g., a commit SHA, tag, or branch name)
+    /// * `to_ref` - Optional ending Git reference (defaults to HEAD if None)
+    ///
+    /// # Returns
+    ///
+    /// A vector of detected changes.
+    ///
     /// # Errors
-    /// Returns an error if change detection fails.
+    ///
+    /// Returns an error if Git operations fail or no changes are detected.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use std::rc::Rc;
+    /// # use sublime_monorepo_tools::{ChangeTracker, MemoryChangeStore, Workspace};
+    /// # fn example(mut tracker: ChangeTracker) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Detect changes since a tag
+    /// let changes = tracker.detect_changes_between("v1.0.0", None)?;
+    /// println!("Found {} changes", changes.len());
+    ///
+    /// // Detect changes between two tags
+    /// let changes = tracker.detect_changes_between("v1.0.0", Some("v2.0.0"))?;
+    /// # Ok(())
+    /// # }
+    /// ```
     #[allow(clippy::too_many_lines)]
     pub fn detect_changes_between(
         &mut self,
@@ -343,8 +539,36 @@ impl ChangeTracker {
 
     /// Records a change manually.
     ///
+    /// # Arguments
+    ///
+    /// * `change` - The change to record
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if recording fails.
+    ///
     /// # Errors
-    /// Returns an error if recording the change fails.
+    ///
+    /// Returns an error if the package does not exist or if storing the change fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::{ChangeTracker, Change, ChangeType};
+    /// # fn example(mut tracker: ChangeTracker) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Create a change
+    /// let change = Change::new(
+    ///     "ui-components",
+    ///     ChangeType::Feature,
+    ///     "Add new button component",
+    ///     false
+    /// );
+    ///
+    /// // Record the change
+    /// tracker.record_change(change)?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn record_change(&mut self, change: Change) -> ChangeResult<()> {
         // Validate that the package exists in the workspace
         if self.workspace.get_package(&change.package).is_none() {
@@ -363,8 +587,38 @@ impl ChangeTracker {
 
     /// Creates and records a changeset.
     ///
+    /// # Arguments
+    ///
+    /// * `summary` - Optional summary for the changeset
+    /// * `changes` - The changes to include in the changeset
+    ///
+    /// # Returns
+    ///
+    /// The created changeset.
+    ///
     /// # Errors
-    /// Returns an error if creating the changeset fails.
+    ///
+    /// Returns an error if any package does not exist or if storing the changeset fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::{ChangeTracker, Change, ChangeType};
+    /// # fn example(mut tracker: ChangeTracker) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Create multiple changes
+    /// let change1 = Change::new("ui-components", ChangeType::Feature, "Add button", false);
+    /// let change2 = Change::new("api", ChangeType::Fix, "Fix validation", false);
+    ///
+    /// // Create and store a changeset
+    /// let changeset = tracker.create_changeset(
+    ///     Some("PR #123: UI and API improvements".to_string()),
+    ///     vec![change1, change2]
+    /// )?;
+    ///
+    /// println!("Created changeset with ID: {}", changeset.id);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn create_changeset(
         &mut self,
         summary: Option<String>,
@@ -391,8 +645,33 @@ impl ChangeTracker {
 
     /// Gets unreleased changes for all packages.
     ///
+    /// # Returns
+    ///
+    /// A hashmap where keys are package names and values are vectors of unreleased changes.
+    ///
     /// # Errors
+    ///
     /// Returns an error if retrieving unreleased changes fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::ChangeTracker;
+    /// # fn example(tracker: ChangeTracker) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Get all unreleased changes
+    /// let unreleased = tracker.unreleased_changes()?;
+    ///
+    /// // Process them
+    /// for (package, changes) in unreleased {
+    ///     println!("Package {} has {} unreleased changes", package, changes.len());
+    ///
+    ///     for change in changes {
+    ///         println!("  - {}", change.summary());
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn unreleased_changes(&self) -> ChangeResult<HashMap<String, Vec<Change>>> {
         // Get all changes by package
         let all_by_package = self.store.get_all_changes_by_package()?;
@@ -413,8 +692,35 @@ impl ChangeTracker {
 
     /// Marks changes as released.
     ///
+    /// # Arguments
+    ///
+    /// * `package` - Name of the package to mark changes for
+    /// * `version` - Version string to assign to the changes
+    /// * `dry_run` - If true, only preview changes without applying them
+    ///
+    /// # Returns
+    ///
+    /// A vector of changes that were or would be marked as released.
+    ///
     /// # Errors
-    /// Returns an error if marking changes as released fails.
+    ///
+    /// Returns an error if the package does not exist or if marking changes fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::ChangeTracker;
+    /// # fn example(mut tracker: ChangeTracker) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Preview changes that would be marked as released
+    /// let dry_run = tracker.mark_released("ui-components", "2.0.0", true)?;
+    /// println!("Would mark {} changes as released", dry_run.len());
+    ///
+    /// // Actually mark changes as released
+    /// let released = tracker.mark_released("ui-components", "2.0.0", false)?;
+    /// println!("Marked {} changes as released", released.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn mark_released(
         &mut self,
         package: &str,
@@ -434,8 +740,32 @@ impl ChangeTracker {
 
     /// Gets unreleased changes for all packages filtered by environment.
     ///
+    /// # Arguments
+    ///
+    /// * `environment` - The environment to filter changes for (e.g., "production", "staging")
+    ///
+    /// # Returns
+    ///
+    /// A hashmap where keys are package names and values are vectors of unreleased changes
+    /// that apply to the specified environment.
+    ///
     /// # Errors
+    ///
     /// Returns an error if retrieving unreleased changes fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::ChangeTracker;
+    /// # fn example(tracker: ChangeTracker) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Get unreleased changes for production
+    /// let prod_changes = tracker.unreleased_changes_for_environment("production")?;
+    ///
+    /// // Get unreleased changes for staging
+    /// let staging_changes = tracker.unreleased_changes_for_environment("staging")?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn unreleased_changes_for_environment(
         &self,
         environment: &str,
@@ -457,8 +787,37 @@ impl ChangeTracker {
 
     /// Marks changes as released for a specific environment.
     ///
+    /// # Arguments
+    ///
+    /// * `package` - Name of the package to mark changes for
+    /// * `version` - Version string to assign to the changes
+    /// * `environment` - Environment name to filter changes by
+    /// * `dry_run` - If true, only preview changes without applying them
+    ///
+    /// # Returns
+    ///
+    /// A vector of changes that were or would be marked as released.
+    ///
     /// # Errors
-    /// Returns an error if marking changes as released fails.
+    ///
+    /// Returns an error if the package does not exist or if marking changes fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::ChangeTracker;
+    /// # fn example(mut tracker: ChangeTracker) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Mark production changes as released
+    /// let released = tracker.mark_released_for_environment(
+    ///     "ui-components",
+    ///     "2.0.0",
+    ///     "production",
+    ///     false
+    /// )?;
+    /// println!("Marked {} changes as released for production", released.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn mark_released_for_environment(
         &mut self,
         package: &str,
@@ -486,8 +845,41 @@ impl ChangeTracker {
 
     /// Marks specific changes as released by ID.
     ///
+    /// # Arguments
+    ///
+    /// * `package` - Name of the package containing the changes
+    /// * `version` - Version string to assign to the changes
+    /// * `change_ids` - IDs of the specific changes to mark
+    /// * `dry_run` - If true, only preview changes without applying them
+    ///
+    /// # Returns
+    ///
+    /// A vector of changes that were or would be marked as released.
+    ///
     /// # Errors
-    /// Returns an error if marking changes as released fails.
+    ///
+    /// Returns an error if the package does not exist or if marking changes fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::{ChangeTracker, ChangeId};
+    /// # use std::str::FromStr;
+    /// # fn example(mut tracker: ChangeTracker) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Get specific change IDs
+    /// let id1 = ChangeId::from_str("550e8400-e29b-41d4-a716-446655440000")?;
+    /// let id2 = ChangeId::from_str("550e8400-e29b-41d4-a716-446655440001")?;
+    ///
+    /// // Mark only these changes as released
+    /// let released = tracker.mark_specific_changes_as_released(
+    ///     "ui-components",
+    ///     "2.0.0",
+    ///     &[id1, id2],
+    ///     false
+    /// )?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn mark_specific_changes_as_released(
         &mut self,
         package: &str,
@@ -542,18 +934,55 @@ impl ChangeTracker {
     }
 
     /// Gets the change store.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the underlying change store implementation.
     #[must_use]
     pub fn store(&self) -> &dyn ChangeStore {
         self.store.as_ref()
     }
 
     /// Gets a mutable reference to the change store.
+    ///
+    /// # Returns
+    ///
+    /// A mutable reference to the underlying change store implementation.
     #[must_use]
     pub fn store_mut(&mut self) -> &mut dyn ChangeStore {
         self.store.as_mut()
     }
 
     /// Generate a report of package changes with cycle information
+    ///
+    /// Creates a text report showing all changes grouped by package,
+    /// with optional cycle information for visualization.
+    ///
+    /// # Arguments
+    ///
+    /// * `with_cycle_info` - Whether to include dependency cycle information
+    ///
+    /// # Returns
+    ///
+    /// A formatted string report.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if retrieving changes fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::ChangeTracker;
+    /// # fn example(tracker: ChangeTracker) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Generate a basic report
+    /// let basic_report = tracker.generate_changes_report(false)?;
+    ///
+    /// // Generate a report with cycle information
+    /// let detailed_report = tracker.generate_changes_report(true)?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn generate_changes_report(&self, with_cycle_info: bool) -> ChangeResult<String> {
         let mut report = String::new();
 
@@ -657,6 +1086,32 @@ impl ChangeTracker {
     }
 
     /// Visualize the dependency graph including cycles
+    ///
+    /// Creates an ASCII art visualization of the package dependency graph,
+    /// highlighting cycles.
+    ///
+    /// # Arguments
+    ///
+    /// * `include_cycles` - Whether to include cycle details
+    ///
+    /// # Returns
+    ///
+    /// A formatted string visualization.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if graph generation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::ChangeTracker;
+    /// # fn example(tracker: ChangeTracker) -> Result<(), Box<dyn std::error::Error>> {
+    /// let graph = tracker.visualize_dependency_graph(true)?;
+    /// println!("{}", graph);
+    /// # Ok(())
+    /// # }
+    /// ```
     #[allow(clippy::single_char_add_str)]
     pub fn visualize_dependency_graph(&self, include_cycles: bool) -> ChangeResult<String> {
         let mut output = String::new();
@@ -783,6 +1238,17 @@ impl ChangeTracker {
     }
 
     /// Analyzes commit messages to determine the change type
+    ///
+    /// Examines the commit messages to identify the type of change
+    /// (feature, fix, breaking, etc.) based on conventional commit prefixes.
+    ///
+    /// # Arguments
+    ///
+    /// * `commits` - List of Git commit data
+    ///
+    /// # Returns
+    ///
+    /// The determined `ChangeType`
     #[allow(clippy::too_many_lines)]
     fn determine_change_type_from_commits(commits: &[sublime_git_tools::RepoCommit]) -> ChangeType {
         // If no commits, default to Chore
@@ -912,6 +1378,15 @@ impl ChangeTracker {
     }
 
     /// Gets the commits related to specific files
+    ///
+    /// # Arguments
+    ///
+    /// * `all_commits` - List of all commits
+    /// * `_files` - List of changed files
+    ///
+    /// # Returns
+    ///
+    /// A list of commits related to the specified files
     fn get_commits_for_files(
         all_commits: &[sublime_git_tools::RepoCommit],
         _files: &[sublime_git_tools::GitChangedFile],
@@ -927,6 +1402,15 @@ impl ChangeTracker {
     }
 
     /// Generates a descriptive message for the change based on commits
+    ///
+    /// # Arguments
+    ///
+    /// * `commits` - List of commits
+    /// * `files` - List of changed files
+    ///
+    /// # Returns
+    ///
+    /// A descriptive string for the change
     fn generate_change_description(
         commits: &[sublime_git_tools::RepoCommit],
         files: &[sublime_git_tools::GitChangedFile],

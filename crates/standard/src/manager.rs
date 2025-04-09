@@ -1,3 +1,12 @@
+//! # Package Manager Module
+//!
+//! This module provides functionality for detecting and working with
+//! Node.js package managers (npm, yarn, pnpm, and bun).
+//!
+//! It includes the `CorePackageManager` enum for representing different
+//! package managers and functionality to detect which manager is being
+//! used in a project by examining lock files.
+
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,

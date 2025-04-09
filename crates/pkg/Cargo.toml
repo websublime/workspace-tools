@@ -8,6 +8,11 @@ edition.workspace = true
 homepage.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "A robust library for managing Node.js packages, dependency graphs, and version handling in Rust"
+documentation = "https://docs.rs/sublime_package_tools"
+readme = "README.md"
+keywords = ["nodejs", "package", "dependency", "semver", "graph"]
+categories = ["development-tools", "parsing"]
 
 [package.metadata.docs.rs]
 all-features = true

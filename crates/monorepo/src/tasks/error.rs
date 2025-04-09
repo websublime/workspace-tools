@@ -1,3 +1,23 @@
+//! Error types for task operations.
+//!
+//! This module defines the error types and result type aliases used throughout the task system.
+//! It provides structured error reporting for various failure modes that can occur during task
+//! execution, dependency resolution, and graph construction.
+//!
+//! # Examples
+//!
+//! ```
+//! use sublime_monorepo_tools::{TaskError, TaskResult};
+//!
+//! fn example_operation() -> TaskResult<()> {
+//!     // Operation that might fail
+//!     Err(TaskError::TaskNotFound("build".to_string()))
+//! }
+//!
+//! let result = example_operation();
+//! assert!(result.is_err());
+//! ```
+
 use std::time::Duration;
 use thiserror::Error;
 
@@ -5,6 +25,26 @@ use thiserror::Error;
 pub type TaskResult<T> = Result<T, TaskError>;
 
 /// Errors that can occur during task operations
+///
+/// This enum represents all possible errors that can occur when working with tasks
+/// in the monorepo, including execution failures, timeouts, dependency issues, and more.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_monorepo_tools::TaskError;
+///
+/// // Create a task not found error
+/// let error = TaskError::TaskNotFound("build".to_string());
+///
+/// // Handle different error types
+/// match error {
+///     TaskError::TaskNotFound(name) => println!("Task {} not found", name),
+///     TaskError::Timeout(duration) => println!("Task timed out after {:?}", duration),
+///     TaskError::ExecutionFailed(reason) => println!("Task failed: {}", reason),
+///     _ => println!("Other error occurred"),
+/// }
+/// ```
 #[derive(Error, Debug)]
 pub enum TaskError {
     /// Task execution failed
@@ -57,6 +97,23 @@ pub enum TaskError {
 }
 
 impl AsRef<str> for TaskError {
+    /// Gets a string representation of the error type.
+    ///
+    /// This method provides a simple way to get the error variant name without
+    /// the associated values, useful for categorizing errors.
+    ///
+    /// # Returns
+    ///
+    /// A string slice representing the error type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_monorepo_tools::TaskError;
+    ///
+    /// let error = TaskError::Cancelled;
+    /// assert_eq!(error.as_ref(), "Cancelled");
+    /// ``
     fn as_ref(&self) -> &str {
         match self {
             TaskError::FilterError(_) => "FilterError",

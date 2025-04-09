@@ -1,13 +1,34 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
-
-use semver::{Version, VersionReq};
+//! Dependency upgrader implementation
+//!
+//! Provides the main implementation for checking and applying dependency upgrades
+//! across packages in a workspace.
 
 use crate::{
     AvailableUpgrade, Dependency, DependencyResolutionError, ExecutionMode, Package,
     PackageRegistryError, RegistryManager, UpgradeConfig, UpgradeStatus, VersionStability,
     VersionUpdateStrategy,
 };
+use semver::{Version, VersionReq};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
+/// Package dependency upgrader
+///
+/// Checks for available dependency upgrades and applies them according to
+/// configurable strategies and filters.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_package_tools::{Upgrader, UpgradeConfig, RegistryManager};
+///
+/// // Create with default configuration
+/// let upgrader = Upgrader::new();
+///
+/// // Create with custom configuration
+/// let config = UpgradeConfig::default();
+/// let registry_manager = RegistryManager::new();
+/// let custom_upgrader = Upgrader::create(config, registry_manager);
+/// ```
 #[derive(Clone)]
 pub struct Upgrader {
     registry_manager: RegistryManager,
@@ -17,6 +38,18 @@ pub struct Upgrader {
 
 impl Upgrader {
     /// Create a new dependency upgrader with the given registry and default configuration
+    ///
+    /// # Returns
+    ///
+    /// A new `Upgrader` instance with default configuration
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::Upgrader;
+    ///
+    /// let upgrader = Upgrader::new();
+    /// ```
     pub fn new() -> Self {
         Self {
             registry_manager: RegistryManager::new(),
@@ -25,41 +58,122 @@ impl Upgrader {
         }
     }
 
+    /// Create an upgrader with custom configuration and registry manager
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Configuration for the upgrader
+    /// * `registry_manager` - Registry manager for package lookups
+    ///
+    /// # Returns
+    ///
+    /// A new `Upgrader` instance with the specified configuration
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::{Upgrader, UpgradeConfig, RegistryManager};
+    ///
+    /// let config = UpgradeConfig::default();
+    /// let registry_manager = RegistryManager::new();
+    /// let upgrader = Upgrader::create(config, registry_manager);
+    /// ```
     pub fn create(config: UpgradeConfig, registry_manager: RegistryManager) -> Self {
         Self { registry_manager, config, cache: HashMap::new() }
     }
 
-    /// Create a new dependency upgrader with the given registry and configuration
+    /// Create a new dependency upgrader with the given configuration
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Configuration for the upgrader
+    ///
+    /// # Returns
+    ///
+    /// A new `Upgrader` instance with the specified configuration and default registry
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::{Upgrader, UpgradeConfig, VersionUpdateStrategy};
+    ///
+    /// let config = UpgradeConfig {
+    ///     update_strategy: VersionUpdateStrategy::MinorAndPatch,
+    ///     ..UpgradeConfig::default()
+    /// };
+    /// let upgrader = Upgrader::with_config(config);
+    /// ```
     pub fn with_config(config: UpgradeConfig) -> Self {
         Self { registry_manager: RegistryManager::new(), config, cache: HashMap::new() }
     }
 
     /// Create with a specific registry manager
+    ///
+    /// # Arguments
+    ///
+    /// * `registry_manager` - Registry manager for package lookups
+    ///
+    /// # Returns
+    ///
+    /// A new `Upgrader` instance with default configuration and the specified registry manager
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::{Upgrader, RegistryManager};
+    ///
+    /// let registry_manager = RegistryManager::new();
+    /// let upgrader = Upgrader::with_registry_manager(registry_manager);
+    /// ```
     pub fn with_registry_manager(registry_manager: RegistryManager) -> Self {
         Self { registry_manager, config: UpgradeConfig::default(), cache: HashMap::new() }
     }
 
     /// Get the registry manager
+    ///
+    /// # Returns
+    ///
+    /// Reference to the upgrader's registry manager
     pub fn registry_manager(&self) -> &RegistryManager {
         &self.registry_manager
     }
 
     /// Get a mutable reference to the registry manager
+    ///
+    /// # Returns
+    ///
+    /// Mutable reference to the upgrader's registry manager
     pub fn registry_manager_mut(&mut self) -> &mut RegistryManager {
         &mut self.registry_manager
     }
 
     /// Set the configuration for the upgrader
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - New configuration to use
     pub fn set_config(&mut self, config: UpgradeConfig) {
         self.config = config;
     }
 
     /// Get the current configuration
+    ///
+    /// # Returns
+    ///
+    /// Reference to the upgrader's configuration
     pub fn config(&self) -> &UpgradeConfig {
         &self.config
     }
 
     /// Get all available versions of a package, using the cache if available
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to look up
+    ///
+    /// # Returns
+    ///
+    /// List of available versions, or a `PackageRegistryError` if the lookup fails
     fn get_cached_versions(
         &mut self,
         package_name: &str,
@@ -73,6 +187,17 @@ impl Upgrader {
     }
 
     /// Find the highest version that satisfies the given requirement
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package
+    /// * `requirement` - Version requirement to satisfy
+    /// * `include_prereleases` - Whether to include prerelease versions
+    ///
+    /// # Returns
+    ///
+    /// The highest satisfying version string, or `None` if no satisfying version exists,
+    /// or a `PackageRegistryError` if the lookup fails
     fn find_highest_satisfying_version(
         &mut self,
         package_name: &str,
@@ -141,6 +266,16 @@ impl Upgrader {
     }
 
     /// Find the highest version available, regardless of requirements
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package
+    /// * `include_prereleases` - Whether to include prerelease versions
+    ///
+    /// # Returns
+    ///
+    /// The highest version string, or `None` if no versions exist,
+    /// or a `PackageRegistryError` if the lookup fails
     fn find_latest_version(
         &mut self,
         package_name: &str,
@@ -195,8 +330,18 @@ impl Upgrader {
         Ok(highest.map(|v| v.to_string()))
     }
 
-    #[allow(clippy::unused_self)]
     /// Determine the upgrade status by comparing versions
+    ///
+    /// # Arguments
+    ///
+    /// * `current_version` - Current version string
+    /// * `compatible_version` - Compatible version string (if available)
+    /// * `latest_version` - Latest version string (if available)
+    ///
+    /// # Returns
+    ///
+    /// Status indicating what kind of upgrade is available
+    #[allow(clippy::unused_self)]
     fn determine_upgrade_status(
         &self,
         current_version: &str,
@@ -250,6 +395,35 @@ impl Upgrader {
     }
 
     /// Check for upgrades for a single dependency
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package containing the dependency
+    /// * `dependency` - The dependency to check
+    ///
+    /// # Returns
+    ///
+    /// Information about available upgrades, or a `PackageRegistryError` if the check fails
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_package_tools::{Upgrader, Dependency, Package};
+    /// use std::cell::RefCell;
+    /// use std::rc::Rc;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut upgrader = Upgrader::new();
+    ///
+    /// // Create a dependency to check
+    /// let dep = Dependency::new("react", "^16.0.0")?;
+    ///
+    /// // Check for upgrades
+    /// let upgrade = upgrader.check_dependency_upgrade("my-app", &dep)?;
+    /// println!("Upgrade status: {}", upgrade.status);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn check_dependency_upgrade(
         &mut self,
         package_name: &str,
@@ -309,6 +483,36 @@ impl Upgrader {
     }
 
     /// Check all dependencies in a package for available upgrades
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - The package to check
+    ///
+    /// # Returns
+    ///
+    /// List of available upgrades, or a `PackageRegistryError` if any check fails
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_package_tools::{Upgrader, Package, Dependency};
+    /// use std::cell::RefCell;
+    /// use std::rc::Rc;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut upgrader = Upgrader::new();
+    ///
+    /// // Create a package with dependencies
+    /// let dep1 = Rc::new(RefCell::new(Dependency::new("react", "^16.0.0")?));
+    /// let dep2 = Rc::new(RefCell::new(Dependency::new("lodash", "^4.0.0")?));
+    /// let package = Package::new("my-app", "1.0.0", Some(vec![dep1, dep2]))?;
+    ///
+    /// // Check for upgrades
+    /// let upgrades = upgrader.check_package_upgrades(&package)?;
+    /// println!("Found {} possible upgrades", upgrades.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn check_package_upgrades(
         &mut self,
         package: &Package,
@@ -357,6 +561,30 @@ impl Upgrader {
     }
 
     /// Check all packages in a collection for available upgrades
+    ///
+    /// # Arguments
+    ///
+    /// * `packages` - Collection of packages to check
+    ///
+    /// # Returns
+    ///
+    /// List of available upgrades across all packages, or a `PackageRegistryError` if any check fails
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_package_tools::{Upgrader, Package};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut upgrader = Upgrader::new();
+    /// let packages = vec![]; // Add your packages here
+    ///
+    /// // Check for upgrades across all packages
+    /// let upgrades = upgrader.check_all_upgrades(&packages)?;
+    /// println!("Found {} possible upgrades in total", upgrades.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn check_all_upgrades(
         &mut self,
         packages: &[Package],
@@ -372,6 +600,43 @@ impl Upgrader {
     }
 
     /// Apply upgrades to packages based on what was found
+    ///
+    /// # Arguments
+    ///
+    /// * `packages` - Collection of packages to update
+    /// * `upgrades` - List of upgrades to apply
+    ///
+    /// # Returns
+    ///
+    /// List of upgrades that were actually applied, or a `DependencyResolutionError` if any update fails
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_package_tools::{Upgrader, Package, UpgradeConfig, ExecutionMode};
+    /// use std::rc::Rc;
+    /// use std::cell::RefCell;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Create an upgrader in Apply mode
+    /// let config = UpgradeConfig {
+    ///     execution_mode: ExecutionMode::Apply,
+    ///     ..UpgradeConfig::default()
+    /// };
+    /// let upgrader = Upgrader::with_config(config);
+    ///
+    /// // Prepare packages (as Rc<RefCell<>> for mutability)
+    /// let packages = vec![]; // Add your Rc<RefCell<Package>> references here
+    ///
+    /// // Find upgrades
+    /// let upgrades = vec![]; // From check_all_upgrades or similar
+    ///
+    /// // Apply upgrades
+    /// let applied = upgrader.apply_upgrades(&packages, &upgrades)?;
+    /// println!("Applied {} upgrades", applied.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn apply_upgrades(
         &self,
         packages: &[Rc<RefCell<Package>>],
@@ -404,7 +669,36 @@ impl Upgrader {
     }
 
     /// Generate a report of upgrades in a human-readable format
-
+    ///
+    /// # Arguments
+    ///
+    /// * `upgrades` - List of available upgrades
+    ///
+    /// # Returns
+    ///
+    /// A formatted string report of the upgrades
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::{Upgrader, AvailableUpgrade, UpgradeStatus};
+    ///
+    /// // Prepare some upgrades (normally from check_all_upgrades)
+    /// let upgrades = vec![
+    ///     AvailableUpgrade {
+    ///         package_name: "my-app".to_string(),
+    ///         dependency_name: "react".to_string(),
+    ///         current_version: "^16.0.0".to_string(),
+    ///         compatible_version: Some("^17.0.0".to_string()),
+    ///         latest_version: Some("^17.0.0".to_string()),
+    ///         status: UpgradeStatus::MajorAvailable("^17.0.0".to_string()),
+    ///     }
+    /// ];
+    ///
+    /// // Generate report
+    /// let report = Upgrader::generate_upgrade_report(&upgrades);
+    /// println!("{}", report);
+    /// ```
     pub fn generate_upgrade_report(upgrades: &[AvailableUpgrade]) -> String {
         if upgrades.is_empty() {
             return "All dependencies are up to date.".to_string();

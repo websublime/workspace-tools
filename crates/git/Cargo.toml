@@ -8,6 +8,11 @@ edition.workspace = true
 homepage.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "A high-level Rust interface to Git operations with robust error handling, built on libgit2"
+documentation = "https://docs.rs/sublime_git_tools"
+readme = "README.md"
+keywords = ["git", "repository", "version-control", "libgit2", "development"]
+categories = ["development-tools", "version-control"]
 
 [package.metadata.docs.rs]
 all-features = true

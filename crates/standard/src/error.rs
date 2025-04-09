@@ -1,3 +1,11 @@
+//! # Error Handling Module
+//!
+//! This module defines error types used throughout the crate,
+//! primarily for command execution errors.
+//!
+//! The `CommandError` enum provides detailed error variants that
+//! capture different failure scenarios when executing external commands.
+
 use thiserror::Error;
 
 /// Represents errors that may occur when executing commands.

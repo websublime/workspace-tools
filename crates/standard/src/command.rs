@@ -1,3 +1,10 @@
+//! # Command Execution Module
+//!
+//! This module provides functionality for executing external commands
+//! with proper error handling and customizable output processing.
+//!
+//! The primary function `execute()` allows running external programs with
+//! captured output and standardized error handling.
 use std::{
     ffi::OsStr,
     fs::canonicalize,

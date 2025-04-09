@@ -1,3 +1,9 @@
+//! # Utility Functions Module
+//!
+//! This module provides general utility functions used throughout the crate.
+//!
+//! Currently, it includes string manipulation utilities for handling command outputs.
+
 /// Strips the trailing newline from a string.
 ///
 /// This function removes any trailing newline characters from the input string.

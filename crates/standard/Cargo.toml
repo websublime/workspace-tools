@@ -8,6 +8,11 @@ edition.workspace = true
 homepage.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "A collection of utilities for working with Node.js projects from Rust applications"
+documentation = "https://docs.rs/sublime_standard_tools"
+readme = "README.md"
+keywords = ["nodejs", "npm", "package-manager", "command", "project"]
+categories = ["development-tools", "command-line-utilities"]
 
 [package.metadata.docs.rs]
 all-features = true

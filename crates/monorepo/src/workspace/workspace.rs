@@ -1,3 +1,13 @@
+//! Core workspace representation and functionality.
+//!
+//! This module provides the `Workspace` struct, which is the central component
+//! for managing packages in a monorepo. It supports package discovery,
+//! dependency analysis, and workspace-wide operations.
+//!
+//! The workspace handles package dependencies, circular dependency detection,
+//! and provides utilities for traversing the package graph.
+
+use crate::{DiscoveryOptions, ValidationOptions, WorkspaceConfig, WorkspaceError, WorkspaceGraph};
 use glob::glob;
 use globset::{Glob, GlobSetBuilder};
 use pathdiff::diff_paths;
@@ -10,8 +20,35 @@ use sublime_git_tools::Repo;
 use sublime_package_tools::{DependencyGraph, Package, PackageInfo, ValidationReport};
 use sublime_standard_tools::CorePackageManager;
 
-use crate::{DiscoveryOptions, ValidationOptions, WorkspaceConfig, WorkspaceError, WorkspaceGraph};
-
+/// Result of topologically sorting workspace packages.
+///
+/// This structure separates packages that can be topologically sorted
+/// (those without circular dependencies) from those involved in cycles.
+///
+/// # Examples
+///
+/// ```no_run
+/// # use sublime_monorepo_tools::{Workspace, DiscoveryOptions};
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// # let workspace = Workspace::new(std::path::PathBuf::from("."), Default::default(), None)?;
+/// // Get sorted packages with cycle information
+/// let sorted = workspace.get_sorted_packages_with_circulars();
+///
+/// // Work with packages that have no circular dependencies
+/// for pkg in sorted.sorted {
+///     println!("Regular package: {}", pkg.borrow().package.borrow().name());
+/// }
+///
+/// // Work with cycle groups
+/// for (i, cycle) in sorted.circular.iter().enumerate() {
+///     println!("Cycle group {}:", i+1);
+///     for pkg in cycle {
+///         println!("  - {}", pkg.borrow().package.borrow().name());
+///     }
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone)]
 pub struct SortedPackages {
     /// Packages that can be topologically sorted (no cycles)
@@ -21,6 +58,37 @@ pub struct SortedPackages {
 }
 
 /// Complete workspace representation.
+///
+/// The `Workspace` struct represents a monorepo workspace, containing packages
+/// and their relationships. It provides methods for discovering packages,
+/// analyzing dependencies, and performing operations on the workspace.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::path::PathBuf;
+/// use sublime_monorepo_tools::{Workspace, WorkspaceConfig, DiscoveryOptions};
+///
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// // Create a workspace
+/// let config = WorkspaceConfig::new(PathBuf::from("."));
+/// let mut workspace = Workspace::new(PathBuf::from("."), config, None)?;
+///
+/// // Discover packages
+/// workspace.discover_packages_with_options(&DiscoveryOptions::default())?;
+///
+/// // Work with packages
+/// for pkg_info in workspace.sorted_packages() {
+///     let name = pkg_info.borrow().package.borrow().name();
+///     println!("Package: {}", name);
+///
+///     // Get dependencies of this package
+///     let deps = workspace.dependencies_of(name);
+///     println!("Dependencies: {}", deps.len());
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone)]
 pub struct Workspace {
     /// Root path of the workspace
@@ -51,8 +119,33 @@ impl std::fmt::Debug for Workspace {
 impl Workspace {
     /// Creates a new workspace.
     ///
+    /// # Arguments
+    ///
+    /// * `root_path` - The root path of the workspace
+    /// * `config` - Configuration for the workspace
+    /// * `git_repo` - Optional Git repository for this workspace
+    ///
+    /// # Returns
+    ///
+    /// A new workspace instance.
+    ///
     /// # Errors
+    ///
     /// Returns an error if workspace creation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::path::PathBuf;
+    /// use sublime_monorepo_tools::{Workspace, WorkspaceConfig};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Create a basic workspace
+    /// let config = WorkspaceConfig::new(PathBuf::from("."));
+    /// let workspace = Workspace::new(PathBuf::from("."), config, None)?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn new(
         root_path: PathBuf,
         config: WorkspaceConfig,
@@ -71,6 +164,30 @@ impl Workspace {
     /// This method provides explicit information about dependency cycles
     /// without treating them as errors. It returns groups of packages that
     /// form circular dependencies.
+    ///
+    /// # Returns
+    ///
+    /// A vector of cycle groups, where each group is a vector of package names.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::{Workspace, DiscoveryOptions};
+    /// # fn example(workspace: &Workspace) {
+    /// // Get circular dependencies
+    /// let cycles = workspace.get_circular_dependencies();
+    ///
+    /// // Print cycles
+    /// if cycles.is_empty() {
+    ///     println!("No circular dependencies found");
+    /// } else {
+    ///     println!("Found {} cycle groups:", cycles.len());
+    ///     for (i, group) in cycles.iter().enumerate() {
+    ///         println!("Cycle {}: {}", i+1, group.join(" → "));
+    ///     }
+    /// }
+    /// # }
+    /// ```
     #[must_use]
     pub fn get_circular_dependencies(&self) -> Vec<Vec<String>> {
         self.get_sorted_packages_with_circulars()
@@ -85,6 +202,31 @@ impl Workspace {
     /// Checks if a package is part of a circular dependency.
     ///
     /// Returns `true` if the package is involved in a circular dependency.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to check
+    ///
+    /// # Returns
+    ///
+    /// `true` if the package is in a dependency cycle, `false` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::{Workspace, DiscoveryOptions};
+    /// # fn example(workspace: &Workspace) {
+    /// // Check if a package is in a cycle
+    /// if workspace.is_in_cycle("my-package") {
+    ///     println!("Package 'my-package' is part of a circular dependency");
+    ///
+    ///     // Get the cycle group
+    ///     if let Some(cycle) = workspace.get_cycle_for_package("my-package") {
+    ///         println!("Cycle: {}", cycle.join(" → "));
+    ///     }
+    /// }
+    /// # }
+    /// ```
     #[must_use]
     pub fn is_in_cycle(&self, package_name: &str) -> bool {
         let circles = self.get_sorted_packages_with_circulars();
@@ -98,6 +240,27 @@ impl Workspace {
     ///
     /// Returns the group of packages forming a cycle that includes the specified
     /// package, or `None` if the package is not part of a cycle.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to find the cycle for
+    ///
+    /// # Returns
+    ///
+    /// An optional vector of package names forming a cycle.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::Workspace;
+    /// # fn example(workspace: &Workspace) {
+    /// if let Some(cycle) = workspace.get_cycle_for_package("ui-components") {
+    ///     println!("Package is in a cycle with: {}", cycle.join(", "));
+    /// } else {
+    ///     println!("Package is not in a dependency cycle");
+    /// }
+    /// # }
+    /// ```
     #[must_use]
     pub fn get_cycle_for_package(&self, package_name: &str) -> Option<Vec<String>> {
         let circles = self.get_sorted_packages_with_circulars();
@@ -117,6 +280,25 @@ impl Workspace {
     ///
     /// The returned HashMap maps package names to cycle group indices.
     /// Packages not in cycles are not included in the map.
+    ///
+    /// # Returns
+    ///
+    /// A HashMap mapping package names to their cycle group index.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::Workspace;
+    /// # fn example(workspace: &Workspace) {
+    /// // Get cycle membership
+    /// let membership = workspace.get_cycle_membership();
+    ///
+    /// // Check if a package is in a cycle
+    /// if let Some(group_index) = membership.get("ui-components") {
+    ///     println!("Package is in cycle group {}", group_index + 1);
+    /// }
+    /// # }
+    /// ```
     #[must_use]
     pub fn get_cycle_membership(&self) -> HashMap<String, usize> {
         let circles = self.get_sorted_packages_with_circulars();
@@ -134,8 +316,44 @@ impl Workspace {
 
     /// Discovers packages with custom options.
     ///
+    /// Scans the workspace for packages according to the provided options.
+    ///
+    /// # Arguments
+    ///
+    /// * `options` - Options controlling package discovery
+    ///
+    /// # Returns
+    ///
+    /// A reference to self for method chaining.
+    ///
     /// # Errors
+    ///
     /// Returns an error if package discovery fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::path::PathBuf;
+    /// use sublime_monorepo_tools::{DiscoveryOptions, Workspace, WorkspaceConfig};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Create workspace
+    /// let config = WorkspaceConfig::new(PathBuf::from("."));
+    /// let mut workspace = Workspace::new(PathBuf::from("."), config, None)?;
+    ///
+    /// // Configure discovery options
+    /// let options = DiscoveryOptions::new()
+    ///     .include_patterns(vec!["packages/*/package.json"])
+    ///     .exclude_patterns(vec!["**/test/**"])
+    ///     .include_private(false);
+    ///
+    /// // Discover packages
+    /// workspace.discover_packages_with_options(&options)?;
+    ///
+    /// println!("Found {} packages", workspace.sorted_packages().len());
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn discover_packages_with_options(
         &mut self,
         options: &DiscoveryOptions,
@@ -242,8 +460,48 @@ impl Workspace {
 
     /// Analyzes workspace dependencies.
     ///
+    /// Analyzes the dependency graph of the workspace, identifying cycles,
+    /// external dependencies, and version conflicts.
+    ///
+    /// # Returns
+    ///
+    /// A `WorkspaceGraph` containing analysis results.
+    ///
     /// # Errors
+    ///
     /// Returns an error if analysis fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::Workspace;
+    /// # fn example(workspace: &Workspace) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Analyze dependencies
+    /// let analysis = workspace.analyze_dependencies()?;
+    ///
+    /// // Check results
+    /// if analysis.cycles_detected {
+    ///     println!("Circular dependencies detected!");
+    ///     for cycle in &analysis.cycles {
+    ///         println!("Cycle: {}", cycle.join(" → "));
+    ///     }
+    /// }
+    ///
+    /// // Check for external dependencies
+    /// if !analysis.external_dependencies.is_empty() {
+    ///     println!("External dependencies: {}", analysis.external_dependencies.join(", "));
+    /// }
+    ///
+    /// // Check for version conflicts
+    /// if !analysis.version_conflicts.is_empty() {
+    ///     println!("Version conflicts found:");
+    ///     for (pkg, versions) in &analysis.version_conflicts {
+    ///         println!("  {}: {}", pkg, versions.join(", "));
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn analyze_dependencies(&self) -> Result<WorkspaceGraph, WorkspaceError> {
         // Extract owned packages
         let packages: Vec<Package> =
@@ -280,6 +538,30 @@ impl Workspace {
     }
 
     /// Gets a package by name.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Name of the package to retrieve
+    ///
+    /// # Returns
+    ///
+    /// An optional reference to the package information.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::Workspace;
+    /// # fn example(workspace: &Workspace) {
+    /// // Get a package
+    /// if let Some(pkg) = workspace.get_package("ui-components") {
+    ///     let info = pkg.borrow();
+    ///     let package = info.package.borrow();
+    ///     println!("Found package: {} v{}", package.name(), package.version_str());
+    /// } else {
+    ///     println!("Package not found");
+    /// }
+    /// # }
+    /// ```
     #[must_use]
     pub fn get_package(&self, name: &str) -> Option<Rc<RefCell<PackageInfo>>> {
         self.package_infos
@@ -295,6 +577,27 @@ impl Workspace {
     ///
     /// The root package of the workspace (located directly at the workspace root path)
     /// is automatically excluded from the result.
+    ///
+    /// # Returns
+    ///
+    /// A vector of package references in dependency order.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::Workspace;
+    /// # fn example(workspace: &Workspace) {
+    /// // Get sorted packages
+    /// let packages = workspace.sorted_packages();
+    ///
+    /// // Process in dependency order (dependencies before dependents)
+    /// for pkg in packages {
+    ///     let info = pkg.borrow();
+    ///     let package = info.package.borrow();
+    ///     println!("Package: {}", package.name());
+    /// }
+    /// # }
+    /// ```
     #[must_use]
     pub fn sorted_packages(&self) -> Vec<Rc<RefCell<PackageInfo>>> {
         let result = self.get_sorted_packages_with_circulars();
@@ -310,7 +613,38 @@ impl Workspace {
         all_packages
     }
 
-    // New method that provides more detailed information
+    /// Gets packages sorted by dependencies with cycle information.
+    ///
+    /// Returns detailed information about the package sorting, separating
+    /// packages that can be topologically sorted from those involved in
+    /// circular dependencies.
+    ///
+    /// # Returns
+    ///
+    /// A `SortedPackages` struct containing sorted packages and cycle groups.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::Workspace;
+    /// # fn example(workspace: &Workspace) {
+    /// // Get sorted packages with cycle info
+    /// let result = workspace.get_sorted_packages_with_circulars();
+    ///
+    /// // Work with sorted packages (no circular dependencies)
+    /// println!("Packages with no circular dependencies: {}", result.sorted.len());
+    ///
+    /// // Work with cycle groups
+    /// println!("Found {} cycle groups", result.circular.len());
+    /// for group in result.circular {
+    ///     let names: Vec<String> = group
+    ///         .iter()
+    ///         .map(|p| p.borrow().package.borrow().name().to_string())
+    ///         .collect();
+    ///     println!("Cycle: {}", names.join(" → "));
+    /// }
+    /// # }
+    /// ```
     #[must_use]
     #[allow(clippy::too_many_lines)]
     #[allow(clippy::items_after_statements)]
@@ -452,6 +786,34 @@ impl Workspace {
     }
 
     /// Gets packages affected by changes in the specified packages.
+    ///
+    /// Determines which packages are affected by changes to the specified packages,
+    /// by traversing the dependency graph to find all dependents.
+    ///
+    /// # Arguments
+    ///
+    /// * `changed_packages` - Names of packages that have changed
+    /// * `check_circular` - Whether to check for circular dependencies (returns empty vec if found)
+    ///
+    /// # Returns
+    ///
+    /// A vector of package references that are affected by the changes.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::Workspace;
+    /// # fn example(workspace: &Workspace) {
+    /// // Find packages affected by changes to "core" and "utils"
+    /// let affected = workspace.affected_packages(&["core", "utils"], None);
+    ///
+    /// println!("Changes to core and utils affect {} packages", affected.len());
+    /// for pkg in affected {
+    ///     let name = pkg.borrow().package.borrow().name();
+    ///     println!("Affected: {}", name);
+    /// }
+    /// # }
+    /// ```
     #[must_use]
     pub fn affected_packages(
         &self,
@@ -502,6 +864,32 @@ impl Workspace {
     }
 
     /// Gets packages that depend on a specific package.
+    ///
+    /// Finds all packages that directly depend on the specified package.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to find dependents for
+    ///
+    /// # Returns
+    ///
+    /// A vector of package references that depend on the specified package.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::Workspace;
+    /// # fn example(workspace: &Workspace) {
+    /// // Find packages that depend on "core"
+    /// let dependents = workspace.dependents_of("core");
+    ///
+    /// println!("Packages depending on core: {}", dependents.len());
+    /// for pkg in dependents {
+    ///     let name = pkg.borrow().package.borrow().name();
+    ///     println!("  - {}", name);
+    /// }
+    /// # }
+    /// ```
     #[must_use]
     pub fn dependents_of(&self, package_name: &str) -> Vec<Rc<RefCell<PackageInfo>>> {
         let packages: Vec<Package> =
@@ -517,6 +905,32 @@ impl Workspace {
     }
 
     /// Gets direct dependencies of a package.
+    ///
+    /// Finds all packages that the specified package directly depends on.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to find dependencies for
+    ///
+    /// # Returns
+    ///
+    /// A vector of package references that the specified package depends on.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::Workspace;
+    /// # fn example(workspace: &Workspace) {
+    /// // Find dependencies of "ui-components"
+    /// let dependencies = workspace.dependencies_of("ui-components");
+    ///
+    /// println!("Dependencies of ui-components: {}", dependencies.len());
+    /// for pkg in dependencies {
+    ///     let name = pkg.borrow().package.borrow().name();
+    ///     println!("  - {}", name);
+    /// }
+    /// # }
+    /// ```
     #[must_use]
     pub fn dependencies_of(&self, package_name: &str) -> Vec<Rc<RefCell<PackageInfo>>> {
         // Find the package - using let...else pattern
@@ -541,23 +955,92 @@ impl Workspace {
     }
 
     /// Gets workspace root path.
+    ///
+    /// # Returns
+    ///
+    /// The root path of the workspace.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::Workspace;
+    /// # fn example(workspace: &Workspace) {
+    /// let root = workspace.root_path();
+    /// println!("Workspace root: {}", root.display());
+    /// # }
+    /// ```
     #[must_use]
     pub fn root_path(&self) -> &Path {
         &self.root_path
     }
 
     /// Gets Git repository reference.
+    ///
+    /// # Returns
+    ///
+    /// An optional reference to the Git repository.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::Workspace;
+    /// # fn example(workspace: &Workspace) {
+    /// if let Some(repo) = workspace.git_repo() {
+    ///     // Use the Git repository
+    ///     if let Ok(sha) = repo.get_current_sha() {
+    ///         println!("Current Git SHA: {}", sha);
+    ///     }
+    /// } else {
+    ///     println!("No Git repository available");
+    /// }
+    /// # }
+    /// ```
     #[must_use]
     pub fn git_repo(&self) -> Option<&Repo> {
         self.git_repo.as_deref()
     }
 
     /// Gets package manager.
+    ///
+    /// # Returns
+    ///
+    /// An optional reference to the package manager.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::Workspace;
+    /// # fn example(workspace: &Workspace) {
+    /// if let Some(pm) = workspace.package_manager() {
+    ///     println!("Package manager: {:?}", pm);
+    /// } else {
+    ///     println!("No package manager detected");
+    /// }
+    /// # }
+    /// ```
     #[must_use]
     pub fn package_manager(&self) -> &Option<CorePackageManager> {
         &self.package_manager
     }
 
+    /// Checks if the workspace is empty.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the workspace has no packages, `false` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::Workspace;
+    /// # fn example(workspace: &Workspace) {
+    /// if workspace.is_empty() {
+    ///     println!("Workspace has no packages");
+    /// } else {
+    ///     println!("Workspace has {} packages", workspace.sorted_packages().len());
+    /// }
+    /// # }
+    /// ```
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.package_infos.is_empty()
@@ -565,8 +1048,29 @@ impl Workspace {
 
     /// Writes package changes to disk.
     ///
+    /// Saves any changes made to packages back to their package.json files.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if writing fails.
+    ///
     /// # Errors
+    ///
     /// Returns an error if writing changes fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::Workspace;
+    /// # fn example(workspace: &Workspace) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Make changes to packages
+    /// // ...
+    ///
+    /// // Write changes to disk
+    /// workspace.write_changes()?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn write_changes(&self) -> Result<(), WorkspaceError> {
         for package_info in &self.package_infos {
             package_info.borrow().write_package_json().map_err(WorkspaceError::PackageError)?;
@@ -578,8 +1082,34 @@ impl Workspace {
     ///
     /// By default, unresolved dependencies are treated as issues.
     ///
+    /// # Returns
+    ///
+    /// A validation report.
+    ///
     /// # Errors
+    ///
     /// Returns an error if validation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::Workspace;
+    /// # fn example(workspace: &Workspace) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Validate workspace
+    /// let report = workspace.validate()?;
+    ///
+    /// // Check for issues
+    /// if report.has_issues() {
+    ///     println!("Workspace has validation issues:");
+    ///     for issue in report.issues() {
+    ///         println!("- {}", issue);
+    ///     }
+    /// } else {
+    ///     println!("Workspace is valid");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn validate(&self) -> Result<ValidationReport, WorkspaceError> {
         // Extract non-root packages
         let non_root_packages: Vec<Package> = self
@@ -608,8 +1138,35 @@ impl Workspace {
 
     /// Validates workspace consistency with custom options.
     ///
+    /// # Arguments
+    ///
+    /// * `options` - Validation options
+    ///
+    /// # Returns
+    ///
+    /// A validation report.
+    ///
     /// # Errors
+    ///
     /// Returns an error if validation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use sublime_monorepo_tools::{Workspace, ValidationOptions};
+    /// # fn example(workspace: &Workspace) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Configure validation options
+    /// let options = ValidationOptions::new()
+    ///     .treat_unresolved_as_external(true)
+    ///     .with_internal_dependencies(vec!["core", "shared"]);
+    ///
+    /// // Validate with custom options
+    /// let report = workspace.validate_with_options(&options)?;
+    ///
+    /// println!("Validation complete: {} issues found", report.issues().len());
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn validate_with_options(
         &self,
         options: &ValidationOptions,
@@ -644,11 +1201,18 @@ impl Workspace {
         Ok(report)
     }
 
-    // Private helper methods
-
     /// Processes a package.json file.
     ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the package.json file
+    ///
+    /// # Returns
+    ///
+    /// An optional package info reference.
+    ///
     /// # Errors
+    ///
     /// Returns an error if processing fails.
     fn process_package_json(
         &self,
