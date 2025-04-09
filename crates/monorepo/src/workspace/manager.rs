@@ -98,8 +98,8 @@ impl WorkspaceManager {
 
         // Create analysis result
         let analysis = WorkspaceAnalysis {
-            cycle_detected: dependency_analysis.cycles_detected,
-            missing_dependencies: dependency_analysis.missing_dependencies,
+            cycles: dependency_analysis.cycles,
+            external_dependencies: dependency_analysis.external_dependencies,
             version_conflicts: dependency_analysis.version_conflicts,
             validation_issues: validation.has_issues(),
         };

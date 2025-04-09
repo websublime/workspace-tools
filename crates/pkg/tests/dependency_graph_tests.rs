@@ -2,9 +2,7 @@
 mod dependency_graph_tests {
     use std::rc::Rc;
     use std::{cell::RefCell, collections::HashMap};
-    use sublime_package_tools::{
-        Dependency, DependencyGraph, DependencyResolutionError, Package, Step,
-    };
+    use sublime_package_tools::{Dependency, DependencyGraph, Package, Step};
 
     // Helper function to create a simple dependency
     fn make_dependency(name: &str, version: &str) -> Rc<RefCell<Dependency>> {
@@ -96,7 +94,7 @@ mod dependency_graph_tests {
         ];
 
         let graph = DependencyGraph::from(packages.as_slice());
-        assert!(graph.detect_circular_dependencies().is_ok());
+        assert!(graph.has_cycles());
 
         // With a cycle
         let packages = vec![
@@ -107,14 +105,7 @@ mod dependency_graph_tests {
 
         let graph = DependencyGraph::from(packages.as_slice());
         let result = graph.detect_circular_dependencies();
-        assert!(result.is_err());
-
-        match result {
-            Err(DependencyResolutionError::CircularDependency { path }) => {
-                assert!(path.contains(&"pkg-a".to_string()));
-            }
-            _ => panic!("Expected CircularDependency error"),
-        }
+        assert!(result.has_cycles());
     }
 
     #[test]
@@ -127,8 +118,8 @@ mod dependency_graph_tests {
 
         let graph = DependencyGraph::from(packages.as_slice());
 
-        // Check for missing dependencies
-        let missing = graph.find_missing_dependencies();
+        // Check for external dependencies
+        let missing = graph.find_external_dependencies();
         assert_eq!(missing.len(), 1);
         assert_eq!(missing[0], "missing");
     }

@@ -44,7 +44,7 @@ impl FromStr for ChangeId {
 }
 
 /// Types of changes.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ChangeType {
     /// New feature or enhancement.

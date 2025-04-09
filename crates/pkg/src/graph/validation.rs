@@ -1,6 +1,6 @@
 #[derive(Debug)]
 pub enum ValidationIssue {
-    /// Circular dependency detected
+    /// Circular dependency detected - now just an issue, not a blocker
     CircularDependency { path: Vec<String> },
 
     /// Unresolved dependency
@@ -14,8 +14,9 @@ impl ValidationIssue {
     /// Returns true if this is a critical issue that should be fixed
     pub fn is_critical(&self) -> bool {
         match self {
-            Self::UnresolvedDependency { .. } | Self::CircularDependency { .. } => true,
-            Self::VersionConflict { .. } => false, // Consider version conflicts as warnings
+            // Circular dependencies are now marked as warnings, not critical errors
+            Self::UnresolvedDependency { .. } => true,
+            Self::VersionConflict { .. } | Self::CircularDependency { .. } => false, // Consider version conflicts as warnings
         }
     }
 

@@ -98,6 +98,27 @@ pub struct PackageVersionChange {
     pub bump_type: BumpType,
     /// Whether this was a dependency-only update
     pub is_dependency_update: bool,
+    /// Whether this update was due to being in a cycle
+    #[serde(default)]
+    pub is_cycle_update: bool,
+    /// Which cycle group this package belongs to (if any)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cycle_group: Option<Vec<String>>,
+}
+
+// Implement default for backward compatibility
+impl Default for PackageVersionChange {
+    fn default() -> Self {
+        Self {
+            package_name: String::new(),
+            previous_version: String::new(),
+            new_version: String::new(),
+            bump_type: BumpType::None,
+            is_dependency_update: false,
+            is_cycle_update: false,
+            cycle_group: None,
+        }
+    }
 }
 
 /// Settings for changelog generation.

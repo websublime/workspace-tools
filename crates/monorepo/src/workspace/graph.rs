@@ -8,8 +8,10 @@ use sublime_package_tools::ValidationReport;
 pub struct WorkspaceGraph {
     /// Whether cycles were detected in the graph
     pub cycles_detected: bool,
-    /// Missing dependencies
-    pub missing_dependencies: Vec<String>,
+    /// The actual cycle groups identified in the graph
+    pub cycles: Vec<Vec<String>>,
+    /// External dependencies
+    pub external_dependencies: Vec<String>,
     /// Version conflicts
     pub version_conflicts: HashMap<String, Vec<String>>,
     /// Validation report

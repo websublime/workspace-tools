@@ -4,9 +4,8 @@ use crate::{
     Dependency, DependencyResolutionError, Node, PackageError, Step, ValidationIssue,
     ValidationOptions, ValidationReport,
 };
-use petgraph::algo::is_cyclic_directed;
+use petgraph::algo::tarjan_scc;
 use petgraph::stable_graph::NodeIndex;
-use petgraph::visit::Dfs;
 use petgraph::{stable_graph::StableDiGraph, Direction};
 
 #[derive(Debug, Clone)]
@@ -14,6 +13,8 @@ pub struct DependencyGraph<'a, N: Node> {
     pub graph: StableDiGraph<Step<'a, N>, ()>,
     pub node_indices: HashMap<N::Identifier, NodeIndex>,
     pub dependents: HashMap<N::Identifier, Vec<N::Identifier>>,
+    // New field to store cycle information
+    pub cycles: Vec<Vec<N::Identifier>>,
 }
 
 impl<'a, N> From<&'a [N]> for DependencyGraph<'a, N>
@@ -69,7 +70,56 @@ where
             }
         }
 
-        Self { graph, node_indices, dependents }
+        // Detect cycles immediately using Tarjan's algorithm
+        let mut pg_graph = petgraph::Graph::<(), (), petgraph::Directed>::new();
+        let mut pg_indices = HashMap::new();
+
+        // Create a petgraph representation
+        for (id, &idx) in &node_indices {
+            if let Some(Step::Resolved(_)) = graph.node_weight(idx) {
+                let pg_idx = pg_graph.add_node(());
+                pg_indices.insert(id.clone(), pg_idx);
+            }
+        }
+
+        // Add edges
+        for (id, &idx) in &node_indices {
+            if let Some(&from_idx) = pg_indices.get(id) {
+                for neighbor in graph.neighbors_directed(idx, Direction::Outgoing) {
+                    if let Some(Step::Resolved(node)) = graph.node_weight(neighbor) {
+                        let dep_id = node.identifier();
+                        if let Some(&to_idx) = pg_indices.get(&dep_id) {
+                            pg_graph.add_edge(from_idx, to_idx, ());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Find strongly connected components (cycles)
+        let sccs = tarjan_scc(&pg_graph);
+
+        // Filter for actual cycles (SCCs with more than one node)
+        let mut cycles = Vec::new();
+        for scc in sccs {
+            if scc.len() > 1 {
+                let mut cycle = Vec::new();
+                for &idx in &scc {
+                    // Find the corresponding identifier
+                    for (id, &pg_idx) in &pg_indices {
+                        if pg_idx == idx {
+                            cycle.push(id.clone());
+                            break;
+                        }
+                    }
+                }
+                if !cycle.is_empty() {
+                    cycles.push(cycle);
+                }
+            }
+        }
+
+        Self { graph, node_indices, dependents, cycles }
     }
 }
 
@@ -112,10 +162,6 @@ where
     pub fn get_node(&self, id: &N::Identifier) -> Option<&Step<'a, N>> {
         self.get_node_index(id).and_then(|idx| self.graph.node_weight(idx))
     }
-
-    pub fn get_dependents(&self, id: &N::Identifier) -> Result<&Vec<N::Identifier>, PackageError> {
-        self.dependents.get(id).ok_or_else(|| PackageError::PackageNotFound(id.to_string()))
-    }
 }
 
 impl<'a, N> DependencyGraph<'a, N>
@@ -123,64 +169,41 @@ where
     N: Node,
 {
     /// Check for circular dependencies in the graph
-    pub fn detect_circular_dependencies(&self) -> Result<&Self, DependencyResolutionError> {
-        if is_cyclic_directed(&self.graph) {
-            // Find one of the cycles for more detailed error reporting
-            let cycle = self.find_cycle();
-
-            // Convert identifiers to strings for error reporting
-            let cycle_strings: Vec<String> = cycle.into_iter().map(|id| id.to_string()).collect();
-
-            return Err(DependencyResolutionError::CircularDependency { path: cycle_strings });
-        }
-
-        Ok(self)
+    ///
+    /// This method no longer returns an error but instead provides information
+    /// about any cycles detected in the dependency graph.
+    ///
+    /// Returns a reference to the graph for method chaining.
+    pub fn detect_circular_dependencies(&self) -> &Self {
+        // Cycles were already detected during construction
+        self
     }
 
-    /// Find a cycle in the graph, if one exists
-    fn find_cycle(&self) -> Vec<N::Identifier> {
-        let mut cycle = Vec::new();
-
-        // Use Petgraph's cycle detection algorithm
-        // A simpler approach that works for our needs
-        for node_idx in self.graph.node_indices() {
-            let node_weight = self.graph.node_weight(node_idx).expect("Node should exist");
-            if let Step::Resolved(node) = node_weight {
-                // Check if this node is part of a cycle
-                let mut dfs = Dfs::new(&self.graph, node_idx);
-
-                // Start a DFS from this node
-                while let Some(next_idx) = dfs.next(&self.graph) {
-                    // If we can follow edges and get back to our source, we have a cycle
-                    for neighbor in self.graph.neighbors(next_idx) {
-                        if neighbor == node_idx && next_idx != node_idx {
-                            // Found a cycle
-                            cycle.push(node.identifier());
-
-                            // Add the immediate successor to the cycle as well
-                            if let Some(Step::Resolved(next_node)) =
-                                self.graph.node_weight(next_idx)
-                            {
-                                cycle.push(next_node.identifier());
-                            }
-
-                            // Return early - we found a cycle
-                            return cycle;
-                        }
-                    }
-                }
-            }
-        }
-
-        cycle
+    /// Returns whether the graph has any circular dependencies
+    pub fn has_cycles(&self) -> bool {
+        !self.cycles.is_empty()
     }
 
-    /// Find all missing dependencies in the workspace
-    pub fn find_missing_dependencies(&self) -> Vec<String>
+    /// Returns information about the cycles in the graph
+    pub fn get_cycles(&self) -> &Vec<Vec<N::Identifier>> {
+        &self.cycles
+    }
+
+    /// Get the cycle groups as strings for easier reporting
+    pub fn get_cycle_strings(&self) -> Vec<Vec<String>> {
+        self.cycles
+            .iter()
+            .map(|cycle| cycle.iter().map(std::string::ToString::to_string).collect())
+            .collect()
+    }
+
+    // Add this new method with the correct name
+    /// Find all external dependencies in the workspace (dependencies not found within the workspace)
+    pub fn find_external_dependencies(&self) -> Vec<String>
     where
         N: Node<DependencyType = Dependency>,
     {
-        let mut missing = Vec::new();
+        let mut external = Vec::new();
 
         // Get all package names in the graph
         let resolved_node_names: HashSet<String> =
@@ -190,11 +213,11 @@ where
         for dep in self.unresolved_dependencies() {
             let name = dep.name().to_string();
             if !resolved_node_names.contains(&name) {
-                missing.push(name);
+                external.push(name);
             }
         }
 
-        missing
+        external
     }
 
     /// Find all version conflicts in the graph
@@ -258,13 +281,11 @@ where
     {
         let mut report = ValidationReport::new();
 
-        // Check for circular dependencies
-        if let Err(e) = self.detect_circular_dependencies() {
-            if let DependencyResolutionError::CircularDependency { path } = e {
-                report.add_issue(ValidationIssue::CircularDependency { path });
-            } else {
-                // Unexpected error type
-                return Err(e);
+        // Check for circular dependencies - now just adds information to report
+        if !self.cycles.is_empty() {
+            // Add each cycle as a separate issue
+            for cycle in self.get_cycle_strings() {
+                report.add_issue(ValidationIssue::CircularDependency { path: cycle });
             }
         }
 
@@ -284,6 +305,11 @@ where
         }
 
         Ok(report)
+    }
+
+    /// Get dependents of a node, even if cycles exist
+    pub fn get_dependents(&self, id: &N::Identifier) -> Result<&Vec<N::Identifier>, PackageError> {
+        self.dependents.get(id).ok_or_else(|| PackageError::PackageNotFound(id.to_string()))
     }
 
     /// Check if dependencies can be upgraded to newer compatible versions
@@ -310,13 +336,11 @@ where
     {
         let mut report = ValidationReport::new();
 
-        // Check for circular dependencies
-        if let Err(e) = self.detect_circular_dependencies() {
-            if let DependencyResolutionError::CircularDependency { path } = e {
-                report.add_issue(ValidationIssue::CircularDependency { path });
-            } else {
-                // Unexpected error type
-                return Err(e);
+        // Check for circular dependencies - now just adds information to report
+        if !self.cycles.is_empty() {
+            // Add each cycle as a separate issue
+            for cycle in self.get_cycle_strings() {
+                report.add_issue(ValidationIssue::CircularDependency { path: cycle });
             }
         }
 

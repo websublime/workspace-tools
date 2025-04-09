@@ -553,6 +553,204 @@ impl ChangeTracker {
         self.store.as_mut()
     }
 
+    /// Generate a report of package changes with cycle information
+    pub fn generate_changes_report(&self, with_cycle_info: bool) -> ChangeResult<String> {
+        let mut report = String::new();
+
+        // Get all changes by package
+        let changes_by_package = self.store().get_all_changes_by_package()?;
+
+        if changes_by_package.is_empty() {
+            report.push_str("No changes found.\n");
+            return Ok(report);
+        }
+
+        // Get cycle information if requested
+        let mut cycle_groups = Vec::new();
+        let mut cycle_membership = HashMap::new();
+
+        if with_cycle_info {
+            let sorted_with_cycles = self.workspace.get_sorted_packages_with_circulars();
+            cycle_groups = sorted_with_cycles
+                .circular
+                .iter()
+                .map(|group| {
+                    group
+                        .iter()
+                        .map(|p| p.borrow().package.borrow().name().to_string())
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+
+            // Build cycle membership lookup
+            for (i, group) in cycle_groups.iter().enumerate() {
+                for pkg_name in group {
+                    cycle_membership.insert(pkg_name.clone(), i);
+                }
+            }
+        }
+
+        // First display cycle information if requested
+        if with_cycle_info && !cycle_groups.is_empty() {
+            report.push_str("Circular dependency groups detected:\n");
+
+            for (i, group) in cycle_groups.iter().enumerate() {
+                report.push_str(&format!("  Group {}: {}\n", i + 1, group.join(" → ")));
+            }
+            report.push('\n');
+        }
+
+        // Report changes by package
+        report.push_str("Package Changes:\n");
+
+        // Sort packages for consistent output, putting cycle members first
+        let mut packages: Vec<_> = changes_by_package.keys().collect();
+        packages.sort_by(|a, b| {
+            let a_in_cycle = cycle_membership.contains_key(*a);
+            let b_in_cycle = cycle_membership.contains_key(*b);
+
+            if a_in_cycle && !b_in_cycle {
+                std::cmp::Ordering::Less
+            } else if !a_in_cycle && b_in_cycle {
+                std::cmp::Ordering::Greater
+            } else {
+                a.cmp(b)
+            }
+        });
+
+        for package_name in packages {
+            let changes = &changes_by_package[package_name];
+
+            // Indicate if package is part of a cycle
+            let cycle_indicator = if let Some(&cycle_idx) = cycle_membership.get(package_name) {
+                format!(" (part of cycle group {})", cycle_idx + 1)
+            } else {
+                String::new()
+            };
+
+            report.push_str(&format!("\n{package_name}{cycle_indicator}:\n"));
+
+            if changes.is_empty() {
+                report.push_str("  No changes\n");
+                continue;
+            }
+
+            // Group by change type
+            let mut by_type: HashMap<&ChangeType, Vec<&Change>> = HashMap::new();
+
+            for change in changes {
+                by_type.entry(&change.change_type).or_default().push(change);
+            }
+
+            // Print changes by type
+            for (change_type, type_changes) in by_type {
+                report.push_str(&format!("  {change_type}:\n"));
+
+                for change in type_changes {
+                    let breaking = if change.breaking { " [BREAKING]" } else { "" };
+                    report.push_str(&format!("    - {}{}\n", change.description, breaking));
+                }
+            }
+        }
+
+        Ok(report)
+    }
+
+    /// Visualize the dependency graph including cycles
+    #[allow(clippy::single_char_add_str)]
+    pub fn visualize_dependency_graph(&self, include_cycles: bool) -> ChangeResult<String> {
+        let mut output = String::new();
+
+        // Get cycle information
+        let sorted_with_cycles = self.workspace.get_sorted_packages_with_circulars();
+        let cycle_groups = sorted_with_cycles
+            .circular
+            .iter()
+            .map(|group| {
+                group
+                    .iter()
+                    .map(|p| p.borrow().package.borrow().name().to_string())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        // Build cycle membership lookup
+        let mut cycle_membership = HashMap::new();
+        for (i, group) in cycle_groups.iter().enumerate() {
+            for pkg_name in group {
+                cycle_membership.insert(pkg_name.clone(), i);
+            }
+        }
+
+        // Generate ASCII art representation of the dependency graph
+        output.push_str("Package Dependency Graph:\n");
+        output.push_str("========================\n\n");
+
+        // Display cycle information if requested
+        if include_cycles && !cycle_groups.is_empty() {
+            output.push_str("Cycle Groups:\n");
+
+            for (i, group) in cycle_groups.iter().enumerate() {
+                output.push_str(&format!("  Group {}: {}\n", i + 1, group.join(" → ")));
+            }
+            output.push_str("\n");
+        }
+
+        // Create a simplified graph visualization
+        let packages = self.workspace.sorted_packages();
+
+        // Process each package
+        for pkg_info in &packages {
+            let pkg = pkg_info.borrow();
+            let package = pkg.package.borrow();
+            let pkg_name = package.name().to_string();
+
+            // Skip root or special packages if desired
+            if pkg_name == "root" || pkg_name == "monorepo" {
+                continue;
+            }
+
+            // Check if this package is in a cycle
+            let cycle_marker = if let Some(&cycle_idx) = cycle_membership.get(&pkg_name) {
+                format!(" (cycle group {})", cycle_idx + 1)
+            } else {
+                String::new()
+            };
+
+            output.push_str(&format!("\n{pkg_name}{cycle_marker}\n"));
+
+            // List dependencies
+            let deps = package.dependencies();
+            if deps.is_empty() {
+                output.push_str("  No dependencies\n");
+            } else {
+                output.push_str("  Dependencies:\n");
+
+                for dep in deps {
+                    let dep_name = dep.borrow().name().to_string();
+
+                    // Check if dependency is in a cycle
+                    let dep_cycle = if let Some(&cycle_idx) = cycle_membership.get(&dep_name) {
+                        format!(" (cycle group {})", cycle_idx + 1)
+                    } else {
+                        String::new()
+                    };
+
+                    // Check if this forms a cyclic dependency
+                    let is_cyclic = cycle_membership.get(&pkg_name)
+                        == cycle_membership.get(&dep_name)
+                        && cycle_membership.contains_key(&pkg_name);
+
+                    let cyclic_marker = if is_cyclic { " ⟲" } else { "" };
+
+                    output.push_str(&format!("    - {dep_name}{dep_cycle}{cyclic_marker}\n"));
+                }
+            }
+        }
+
+        Ok(output)
+    }
+
     // Helper method to find the nearest package.json and extract its name
     fn find_package_name_from_nearest_package_json(file_path: &Path) -> Option<String> {
         let mut current = file_path;

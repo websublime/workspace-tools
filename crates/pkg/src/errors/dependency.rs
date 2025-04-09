@@ -12,7 +12,8 @@ pub enum DependencyResolutionError {
     NoValidVersion { name: String, requirements: Vec<String> },
     #[error("Dependency {name} not found in package {package}")]
     DependencyNotFound { name: String, package: String },
-    #[error("Circular dependencies founded: {path:?}")]
+    // Note: We keep this error for backward compatibility, but we won't generate it anymore
+    #[error("Circular dependencies found: {path:?}")]
     CircularDependency { path: Vec<String> },
 }
 

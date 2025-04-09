@@ -152,20 +152,14 @@ fn find_nodes_in_cycles<N: Node>(graph: &DependencyGraph<N>) -> HashSet<String> 
     let mut nodes_in_cycles = HashSet::new();
 
     // Quick check - if there are no cycles, return empty set
-    if graph.detect_circular_dependencies().is_ok() {
+    if !graph.has_cycles() {
         return nodes_in_cycles;
     }
 
-    // Find strongly connected components (cycles)
-    let scc = petgraph::algo::kosaraju_scc(&graph.graph);
-    for component in scc {
-        if component.len() > 1 {
-            // This is a cycle - add all nodes in it to the result
-            for &node_idx in &component {
-                if let Step::Resolved(node) = &graph.graph[node_idx] {
-                    nodes_in_cycles.insert(node.identifier().to_string());
-                }
-            }
+    // Get all nodes involved in cycles from the graph's cycles field
+    for cycle in graph.get_cycles() {
+        for node_id in cycle {
+            nodes_in_cycles.insert(node_id.to_string());
         }
     }
 

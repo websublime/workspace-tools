@@ -66,6 +66,72 @@ impl Workspace {
         Ok(Self { root_path, package_infos: Vec::new(), package_manager, git_repo, config })
     }
 
+    /// Returns information about circular dependencies in the workspace.
+    ///
+    /// This method provides explicit information about dependency cycles
+    /// without treating them as errors. It returns groups of packages that
+    /// form circular dependencies.
+    #[must_use]
+    pub fn get_circular_dependencies(&self) -> Vec<Vec<String>> {
+        self.get_sorted_packages_with_circulars()
+            .circular
+            .iter()
+            .map(|group| {
+                group.iter().map(|p| p.borrow().package.borrow().name().to_string()).collect()
+            })
+            .collect()
+    }
+
+    /// Checks if a package is part of a circular dependency.
+    ///
+    /// Returns `true` if the package is involved in a circular dependency.
+    #[must_use]
+    pub fn is_in_cycle(&self, package_name: &str) -> bool {
+        let circles = self.get_sorted_packages_with_circulars();
+
+        circles.circular.iter().any(|group| {
+            group.iter().any(|pkg| pkg.borrow().package.borrow().name() == package_name)
+        })
+    }
+
+    /// Gets the cycle group containing a package, if any.
+    ///
+    /// Returns the group of packages forming a cycle that includes the specified
+    /// package, or `None` if the package is not part of a cycle.
+    #[must_use]
+    pub fn get_cycle_for_package(&self, package_name: &str) -> Option<Vec<String>> {
+        let circles = self.get_sorted_packages_with_circulars();
+
+        for group in &circles.circular {
+            if group.iter().any(|pkg| pkg.borrow().package.borrow().name() == package_name) {
+                return Some(
+                    group.iter().map(|p| p.borrow().package.borrow().name().to_string()).collect(),
+                );
+            }
+        }
+
+        None
+    }
+
+    /// Returns a mapping of packages to their cycle groups.
+    ///
+    /// The returned HashMap maps package names to cycle group indices.
+    /// Packages not in cycles are not included in the map.
+    #[must_use]
+    pub fn get_cycle_membership(&self) -> HashMap<String, usize> {
+        let circles = self.get_sorted_packages_with_circulars();
+        let mut membership = HashMap::new();
+
+        for (i, group) in circles.circular.iter().enumerate() {
+            for pkg in group {
+                let name = pkg.borrow().package.borrow().name().to_string();
+                membership.insert(name, i);
+            }
+        }
+
+        membership
+    }
+
     /// Discovers packages with custom options.
     ///
     /// # Errors
@@ -186,26 +252,31 @@ impl Workspace {
         // Create the dependency graph
         let graph = DependencyGraph::from(packages.as_slice());
 
-        // Check for cycles
-        let cycles_detected = graph.detect_circular_dependencies().is_err();
+        // Get cycles directly from the graph instead of checking for errors
+        let cycles_detected = graph.has_cycles();
 
-        // Get missing dependencies
-        let missing_dependencies = graph.find_missing_dependencies();
+        // Get any cycle information
+        let cycles = graph.get_cycle_strings();
+
+        // Get external dependencies (previously called missing dependencies)
+        let external_dependencies = graph.find_external_dependencies();
 
         // Get version conflicts
         let version_conflicts = graph.find_version_conflicts_for_package();
 
-        // Run validation if no cycles
-        let validation = if cycles_detected {
-            None
-        } else {
-            match graph.validate_package_dependencies() {
-                Ok(report) => Some(report),
-                Err(_) => None,
-            }
+        // Run validation
+        let validation = match graph.validate_package_dependencies() {
+            Ok(report) => Some(report),
+            Err(_) => None,
         };
 
-        Ok(WorkspaceGraph { cycles_detected, missing_dependencies, version_conflicts, validation })
+        Ok(WorkspaceGraph {
+            cycles_detected,
+            cycles,
+            external_dependencies,
+            version_conflicts,
+            validation,
+        })
     }
 
     /// Gets a package by name.
@@ -394,7 +465,8 @@ impl Workspace {
 
         let graph = DependencyGraph::from(packages.as_slice());
 
-        if check && graph.detect_circular_dependencies().is_err() {
+        // Updated to use has_cycles() instead of checking for errors
+        if check && graph.has_cycles() {
             return Vec::new();
         }
 
@@ -431,26 +503,16 @@ impl Workspace {
 
     /// Gets packages that depend on a specific package.
     #[must_use]
-    pub fn dependents_of(
-        &self,
-        package_name: &str,
-        check_circular: Option<bool>,
-    ) -> Vec<Rc<RefCell<PackageInfo>>> {
-        let check = check_circular.unwrap_or(true); // Default to true for backward compatibility
-
+    pub fn dependents_of(&self, package_name: &str) -> Vec<Rc<RefCell<PackageInfo>>> {
         let packages: Vec<Package> =
             self.package_infos.iter().map(|info| info.borrow().package.borrow().clone()).collect();
 
         let graph = DependencyGraph::from(packages.as_slice());
 
-        // Only check for cycles if the caller wants it
-        if check && graph.detect_circular_dependencies().is_err() {
-            return Vec::new();
-        }
-
+        // Always get dependents, even if cycles exist
         match graph.get_dependents(&package_name.to_string()) {
             Ok(dependents) => dependents.iter().filter_map(|name| self.get_package(name)).collect(),
-            Err(_) => Vec::new(),
+            Err(_) => Vec::new(), // Only for package not found errors
         }
     }
 
