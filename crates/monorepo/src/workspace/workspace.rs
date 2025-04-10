@@ -825,7 +825,7 @@ impl Workspace {
         let packages: Vec<Package> =
             self.package_infos.iter().map(|info| info.borrow().package.borrow().clone()).collect();
 
-        let graph = DependencyGraph::from(packages.as_slice());
+        let mut graph = DependencyGraph::from(packages.as_slice());
 
         // Updated to use has_cycles() instead of checking for errors
         if check && graph.has_cycles() {
@@ -895,7 +895,7 @@ impl Workspace {
         let packages: Vec<Package> =
             self.package_infos.iter().map(|info| info.borrow().package.borrow().clone()).collect();
 
-        let graph = DependencyGraph::from(packages.as_slice());
+        let mut graph = DependencyGraph::from(packages.as_slice());
 
         // Always get dependents, even if cycles exist
         match graph.get_dependents(&package_name.to_string()) {

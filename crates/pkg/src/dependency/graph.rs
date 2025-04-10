@@ -902,8 +902,17 @@ where
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_dependents(&self, id: &N::Identifier) -> Result<&Vec<N::Identifier>, PackageError> {
-        self.dependents.get(id).ok_or_else(|| PackageError::PackageNotFound(id.to_string()))
+    pub fn get_dependents(
+        &mut self,
+        id: &N::Identifier,
+    ) -> Result<&Vec<N::Identifier>, PackageError> {
+        // First check if the package exists in the graph
+        if !self.node_indices.contains_key(id) {
+            return Err(PackageError::PackageNotFound(format!("{id:?}")));
+        }
+
+        // Use entry API to insert an empty vector if the key doesn't exist
+        Ok(self.dependents.entry(id.clone()).or_default())
     }
 
     /// Check if dependencies can be upgraded to newer compatible versions.
