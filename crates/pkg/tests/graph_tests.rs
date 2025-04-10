@@ -4,7 +4,7 @@ mod graph_tests {
     use std::rc::Rc;
     use sublime_package_tools::{
         build_dependency_graph_from_packages, generate_ascii, generate_dot, Dependency, DotOptions,
-        Package, ValidationIssue, ValidationOptions, ValidationReport,
+        Package, Step, ValidationIssue, ValidationOptions, ValidationReport,
     };
 
     // Helper function to create test packages
@@ -322,5 +322,153 @@ mod graph_tests {
 
         assert!(has_circular, "CircularDependency should be a warning");
         assert!(has_version_conflict, "VersionConflict should be a warning");
+    }
+
+    #[test]
+    fn test_dot_visualization() {
+        let packages = create_test_packages(); // Using existing helper function
+        let graph = build_dependency_graph_from_packages(&packages);
+
+        // Test with default options
+        let default_options = DotOptions::default();
+        let dot_result = generate_dot(&graph, &default_options);
+        assert!(dot_result.is_ok());
+
+        let dot_string = dot_result.unwrap();
+        assert!(dot_string.contains("digraph"));
+        assert!(dot_string.contains("pkg-a"));
+        assert!(dot_string.contains("pkg-b"));
+        assert!(dot_string.contains("pkg-c"));
+
+        // Test with custom options
+        let custom_options = DotOptions {
+            title: "Custom Graph".to_string(),
+            show_external: false,
+            highlight_cycles: true,
+        };
+
+        let custom_dot = generate_dot(&graph, &custom_options);
+        assert!(custom_dot.is_ok());
+        let custom_string = custom_dot.unwrap();
+        assert!(custom_string.contains("Custom Graph"));
+    }
+
+    #[test]
+    fn test_ascii_visualization() {
+        // Test on a graph with no nodes
+        let empty_packages: Vec<Package> = Vec::new();
+        let empty_graph = build_dependency_graph_from_packages(&empty_packages);
+
+        let ascii_result = generate_ascii(&empty_graph);
+        assert!(ascii_result.is_ok());
+        let ascii_string = ascii_result.unwrap();
+        assert!(ascii_string.contains("(empty)"));
+
+        // Test on a normal graph
+        let packages = create_test_packages();
+        let graph = build_dependency_graph_from_packages(&packages);
+
+        let ascii_result = generate_ascii(&graph);
+        assert!(ascii_result.is_ok());
+        let ascii_string = ascii_result.unwrap();
+
+        // Check for expected content
+        assert!(ascii_string.contains("pkg-a"));
+        assert!(ascii_string.contains("├──") || ascii_string.contains("└──")); // Tree branches
+    }
+
+    #[test]
+    fn test_validation_issue_messages() {
+        // Create different issue types and test their messages
+        let circular = ValidationIssue::CircularDependency {
+            path: vec!["a".to_string(), "b".to_string(), "a".to_string()],
+        };
+
+        let unresolved = ValidationIssue::UnresolvedDependency {
+            name: "missing-pkg".to_string(),
+            version_req: "^1.0.0".to_string(),
+        };
+
+        let conflict = ValidationIssue::VersionConflict {
+            name: "shared-pkg".to_string(),
+            versions: vec!["1.0.0".to_string(), "2.0.0".to_string()],
+        };
+
+        // Check messages
+        assert!(circular.message().contains("Circular dependency"));
+        assert!(circular.message().contains("a -> b -> a"));
+
+        assert!(unresolved.message().contains("Unresolved dependency"));
+        assert!(unresolved.message().contains("missing-pkg"));
+
+        assert!(conflict.message().contains("Version conflict"));
+        assert!(conflict.message().contains("shared-pkg"));
+
+        // Check criticality
+        assert!(!circular.is_critical()); // Circular dependencies are warnings
+        assert!(unresolved.is_critical()); // Unresolved dependencies are critical
+        assert!(!conflict.is_critical()); // Version conflicts are warnings
+    }
+
+    #[test]
+    fn test_graph_node_and_step() {
+        // Create a test package
+        let pkg = Package::new("test-pkg", "1.0.0", None).unwrap();
+
+        // Create resolved and unresolved steps with explicit type parameters
+        let resolved = Step::<Package>::Resolved(&pkg);
+        let unresolved = Step::<Package>::Unresolved(Dependency::new("missing", "^1.0.0").unwrap());
+
+        // Test step methods
+        assert!(resolved.is_resolved());
+        assert!(!unresolved.is_resolved());
+
+        assert!(resolved.as_resolved().is_some());
+        assert!(unresolved.as_resolved().is_none());
+
+        assert!(resolved.as_unresolved().is_none());
+        assert!(unresolved.as_unresolved().is_some());
+
+        // Test display
+        assert_eq!(format!("{resolved}"), "Resolved");
+        assert_eq!(format!("{unresolved}"), "Unresolved");
+    }
+
+    #[test]
+    fn test_graph_iteration() {
+        let packages = create_test_packages(); // Using existing helper function
+        let mut graph = build_dependency_graph_from_packages(&packages);
+
+        // Dependency-order iteration (leaf nodes first)
+        // pkg-c should come first (no dependencies)
+        // Then pkg-b (depends on c)
+        // Then pkg-a (depends on b and c)
+
+        let first = graph.next();
+        assert!(first.is_some());
+        if let Some(Step::Resolved(node)) = first {
+            assert_eq!(node.name(), "pkg-c"); // pkg-c has no dependencies
+        } else {
+            panic!("Expected resolved node for pkg-c");
+        }
+
+        let second = graph.next();
+        assert!(second.is_some());
+        if let Some(Step::Resolved(node)) = second {
+            assert_eq!(node.name(), "pkg-b"); // pkg-b depends only on pkg-c
+        } else {
+            panic!("Expected resolved node for pkg-b");
+        }
+
+        let third = graph.next();
+        assert!(third.is_some());
+        if let Some(Step::Resolved(node)) = third {
+            assert_eq!(node.name(), "pkg-a"); // pkg-a depends on pkg-b and pkg-c
+        } else {
+            panic!("Expected resolved node for pkg-a");
+        }
+
+        // No more nodes
+        assert!(graph.next().is_none());
     }
 }

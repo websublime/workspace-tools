@@ -1,11 +1,12 @@
 #[cfg(test)]
 mod package_tests {
     use serde_json::json;
-    use std::cell::RefCell;
+    use std::collections::HashMap;
     use std::rc::Rc;
+    use std::{cell::RefCell, time::Duration};
     use sublime_package_tools::{
-        ChangeType, Dependency, DependencyChange, DependencyRegistry, Package, PackageDiff,
-        PackageInfo,
+        package_scope_name_version, CacheEntry, ChangeType, Dependency, DependencyChange,
+        DependencyRegistry, Package, PackageDiff, PackageInfo, ResolutionResult,
     };
 
     #[test]
@@ -257,5 +258,154 @@ mod package_tests {
         // Removed dependency
         let removed = DependencyChange::new("moment", Some("^2.29.1"), None, ChangeType::Removed);
         assert_eq!(removed.change_type, ChangeType::Removed);
+    }
+
+    #[test]
+    fn test_cache_entry() {
+        // Create a cache entry with a string
+        let entry = CacheEntry::new(String::from("cached data"));
+
+        // Test valid case - short TTL
+        let short_ttl = Duration::from_millis(100); // 100ms
+        assert!(entry.is_valid(short_ttl));
+
+        // Test expiration
+        std::thread::sleep(Duration::from_millis(150)); // Sleep longer than TTL
+        assert!(!entry.is_valid(short_ttl));
+
+        // Test get
+        assert_eq!(entry.get(), "cached data");
+
+        // Test with complex data
+        let complex_entry = CacheEntry::new(vec![1, 2, 3]);
+        assert_eq!(complex_entry.get(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_package_scope_metadata() {
+        // Test simple scoped package
+        let simple = package_scope_name_version("@scope/package");
+        assert!(simple.is_some());
+        let metadata = simple.unwrap();
+        assert_eq!(metadata.name, "@scope/package");
+        assert_eq!(metadata.version, "latest");
+        assert!(metadata.path.is_none());
+
+        // Test with version
+        let with_version = package_scope_name_version("@scope/package@1.2.3");
+        assert!(with_version.is_some());
+        let metadata = with_version.unwrap();
+        assert_eq!(metadata.name, "@scope/package");
+        assert_eq!(metadata.version, "1.2.3");
+        assert!(metadata.path.is_none());
+
+        // Test with path
+        let with_path = package_scope_name_version("@scope/package@1.2.3@lib/index.js");
+        assert!(with_path.is_some());
+        let metadata = with_path.unwrap();
+        assert_eq!(metadata.name, "@scope/package");
+        assert_eq!(metadata.version, "1.2.3");
+        assert_eq!(metadata.path, Some("lib/index.js".to_string()));
+
+        // Test with colon format
+        let colon_format = package_scope_name_version("@scope/package:1.2.3");
+        assert!(colon_format.is_some());
+        let metadata = colon_format.unwrap();
+        assert_eq!(metadata.name, "@scope/package");
+        assert_eq!(metadata.version, "1.2.3");
+
+        // Test non-scoped package
+        let non_scoped = package_scope_name_version("regular-package");
+        assert!(non_scoped.is_none());
+    }
+
+    #[test]
+    fn test_package_as_node() {
+        // Import Node trait to bring trait methods into scope
+        use sublime_package_tools::Node;
+
+        // Test Package implementation of Node trait
+        let pkg = Package::new("test-pkg", "1.0.0", None).unwrap();
+
+        // Test identifier
+        assert_eq!(pkg.identifier(), "test-pkg".to_string());
+
+        // Create a dependency that matches the package
+        let matching_dep = Dependency::new("test-pkg", "^1.0.0").unwrap();
+
+        // Test matches
+        assert!(pkg.matches(&matching_dep));
+
+        // Test with non-matching dependency
+        let non_matching_dep = Dependency::new("test-pkg", "^2.0.0").unwrap();
+        assert!(!pkg.matches(&non_matching_dep));
+
+        // Test dependencies_vec returns empty for a package with no deps
+        let deps = pkg.dependencies_vec();
+        assert_eq!(deps.len(), 0);
+    }
+
+    #[test]
+    fn test_package_info_dependency_resolution() {
+        // Create package with dependencies
+        let pkg = Package::new(
+            "test-pkg",
+            "1.0.0",
+            Some(vec![
+                Rc::new(RefCell::new(Dependency::new("react", "^17.0.0").unwrap())),
+                Rc::new(RefCell::new(Dependency::new("lodash", "^4.17.20").unwrap())),
+            ]),
+        )
+        .unwrap();
+
+        // Create package info with JSON
+        let pkg_info = PackageInfo::new(
+            pkg,
+            "/path/to/package.json".to_string(),
+            "/path/to".to_string(),
+            "relative/path".to_string(),
+            json!({
+                "name": "test-pkg",
+                "version": "1.0.0",
+                "dependencies": {
+                    "react": "^17.0.0",
+                    "lodash": "^4.17.20"
+                }
+            }),
+        );
+
+        // Create a resolution result
+        let mut resolved_versions = HashMap::new();
+        resolved_versions.insert("react".to_string(), "^18.0.0".to_string());
+        resolved_versions.insert("lodash".to_string(), "^4.17.21".to_string());
+
+        let resolution = ResolutionResult {
+            resolved_versions,
+            updates_required: vec![], // Not needed for this test
+        };
+
+        // Apply resolution
+        assert!(pkg_info.apply_dependency_resolution(&resolution).is_ok());
+
+        // Check package was updated
+        let pkg_ref = pkg_info.package.borrow();
+
+        // Check both react and lodash were updated in the package
+        for dep in pkg_ref.dependencies() {
+            let dep_borrow = dep.borrow();
+            if dep_borrow.name() == "react" {
+                assert_eq!(dep_borrow.version().to_string(), "^18.0.0");
+            } else if dep_borrow.name() == "lodash" {
+                assert_eq!(dep_borrow.version().to_string(), "^4.17.21");
+            }
+        }
+
+        // Also check the JSON was updated
+        let json_ref = pkg_info.pkg_json.borrow();
+        let deps = &json_ref["dependencies"];
+        assert_eq!(deps["react"], "^18.0.0");
+        assert_eq!(deps["lodash"], "^4.17.21");
+
+        // No need to test write_package_json as it requires filesystem operations
     }
 }

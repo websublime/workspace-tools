@@ -418,15 +418,19 @@ impl RegistryManager {
                 let key = key.trim();
                 let value = value.trim();
 
+                // Handle exact match for the default registry
+                if key == "registry" {
+                    self.add_registry(value, RegistryType::Npm);
+                    self.set_default_registry(value)?;
+                    continue;
+                }
+
                 // Handle registry scopes
                 if let Some(registry_key) = key.strip_suffix(":registry") {
                     if registry_key.starts_with('@') {
                         let scope = registry_key.trim_start_matches('@');
                         self.add_registry(value, RegistryType::Npm);
                         self.associate_scope(scope, value)?;
-                    } else if registry_key == "registry" {
-                        self.add_registry(value, RegistryType::Npm);
-                        self.set_default_registry(value)?;
                     }
                 }
 
