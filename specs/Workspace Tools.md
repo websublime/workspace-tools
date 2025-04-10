@@ -1,4 +1,19 @@
-# Sublime Monorepo Tools - Comprehensive System Design
+---
+type: Project
+collections: Workspace Project
+title: Workspace Tools
+description: System Design
+icon: Ⓜ️
+tags: [cli, rust, workspace-tools]
+status: null
+timeFrame: null
+collaborators: null
+coverImage: null
+---
+
+# Workspace Tools
+
+# **Sublime Monorepo Tools - Comprehensive System Design**
 
 ## Overview
 
@@ -6,7 +21,7 @@
 
 ## System Architecture
 
-```
+```bash
 ┌─────────────────────────────────────────────────────────────────┐
 │                     Workspace Node Tools                        │
 │                                                                 │
@@ -44,7 +59,7 @@
 
 ## Core Module Structure
 
-```
+```bash
 sublime_monorepo_tools/
 ├── Cargo.toml
 └── src/
@@ -109,7 +124,6 @@ The primary interface for discovering, loading, and managing monorepo workspaces
 pub struct WorkspaceManager {
     // Internal implementation
 }
-
 impl WorkspaceManager {
     /// Create a new workspace manager
     pub fn new() -> Self;
@@ -145,7 +159,6 @@ pub struct Workspace {
     package_manager: Option<CorePackageManager>,
     git_repo: Option<Rc<Repo>>,
 }
-
 impl Workspace {
     /// Get a package by name
     pub fn get_package(&self, name: &str) -> Option<Rc<RefCell<PackageInfo>>>;
@@ -194,7 +207,6 @@ pub struct ChangeTracker {
     workspace: Rc<Workspace>,
     store: Box<dyn ChangeStore>,
 }
-
 impl ChangeTracker {
     /// Create a new change tracker
     pub fn new(
@@ -254,7 +266,6 @@ pub struct Change {
     /// Release version (None if unreleased)
     pub release_version: Option<String>,
 }
-
 /// Collection of related changes
 pub struct Changeset {
     /// Unique identifier
@@ -266,7 +277,6 @@ pub struct Changeset {
     /// Creation timestamp
     pub created_at: DateTime<Utc>,
 }
-
 /// Types of changes
 pub enum ChangeType {
     Feature,
@@ -296,7 +306,6 @@ pub struct VersionManager<'a> {
     workspace: &'a Workspace,
     change_tracker: Option<&'a ChangeTracker>,
 }
-
 impl<'a> VersionManager<'a> {
     /// Create a new version manager
     pub fn new(
@@ -353,7 +362,6 @@ pub enum VersionBumpStrategy {
     /// Manually specified versions
     Manual(HashMap<String, String>),
 }
-
 /// Version bump suggestion
 pub struct VersionSuggestion {
     /// Package name
@@ -382,7 +390,6 @@ pub struct TaskRunner<'a> {
     tasks: HashMap<String, Task>,
     max_parallelism: usize,
 }
-
 impl<'a> TaskRunner<'a> {
     /// Create a new task runner
     pub fn new(
@@ -433,7 +440,6 @@ pub struct Task {
     /// Timeout
     pub timeout: Option<Duration>,
 }
-
 /// Result of task execution
 pub struct TaskResult {
     /// Original task
@@ -460,7 +466,6 @@ The hooks module manages Git hooks for seamless workflow integration.
 pub struct HooksManager<'a> {
     workspace: &'a Workspace,
 }
-
 impl<'a> HooksManager<'a> {
     /// Create a new hooks manager
     pub fn new(workspace: &'a Workspace) -> Self;
@@ -493,7 +498,6 @@ impl<'a> HooksManager<'a> {
 pub struct TurboIntegration<'a> {
     workspace: &'a Workspace,
 }
-
 impl<'a> TurboIntegration<'a> {
     /// Create new Turborepo integration
     pub fn new(workspace: &'a Workspace) -> Self;
@@ -553,8 +557,6 @@ declare module "sublime_monorepo_tools" {
 
 ## Integration with Existing Crates
 
-### Integration with sublime\_standard\_tools
-
 ```rust
 // Workspace discovery using sublime_standard_tools
 impl WorkspaceManager {
@@ -579,7 +581,6 @@ impl WorkspaceManager {
         // Continue implementation...
     }
 }
-
 // Task execution using sublime_standard_tools
 impl<'a> TaskRunner<'a> {
     fn execute_task(&self, task: &Task) -> Result<TaskResult, TaskError> {
@@ -588,7 +589,7 @@ impl<'a> TaskRunner<'a> {
 }
 ```
 
-### Integration with sublime\_git\_tools
+### Integration with sublime_git_tools
 
 ```rust
 // Change detection using sublime_git_tools
@@ -613,7 +614,7 @@ impl ChangeTracker {
 }
 ```
 
-### Integration with sublime\_package\_tools
+### Integration with sublime_package_tools
 
 ```rust
 // Using PackageInfo directly from sublime_package_tools
@@ -642,7 +643,7 @@ impl Workspace {
 
 ### 1. Change Detection and Version Management Workflow
 
-```
+```bash
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  Code Changes   │────►│  Git Commits    │────►│ Change Tracker  │
 └─────────────────┘     └─────────────────┘     └────────┬────────┘
@@ -661,7 +662,7 @@ impl Workspace {
 
 ### 2. Git Hooks Integration Flow
 
-```
+```bash
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  Developer      │────►│  Git Stage      │────►│  Pre-commit     │
 │  Makes Changes  │     │  Changes        │     │     Hook        │
@@ -682,7 +683,7 @@ impl Workspace {
 
 ### 3. Task Execution Workflow
 
-```
+```bash
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  Task           │────►│  Dependency     │────►│Task Prioritizer │
 │  Definition     │     │  Resolution     │     │                 │
@@ -697,7 +698,7 @@ impl Workspace {
 
 ### 4. Deployment Management Flow
 
-```
+```bash
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  Environment    │────►│  Deployment     │────►│   Version       │
 │  Configuration  │     │    Planning     │     │   Selection     │
@@ -714,145 +715,199 @@ impl Workspace {
 
 ### 1. Performance Optimization
 
-* **Incremental Analysis**: Only analyze changed packages and their dependents
-* **Caching**: Cache dependency graphs, parsing results, and other expensive computations
-* **Parallel Processing**: Utilize multi-threading for CPU-intensive operations
-* **Lazy Loading**: Defer loading package details until needed
-* **Differential Operations**: Support partial updates to large workspaces
+- **Incremental Analysis**: Only analyze changed packages and their dependents
+
+- **Caching**: Cache dependency graphs, parsing results, and other expensive computations
+
+- **Parallel Processing**: Utilize multi-threading for CPU-intensive operations
+
+- **Lazy Loading**: Defer loading package details until needed
+
+- **Differential Operations**: Support partial updates to large workspaces
 
 ### 2. Security
 
-* **Hook Validation**: Verify hook integrity to prevent tampering
-* **Dependency Security**: Integrate with vulnerability scanning
-* **Permission Management**: Fine-grained controls for various operations
-* **Audit Trails**: Track all operations for accountability
+- **Hook Validation**: Verify hook integrity to prevent tampering
+
+- **Dependency Security**: Integrate with vulnerability scanning
+
+- **Permission Management**: Fine-grained controls for various operations
+
+- **Audit Trails**: Track all operations for accountability
 
 ### 3. Extensibility
 
-* **Plugin System**: Support for third-party extensions
-* **Custom Validators**: Allow custom validation rules
-* **Event Hooks**: Provide event hooks for external tools
-* **Configuration Flexibility**: Support project-specific customizations
+- **Plugin System**: Support for third-party extensions
+
+- **Custom Validators**: Allow custom validation rules
+
+- **Event Hooks**: Provide event hooks for external tools
+
+- **Configuration Flexibility**: Support project-specific customizations
 
 ### 4. Enterprise Features
 
-* **Multi-Team Support**: Handle repositories with multiple teams
-* **Compliance**: Support for enterprise compliance requirements
-* **Integration Points**: Connect with enterprise systems (JIRA, etc.)
-* **Advanced Reporting**: Generate comprehensive reports for stakeholders
+- **Multi-Team Support**: Handle repositories with multiple teams
+
+- **Compliance**: Support for enterprise compliance requirements
+
+- **Integration Points**: Connect with enterprise systems (JIRA, etc.)
+
+- **Advanced Reporting**: Generate comprehensive reports for stakeholders
 
 ### 5. Cross-Language Support
 
-* **Polyglot Repositories**: Support for mixed language repositories
-* **Language-Specific Extensions**: Accommodate language-specific requirements
-* **Cross-Language Dependencies**: Track dependencies across language boundaries
+- **Polyglot Repositories**: Support for mixed language repositories
+
+- **Language-Specific Extensions**: Accommodate language-specific requirements
+
+- **Cross-Language Dependencies**: Track dependencies across language boundaries
 
 ### 6. Enhanced Developer Experience
 
-* **Interactive TUI**: Terminal UI for complex operations
-* **Guided Workflows**: Step-by-step guidance for common tasks
-* **Rich Error Messages**: Clear, actionable error messages
-* **Documentation Generation**: Auto-generate package documentation
+- **Interactive TUI**: Terminal UI for complex operations
+
+- **Guided Workflows**: Step-by-step guidance for common tasks
+
+- **Rich Error Messages**: Clear, actionable error messages
+
+- **Documentation Generation**: Auto-generate package documentation
 
 ## Implementation Strategy
 
 ### Phase 1: Core Framework (2-3 weeks)
 
 1. **Workspace Management**
-   * Package discovery and loading
-   * Integration with `sublime_standard_tools` for command execution
-   * Integration with `sublime_git_tools` for repo operations
-   * Basic dependency graph via `sublime_package_tools`
+
+    - Package discovery and loading
+
+    - Integration with `sublime_standard_tools` for command execution
+
+    - Integration with `sublime_git_tools` for repo operations
+
+    - Basic dependency graph via `sublime_package_tools`
+
 2. **Change Management**
-   * Change tracking infrastructure
-   * Git integration for change detection
-   * Changeset storage system
+
+    - Change tracking infrastructure
+
+    - Git integration for change detection
+
+    - Changeset storage system
+
 3. **Core Testing Infrastructure**
-   * Unit tests for core components
-   * Integration tests with sample repos
+
+    - Unit tests for core components
+
+    - Integration tests with sample repos
 
 ### Phase 2: Extended Functionality (2-3 weeks)
 
 1. **Versioning System**
-   * Version bumping strategies
-   * Changelog generation
-   * Integrated version validation
+
+    - Version bumping strategies
+
+    - Changelog generation
+
+    - Integrated version validation
+
 2. **Task Execution**
-   * Task definition and discovery
-   * Parallel execution engine
-   * Task dependency resolution
+
+    - Task definition and discovery
+
+    - Parallel execution engine
+
+    - Task dependency resolution
+
 3. **Git Hooks**
-   * Hook manager implementation
-   * Template system
-   * Pre-commit and post-commit hooks
+
+    - Hook manager implementation
+
+    - Template system
+
+    - Pre-commit and post-commit hooks
 
 ### Phase 3: Advanced Features (2-3 weeks)
 
 1. **Deployment Management**
-   * Environment configuration
-   * Deployment tracking
-   * Release history
+
+    - Environment configuration
+
+    - Deployment tracking
+
+    - Release history
+
 2. **External Integration**
-   * Turborepo config generation
-   * Nx integration
-   * CI system connectors
+
+    - Turborepo config generation
+
+    - Nx integration
+
+    - CI system connectors
+
 3. **Performance Optimization**
-   * Caching systems
-   * Incremental analysis
-   * Parallel processing
+
+    - Caching systems
+
+    - Incremental analysis
+
+    - Parallel processing
 
 ### Phase 4: Node.js Bindings and Documentation (1-2 weeks)
 
 1. **NAPI Interface**
-   * Core binding infrastructure
-   * JavaScript/TypeScript typings
-   * Error handling translation
+
+    - Core binding infrastructure
+
+    - JavaScript/TypeScript typings
+
+    - Error handling translation
+
 2. **Documentation**
-   * API documentation
-   * User guides
-   * Examples and tutorials
+
+    - API documentation
+
+    - User guides
+
+    - Examples and tutorials
+
 3. **Final Testing**
-   * End-to-end tests
-   * Performance benchmarks
-   * Cross-platform validation
+
+    - End-to-end tests
+
+    - Performance benchmarks
+
+    - Cross-platform validation
 
 ## Examples and Use Cases
 
 ### Example: Setting Up a Release Workflow
 
-```rust
+```text
 // Create workspace
 let workspace_manager = WorkspaceManager::new();
 let workspace = workspace_manager.discover_workspace("./", DiscoveryOptions::new())?;
-
 // Setup change tracking
 let store = FileChangeStore::new("./.changeset");
 let change_tracker = ChangeTracker::new(Rc::new(workspace.clone()), Box::new(store));
-
 // Create version manager
 let version_manager = VersionManager::new(&workspace, Some(&change_tracker));
-
 // Generate and preview version bumps
 let strategy = VersionBumpStrategy::ConventionalCommits { from_ref: Some("v1.0.0".to_string()) };
 let preview = version_manager.preview_bumps(&strategy)?;
-
 println!("Planned version changes:");
 for change in &preview.changes {
     println!("{}: {} -> {}", change.package, change.from, change.to);
 }
-
 // Apply version bumps if confirmed
 let changes = version_manager.apply_bumps(&strategy, false)?;
-
 // Generate changelogs
 let changelog_options = ChangelogOptions::new();
 let changelogs = version_manager.generate_changelogs(&changelog_options, false)?;
-
 // Run tests before publishing
 let task_runner = TaskRunner::new(&workspace, None);
 task_runner.add_task(Task::new("test", "npm test"));
 let results = task_runner.run_all()?;
-
 // Check if all tests passed
 let all_passed = results.iter().all(|r| r.success);
 if all_passed {
@@ -864,12 +919,11 @@ if all_passed {
 
 ### Example: Git Hook Setup
 
-```rust
+```text
 // Create workspace and hooks manager
 let workspace_manager = WorkspaceManager::new();
 let workspace = workspace_manager.discover_workspace("./", DiscoveryOptions::new())?;
 let hooks_manager = HooksManager::new(&workspace);
-
 // Install Git hooks
 let options = HookInstallOptions {
     overwrite_existing: true,
@@ -877,14 +931,11 @@ let options = HookInstallOptions {
     env_vars: HashMap::new(),
     custom_templates: HashMap::new(),
 };
-
 hooks_manager.install_hooks(
     &[HookType::PreCommit, HookType::PostCommit],
     &options
 )?;
-
 println!("Git hooks installed successfully!");
-
 // Check if hooks are working
 let result = hooks_manager.run_hook(HookType::PreCommit)?;
 if result.success {
@@ -901,3 +952,5 @@ if result.success {
 The Git hooks integration ensures a seamless developer workflow, while the extensive versioning, deployment, and task management capabilities enable efficient operation of large-scale monorepos. Both Rust and Node.js interfaces make the system accessible to a wide range of users and use cases, from command-line tools to full-featured desktop applications.
 
 This comprehensive system design provides a solid foundation for implementing `sublime_monorepo_tools` as a powerful addition to the Workspace Node Tools ecosystem.
+
+

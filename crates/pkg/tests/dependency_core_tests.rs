@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod dependency_core_tests {
+    use std::cmp::Ordering;
     use sublime_package_tools::{Dependency, VersionError};
 
     #[test]
@@ -17,10 +18,9 @@ mod dependency_core_tests {
         assert!(dep.is_err());
         assert!(matches!(dep.unwrap_err(), VersionError::Parse { .. }));
 
-        // Test workspace marker (should be rejected)
+        // Test workspace marker - now supported in newer API
         let dep = Dependency::new("test-package", "workspace:*");
-        assert!(dep.is_err());
-        assert!(matches!(dep.unwrap_err(), VersionError::InvalidVersion(_)));
+        assert!(dep.is_ok(), "Workspace marker should be accepted in new API");
     }
 
     #[test]
@@ -34,6 +34,8 @@ mod dependency_core_tests {
             ("~1.0.0", "1.1.0", false),
             (">=1.0.0", "1.0.0", true),
             (">=1.0.0", "0.9.0", false),
+            // New case for workspace syntax
+            ("workspace:*", "1.0.0", true),
         ];
 
         for (req, version, should_match) in test_cases {
@@ -66,6 +68,11 @@ mod dependency_core_tests {
 
         // Version should remain unchanged after failed update
         assert_eq!(dep.version().to_string(), "^2.0.0");
+
+        // Update to workspace syntax
+        let result = dep.update_version("workspace:^1.0.0");
+        assert!(result.is_ok());
+        assert_eq!(dep.version().to_string(), "workspace:^1.0.0");
     }
 
     #[test]
@@ -78,6 +85,11 @@ mod dependency_core_tests {
         let dep = Dependency::new("test", "~2.3.4").unwrap();
         let fixed = dep.fixed_version().unwrap();
         assert_eq!(fixed.to_string(), "2.3.4");
+
+        // Test with workspace version
+        let dep = Dependency::new("test", "workspace:^1.0.0").unwrap();
+        let fixed = dep.fixed_version().unwrap();
+        assert_eq!(fixed.to_string(), "1.0.0");
     }
 
     #[test]
@@ -107,15 +119,15 @@ mod dependency_core_tests {
 
         // Compare with a higher version
         let result = dep.compare_versions("2.0.0").unwrap();
-        assert_eq!(result, std::cmp::Ordering::Less);
+        assert_eq!(result, Ordering::Less);
 
         // Compare with the same version
         let result = dep.compare_versions("1.0.0").unwrap();
-        assert_eq!(result, std::cmp::Ordering::Equal);
+        assert_eq!(result, Ordering::Equal);
 
         // Compare with a lower version
         let result = dep.compare_versions("0.9.0").unwrap();
-        assert_eq!(result, std::cmp::Ordering::Greater);
+        assert_eq!(result, Ordering::Greater);
 
         // Compare with an invalid version
         let result = dep.compare_versions("invalid");

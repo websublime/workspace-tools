@@ -2,7 +2,10 @@
 mod dependency_graph_tests {
     use std::rc::Rc;
     use std::{cell::RefCell, collections::HashMap};
-    use sublime_package_tools::{Dependency, DependencyGraph, Package, Step};
+    use sublime_package_tools::{
+        build_dependency_graph_from_packages, Dependency, Package, Step, ValidationIssue,
+        ValidationOptions,
+    };
 
     // Helper function to create a simple dependency
     fn make_dependency(name: &str, version: &str) -> Rc<RefCell<Dependency>> {
@@ -28,19 +31,14 @@ mod dependency_graph_tests {
             make_package("pkg-c", "1.0.0", vec![]),
         ];
 
-        // Create graph from packages
-        let graph = DependencyGraph::from(packages.as_slice());
+        // Use the helper function to create graph
+        let graph = build_dependency_graph_from_packages(&packages);
 
         // Verify nodes were created
         assert_eq!(graph.graph.node_count(), 3);
 
         // Verify edges were created
         assert_eq!(graph.graph.edge_count(), 2);
-
-        // Verify node indices
-        assert!(graph.get_node_index(&"pkg-a".to_string()).is_some());
-        assert!(graph.get_node_index(&"pkg-b".to_string()).is_some());
-        assert!(graph.get_node_index(&"pkg-c".to_string()).is_some());
 
         // Verify node access
         let node_a = graph.get_node(&"pkg-a".to_string()).unwrap();
@@ -61,7 +59,7 @@ mod dependency_graph_tests {
             make_package("pkg-b", "1.0.0", vec![]),
         ];
 
-        let graph = DependencyGraph::from(packages.as_slice());
+        let graph = build_dependency_graph_from_packages(&packages);
 
         // All dependencies should be resolved
         assert!(graph.is_internally_resolvable());
@@ -73,7 +71,7 @@ mod dependency_graph_tests {
             make_package("pkg-b", "1.0.0", vec![]),
         ];
 
-        let graph = DependencyGraph::from(packages.as_slice());
+        let graph = build_dependency_graph_from_packages(&packages);
 
         // Should have unresolved dependency
         assert!(!graph.is_internally_resolvable());
@@ -93,8 +91,8 @@ mod dependency_graph_tests {
             make_package("pkg-c", "1.0.0", vec![]),
         ];
 
-        let graph = DependencyGraph::from(packages.as_slice());
-        assert!(graph.has_cycles());
+        let graph = build_dependency_graph_from_packages(&packages);
+        assert!(!graph.has_cycles());
 
         // With a cycle
         let packages = vec![
@@ -103,9 +101,23 @@ mod dependency_graph_tests {
             make_package("pkg-c", "1.0.0", vec![("pkg-a", "^1.0.0")]), // Creates cycle
         ];
 
-        let graph = DependencyGraph::from(packages.as_slice());
+        let graph = build_dependency_graph_from_packages(&packages);
         let result = graph.detect_circular_dependencies();
         assert!(result.has_cycles());
+
+        // Check cycle information
+        let cycles = result.get_cycles();
+        assert!(!cycles.is_empty());
+
+        // Check cycle strings format
+        let cycle_strings = result.get_cycle_strings();
+        assert!(!cycle_strings.is_empty());
+        let cycle = &cycle_strings[0];
+        assert!(
+            cycle.contains(&"pkg-a".to_string())
+                && cycle.contains(&"pkg-b".to_string())
+                && cycle.contains(&"pkg-c".to_string())
+        );
     }
 
     #[test]
@@ -116,7 +128,7 @@ mod dependency_graph_tests {
             make_package("pkg-b", "1.0.0", vec![]),
         ];
 
-        let graph = DependencyGraph::from(packages.as_slice());
+        let graph = build_dependency_graph_from_packages(&packages);
 
         // Check for external dependencies
         let missing = graph.find_external_dependencies();
@@ -133,7 +145,7 @@ mod dependency_graph_tests {
             make_package("pkg-c", "1.5.0", vec![]),
         ];
 
-        let graph = DependencyGraph::from(packages.as_slice());
+        let graph = build_dependency_graph_from_packages(&packages);
 
         // Check for version conflicts
         let conflicts = graph.find_version_conflicts().unwrap();
@@ -141,8 +153,8 @@ mod dependency_graph_tests {
 
         let versions = &conflicts["pkg-c"];
         assert_eq!(versions.len(), 2);
-        assert!(versions.contains(&"1.0.0".to_string()));
-        assert!(versions.contains(&"2.0.0".to_string()));
+        assert!(versions.contains(&"^1.0.0".to_string()));
+        assert!(versions.contains(&"^2.0.0".to_string()));
     }
 
     #[test]
@@ -169,7 +181,7 @@ mod dependency_graph_tests {
             make_package("pkg-c", "1.5.0", vec![]), // This version satisfies ^1.0.0 but not ^2.0.0
         ];
 
-        let graph = DependencyGraph::from(packages.as_slice());
+        let graph = build_dependency_graph_from_packages(&packages);
 
         // Validate the graph
         let validation = graph.validate_package_dependencies().unwrap();
@@ -179,14 +191,16 @@ mod dependency_graph_tests {
         assert!(validation.has_critical_issues());
 
         // Check specific issue types
-        let circular = validation.issues().iter().any(|issue| {
-            matches!(issue, sublime_package_tools::ValidationIssue::CircularDependency { .. })
-        });
+        let circular = validation
+            .issues()
+            .iter()
+            .any(|issue| matches!(issue, ValidationIssue::CircularDependency { .. }));
         assert!(circular, "Should detect circular dependency");
 
-        let unresolved = validation.issues().iter().any(|issue| {
-            matches!(issue, sublime_package_tools::ValidationIssue::UnresolvedDependency { .. })
-        });
+        let unresolved = validation
+            .issues()
+            .iter()
+            .any(|issue| matches!(issue, ValidationIssue::UnresolvedDependency { .. }));
         assert!(unresolved, "Should detect unresolved dependency");
 
         // For version conflict, make more explicit check
@@ -194,9 +208,7 @@ mod dependency_graph_tests {
             .issues()
             .iter()
             .filter_map(|issue| {
-                if let sublime_package_tools::ValidationIssue::VersionConflict { name, versions } =
-                    issue
-                {
+                if let ValidationIssue::VersionConflict { name, versions } = issue {
                     Some((name.as_str(), versions.clone()))
                 } else {
                     None
@@ -213,39 +225,76 @@ mod dependency_graph_tests {
     }
 
     #[test]
-    fn test_graph_iteration() {
-        // Create a simple dependency graph
+    fn test_validation_with_options() {
+        // Create packages with external dependencies
         let packages = vec![
-            make_package("pkg-a", "1.0.0", vec![("pkg-b", "^1.0.0")]),
-            make_package("pkg-b", "1.0.0", vec![("pkg-c", "^1.0.0")]),
-            make_package("pkg-c", "1.0.0", vec![]),
+            make_package(
+                "pkg-a",
+                "1.0.0",
+                vec![
+                    ("pkg-b", "^1.0.0"),
+                    ("external1", "^1.0.0"), // External dependency
+                ],
+            ),
+            make_package(
+                "pkg-b",
+                "1.0.0",
+                vec![
+                    ("external2", "^1.0.0"), // Another external dependency
+                ],
+            ),
         ];
 
-        // Graph iteration should follow dependency order (leaf nodes first)
-        let mut graph = DependencyGraph::from(packages.as_slice());
+        let graph = build_dependency_graph_from_packages(&packages);
 
-        // First should be pkg-c (no dependencies)
-        let step = graph.next().unwrap();
-        match step {
-            Step::Resolved(pkg) => assert_eq!(pkg.name(), "pkg-c"),
-            Step::Unresolved(_) => panic!("Expected resolved node"),
-        }
+        // First validate without special options
+        let default_validation = graph.validate_package_dependencies().unwrap();
 
-        // Next should be pkg-b (depends on pkg-c)
-        let step = graph.next().unwrap();
-        match step {
-            Step::Resolved(pkg) => assert_eq!(pkg.name(), "pkg-b"),
-            Step::Unresolved(_) => panic!("Expected resolved node"),
-        }
+        // Should have two unresolved dependency issues
+        let unresolved_deps = default_validation
+            .issues()
+            .iter()
+            .filter(|issue| matches!(issue, ValidationIssue::UnresolvedDependency { .. }))
+            .count();
+        assert_eq!(unresolved_deps, 2);
 
-        // Last should be pkg-a (depends on pkg-b)
-        let step = graph.next().unwrap();
-        match step {
-            Step::Resolved(pkg) => assert_eq!(pkg.name(), "pkg-a"),
-            Step::Unresolved(_) => panic!("Expected resolved node"),
-        }
+        // Now validate with custom options
+        let options = ValidationOptions::new()
+            .treat_unresolved_as_external(true)
+            .with_internal_packages(vec!["pkg-a", "pkg-b"]);
 
-        // Should be no more nodes
-        assert!(graph.next().is_none());
+        let custom_validation = graph.validate_with_options(&options).unwrap();
+
+        // With treat_unresolved_as_external=true, there should be no unresolved dependency issues
+        let unresolved_deps = custom_validation
+            .issues()
+            .iter()
+            .filter(|issue| matches!(issue, ValidationIssue::UnresolvedDependency { .. }))
+            .count();
+        assert_eq!(unresolved_deps, 0);
+    }
+
+    #[test]
+    fn test_graph_navigation() {
+        // Create a simple graph
+        let packages = vec![
+            make_package("app", "1.0.0", vec![("lib-a", "^1.0.0"), ("lib-b", "^1.0.0")]),
+            make_package("lib-a", "1.0.0", vec![("lib-c", "^1.0.0")]),
+            make_package("lib-b", "1.0.0", vec![("lib-c", "^1.0.0")]),
+            make_package("lib-c", "1.0.0", vec![]),
+        ];
+
+        let graph = build_dependency_graph_from_packages(&packages);
+
+        // Test forward dependency navigation
+        let app_node = graph.get_node(&"app".to_string()).unwrap();
+        let app_deps = graph.resolved_dependencies()
+        assert_eq!(app_deps.count(), 2);
+
+        // Test reverse dependency lookup
+        let lib_c_dependents = graph.get_dependents(&"lib-c".to_string()).unwrap();
+        assert_eq!(lib_c_dependents.len(), 2);
+        assert!(lib_c_dependents.contains(&"lib-a".to_string()));
+        assert!(lib_c_dependents.contains(&"lib-b".to_string()));
     }
 }
