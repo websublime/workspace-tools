@@ -676,7 +676,7 @@ pub fn suggest_version_bumps_with_options(
     }
 
     // Handle dependent packages that need updates due to dependency changes
-    handle_dependency_updates(workspace, &mut suggestions)?;
+    handle_dependency_updates(workspace, &mut suggestions, harmonize_cycles)?;
 
     Ok(suggestions)
 }
@@ -703,22 +703,32 @@ pub fn suggest_version_bumps_with_options(
 fn handle_dependency_updates(
     workspace: &Workspace,
     suggestions: &mut HashMap<String, VersionSuggestion>,
+    harmonize_cycles: bool, // Added parameter
 ) -> VersioningResult<()> {
-    // Get cycle information first
-    let sorted_with_cycles = workspace.get_sorted_packages_with_circulars();
-    let cycle_groups = sorted_with_cycles
-        .circular
-        .iter()
-        .map(|group| {
-            group.iter().map(|p| p.borrow().package.borrow().name().to_string()).collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
+    // Get cycle information only if harmonization is enabled
+    let cycle_groups = if harmonize_cycles {
+        let sorted_with_cycles = workspace.get_sorted_packages_with_circulars();
+        sorted_with_cycles
+            .circular
+            .iter()
+            .map(|group| {
+                group
+                    .iter()
+                    .map(|p| p.borrow().package.borrow().name().to_string())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new() // Empty if we're not harmonizing cycles
+    };
 
-    // Create a cycle membership map for quick lookups
+    // Create a cycle membership map only if harmonization is enabled
     let mut cycle_membership: HashMap<String, usize> = HashMap::new();
-    for (i, group) in cycle_groups.iter().enumerate() {
-        for pkg_name in group {
-            cycle_membership.insert(pkg_name.clone(), i);
+    if harmonize_cycles {
+        for (i, group) in cycle_groups.iter().enumerate() {
+            for pkg_name in group {
+                cycle_membership.insert(pkg_name.clone(), i);
+            }
         }
     }
 
@@ -794,26 +804,28 @@ fn handle_dependency_updates(
                 }
             }
 
-            // Check if this package is part of a cycle
+            // Check if this package is part of a cycle (only if harmonize_cycles is true)
             let mut cycle_info = None;
-            if let Some(&cycle_index) = cycle_membership.get(&dependent_name) {
-                let cycle_group = &cycle_groups[cycle_index];
+            if harmonize_cycles {
+                if let Some(&cycle_index) = cycle_membership.get(&dependent_name) {
+                    let cycle_group = &cycle_groups[cycle_index];
 
-                // Check if other packages in this cycle have already been bumped
-                for cycle_pkg in cycle_group {
-                    if let Some(suggestion) = suggestions.get(cycle_pkg) {
-                        // Use the highest bump type from the cycle
-                        if bump_higher_than(suggestion.bump_type, bump_type) {
-                            bump_type = suggestion.bump_type;
+                    // Check if other packages in this cycle have already been bumped
+                    for cycle_pkg in cycle_group {
+                        if let Some(suggestion) = suggestions.get(cycle_pkg) {
+                            // Use the highest bump type from the cycle
+                            if bump_higher_than(suggestion.bump_type, bump_type) {
+                                bump_type = suggestion.bump_type;
+                            }
                         }
                     }
+
+                    cycle_info = Some(cycle_group.clone());
+
+                    // Add cycle-specific reason
+                    dependency_reasons
+                        .push(format!("Part of dependency cycle: {}", cycle_group.join(" → ")));
                 }
-
-                cycle_info = Some(cycle_group.clone());
-
-                // Add cycle-specific reason
-                dependency_reasons
-                    .push(format!("Part of dependency cycle: {}", cycle_group.join(" → ")));
             }
 
             // Calculate new version

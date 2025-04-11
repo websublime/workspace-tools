@@ -24,8 +24,8 @@ pub use versioning::{
     error::{VersioningError, VersioningResult},
     strategy::{BumpReason, BumpType, ChangelogOptions, PackageVersionChange, VersionBumpStrategy},
     suggest::{
-        determine_bump_type_from_change, suggest_version_bumps, VersionBumpPreview,
-        VersionSuggestion,
+        determine_bump_type_from_change, print_version_bump_preview, suggest_version_bumps,
+        suggest_version_bumps_with_options, VersionBumpPreview, VersionSuggestion,
     },
 };
 
