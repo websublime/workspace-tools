@@ -374,19 +374,20 @@ impl Workspace {
             WorkspaceError::InvalidConfiguration(format!("Failed to build exclude set: {e}"))
         })?;
 
+        // Define a default pattern to use when both config and options are empty
+        let default_pattern = vec!["**/package.json".to_string()];
+
         // Use package patterns from config or default to include patterns from options
-        let patterns = if self.config.packages.is_empty() {
+        // Prioritize config.packages when provided, fall back to options
+        let patterns = if !self.config.packages.is_empty() {
+            // If config has packages defined, always use them (highest priority)
+            &self.config.packages
+        } else if !options.include_patterns.is_empty() {
+            // If config is empty but options has patterns, use options
             &options.include_patterns
         } else {
-            // Check if we're using the default options and have workspaces in package.json
-            // If so, prefer options.include_patterns which will match more patterns
-            if options.include_patterns.contains(&"**/package.json".to_string())
-                && !options.include_patterns.is_empty()
-            {
-                &options.include_patterns
-            } else {
-                &self.config.packages
-            }
+            // If both are empty, fall back to the default pattern
+            &default_pattern
         };
 
         for pattern in patterns {

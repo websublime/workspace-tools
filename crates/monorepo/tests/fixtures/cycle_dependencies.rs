@@ -2,9 +2,23 @@ use crate::fixtures::{create_monorepo_base, create_package};
 use tempfile::TempDir;
 
 /// Create a monorepo with cycle dependencies using the specified package names
-pub fn create_cycle_dependencies_monorepo() -> TempDir {
+pub fn create_cycle_dependencies_monorepo(package_manager: Option<&str>) -> TempDir {
     let temp_dir = create_monorepo_base();
     let repo_path = temp_dir.path();
+
+    // Add package manager files if specified
+    if let Some(manager) = package_manager {
+        match manager {
+            "npm" => crate::fixtures::add_npm_manager(repo_path).unwrap(),
+            "yarn" => crate::fixtures::add_yarn_manager(repo_path).unwrap(),
+            "pnpm" => crate::fixtures::add_pnpm_manager(repo_path).unwrap(),
+            "bun" => crate::fixtures::add_bun_manager(repo_path).unwrap(),
+            _ => panic!("Unsupported package manager: {manager}"),
+        }
+    } else {
+        // Default to npm if no package manager specified
+        crate::fixtures::add_npm_manager(repo_path).unwrap();
+    }
 
     // Using exactly the packages from the spec to create a cycle:
     // foo -> bar -> baz -> foo
@@ -101,6 +115,21 @@ pub fn bun_monorepo() -> TempDir {
 }
 
 #[fixture]
-pub fn cycle_monorepo() -> TempDir {
-    create_cycle_dependencies_monorepo()
+pub fn npm_cycle_monorepo() -> TempDir {
+    create_cycle_dependencies_monorepo(Some("npm"))
+}
+
+#[fixture]
+pub fn yarn_cycle_monorepo() -> TempDir {
+    create_cycle_dependencies_monorepo(Some("yarn"))
+}
+
+#[fixture]
+pub fn pnpm_cycle_monorepo() -> TempDir {
+    create_cycle_dependencies_monorepo(Some("pnpm"))
+}
+
+#[fixture]
+pub fn bun_cycle_monorepo() -> TempDir {
+    create_cycle_dependencies_monorepo(Some("bun"))
 }

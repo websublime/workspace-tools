@@ -46,19 +46,11 @@ pub fn get_project_root_path(root: Option<PathBuf>) -> Option<PathBuf> {
         None => env::current_dir(),
     };
 
-    let current_dir = match env_dir {
-        Ok(dir) => dir,
-        _ => PathBuf::from("./"),
-    };
+    let Ok(current_dir) = env_dir else { return None };
     let current_path = current_dir.as_path();
-    let git_root_dir = walk_reverse_dir(current_path);
 
-    let project_root = match git_root_dir {
-        Some(current) => current,
-        None => current_dir,
-    };
-
-    Some(project_root)
+    // Just use walk_reverse_dir directly, which returns None when it can't find project indicators
+    walk_reverse_dir(current_path)
 }
 
 /// Recursively walks up the directory tree to find a project root.

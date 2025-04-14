@@ -13,7 +13,10 @@ mod change_tracker_tests {
     use tempfile::TempDir;
 
     // Import fixtures directly
-    use crate::fixtures::{cycle_monorepo, npm_monorepo};
+    use crate::fixtures::{
+        bun_cycle_monorepo, npm_cycle_monorepo, npm_monorepo, pnpm_cycle_monorepo,
+        yarn_cycle_monorepo,
+    };
 
     // Helper to create a workspace from a monorepo fixture
     fn setup_workspace(temp_dir: &TempDir) -> Result<Rc<Workspace>, Box<dyn std::error::Error>> {
@@ -374,8 +377,12 @@ mod change_tracker_tests {
     }
 
     #[rstest]
+    #[case::npm(npm_cycle_monorepo())]
+    #[case::yarn(yarn_cycle_monorepo())]
+    #[case::pnpm(pnpm_cycle_monorepo())]
+    #[case::bun(bun_cycle_monorepo())]
     fn test_with_cycle_dependencies(
-        cycle_monorepo: TempDir,
+        #[case] cycle_monorepo: TempDir,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Set up workspace using the cycle_monorepo fixture
         let workspace = setup_workspace(&cycle_monorepo)?;

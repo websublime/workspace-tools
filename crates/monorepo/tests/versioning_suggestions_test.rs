@@ -2,7 +2,10 @@ mod fixtures;
 
 #[cfg(test)]
 mod versioning_suggestions_tests {
-    use crate::fixtures::{cycle_monorepo, npm_monorepo};
+    use crate::fixtures::{
+        bun_cycle_monorepo, npm_cycle_monorepo, npm_monorepo, pnpm_cycle_monorepo,
+        yarn_cycle_monorepo,
+    };
     use rstest::*;
 
     use std::{collections::HashMap, rc::Rc};
@@ -27,7 +30,9 @@ mod versioning_suggestions_tests {
         let mut workspace = Workspace::new(repo_path.to_path_buf(), config, git_repo)?;
 
         // Discover packages
-        let options = DiscoveryOptions::new().include_patterns(vec!["packages/*/package.json"]);
+        let options = DiscoveryOptions::new()
+            .include_patterns(vec!["packages/*/package.json"])
+            .auto_detect_root(true);
         workspace.discover_packages_with_options(&options)?;
 
         Ok(Rc::new(workspace))
@@ -362,7 +367,13 @@ mod versioning_suggestions_tests {
     }
 
     #[rstest]
-    fn test_cycle_harmonization(cycle_monorepo: TempDir) -> Result<(), Box<dyn std::error::Error>> {
+    #[case::npm(npm_cycle_monorepo())]
+    #[case::yarn(yarn_cycle_monorepo())]
+    #[case::pnpm(pnpm_cycle_monorepo())]
+    #[case::bun(bun_cycle_monorepo())]
+    fn test_cycle_harmonization(
+        #[case] cycle_monorepo: TempDir,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Set up workspace with cycle dependencies
         let workspace = setup_workspace(&cycle_monorepo)?;
 
@@ -455,8 +466,12 @@ mod versioning_suggestions_tests {
     }
 
     #[rstest]
+    #[case::npm(npm_cycle_monorepo())]
+    #[case::yarn(yarn_cycle_monorepo())]
+    #[case::pnpm(pnpm_cycle_monorepo())]
+    #[case::bun(bun_cycle_monorepo())]
     fn test_cycle_harmonization_disabled(
-        cycle_monorepo: TempDir,
+        #[case] cycle_monorepo: TempDir,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Set up workspace with cycle dependencies
         let workspace = setup_workspace(&cycle_monorepo)?;
@@ -502,11 +517,11 @@ mod versioning_suggestions_tests {
         }
 
         assert_eq!(
-            major_bump_packages.len(),
-            1,
-            "Without cycle harmonization, only one package should get Major bump, got: {major_bump_packages:?}",
+                    major_bump_packages.len(),
+                    1,
+                    "Without cycle harmonization, only one package should get Major bump, got: {major_bump_packages:?}",
 
-        );
+                );
 
         assert_eq!(
             major_bump_packages[0], changed_package,
@@ -516,10 +531,10 @@ mod versioning_suggestions_tests {
         // No suggestions should have cycle_group information
         for (pkg_name, suggestion) in &suggestions {
             assert!(
-                suggestion.cycle_group.is_none(),
-                "Package {pkg_name} should not have cycle group info when harmonization is disabled",
+                        suggestion.cycle_group.is_none(),
+                        "Package {pkg_name} should not have cycle group info when harmonization is disabled",
 
-            );
+                    );
 
             // Other packages in the cycle might get updated via normal dependency propagation
             // but not with BumpReason indicating cycle relationship

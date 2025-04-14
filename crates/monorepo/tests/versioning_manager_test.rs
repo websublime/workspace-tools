@@ -2,7 +2,10 @@ mod fixtures;
 
 #[cfg(test)]
 mod versioning_manager_tests {
-    use crate::fixtures::{cycle_monorepo, npm_monorepo};
+    use crate::fixtures::{
+        bun_cycle_monorepo, npm_cycle_monorepo, npm_monorepo, pnpm_cycle_monorepo,
+        yarn_cycle_monorepo,
+    };
     use rstest::*;
     use std::rc::Rc;
     use sublime_monorepo_tools::{
@@ -318,7 +321,13 @@ mod versioning_manager_tests {
     }
 
     #[rstest]
-    fn test_cycle_detection(cycle_monorepo: TempDir) -> Result<(), Box<dyn std::error::Error>> {
+    #[case::npm(npm_cycle_monorepo())]
+    #[case::yarn(yarn_cycle_monorepo())]
+    #[case::pnpm(pnpm_cycle_monorepo())]
+    #[case::bun(bun_cycle_monorepo())]
+    fn test_cycle_detection(
+        #[case] cycle_monorepo: TempDir,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Setup workspace with cycle fixture
         let workspace = setup_workspace(&cycle_monorepo)?;
 

@@ -4,7 +4,10 @@ mod fixtures;
 mod versioning_errors_tests {
     use std::rc::Rc;
 
-    use crate::fixtures::{cycle_monorepo, npm_monorepo};
+    use crate::fixtures::{
+        bun_cycle_monorepo, npm_cycle_monorepo, npm_monorepo, pnpm_cycle_monorepo,
+        yarn_cycle_monorepo,
+    };
     use rstest::*;
     use sublime_monorepo_tools::{
         ChangelogOptions, DiscoveryOptions, VersionBumpStrategy, VersionManager, VersioningError,
@@ -114,12 +117,19 @@ mod versioning_errors_tests {
     }
 
     #[rstest]
+    #[case::npm(npm_cycle_monorepo())]
+    #[case::yarn(yarn_cycle_monorepo())]
+    #[case::pnpm(pnpm_cycle_monorepo())]
+    #[case::bun(bun_cycle_monorepo())]
     fn test_cyclic_dependencies_error(
-        cycle_monorepo: TempDir,
+        #[case] cycle_monorepo: TempDir,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Setup workspace with cycles
         let manager = WorkspaceManager::new();
-        let options = DiscoveryOptions::new().include_patterns(vec!["packages/*/package.json"]);
+        let options = DiscoveryOptions::new()
+            .include_patterns(vec!["packages/*/package.json"])
+            .auto_detect_root(true);
+
         let workspace = manager.discover_workspace(cycle_monorepo.path(), &options)?;
 
         // Create version manager
