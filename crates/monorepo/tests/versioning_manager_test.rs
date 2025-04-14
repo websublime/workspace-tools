@@ -1,7 +1,7 @@
 mod fixtures;
 
 #[cfg(test)]
-mod tests {
+mod versioning_manager_tests {
     use crate::fixtures::{cycle_monorepo, npm_monorepo};
     use rstest::*;
     use std::rc::Rc;

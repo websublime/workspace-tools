@@ -1,7 +1,7 @@
 mod fixtures;
 
 #[cfg(test)]
-mod version_suggestions_tests {
+mod versioning_suggestions_tests {
     use crate::fixtures::{cycle_monorepo, npm_monorepo};
     use rstest::*;
 

@@ -1,7 +1,7 @@
 mod fixtures;
 
 #[cfg(test)]
-mod tests {
+mod versioning_changelog_tests {
     use crate::fixtures::npm_monorepo;
     use rstest::*;
     use std::fs;
@@ -171,7 +171,17 @@ mod tests {
         let store = Box::new(MemoryChangeStore::new());
         let mut tracker = ChangeTracker::new(Rc::new(workspace.clone()), store);
 
-        // Create changes for multiple versions - some released, some unreleased
+        // First record and release the v1 changes
+        let v1_changes = vec![
+            Change::new("@scope/package-foo", ChangeType::Feature, "Initial feature", false),
+            Change::new("@scope/package-foo", ChangeType::Fix, "Fix bug in v1", false),
+        ];
+
+        // Record v1 changes
+        tracker.create_changeset(None, v1_changes)?;
+        tracker.mark_released("@scope/package-foo", "1.0.0", false)?;
+
+        // Now record unreleased changes AFTER marking the v1 changes as released
         let unreleased_changes = vec![Change::new(
             "@scope/package-foo",
             ChangeType::Feature,
@@ -179,17 +189,12 @@ mod tests {
             false,
         )];
 
-        let v1_changes = vec![
-            Change::new("@scope/package-foo", ChangeType::Feature, "Initial feature", false),
-            Change::new("@scope/package-foo", ChangeType::Fix, "Fix bug in v1", false),
-        ];
-
         // Record unreleased changes
         tracker.create_changeset(None, unreleased_changes)?;
 
-        // Record released changes and mark as released
-        tracker.create_changeset(None, v1_changes)?;
-        tracker.mark_released("@scope/package-foo", "1.0.0", false)?;
+        // Let's verify the tracker has unreleased changes
+        let unreleased = tracker.unreleased_changes()?;
+        assert!(!unreleased.is_empty(), "Unreleased feature");
 
         // Create version manager
         let manager = VersionManager::new(&workspace, Some(&tracker));
@@ -207,16 +212,28 @@ mod tests {
         let foo_changelog = &changelogs["@scope/package-foo"];
 
         // Should have Unreleased section first
-        assert!(foo_changelog.contains("## Unreleased"));
-        assert!(foo_changelog.contains("Unreleased feature"));
+        assert!(
+            foo_changelog.contains("## Unreleased"),
+            "Changelog should contain an Unreleased section"
+        );
+        assert!(
+            foo_changelog.contains("Unreleased feature"),
+            "Changelog should contain unreleased feature"
+        );
 
         // Then should have version 1.0.0 section
-        assert!(foo_changelog.contains("## Version 1.0.0"));
-        assert!(foo_changelog.contains("Initial feature"));
-        assert!(foo_changelog.contains("Fix bug in v1"));
+        assert!(
+            foo_changelog.contains("## Version 1.0.0"),
+            "Changelog should contain Version 1.0.0 section"
+        );
+        assert!(
+            foo_changelog.contains("Initial feature"),
+            "Changelog should contain initial feature"
+        );
+        assert!(foo_changelog.contains("Fix bug in v1"), "Changelog should contain bug fix");
 
         // Should include date for released version
-        assert!(foo_changelog.contains("*Released: "));
+        assert!(foo_changelog.contains("*Released: "), "Changelog should contain release date");
 
         // Version sections should be in correct order (unreleased first, then newest to oldest)
         let unreleased_pos = foo_changelog.find("## Unreleased").unwrap_or(0);
