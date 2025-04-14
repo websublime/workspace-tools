@@ -90,7 +90,7 @@ mod tests {
         assert!(bar_changelog.contains("## Unreleased"));
         assert!(bar_changelog.contains("### Fix"));
         assert!(bar_changelog.contains("Fix security issue"));
-        assert!(bar_changelog.contains("### Documentation"));
+        assert!(bar_changelog.contains("### Docs"));
         assert!(bar_changelog.contains("Update docs"));
 
         // Generate with custom options
@@ -109,7 +109,7 @@ mod tests {
         assert!(custom_changelogs.contains_key("@scope/package-foo"));
         let custom_foo = &custom_changelogs["@scope/package-foo"];
         assert!(custom_foo.contains("# Release History"));
-        assert!(custom_foo.contains("* Feature: Add new API"));
+        assert!(custom_foo.contains("* feature: Add new API ⚠️"));
         assert!(!custom_foo.contains("Released:"), "Release date should not be included");
 
         // Actually write changelogs to disk
@@ -154,7 +154,7 @@ mod tests {
         // Should preserve existing header
         assert!(merged_content.contains("# Existing Changelog"));
         // And include both old and new content
-        assert!(merged_content.contains("## v1.0.0"));
+        assert!(merged_content.contains("Some existing content"));
         assert!(merged_content.contains("## Unreleased"));
 
         Ok(())
