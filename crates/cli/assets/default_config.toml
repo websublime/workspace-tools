@@ -1,19 +1,28 @@
 # Default configuration for workspace-cli
 
 [general]
+# Log level: error, warn, info, debug, trace
 log_level = "info"
+# Whether to auto-start the daemon when needed
 auto_start_daemon = true
 
 [daemon]
+# Path to the daemon socket
 socket_path = "~/.local/share/workspace-cli/daemon.sock"
+# Path to the daemon PID file
 pid_file = "~/.local/share/workspace-cli/daemon.pid"
+# Polling interval in milliseconds when actively monitoring
 polling_interval_ms = 500
+# Polling interval in milliseconds when not actively monitoring
 inactive_polling_ms = 5000
 
 [monitor]
+# UI refresh rate in milliseconds
 refresh_rate_ms = 1000
-default_view = "overview" # overview, changes, packages, graph
-color_theme = "default"   # default, dark, light
+# Default view: overview, changes, packages, graph
+default_view = "overview"
+# Color theme: default, dark, light
+color_theme = "default"
 
 [watcher]
 include_patterns = [

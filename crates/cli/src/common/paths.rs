@@ -1,7 +1,7 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use dirs;
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Get the user's config directory
 pub fn get_config_dir() -> Result<PathBuf> {
@@ -40,8 +40,9 @@ pub fn get_default_pid_path() -> Result<String> {
 /// Expand a path that might contain tilde
 pub fn expand_path(path: &str) -> Result<PathBuf> {
     if path.starts_with("~/") {
-        let home = dirs::home_dir().ok_or_else(|| anyhow!("Could not determine home directory"))?;
-        let path_without_tilde = &path[2..];
+        let home = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+        let path_without_tilde = path.strip_prefix("~/").unwrap_or(path);
         Ok(home.join(path_without_tilde))
     } else {
         Ok(PathBuf::from(path))

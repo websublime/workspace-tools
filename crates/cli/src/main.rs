@@ -1,36 +1,69 @@
-use anyhow::{Context, Result};
-use clap::{ArgMatches, Command};
+use anyhow::Result;
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use colored::Colorize;
-use log::{error, info};
+use log::{debug, info, trace};
+use std::collections::HashMap;
 use std::env;
-use std::path::PathBuf;
-use std::process::Command as ProcessCommand;
 
-use sublime_workspace_cli::common::config::Config;
-use sublime_workspace_cli::common::paths;
+use sublime_workspace_cli::common::commands;
+use sublime_workspace_cli::common::config::{Config, ConfigSource};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");
+const AUTHOR: &str = env!("CARGO_PKG_AUTHORS");
 
 fn main() -> Result<()> {
-    // Initialize logger
-    env_logger::init();
-
     // Parse command line arguments
     let matches = build_cli().get_matches();
 
-    info!("Starting workspace CLI v{}", VERSION);
+    // Configure logging based on verbosity
+    let log_level = match matches.get_count("verbose") {
+        0 => "error",
+        1 => "warn",
+        2 => "info",
+        3 => "debug",
+        _ => "trace",
+    };
 
-    // Load configuration
-    let config = Config::load().context("Failed to load configuration")?;
+    env::set_var("RUST_LOG", format!("{}={}", PACKAGE_NAME, log_level));
+    env_logger::init();
+
+    info!("Starting workspace CLI v{}", VERSION);
+    trace!("Command line arguments: {:?}", env::args().collect::<Vec<_>>());
+
+    // Extract global config overrides
+    let config_overrides = extract_config_overrides(&matches);
+
+    // Load configuration with appropriate sources
+    let mut config = Config::load_with_sources(vec![
+        ConfigSource::Defaults,
+        ConfigSource::SystemConfig,
+        ConfigSource::UserConfig,
+        ConfigSource::ProjectConfig,
+        ConfigSource::Environment,
+    ])?;
+
+    // Apply command-line overrides
+    if !config_overrides.is_empty() {
+        debug!("Applying command-line configuration overrides");
+        config.apply_cli_overrides(config_overrides)?;
+    }
 
     // Process subcommand
     match matches.subcommand() {
-        Some((subcommand, args)) => run_subcommand(subcommand, args, &config),
+        Some((subcommand, args)) => commands::run_subcommand(subcommand, args, &config),
         None => {
-            println!("{} v{}", PACKAGE_NAME.bright_green(), VERSION);
-            println!("Use {} to see available commands", "--help".bright_blue());
-            Ok(())
+            if matches.get_flag("list") {
+                list_commands()?;
+                Ok(())
+            } else if matches.get_flag("version") {
+                print_version();
+                Ok(())
+            } else {
+                print_banner();
+                println!("Use {} to see available commands", "--help".bright_blue());
+                Ok(())
+            }
         }
     }
 }
@@ -38,66 +71,111 @@ fn main() -> Result<()> {
 fn build_cli() -> Command {
     Command::new("workspace")
         .version(VERSION)
+        .author(AUTHOR)
         .about("Monorepo management tool")
+        .arg(
+            Arg::new("verbose")
+                .short('v')
+                .long("verbose")
+                .action(ArgAction::Count)
+                .help("Increase output verbosity (can be used multiple times)"),
+        )
+        .arg(
+            Arg::new("config")
+                .short('c')
+                .long("config")
+                .help("Specify an alternative config file")
+                .value_name("FILE"),
+        )
+        .arg(
+            Arg::new("set")
+                .long("set")
+                .help("Override a configuration value (format: key=value)")
+                .value_name("KEY=VALUE")
+                .action(ArgAction::Append),
+        )
+        .arg(
+            Arg::new("list")
+                .short('l')
+                .long("list")
+                .action(ArgAction::SetTrue)
+                .help("List available commands")
+                .conflicts_with("help"),
+        )
         .subcommand_required(false)
-        .subcommand(
-            Command::new("daemon").about("Run the workspace daemon").arg_required_else_help(false),
-        )
-        .subcommand(
-            Command::new("monitor")
-                .about("Open the interactive workspace monitor")
-                .arg_required_else_help(false),
-        )
-        .subcommand(
-            Command::new("changes").about("Manage package changes").arg_required_else_help(true),
-        )
-        .subcommand(
-            Command::new("version").about("Manage package versions").arg_required_else_help(true),
-        )
-        .subcommand(
-            Command::new("graph").about("Visualize dependency graphs").arg_required_else_help(true),
-        )
+    // We'll dynamically discover subcommands rather than hardcoding them
 }
 
-fn run_subcommand(subcommand: &str, args: &ArgMatches, config: &Config) -> Result<()> {
-    let binary_name = format!("workspace-{}", subcommand);
+fn print_banner() {
+    let version_str = format!("v{}", VERSION);
+    println!("{} {}", PACKAGE_NAME.bright_green().bold(), version_str.bright_yellow());
+    println!("Monorepo management tools for Node.js projects");
+    println!("--------------------------------------------");
+}
 
-    // Build args to pass to the subcommand
-    let mut sub_args = Vec::new();
-    for (name, value) in args.ids() {
-        // Extract all arguments to pass along
-        if let Some(val) = value.raw() {
-            sub_args.push(format!("--{}", name));
-            sub_args.push(val.to_string());
-        } else {
-            sub_args.push(format!("--{}", name));
+fn print_version() {
+    println!("{} v{}", PACKAGE_NAME, VERSION);
+    println!("Author: {}", AUTHOR);
+    println!();
+
+    // Print information about the build
+    println!("Build Information:");
+    println!("  Rust Version: {}", env!("CARGO_PKG_RUST_VERSION"));
+    println!("  Profile: {}", if cfg!(debug_assertions) { "debug" } else { "release" });
+    match std::env::var("TARGET") {
+        Ok(target) => println!("  Target: {}", target),
+        Err(_) => println!("  Target: {} {}", std::env::consts::OS, std::env::consts::ARCH),
+    };
+    println!();
+
+    // Print all available commands
+    if let Ok(commands) = commands::get_available_commands() {
+        println!("Available Commands:");
+        for cmd in commands {
+            println!("  {}", cmd.name);
+        }
+    }
+}
+
+fn list_commands() -> Result<()> {
+    let commands = commands::get_available_commands()?;
+
+    println!("Available commands:");
+    println!();
+
+    let mut max_len = 0;
+    for cmd in &commands {
+        max_len = max_len.max(cmd.name.len());
+    }
+
+    for cmd in commands {
+        let padding = " ".repeat(max_len - cmd.name.len() + 2);
+        let name = if cmd.built_in { cmd.name.bright_green() } else { cmd.name.bright_yellow() };
+
+        println!(
+            "  {}{}{}",
+            name,
+            padding,
+            cmd.description.unwrap_or_else(|| "No description available".to_string())
+        );
+    }
+
+    println!();
+    println!("Run '{} <command> --help' to see command-specific help", PACKAGE_NAME);
+
+    Ok(())
+}
+
+fn extract_config_overrides(matches: &ArgMatches) -> HashMap<String, String> {
+    let mut overrides = HashMap::new();
+
+    if let Some(values) = matches.get_many::<String>("set") {
+        for value in values {
+            if let Some((key, val)) = value.split_once('=') {
+                overrides.insert(key.to_string(), val.to_string());
+            }
         }
     }
 
-    // Get current executable directory
-    let current_exe = env::current_exe().context("Failed to get current executable path")?;
-    let exe_dir = current_exe.parent().context("Failed to get executable directory")?;
-
-    // Look for subcommand in same directory as main binary
-    let subcommand_path = exe_dir.join(&binary_name);
-
-    info!("Running subcommand: {}", binary_name);
-
-    // If subcommand binary exists, execute it
-    if subcommand_path.exists() {
-        let status = ProcessCommand::new(subcommand_path)
-            .args(&sub_args)
-            .status()
-            .with_context(|| format!("Failed to execute subcommand: {}", binary_name))?;
-
-        if !status.success() {
-            error!("Subcommand {} exited with status: {}", binary_name, status);
-            anyhow::bail!("Subcommand execution failed");
-        }
-
-        Ok(())
-    } else {
-        error!("Subcommand binary not found: {}", subcommand_path.display());
-        anyhow::bail!("Subcommand binary not found: {}", binary_name)
-    }
+    overrides
 }
