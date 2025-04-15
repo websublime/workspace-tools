@@ -39,7 +39,7 @@ libgit2-sys = { version = "*", features = [
   "vendored",
   "vendored-openssl",
 ] }
-dirs = "5.0.1"
+dirs = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.19.1"

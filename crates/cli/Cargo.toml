@@ -1,0 +1,63 @@
+[package]
+name = "sublime_cli_tools"
+version = "0.1.0"
+edition = "2021"
+description = "CLI tools for monorepo management"
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+sublime_standard_tools = { workspace = true }
+sublime_git_tools = { workspace = true }
+sublime_package_tools = { workspace = true }
+sublime_monorepo_tools = { workspace = true }
+
+# CLI dependencies
+clap = { version = "4.5.36", features = ["derive"] }
+dirs = { workspace = true }
+notify = "8.0.0"
+toml = "0.8.20"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# TUI dependencies
+ratatui = "0.29.0"
+crossterm = "0.29.0"
+tui-widget-list = "0.13.2"
+
+# Other dependencies
+tokio = { version = "1.44.2", features = ["full"] }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+anyhow = "1.0.98"
+log = { workspace = true }
+env_logger = "0.10"
+colored = "3.0.0"
+
+[[bin]]
+name = "workspace"
+path = "src/main.rs"
+
+[[bin]]
+name = "workspace-daemon"
+path = "src/bin/workspace-daemon.rs"
+
+[[bin]]
+name = "workspace-monitor"
+path = "src/bin/workspace-monitor.rs"
+
+[[bin]]
+name = "workspace-changes"
+path = "src/bin/workspace-changes.rs"
+
+[[bin]]
+name = "workspace-version"
+path = "src/bin/workspace-version.rs"
+
+[[bin]]
+name = "workspace-graph"
+path = "src/bin/workspace-graph.rs"
+
+[lib]
+name = "sublime_workspace_cli"
+path = "src/lib.rs"

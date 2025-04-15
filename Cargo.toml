@@ -74,6 +74,7 @@ sublime_node_tools = { version = "~0.1.0", path = "./crates/node" }
 sublime_git_tools = { version = "~0.1.0", path = "./crates/git" }
 sublime_package_tools = { version = "~0.1.0", path = "./crates/pkg" }
 sublime_monorepo_tools = { version = "~0.1.0", path = "./crates/monorepo" }
+sublime_cli_tools = { version = "~0.1.0", path = "./crates/cli" }
 #sublime_hooks_tools = { version = "~0.1.0", path = "./crates/hooks" }
 mimalloc = "0.1.42"
 serde = "1.0.203"
@@ -83,6 +84,9 @@ thiserror = "1.0.64"
 regex = "1.11.0"
 tokio = { version = "1.38.0", default-features = false }
 derive_more = { version = "2.0.1", features = ["debug"] }
+dirs = "6.0.0"
+log = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 
 [profile.release]
 codegen-units = 1
