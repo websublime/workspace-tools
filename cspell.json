@@ -3,6 +3,8 @@
     "DependencyResolutionError",
     "DependencyResolutionError",
     "&vec![pkg.clone()]",
-    "if !circular_group.is_empty() { vec![circular_group] } else { Vec::new() }"
+    "if !circular_group.is_empty() { vec![circular_group] } else { Vec::new() }",
+    "set_values.enumerate()",
+    "dialoguer"
   ]
 }

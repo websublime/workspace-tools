@@ -3,8 +3,9 @@ name = "sublime_cli_tools"
 version = "0.1.0"
 edition = "2021"
 description = "CLI tools for monorepo management"
-authors = ["Your Name <your.email@example.com>"]
-license = "MIT OR Apache-2.0"
+authors = ["Miguel Ramos <miguel.ramos@websublime.com>"]
+license = "MIT"
+default-run = "workspace"
 
 [dependencies]
 sublime_standard_tools = { workspace = true }
@@ -25,6 +26,15 @@ ratatui = "0.29.0"
 crossterm = "0.29.0"
 tui-widget-list = "0.13.2"
 
+# Enhanced CLI output
+tabled = "0.17.0"         # Beautiful tables
+console = "0.15"          # Better styling and emoji support
+dialoguer = "0.11"        # Interactive prompts (if needed)
+indicatif = "0.17"        # Progress bars and spinners
+unicode-width = "0.2"     # For proper alignment with Unicode
+colored = "3.0.0"
+textwrap = "0.16.0"
+
 # Other dependencies
 tokio = { version = "1.44.2", features = ["full"] }
 chrono = { workspace = true }
@@ -32,12 +42,13 @@ thiserror = { workspace = true }
 anyhow = "1.0.98"
 log = { workspace = true }
 env_logger = "0.10"
-colored = "3.0.0"
 ctrlc = "3.4"
 rand = "0.8"
 bincode = "1.3"
 libc = "0.2"
 glob-match = "0.2"
+regex = { workspace = true }
+once_cell = "1.18.0"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

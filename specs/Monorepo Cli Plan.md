@@ -6,10 +6,12 @@ description: null
 icon: 💭
 createdAt: '2025-04-14T23:57:55.769Z'
 creationDate: 2025-04-15 00:57
-modificationDate: 2025-04-15 01:13
+modificationDate: 2025-04-16 11:17
 tags: [workspace-tools, rust, cli]
 coverImage: null
 ---
+
+# Monorepo Management System: Comprehensive Implementation Plan
 
 ### The request
 
@@ -19,7 +21,11 @@ let's create detail plan and a step by step implementation. Diagrams to demonstr
 
 - a base command
 
-- all the others are sub commands (cargo style) and ability to extend from outside
+- all the others are sub commands (cargo/git style) and ability to extend from outside
+
+- global parameters from the base command are passed to the subcommands
+
+- init monorepo from a template subcommand so we will have (workspace repo init, workspace repo add, workspace remove) grouped in the subcommand
 
 - monitor all the changes in the monorepo
 
@@ -245,6 +251,8 @@ To finalize, for now no code just a very well detailed plan like describe here, 
 - Store repository metadata
 
 - Configure per-repository settings
+
+- Init repository from a template
 
 **Integration Points**:
 
@@ -609,6 +617,8 @@ get_project_root_path(root) -> Option<PathBuf>
 3. Configure dependencies
 
 4. Create basic CLI entry point
+
+5. Create a ui lib to be used across all outputs
 
 #### Step 2: Configuration System
 
@@ -1057,25 +1067,44 @@ sublime_standard_tools = { workspace = true }
 sublime_git_tools = { workspace = true }
 sublime_package_tools = { workspace = true }
 sublime_monorepo_tools = { workspace = true }
+
 # CLI dependencies
-clap = { version = "4.3", features = ["derive"] }
-dirs = "5.0"
-notify = "5.1"
-toml = "0.7"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+clap = { version = "4.5.36", features = ["derive"] }
+dirs = { workspace = true }
+notify = "8.0.0"
+toml = "0.8.20"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
 # TUI dependencies
-ratatui = "0.23.0"
-crossterm = "0.27.0"
-tui-widget-list = "0.4"
+ratatui = "0.29.0"
+crossterm = "0.29.0"
+tui-widget-list = "0.13.2"
+
+# Enhanced CLI output
+cli-table = "0.4"         # Beautiful tables
+console = "0.15"          # Better styling and emoji support
+dialoguer = "0.11"        # Interactive prompts (if needed)
+indicatif = "0.17"        # Progress bars and spinners
+unicode-width = "0.2"     # For proper alignment with Unicode
+
 # Other dependencies
-tokio = { version = "1.29", features = ["full"] }
-chrono = { version = "0.4", features = ["serde"] }
-thiserror = "1.0"
-anyhow = "1.0"
-log = "0.4"
+tokio = { version = "1.44.2", features = ["full"] }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+anyhow = "1.0.98"
+log = { workspace = true }
 env_logger = "0.10"
-colored = "2.0"
+colored = "3.0.0"
+ctrlc = "3.4"
+rand = "0.8"
+bincode = "1.3"
+libc = "0.2"
+glob-match = "0.2"
+regex = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 [[bin]]
 name = "workspace"
 path = "src/main.rs"
