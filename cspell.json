@@ -8,6 +8,9 @@
     "dialoguer",
     "peaker",
     "status_list",
-    "packages"
+    "packages",
+    "nonblocking",
+    "thiserror",
+    "unistd"
   ]
 }
