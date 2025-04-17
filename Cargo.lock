@@ -2440,6 +2440,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "serde_yaml",
  "sublime_git_tools",
  "sublime_monorepo_tools",
  "sublime_package_tools",

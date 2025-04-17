@@ -24,6 +24,7 @@ pub struct Tabular {
     pub rows: Vec<Vec<String>>,
 }
 
+#[derive(Default)]
 pub struct TabularOptions {
     pub title: Option<String>,
     pub headers_in_columns: bool,
@@ -120,6 +121,20 @@ pub fn key_value_table<K: Display, V: Display>(items: Vec<(K, V)>) -> String {
         items.into_iter().map(|(k, v)| vec![k.to_string(), v.to_string()]).collect();
 
     create_table(headers, rows)
+}
+
+pub fn key_value_tabular<K: Display, V: Display>(
+    items: Vec<(K, V)>,
+    options: Option<TabularOptions>,
+) -> String {
+    let headers = vec!["Key".to_string(), "Value".to_string()];
+    let rows: Vec<Vec<String>> =
+        items.into_iter().map(|(k, v)| vec![k.to_string(), v.to_string()]).collect();
+
+    let tabular_options = options.unwrap_or_default();
+    let tabular = Tabular { headers, rows };
+
+    create_tabular(&tabular, &tabular_options)
 }
 
 fn get_terminal_size() -> (usize, usize) {

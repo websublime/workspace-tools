@@ -32,7 +32,9 @@ pub use progress::{
     progress_iterator, progress_vec, spinner, StagedProgress,
 };
 pub use symbols::{Symbol, SymbolType};
-pub use tables::{create_table, create_tabular, key_value_table, Tabular, TabularOptions};
+pub use tables::{
+    create_table, create_tabular, key_value_table, key_value_tabular, Tabular, TabularOptions,
+};
 pub use theme::{
     current_palette, dim_style, error_style, highlight_style, info_style, muted_style,
     primary_style, secondary_style, success_style, use_default_theme, use_theme, warning_style,
