@@ -1,6 +1,7 @@
 use console::Term;
 use std::{env, time::Duration};
 use sublime_workspace_cli::ui;
+use tabled::settings::Color;
 
 fn main() {
     // Initialize the UI system
@@ -161,6 +162,31 @@ fn test_tables() {
     ];
 
     println!("{}", ui::create_table(headers, rows));
+    println!();
+
+    let tabular = ui::Tabular {
+        headers: vec!["Name".to_string(), "Version".to_string(), "Status".to_string()],
+        rows: vec![
+            vec!["package-a".to_string(), "1.0.0".to_string(), "Up to date".to_string()],
+            vec!["package-b".to_string(), "2.1.0".to_string(), "Needs update".to_string()],
+            vec!["package-c".to_string(), "0.5.0".to_string(), "Deprecated".to_string()],
+            vec![
+                "very-long-package-name".to_string(),
+                "1.0.0-beta.1".to_string(),
+                "Under development".to_string(),
+            ],
+        ],
+    };
+
+    let tabular_options = ui::TabularOptions {
+        title: Some("Packages".to_string()),
+        headers_in_columns: true,
+        border_color: Some(Color::FG_CYAN),
+        header_color: Some(Color::FG_YELLOW),
+        header_title: Some("Packages".to_string()),
+    };
+
+    println!("{}", ui::create_tabular(&tabular, &tabular_options));
     println!();
 
     // Key-value table
