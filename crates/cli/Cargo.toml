@@ -34,6 +34,7 @@ indicatif = "0.17"        # Progress bars and spinners
 unicode-width = "0.2"     # For proper alignment with Unicode
 colored = "3.0.0"
 textwrap = "0.16.0"
+terminal_size = "0.4.2"
 
 # Other dependencies
 tokio = { version = "1.44.2", features = ["full"] }

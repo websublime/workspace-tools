@@ -179,11 +179,12 @@ fn test_tables() {
     };
 
     let tabular_options = ui::TabularOptions {
-        title: Some("Packages".to_string()),
+        title: None,
         headers_in_columns: true,
         border_color: Some(Color::FG_CYAN),
         header_color: Some(Color::FG_YELLOW),
-        header_title: Some("Packages".to_string()),
+        header_title: Some("Packages Information".to_string()),
+        footer_title: Some(format!("Total: {}", tabular.rows.len())),
     };
 
     println!("{}", ui::create_tabular(&tabular, &tabular_options));
