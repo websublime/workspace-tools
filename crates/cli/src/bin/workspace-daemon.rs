@@ -47,6 +47,25 @@ enum Commands {
 
     /// Run the daemon in foreground mode (used internally)
     Run,
+
+    /// List repositories being monitored by the daemon
+    ListRepos,
+
+    /// Add a repository to be monitored
+    AddRepo {
+        /// Path to the repository
+        path: String,
+
+        /// Optional name for the repository
+        #[arg(long)]
+        name: Option<String>,
+    },
+
+    /// Remove a repository from monitoring
+    RemoveRepo {
+        /// Repository path or name
+        identifier: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -117,7 +136,12 @@ fn main() -> Result<()> {
         Commands::Stop => stop_daemon(&daemon_manager)?,
         Commands::Restart => restart_daemon(&daemon_manager, cli.log_level.as_deref())?,
         Commands::Status => show_daemon_status(&daemon_manager)?,
-        Commands::Run => run_daemon(&daemon_manager, daemon_config, log_level)?,
+        Commands::Run => run_daemon(&daemon_manager, daemon_config, Some(config_path), log_level)?,
+        Commands::ListRepos => list_repositories(&daemon_manager)?,
+        Commands::AddRepo { path, name } => {
+            add_repository(&daemon_manager, &path, name.as_deref())?
+        }
+        Commands::RemoveRepo { identifier } => remove_repository(&daemon_manager, &identifier)?,
     }
 
     Ok(())
@@ -295,6 +319,7 @@ fn show_daemon_status(daemon_manager: &DaemonManager) -> Result<()> {
         println!("\n{}", ui::highlight("Available commands:"));
         println!("{}", ui::command_example("workspace daemon stop"));
         println!("{}", ui::command_example("workspace daemon restart"));
+        println!("{}", ui::command_example("workspace daemon list-repos"));
     } else {
         println!("{}", ui::warning_style("Daemon is not running"));
         println!("\n{}", ui::highlight("Commands to start the daemon:"));
@@ -304,9 +329,86 @@ fn show_daemon_status(daemon_manager: &DaemonManager) -> Result<()> {
     Ok(())
 }
 
+fn list_repositories(daemon_manager: &DaemonManager) -> Result<()> {
+    // Query the daemon for repositories
+    match daemon_manager.send_command("list-repos", &[]) {
+        Ok(output) => {
+            let repos: Vec<&str> = output.split('\n').filter(|s| !s.is_empty()).collect();
+
+            println!("{}", ui::section_header("Monitored Repositories"));
+
+            if repos.is_empty() {
+                println!("{}", ui::muted("No repositories are currently being monitored."));
+                println!("\nTo add a repository:");
+                println!("{}", ui::command_example("workspace daemon add-repo <path>"));
+            } else {
+                // Create repository table
+                let mut table_rows = Vec::new();
+
+                for (i, repo) in repos.iter().enumerate() {
+                    table_rows.push(vec![(i + 1).to_string(), repo.to_string()]);
+                }
+
+                let headers = vec!["#".to_string(), "Repository Path".to_string()];
+
+                let tabular = ui::Tabular { headers, rows: table_rows };
+
+                let options = ui::TabularOptions {
+                    title: None,
+                    headers_in_columns: true,
+                    border_color: Some(tabled::settings::Color::FG_CYAN),
+                    header_color: Some(tabled::settings::Color::FG_YELLOW),
+                    header_title: None,
+                    footer_title: Some(format!("Total: {} repositories", repos.len())),
+                };
+
+                println!("{}", ui::create_tabular(&tabular, &options));
+            }
+        }
+        Err(e) => {
+            println!("{}", ui::error(&format!("Failed to list repositories: {}", e)));
+            return Err(e.into());
+        }
+    }
+
+    Ok(())
+}
+
+fn add_repository(daemon_manager: &DaemonManager, path: &str, name: Option<&str>) -> Result<()> {
+    match daemon_manager.add_repository(path, name) {
+        Ok(()) => {
+            println!("{}", ui::success(&format!("Repository '{}' added for monitoring", path)));
+        }
+        Err(e) => {
+            println!("{}", ui::error(&format!("Failed to add repository: {}", e)));
+            return Err(e.into());
+        }
+    }
+
+    Ok(())
+}
+
+fn remove_repository(daemon_manager: &DaemonManager, identifier: &str) -> Result<()> {
+    match daemon_manager.remove_repository(identifier) {
+        Ok(()) => {
+            println!(
+                "{}",
+                ui::success(&format!("Repository '{}' removed from monitoring", identifier))
+            );
+        }
+        Err(e) => {
+            println!("{}", ui::error(&format!("Failed to remove repository: {}", e)));
+            return Err(e.into());
+        }
+    }
+
+    Ok(())
+}
+
 fn run_daemon(
     daemon_manager: &DaemonManager,
     daemon_config: sublime_workspace_cli::common::config::DaemonConfig,
+    config_path: Option<PathBuf>,
     log_level: &str,
 ) -> Result<()> {
     // This function is called when the daemon is started in the background
@@ -341,7 +443,7 @@ fn run_daemon(
     info!("Daemon PID file created at {:?}", pid_file_path);
 
     // Create a new daemon server
-    let mut server = DaemonServer::new(socket_path);
+    let mut server = DaemonServer::new(socket_path, config_path);
 
     // Run the server
     match server.run() {

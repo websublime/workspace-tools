@@ -1,4 +1,3 @@
-use crate::common::config::DaemonConfig;
 use anyhow::Result;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
@@ -13,10 +12,10 @@ use std::thread;
 use std::time::Duration;
 use thiserror::Error;
 
-use super::config::Config;
+use crate::common::config::{get_config_path, Config, DaemonConfig, RepositoryConfig};
 
 /// Maximum message size for IPC communications
-const MAX_MESSAGE_SIZE: usize = 1024 * 1024; // 1MB
+const MAX_MESSAGE_SIZE: usize = 10 * 1024 * 1024; // 10MB
 
 /// Default timeout for daemon operations in milliseconds
 const DEFAULT_OPERATION_TIMEOUT_MS: u64 = 5000;
@@ -483,28 +482,102 @@ impl DaemonManager {
             return Err(DaemonError::NotRunning);
         }
 
-        // Create an add repository request
-        let request = DaemonMessage::AddRepositoryRequest {
-            path: path.to_string(),
-            name: name.map(String::from),
-        };
+        if self.is_running()? {
+            // Create an add repository request
+            let request = DaemonMessage::AddRepositoryRequest {
+                path: path.to_string(),
+                name: name.map(String::from),
+            };
 
-        // Send the request and get the response
-        match self.send_message(&request) {
-            Ok(DaemonMessage::AddRepositoryResponse { success, error }) => {
-                if success {
-                    Ok(())
-                } else {
-                    Err(DaemonError::CommandError(
-                        error.unwrap_or_else(|| "Failed to add repository".to_string()),
-                    ))
+            // Send the request and get the response
+            match self.send_message(&request) {
+                Ok(DaemonMessage::AddRepositoryResponse { success, error }) => {
+                    if !success {
+                        return Err(DaemonError::CommandError(
+                            error.unwrap_or_else(|| {
+                                "Failed to add repository to daemon".to_string()
+                            }),
+                        ));
+                    }
+                    // Continue to also add to config
+                }
+                Ok(_) => {
+                    return Err(DaemonError::InvalidMessage(
+                        "Unexpected response to add repository request".to_string(),
+                    ));
+                }
+                Err(e) => {
+                    warn!("Failed to add repository to running daemon: {}", e);
+                    // Continue to add to config anyway
                 }
             }
-            Ok(_) => Err(DaemonError::InvalidMessage(
-                "Unexpected response to add repository request".to_string(),
-            )),
-            Err(e) => Err(e),
         }
+
+        // Next, add to config file so it persists for future daemon runs
+        let config_path = get_config_path();
+        let mut config = if config_path.exists() {
+            match Config::load(&config_path) {
+                Ok(config) => config,
+                Err(e) => {
+                    return Err(DaemonError::ConfigError(format!("Failed to load config: {}", e)));
+                }
+            }
+        } else {
+            Config::default()
+        };
+
+        // Create new repository config
+        let repo_config = RepositoryConfig {
+            path: path.to_string(),
+            name: name.map(String::from),
+            active: Some(true),
+            branch: None,
+            include_patterns: None,
+            exclude_patterns: None,
+        };
+
+        // Add to config
+        if config.repositories.is_none() {
+            config.repositories = Some(Vec::new());
+        }
+
+        if let Some(repos) = &mut config.repositories {
+            // Check if repo already exists by path
+            if repos.iter().any(|r| r.path == path) {
+                return Err(DaemonError::ConfigError(format!(
+                    "Repository already exists at path: {}",
+                    path
+                )));
+            }
+
+            // Add the new repo
+            repos.push(repo_config);
+        }
+
+        // Save config
+        let content = match toml::to_string_pretty(&config) {
+            Ok(content) => content,
+            Err(e) => {
+                return Err(DaemonError::ConfigError(format!("Failed to serialize config: {}", e)));
+            }
+        };
+
+        // Create parent directories if needed
+        if let Some(parent) = config_path.parent() {
+            if let Err(e) = fs::create_dir_all(parent) {
+                return Err(DaemonError::ConfigError(format!(
+                    "Failed to create config directory: {}",
+                    e
+                )));
+            }
+        }
+
+        // Write config file
+        if let Err(e) = fs::write(&config_path, content) {
+            return Err(DaemonError::ConfigError(format!("Failed to write config file: {}", e)));
+        }
+
+        Ok(())
     }
 
     /// Removes a repository from monitoring
@@ -514,25 +587,78 @@ impl DaemonManager {
             return Err(DaemonError::NotRunning);
         }
 
-        // Create a remove repository request
-        let request = DaemonMessage::RemoveRepositoryRequest { identifier: identifier.to_string() };
+        // First, remove from daemon if it's running
+        if self.is_running()? {
+            // Create a remove repository request
+            let request =
+                DaemonMessage::RemoveRepositoryRequest { identifier: identifier.to_string() };
 
-        // Send the request and get the response
-        match self.send_message(&request) {
-            Ok(DaemonMessage::RemoveRepositoryResponse { success, error }) => {
-                if success {
-                    Ok(())
-                } else {
-                    Err(DaemonError::CommandError(
-                        error.unwrap_or_else(|| "Failed to remove repository".to_string()),
-                    ))
+            // Send the request and check response
+            match self.send_message(&request) {
+                Ok(DaemonMessage::RemoveRepositoryResponse { success, error }) => {
+                    if !success {
+                        warn!(
+                            "Failed to remove repository from running daemon: {}",
+                            error.unwrap_or_else(|| "Unknown error".to_string())
+                        );
+                        // Continue to remove from config anyway
+                    }
+                }
+                Ok(_) => {
+                    warn!("Unexpected response to remove repository request");
+                    // Continue to remove from config anyway
+                }
+                Err(e) => {
+                    warn!("Failed to remove repository from running daemon: {}", e);
+                    // Continue to remove from config anyway
                 }
             }
-            Ok(_) => Err(DaemonError::InvalidMessage(
-                "Unexpected response to remove repository request".to_string(),
-            )),
-            Err(e) => Err(e),
         }
+
+        // Next, remove from config file so it persists for future daemon runs
+        let config_path = get_config_path();
+        if !config_path.exists() {
+            return Err(DaemonError::ConfigError("Config file does not exist".to_string()));
+        }
+
+        let mut config = match Config::load(&config_path) {
+            Ok(config) => config,
+            Err(e) => {
+                return Err(DaemonError::ConfigError(format!("Failed to load config: {}", e)));
+            }
+        };
+
+        // Remove from config
+        let mut removed = false;
+        if let Some(repos) = &mut config.repositories {
+            let initial_len = repos.len();
+            repos.retain(|r| {
+                r.path != identifier && r.name.as_ref() != Some(&identifier.to_string())
+            });
+            removed = repos.len() < initial_len;
+        }
+
+        if !removed {
+            return Err(DaemonError::ConfigError(format!(
+                "Repository not found with identifier: {}",
+                identifier
+            )));
+        }
+
+        // Save config
+        let content = match toml::to_string_pretty(&config) {
+            Ok(content) => content,
+            Err(e) => {
+                return Err(DaemonError::ConfigError(format!("Failed to serialize config: {}", e)));
+            }
+        };
+
+        // Write config file
+        if let Err(e) = fs::write(&config_path, content) {
+            return Err(DaemonError::ConfigError(format!("Failed to write config file: {}", e)));
+        }
+
+        Ok(())
     }
 
     // Private helper methods
@@ -644,6 +770,7 @@ impl DaemonManager {
 /// Daemon server for handling IPC communication in the daemon process
 pub struct DaemonServer {
     socket_path: PathBuf,
+    config_path: Option<PathBuf>,
     running: Arc<AtomicBool>,
     start_time: std::time::Instant,
     repositories: Vec<String>, // Placeholder for repository tracking
@@ -651,12 +778,52 @@ pub struct DaemonServer {
 
 impl DaemonServer {
     /// Creates a new daemon server
-    pub fn new(socket_path: PathBuf) -> Self {
+    pub fn new(socket_path: PathBuf, config_path: Option<PathBuf>) -> Self {
         Self {
             socket_path,
+            config_path,
             running: Arc::new(AtomicBool::new(true)),
             start_time: std::time::Instant::now(),
             repositories: Vec::new(),
+        }
+    }
+
+    /// Loads repositories from configuration
+    pub fn load_repositories_from_config(&mut self) -> Result<(), DaemonError> {
+        use crate::common::config::{get_config_path, Config};
+
+        // Use provided config path or default
+        let config_path = self.config_path.clone().unwrap_or_else(get_config_path);
+
+        if !config_path.exists() {
+            warn!("Config file does not exist at {:?}, no repositories loaded", config_path);
+            return Ok(());
+        }
+
+        info!("Loading repositories from config file: {:?}", config_path);
+
+        // Try to load the config file
+        match Config::load(&config_path) {
+            Ok(config) => {
+                // Extract repositories from config
+                if let Some(repos) = config.repositories {
+                    let active_repos: Vec<String> = repos
+                        .iter()
+                        .filter(|r| r.active.unwrap_or(true))
+                        .map(|r| r.path.clone())
+                        .collect();
+
+                    info!("Found {} active repositories in config", active_repos.len());
+                    self.repositories = active_repos;
+                } else {
+                    info!("No repositories defined in config");
+                }
+                Ok(())
+            }
+            Err(e) => {
+                warn!("Failed to load config file: {}", e);
+                Err(DaemonError::ConfigError(format!("Failed to load config: {}", e)))
+            }
         }
     }
 
@@ -675,7 +842,17 @@ impl DaemonServer {
         // Create the Unix socket
         let listener = UnixListener::bind(&self.socket_path).map_err(DaemonError::SocketError)?;
 
-        info!("Daemon server started at {:?}", self.socket_path);
+        // Load repositories from config
+        if let Err(e) = self.load_repositories_from_config() {
+            warn!("Error loading repositories from config: {}", e);
+            // Continue running even if we can't load repos
+        }
+
+        info!(
+            "Daemon server started at {:?} with {} repositories",
+            self.socket_path,
+            self.repositories.len()
+        );
 
         // Set up signal handling for graceful shutdown
         let running = self.running.clone();
