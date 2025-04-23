@@ -23,6 +23,9 @@ pub struct DaemonConfig {
     pub pid_file: Option<String>,
     pub polling_interval_ms: Option<u64>,
     pub inactive_polling_ms: Option<u64>,
+    pub log_max_size_bytes: Option<u64>,
+    pub log_max_files: Option<usize>,
+    pub log_check_interval_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +72,10 @@ impl Config {
                 pid_file: Some(expand_path("~/.local/share/workspace-cli/daemon.pid")),
                 polling_interval_ms: Some(500),
                 inactive_polling_ms: Some(5000),
+                // Add log rotation configuration with sensible defaults
+                log_max_size_bytes: Some(10 * 1024 * 1024), // 10 MB
+                log_max_files: Some(5),                     // Keep 5 rotated log files
+                log_check_interval_ms: Some(3600000),       // Check every hour (in milliseconds)
             }),
             monitor: Some(MonitorConfig {
                 refresh_rate_ms: Some(1000),

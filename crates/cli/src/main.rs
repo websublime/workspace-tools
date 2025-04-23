@@ -88,6 +88,15 @@ enum Commands {
         args: Vec<String>,
     },
 
+    /// Debug and troubleshoot the daemon connection
+    Debug {
+        /// Subcommand to execute
+        command: Option<String>,
+
+        /// Additional arguments to pass to the subcommand
+        args: Vec<String>,
+    },
+
     /// Execute a custom subcommand
     #[command(external_subcommand)]
     External(Vec<String>),
@@ -261,6 +270,15 @@ fn main() -> Result<()> {
             full_args.extend(args.iter().map(String::as_str));
 
             run_subcommand("workspace-graph", &full_args)?;
+        }
+        Some(Commands::Debug { command, args }) => {
+            let mut full_args = Vec::new();
+            if let Some(cmd) = command {
+                full_args.push(cmd.as_str());
+            }
+            full_args.extend(args.iter().map(String::as_str));
+
+            run_subcommand("workspace-debug", &full_args)?;
         }
         Some(Commands::External(args)) => {
             if args.is_empty() {
