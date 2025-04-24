@@ -69,12 +69,12 @@ single_match = "allow"
 single_match_else = "allow"
 
 [workspace.dependencies]
-sublime_standard_tools = { version = "~0.1.0", path = "./crates/standard" }
-sublime_node_tools = { version = "~0.1.0", path = "./crates/node" }
-sublime_git_tools = { version = "~0.1.0", path = "./crates/git" }
-sublime_package_tools = { version = "~0.1.0", path = "./crates/pkg" }
-sublime_monorepo_tools = { version = "~0.1.0", path = "./crates/monorepo" }
-sublime_cli_tools = { version = "~0.1.0", path = "./crates/cli" }
+#sublime_standard_tools = { version = "~0.1.0", path = "./crates/standard" }
+#sublime_node_tools = { version = "~0.1.0", path = "./crates/node" }
+#sublime_git_tools = { version = "~0.1.0", path = "./crates/git" }
+#sublime_package_tools = { version = "~0.1.0", path = "./crates/pkg" }
+#sublime_monorepo_tools = { version = "~0.1.0", path = "./crates/monorepo" }
+#sublime_cli_tools = { version = "~0.1.0", path = "./crates/cli" }
 #sublime_hooks_tools = { version = "~0.1.0", path = "./crates/hooks" }
 mimalloc = "0.1.42"
 serde = "1.0.203"
