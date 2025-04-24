@@ -1,55 +1,25 @@
-//! Workspace detection utilities
-//!
-//! Provides functions to detect workspaces in various monorepo setups
-//! based on package manager configuration files.
-
+use crate::common::errors::CliResult;
 use log::{debug, info};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::fs;
-use std::path::Path;
-use sublime_standard_tools::CorePackageManager;
+use std::path::{Path, PathBuf};
 
 /// Detect workspace patterns based on package manager and config files
 pub fn detect_workspace_patterns(path: &Path) -> Vec<String> {
     let mut patterns = Vec::new();
 
-    // Try to detect the package manager first
-    let package_manager = sublime_standard_tools::detect_package_manager(path);
-    info!("Detected package manager: {:?}", package_manager);
+    // Try to detect patterns from package.json workspaces
+    patterns.extend(extract_patterns_from_package_json(path));
 
-    // Check for workspace config based on package manager
-    match package_manager {
-        // For pnpm, prioritize checking pnpm-workspace.yaml
-        Some(CorePackageManager::Pnpm) => {
-            let pnpm_patterns = extract_patterns_from_pnpm_workspace(path);
-            patterns.extend(pnpm_patterns);
+    // Try pnpm-workspace.yaml if no patterns found yet
+    if patterns.is_empty() {
+        patterns.extend(extract_patterns_from_pnpm_workspace(path));
+    }
 
-            // If no patterns found in pnpm-workspace.yaml, check package.json as fallback
-            if patterns.is_empty() {
-                patterns.extend(extract_patterns_from_package_json(path));
-            }
-        }
-
-        // For yarn/npm/bun, prioritize checking package.json workspaces
-        Some(CorePackageManager::Yarn)
-        | Some(CorePackageManager::Npm)
-        | Some(CorePackageManager::Bun) => {
-            patterns.extend(extract_patterns_from_package_json(path));
-        }
-
-        // If no package manager detected, check all possible config files
-        None => {
-            // Try all config files in order
-            patterns.extend(extract_patterns_from_package_json(path));
-
-            if patterns.is_empty() {
-                patterns.extend(extract_patterns_from_pnpm_workspace(path));
-            }
-
-            if patterns.is_empty() {
-                patterns.extend(extract_patterns_from_lerna_config(path));
-            }
-        }
+    // Try lerna.json if still no patterns
+    if patterns.is_empty() {
+        patterns.extend(extract_patterns_from_lerna_config(path));
     }
 
     // Add fallback patterns if none were found
@@ -66,7 +36,7 @@ pub fn detect_workspace_patterns(path: &Path) -> Vec<String> {
 }
 
 /// Extract workspace patterns from package.json
-pub fn extract_patterns_from_package_json(path: &Path) -> Vec<String> {
+fn extract_patterns_from_package_json(path: &Path) -> Vec<String> {
     let mut patterns = Vec::new();
     let package_json_path = path.join("package.json");
 
@@ -112,7 +82,7 @@ pub fn extract_patterns_from_package_json(path: &Path) -> Vec<String> {
 }
 
 /// Extract workspace patterns from pnpm-workspace.yaml
-pub fn extract_patterns_from_pnpm_workspace(path: &Path) -> Vec<String> {
+fn extract_patterns_from_pnpm_workspace(path: &Path) -> Vec<String> {
     let mut patterns = Vec::new();
     let pnpm_workspace_path = path.join("pnpm-workspace.yaml");
 
@@ -144,7 +114,7 @@ pub fn extract_patterns_from_pnpm_workspace(path: &Path) -> Vec<String> {
 }
 
 /// Extract workspace patterns from lerna.json
-pub fn extract_patterns_from_lerna_config(path: &Path) -> Vec<String> {
+fn extract_patterns_from_lerna_config(path: &Path) -> Vec<String> {
     let mut patterns = Vec::new();
     let lerna_path = path.join("lerna.json");
 
@@ -186,4 +156,121 @@ pub fn get_standard_exclude_patterns() -> Vec<String> {
         "**/.vitepress/**".to_string(),
         "**/.github/**".to_string(),
     ]
+}
+
+/// Workspace detector for finding workspaces in a repository
+pub struct WorkspaceDetector {
+    root_path: PathBuf,
+    include_patterns: Vec<String>,
+    exclude_patterns: Vec<String>,
+}
+
+impl WorkspaceDetector {
+    pub fn new<P: AsRef<Path>>(root_path: P) -> Self {
+        Self {
+            root_path: root_path.as_ref().to_path_buf(),
+            include_patterns: Vec::new(),
+            exclude_patterns: get_standard_exclude_patterns(),
+        }
+    }
+
+    pub fn with_patterns<P: AsRef<Path>>(
+        root_path: P,
+        include_patterns: Vec<String>,
+        exclude_patterns: Vec<String>,
+    ) -> Self {
+        Self { root_path: root_path.as_ref().to_path_buf(), include_patterns, exclude_patterns }
+    }
+
+    pub fn add_include_pattern(&mut self, pattern: String) {
+        self.include_patterns.push(pattern);
+    }
+
+    pub fn add_exclude_pattern(&mut self, pattern: String) {
+        self.exclude_patterns.push(pattern);
+    }
+
+    pub fn set_include_patterns(&mut self, patterns: Vec<String>) {
+        self.include_patterns = patterns;
+    }
+
+    pub fn set_exclude_patterns(&mut self, patterns: Vec<String>) {
+        self.exclude_patterns = patterns;
+    }
+
+    pub fn detect(&self) -> CliResult<Vec<PathBuf>> {
+        let mut workspaces = HashSet::new();
+
+        // Use the existing patterns or detect them
+        let patterns = if self.include_patterns.is_empty() {
+            detect_workspace_patterns(&self.root_path)
+        } else {
+            self.include_patterns.clone()
+        };
+
+        // Find workspaces based on patterns
+        for pattern in patterns {
+            let glob_pattern = self.root_path.join(&pattern);
+            if let Some(glob_pattern_str) = glob_pattern.to_str() {
+                match glob::glob(glob_pattern_str) {
+                    Ok(paths) => {
+                        for entry in paths.filter_map(Result::ok) {
+                            if !self.is_excluded(&entry) {
+                                if entry.is_dir() {
+                                    workspaces.insert(entry);
+                                } else if entry.is_file() && entry.ends_with("package.json") {
+                                    if let Some(parent) = entry.parent() {
+                                        workspaces.insert(parent.to_path_buf());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to process glob pattern {}: {}", pattern, e);
+                    }
+                }
+            }
+        }
+
+        Ok(workspaces.into_iter().collect())
+    }
+
+    fn is_excluded(&self, path: &Path) -> bool {
+        let path_str = path.to_string_lossy();
+        self.exclude_patterns.iter().any(|pattern| {
+            if let Ok(pattern) = glob::Pattern::new(pattern) {
+                pattern.matches(&path_str)
+            } else {
+                false
+            }
+        })
+    }
+
+    pub fn scan_for_repositories(&self) -> CliResult<Vec<(PathBuf, Option<String>)>> {
+        let workspaces = self.detect()?;
+        let mut repositories = Vec::new();
+
+        for workspace in workspaces {
+            // Try to read package.json for workspace name
+            let package_json = workspace.join("package.json");
+            let name = if package_json.exists() {
+                if let Ok(content) = fs::read_to_string(&package_json) {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                        json.get("name").and_then(|n| n.as_str()).map(String::from)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            repositories.push((workspace, name));
+        }
+
+        Ok(repositories)
+    }
 }

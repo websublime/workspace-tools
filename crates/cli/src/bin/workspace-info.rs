@@ -7,8 +7,7 @@ use sublime_monorepo_tools::{DiscoveryOptions, WorkspaceManager};
 use sublime_package_tools::ValidationOptions;
 use sublime_workspace_cli::{
     common::config::{get_config_path, Config, RepositoryConfig},
-    common::workspace_detection,
-    ui,
+    ui, workspace,
 };
 
 #[derive(Parser)]
@@ -176,8 +175,8 @@ fn determine_repositories_to_analyze(cli: &Cli, config: &Config) -> Result<Vec<R
 /// Create discovery options with smart pattern detection
 fn create_discovery_options(path: &Path) -> DiscoveryOptions {
     // Dynamically detect workspace patterns
-    let include_patterns = workspace_detection::detect_workspace_patterns(path);
-    let exclude_patterns = workspace_detection::get_standard_exclude_patterns();
+    let include_patterns = workspace::detect_workspace_patterns(path);
+    let exclude_patterns = workspace::get_standard_exclude_patterns();
 
     DiscoveryOptions::new()
         .auto_detect_root(true)

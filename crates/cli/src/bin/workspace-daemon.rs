@@ -109,7 +109,7 @@ fn main() -> Result<()> {
 
     // Load configuration
     let config_path = cli.config.clone().unwrap_or_else(get_config_path);
-    let config = Config::load(&config_path).unwrap_or(Config::default());
+    let config = Config::load(&config_path).unwrap_or_default();
 
     // Override config with CLI arguments
     let socket_path = cli

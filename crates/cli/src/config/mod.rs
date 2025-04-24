@@ -1,7 +1,20 @@
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+mod daemon_config;
+pub use daemon_config::{DaemonConfig, DaemonConfigBuilder};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+use std::path::{Path, PathBuf};
+
+use crate::common::errors::{CliError, CliResult};
+
+pub trait ConfigLoader {
+    fn load<P: AsRef<Path>>(path: P) -> CliResult<Self>
+    where
+        Self: Sized;
+
+    fn save<P: AsRef<Path>>(&self, path: P) -> CliResult<()>;
+}
+
+/// General configuration container with all settings
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Config {
     pub general: Option<GeneralConfig>,
     pub daemon: Option<DaemonConfig>,
@@ -11,45 +24,34 @@ pub struct Config {
     pub repositories: Option<Vec<RepositoryConfig>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GeneralConfig {
     pub log_level: Option<String>,
     pub auto_start_daemon: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DaemonConfig {
-    pub socket_path: Option<String>,
-    pub pid_file: Option<String>,
-    pub polling_interval_ms: Option<u64>,
-    pub inactive_polling_ms: Option<u64>,
-    pub log_max_size_bytes: Option<u64>,
-    pub log_max_files: Option<usize>,
-    pub log_check_interval_ms: Option<u64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MonitorConfig {
     pub refresh_rate_ms: Option<u64>,
     pub default_view: Option<String>,
     pub color_theme: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct WatcherConfig {
     pub include_patterns: Option<Vec<String>>,
     pub exclude_patterns: Option<Vec<String>>,
     pub use_git_hooks: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GithubConfig {
     pub enable_integration: Option<bool>,
     pub token_path: Option<String>,
     pub fetch_interval_s: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RepositoryConfig {
     pub path: String,
     pub name: Option<String>,
@@ -66,16 +68,7 @@ impl Default for Config {
                 log_level: Some("info".to_string()),
                 auto_start_daemon: Some(true),
             }),
-            daemon: Some(DaemonConfig {
-                socket_path: Some(expand_path("~/.local/share/workspace-cli/daemon.sock")),
-                pid_file: Some(expand_path("~/.local/share/workspace-cli/daemon.pid")),
-                polling_interval_ms: Some(500),
-                inactive_polling_ms: Some(5000),
-                // Add log rotation configuration with sensible defaults
-                log_max_size_bytes: Some(10 * 1024 * 1024), // 10 MB
-                log_max_files: Some(5),                     // Keep 5 rotated log files
-                log_check_interval_ms: Some(3600000),       // Check every hour (in milliseconds)
-            }),
+            daemon: Some(DaemonConfig::default()),
             monitor: Some(MonitorConfig {
                 refresh_rate_ms: Some(1000),
                 default_view: Some("overview".to_string()),
@@ -108,7 +101,9 @@ impl Default for Config {
             }),
             github: Some(GithubConfig {
                 enable_integration: Some(false),
-                token_path: Some(expand_path("~/.config/workspace-cli/github_token")),
+                token_path: Some(crate::common::utils::expand_path(
+                    "~/.config/workspace-cli/github_token",
+                )),
                 fetch_interval_s: Some(300),
             }),
             repositories: Some(Vec::new()),
@@ -116,14 +111,30 @@ impl Default for Config {
     }
 }
 
-impl Config {
-    pub fn load(path: &std::path::Path) -> Result<Self, anyhow::Error> {
-        let content = std::fs::read_to_string(path)?;
-        let config: Config = toml::from_str(&content)?;
+impl ConfigLoader for Config {
+    fn load<P: AsRef<Path>>(path: P) -> CliResult<Self> {
+        let content = std::fs::read_to_string(path.as_ref()).map_err(CliError::Io)?;
+        let config: Config = toml::from_str(&content)
+            .map_err(|e| CliError::Config(format!("Failed to parse config: {}", e)))?;
         Ok(config)
+    }
+
+    fn save<P: AsRef<Path>>(&self, path: P) -> CliResult<()> {
+        let content = toml::to_string_pretty(self)
+            .map_err(|e| CliError::Config(format!("Failed to serialize config: {}", e)))?;
+
+        // Create parent directory if it doesn't exist
+        if let Some(parent) = path.as_ref().parent() {
+            std::fs::create_dir_all(parent).map_err(CliError::Io)?;
+        }
+
+        std::fs::write(path, content).map_err(CliError::Io)?;
+
+        Ok(())
     }
 }
 
+/// Get the default config path
 pub fn get_config_path() -> PathBuf {
     if let Ok(path) = std::env::var("WORKSPACE_CONFIG_PATH") {
         return PathBuf::from(path);
@@ -135,16 +146,4 @@ pub fn get_config_path() -> PathBuf {
     path.push("workspace-cli");
     path.push("config.toml");
     path
-}
-
-pub fn expand_path(path: &str) -> String {
-    let path = path.trim();
-
-    if path.starts_with("~/") {
-        if let Some(home) = dirs::home_dir() {
-            return home.join(path.strip_prefix("~/").unwrap()).to_string_lossy().into_owned();
-        }
-    }
-
-    path.to_string()
 }

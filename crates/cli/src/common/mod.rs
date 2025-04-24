@@ -1,4 +1,5 @@
 pub mod config;
 pub mod daemon;
+pub mod errors;
 pub mod ipc;
-pub mod workspace_detection;
+pub mod utils;
