@@ -1,32 +1,43 @@
 [workspace]
-members = ["crates/*"]
+members = ["crates/standard"]
 resolver = "2"
 
 [workspace.package]
+version = "0.1.0"
+authors = ["WebSublime"]
 edition = "2021"
-homepage = "https://websublime.com/"
+rust-version = "1.82.0"
 license = "MIT"
 repository = "https://github.com/websublime/workspace-node-tools"
 
-[profile.release-debug]
-debug = true
-inherits = "release"
+[workspace.dependencies]
+# Internal crates
+#sublime_standard_tools = { version = "0.1.0", path = "./crates/standard" }
+
+# Core dependencies
+async-trait = "0.1.74"
+chrono = { version = "0.4.31", features = ["serde"] }
+derive_more = { version = "2.0.1", features = ["debug"] }
+dirs = "6.0.0"
+log = "0.4.20"
+mimalloc = "0.1.42"
+regex = "1.11.0"
+serde = { version = "1.0.203", features = ["derive"] }
+serde_json = "1.0.117"
+tempfile = "3.8.1"
+thiserror = "1.0.64"
+tokio = { version = "1.38.0", default-features = false }
+toml = "0.5.0"
+walkdir = "2.4.0"
 
 [workspace.lints.rust]
+# Will be expanded as needed
 
 [workspace.lints.clippy]
 # Guidelines
-# - We should only disable rules globally if they are either false positives, chaotic, or does not make sense.
-# - Group are enabled with priority -1, so we could easily override some specific rules.
-#   - https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-lints-section
-
-# --- restriction https://doc.rust-lang.org/clippy/usage.html#clippyrestriction
 dbg_macro = "deny"
 print_stdout = "deny"
 allow-dbg-in-tests = "allow"
-
-# I like the explicitness of this rule as it removes confusion around `clone`.
-# This increases readability, avoids `clone` mindlessly and heap allocating on accident.
 clone_on_ref_ptr = "deny"
 empty_drop = "deny"
 exit = "deny"
@@ -36,64 +47,31 @@ rc_buffer = "deny"
 rc_mutex = "deny"
 rest_pat_in_fully_bound_structs = "deny"
 unnecessary_safety_comment = "deny"
-
-# --- pedantic #https://doc.rust-lang.org/clippy/usage.html#clippypedantic
-# To write the best rust code, pedantic group is enabled by default.
 pedantic = { level = "deny", priority = -1 }
-
-# Wizards, naming is too hard.
 module_inception = "allow"
 module_name_repetitions = "allow"
 similar_names = "allow"
-
-# Forwarding `Result` is a common pattern, this rule is too pedantic.
 missing_errors_doc = "allow"
-
-# #[must_use] is creating too much noise for this codebase, it does not add much value except nagging
-# the programmer to add a #[must_use] after clippy has been run.
-# Having #[must_use] everywhere also hinders readability.
 must_use_candidate = "allow"
-
 doc_markdown = "allow"
 missing_const_for_fn = "allow"
 needless_for_each = "allow"
 new_without_default = "allow"
-# TODO: should review this rule.
 missing_panics_doc = "allow"
-
-# Order doesn't really matter https://rust-lang.github.io/rust-clippy/master/index.html#/inconsistent_struct_constructor
 inconsistent_struct_constructor = "allow"
-
-# Single match is equally readable as if/else. https://rust-lang.github.io/rust-clippy/master/index.html#/single_match
 single_match = "allow"
 single_match_else = "allow"
 
-[workspace.dependencies]
-#sublime_standard_tools = { version = "~0.1.0", path = "./crates/standard" }
-#sublime_node_tools = { version = "~0.1.0", path = "./crates/node" }
-#sublime_git_tools = { version = "~0.1.0", path = "./crates/git" }
-#sublime_package_tools = { version = "~0.1.0", path = "./crates/pkg" }
-#sublime_monorepo_tools = { version = "~0.1.0", path = "./crates/monorepo" }
-#sublime_cli_tools = { version = "~0.1.0", path = "./crates/cli" }
-#sublime_hooks_tools = { version = "~0.1.0", path = "./crates/hooks" }
-mimalloc = "0.1.42"
-serde = "1.0.203"
-serde_json = "1.0.117"
-toml = "^0.5"
-thiserror = "1.0.64"
-regex = "1.11.0"
-tokio = { version = "1.38.0", default-features = false }
-derive_more = { version = "2.0.1", features = ["debug"] }
-dirs = "6.0.0"
-log = "0.4"
-chrono = { version = "0.4", features = ["serde"] }
-
 [profile.release]
 codegen-units = 1
-debug = false     # Set to `true` for debug information
+debug = false
 lto = "fat"
 opt-level = 3
-strip = "symbols" # Set to `false` for debug information
+strip = "symbols"
+
+[profile.release-debug]
+debug = true
+inherits = "release"
 
 [profile.release-wasi]
 codegen-units = 16
