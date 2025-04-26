@@ -26,7 +26,7 @@ mod utils;
 pub use fs::{FileSystem, FileSystemManager};
 pub use package::{PackageManager, PackageManagerKind};
 pub use structure::{Project, ProjectManager};
-pub use utils::PathExt;
+pub use utils::{NodePathKind, PathExt, PathUtils};
 
 use std::path::PathBuf;
 
@@ -43,11 +43,7 @@ pub struct ProjectConfig {
 
 impl Default for ProjectConfig {
     fn default() -> Self {
-        Self {
-            root: None,
-            detect_package_manager: true,
-            validate_structure: true,
-        }
+        Self { root: None, detect_package_manager: true, validate_structure: true }
     }
 }
 
@@ -130,7 +126,6 @@ impl ProjectConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
     #[test]
     fn test_project_config() {
@@ -153,4 +148,3 @@ mod tests {
         assert!(config.validate_structure);
     }
 }
-

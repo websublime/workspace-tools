@@ -20,7 +20,7 @@
 
 use std::{
     env,
-    path::{Path, PathBuf, Component},
+    path::{Component, Path, PathBuf},
 };
 
 use crate::error::{StandardError, StandardResult};
@@ -148,7 +148,7 @@ impl PathExt for Path {
         let mut current = Some(self);
         while let Some(path) = current {
             if path.join("package.json").exists() {
-                return self.strip_prefix(path).ok().map(|p| p.to_path_buf());
+                return self.strip_prefix(path).ok().map(std::path::Path::to_path_buf);
             }
             current = path.parent();
         }
@@ -162,19 +162,19 @@ impl PathExt for Path {
     fn validate(&self) -> StandardResult<()> {
         // Check for parent directory traversal
         if self.components().any(|c| c == Component::ParentDir) {
-            return Err(StandardError::new(
-                "Path contains parent directory traversal",
+            return Err(StandardError::Operation(
+                "Path contains parent directory traversal".to_string(),
             ));
         }
 
         // Check for absolute paths
         if self.is_absolute() {
-            return Err(StandardError::new("Absolute paths are not allowed"));
+            return Err(StandardError::Operation("Absolute paths are not allowed".to_string()));
         }
 
         // Check for symbolic links
         if self.read_link().is_ok() {
-            return Err(StandardError::new("Symbolic links are not allowed"));
+            return Err(StandardError::Operation("Symbolic links are not allowed".to_string()));
         }
 
         Ok(())
@@ -199,9 +199,8 @@ impl PathUtils {
     /// let cwd = PathUtils::current_dir().unwrap();
     /// ```
     pub fn current_dir() -> StandardResult<PathBuf> {
-        env::current_dir().map_err(|e| {
-            StandardError::new(format!("Failed to get current directory: {}", e))
-        })
+        env::current_dir()
+            .map_err(|e| StandardError::Operation(format!("Failed to get current directory: {e}")))
     }
 
     /// Finds the nearest package.json directory
@@ -259,16 +258,16 @@ impl PathUtils {
     /// ```
     pub fn make_relative(path: &Path, base: &Path) -> StandardResult<PathBuf> {
         path.strip_prefix(base)
-            .map(|p| p.to_path_buf())
-            .map_err(|e| StandardError::new(format!("Failed to make path relative: {}", e)))
+            .map(std::path::Path::to_path_buf)
+            .map_err(|e| StandardError::Operation(format!("Failed to make path relative: {e}")))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_path_normalization() {
@@ -279,25 +278,32 @@ mod tests {
     #[test]
     fn test_node_paths() {
         let path = Path::new("project");
-        assert_eq!(path.node_path(NodePathKind::NodeModules), PathBuf::from("project/node_modules"));
-        assert_eq!(path.node_path(NodePathKind::PackageJson), PathBuf::from("project/package.json"));
+        assert_eq!(
+            path.node_path(NodePathKind::NodeModules),
+            PathBuf::from("project/node_modules")
+        );
+        assert_eq!(
+            path.node_path(NodePathKind::PackageJson),
+            PathBuf::from("project/package.json")
+        );
     }
 
+    #[allow(clippy::expect_used)]
     #[test]
     fn test_project_detection() {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("Fail to create temporary directory");
         let project_dir = temp_dir.path();
 
         // No package.json
         assert!(!project_dir.is_in_project());
 
         // Create package.json
-        fs::write(project_dir.join("package.json"), "{}").unwrap();
+        fs::write(project_dir.join("package.json"), "{}").expect("Fail to create package.json");
         assert!(project_dir.is_in_project());
 
         // Test subdirectory
         let sub_dir = project_dir.join("src");
-        fs::create_dir(&sub_dir).unwrap();
+        fs::create_dir(&sub_dir).expect("Fail to create subdirectory");
         assert!(sub_dir.is_in_project());
     }
 
@@ -313,36 +319,38 @@ mod tests {
         assert!(Path::new("test/path").validate().is_ok());
     }
 
+    #[allow(clippy::expect_used)]
     #[test]
     fn test_relative_paths() {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("Fail to create temporary directory");
         let project_dir = temp_dir.path();
 
         // Create project structure
-        fs::write(project_dir.join("package.json"), "{}").unwrap();
-        fs::create_dir(project_dir.join("src")).unwrap();
+        fs::write(project_dir.join("package.json"), "{}").expect("Fail to write package.json");
+        fs::create_dir(project_dir.join("src")).expect("Fail to create src directory");
 
         let src_dir = project_dir.join("src");
-        let relative = src_dir.relative_to_project().unwrap();
+        let relative = src_dir.relative_to_project().expect("Fail to get relative path");
         assert_eq!(relative, PathBuf::from("src"));
     }
 
+    #[allow(clippy::expect_used)]
     #[test]
     fn test_path_utils() {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("Fail to create temporary directory");
         let project_dir = temp_dir.path();
 
         // Create project structure
-        fs::write(project_dir.join("package.json"), "{}").unwrap();
+        fs::write(project_dir.join("package.json"), "{}").expect("Fail to write package.json");
 
         // Find project root
-        let root = PathUtils::find_project_root(project_dir).unwrap();
+        let root = PathUtils::find_project_root(project_dir).expect("Fail to find project root");
         assert_eq!(root, project_dir);
 
         // Make relative path
         let sub_path = project_dir.join("src/test");
-        let relative = PathUtils::make_relative(&sub_path, project_dir).unwrap();
+        let relative =
+            PathUtils::make_relative(&sub_path, project_dir).expect("Fail to make relative path");
         assert_eq!(relative, PathBuf::from("src/test"));
     }
 }
-
