@@ -195,14 +195,14 @@
 //! # }
 //! ```
 
-//#![warn(missing_docs)]
-//#![warn(rustdoc::missing_crate_level_docs)]
-//#![deny(unused_must_use)]
-//#![deny(clippy::unwrap_used)]
-//#![deny(clippy::expect_used)]
-//#![deny(clippy::todo)]
-//#![deny(clippy::unimplemented)]
-//#![deny(clippy::panic)]
+#![warn(missing_docs)]
+#![warn(rustdoc::missing_crate_level_docs)]
+#![deny(unused_must_use)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::todo)]
+#![deny(clippy::unimplemented)]
+#![deny(clippy::panic)]
 
 pub mod cache;
 pub mod command;
