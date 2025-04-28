@@ -1,6 +1,24 @@
 use std::collections::HashMap;
 
 /// Result of a validation action
+///
+/// Represents the outcome of validation checks with appropriate details.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::validation::ValidationResult;
+///
+/// // Create validation results
+/// let valid = ValidationResult::Valid;
+/// let warning = ValidationResult::Warning(vec!["Value might cause performance issues".to_string()]);
+/// let error = ValidationResult::Error(vec!["Invalid format".to_string()]);
+///
+/// // Check validation status
+/// assert!(valid.is_valid());
+/// assert!(warning.is_valid());
+/// assert!(!error.is_valid());
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationResult {
     /// Validation passed successfully
@@ -13,30 +31,111 @@ pub enum ValidationResult {
 
 impl ValidationResult {
     /// Returns true if the validation passed (Valid or Warning)
+    ///
+    /// # Returns
+    ///
+    /// `true` if validation is Valid or Warning, `false` if Error
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::ValidationResult;
+    ///
+    /// let result = ValidationResult::Warning(vec!["Minor issue".to_string()]);
+    /// assert!(result.is_valid());
+    ///
+    /// let result = ValidationResult::Error(vec!["Critical error".to_string()]);
+    /// assert!(!result.is_valid());
+    /// ```
     #[must_use]
     pub fn is_valid(&self) -> bool {
         !matches!(self, Self::Error(_))
     }
 
     /// Returns true if the validation passed without warnings
+    ///
+    /// # Returns
+    ///
+    /// `true` if validation is Valid, `false` otherwise
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::ValidationResult;
+    ///
+    /// let result = ValidationResult::Valid;
+    /// assert!(result.is_strictly_valid());
+    ///
+    /// let result = ValidationResult::Warning(vec!["Minor issue".to_string()]);
+    /// assert!(!result.is_strictly_valid());
+    /// ```
     #[must_use]
     pub fn is_strictly_valid(&self) -> bool {
         matches!(self, Self::Valid)
     }
 
     /// Returns true if the validation has warnings
+    ///
+    /// # Returns
+    ///
+    /// `true` if validation has warnings, `false` otherwise
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::ValidationResult;
+    ///
+    /// let result = ValidationResult::Warning(vec!["Minor issue".to_string()]);
+    /// assert!(result.has_warnings());
+    ///
+    /// let result = ValidationResult::Valid;
+    /// assert!(!result.has_warnings());
+    /// ```
     #[must_use]
     pub fn has_warnings(&self) -> bool {
         matches!(self, Self::Warning(_))
     }
 
     /// Returns true if the validation has errors
+    ///
+    /// # Returns
+    ///
+    /// `true` if validation has errors, `false` otherwise
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::ValidationResult;
+    ///
+    /// let result = ValidationResult::Error(vec!["Critical error".to_string()]);
+    /// assert!(result.has_errors());
+    ///
+    /// let result = ValidationResult::Valid;
+    /// assert!(!result.has_errors());
+    /// ```
     #[must_use]
     pub fn has_errors(&self) -> bool {
         matches!(self, Self::Error(_))
     }
 
     /// Gets the warnings, if any
+    ///
+    /// # Returns
+    ///
+    /// A slice of warnings if warnings exist, `None` otherwise
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::ValidationResult;
+    ///
+    /// let result = ValidationResult::Warning(vec!["Minor issue".to_string()]);
+    /// assert!(result.warnings().is_some());
+    /// assert_eq!(result.warnings().unwrap()[0], "Minor issue");
+    ///
+    /// let result = ValidationResult::Valid;
+    /// assert!(result.warnings().is_none());
+    /// ```
     #[must_use]
     pub fn warnings(&self) -> Option<&[String]> {
         match self {
@@ -46,6 +145,23 @@ impl ValidationResult {
     }
 
     /// Gets the errors, if any
+    ///
+    /// # Returns
+    ///
+    /// A slice of errors if errors exist, `None` otherwise
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::ValidationResult;
+    ///
+    /// let result = ValidationResult::Error(vec!["Critical error".to_string()]);
+    /// assert!(result.errors().is_some());
+    /// assert_eq!(result.errors().unwrap()[0], "Critical error");
+    ///
+    /// let result = ValidationResult::Valid;
+    /// assert!(result.errors().is_none());
+    /// ```
     #[must_use]
     pub fn errors(&self) -> Option<&[String]> {
         match self {
@@ -55,6 +171,30 @@ impl ValidationResult {
     }
 
     /// Merges two validation results, preferring the more severe result
+    ///
+    /// Priority: Error > Warning > Valid
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - Another validation result to merge with
+    ///
+    /// # Returns
+    ///
+    /// A new validation result containing the combined information
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::ValidationResult;
+    ///
+    /// // Warning + Error = Error (with both messages)
+    /// let result1 = ValidationResult::Warning(vec!["Minor issue".to_string()]);
+    /// let result2 = ValidationResult::Error(vec!["Critical error".to_string()]);
+    /// let merged = result1.merge(result2);
+    ///
+    /// assert!(merged.has_errors());
+    /// assert_eq!(merged.errors().unwrap().len(), 2);
+    /// ```
     #[must_use]
     pub fn merge(self, other: Self) -> Self {
         match (self, other) {
@@ -87,30 +227,173 @@ impl ValidationResult {
 }
 
 /// Trait for objects that can be validated
+///
+/// Allows objects to self-validate by implementing this trait.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::validation::{Validatable, ValidationResult};
+///
+/// struct User {
+///     username: String,
+///     age: i32,
+/// }
+///
+/// impl Validatable for User {
+///     fn validate(&self) -> ValidationResult {
+///         if self.username.is_empty() {
+///             ValidationResult::Error(vec!["Username cannot be empty".to_string()])
+///         } else if self.age < 0 {
+///             ValidationResult::Error(vec!["Age cannot be negative".to_string()])
+///         } else {
+///             ValidationResult::Valid
+///         }
+///     }
+/// }
+///
+/// let valid_user = User { username: "alice".to_string(), age: 30 };
+/// assert!(valid_user.validate().is_valid());
+///
+/// let invalid_user = User { username: "".to_string(), age: 30 };
+/// assert!(!invalid_user.validate().is_valid());
+/// ```
 pub trait Validatable {
     /// Validates this object
+    ///
+    /// # Returns
+    ///
+    /// The validation result
     fn validate(&self) -> ValidationResult;
 }
 
 /// A single validation rule
+///
+/// Defines a rule that can validate a specific type.
+///
+/// # Type Parameters
+///
+/// * `T` - The type that can be validated by this rule
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::validation::{ValidationRule, ValidationResult};
+///
+/// struct MinLengthRule {
+///     min_length: usize,
+/// }
+///
+/// impl ValidationRule<String> for MinLengthRule {
+///     fn validate(&self, target: &String) -> ValidationResult {
+///         if target.len() < self.min_length {
+///             ValidationResult::Error(vec![
+///                 format!("String must be at least {} characters", self.min_length)
+///             ])
+///         } else {
+///             ValidationResult::Valid
+///         }
+///     }
+/// }
+///
+/// let rule = MinLengthRule { min_length: 5 };
+/// assert!(rule.validate(&"hello".to_string()).is_valid());
+/// assert!(!rule.validate(&"hi".to_string()).is_valid());
+/// ```
 pub trait ValidationRule<T> {
     /// Validates the target object
+    ///
+    /// # Arguments
+    ///
+    /// * `target` - The object to validate
+    ///
+    /// # Returns
+    ///
+    /// The validation result
     fn validate(&self, target: &T) -> ValidationResult;
 }
 
 /// A validator for a specific type
+///
+/// Manages a collection of validation rules for a specific type.
+///
+/// # Type Parameters
+///
+/// * `T` - The type that this validator can validate
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::validation::{Validator, ValidationRule, ValidationResult};
+///
+/// // Create a validation rule
+/// struct NumericRule;
+/// impl ValidationRule<String> for NumericRule {
+///     fn validate(&self, target: &String) -> ValidationResult {
+///         if target.chars().all(|c| c.is_numeric()) {
+///             ValidationResult::Valid
+///         } else {
+///             ValidationResult::Error(vec!["Value must be numeric".to_string()])
+///         }
+///     }
+/// }
+///
+/// // Create a validator and add the rule
+/// let mut validator = Validator::<String>::new();
+/// validator.add_rule(NumericRule);
+///
+/// // Validate values
+/// assert!(validator.validate(&"12345".to_string()).is_valid());
+/// assert!(!validator.validate(&"abc123".to_string()).is_valid());
+/// ```
 pub struct Validator<T> {
     rules: Vec<Box<dyn ValidationRule<T>>>,
 }
 
 impl<T> Validator<T> {
     /// Creates a new validator
+    ///
+    /// # Returns
+    ///
+    /// A new, empty validator
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::Validator;
+    ///
+    /// let validator = Validator::<String>::new();
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self { rules: Vec::new() }
     }
 
     /// Adds a validation rule
+    ///
+    /// # Arguments
+    ///
+    /// * `rule` - The validation rule to add
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::{Validator, ValidationRule, ValidationResult};
+    ///
+    /// struct LengthRule { max: usize }
+    /// impl ValidationRule<String> for LengthRule {
+    ///     fn validate(&self, target: &String) -> ValidationResult {
+    ///         if target.len() <= self.max {
+    ///             ValidationResult::Valid
+    ///         } else {
+    ///             ValidationResult::Error(vec!["String too long".to_string()])
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// let mut validator = Validator::<String>::new();
+    /// validator.add_rule(LengthRule { max: 10 });
+    /// ```
     pub fn add_rule<R>(&mut self, rule: R)
     where
         R: ValidationRule<T> + 'static,
@@ -119,6 +402,37 @@ impl<T> Validator<T> {
     }
 
     /// Validates a target object against all rules
+    ///
+    /// # Arguments
+    ///
+    /// * `target` - The object to validate
+    ///
+    /// # Returns
+    ///
+    /// The combined validation result from all rules
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::{Validator, ValidationRule, ValidationResult};
+    ///
+    /// struct NotEmptyRule;
+    /// impl ValidationRule<String> for NotEmptyRule {
+    ///     fn validate(&self, target: &String) -> ValidationResult {
+    ///         if target.is_empty() {
+    ///             ValidationResult::Error(vec!["Value cannot be empty".to_string()])
+    ///         } else {
+    ///             ValidationResult::Valid
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// let mut validator = Validator::<String>::new();
+    /// validator.add_rule(NotEmptyRule);
+    ///
+    /// assert!(validator.validate(&"Hello".to_string()).is_valid());
+    /// assert!(!validator.validate(&"".to_string()).is_valid());
+    /// ```
     pub fn validate(&self, target: &T) -> ValidationResult {
         let mut result = ValidationResult::Valid;
 
@@ -137,6 +451,27 @@ impl<T> Default for Validator<T> {
 }
 
 /// A validation context for complex validations
+///
+/// Provides a container for validation state, including data, warnings, and errors.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::validation::ValidationContext;
+///
+/// let mut context = ValidationContext::new();
+///
+/// // Add data for validation
+/// context.add_data("user_id", "12345");
+///
+/// // Add validation issues
+/// context.add_warning("Username is very short");
+/// context.add_error("Email address is invalid");
+///
+/// // Get the final result
+/// let result = context.result();
+/// assert!(result.has_errors());
+/// ```
 #[derive(Debug)]
 pub struct ValidationContext {
     /// Additional data for validation
@@ -149,32 +484,128 @@ pub struct ValidationContext {
 
 impl ValidationContext {
     /// Creates a new validation context
+    ///
+    /// # Returns
+    ///
+    /// A new, empty validation context
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::ValidationContext;
+    ///
+    /// let context = ValidationContext::new();
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self { data: HashMap::new(), warnings: Vec::new(), errors: Vec::new() }
     }
 
     /// Adds data to the context
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key for the data
+    /// * `value` - The value to store
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::ValidationContext;
+    ///
+    /// let mut context = ValidationContext::new();
+    /// context.add_data("max_size", "1024");
+    /// context.add_data("environment", "production");
+    /// ```
     pub fn add_data(&mut self, key: impl Into<String>, value: impl Into<String>) {
         self.data.insert(key.into(), value.into());
     }
 
     /// Gets data from the context
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key to retrieve data for
+    ///
+    /// # Returns
+    ///
+    /// The value for the key, or None if not present
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::ValidationContext;
+    ///
+    /// let mut context = ValidationContext::new();
+    /// context.add_data("max_size", "1024");
+    ///
+    /// assert_eq!(context.get_data("max_size"), Some(&"1024".to_string()));
+    /// assert_eq!(context.get_data("unknown"), None);
+    /// ```
     pub fn get_data(&self, key: &str) -> Option<&String> {
         self.data.get(key)
     }
 
     /// Adds a warning to the context
+    ///
+    /// # Arguments
+    ///
+    /// * `warning` - The warning message to add
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::ValidationContext;
+    ///
+    /// let mut context = ValidationContext::new();
+    /// context.add_warning("Performance may be affected");
+    /// ```
     pub fn add_warning(&mut self, warning: impl Into<String>) {
         self.warnings.push(warning.into());
     }
 
     /// Adds an error to the context
+    ///
+    /// # Arguments
+    ///
+    /// * `error` - The error message to add
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::ValidationContext;
+    ///
+    /// let mut context = ValidationContext::new();
+    /// context.add_error("Invalid configuration value");
+    /// ```
     pub fn add_error(&mut self, error: impl Into<String>) {
         self.errors.push(error.into());
     }
 
     /// Gets the validation result
+    ///
+    /// # Returns
+    ///
+    /// The validation result based on collected warnings and errors
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::validation::ValidationContext;
+    ///
+    /// let mut context = ValidationContext::new();
+    ///
+    /// // Empty context is valid
+    /// assert!(context.result().is_strictly_valid());
+    ///
+    /// // Add a warning
+    /// context.add_warning("Minor issue detected");
+    /// assert!(context.result().has_warnings());
+    ///
+    /// // Add an error
+    /// context.add_error("Critical problem found");
+    /// assert!(context.result().has_errors());
+    /// ```
     pub fn result(&self) -> ValidationResult {
         if !self.errors.is_empty() {
             ValidationResult::Error(self.errors.clone())

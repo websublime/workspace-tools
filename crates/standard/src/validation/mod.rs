@@ -18,6 +18,10 @@
 //! - Providing useful feedback
 //! - Ensuring system reliability
 
+mod rules;
 mod validator;
 
+pub use rules::{
+    CombinedRule, NumericRangeRule, ParseableRule, PathExistsRule, PatternRule, StringLengthRule,
+};
 pub use validator::{Validatable, ValidationContext, ValidationResult, ValidationRule, Validator};

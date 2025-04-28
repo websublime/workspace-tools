@@ -222,7 +222,10 @@ pub use cache::{Cache, CacheConfig, CacheStrategy};
 pub use config::{ConfigManager, ConfigScope, ConfigValue};
 pub use diagnostic::{DiagnosticCollector, DiagnosticLevel};
 pub use error::{CommandError, CommandResult, StandardError, StandardResult};
-pub use validation::{ValidationResult, Validator};
+pub use validation::{
+    CombinedRule, NumericRangeRule, ParseableRule, PathExistsRule, PatternRule, StringLengthRule,
+    Validatable, ValidationContext, ValidationResult, ValidationRule, Validator,
+};
 
 /// Version of the crate
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
