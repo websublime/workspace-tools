@@ -1,4 +1,23 @@
 //! Project structure management for Node.js projects.
+//!
+//! What:
+//! This module provides functionality for detecting, validating, and managing
+//! Node.js project structures. It can identify project roots, validate project
+//! configurations, and handle package.json parsing.
+//!
+//! Who:
+//! Used by developers who need to:
+//! - Detect and validate Node.js project structures
+//! - Parse package.json files
+//! - Check project integrity
+//! - Manage project configuration
+//!
+//! Why:
+//! Proper project structure management is essential for:
+//! - Reliable tool operation across different projects
+//! - Consistent project validation
+//! - Safe project manipulation
+//! - Dependency management
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -10,7 +29,20 @@ use std::{
 use super::{FileSystem, FileSystemManager, PackageManager, ProjectConfig};
 use crate::error::{FileSystemError, StandardError, StandardResult};
 
-/// Validation status of a project
+/// Validation status of a Node.js project.
+///
+/// Represents the result of validating a project's structure and configuration.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::project::ValidationStatus;
+///
+/// let status = ValidationStatus::Valid;
+/// assert!(matches!(status, ValidationStatus::Valid));
+///
+/// let warnings = ValidationStatus::Warning(vec!["Missing test directory".to_string()]);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationStatus {
     Valid,
@@ -19,7 +51,25 @@ pub enum ValidationStatus {
     NotValidated,
 }
 
-/// Package.json content structure
+/// Package.json content structure for Node.js projects.
+///
+/// Represents the parsed contents of a package.json file with essential fields.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::project::PackageJson;
+/// use std::collections::HashMap;
+///
+/// // Create a minimal package.json structure
+/// let package_json = PackageJson {
+///     name: "test-project".to_string(),
+///     version: "1.0.0".to_string(),
+///     dependencies: HashMap::new(),
+///     dev_dependencies: HashMap::new(),
+///     scripts: HashMap::new(),
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PackageJson {
     pub name: String,
@@ -32,17 +82,53 @@ pub struct PackageJson {
     pub scripts: HashMap<String, String>,
 }
 
-/// Represents a Node.js project
+/// Represents a Node.js project with its configuration and validation status.
+///
+/// Encapsulates the structure and metadata of a Node.js project.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::project::{Project, ProjectConfig};
+/// use std::path::Path;
+///
+/// let config = ProjectConfig::new();
+/// let project = Project::new(".", config);
+/// ```
 #[derive(Debug)]
 pub struct Project {
+    /// Root directory of the project
     root: PathBuf,
+    /// Detected package manager (if any)
     package_manager: Option<PackageManager>,
+    /// Project configuration
     config: ProjectConfig,
+    /// Validation status of the project
     validation: ValidationStatus,
+    /// Parsed package.json (if available)
     package_json: Option<PackageJson>,
 }
 
 impl Project {
+    /// Creates a new Project instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `root` - Root directory of the project
+    /// * `config` - Configuration for project detection and validation
+    ///
+    /// # Returns
+    ///
+    /// A new Project instance
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::{Project, ProjectConfig};
+    ///
+    /// let config = ProjectConfig::new();
+    /// let project = Project::new(".", config);
+    /// ```
     #[must_use]
     pub fn new(root: impl Into<PathBuf>, config: ProjectConfig) -> Self {
         Self {
@@ -54,34 +140,131 @@ impl Project {
         }
     }
 
+    /// Gets the root directory of the project.
+    ///
+    /// # Returns
+    ///
+    /// The root directory path
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::{Project, ProjectConfig};
+    /// use std::path::Path;
+    ///
+    /// let project = Project::new(".", ProjectConfig::new());
+    /// assert_eq!(project.root(), Path::new("."));
+    /// ```
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
     }
 
+    /// Gets the package manager for the project.
+    ///
+    /// # Returns
+    ///
+    /// The package manager, if detected
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::{Project, ProjectConfig};
+    ///
+    /// let project = Project::new(".", ProjectConfig::new());
+    /// if let Some(pm) = project.package_manager() {
+    ///     println!("Using package manager: {}", pm.kind().command());
+    /// }
+    /// ```
     #[must_use]
     pub fn package_manager(&self) -> Option<&PackageManager> {
         self.package_manager.as_ref()
     }
 
+    /// Gets the validation status of the project.
+    ///
+    /// # Returns
+    ///
+    /// The validation status
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::{Project, ProjectConfig, ValidationStatus};
+    ///
+    /// let project = Project::new(".", ProjectConfig::new());
+    /// match project.validation_status() {
+    ///     ValidationStatus::Valid => println!("Project is valid"),
+    ///     ValidationStatus::Warning(warnings) => println!("Project has warnings: {:?}", warnings),
+    ///     ValidationStatus::Error(errors) => println!("Project has errors: {:?}", errors),
+    ///     ValidationStatus::NotValidated => println!("Project has not been validated"),
+    /// }
+    /// ```
     #[must_use]
     pub fn validation_status(&self) -> &ValidationStatus {
         &self.validation
     }
 
+    /// Gets the parsed package.json.
+    ///
+    /// # Returns
+    ///
+    /// The parsed package.json, if available
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::{Project, ProjectConfig};
+    ///
+    /// let project = Project::new(".", ProjectConfig::new());
+    /// if let Some(pkg) = project.package_json() {
+    ///     println!("Project name: {}", pkg.name);
+    ///     println!("Project version: {}", pkg.version);
+    /// }
+    /// ```
     #[must_use]
     pub fn package_json(&self) -> Option<&PackageJson> {
         self.package_json.as_ref()
     }
 }
 
-/// Manager for project operations
+/// Manager for Node.js project operations.
+///
+/// Provides functionality for detecting, validating, and managing Node.js projects.
+///
+/// # Examples
+///
+/// ```no_run
+/// use sublime_standard_tools::project::{ProjectManager, ProjectConfig};
+///
+/// let manager = ProjectManager::new();
+/// let config = ProjectConfig::new();
+///
+/// // Detect a project in the current directory
+/// match manager.detect_project(".", &config) {
+///     Ok(project) => println!("Detected project: {}", project.root().display()),
+///     Err(e) => println!("Failed to detect project: {}", e),
+/// }
+/// ```
 #[derive(Debug)]
 pub struct ProjectManager<F: FileSystem = FileSystemManager> {
     fs: F,
 }
 
 impl ProjectManager<FileSystemManager> {
+    /// Creates a new ProjectManager with the default filesystem manager.
+    ///
+    /// # Returns
+    ///
+    /// A new ProjectManager instance
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::ProjectManager;
+    ///
+    /// let manager = ProjectManager::new();
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self { fs: FileSystemManager::new() }
@@ -89,10 +272,53 @@ impl ProjectManager<FileSystemManager> {
 }
 
 impl<F: FileSystem> ProjectManager<F> {
+    /// Creates a new ProjectManager with a custom filesystem implementation.
+    ///
+    /// # Arguments
+    ///
+    /// * `fs` - The filesystem implementation to use
+    ///
+    /// # Returns
+    ///
+    /// A new ProjectManager instance
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::{ProjectManager, FileSystemManager};
+    ///
+    /// let fs = FileSystemManager::new();
+    /// let manager = ProjectManager::with_filesystem(fs);
+    /// ```
     pub fn with_filesystem(fs: F) -> Self {
         Self { fs }
     }
 
+    /// Detects a Node.js project in the given path.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to detect the project in
+    /// * `config` - Configuration for project detection
+    ///
+    /// # Returns
+    ///
+    /// A Project instance or an error if detection fails
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_standard_tools::project::{ProjectManager, ProjectConfig};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let manager = ProjectManager::new();
+    /// let config = ProjectConfig::new();
+    ///
+    /// let project = manager.detect_project(".", &config)?;
+    /// println!("Project name: {}", project.package_json().unwrap().name);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn detect_project(
         &self,
         path: impl AsRef<Path>,
@@ -126,6 +352,34 @@ impl<F: FileSystem> ProjectManager<F> {
         Ok(project)
     }
 
+    /// Validates a Node.js project structure.
+    ///
+    /// Checks for required files, directory structure, and package manager consistency.
+    ///
+    /// # Arguments
+    ///
+    /// * `project` - The project to validate
+    ///
+    /// # Returns
+    ///
+    /// Success or an error if validation fails
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_standard_tools::project::{ProjectManager, ProjectConfig};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let manager = ProjectManager::new();
+    /// let config = ProjectConfig::new();
+    ///
+    /// let mut project = manager.detect_project(".", &config)?;
+    /// manager.validate_project(&mut project)?;
+    ///
+    /// println!("Validation status: {:?}", project.validation_status());
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn validate_project(&self, project: &mut Project) -> StandardResult<()> {
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
@@ -253,9 +507,11 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::expect_used)]
+    #[allow(clippy::panic)]
     #[test]
     fn test_project_detection_real_fs() -> StandardResult<()> {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("Failed to create temporary directory");
         create_test_project_real(temp_dir.path())?;
 
         let manager = ProjectManager::new();
@@ -271,17 +527,22 @@ mod tests {
             panic!("Expected Warning status");
         }
 
+        let package_manager = project.package_manager().expect("Package manager should be present");
+        let package_json = project.package_json().expect("Package JSON should be present");
+
         assert!(project.package_manager().is_some());
-        assert_eq!(project.package_manager().unwrap().kind(), PackageManagerKind::Npm); // using npm lock file now
+        assert_eq!(package_manager.kind(), PackageManagerKind::Npm); // using npm lock file now
         assert!(project.package_json().is_some());
-        assert_eq!(project.package_json().unwrap().name, "test-project");
+        assert_eq!(package_json.name, "test-project");
 
         Ok(())
     }
 
+    #[allow(clippy::expect_used)]
+    #[allow(clippy::panic)]
     #[test]
     fn test_project_validation_real_fs() -> StandardResult<()> {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("Failed to create temporary directory");
         create_test_project_real(temp_dir.path())?;
 
         let manager = ProjectManager::new();
@@ -292,7 +553,7 @@ mod tests {
 
         // Create node_modules as a directory
         let node_modules_path = temp_dir.path().join("node_modules");
-        std_fs::create_dir(&node_modules_path).unwrap();
+        std_fs::create_dir(&node_modules_path).expect("Failed to create node_modules directory");
 
         // Re-validate
         manager.validate_project(&mut project)?;
@@ -302,8 +563,8 @@ mod tests {
         );
 
         // Test error: node_modules is a file
-        std_fs::remove_dir(&node_modules_path).unwrap();
-        std_fs::write(&node_modules_path, "not a dir").unwrap();
+        std_fs::remove_dir(&node_modules_path).expect("Failed to remove node_modules directory");
+        std_fs::write(&node_modules_path, "not a dir").expect("Failed to write to node_modules");
         manager.validate_project(&mut project)?;
         assert!(matches!(project.validation_status(), ValidationStatus::Error(_)));
         if let ValidationStatus::Error(errors) = project.validation_status() {
@@ -317,6 +578,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::unwrap_used)]
     #[test]
     fn test_detect_project_no_package_json() {
         let temp_dir = TempDir::new().unwrap();
@@ -329,6 +591,7 @@ mod tests {
         ));
     }
 
+    #[allow(clippy::unwrap_used)]
     #[test]
     fn test_detect_project_invalid_package_json() -> StandardResult<()> {
         let temp_dir = TempDir::new().unwrap();

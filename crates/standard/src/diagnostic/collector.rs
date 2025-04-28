@@ -2,7 +2,21 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// Severity level for diagnostic information
+/// Severity level for diagnostic information.
+///
+/// Represents the importance and impact of a diagnostic entry.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::diagnostic::DiagnosticLevel;
+///
+/// let info = DiagnosticLevel::Info;
+/// let error = DiagnosticLevel::Error;
+///
+/// // Compare severity levels
+/// assert!(error > info);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum DiagnosticLevel {
     /// Informational message, no impact
@@ -15,7 +29,24 @@ pub enum DiagnosticLevel {
     Critical,
 }
 
-/// A single diagnostic entry
+/// A single diagnostic entry with context and metadata.
+///
+/// Represents a piece of diagnostic information with associated context,
+/// severity level, and timing information.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::diagnostic::{DiagnosticEntry, DiagnosticLevel};
+/// use std::time::Duration;
+///
+/// let entry = DiagnosticEntry::new(
+///     DiagnosticLevel::Warning,
+///     "fs_operations",
+///     "Slow file read detected"
+/// ).with_data("file", "large_data.json")
+///   .with_duration(Duration::from_millis(1500));
+/// ```
 #[derive(Debug, Clone)]
 pub struct DiagnosticEntry {
     /// Timestamp when the entry was created
@@ -33,7 +64,29 @@ pub struct DiagnosticEntry {
 }
 
 impl DiagnosticEntry {
-    /// Creates a new diagnostic entry
+    /// Creates a new diagnostic entry.
+    ///
+    /// # Arguments
+    ///
+    /// * `level` - Severity level of the diagnostic
+    /// * `context` - The context where the diagnostic occurred
+    /// * `message` - Descriptive message about the diagnostic
+    ///
+    /// # Returns
+    ///
+    /// A new diagnostic entry with the given information
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::diagnostic::{DiagnosticEntry, DiagnosticLevel};
+    ///
+    /// let entry = DiagnosticEntry::new(
+    ///     DiagnosticLevel::Info,
+    ///     "initialization",
+    ///     "System startup complete"
+    /// );
+    /// ```
     #[must_use]
     pub fn new(
         level: DiagnosticLevel,
@@ -50,14 +103,57 @@ impl DiagnosticEntry {
         }
     }
 
-    /// Adds a key-value pair to the diagnostic data
+    /// Adds a key-value pair to the diagnostic data.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - Key for the data point
+    /// * `value` - Value for the data point
+    ///
+    /// # Returns
+    ///
+    /// Self with added data for method chaining
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::diagnostic::{DiagnosticEntry, DiagnosticLevel};
+    ///
+    /// let entry = DiagnosticEntry::new(
+    ///     DiagnosticLevel::Warning,
+    ///     "disk_space",
+    ///     "Low disk space detected"
+    /// ).with_data("available_mb", "250")
+    ///   .with_data("path", "/var/logs");
+    /// ```
     #[must_use]
     pub fn with_data(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.data.insert(key.into(), value.into());
         self
     }
 
-    /// Sets the operation duration
+    /// Sets the operation duration for this diagnostic.
+    ///
+    /// # Arguments
+    ///
+    /// * `duration` - Duration of the operation
+    ///
+    /// # Returns
+    ///
+    /// Self with added duration for method chaining
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::diagnostic::{DiagnosticEntry, DiagnosticLevel};
+    /// use std::time::Duration;
+    ///
+    /// let entry = DiagnosticEntry::new(
+    ///     DiagnosticLevel::Info,
+    ///     "database",
+    ///     "Query completed"
+    /// ).with_duration(Duration::from_millis(350));
+    /// ```
     #[must_use]
     pub fn with_duration(mut self, duration: Duration) -> Self {
         self.duration = Some(duration);
@@ -65,27 +161,100 @@ impl DiagnosticEntry {
     }
 }
 
-/// Collector for diagnostic information
+/// Collector for diagnostic information.
+///
+/// Thread-safe collector for storing and retrieving diagnostic entries
+/// with various severity levels.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::diagnostic::{DiagnosticCollector, DiagnosticLevel};
+///
+/// let collector = DiagnosticCollector::new();
+///
+/// // Record diagnostics
+/// collector.info("startup", "Application initialized");
+/// collector.warning("memory", "Memory usage above 80%");
+/// collector.error("network", "Failed to connect to API");
+///
+/// // Get all entries with Warning or higher severity
+/// let warnings_and_errors = collector.entries_with_level_at_or_above(DiagnosticLevel::Warning);
+/// ```
 #[derive(Debug, Clone)]
 pub struct DiagnosticCollector {
+    /// Collection of diagnostic entries
     entries: Arc<Mutex<Vec<DiagnosticEntry>>>,
+    /// Maximum number of entries to store
     max_entries: usize,
 }
 
 impl DiagnosticCollector {
-    /// Creates a new diagnostic collector with default settings
+    /// Creates a new diagnostic collector with default settings.
+    ///
+    /// Default maximum entries is 1000.
+    ///
+    /// # Returns
+    ///
+    /// A new diagnostic collector
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::diagnostic::DiagnosticCollector;
+    ///
+    /// let collector = DiagnosticCollector::new();
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self { entries: Arc::new(Mutex::new(Vec::new())), max_entries: 1000 }
     }
 
-    /// Creates a new diagnostic collector with a maximum entries limit
+    /// Creates a new diagnostic collector with a maximum entries limit.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_entries` - Maximum number of entries to keep
+    ///
+    /// # Returns
+    ///
+    /// A new diagnostic collector with specified capacity
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::diagnostic::DiagnosticCollector;
+    ///
+    /// // Create a collector that stores up to 500 entries
+    /// let collector = DiagnosticCollector::with_max_entries(500);
+    /// ```
     #[must_use]
     pub fn with_max_entries(max_entries: usize) -> Self {
         Self { entries: Arc::new(Mutex::new(Vec::new())), max_entries }
     }
 
-    /// Adds a diagnostic entry to the collector
+    /// Adds a diagnostic entry to the collector.
+    ///
+    /// When the maximum number of entries is reached, the oldest entry is removed.
+    ///
+    /// # Arguments
+    ///
+    /// * `entry` - The diagnostic entry to add
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::diagnostic::{DiagnosticCollector, DiagnosticEntry, DiagnosticLevel};
+    ///
+    /// let collector = DiagnosticCollector::new();
+    /// let entry = DiagnosticEntry::new(
+    ///     DiagnosticLevel::Info,
+    ///     "system",
+    ///     "Operation completed"
+    /// );
+    ///
+    /// collector.add(entry);
+    /// ```
     pub fn add(&self, entry: DiagnosticEntry) {
         let mut entries = self.entries.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
@@ -97,39 +266,146 @@ impl DiagnosticCollector {
         entries.push(entry);
     }
 
-    /// Records an informational diagnostic
+    /// Records an informational diagnostic.
+    ///
+    /// # Arguments
+    ///
+    /// * `context` - The context where the diagnostic occurred
+    /// * `message` - Descriptive message about the diagnostic
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::diagnostic::DiagnosticCollector;
+    ///
+    /// let collector = DiagnosticCollector::new();
+    /// collector.info("startup", "System initialized successfully");
+    /// ```
     pub fn info(&self, context: impl Into<String>, message: impl Into<String>) {
         self.add(DiagnosticEntry::new(DiagnosticLevel::Info, context, message));
     }
 
-    /// Records a warning diagnostic
+    /// Records a warning diagnostic.
+    ///
+    /// # Arguments
+    ///
+    /// * `context` - The context where the diagnostic occurred
+    /// * `message` - Descriptive message about the diagnostic
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::diagnostic::DiagnosticCollector;
+    ///
+    /// let collector = DiagnosticCollector::new();
+    /// collector.warning("disk_space", "Low disk space detected");
+    /// ```
     pub fn warning(&self, context: impl Into<String>, message: impl Into<String>) {
         self.add(DiagnosticEntry::new(DiagnosticLevel::Warning, context, message));
     }
 
-    /// Records an error diagnostic
+    /// Records an error diagnostic.
+    ///
+    /// # Arguments
+    ///
+    /// * `context` - The context where the diagnostic occurred
+    /// * `message` - Descriptive message about the diagnostic
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::diagnostic::DiagnosticCollector;
+    ///
+    /// let collector = DiagnosticCollector::new();
+    /// collector.error("network", "Failed to connect to server");
+    /// ```
     pub fn error(&self, context: impl Into<String>, message: impl Into<String>) {
         self.add(DiagnosticEntry::new(DiagnosticLevel::Error, context, message));
     }
 
-    /// Records a critical diagnostic
+    /// Records a critical diagnostic.
+    ///
+    /// # Arguments
+    ///
+    /// * `context` - The context where the diagnostic occurred
+    /// * `message` - Descriptive message about the diagnostic
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::diagnostic::DiagnosticCollector;
+    ///
+    /// let collector = DiagnosticCollector::new();
+    /// collector.critical("database", "Database connection lost");
+    /// ```
     pub fn critical(&self, context: impl Into<String>, message: impl Into<String>) {
         self.add(DiagnosticEntry::new(DiagnosticLevel::Critical, context, message));
     }
 
-    /// Gets all diagnostic entries
+    /// Gets all diagnostic entries.
+    ///
+    /// # Returns
+    ///
+    /// A vector containing all diagnostic entries
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::diagnostic::DiagnosticCollector;
+    ///
+    /// let collector = DiagnosticCollector::new();
+    /// collector.info("system", "Test diagnostic");
+    ///
+    /// let all_entries = collector.entries();
+    /// println!("Collected {} diagnostics", all_entries.len());
+    /// ```
     pub fn entries(&self) -> Vec<DiagnosticEntry> {
         let entries = self.entries.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         entries.clone()
     }
 
-    /// Gets entries with level at or above the specified level
+    /// Gets entries with level at or above the specified level.
+    ///
+    /// # Arguments
+    ///
+    /// * `level` - The minimum severity level to include
+    ///
+    /// # Returns
+    ///
+    /// A vector containing diagnostic entries at or above the specified level
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::diagnostic::{DiagnosticCollector, DiagnosticLevel};
+    ///
+    /// let collector = DiagnosticCollector::new();
+    /// collector.info("system", "Info message");
+    /// collector.error("system", "Error message");
+    ///
+    /// // Get only errors and above
+    /// let errors = collector.entries_with_level_at_or_above(DiagnosticLevel::Error);
+    /// assert_eq!(errors.len(), 1);
+    /// ```
     pub fn entries_with_level_at_or_above(&self, level: DiagnosticLevel) -> Vec<DiagnosticEntry> {
         let entries = self.entries.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         entries.iter().filter(|e| e.level >= level).cloned().collect()
     }
 
-    /// Clears all diagnostic entries
+    /// Clears all diagnostic entries.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::diagnostic::DiagnosticCollector;
+    ///
+    /// let collector = DiagnosticCollector::new();
+    /// collector.info("system", "Test diagnostic");
+    /// assert_eq!(collector.entries().len(), 1);
+    ///
+    /// collector.clear();
+    /// assert_eq!(collector.entries().len(), 0);
+    /// ```
     pub fn clear(&self) {
         let mut entries = self.entries.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         entries.clear();
@@ -219,6 +495,7 @@ mod tests {
         assert_eq!(collector.entries().len(), 0);
     }
 
+    #[allow(clippy::unwrap_used)]
     #[test]
     fn test_collector_thread_safety() {
         let collector = DiagnosticCollector::new();

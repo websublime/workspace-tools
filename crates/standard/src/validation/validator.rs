@@ -196,6 +196,7 @@ impl Default for ValidationContext {
 mod tests {
     use super::*;
 
+    #[allow(clippy::expect_used)]
     #[test]
     fn test_validation_result_operations() {
         // Test basic results
@@ -218,9 +219,12 @@ mod tests {
         assert!(!error.has_warnings());
         assert!(error.has_errors());
 
+        let warnings = warning.warnings().expect("Warnings should be present");
+        let errors = error.errors().expect("Errors should be present");
+
         // Test getters
-        assert_eq!(warning.warnings().unwrap()[0], "warning");
-        assert_eq!(error.errors().unwrap()[0], "error");
+        assert_eq!(warnings[0], "warning");
+        assert_eq!(errors[0], "error");
     }
 
     #[test]

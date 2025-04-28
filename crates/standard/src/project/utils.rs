@@ -65,30 +65,88 @@ impl NodePathKind {
     }
 }
 
-/// Extended path operations for Node.js projects
+/// Extended path operations for Node.js projects.
+///
+/// Trait that adds Node.js-specific functionality to Path objects.
+///
+/// # Examples
+///
+/// ```no_run
+/// use sublime_standard_tools::project::{PathExt, NodePathKind};
+/// use std::path::Path;
+///
+/// let path = Path::new(".");
+/// let normalized = path.normalize();
+///
+/// // Get path to node_modules
+/// let node_modules_path = path.node_path(NodePathKind::NodeModules);
+///
+/// // Check if path is in a project
+/// if path.is_in_project() {
+///     println!("Inside a Node.js project");
+/// }
+/// ```
 pub trait PathExt {
-    /// Normalizes a path to use platform-specific separators
+    /// Normalizes a path to use platform-specific separators.
+    ///
+    /// Removes redundant components like "." and resolves ".." components.
     ///
     /// # Returns
     ///
-    /// Normalized path
+    /// A normalized path
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::PathExt;
+    /// use std::path::{Path, PathBuf};
+    ///
+    /// let path = Path::new("a/b/../c/./d");
+    /// assert_eq!(path.normalize(), PathBuf::from("a/c/d"));
+    /// ```
     fn normalize(&self) -> PathBuf;
 
-    /// Checks if this path is within a Node.js project
+    /// Checks if this path is within a Node.js project.
+    ///
+    /// A Node.js project is a directory containing a package.json file.
     ///
     /// # Returns
     ///
-    /// true if path is within a project (contains package.json)
+    /// True if path is within a project, false otherwise
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_standard_tools::project::PathExt;
+    /// use std::path::Path;
+    ///
+    /// let path = Path::new(".");
+    /// if path.is_in_project() {
+    ///     println!("Inside a Node.js project");
+    /// }
+    /// ```
     fn is_in_project(&self) -> bool;
 
-    /// Returns path relative to project root
+    /// Returns path relative to project root.
     ///
     /// # Returns
     ///
     /// Path relative to nearest package.json, or None if not in project
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_standard_tools::project::PathExt;
+    /// use std::path::Path;
+    ///
+    /// let path = Path::new("src/components");
+    /// if let Some(rel_path) = path.relative_to_project() {
+    ///     println!("Relative path: {}", rel_path.display());
+    /// }
+    /// ```
     fn relative_to_project(&self) -> Option<PathBuf>;
 
-    /// Returns path to a Node.js project directory
+    /// Returns path to a Node.js project directory or file.
     ///
     /// # Arguments
     ///
@@ -96,20 +154,45 @@ pub trait PathExt {
     ///
     /// # Returns
     ///
-    /// Path to requested directory
+    /// Path to requested directory or file
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::{PathExt, NodePathKind};
+    /// use std::path::{Path, PathBuf};
+    ///
+    /// let project_dir = Path::new("my-project");
+    /// assert_eq!(
+    ///     project_dir.node_path(NodePathKind::NodeModules),
+    ///     PathBuf::from("my-project/node_modules")
+    /// );
+    /// ```
     fn node_path(&self, kind: NodePathKind) -> PathBuf;
 
-    /// Validates that a path is safe
+    /// Validates that a path is safe.
     ///
     /// Checks for:
     /// - No parent directory traversal
     /// - No absolute paths
     /// - No symbolic links
-    /// - Within project root
     ///
     /// # Returns
     ///
-    /// Result indicating if path is safe
+    /// Success if the path is safe, or an error with details
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::PathExt;
+    /// use std::path::Path;
+    ///
+    /// let path = Path::new("src/components");
+    /// match path.validate() {
+    ///     Ok(_) => println!("Path is safe"),
+    ///     Err(e) => println!("Path is unsafe: {}", e),
+    /// }
+    /// ```
     fn validate(&self) -> StandardResult<()>;
 }
 
@@ -181,7 +264,18 @@ impl PathExt for Path {
     }
 }
 
-/// Helper functions for working with paths
+/// Helper functions for working with Node.js project paths.
+///
+/// Static utility methods for common path operations in Node.js projects.
+///
+/// # Examples
+///
+/// ```no_run
+/// use sublime_standard_tools::project::PathUtils;
+///
+/// let cwd = PathUtils::current_dir().unwrap();
+/// println!("Current directory: {}", cwd.display());
+/// ```
 pub struct PathUtils;
 
 impl PathUtils {

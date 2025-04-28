@@ -1,3 +1,10 @@
+//! Package manager functionality for Node.js projects.
+//!
+//! What:
+//! This module provides detection and interaction capabilities for various
+//! Node.js package managers (npm, yarn, pnpm, bun). It identifies the package
+//! manager used in a project and provides utilities for interacting with it.
+//!
 //! Who:
 //! Used by developers who need to:
 //! - Detect which package manager a project uses
@@ -13,17 +20,48 @@
 use crate::error::{StandardError, StandardResult};
 use std::path::{Path, PathBuf};
 
-/// Supported package manager types
+/// Supported package manager types for Node.js projects.
+///
+/// Represents the different package managers that can be used with Node.js projects.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::project::PackageManagerKind;
+///
+/// let npm = PackageManagerKind::Npm;
+/// assert_eq!(npm.command(), "npm");
+/// assert_eq!(npm.lock_file(), "package-lock.json");
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PackageManagerKind {
+    /// npm package manager (default for Node.js)
     Npm,
+    /// Yarn package manager
     Yarn,
+    /// pnpm package manager (performance-oriented)
     Pnpm,
+    /// Bun package manager and runtime
     Bun,
 }
 
 impl PackageManagerKind {
-    /// Returns the lock file name for this package manager
+    /// Returns the lock file name for this package manager.
+    ///
+    /// Each package manager uses a different lock file to track dependencies.
+    ///
+    /// # Returns
+    ///
+    /// The name of the lock file used by this package manager
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::PackageManagerKind;
+    ///
+    /// assert_eq!(PackageManagerKind::Npm.lock_file(), "package-lock.json");
+    /// assert_eq!(PackageManagerKind::Yarn.lock_file(), "yarn.lock");
+    /// ```
     #[must_use]
     pub fn lock_file(self) -> &'static str {
         match self {
@@ -34,7 +72,22 @@ impl PackageManagerKind {
         }
     }
 
-    /// Returns the command name for this package manager
+    /// Returns the command name for this package manager.
+    ///
+    /// The command name is used to execute the package manager from the command line.
+    ///
+    /// # Returns
+    ///
+    /// The command name for this package manager
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::PackageManagerKind;
+    ///
+    /// assert_eq!(PackageManagerKind::Npm.command(), "npm");
+    /// assert_eq!(PackageManagerKind::Yarn.command(), "yarn");
+    /// ```
     #[must_use]
     pub fn command(self) -> &'static str {
         match self {
@@ -46,21 +99,80 @@ impl PackageManagerKind {
     }
 }
 
-/// Package manager instance
+/// Package manager instance for a Node.js project.
+///
+/// Represents a specific package manager detected in a project directory.
+///
+/// # Examples
+///
+/// ```no_run
+/// use sublime_standard_tools::project::{PackageManager, PackageManagerKind};
+/// use std::path::Path;
+///
+/// // Detect the package manager in the current directory
+/// let manager = PackageManager::detect(".").unwrap_or_else(|_| {
+///     // Default to npm if detection fails
+///     PackageManager::new(PackageManagerKind::Npm, ".")
+/// });
+///
+/// println!("Using package manager: {}", manager.kind().command());
+/// ```
 #[derive(Debug)]
 pub struct PackageManager {
+    /// The type of package manager
     kind: PackageManagerKind,
+    /// The root directory of the project
     root: PathBuf,
 }
 
 impl PackageManager {
+    /// Creates a new PackageManager instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `kind` - The type of package manager
+    /// * `root` - The root directory of the project
+    ///
+    /// # Returns
+    ///
+    /// A new PackageManager instance
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::{PackageManager, PackageManagerKind};
+    ///
+    /// let manager = PackageManager::new(PackageManagerKind::Npm, ".");
+    /// ```
     #[must_use]
     pub fn new(kind: PackageManagerKind, root: impl Into<PathBuf>) -> Self {
         Self { kind, root: root.into() }
     }
 
     /// Detects the package manager used in the given directory by checking for lock files.
+    ///
     /// Checks in the order: bun, pnpm, yarn, npm.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The directory to check for package manager lock files
+    ///
+    /// # Returns
+    ///
+    /// A PackageManager instance or an error if no package manager is detected
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_standard_tools::project::PackageManager;
+    /// use std::path::Path;
+    ///
+    /// // Try to detect the package manager
+    /// match PackageManager::detect(".") {
+    ///     Ok(manager) => println!("Detected: {}", manager.kind().command()),
+    ///     Err(e) => println!("No package manager detected: {}", e),
+    /// }
+    /// ```
     pub fn detect(path: impl AsRef<Path>) -> StandardResult<Self> {
         let path = path.as_ref();
 
@@ -86,16 +198,60 @@ impl PackageManager {
         )))
     }
 
+    /// Gets the kind of package manager.
+    ///
+    /// # Returns
+    ///
+    /// The package manager type
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::{PackageManager, PackageManagerKind};
+    ///
+    /// let manager = PackageManager::new(PackageManagerKind::Npm, ".");
+    /// assert_eq!(manager.kind(), PackageManagerKind::Npm);
+    /// ```
     #[must_use]
     pub fn kind(&self) -> PackageManagerKind {
         self.kind
     }
 
+    /// Gets the root directory of the project.
+    ///
+    /// # Returns
+    ///
+    /// The root directory path
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::{PackageManager, PackageManagerKind};
+    /// use std::path::Path;
+    ///
+    /// let manager = PackageManager::new(PackageManagerKind::Npm, ".");
+    /// assert_eq!(manager.root(), Path::new("."));
+    /// ```
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
     }
 
+    /// Gets the path to the lock file for this package manager.
+    ///
+    /// # Returns
+    ///
+    /// The path to the lock file
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::{PackageManager, PackageManagerKind};
+    /// use std::path::PathBuf;
+    ///
+    /// let manager = PackageManager::new(PackageManagerKind::Npm, ".");
+    /// assert_eq!(manager.lock_file_path(), PathBuf::from("./package-lock.json"));
+    /// ```
     #[must_use]
     pub fn lock_file_path(&self) -> PathBuf {
         // Handle npm's alternative lock file if necessary, though detect prioritizes package-lock.json
@@ -133,6 +289,7 @@ mod tests {
         assert_eq!(PackageManagerKind::Bun.command(), "bun");
     }
 
+    #[allow(clippy::unwrap_used)]
     #[test]
     fn test_package_manager_detection() {
         let temp_dir = TempDir::new().unwrap();
@@ -179,6 +336,8 @@ mod tests {
         std::fs::remove_file(&shrinkwrap).unwrap();
     }
 
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::panic)]
     #[test]
     fn test_no_package_manager() {
         let temp_dir = TempDir::new().unwrap();
