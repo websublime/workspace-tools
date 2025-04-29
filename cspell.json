@@ -12,6 +12,7 @@
     "nonblocking",
     "thiserror",
     "unistd",
-    "IpcConnection"
+    "IpcConnection",
+    "&packages_dir.join(\"ui\")"
   ]
 }

@@ -165,6 +165,7 @@ struct RushConfig {
 }
 
 /// Rush project configuration
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 struct RushProject {
     /// Package name
@@ -602,7 +603,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # }
     /// ```
     #[allow(clippy::manual_let_else)]
-    pub async fn detect_monorepo(&self, path: impl AsRef<Path>) -> StandardResult<MonorepoInfo> {
+    pub fn detect_monorepo(&self, path: impl AsRef<Path>) -> StandardResult<MonorepoInfo> {
         let path = path.as_ref();
 
         // Find monorepo root
@@ -903,7 +904,11 @@ impl<F: FileSystem> MonorepoDetector<F> {
 
         // Add patterns for directories that exist
         for pattern in common_patterns {
-            let base_dir = pattern.split('/').next().unwrap();
+            let base_dir = pattern.split('/').next().ok_or_else(|| {
+                StandardError::operation(
+                    "Invalid pattern format without directory component".to_string(),
+                )
+            })?;
             if self.fs.exists(&root.join(base_dir)) {
                 patterns.push(pattern.to_string());
             }
@@ -1206,7 +1211,7 @@ mod tests {
         )?;
 
         // Detect the monorepo
-        let monorepo = detector.detect_monorepo(root_path).await?;
+        let monorepo = detector.detect_monorepo(root_path)?;
 
         // Verify monorepo information
         assert_eq!(monorepo.kind(), MonorepoKind::YarnWorkspaces);
@@ -1244,9 +1249,9 @@ mod tests {
         let apps_dir = root_path.join("apps");
         let libs_dir = root_path.join("libs");
 
-        std::fs::create_dir_all(&packages_dir.join("ui"))?;
-        std::fs::create_dir_all(&apps_dir.join("web"))?;
-        std::fs::create_dir_all(&libs_dir.join("utils"))?;
+        std::fs::create_dir_all(packages_dir.join("ui"))?;
+        std::fs::create_dir_all(apps_dir.join("web"))?;
+        std::fs::create_dir_all(libs_dir.join("utils"))?;
 
         // Create package.json files
         std::fs::write(
@@ -1317,7 +1322,7 @@ mod tests {
         assert_eq!(detector.is_monorepo_root(root_path)?, Some(MonorepoKind::Custom));
 
         // Test full detection
-        let monorepo = detector.detect_monorepo(root_path).await?;
+        let monorepo = detector.detect_monorepo(root_path)?;
         assert_eq!(monorepo.kind(), MonorepoKind::Custom);
         assert_eq!(monorepo.packages().len(), 2);
 

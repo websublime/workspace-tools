@@ -65,10 +65,11 @@ graph TD
     B --> D[Project Structure]
     B --> E[Environment Management]
     B --> F[Process Control]
-    C --> G[OS Layer]
-    D --> G
-    E --> G
-    F --> G
+    B --> G[Validation]
+    B --> H[Configuration]
+    B --> I[Diagnostics]
+    B --> J[Cache]
+    B --> K[Error Handling]
 ```
 
 ### 3.2 Component Interaction
