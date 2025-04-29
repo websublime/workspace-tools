@@ -53,4 +53,6 @@ regex = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+chrono = { workspace = true }
+dirs = { workspace = true }
 tokio = { workspace = true, features = ["full", "test-util", "macros"] }

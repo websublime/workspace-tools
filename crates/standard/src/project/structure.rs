@@ -45,9 +45,13 @@ use crate::error::{FileSystemError, StandardError, StandardResult};
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationStatus {
+    /// Project structure is valid
     Valid,
+    /// Project has warnings but is usable
     Warning(Vec<String>),
+    /// Project has errors that need to be fixed
     Error(Vec<String>),
+    /// Project has not been validated
     NotValidated,
 }
 
@@ -72,12 +76,19 @@ pub enum ValidationStatus {
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PackageJson {
+    /// Project name
     pub name: String,
+    /// Project version
+    #[serde(default)]
     pub version: String,
+    /// Production dependencies
     #[serde(default)]
     pub dependencies: HashMap<String, String>,
+    /// Development dependencies
     #[serde(default)]
+    #[serde(rename = "devDependencies")]
     pub dev_dependencies: HashMap<String, String>,
+    /// NPM scripts
     #[serde(default)]
     pub scripts: HashMap<String, String>,
 }

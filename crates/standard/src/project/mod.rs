@@ -25,7 +25,7 @@ mod utils;
 
 pub use fs::{FileSystem, FileSystemManager};
 pub use package::{PackageManager, PackageManagerKind};
-pub use structure::{Project, ProjectManager};
+pub use structure::{PackageJson, Project, ProjectManager, ValidationStatus};
 pub use utils::{NodePathKind, PathExt, PathUtils};
 
 use std::path::PathBuf;
