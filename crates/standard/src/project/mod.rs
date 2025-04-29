@@ -2,7 +2,8 @@
 //!
 //! What:
 //! This module provides functionality for managing Node.js project structures,
-//! including package manager detection, file system operations, and path handling.
+//! including package manager detection, file system operations, path handling
+//! and monorepo management.
 //!
 //! Who:
 //! Used by developers who need to:
@@ -10,6 +11,7 @@
 //! - Manage package manager operations
 //! - Handle project-specific file operations
 //! - Work with project paths reliably
+//! - Detect and work with monorepo structures
 //!
 //! Why:
 //! Consistent project structure management is essential for:
@@ -17,13 +19,16 @@
 //! - Proper package manager integration
 //! - Safe file system operations
 //! - Cross-platform compatibility
+//! - Monorepo workspace handling
 
 mod fs;
+mod monorepo;
 mod package;
 mod structure;
 mod utils;
 
 pub use fs::{FileSystem, FileSystemManager};
+pub use monorepo::{MonorepoDetector, MonorepoInfo, MonorepoKind, WorkspacePackage};
 pub use package::{PackageManager, PackageManagerKind};
 pub use structure::{PackageJson, Project, ProjectManager, ValidationStatus};
 pub use utils::{NodePathKind, PathExt, PathUtils};
@@ -39,11 +44,18 @@ pub struct ProjectConfig {
     detect_package_manager: bool,
     /// Whether to validate project structure
     validate_structure: bool,
+    /// Whether to detect monorepo structure
+    detect_monorepo: bool,
 }
 
 impl Default for ProjectConfig {
     fn default() -> Self {
-        Self { root: None, detect_package_manager: true, validate_structure: true }
+        Self {
+            root: None,
+            detect_package_manager: true,
+            validate_structure: true,
+            detect_monorepo: true,
+        }
     }
 }
 
@@ -121,6 +133,26 @@ impl ProjectConfig {
         self.validate_structure = validate;
         self
     }
+
+    /// Sets whether to detect monorepo structure
+    ///
+    /// # Arguments
+    ///
+    /// * `detect` - Whether to detect monorepo structure
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::project::ProjectConfig;
+    ///
+    /// let config = ProjectConfig::new()
+    ///     .detect_monorepo(true);
+    /// ```
+    #[must_use]
+    pub fn detect_monorepo(mut self, detect: bool) -> Self {
+        self.detect_monorepo = detect;
+        self
+    }
 }
 
 #[cfg(test)]
@@ -132,11 +164,13 @@ mod tests {
         let config = ProjectConfig::new()
             .with_root("/test/path")
             .detect_package_manager(true)
-            .validate_structure(true);
+            .validate_structure(true)
+            .detect_monorepo(true);
 
         assert_eq!(config.root, Some(PathBuf::from("/test/path")));
         assert!(config.detect_package_manager);
         assert!(config.validate_structure);
+        assert!(config.detect_monorepo);
     }
 
     #[test]
@@ -146,5 +180,6 @@ mod tests {
         assert_eq!(config.root, None);
         assert!(config.detect_package_manager);
         assert!(config.validate_structure);
+        assert!(config.detect_monorepo);
     }
 }

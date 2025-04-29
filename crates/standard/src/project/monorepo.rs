@@ -26,7 +26,7 @@ use std::{collections::HashMap, fs};
 use glob::glob;
 use serde::{Deserialize, Serialize};
 
-use super::{FileSystem, FileSystemManager, PackageJson, PathExt};
+use super::{FileSystem, FileSystemManager, PackageJson};
 use crate::error::{FileSystemError, StandardError, StandardResult};
 
 /// Types of monorepo tools supported
@@ -94,12 +94,11 @@ impl MonorepoKind {
     pub fn config_file(self) -> &'static str {
         match self {
             Self::Lerna => "lerna.json",
-            Self::YarnWorkspaces => "package.json", // Uses workspaces field in package.json
+            Self::YarnWorkspaces | Self::Custom => "package.json", // Uses workspaces field in package.json
             Self::PnpmWorkspaces => "pnpm-workspace.yaml",
             Self::Nx => "nx.json",
             Self::Turborepo => "turbo.json",
             Self::Rush => "rush.json",
-            Self::Custom => "package.json", // Generic detection fallback
         }
     }
 }
@@ -112,7 +111,8 @@ struct LernaConfig {
     packages: Vec<String>,
     /// Use Yarn Workspaces for package management
     #[serde(default)]
-    useWorkspaces: bool,
+    #[serde(rename = "useWorkspaces")]
+    use_workspaces: bool,
 }
 
 /// Workspace configuration in package.json (Yarn and npm)
@@ -169,9 +169,11 @@ struct RushConfig {
 struct RushProject {
     /// Package name
     #[serde(default)]
-    packageName: String,
+    #[serde(rename = "packageName")]
+    package_name: String,
     /// Project folder path
-    projectFolder: String,
+    #[serde(rename = "projectFolder")]
+    project_folder: String,
 }
 
 /// Workspace package information
@@ -477,10 +479,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn is_monorepo_root(
-        &self,
-        path: impl AsRef<Path>,
-    ) -> StandardResult<Option<MonorepoKind>> {
+    pub fn is_monorepo_root(&self, path: impl AsRef<Path>) -> StandardResult<Option<MonorepoKind>> {
         let path = path.as_ref();
 
         // Check for each monorepo configuration file
@@ -520,7 +519,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
             }
 
             // Custom monorepo detection (multiple package.json files or packages directory)
-            if self.has_multiple_packages(path).await? {
+            if self.has_multiple_packages(path) {
                 return Ok(Some(MonorepoKind::Custom));
             }
         }
@@ -553,21 +552,21 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn find_monorepo_root(
+    pub fn find_monorepo_root(
         &self,
         start_path: impl AsRef<Path>,
     ) -> StandardResult<Option<(PathBuf, MonorepoKind)>> {
         let start_path = start_path.as_ref();
 
         // Check if the current directory is a monorepo root
-        if let Some(kind) = self.is_monorepo_root(start_path).await? {
+        if let Some(kind) = self.is_monorepo_root(start_path)? {
             return Ok(Some((start_path.to_path_buf(), kind)));
         }
 
         // Walk up the directory tree
         let mut current = Some(start_path);
         while let Some(path) = current {
-            if let Some(kind) = self.is_monorepo_root(path).await? {
+            if let Some(kind) = self.is_monorepo_root(path)? {
                 return Ok(Some((path.to_path_buf(), kind)));
             }
             current = path.parent();
@@ -602,11 +601,12 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(clippy::manual_let_else)]
     pub async fn detect_monorepo(&self, path: impl AsRef<Path>) -> StandardResult<MonorepoInfo> {
         let path = path.as_ref();
 
         // Find monorepo root
-        let (root, kind) = if let Some((root, kind)) = self.find_monorepo_root(path).await? {
+        let (root, kind) = if let Some((root, kind)) = self.find_monorepo_root(path)? {
             (root, kind)
         } else {
             return Err(StandardError::operation(format!(
@@ -617,13 +617,13 @@ impl<F: FileSystem> MonorepoDetector<F> {
 
         // Get package locations
         let packages = match kind {
-            MonorepoKind::Lerna => self.detect_lerna_packages(&root).await?,
-            MonorepoKind::YarnWorkspaces => self.detect_yarn_packages(&root).await?,
-            MonorepoKind::PnpmWorkspaces => self.detect_pnpm_packages(&root).await?,
-            MonorepoKind::Nx => self.detect_nx_packages(&root).await?,
-            MonorepoKind::Turborepo => self.detect_turborepo_packages(&root).await?,
-            MonorepoKind::Rush => self.detect_rush_packages(&root).await?,
-            MonorepoKind::Custom => self.detect_custom_packages(&root).await?,
+            MonorepoKind::Lerna => self.detect_lerna_packages(&root)?,
+            MonorepoKind::YarnWorkspaces => self.detect_yarn_packages(&root)?,
+            MonorepoKind::PnpmWorkspaces => self.detect_pnpm_packages(&root)?,
+            MonorepoKind::Nx => self.detect_nx_packages(&root)?,
+            MonorepoKind::Turborepo => self.detect_turborepo_packages(&root)?,
+            MonorepoKind::Rush => self.detect_rush_packages(&root)?,
+            MonorepoKind::Custom => self.detect_custom_packages(&root)?,
         };
 
         // Create monorepo info
@@ -639,7 +639,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Returns
     ///
     /// True if multiple package.json files are found
-    async fn has_multiple_packages(&self, path: &Path) -> StandardResult<bool> {
+    fn has_multiple_packages(&self, path: &Path) -> bool {
         // Common package directory patterns
         let package_dirs = [
             path.join("packages"),
@@ -657,7 +657,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
                     for entry in entries {
                         let pkg_json = entry.join("package.json");
                         if self.fs.exists(&pkg_json) {
-                            return Ok(true);
+                            return true;
                         }
                     }
                 }
@@ -665,22 +665,19 @@ impl<F: FileSystem> MonorepoDetector<F> {
         }
 
         // Manual check for multiple package.json files in subdirectories
-        let paths = match self.fs.walk_dir(path) {
-            Ok(paths) => paths,
-            Err(_) => return Ok(false),
-        };
+        let Ok(paths) = self.fs.walk_dir(path) else { return false };
 
         let mut package_json_count = 0;
         for path in paths {
             if path.file_name().map_or(false, |name| name == "package.json") {
                 package_json_count += 1;
                 if package_json_count > 1 {
-                    return Ok(true);
+                    return true;
                 }
             }
         }
 
-        Ok(false)
+        false
     }
 
     /// Detects packages in a Lerna monorepo
@@ -692,15 +689,15 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Returns
     ///
     /// A vector of workspace packages
-    async fn detect_lerna_packages(&self, root: &Path) -> StandardResult<Vec<WorkspacePackage>> {
+    fn detect_lerna_packages(&self, root: &Path) -> StandardResult<Vec<WorkspacePackage>> {
         let lerna_path = root.join("lerna.json");
         let lerna_content = self.fs.read_file_string(&lerna_path)?;
         let lerna_config = serde_json::from_str::<LernaConfig>(&lerna_content)
-            .map_err(|e| StandardError::operation(format!("Invalid lerna.json format: {}", e)))?;
+            .map_err(|e| StandardError::operation(format!("Invalid lerna.json format: {e}")))?;
 
         // If useWorkspaces is true, delegate to yarn/npm workspaces detection
-        if lerna_config.useWorkspaces {
-            return self.detect_yarn_packages(root).await;
+        if lerna_config.use_workspaces {
+            return self.detect_yarn_packages(root);
         }
 
         // Default patterns if none specified
@@ -710,7 +707,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
             lerna_config.packages
         };
 
-        self.find_packages_from_patterns(root, &patterns).await
+        self.find_packages_from_patterns(root, &patterns)
     }
 
     /// Detects packages in a Yarn Workspaces monorepo
@@ -722,11 +719,11 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Returns
     ///
     /// A vector of workspace packages
-    async fn detect_yarn_packages(&self, root: &Path) -> StandardResult<Vec<WorkspacePackage>> {
+    fn detect_yarn_packages(&self, root: &Path) -> StandardResult<Vec<WorkspacePackage>> {
         let package_json_path = root.join("package.json");
         let package_json_content = self.fs.read_file_string(&package_json_path)?;
         let package_json = serde_json::from_str::<WorkspacesConfig>(&package_json_content)
-            .map_err(|e| StandardError::operation(format!("Invalid package.json format: {}", e)))?;
+            .map_err(|e| StandardError::operation(format!("Invalid package.json format: {e}")))?;
 
         let workspaces_config = package_json.workspaces.ok_or_else(|| {
             StandardError::operation("No workspaces field in package.json".to_string())
@@ -737,7 +734,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
             WorkspacesPatterns::Object { packages } => packages,
         };
 
-        self.find_packages_from_patterns(root, &patterns).await
+        self.find_packages_from_patterns(root, &patterns)
     }
 
     /// Detects packages in a pnpm Workspaces monorepo
@@ -749,14 +746,14 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Returns
     ///
     /// A vector of workspace packages
-    async fn detect_pnpm_packages(&self, root: &Path) -> StandardResult<Vec<WorkspacePackage>> {
+    fn detect_pnpm_packages(&self, root: &Path) -> StandardResult<Vec<WorkspacePackage>> {
         let pnpm_path = root.join("pnpm-workspace.yaml");
         let pnpm_content = self.fs.read_file_string(&pnpm_path)?;
 
         let pnpm_config: PnpmWorkspaceConfig = serde_yaml::from_str(&pnpm_content)
-            .map_err(|e| StandardError::operation(format!("Invalid pnpm-workspace.yaml: {}", e)))?;
+            .map_err(|e| StandardError::operation(format!("Invalid pnpm-workspace.yaml: {e}")))?;
 
-        self.find_packages_from_patterns(root, &pnpm_config.packages).await
+        self.find_packages_from_patterns(root, &pnpm_config.packages)
     }
 
     /// Detects packages in an Nx monorepo
@@ -768,33 +765,18 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Returns
     ///
     /// A vector of workspace packages
-    async fn detect_nx_packages(&self, root: &Path) -> StandardResult<Vec<WorkspacePackage>> {
+    fn detect_nx_packages(&self, root: &Path) -> StandardResult<Vec<WorkspacePackage>> {
         let nx_path = root.join("nx.json");
         let nx_content = self.fs.read_file_string(&nx_path)?;
         let nx_config = serde_json::from_str::<NxConfig>(&nx_content)
-            .map_err(|e| StandardError::operation(format!("Invalid nx.json format: {}", e)))?;
+            .map_err(|e| StandardError::operation(format!("Invalid nx.json format: {e}")))?;
 
         let mut packages = Vec::new();
 
         // Two cases:
         // 1. Newer Nx has explicit project config with paths
         // 2. Older Nx requires checking workspace.json or angular.json
-        if !nx_config.projects.is_empty() {
-            // Case 1: Extract from nx.json projects
-            for (name, project_config) in nx_config.projects {
-                if let Some(project_path) = project_config.root {
-                    let package_path = root.join(&project_path);
-                    let package_json_path = package_path.join("package.json");
-
-                    if self.fs.exists(&package_json_path) {
-                        if let Ok(package) = self.read_package_json(&package_json_path, root).await
-                        {
-                            packages.push(package);
-                        }
-                    }
-                }
-            }
-        } else {
+        if nx_config.projects.is_empty() {
             // Case 2: Try workspace.json or angular.json
             let workspace_files = ["workspace.json", "angular.json"];
             for file in &workspace_files {
@@ -802,19 +784,33 @@ impl<F: FileSystem> MonorepoDetector<F> {
                 if self.fs.exists(&workspace_path) {
                     let content = self.fs.read_file_string(&workspace_path)?;
                     if let Ok(workspace_config) = serde_json::from_str::<NxConfig>(&content) {
-                        for (name, project_config) in workspace_config.projects {
+                        for (_name, project_config) in workspace_config.projects {
                             if let Some(project_path) = project_config.root {
                                 let package_path = root.join(&project_path);
                                 let package_json_path = package_path.join("package.json");
 
                                 if self.fs.exists(&package_json_path) {
                                     if let Ok(package) =
-                                        self.read_package_json(&package_json_path, root).await
+                                        self.read_package_json(&package_json_path, root)
                                     {
                                         packages.push(package);
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        } else {
+            // Case 1: Extract from nx.json projects
+            for (_name, project_config) in nx_config.projects {
+                if let Some(project_path) = project_config.root {
+                    let package_path = root.join(&project_path);
+                    let package_json_path = package_path.join("package.json");
+
+                    if self.fs.exists(&package_json_path) {
+                        if let Ok(package) = self.read_package_json(&package_json_path, root) {
+                            packages.push(package);
                         }
                     }
                 }
@@ -825,7 +821,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
         if packages.is_empty() {
             let patterns =
                 vec!["packages/*".to_string(), "apps/*".to_string(), "libs/*".to_string()];
-            packages = self.find_packages_from_patterns(root, &patterns).await?;
+            packages = self.find_packages_from_patterns(root, &patterns)?;
         }
 
         Ok(packages)
@@ -840,24 +836,21 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Returns
     ///
     /// A vector of workspace packages
-    async fn detect_turborepo_packages(
-        &self,
-        root: &Path,
-    ) -> StandardResult<Vec<WorkspacePackage>> {
+    fn detect_turborepo_packages(&self, root: &Path) -> StandardResult<Vec<WorkspacePackage>> {
         // Turborepo uses npm/yarn/pnpm workspaces under the hood
         // First try to detect from package.json
-        if let Ok(packages) = self.detect_yarn_packages(root).await {
+        if let Ok(packages) = self.detect_yarn_packages(root) {
             return Ok(packages);
         }
 
         // If no workspaces in package.json, try pnpm
         if self.fs.exists(&root.join("pnpm-workspace.yaml")) {
-            return self.detect_pnpm_packages(root).await;
+            return self.detect_pnpm_packages(root);
         }
 
         // Fall back to common patterns
         let patterns = vec!["packages/*".to_string(), "apps/*".to_string()];
-        self.find_packages_from_patterns(root, &patterns).await
+        self.find_packages_from_patterns(root, &patterns)
     }
 
     /// Detects packages in a Rush monorepo
@@ -869,20 +862,20 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Returns
     ///
     /// A vector of workspace packages
-    async fn detect_rush_packages(&self, root: &Path) -> StandardResult<Vec<WorkspacePackage>> {
+    fn detect_rush_packages(&self, root: &Path) -> StandardResult<Vec<WorkspacePackage>> {
         let rush_path = root.join("rush.json");
         let rush_content = self.fs.read_file_string(&rush_path)?;
         let rush_config = serde_json::from_str::<RushConfig>(&rush_content)
-            .map_err(|e| StandardError::operation(format!("Invalid rush.json format: {}", e)))?;
+            .map_err(|e| StandardError::operation(format!("Invalid rush.json format: {e}")))?;
 
         let mut packages = Vec::new();
 
         for project in rush_config.projects {
-            let package_path = root.join(&project.projectFolder);
+            let package_path = root.join(&project.project_folder);
             let package_json_path = package_path.join("package.json");
 
             if self.fs.exists(&package_json_path) {
-                if let Ok(package) = self.read_package_json(&package_json_path, root).await {
+                if let Ok(package) = self.read_package_json(&package_json_path, root) {
                     packages.push(package);
                 }
             }
@@ -900,7 +893,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Returns
     ///
     /// A vector of workspace packages
-    async fn detect_custom_packages(&self, root: &Path) -> StandardResult<Vec<WorkspacePackage>> {
+    fn detect_custom_packages(&self, root: &Path) -> StandardResult<Vec<WorkspacePackage>> {
         // Check for common monorepo directories
         let common_patterns =
             ["packages/*", "apps/*", "libs/*", "modules/*", "components/*", "services/*"];
@@ -918,10 +911,10 @@ impl<F: FileSystem> MonorepoDetector<F> {
 
         // If no common patterns are found, scan for package.json files
         if patterns.is_empty() {
-            return self.find_packages_by_scanning(root).await;
+            return self.find_packages_by_scanning(root);
         }
 
-        self.find_packages_from_patterns(root, &patterns).await
+        self.find_packages_from_patterns(root, &patterns)
     }
 
     /// Finds packages using glob patterns
@@ -934,7 +927,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Returns
     ///
     /// A vector of workspace packages
-    async fn find_packages_from_patterns(
+    fn find_packages_from_patterns(
         &self,
         root: &Path,
         patterns: &[String],
@@ -948,7 +941,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
 
             // Use glob to find matching paths
             for entry in glob(&abs_pattern).map_err(|e| {
-                StandardError::operation(format!("Invalid glob pattern '{}': {}", pattern, e))
+                StandardError::operation(format!("Invalid glob pattern '{pattern}': {e}"))
             })? {
                 match entry {
                     Ok(path) => {
@@ -958,7 +951,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
                             {
                                 package_paths.insert(path.clone());
                                 if let Ok(package) =
-                                    self.read_package_json(&package_json_path, root).await
+                                    self.read_package_json(&package_json_path, root)
                                 {
                                     packages.push(package);
                                 }
@@ -984,10 +977,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Returns
     ///
     /// A vector of workspace packages
-    async fn find_packages_by_scanning(
-        &self,
-        root: &Path,
-    ) -> StandardResult<Vec<WorkspacePackage>> {
+    fn find_packages_by_scanning(&self, root: &Path) -> StandardResult<Vec<WorkspacePackage>> {
         let mut packages = Vec::new();
         let root_package_json = root.join("package.json");
 
@@ -1018,7 +1008,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
 
                 if !package_paths.contains(package_dir) {
                     package_paths.insert(package_dir.to_path_buf());
-                    if let Ok(package) = self.read_package_json(&path, root).await {
+                    if let Ok(package) = self.read_package_json(&path, root) {
                         // Skip the root package
                         if let Some(ref name) = root_package_name {
                             if &package.name == name {
@@ -1044,7 +1034,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Returns
     ///
     /// A workspace package
-    async fn read_package_json(
+    fn read_package_json(
         &self,
         package_json_path: &Path,
         root: &Path,
@@ -1053,7 +1043,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
         let package_json = serde_json::from_str::<PackageJson>(&content).map_err(|e| {
             FileSystemError::Validation {
                 path: package_json_path.to_path_buf(),
-                reason: format!("Invalid package.json format: {}", e),
+                reason: format!("Invalid package.json format: {e}"),
             }
         })?;
 
@@ -1115,7 +1105,7 @@ mod tests {
         let root_path = temp_dir.path();
 
         // Not a monorepo yet
-        assert!(detector.is_monorepo_root(root_path).await?.is_none());
+        assert!(detector.is_monorepo_root(root_path)?.is_none());
 
         // Create a lerna.json file
         std::fs::write(
@@ -1124,12 +1114,13 @@ mod tests {
         )?;
 
         // Now it should be detected as a Lerna monorepo
-        assert_eq!(detector.is_monorepo_root(root_path).await?, Some(MonorepoKind::Lerna));
+        assert_eq!(detector.is_monorepo_root(root_path)?, Some(MonorepoKind::Lerna));
 
         Ok(())
     }
 
     // Test find_monorepo_root function
+    #[allow(clippy::unwrap_used)]
     #[tokio::test]
     async fn test_find_monorepo_root() -> StandardResult<()> {
         let detector = MonorepoDetector::new();
@@ -1150,14 +1141,14 @@ mod tests {
         )?;
 
         // Test finding from root
-        let result = detector.find_monorepo_root(root_path).await?;
+        let result = detector.find_monorepo_root(root_path)?;
         assert!(result.is_some());
         let (found_root, kind) = result.unwrap();
         assert_eq!(found_root, root_path);
         assert_eq!(kind, MonorepoKind::YarnWorkspaces);
 
         // Test finding from subdirectory
-        let result = detector.find_monorepo_root(&package_dir).await?;
+        let result = detector.find_monorepo_root(&package_dir)?;
         assert!(result.is_some());
         let (found_root, kind) = result.unwrap();
         assert_eq!(found_root, root_path);
@@ -1167,6 +1158,7 @@ mod tests {
     }
 
     // Test full monorepo detection
+    #[allow(clippy::unwrap_used)]
     #[tokio::test]
     async fn test_detect_monorepo() -> StandardResult<()> {
         let detector = MonorepoDetector::new();
@@ -1275,7 +1267,7 @@ mod tests {
         // Find packages using patterns
         let patterns = vec!["packages/*".to_string(), "apps/*".to_string(), "libs/*".to_string()];
 
-        let packages = detector.find_packages_from_patterns(root_path, &patterns).await?;
+        let packages = detector.find_packages_from_patterns(root_path, &patterns)?;
 
         // Verify packages
         assert_eq!(packages.len(), 3);
@@ -1322,7 +1314,7 @@ mod tests {
         )?;
 
         // Detect as custom monorepo
-        assert_eq!(detector.is_monorepo_root(root_path).await?, Some(MonorepoKind::Custom));
+        assert_eq!(detector.is_monorepo_root(root_path)?, Some(MonorepoKind::Custom));
 
         // Test full detection
         let monorepo = detector.detect_monorepo(root_path).await?;
