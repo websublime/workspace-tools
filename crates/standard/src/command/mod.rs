@@ -18,9 +18,13 @@
 //! handle these interactions.
 
 mod executor;
+mod queue;
 mod stream;
 mod types;
 
 pub use executor::{CommandExecutor, DefaultCommandExecutor};
+pub use queue::{
+    CommandPriority, CommandQueue, CommandQueueConfig, CommandQueueResult, CommandStatus,
+};
 pub use stream::{CommandStream, StreamConfig, StreamOutput};
 pub use types::{Command, CommandBuilder, CommandOutput, ResourceLimits};

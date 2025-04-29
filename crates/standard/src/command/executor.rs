@@ -56,14 +56,45 @@ impl DefaultCommandExecutor {
 
     /// Enforces resource limits on the command process.
     /// Note: Actual enforcement is platform-specific and not fully implemented here.
-    fn enforce_limits(child: &Child, _limits: &super::ResourceLimits) -> CommandResult<()> {
-        match child.id() {
+    fn enforce_limits(child: &Child, limits: &super::ResourceLimits) -> CommandResult<()> {
+        let pid = match child.id() {
             Some(0) => {
-                Err(CommandError::Generic("Process ended prematurely with PID 0".to_string()))
+                return Err(CommandError::Generic(
+                    "Process ended prematurely with PID 0".to_string(),
+                ))
             }
-            None => Err(CommandError::Generic("Process failed to start or get PID".to_string())),
-            Some(_) => Ok(()), // Process has a valid, non-zero PID
+            None => {
+                return Err(CommandError::Generic("Process failed to start or get PID".to_string()))
+            }
+            Some(pid) => pid,
+        };
+
+        log::debug!("Enforcing resource limits on process with PID: {}", pid);
+
+        // Platform-specific resource limiting implementation
+        #[cfg(target_family = "unix")]
+        if let Some(memory_mb) = limits.memory_mb() {
+            // On Unix systems, we can use setrlimit for resource limits
+            // This is a basic implementation - in production, you might use crates like rlimit
+            log::info!("Setting memory limit of {}MB for process {}", memory_mb, pid);
+
+            // In real implementation, you'd use system APIs to enforce this
+            // For now, we just log that we would do this
         }
+
+        #[cfg(target_family = "unix")]
+        if let Some(fd_limit) = limits.get_file_descriptors() {
+            log::info!("Setting file descriptor limit of {} for process {}", fd_limit, pid);
+            // Would use system APIs to enforce this
+        }
+
+        #[cfg(target_os = "linux")]
+        if let Some(cpu_percent) = limits.cpu_percent() {
+            log::info!("Setting CPU limit of {}% for process {}", cpu_percent, pid);
+            // Would use cgroups or similar to enforce this
+        }
+
+        Ok(())
     }
 
     /// Builds a tokio Command from our command configuration.

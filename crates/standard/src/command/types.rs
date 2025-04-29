@@ -114,6 +114,63 @@ impl ResourceLimits {
         self.file_descriptors = Some(limit);
         self
     }
+
+    /// Gets the memory limit in megabytes.
+    ///
+    /// # Returns
+    ///
+    /// The memory limit in megabytes, if set
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::command::ResourceLimits;
+    ///
+    /// let limits = ResourceLimits::new().memory_limit(1024);
+    /// assert_eq!(limits.memory_mb(), Some(1024));
+    /// ```
+    #[must_use]
+    pub fn memory_mb(&self) -> Option<u64> {
+        self.memory_mb
+    }
+
+    /// Gets the CPU usage limit percentage.
+    ///
+    /// # Returns
+    ///
+    /// The CPU usage limit (0-100), if set
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::command::ResourceLimits;
+    ///
+    /// let limits = ResourceLimits::new().cpu_limit(50);
+    /// assert_eq!(limits.cpu_percent(), Some(50));
+    /// ```
+    #[must_use]
+    pub fn cpu_percent(&self) -> Option<u8> {
+        self.cpu_percent
+    }
+
+    /// Gets the file descriptor limit.
+    ///
+    /// # Returns
+    ///
+    /// The maximum number of file descriptors, if set
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::command::ResourceLimits;
+    ///
+    /// let limits = ResourceLimits::new().file_descriptors(1000);
+    /// assert_eq!(limits.file_descriptors(), Some(1000));
+    /// ```
+    #[must_use]
+    pub fn get_file_descriptors(&self) -> Option<u32> {
+        self.file_descriptors
+    }
 }
 
 impl Default for ResourceLimits {
