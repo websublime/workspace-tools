@@ -1,22 +1,37 @@
 //! # Monorepo Module Tests
 //!
 //! ## What
-//! This file contains unit tests for the monorepo module functionality.
+//! This file contains unit tests for the monorepo module functionality,
+//! ensuring all components work correctly independently and together.
 //!
 //! ## How
-//! Tests verify the behavior of MonorepoKind and MonorepoDescriptor,
-//! covering normal operations and edge cases.
+//! Tests are organized into sections covering MonorepoKind, MonorepoDescriptor,
+//! PackageManagerKind, and PackageManager. Each test focuses on a specific
+//! aspect of functionality with clear assertions.
 //!
 //! ## Why
-//! Comprehensive testing ensures that the monorepo detection and analysis
-//! functions work correctly in all scenarios.
+//! Comprehensive testing ensures that the monorepo detection, analysis, and
+//! package manager operations work correctly across different scenarios and
+//! edge cases, providing confidence in the reliability of the module.
 
 #[allow(clippy::unwrap_used)]
 #[allow(clippy::get_unwrap)]
+#[allow(clippy::expect_used)]
 #[cfg(test)]
 mod tests {
-    use crate::monorepo::{MonorepoDescriptor, MonorepoKind, WorkspacePackage};
+    use crate::error::MonorepoError;
+    use crate::filesystem::{FileSystem, FileSystemManager};
+    use crate::monorepo::{
+        types::{PackageManager, PackageManagerKind},
+        MonorepoDescriptor, MonorepoKind, WorkspacePackage,
+    };
     use std::path::{Path, PathBuf};
+    use tempfile::TempDir;
+
+    // Helper function to create a temporary directory for tests
+    fn setup_test_dir() -> TempDir {
+        tempfile::tempdir().expect("Failed to create temporary directory for test")
+    }
 
     #[test]
     fn test_monorepo_kind_names() {
@@ -195,6 +210,120 @@ mod tests {
         let outside_file = Path::new("/fake/monorepo/outside/file.js");
         let found_pkg = descriptor.find_package_for_path(outside_file);
         assert!(found_pkg.is_none());
+    }
+
+    #[test]
+    fn test_package_manager_kind_lock_files() {
+        assert_eq!(PackageManagerKind::Npm.lock_file(), "package-lock.json");
+        assert_eq!(PackageManagerKind::Yarn.lock_file(), "yarn.lock");
+        assert_eq!(PackageManagerKind::Pnpm.lock_file(), "pnpm-lock.yaml");
+        assert_eq!(PackageManagerKind::Bun.lock_file(), "bun.lockb");
+        assert_eq!(PackageManagerKind::Jsr.lock_file(), "jsr.json");
+    }
+
+    #[test]
+    fn test_package_manager_kind_commands() {
+        assert_eq!(PackageManagerKind::Npm.command(), "npm");
+        assert_eq!(PackageManagerKind::Yarn.command(), "yarn");
+        assert_eq!(PackageManagerKind::Pnpm.command(), "pnpm");
+        assert_eq!(PackageManagerKind::Bun.command(), "bun");
+        assert_eq!(PackageManagerKind::Jsr.command(), "jsr");
+    }
+
+    #[test]
+    fn test_package_manager_creation() {
+        let root = PathBuf::from("/project/root");
+        let npm_manager = PackageManager::new(PackageManagerKind::Npm, &root);
+
+        assert_eq!(npm_manager.kind(), PackageManagerKind::Npm);
+        assert_eq!(npm_manager.root(), &root);
+        assert_eq!(npm_manager.lock_file_path(), root.join("package-lock.json"));
+
+        let yarn_manager = PackageManager::new(PackageManagerKind::Yarn, &root);
+        assert_eq!(yarn_manager.kind(), PackageManagerKind::Yarn);
+        assert_eq!(yarn_manager.lock_file_path(), root.join("yarn.lock"));
+    }
+
+    #[test]
+    fn test_package_manager_detect() {
+        let temp_dir = setup_test_dir();
+        let fs = FileSystemManager::new();
+
+        // Create npm lock file
+        let npm_lock_path = temp_dir.path().join("package-lock.json");
+        fs.write_file_string(&npm_lock_path, "{}").unwrap();
+
+        // Detect should find npm
+        let manager = PackageManager::detect(temp_dir.path()).unwrap();
+        assert_eq!(manager.kind(), PackageManagerKind::Npm);
+        assert_eq!(manager.root(), temp_dir.path());
+
+        // Remove npm lock and add yarn lock
+        fs.remove(&npm_lock_path).unwrap();
+        fs.write_file_string(&temp_dir.path().join("yarn.lock"), "").unwrap();
+
+        // Detect should find yarn
+        let manager = PackageManager::detect(temp_dir.path()).unwrap();
+        assert_eq!(manager.kind(), PackageManagerKind::Yarn);
+    }
+
+    #[test]
+    fn test_package_manager_detect_failure() {
+        let temp_dir = setup_test_dir();
+
+        // No lock files, should fail
+        let result = PackageManager::detect(temp_dir.path());
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), MonorepoError::ManagerNotFound));
+    }
+
+    #[test]
+    fn test_package_manager_lock_file_path() {
+        let temp_dir = setup_test_dir();
+        let fs = FileSystemManager::new();
+
+        // Test npm with package-lock.json
+        let npm_lock_path = temp_dir.path().join("package-lock.json");
+        fs.write_file_string(&npm_lock_path, "{}").unwrap();
+
+        let npm_manager = PackageManager::new(PackageManagerKind::Npm, temp_dir.path());
+        assert_eq!(npm_manager.lock_file_path(), npm_lock_path);
+
+        // Test npm with npm-shrinkwrap.json (alternative)
+        fs.remove(&npm_lock_path).unwrap();
+        let shrinkwrap_path = temp_dir.path().join("npm-shrinkwrap.json");
+        fs.write_file_string(&shrinkwrap_path, "{}").unwrap();
+
+        let npm_manager = PackageManager::new(PackageManagerKind::Npm, temp_dir.path());
+        assert_eq!(npm_manager.lock_file_path(), shrinkwrap_path);
+    }
+
+    #[test]
+    fn test_monorepo_error_display() {
+        use crate::error::{FileSystemError, MonorepoError};
+        use std::path::PathBuf;
+
+        // Create separate FileSystemError instances for each test case
+        let path = PathBuf::from("/fake/path");
+
+        // Test each MonorepoError variant with a fresh FileSystemError
+        let detection_error =
+            MonorepoError::Detection { source: FileSystemError::NotFound { path: path.clone() } };
+        assert!(detection_error.to_string().contains("Failed to detect monorepo type"));
+
+        let parsing_error =
+            MonorepoError::Parsing { source: FileSystemError::NotFound { path: path.clone() } };
+        assert!(parsing_error.to_string().contains("Failed to parse monorepo descriptor"));
+
+        let reading_error =
+            MonorepoError::Reading { source: FileSystemError::NotFound { path: path.clone() } };
+        assert!(reading_error.to_string().contains("Failed to read monorepo descriptor"));
+
+        let writing_error = MonorepoError::Writing { source: FileSystemError::NotFound { path } };
+        assert!(writing_error.to_string().contains("Failed to write monorepo descriptor"));
+
+        let manager_not_found = MonorepoError::ManagerNotFound;
+        assert_eq!(manager_not_found.to_string(), "Failed to find package manager");
     }
 
     // Helper function to create test packages

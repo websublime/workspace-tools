@@ -19,9 +19,12 @@
 
 mod descriptor;
 mod kinds;
+mod manager;
 mod types;
 
 #[cfg(test)]
 mod tests;
 
-pub use types::{MonorepoDescriptor, MonorepoKind, WorkspacePackage};
+pub use types::{
+    MonorepoDescriptor, MonorepoKind, PackageManager, PackageManagerKind, WorkspacePackage,
+};

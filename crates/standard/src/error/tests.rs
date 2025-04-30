@@ -1,7 +1,8 @@
 #[allow(clippy::unwrap_used)]
+#[allow(clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use crate::error::FileSystemError;
+    use crate::error::{FileSystemError, FileSystemResult, MonorepoError, MonorepoResult};
     use std::{io, path::PathBuf};
 
     #[test]
@@ -121,5 +122,94 @@ mod tests {
         let permission_denied =
             FileSystemError::PermissionDenied { path: "/test/protected".into() };
         assert_eq!(permission_denied.to_string(), "Permission denied for path: /test/protected");
+    }
+
+    #[test]
+    fn test_monorepo_error_variants() {
+        // Test Detection error
+        let fs_error = FileSystemError::NotFound { path: PathBuf::from("/missing/workspace.yaml") };
+        let detection_error = MonorepoError::Detection { source: fs_error };
+        assert!(detection_error.to_string().contains("Failed to detect monorepo type"));
+
+        // Test Parsing error
+        let fs_error = FileSystemError::Utf8Decode {
+            path: PathBuf::from("/project/workspace.yaml"),
+            source: String::from_utf8(vec![0xFF, 0xFF]).unwrap_err(),
+        };
+        let parsing_error = MonorepoError::Parsing { source: fs_error };
+        assert!(parsing_error.to_string().contains("Failed to parse monorepo descriptor"));
+
+        // Test Reading error
+        let fs_error =
+            FileSystemError::PermissionDenied { path: PathBuf::from("/protected/workspace.yaml") };
+        let reading_error = MonorepoError::Reading { source: fs_error };
+        assert!(reading_error.to_string().contains("Failed to read monorepo descriptor"));
+
+        // Test Writing error
+        let fs_error = FileSystemError::Io {
+            path: PathBuf::from("/full/disk/workspace.yaml"),
+            source: io::Error::new(io::ErrorKind::Other, "disk full"),
+        };
+        let writing_error = MonorepoError::Writing { source: fs_error };
+        assert!(writing_error.to_string().contains("Failed to write monorepo descriptor"));
+
+        // Test ManagerNotFound error
+        let manager_not_found = MonorepoError::ManagerNotFound;
+        assert_eq!(manager_not_found.to_string(), "Failed to find package manager");
+    }
+
+    #[test]
+    fn test_monorepo_result_usage() {
+        // Function that returns MonorepoResult
+        fn find_workspace(path: &str) -> MonorepoResult<String> {
+            if path.is_empty() {
+                let fs_error = FileSystemError::Validation {
+                    path: PathBuf::from("<empty>"),
+                    reason: "Empty path provided".to_string(),
+                };
+                return Err(MonorepoError::Detection { source: fs_error });
+            }
+            Ok("Found workspace".to_string())
+        }
+
+        // Test success case
+        let result = find_workspace("/valid/path");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Found workspace");
+
+        // Test error case
+        let result = find_workspace("");
+        assert!(result.is_err());
+        match result {
+            Err(MonorepoError::Detection { source }) => {
+                assert!(matches!(source, FileSystemError::Validation { .. }));
+            }
+            _ => panic!("Expected Detection error"),
+        }
+    }
+
+    #[test]
+    fn test_filesystem_to_monorepo_error_conversion() {
+        // Test a pattern of converting FileSystemError to MonorepoError
+        fn read_workspace_file(path: &str) -> MonorepoResult<String> {
+            let path_buf = PathBuf::from(path);
+
+            // Simulate filesystem error
+            let fs_result: FileSystemResult<String> =
+                Err(FileSystemError::NotFound { path: path_buf.clone() });
+
+            // Convert to MonorepoError
+            fs_result.map_err(|e| MonorepoError::Reading { source: e })
+        }
+
+        let result = read_workspace_file("/missing/workspace.yaml");
+        assert!(result.is_err());
+
+        match result {
+            Err(MonorepoError::Reading { source }) => {
+                assert!(matches!(source, FileSystemError::NotFound { .. }));
+            }
+            _ => panic!("Expected Reading error with NotFound source"),
+        }
     }
 }
