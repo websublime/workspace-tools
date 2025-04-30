@@ -18,9 +18,10 @@
 //! error context and type safety.
 
 mod manager;
+mod paths;
 mod types;
 
 #[cfg(test)]
 mod tests;
 
-pub use types::{FileSystem, FileSystemManager};
+pub use types::{FileSystem, FileSystemManager, NodePathKind, PathExt, PathUtils};
