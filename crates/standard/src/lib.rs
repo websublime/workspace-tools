@@ -32,6 +32,7 @@
 
 pub mod error;
 pub mod filesystem;
+pub mod monorepo;
 
 /// Version of the crate
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
