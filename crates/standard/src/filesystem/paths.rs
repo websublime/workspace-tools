@@ -17,7 +17,7 @@
 //! and provide a consistent approach to path handling across the crate.
 
 use super::{types::PathExt, NodePathKind, PathUtils};
-use crate::error::{FileSystemError, FileSystemResult};
+use crate::error::{Error, FileSystemError, FileSystemResult, Result};
 use std::path::{Component, Path, PathBuf};
 
 impl NodePathKind {
@@ -294,9 +294,10 @@ impl PathExt for Path {
     /// # Ok(())
     /// # }
     /// ```
-    fn canonicalize(&self) -> FileSystemResult<PathBuf> {
+    fn canonicalize(&self) -> Result<PathBuf> {
         if self.is_symlink() {
-            return Path::canonicalize(self).map_err(std::convert::Into::into);
+            return Path::canonicalize(self)
+                .map_err(|e| Error::FileSystem(FileSystemError::from_io(e, self)));
         }
 
         Ok(self.to_path_buf())

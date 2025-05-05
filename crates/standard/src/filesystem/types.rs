@@ -13,7 +13,7 @@
 //! Separating the trait from the implementation allows for better testability
 //! through mocking and provides a clear contract for filesystem operations.
 
-use crate::error::FileSystemError;
+use crate::error::Result;
 use std::path::{Path, PathBuf};
 
 /// A manager for filesystem operations.
@@ -67,7 +67,7 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
-    fn read_file(&self, path: &Path) -> Result<Vec<u8>, FileSystemError>;
+    fn read_file(&self, path: &Path) -> Result<Vec<u8>>;
 
     /// Writes data to a file, creating the file and any parent directories if they don't exist.
     ///
@@ -94,7 +94,7 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
-    fn write_file(&self, path: &Path, contents: &[u8]) -> Result<(), FileSystemError>;
+    fn write_file(&self, path: &Path, contents: &[u8]) -> Result<()>;
 
     /// Reads a file and returns its contents as a UTF-8 encoded string.
     ///
@@ -120,7 +120,7 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
-    fn read_file_string(&self, path: &Path) -> Result<String, FileSystemError>;
+    fn read_file_string(&self, path: &Path) -> Result<String>;
 
     /// Writes a string to a file, creating the file and any parent directories if they don't exist.
     ///
@@ -146,7 +146,7 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
-    fn write_file_string(&self, path: &Path, contents: &str) -> Result<(), FileSystemError>;
+    fn write_file_string(&self, path: &Path, contents: &str) -> Result<()>;
 
     /// Creates a directory and all of its parent directories if they don't exist.
     ///
@@ -171,7 +171,7 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
-    fn create_dir_all(&self, path: &Path) -> Result<(), FileSystemError>;
+    fn create_dir_all(&self, path: &Path) -> Result<()>;
 
     /// Removes a file or directory (recursively if it's a directory).
     ///
@@ -198,7 +198,7 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
-    fn remove(&self, path: &Path) -> Result<(), FileSystemError>;
+    fn remove(&self, path: &Path) -> Result<()>;
 
     /// Checks if a path exists.
     ///
@@ -252,7 +252,7 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
-    fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>, FileSystemError>;
+    fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>>;
 
     /// Walks a directory recursively, listing all files and directories.
     ///
@@ -278,7 +278,7 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
-    fn walk_dir(&self, path: &Path) -> Result<Vec<PathBuf>, FileSystemError>;
+    fn walk_dir(&self, path: &Path) -> Result<Vec<PathBuf>>;
 }
 
 /// Represents common directory and file types in Node.js projects.
@@ -472,5 +472,5 @@ pub trait PathExt {
     /// # Ok(())
     /// # }
     /// ```
-    fn canonicalize(&self) -> Result<PathBuf, FileSystemError>;
+    fn canonicalize(&self) -> Result<PathBuf>;
 }

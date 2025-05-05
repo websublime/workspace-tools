@@ -19,7 +19,7 @@
 #[allow(clippy::expect_used)]
 #[cfg(test)]
 mod tests {
-    use crate::error::MonorepoError;
+    use crate::error::{Error, MonorepoError};
     use crate::filesystem::{FileSystem, FileSystemManager};
     use crate::monorepo::{
         types::{PackageManager, PackageManagerKind},
@@ -274,7 +274,7 @@ mod tests {
         // No lock files, should fail
         let result = PackageManager::detect(temp_dir.path());
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), MonorepoError::ManagerNotFound));
+        assert!(matches!(result.unwrap_err(), Error::Monorepo(MonorepoError::ManagerNotFound)));
     }
 
     #[test]

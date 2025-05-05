@@ -17,7 +17,7 @@
 //! for testing with mock implementations if needed.
 
 use super::{FileSystem, FileSystemManager};
-use crate::error::FileSystemError;
+use crate::error::{Error, FileSystemError, Result};
 use std::{
     fs::{self, File},
     io::{Read, Write},
@@ -68,83 +68,96 @@ impl FileSystemManager {
     /// # Ok(())
     /// # }
     /// ```
-    fn validate_path(&self, path: &Path) -> Result<&Self, FileSystemError> {
+    fn validate_path(&self, path: &Path) -> Result<&Self> {
         if !path.exists() {
-            return Err(FileSystemError::NotFound { path: path.to_path_buf() });
+            return Err(Error::FileSystem(FileSystemError::NotFound { path: path.to_path_buf() }));
         }
         Ok(self)
     }
 }
 
 impl FileSystem for FileSystemManager {
-    fn read_file(&self, path: &Path) -> Result<Vec<u8>, FileSystemError> {
+    fn read_file(&self, path: &Path) -> Result<Vec<u8>> {
         self.validate_path(path)?;
-        let mut file = File::open(path).map_err(|e| FileSystemError::from_io(e, path))?;
+        let mut file =
+            File::open(path).map_err(|e| Error::FileSystem(FileSystemError::from_io(e, path)))?;
         let mut contents = Vec::new();
-        file.read_to_end(&mut contents).map_err(|e| FileSystemError::from_io(e, path))?;
+        file.read_to_end(&mut contents)
+            .map_err(|e| Error::FileSystem(FileSystemError::from_io(e, path)))?;
         Ok(contents)
     }
 
-    fn write_file(&self, path: &Path, contents: &[u8]) -> Result<(), FileSystemError> {
+    fn write_file(&self, path: &Path, contents: &[u8]) -> Result<()> {
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| FileSystemError::from_io(e, parent))?;
+            fs::create_dir_all(parent)
+                .map_err(|e| Error::FileSystem(FileSystemError::from_io(e, parent)))?;
         }
-        let mut file = File::create(path).map_err(|e| FileSystemError::from_io(e, path))?;
-        file.write_all(contents).map_err(|e| FileSystemError::from_io(e, path))?;
+        let mut file =
+            File::create(path).map_err(|e| Error::FileSystem(FileSystemError::from_io(e, path)))?;
+        file.write_all(contents)
+            .map_err(|e| Error::FileSystem(FileSystemError::from_io(e, path)))?;
         Ok(())
     }
 
-    fn read_file_string(&self, path: &Path) -> Result<String, FileSystemError> {
+    fn read_file_string(&self, path: &Path) -> Result<String> {
         let bytes = self.read_file(path)?;
-        String::from_utf8(bytes)
-            .map_err(|e| FileSystemError::Utf8Decode { path: path.to_path_buf(), source: e })
+        String::from_utf8(bytes).map_err(|e| {
+            Error::FileSystem(FileSystemError::Utf8Decode { path: path.to_path_buf(), source: e })
+        })
     }
 
-    fn write_file_string(&self, path: &Path, contents: &str) -> Result<(), FileSystemError> {
+    fn write_file_string(&self, path: &Path, contents: &str) -> Result<()> {
         self.write_file(path, contents.as_bytes())
     }
 
-    fn create_dir_all(&self, path: &Path) -> Result<(), FileSystemError> {
-        fs::create_dir_all(path).map_err(|e| FileSystemError::from_io(e, path))
+    fn create_dir_all(&self, path: &Path) -> Result<()> {
+        fs::create_dir_all(path).map_err(|e| Error::FileSystem(FileSystemError::from_io(e, path)))
     }
 
-    fn remove(&self, path: &Path) -> Result<(), FileSystemError> {
+    fn remove(&self, path: &Path) -> Result<()> {
         self.validate_path(path)?;
         if path.is_dir() { fs::remove_dir_all(path) } else { fs::remove_file(path) }
-            .map_err(|e| FileSystemError::from_io(e, path))
+            .map_err(|e| Error::FileSystem(FileSystemError::from_io(e, path)))
     }
 
     fn exists(&self, path: &Path) -> bool {
         path.exists()
     }
 
-    fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>, FileSystemError> {
+    fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>> {
         self.validate_path(path)?;
         if !path.is_dir() {
-            return Err(FileSystemError::NotADirectory { path: path.to_path_buf() });
+            return Err(Error::FileSystem(FileSystemError::NotADirectory {
+                path: path.to_path_buf(),
+            }));
         }
         fs::read_dir(path)
-            .map_err(|e| FileSystemError::from_io(e, path))?
-            .map(|res| res.map(|e| e.path()).map_err(|e| FileSystemError::from_io(e, path)))
+            .map_err(|e| Error::FileSystem(FileSystemError::from_io(e, path)))?
+            .map(|res| {
+                res.map(|e| e.path())
+                    .map_err(|e| Error::FileSystem(FileSystemError::from_io(e, path)))
+            })
             .collect()
     }
 
-    fn walk_dir(&self, path: &Path) -> Result<Vec<PathBuf>, FileSystemError> {
+    fn walk_dir(&self, path: &Path) -> Result<Vec<PathBuf>> {
         self.validate_path(path)?;
         if !path.is_dir() {
-            return Err(FileSystemError::NotADirectory { path: path.to_path_buf() });
+            return Err(Error::FileSystem(FileSystemError::NotADirectory {
+                path: path.to_path_buf(),
+            }));
         }
         WalkDir::new(path)
             .into_iter()
             .map(|entry_result| {
                 entry_result.map(|entry| entry.path().to_path_buf()).map_err(|e| {
                     let path_context = e.path().unwrap_or(path).to_path_buf();
-                    FileSystemError::from_io(
+                    Error::FileSystem(FileSystemError::from_io(
                         e.into_io_error().unwrap_or_else(|| {
                             std::io::Error::new(std::io::ErrorKind::Other, "walkdir error")
                         }),
                         path_context, // Provide path context if available
-                    )
+                    ))
                 })
             })
             .collect() // Collect results, propagating the first error

@@ -16,8 +16,10 @@
 //! consistently and safely throughout the codebase, enabling accurate dependency
 //! analysis and project structure navigation.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf};
+
+use crate::filesystem::{FileSystem, FileSystemManager};
 
 /// Represents the type of monorepo system being used.
 ///
@@ -176,4 +178,61 @@ pub struct PackageManager {
     pub(crate) kind: PackageManagerKind,
     /// The root directory of the project
     pub(crate) root: PathBuf,
+}
+
+/// Detects and analyzes monorepo structures within a filesystem.
+///
+/// This struct provides functionality to scan a directory structure,
+/// identify the type of monorepo being used, and gather information about
+/// its workspace packages and relationships.
+///
+/// # Type Parameters
+///
+/// * `F` - A filesystem implementation that satisfies the `FileSystem` trait.
+///   Defaults to `FileSystemManager` for standard operations.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::Path;
+/// use sublime_standard_tools::monorepo::types::{MonorepoDetector, MonorepoKind};
+/// use sublime_standard_tools::filesystem::FileSystemManager;
+///
+/// // Create a detector with the default filesystem implementation
+/// let fs = FileSystemManager::new();
+/// let detector = MonorepoDetector::new(fs);
+///
+/// // Detect a monorepo at a specific path
+/// let path = Path::new("/path/to/project");
+/// match detector.detect(path) {
+///     Ok(descriptor) => {
+///         println!("Detected monorepo: {:?}", descriptor.kind());
+///         println!("Found {} packages", descriptor.packages().len());
+///     },
+///     Err(e) => println!("No monorepo detected: {}", e)
+/// }
+/// ```
+///
+/// The detector uses heuristics based on configuration files and directory
+/// structures to identify different types of monorepos (Yarn, pnpm, npm, etc.)
+/// and builds a comprehensive description of the workspace structure.
+#[derive(Debug, Clone)]
+pub struct MonorepoDetector<F: FileSystem = FileSystemManager> {
+    /// File system interface for filesystem operations
+    pub(crate) fs: F,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum WorkspacesPatterns {
+    /// Workspace glob patterns as array
+    Array(Vec<String>),
+    /// Workspace config with patterns in "packages" field
+    Object { packages: Vec<String> },
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PnpmWorkspaceConfig {
+    /// Package locations (glob patterns)
+    pub(crate) packages: Vec<String>,
 }

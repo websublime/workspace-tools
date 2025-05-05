@@ -22,4 +22,7 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub use types::{FileSystemError, FileSystemResult, MonorepoError, MonorepoResult};
+pub use types::{
+    Error, FileSystemError, FileSystemResult, MonorepoError, MonorepoResult, Result,
+    WorkspaceError, WorkspaceResult,
+};

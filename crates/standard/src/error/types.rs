@@ -13,9 +13,11 @@
 //! Centralizing error type definitions provides a clear overview of all
 //! possible error conditions and ensures consistency in error handling.
 
+use core::error::Error as CoreError;
+use core::result::Result as CoreResult;
 use std::io;
 use std::path::PathBuf;
-use thiserror::Error;
+use thiserror::Error as ThisError;
 
 /// Errors that can occur during filesystem operations.
 ///
@@ -33,7 +35,7 @@ use thiserror::Error;
 /// let error = FileSystemError::NotFound { path: PathBuf::from("/missing/file.txt") };
 /// assert!(error.to_string().contains("not found"));
 /// ```
-#[derive(Error, Debug)]
+#[derive(ThisError, Debug)]
 pub enum FileSystemError {
     /// Path not found.
     #[error("Path not found: {path}")]
@@ -114,7 +116,7 @@ pub enum FileSystemError {
 ///     Ok("sample config".to_string())
 /// }
 /// ```
-pub type FileSystemResult<T> = Result<T, FileSystemError>;
+pub type FileSystemResult<T> = CoreResult<T, FileSystemError>;
 
 /// Errors that can occur during monorepo operations.
 ///
@@ -132,7 +134,7 @@ pub type FileSystemResult<T> = Result<T, FileSystemError>;
 /// let error = MonorepoError::Detection { source: fs_error };
 /// assert!(error.to_string().contains("Failed to detect monorepo type"));
 /// ```
-#[derive(Error, Debug)]
+#[derive(ThisError, Debug)]
 pub enum MonorepoError {
     /// Failed to detect the monorepo type.
     #[error("Failed to detect monorepo type: {source}")]
@@ -185,4 +187,86 @@ pub enum MonorepoError {
 ///     Ok("yarn".to_string())
 /// }
 /// ```
-pub type MonorepoResult<T> = Result<T, MonorepoError>;
+pub type MonorepoResult<T> = CoreResult<T, MonorepoError>;
+
+#[derive(ThisError, Debug)]
+pub enum WorkspaceError {
+    #[error("Invalid package json format: {0}")]
+    InvalidPackageJson(String),
+    #[error("Invalid workspaces pattern: {0}")]
+    InvalidWorkspacesPattern(String),
+    #[error("Invalid workspaces pattern: {0}")]
+    InvalidPnpmWorkspace(String),
+    #[error("Package not found: {0}")]
+    PackageNotFound(String),
+    #[error("Workspace not found: {0}")]
+    WorkspaceNotFound(String),
+    #[error("Workspace config is missing: {0}")]
+    WorkspaceConfigMissing(String),
+}
+
+pub type WorkspaceResult<T> = CoreResult<T, WorkspaceError>;
+
+/// General error type for the standard tools library.
+///
+/// This enum serves as a composite error type that aggregates all domain-specific
+/// errors from the crate into a single error type. This allows for simplified error
+/// handling in consumer code that may deal with multiple domains.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::error::{Error, FileSystemError, MonorepoError};
+/// use std::path::PathBuf;
+///
+/// // Creating an error from a filesystem error
+/// let fs_error = FileSystemError::NotFound { path: PathBuf::from("/missing/file.txt") };
+/// let error: Error = fs_error.into();
+///
+/// // Creating an error from a monorepo error
+/// let monorepo_error = MonorepoError::ManagerNotFound;
+/// let error: Error = monorepo_error.into();
+///
+/// // Using in a function that could have multiple error sources
+/// fn complex_operation() -> sublime_standard_tools::error::Result<()> {
+///     // This could return either a FileSystem or Monorepo error
+///     // Both will be automatically converted to the Error enum
+///     Ok(())
+/// }
+/// ```
+#[derive(ThisError, Debug)]
+pub enum Error {
+    /// Monorepo-related error.
+    #[error("Monorepo execution error")]
+    Monorepo(#[from] MonorepoError),
+    /// Filesystem-related error.
+    #[error("FileSystem execution error")]
+    FileSystem(#[from] FileSystemError),
+    /// Workspace-related error.
+    #[error("Workspace execution error")]
+    Workspace(#[from] WorkspaceError),
+}
+
+/// Result type for general operations in the standard tools library.
+///
+/// This is a convenience type alias for Results with the composite Error type.
+/// It simplifies error handling when functions may return errors from various domains.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::error::{Result, Error, FileSystemError};
+/// use std::path::PathBuf;
+///
+/// fn process_project_files(root_dir: &str) -> Result<Vec<String>> {
+///     if root_dir.is_empty() {
+///         return Err(FileSystemError::Validation {
+///             path: PathBuf::from(root_dir),
+///             reason: "Empty directory path".to_string(),
+///         }.into());
+///     }
+///     // Implementation that might return various error types
+///     Ok(vec!["file1.txt".to_string(), "file2.txt".to_string()])
+/// }
+/// ```
+pub type Result<T> = CoreResult<T, Error>;

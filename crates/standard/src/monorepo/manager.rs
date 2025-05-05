@@ -13,7 +13,7 @@
 //! allows the crate to work with any supported package manager in a consistent way.
 
 use super::types::{PackageManager, PackageManagerKind};
-use crate::error::{MonorepoError, MonorepoResult};
+use crate::error::{Error, MonorepoError, Result};
 use std::path::{Path, PathBuf};
 
 impl PackageManager {
@@ -73,7 +73,7 @@ impl PackageManager {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn detect(path: impl AsRef<Path>) -> MonorepoResult<Self> {
+    pub fn detect(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
 
         if path.join(PackageManagerKind::Bun.lock_file()).exists() {
@@ -95,7 +95,7 @@ impl PackageManager {
             return Ok(Self::new(PackageManagerKind::Jsr, path));
         }
 
-        Err(MonorepoError::ManagerNotFound)
+        Err(Error::Monorepo(MonorepoError::ManagerNotFound))
     }
 
     /// Returns the kind of package manager.

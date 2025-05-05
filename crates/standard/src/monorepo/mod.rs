@@ -18,6 +18,7 @@
 //! monorepo implementation.
 
 mod descriptor;
+mod detector;
 mod kinds;
 mod manager;
 mod types;
@@ -26,5 +27,6 @@ mod types;
 mod tests;
 
 pub use types::{
-    MonorepoDescriptor, MonorepoKind, PackageManager, PackageManagerKind, WorkspacePackage,
+    MonorepoDescriptor, MonorepoDetector, MonorepoKind, PackageManager, PackageManagerKind,
+    PnpmWorkspaceConfig, WorkspacePackage, WorkspacesPatterns,
 };
