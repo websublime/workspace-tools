@@ -1,8 +1,25 @@
+//! # Monorepo Detection Implementation
+//!
+//! ## What
+//! This file implements the MonorepoDetector struct, providing methods to identify
+//! and analyze monorepo structures in a filesystem. It supports detection of various
+//! monorepo types including npm, yarn, pnpm, bun, and others.
+//!
+//! ## How
+//! The implementation uses a filesystem abstraction to scan for package manager lock files
+//! and workspace configuration files. It employs various heuristics to detect monorepo
+//! structures and builds a comprehensive representation of packages and their relationships.
+//!
+//! ## Why
+//! Accurate detection of monorepo structures is essential for proper project analysis,
+//! dependency management, and command execution. This implementation provides a consistent
+//! approach to working with different monorepo types through a unified interface.
+
 use package_json::{PackageJson, PackageJsonManager};
 
 use super::{
     MonorepoDescriptor, MonorepoDetector, MonorepoKind, PackageManagerKind, PnpmWorkspaceConfig,
-    WorkspacePackage, WorkspacesPatterns,
+    WorkspacePackage,
 };
 use crate::error::{Error, FileSystemError, MonorepoError, Result, WorkspaceError};
 use crate::filesystem::{FileSystem, FileSystemManager};
@@ -12,6 +29,19 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 impl MonorepoDetector<FileSystemManager> {
+    /// Creates a new MonorepoDetector with the default filesystem implementation.
+    ///
+    /// # Returns
+    ///
+    /// A new MonorepoDetector instance using the FileSystemManager.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::monorepo::MonorepoDetector;
+    ///
+    /// let detector = MonorepoDetector::new();
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self { fs: FileSystemManager::new() }
@@ -19,11 +49,59 @@ impl MonorepoDetector<FileSystemManager> {
 }
 
 impl<F: FileSystem> MonorepoDetector<F> {
+    /// Creates a new MonorepoDetector with a custom filesystem implementation.
+    ///
+    /// # Arguments
+    ///
+    /// * `fs` - The filesystem implementation to use
+    ///
+    /// # Returns
+    ///
+    /// A new MonorepoDetector instance using the provided filesystem.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// use sublime_standard_tools::monorepo::MonorepoDetector;
+    ///
+    /// let fs = FileSystemManager::new();
+    /// let detector = MonorepoDetector::with_filesystem(fs);
+    /// ```
     #[must_use]
     pub fn with_filesystem(fs: F) -> Self {
         Self { fs }
     }
 
+    /// Checks if a path is the root of a monorepo by examining lock files.
+    ///
+    /// This method looks for lock files specific to different package managers
+    /// to determine if the directory is a monorepo root and which type.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to check
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Some(MonorepoKind))` - If the path is a monorepo root, with the detected type
+    /// * `Ok(None)` - If the path is not a monorepo root
+    /// * `Err(Error)` - If an error occurred during detection
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::Path;
+    /// use sublime_standard_tools::monorepo::MonorepoDetector;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let detector = MonorepoDetector::new();
+    /// if let Some(kind) = detector.is_monorepo_root(".")? {
+    ///     println!("Found monorepo of type: {}", kind.name());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn is_monorepo_root(&self, path: impl AsRef<Path>) -> Result<Option<MonorepoKind>> {
         let path = path.as_ref();
 
@@ -55,6 +133,36 @@ impl<F: FileSystem> MonorepoDetector<F> {
         Ok(None)
     }
 
+    /// Finds the nearest monorepo root by walking up from the given path.
+    ///
+    /// This method starts at the provided path and checks each parent directory
+    /// until it finds a monorepo root or reaches the filesystem root.
+    ///
+    /// # Arguments
+    ///
+    /// * `start_path` - The path to start searching from
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Some((PathBuf, MonorepoKind)))` - The path and kind of monorepo if found
+    /// * `Ok(None)` - If no monorepo root was found
+    /// * `Err(Error)` - If an error occurred during detection
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::Path;
+    /// use sublime_standard_tools::monorepo::MonorepoDetector;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let detector = MonorepoDetector::new();
+    /// if let Some((root, kind)) = detector.find_monorepo_root("src/components")? {
+    ///     println!("Found monorepo root at: {}", root.display());
+    ///     println!("Type: {}", kind.name());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn find_monorepo_root(
         &self,
         start_path: impl AsRef<Path>,
@@ -78,6 +186,36 @@ impl<F: FileSystem> MonorepoDetector<F> {
         Ok(None)
     }
 
+    /// Detects and analyzes a monorepo at the given path.
+    ///
+    /// This method identifies the monorepo type, locates all packages,
+    /// and creates a comprehensive description of the monorepo structure.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to analyze for a monorepo structure
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(MonorepoDescriptor)` - A descriptor containing all monorepo information
+    /// * `Err(Error)` - If the path is not a monorepo or an error occurred
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::Path;
+    /// use sublime_standard_tools::monorepo::MonorepoDetector;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let detector = MonorepoDetector::new();
+    /// let monorepo = detector.detect_monorepo(".")?;
+    ///
+    /// println!("Detected {} monorepo with {} packages",
+    ///          monorepo.kind().name(),
+    ///          monorepo.packages().len());
+    /// # Ok(())
+    /// # }
+    /// ```
     #[allow(clippy::manual_let_else)]
     pub fn detect_monorepo(&self, path: impl AsRef<Path>) -> Result<MonorepoDescriptor> {
         let path = path.as_ref();
@@ -107,7 +245,30 @@ impl<F: FileSystem> MonorepoDetector<F> {
         Ok(MonorepoDescriptor::new(kind, root, packages))
     }
 
-    fn has_multiple_packages(&self, path: &Path) -> bool {
+    /// Checks if a directory contains multiple packages based on common patterns.
+    ///
+    /// This is a heuristic method that examines common monorepo directory structures
+    /// to determine if a directory likely contains multiple packages.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to check for multiple packages
+    ///
+    /// # Returns
+    ///
+    /// `true` if the path likely contains multiple packages, `false` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::Path;
+    /// use sublime_standard_tools::monorepo::MonorepoDetector;
+    ///
+    /// let detector = MonorepoDetector::new();
+    /// let has_packages = detector.has_multiple_packages(Path::new("."));
+    /// println!("Contains multiple packages: {}", has_packages);
+    /// ```
+    pub fn has_multiple_packages(&self, path: &Path) -> bool {
         // Common package directory patterns
         let package_dirs = [
             path.join("packages"),
@@ -151,6 +312,30 @@ impl<F: FileSystem> MonorepoDetector<F> {
         false
     }
 
+    /// Detects packages in an npm/yarn monorepo by parsing package.json workspaces.
+    ///
+    /// # Arguments
+    ///
+    /// * `root` - The root directory of the monorepo
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<WorkspacePackage>)` - The list of packages found in the monorepo
+    /// * `Err(Error)` - If an error occurred during package detection
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::path::Path;
+    /// # use sublime_standard_tools::monorepo::MonorepoDetector;
+    /// #
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let detector = MonorepoDetector::new();
+    /// let packages = detector.detect_npm_packages(Path::new("/project/root"))?;
+    /// println!("Found {} packages", packages.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     fn detect_npm_packages(&self, root: &Path) -> Result<Vec<WorkspacePackage>> {
         let package_json_path = root.join("package.json");
         let mut manager = PackageJsonManager::with_file_path(&package_json_path);
@@ -167,6 +352,30 @@ impl<F: FileSystem> MonorepoDetector<F> {
         self.find_packages_from_patterns(root, workspaces_config)
     }
 
+    /// Detects packages in a pnpm monorepo by parsing pnpm-workspace.yaml.
+    ///
+    /// # Arguments
+    ///
+    /// * `root` - The root directory of the monorepo
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<WorkspacePackage>)` - The list of packages found in the monorepo
+    /// * `Err(Error)` - If an error occurred during package detection
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::path::Path;
+    /// # use sublime_standard_tools::monorepo::MonorepoDetector;
+    /// #
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let detector = MonorepoDetector::new();
+    /// let packages = detector.detect_pnpm_packages(Path::new("/project/root"))?;
+    /// println!("Found {} packages", packages.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     fn detect_pnpm_packages(&self, root: &Path) -> Result<Vec<WorkspacePackage>> {
         let pnpm_path = root.join("pnpm-workspace.yaml");
         let pnpm_content = self.fs.read_file_string(&pnpm_path)?;
@@ -177,6 +386,30 @@ impl<F: FileSystem> MonorepoDetector<F> {
         self.find_packages_from_patterns(root, &pnpm_config.packages)
     }
 
+    /// Detects packages in an unrecognized monorepo by using common patterns.
+    ///
+    /// # Arguments
+    ///
+    /// * `root` - The root directory of the monorepo
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<WorkspacePackage>)` - The list of packages found in the monorepo
+    /// * `Err(Error)` - If an error occurred during package detection
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::path::Path;
+    /// # use sublime_standard_tools::monorepo::MonorepoDetector;
+    /// #
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let detector = MonorepoDetector::new();
+    /// let packages = detector.detect_custom_packages(Path::new("/project/root"))?;
+    /// println!("Found {} packages", packages.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     fn detect_custom_packages(&self, root: &Path) -> Result<Vec<WorkspacePackage>> {
         // Check for common monorepo directories
         let common_patterns =
@@ -202,7 +435,33 @@ impl<F: FileSystem> MonorepoDetector<F> {
         self.find_packages_from_patterns(root, &patterns)
     }
 
-    fn find_packages_from_patterns(
+    /// Finds packages in a monorepo by matching glob patterns.
+    ///
+    /// # Arguments
+    ///
+    /// * `root` - The root directory of the monorepo
+    /// * `patterns` - Glob patterns that match package directories
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<WorkspacePackage>)` - The list of packages found in the monorepo
+    /// * `Err(Error)` - If an error occurred during package detection
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::path::Path;
+    /// # use sublime_standard_tools::monorepo::MonorepoDetector;
+    /// #
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let detector = MonorepoDetector::new();
+    /// let patterns = vec!["packages/*".to_string(), "apps/*".to_string()];
+    /// let packages = detector.find_packages_from_patterns(Path::new("/project/root"), &patterns)?;
+    /// println!("Found {} packages", packages.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub(crate) fn find_packages_from_patterns(
         &self,
         root: &Path,
         patterns: &[String],
@@ -243,8 +502,34 @@ impl<F: FileSystem> MonorepoDetector<F> {
         Ok(packages)
     }
 
+    /// Finds packages by scanning the directory hierarchy for package.json files.
+    ///
+    /// This is used when no explicit workspace patterns are available.
+    ///
+    /// # Arguments
+    ///
+    /// * `root` - The root directory of the monorepo
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<WorkspacePackage>)` - The list of packages found in the monorepo
+    /// * `Err(Error)` - If an error occurred during package detection
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::path::Path;
+    /// # use sublime_standard_tools::monorepo::MonorepoDetector;
+    /// #
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let detector = MonorepoDetector::new();
+    /// let packages = detector.find_packages_by_scanning(Path::new("/project/root"))?;
+    /// println!("Found {} packages by scanning", packages.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     #[allow(clippy::implicit_clone)]
-    fn find_packages_by_scanning(&self, root: &Path) -> Result<Vec<WorkspacePackage>> {
+    pub(crate) fn find_packages_by_scanning(&self, root: &Path) -> Result<Vec<WorkspacePackage>> {
         let mut packages = Vec::new();
         let root_package_json = root.join("package.json");
 
@@ -298,7 +583,40 @@ impl<F: FileSystem> MonorepoDetector<F> {
         Ok(packages)
     }
 
-    fn read_package_json(&self, package_json_path: &Path, root: &Path) -> Result<WorkspacePackage> {
+    /// Reads and parses a package.json file to create a WorkspacePackage.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_json_path` - The path to the package.json file
+    /// * `root` - The root directory of the monorepo
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(WorkspacePackage)` - The parsed package information
+    /// * `Err(Error)` - If the package.json is invalid or can't be read
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::path::{Path, PathBuf};
+    /// # use sublime_standard_tools::monorepo::MonorepoDetector;
+    /// #
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let detector = MonorepoDetector::new();
+    /// let root = PathBuf::from("/project/root");
+    /// let pkg_json_path = root.join("packages/ui/package.json");
+    ///
+    /// if let Ok(package) = detector.read_package_json(&pkg_json_path, &root) {
+    ///     println!("Package: {} v{}", package.name, package.version);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub(crate) fn read_package_json(
+        &self,
+        package_json_path: &Path,
+        root: &Path,
+    ) -> Result<WorkspacePackage> {
         let content = self.fs.read_file_string(package_json_path)?;
         let package_json = serde_json::from_str::<PackageJson>(&content).map_err(|e| {
             FileSystemError::Validation {

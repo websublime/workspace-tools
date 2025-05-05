@@ -28,5 +28,5 @@ mod tests;
 
 pub use types::{
     MonorepoDescriptor, MonorepoDetector, MonorepoKind, PackageManager, PackageManagerKind,
-    PnpmWorkspaceConfig, WorkspacePackage, WorkspacesPatterns,
+    PnpmWorkspaceConfig, WorkspacePackage,
 };

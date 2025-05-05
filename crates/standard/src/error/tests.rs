@@ -2,7 +2,10 @@
 #[allow(clippy::panic)]
 #[cfg(test)]
 mod tests {
-    use crate::error::{FileSystemError, FileSystemResult, MonorepoError, MonorepoResult};
+    use crate::error::{
+        Error, FileSystemError, FileSystemResult, MonorepoError, MonorepoResult, Result,
+        WorkspaceError, WorkspaceResult,
+    };
     use std::{io, path::PathBuf};
 
     #[test]
@@ -210,6 +213,119 @@ mod tests {
                 assert!(matches!(source, FileSystemError::NotFound { .. }));
             }
             _ => panic!("Expected Reading error with NotFound source"),
+        }
+    }
+
+    #[test]
+    fn test_workspace_error_variants() {
+        // Test InvalidPackageJson error
+        let invalid_json = WorkspaceError::InvalidPackageJson("Missing name field".to_string());
+        assert_eq!(invalid_json.to_string(), "Invalid package json format: Missing name field");
+
+        // Test InvalidWorkspacesPattern error
+        let invalid_pattern =
+            WorkspaceError::InvalidWorkspacesPattern("Invalid glob pattern".to_string());
+        assert_eq!(invalid_pattern.to_string(), "Invalid workspaces pattern: Invalid glob pattern");
+
+        // Test InvalidPnpmWorkspace error
+        let invalid_pnpm = WorkspaceError::InvalidPnpmWorkspace("Invalid YAML syntax".to_string());
+        assert_eq!(invalid_pnpm.to_string(), "Invalid workspaces pattern: Invalid YAML syntax");
+
+        // Test PackageNotFound error
+        let pkg_not_found = WorkspaceError::PackageNotFound("ui-components".to_string());
+        assert_eq!(pkg_not_found.to_string(), "Package not found: ui-components");
+
+        // Test WorkspaceNotFound error
+        let workspace_not_found = WorkspaceError::WorkspaceNotFound("frontend".to_string());
+        assert_eq!(workspace_not_found.to_string(), "Workspace not found: frontend");
+
+        // Test WorkspaceConfigMissing error
+        let config_missing =
+            WorkspaceError::WorkspaceConfigMissing("No workspaces field".to_string());
+        assert_eq!(config_missing.to_string(), "Workspace config is missing: No workspaces field");
+    }
+
+    #[test]
+    fn test_workspace_error_conversion_to_error() {
+        // Test converting WorkspaceError to the composite Error type
+        let workspace_error = WorkspaceError::PackageNotFound("test-pkg".to_string());
+        let error: Error = workspace_error.into();
+
+        match error {
+            Error::Workspace(inner) => {
+                assert!(matches!(inner, WorkspaceError::PackageNotFound(_)));
+                if let WorkspaceError::PackageNotFound(name) = inner {
+                    assert_eq!(name, "test-pkg");
+                } else {
+                    panic!("Wrong error variant");
+                }
+            }
+            _ => panic!("Expected Workspace error variant"),
+        }
+    }
+
+    #[test]
+    fn test_workspace_result_usage() {
+        // Function that returns WorkspaceResult
+        fn validate_workspace_name(name: &str) -> WorkspaceResult<String> {
+            if name.is_empty() {
+                return Err(WorkspaceError::WorkspaceNotFound("Empty name provided".to_string()));
+            }
+            if name.contains(' ') {
+                return Err(WorkspaceError::InvalidWorkspacesPattern(
+                    "Spaces not allowed".to_string(),
+                ));
+            }
+            Ok(format!("Valid workspace: {name}"))
+        }
+
+        // Test success case
+        let result = validate_workspace_name("test-workspace");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Valid workspace: test-workspace");
+
+        // Test error case - empty name
+        let result = validate_workspace_name("");
+        assert!(result.is_err());
+        match result {
+            Err(WorkspaceError::WorkspaceNotFound(_)) => { /* expected */ }
+            _ => panic!("Expected WorkspaceNotFound error"),
+        }
+
+        // Test error case - invalid name
+        let result = validate_workspace_name("invalid workspace");
+        assert!(result.is_err());
+        match result {
+            Err(WorkspaceError::InvalidWorkspacesPattern(_)) => { /* expected */ }
+            _ => panic!("Expected InvalidWorkspacesPattern error"),
+        }
+    }
+
+    #[test]
+    fn test_workspace_error_to_composite_error() {
+        // Test how workspace errors work with the Result<T> type alias
+        fn process_workspace(valid: bool) -> Result<()> {
+            if !valid {
+                return Err(
+                    WorkspaceError::WorkspaceConfigMissing("Required config".to_string()).into()
+                );
+            }
+            Ok(())
+        }
+
+        // Test success case
+        let result = process_workspace(true);
+        assert!(result.is_ok());
+
+        // Test error case
+        let result = process_workspace(false);
+        assert!(result.is_err());
+
+        match result {
+            Err(Error::Workspace(inner)) => {
+                assert!(matches!(inner, WorkspaceError::WorkspaceConfigMissing(_)));
+            }
+            _ => panic!("Expected Workspace error variant"),
         }
     }
 }

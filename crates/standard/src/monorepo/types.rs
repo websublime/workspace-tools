@@ -222,15 +222,34 @@ pub struct MonorepoDetector<F: FileSystem = FileSystemManager> {
     pub(crate) fs: F,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
-pub enum WorkspacesPatterns {
-    /// Workspace glob patterns as array
-    Array(Vec<String>),
-    /// Workspace config with patterns in "packages" field
-    Object { packages: Vec<String> },
-}
-
+/// Configuration structure for PNPM workspaces.
+///
+/// This struct represents the parsed content of a pnpm-workspace.yaml file,
+/// which defines the package locations in a PNPM workspace monorepo.
+///
+/// # Examples
+///
+/// ```
+/// use serde_yaml;
+/// use sublime_standard_tools::monorepo::PnpmWorkspaceConfig;
+///
+/// let yaml_content = r#"
+/// packages:
+///   - 'packages/*'
+///   - 'apps/*'
+///   - '!**/test/**'
+/// "#;
+///
+/// let config: PnpmWorkspaceConfig = serde_yaml::from_str(yaml_content).unwrap();
+/// assert_eq!(config.packages.len(), 3);
+/// assert_eq!(config.packages[0], "packages/*");
+/// assert_eq!(config.packages[1], "apps/*");
+/// assert_eq!(config.packages[2], "!**/test/**");
+/// ```
+///
+/// The `packages` field contains glob patterns that define which directories
+/// contain packages in the monorepo, including negative patterns (prefixed with `!`)
+/// which exclude matching directories.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PnpmWorkspaceConfig {
     /// Package locations (glob patterns)

@@ -13,7 +13,6 @@
 //! Centralizing error type definitions provides a clear overview of all
 //! possible error conditions and ensures consistency in error handling.
 
-use core::error::Error as CoreError;
 use core::result::Result as CoreResult;
 use std::io;
 use std::path::PathBuf;
@@ -189,22 +188,60 @@ pub enum MonorepoError {
 /// ```
 pub type MonorepoResult<T> = CoreResult<T, MonorepoError>;
 
+/// Errors that can occur during workspace operations.
+///
+/// This enum represents the various ways that workspace processing
+/// can fail, specifically related to parsing and working with monorepo
+/// workspace configurations.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::error::WorkspaceError;
+///
+/// // Creating a specific workspace error
+/// let error = WorkspaceError::PackageNotFound("ui-components".to_string());
+/// assert!(error.to_string().contains("Package not found"));
+/// ```
 #[derive(ThisError, Debug)]
 pub enum WorkspaceError {
+    /// Error parsing package.json format.
     #[error("Invalid package json format: {0}")]
     InvalidPackageJson(String),
+    /// Error parsing workspaces pattern.
     #[error("Invalid workspaces pattern: {0}")]
     InvalidWorkspacesPattern(String),
+    /// Error parsing pnpm workspace configuration.
     #[error("Invalid workspaces pattern: {0}")]
     InvalidPnpmWorkspace(String),
+    /// Package not found in workspace.
     #[error("Package not found: {0}")]
     PackageNotFound(String),
+    /// Workspace not found.
     #[error("Workspace not found: {0}")]
     WorkspaceNotFound(String),
+    /// Workspace configuration is missing.
     #[error("Workspace config is missing: {0}")]
     WorkspaceConfigMissing(String),
 }
 
+/// Result type for workspace operations.
+///
+/// This is a convenience type alias for Results with WorkspaceError.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::error::{WorkspaceResult, WorkspaceError};
+///
+/// fn find_workspace_package(name: &str) -> WorkspaceResult<String> {
+///     if name.is_empty() {
+///         return Err(WorkspaceError::PackageNotFound("Empty name provided".to_string()));
+///     }
+///     // Implementation would look up the package
+///     Ok(format!("Found package {}", name))
+/// }
+/// ```
 pub type WorkspaceResult<T> = CoreResult<T, WorkspaceError>;
 
 /// General error type for the standard tools library.

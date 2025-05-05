@@ -21,6 +21,7 @@
 mod tests {
     use crate::error::{Error, MonorepoError};
     use crate::filesystem::{FileSystem, FileSystemManager};
+    use crate::monorepo::MonorepoDetector;
     use crate::monorepo::{
         types::{PackageManager, PackageManagerKind},
         MonorepoDescriptor, MonorepoKind, WorkspacePackage,
@@ -324,6 +325,257 @@ mod tests {
 
         let manager_not_found = MonorepoError::ManagerNotFound;
         assert_eq!(manager_not_found.to_string(), "Failed to find package manager");
+    }
+
+    #[test]
+    fn test_monorepo_detector_new() {
+        let detector = MonorepoDetector::new();
+        // Simply test that we can create the detector
+        assert!(detector.fs.exists(Path::new(".")));
+    }
+
+    #[test]
+    fn test_monorepo_detector_with_filesystem() {
+        let fs = FileSystemManager::new();
+        let detector = MonorepoDetector::with_filesystem(fs);
+        // Simply test that we can create the detector with custom filesystem
+        assert!(detector.fs.exists(Path::new(".")));
+    }
+
+    #[test]
+    fn test_is_monorepo_root() {
+        let temp_dir = setup_test_dir();
+        let fs = FileSystemManager::new();
+        let detector = MonorepoDetector::new();
+
+        // Create yarn lock file
+        let yarn_lock_path = temp_dir.path().join("yarn.lock");
+        fs.write_file_string(&yarn_lock_path, "").unwrap();
+
+        // Should detect Yarn monorepo
+        let result = detector.is_monorepo_root(temp_dir.path()).unwrap();
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), MonorepoKind::YarnWorkspaces));
+
+        // Add package.json with workspaces field
+        let package_json_path = temp_dir.path().join("package.json");
+        fs.write_file_string(&package_json_path, r#"{"name":"test","workspaces":["packages/*"]}"#)
+            .unwrap();
+
+        // Remove yarn.lock and add pnpm-lock.yaml
+        fs.remove(&yarn_lock_path).unwrap();
+        fs.write_file_string(&temp_dir.path().join("pnpm-lock.yaml"), "").unwrap();
+
+        // Should detect pnpm monorepo
+        let result = detector.is_monorepo_root(temp_dir.path()).unwrap();
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), MonorepoKind::PnpmWorkspaces));
+
+        // Remove all lock files - should no longer detect a monorepo
+        fs.remove(&temp_dir.path().join("pnpm-lock.yaml")).unwrap();
+        let result = detector.is_monorepo_root(temp_dir.path()).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_find_monorepo_root() {
+        let temp_dir = setup_test_dir();
+        let fs = FileSystemManager::new();
+        let detector = MonorepoDetector::new();
+
+        // Create a nested directory structure
+        let packages_dir = temp_dir.path().join("packages");
+        let nested_dir = packages_dir.join("nested");
+        fs.create_dir_all(&nested_dir).unwrap();
+
+        // Add a yarn.lock file at the root
+        fs.write_file_string(&temp_dir.path().join("yarn.lock"), "").unwrap();
+        fs.write_file_string(
+            &temp_dir.path().join("package.json"),
+            r#"{"name":"test","workspaces":["packages/*"]}"#,
+        )
+        .unwrap();
+
+        // Test from the root
+        let result = detector.find_monorepo_root(temp_dir.path()).unwrap();
+        assert!(result.is_some());
+        let (root, kind) = result.unwrap();
+        assert_eq!(root, temp_dir.path());
+        assert!(matches!(kind, MonorepoKind::YarnWorkspaces));
+
+        // Test from a nested directory
+        let result = detector.find_monorepo_root(&nested_dir).unwrap();
+        assert!(result.is_some());
+        let (root, kind) = result.unwrap();
+        assert_eq!(root, temp_dir.path());
+        assert!(matches!(kind, MonorepoKind::YarnWorkspaces));
+    }
+
+    #[test]
+    fn test_has_multiple_packages() {
+        let temp_dir = setup_test_dir();
+        let fs = FileSystemManager::new();
+        let detector = MonorepoDetector::new();
+
+        // Create a packages directory with two packages
+        let packages_dir = temp_dir.path().join("packages");
+        let pkg1_dir = packages_dir.join("pkg1");
+        let pkg2_dir = packages_dir.join("pkg2");
+        fs.create_dir_all(&pkg1_dir).unwrap();
+        fs.create_dir_all(&pkg2_dir).unwrap();
+
+        // Add package.json files
+        fs.write_file_string(
+            &pkg1_dir.join("package.json"),
+            r#"{"name":"pkg1","version":"1.0.0"}"#,
+        )
+        .unwrap();
+        fs.write_file_string(
+            &pkg2_dir.join("package.json"),
+            r#"{"name":"pkg2","version":"1.0.0"}"#,
+        )
+        .unwrap();
+
+        // Should detect multiple packages
+        assert!(detector.has_multiple_packages(temp_dir.path()));
+
+        // Test with a non-monorepo directory
+        let non_monorepo_dir = temp_dir.path().join("non-monorepo");
+        fs.create_dir_all(&non_monorepo_dir).unwrap();
+        fs.write_file_string(
+            &non_monorepo_dir.join("package.json"),
+            r#"{"name":"single","version":"1.0.0"}"#,
+        )
+        .unwrap();
+
+        // Should not detect multiple packages
+        assert!(!detector.has_multiple_packages(&non_monorepo_dir));
+    }
+
+    #[allow(clippy::panic)]
+    #[test]
+    fn test_detect_monorepo_error() {
+        let temp_dir = setup_test_dir();
+        let detector = MonorepoDetector::new();
+
+        // Attempting to detect a monorepo in an empty directory should fail
+        let result = detector.detect_monorepo(temp_dir.path());
+        assert!(result.is_err());
+
+        match result {
+            Err(Error::Monorepo(MonorepoError::Detection { source: _ })) => {
+                // This is the expected error
+            }
+            _ => panic!("Expected a MonorepoError::Detection error"),
+        }
+    }
+
+    #[test]
+    fn test_find_packages_from_patterns() {
+        let temp_dir = setup_test_dir();
+        let fs = FileSystemManager::new();
+        let detector = MonorepoDetector::new();
+
+        // Create package directories
+        let packages_dir = temp_dir.path().join("packages");
+        let apps_dir = temp_dir.path().join("apps");
+        let pkg1 = packages_dir.join("pkg1");
+        let app1 = apps_dir.join("app1");
+
+        fs.create_dir_all(&pkg1).unwrap();
+        fs.create_dir_all(&app1).unwrap();
+
+        // Create package.json files
+        fs.write_file_string(&pkg1.join("package.json"), r#"{"name":"pkg1","version":"1.0.0"}"#)
+            .unwrap();
+        fs.write_file_string(&app1.join("package.json"), r#"{"name":"app1","version":"1.0.0"}"#)
+            .unwrap();
+
+        // Test finding packages
+        let patterns = vec!["packages/*".to_string(), "apps/*".to_string()];
+        let packages = detector.find_packages_from_patterns(temp_dir.path(), &patterns).unwrap();
+
+        // Should find both packages
+        assert_eq!(packages.len(), 2);
+        assert!(packages.iter().any(|p| p.name == "pkg1"));
+        assert!(packages.iter().any(|p| p.name == "app1"));
+    }
+
+    #[test]
+    fn test_find_packages_by_scanning() {
+        let temp_dir = setup_test_dir();
+        let fs = FileSystemManager::new();
+        let detector = MonorepoDetector::new();
+
+        // Create a root package.json
+        fs.write_file_string(
+            &temp_dir.path().join("package.json"),
+            r#"{"name":"root","version":"1.0.0"}"#,
+        )
+        .unwrap();
+
+        // Create nested package directories
+        let deep_pkg_dir = temp_dir.path().join("deeply/nested/pkg");
+        fs.create_dir_all(&deep_pkg_dir).unwrap();
+        fs.write_file_string(
+            &deep_pkg_dir.join("package.json"),
+            r#"{"name":"nested-pkg","version":"1.0.0"}"#,
+        )
+        .unwrap();
+
+        // Create a node_modules directory that should be ignored
+        let node_modules_dir = temp_dir.path().join("node_modules/fake-pkg");
+        fs.create_dir_all(&node_modules_dir).unwrap();
+        fs.write_file_string(
+            &node_modules_dir.join("package.json"),
+            r#"{"name":"fake-pkg","version":"1.0.0"}"#,
+        )
+        .unwrap();
+
+        // Test finding packages
+        let packages = detector.find_packages_by_scanning(temp_dir.path()).unwrap();
+
+        // Should find only the nested package, not the root or node_modules
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name, "nested-pkg");
+    }
+
+    #[test]
+    fn test_read_package_json() {
+        let temp_dir = setup_test_dir();
+        let fs = FileSystemManager::new();
+        let detector = MonorepoDetector::new();
+
+        // Create a package with dependencies
+        let pkg_dir = temp_dir.path().join("pkg");
+        fs.create_dir_all(&pkg_dir).unwrap();
+
+        let package_json_content = r#"{
+            "name": "test-pkg",
+            "version": "1.2.3",
+            "dependencies": {
+                "dep1": "^1.0.0",
+                "dep2": "^2.0.0"
+            },
+            "devDependencies": {
+                "dev-dep1": "^3.0.0"
+            }
+        }"#;
+
+        fs.write_file_string(&pkg_dir.join("package.json"), package_json_content).unwrap();
+
+        // Parse the package
+        let package =
+            detector.read_package_json(&pkg_dir.join("package.json"), temp_dir.path()).unwrap();
+
+        // Verify package data
+        assert_eq!(package.name, "test-pkg");
+        assert_eq!(package.version, "1.2.3");
+        assert_eq!(package.workspace_dependencies.len(), 2);
+        assert!(package.workspace_dependencies.contains(&"dep1".to_string()));
+        assert!(package.workspace_dependencies.contains(&"dep2".to_string()));
+        assert_eq!(package.workspace_dev_dependencies.len(), 1);
+        assert!(package.workspace_dev_dependencies.contains(&"dev-dep1".to_string()));
     }
 
     // Helper function to create test packages
