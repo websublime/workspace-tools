@@ -21,6 +21,7 @@ mod descriptor;
 mod detector;
 mod kinds;
 mod manager;
+mod project;
 mod types;
 
 #[cfg(test)]
@@ -28,5 +29,6 @@ mod tests;
 
 pub use types::{
     MonorepoDescriptor, MonorepoDetector, MonorepoKind, PackageManager, PackageManagerKind,
-    PnpmWorkspaceConfig, WorkspacePackage,
+    PnpmWorkspaceConfig, Project, ProjectConfig, ProjectManager, ProjectValidationStatus,
+    WorkspacePackage,
 };

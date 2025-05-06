@@ -21,10 +21,12 @@
 mod tests {
     use crate::error::{Error, MonorepoError};
     use crate::filesystem::{FileSystem, FileSystemManager};
-    use crate::monorepo::MonorepoDetector;
     use crate::monorepo::{
         types::{PackageManager, PackageManagerKind},
         MonorepoDescriptor, MonorepoKind, WorkspacePackage,
+    };
+    use crate::monorepo::{
+        MonorepoDetector, Project, ProjectConfig, ProjectManager, ProjectValidationStatus,
     };
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
@@ -576,6 +578,264 @@ mod tests {
         assert!(package.workspace_dependencies.contains(&"dep2".to_string()));
         assert_eq!(package.workspace_dev_dependencies.len(), 1);
         assert!(package.workspace_dev_dependencies.contains(&"dev-dep1".to_string()));
+    }
+
+    #[test]
+    fn test_project_config() {
+        // Test default implementation
+        let default_config = ProjectConfig::default();
+        assert!(default_config.root.is_none());
+        assert!(default_config.detect_package_manager);
+        assert!(default_config.validate_structure);
+        assert!(default_config.detect_monorepo);
+
+        // Test constructor
+        let config = ProjectConfig::new();
+        assert!(config.root.is_none());
+        assert!(config.detect_package_manager);
+        assert!(config.validate_structure);
+        assert!(config.detect_monorepo);
+
+        // Test builder pattern methods
+        let custom_path = PathBuf::from("/test/project");
+        let config = ProjectConfig::new()
+            .with_root(&custom_path)
+            .with_detect_package_manager(false)
+            .with_validate_structure(false)
+            .with_detect_monorepo(false);
+
+        assert_eq!(config.root, Some(custom_path));
+        assert!(!config.detect_package_manager);
+        assert!(!config.validate_structure);
+        assert!(!config.detect_monorepo);
+    }
+
+    #[test]
+    fn test_project_validation_status() {
+        // Test Valid variant
+        let valid = ProjectValidationStatus::Valid;
+
+        // Test Warning variant
+        let warnings = vec!["Missing lock file".to_string(), "No node_modules".to_string()];
+        let warning_status = ProjectValidationStatus::Warning(warnings.clone());
+
+        // Test Error variant
+        let errors = vec!["Invalid package.json".to_string()];
+        let error_status = ProjectValidationStatus::Error(errors.clone());
+
+        // Test NotValidated variant
+        let not_validated = ProjectValidationStatus::NotValidated;
+
+        // Test equality
+        assert_eq!(valid, ProjectValidationStatus::Valid);
+        assert_eq!(warning_status, ProjectValidationStatus::Warning(warnings));
+        assert_eq!(error_status, ProjectValidationStatus::Error(errors));
+        assert_eq!(not_validated, ProjectValidationStatus::NotValidated);
+
+        // Test inequality
+        assert_ne!(valid, warning_status);
+        assert_ne!(valid, error_status);
+        assert_ne!(valid, not_validated);
+        assert_ne!(warning_status, error_status);
+    }
+
+    #[test]
+    fn test_project_creation() {
+        let temp_dir = setup_test_dir();
+        let root = temp_dir.path().to_path_buf();
+        let config = ProjectConfig::default();
+
+        let project = Project::new(&root, config);
+
+        // Test project properties
+        assert_eq!(project.root(), root.as_path());
+        assert!(project.package_manager().is_none());
+        assert!(matches!(project.validation_status(), &ProjectValidationStatus::NotValidated));
+        assert!(project.package_json().is_none());
+    }
+
+    #[test]
+    fn test_project_manager() {
+        // Test constructor
+        let manager = ProjectManager::new();
+
+        // Test with_filesystem
+        let fs = FileSystemManager::new();
+        let custom_manager = ProjectManager::with_filesystem(fs);
+
+        // Test that both managers exist (basic existence check)
+        assert!(manager.fs.exists(Path::new(".")));
+        assert!(custom_manager.fs.exists(Path::new(".")));
+    }
+
+    #[allow(clippy::panic)]
+    #[test]
+    fn test_detect_project() {
+        let temp_dir = setup_test_dir();
+        let fs = FileSystemManager::new();
+        let project_manager = ProjectManager::new();
+
+        // Create a valid package.json
+        let package_json_content = r#"{
+            "name": "test-project",
+            "version": "1.0.0",
+            "dependencies": {
+                "dep1": "^1.0.0"
+            }
+        }"#;
+
+        let package_json_path = temp_dir.path().join("package.json");
+        fs.write_file_string(&package_json_path, package_json_content).unwrap();
+
+        // Create npm lock file
+        let npm_lock_path = temp_dir.path().join("package-lock.json");
+        fs.write_file_string(&npm_lock_path, "{}").unwrap();
+
+        // Create node_modules directory for dependencies
+        fs.create_dir_all(temp_dir.path().join("node_modules/dep1").as_path()).unwrap();
+
+        // Test with default config
+        let config = ProjectConfig::default();
+        let result = project_manager.detect_project(temp_dir.path(), &config);
+
+        assert!(result.is_ok());
+        let project = result.unwrap();
+
+        // Check project properties
+        assert_eq!(project.root(), temp_dir.path());
+        assert!(project.package_manager().is_some());
+        assert_eq!(project.package_manager().unwrap().kind(), PackageManagerKind::Npm);
+
+        // Package.json should be parsed
+        let package_json = project.package_json();
+        assert!(package_json.is_some());
+        assert_eq!(package_json.unwrap().name, "test-project");
+
+        // With proper setup, the project should be validated as Valid
+        match project.validation_status() {
+            ProjectValidationStatus::Valid => {}
+            ProjectValidationStatus::Warning(warnings) => {
+                panic!("Expected Valid status but got Warning with: {warnings:?}");
+            }
+            ProjectValidationStatus::Error(errors) => {
+                panic!("Expected Valid status but got Error with: {errors:?}");
+            }
+            ProjectValidationStatus::NotValidated => {
+                panic!("Expected Valid status but got NotValidated");
+            }
+        }
+
+        // Test with disabled validation and package manager detection
+        let config =
+            ProjectConfig::new().with_validate_structure(false).with_detect_package_manager(false);
+
+        let result = project_manager.detect_project(temp_dir.path(), &config);
+        assert!(result.is_ok());
+
+        let project = result.unwrap();
+        assert_eq!(project.root(), temp_dir.path());
+        assert!(project.package_manager().is_none()); // No package manager since detection was disabled
+        assert!(matches!(project.validation_status(), &ProjectValidationStatus::NotValidated));
+    }
+
+    #[allow(clippy::panic)]
+    #[test]
+    fn test_validate_project() {
+        let temp_dir = setup_test_dir();
+        let fs = FileSystemManager::new();
+        let project_manager = ProjectManager::new();
+
+        // 1. Create a valid project
+        let valid_dir = temp_dir.path().join("valid");
+        fs.create_dir_all(&valid_dir).unwrap();
+
+        let package_json_content = r#"{
+            "name": "valid-project",
+            "version": "1.0.0",
+            "dependencies": {
+                "dep1": "^1.0.0"
+            }
+        }"#;
+
+        fs.write_file_string(&valid_dir.join("package.json"), package_json_content).unwrap();
+        fs.write_file_string(&valid_dir.join("package-lock.json"), "{}").unwrap();
+        // Create a proper node_modules structure
+        fs.create_dir_all(&valid_dir.join("node_modules/dep1")).unwrap();
+
+        let config = ProjectConfig::new().with_validate_structure(false);
+        let mut valid_project = Project::new(&valid_dir, config);
+
+        // Parse package.json manually for the test
+        valid_project.package_json = Some(serde_json::from_str(package_json_content).unwrap());
+        // Set package manager for complete validation
+        valid_project.package_manager =
+            Some(PackageManager::new(PackageManagerKind::Npm, &valid_dir));
+
+        // Validate project
+        let result = project_manager.validate_project(&mut valid_project);
+        assert!(result.is_ok());
+
+        // Check validation status - should be Valid now with proper node_modules
+        match valid_project.validation_status() {
+            ProjectValidationStatus::Valid => {}
+            ProjectValidationStatus::Warning(warnings) => {
+                panic!("Expected Valid status but got Warning with: {warnings:?}");
+            }
+            ProjectValidationStatus::Error(errors) => {
+                panic!("Expected Valid status but got Error with: {errors:?}");
+            }
+            ProjectValidationStatus::NotValidated => {
+                panic!("Expected Valid status but got NotValidated");
+            }
+        }
+
+        // 2. Create a project with warnings (missing node_modules)
+        let warning_dir = temp_dir.path().join("warning");
+        fs.create_dir_all(&warning_dir).unwrap();
+
+        fs.write_file_string(&warning_dir.join("package.json"), package_json_content).unwrap();
+        fs.write_file_string(&warning_dir.join("package-lock.json"), "{}").unwrap();
+        // Deliberately not creating node_modules
+
+        let config = ProjectConfig::new().with_validate_structure(false);
+        let mut warning_project = Project::new(&warning_dir, config);
+
+        // Parse package.json manually for the test
+        warning_project.package_json = Some(serde_json::from_str(package_json_content).unwrap());
+        warning_project.package_manager =
+            Some(PackageManager::new(PackageManagerKind::Npm, &warning_dir));
+
+        // Validate project
+        let result = project_manager.validate_project(&mut warning_project);
+        assert!(result.is_ok());
+
+        match warning_project.validation_status() {
+            ProjectValidationStatus::Warning(warnings) => {
+                assert!(!warnings.is_empty());
+                assert!(warnings.iter().any(|w| w.contains("node_modules")));
+            }
+            _ => panic!("Expected warning validation status"),
+        }
+
+        // 3. Create a project with errors (missing package.json)
+        let error_dir = temp_dir.path().join("error");
+        fs.create_dir_all(&error_dir).unwrap();
+        // Deliberately not creating package.json
+
+        let config = ProjectConfig::new().with_validate_structure(false);
+        let mut error_project = Project::new(&error_dir, config);
+
+        // Validate project
+        let result = project_manager.validate_project(&mut error_project);
+        assert!(result.is_ok());
+
+        match error_project.validation_status() {
+            ProjectValidationStatus::Error(errors) => {
+                assert!(!errors.is_empty());
+                assert!(errors.iter().any(|e| e.contains("package.json")));
+            }
+            _ => panic!("Expected error validation status"),
+        }
     }
 
     // Helper function to create test packages

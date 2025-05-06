@@ -16,6 +16,7 @@
 //! consistently and safely throughout the codebase, enabling accurate dependency
 //! analysis and project structure navigation.
 
+use package_json::PackageJson;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf};
 
@@ -254,4 +255,144 @@ pub struct MonorepoDetector<F: FileSystem = FileSystemManager> {
 pub struct PnpmWorkspaceConfig {
     /// Package locations (glob patterns)
     pub(crate) packages: Vec<String>,
+}
+
+/// Configuration options for project detection and validation.
+///
+/// This struct defines options that control how projects are detected,
+/// including whether to detect package managers, validate structure,
+/// and identify monorepo patterns.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::Path;
+/// use sublime_standard_tools::monorepo::ProjectConfig;
+///
+/// // Create a configuration with default settings
+/// let config = ProjectConfig::default();
+///
+/// // Create a custom configuration
+/// let custom_config = ProjectConfig::new()
+///     .with_root("/path/to/project")
+///     .with_detect_package_manager(true)
+///     .with_validate_structure(true)
+///     .with_detect_monorepo(true);
+/// ```
+#[derive(Debug, Clone)]
+pub struct ProjectConfig {
+    /// Root directory to start searching from
+    pub(crate) root: Option<PathBuf>,
+    /// Whether to automatically detect package manager
+    pub(crate) detect_package_manager: bool,
+    /// Whether to validate project structure
+    pub(crate) validate_structure: bool,
+    /// Whether to detect monorepo structure
+    pub(crate) detect_monorepo: bool,
+}
+
+/// Status of a project validation operation.
+///
+/// This enum represents the different states a project can be in
+/// after validation, including valid, warnings, errors, or not validated.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::monorepo::ProjectValidationStatus;
+///
+/// // A valid project
+/// let valid = ProjectValidationStatus::Valid;
+///
+/// // A project with warnings
+/// let warnings = ProjectValidationStatus::Warning(vec![
+///     "Missing lock file".to_string(),
+///     "Dependencies not installed".to_string(),
+/// ]);
+///
+/// // A project with errors
+/// let errors = ProjectValidationStatus::Error(vec![
+///     "Invalid package.json".to_string(),
+/// ]);
+///
+/// // A project that hasn't been validated
+/// let not_validated = ProjectValidationStatus::NotValidated;
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProjectValidationStatus {
+    /// Project structure is valid
+    Valid,
+    /// Project has warnings but is usable
+    Warning(Vec<String>),
+    /// Project has errors that need to be fixed
+    Error(Vec<String>),
+    /// Project has not been validated
+    NotValidated,
+}
+
+/// Represents a detected Node.js project.
+///
+/// This struct contains information about a Node.js project,
+/// including its root directory, package manager, validation status,
+/// and parsed package.json.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::monorepo::{Project, ProjectConfig};
+///
+/// // Create a new project
+/// let config = ProjectConfig::default();
+/// let project = Project::new("/path/to/project", config);
+///
+/// // Access project properties
+/// println!("Project root: {}", project.root().display());
+/// ```
+#[derive(Debug)]
+pub struct Project {
+    /// Root directory of the project
+    pub(crate) root: PathBuf,
+    /// Detected package manager (if any)
+    pub(crate) package_manager: Option<PackageManager>,
+    /// Project configuration
+    pub(crate) config: ProjectConfig,
+    /// Validation status of the project
+    pub(crate) validation: ProjectValidationStatus,
+    /// Parsed package.json (if available)
+    pub(crate) package_json: Option<PackageJson>,
+}
+
+/// Manages Node.js project detection and validation.
+///
+/// This struct provides functionality to detect, analyze, and validate
+/// Node.js projects within a filesystem.
+///
+/// # Type Parameters
+///
+/// * `F` - A filesystem implementation that satisfies the `FileSystem` trait.
+///   Defaults to `FileSystemManager` for standard operations.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::monorepo::{ProjectManager, ProjectConfig};
+///
+/// // Create a manager with the default filesystem implementation
+/// let manager = ProjectManager::new();
+///
+/// // Create a manager with a custom filesystem
+/// use sublime_standard_tools::filesystem::FileSystemManager;
+/// let fs = FileSystemManager::new();
+/// let manager = ProjectManager::with_filesystem(fs);
+///
+/// // Detect a project
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let config = ProjectConfig::default();
+/// let project = manager.detect_project(".", &config)?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug)]
+pub struct ProjectManager<F: FileSystem = FileSystemManager> {
+    pub(crate) fs: F,
 }
