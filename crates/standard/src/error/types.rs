@@ -282,6 +282,16 @@ pub enum Error {
     /// Workspace-related error.
     #[error("Workspace execution error")]
     Workspace(#[from] WorkspaceError),
+    /// General purpose errors with a custom message.
+    #[error("Operation error: {0}")]
+    Operation(String),
+}
+
+impl Error {
+    /// Creates a new operational error.
+    pub fn operation(message: impl Into<String>) -> Self {
+        Self::Operation(message.into())
+    }
 }
 
 /// Result type for general operations in the standard tools library.

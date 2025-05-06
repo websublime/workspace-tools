@@ -26,8 +26,11 @@ mod tests {
         MonorepoDescriptor, MonorepoKind, WorkspacePackage,
     };
     use crate::monorepo::{
-        MonorepoDetector, Project, ProjectConfig, ProjectManager, ProjectValidationStatus,
+        ConfigFormat, ConfigManager, ConfigScope, ConfigValue, MonorepoDetector, Project,
+        ProjectConfig, ProjectManager, ProjectValidationStatus,
     };
+    use std::collections::HashMap;
+    use std::f64;
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
@@ -836,6 +839,129 @@ mod tests {
             }
             _ => panic!("Expected error validation status"),
         }
+    }
+
+    #[test]
+    fn test_config_value_types() {
+        // Test string value
+        let string_val = ConfigValue::String("test".to_string());
+        assert!(string_val.is_string());
+        assert_eq!(string_val.as_string(), Some("test"));
+        assert!(!string_val.is_integer());
+        assert!(string_val.as_integer().is_none());
+
+        // Test integer value
+        let int_val = ConfigValue::Integer(42);
+        assert!(int_val.is_integer());
+        assert_eq!(int_val.as_integer(), Some(42));
+        assert_eq!(int_val.as_float(), Some(42.0));
+
+        // Test float value
+        let float_val = ConfigValue::Float(f64::consts::PI);
+        assert!(float_val.is_float());
+        assert_eq!(float_val.as_float(), Some(f64::consts::PI));
+
+        // Test boolean value
+        let bool_val = ConfigValue::Boolean(true);
+        assert!(bool_val.is_boolean());
+        assert_eq!(bool_val.as_boolean(), Some(true));
+
+        // Test array value
+        let array_val = ConfigValue::Array(vec![ConfigValue::Integer(1), ConfigValue::Integer(2)]);
+        assert!(array_val.is_array());
+        let arr = array_val.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+
+        // Test map value
+        let mut map = HashMap::new();
+        map.insert("key".to_string(), ConfigValue::String("value".to_string()));
+        let map_val = ConfigValue::Map(map);
+        assert!(map_val.is_map());
+        let map_ref = map_val.as_map().unwrap();
+        assert_eq!(map_ref.len(), 1);
+
+        // Test null value
+        let null_val = ConfigValue::Null;
+        assert!(null_val.is_null());
+    }
+
+    #[test]
+    fn test_config_manager_basics() {
+        let manager = ConfigManager::new();
+
+        // Test set and get
+        manager.set("test", ConfigValue::String("value".to_string()));
+        let value = manager.get("test");
+        assert!(value.is_some());
+        assert_eq!(value.unwrap().as_string(), Some("value"));
+
+        // Test remove
+        let removed = manager.remove("test");
+        assert!(removed.is_some());
+        assert_eq!(removed.unwrap().as_string(), Some("value"));
+
+        // Test after removal
+        assert!(manager.get("test").is_none());
+    }
+
+    #[test]
+    fn test_config_scopes() {
+        let mut manager = ConfigManager::new();
+
+        // Test setting paths for different scopes
+        let global_path = PathBuf::from("/global/config.json");
+        let user_path = PathBuf::from("/user/config.json");
+        let project_path = PathBuf::from("/project/config.json");
+
+        manager.set_path(ConfigScope::Global, &global_path);
+        manager.set_path(ConfigScope::User, &user_path);
+        manager.set_path(ConfigScope::Project, &project_path);
+
+        // Test getting paths
+        assert_eq!(manager.get_path(ConfigScope::Global), Some(&global_path));
+        assert_eq!(manager.get_path(ConfigScope::User), Some(&user_path));
+        assert_eq!(manager.get_path(ConfigScope::Project), Some(&project_path));
+        assert_eq!(manager.get_path(ConfigScope::Runtime), None);
+    }
+
+    #[test]
+    fn test_config_format_detection() {
+        // Test format detection by extension
+        assert_eq!(ConfigManager::detect_format(Path::new("config.json")), ConfigFormat::Json);
+        assert_eq!(ConfigManager::detect_format(Path::new("config.toml")), ConfigFormat::Toml);
+        assert_eq!(ConfigManager::detect_format(Path::new("config.yaml")), ConfigFormat::Yaml);
+        assert_eq!(ConfigManager::detect_format(Path::new("config.yml")), ConfigFormat::Yaml);
+        assert_eq!(
+            ConfigManager::detect_format(Path::new("config.txt")),
+            ConfigFormat::Json // Default for unknown extensions
+        );
+    }
+
+    #[allow(clippy::panic)]
+    #[test]
+    fn test_config_parsing_serializing() {
+        // JSON parsing
+        let json_str = r#"{"name":"test","value":42,"enabled":true}"#;
+        let json_result = ConfigManager::parse_config(json_str, ConfigFormat::Json);
+        assert!(json_result.is_ok());
+
+        let config_value = json_result.unwrap();
+        if let ConfigValue::Map(map) = config_value {
+            assert_eq!(map.get("name").unwrap().as_string(), Some("test"));
+            assert_eq!(map.get("value").unwrap().as_integer(), Some(42));
+            assert_eq!(map.get("enabled").unwrap().as_boolean(), Some(true));
+        } else {
+            panic!("Expected Map ConfigValue");
+        }
+
+        // Serialization
+        let mut map = HashMap::new();
+        map.insert("test".to_string(), ConfigValue::String("value".to_string()));
+        let config = ConfigValue::Map(map);
+
+        let json_str = ConfigManager::serialize_config(&config, ConfigFormat::Json);
+        assert!(json_str.is_ok());
+        assert!(json_str.unwrap().contains("test"));
     }
 
     // Helper function to create test packages

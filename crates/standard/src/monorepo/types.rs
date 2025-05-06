@@ -18,7 +18,11 @@
 
 use package_json::PackageJson;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{Arc, RwLock},
+};
 
 use crate::filesystem::{FileSystem, FileSystemManager};
 
@@ -395,4 +399,145 @@ pub struct Project {
 #[derive(Debug)]
 pub struct ProjectManager<F: FileSystem = FileSystemManager> {
     pub(crate) fs: F,
+}
+
+/// Configuration scope levels.
+///
+/// This enum defines the different scopes that configuration can apply to,
+/// from the most global (system-wide) to the most specific (runtime only).
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::monorepo::types::ConfigScope;
+///
+/// // Accessing different configuration scopes
+/// let global = ConfigScope::Global;
+/// let user = ConfigScope::User;
+/// let project = ConfigScope::Project;
+/// let runtime = ConfigScope::Runtime;
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ConfigScope {
+    /// Global configuration (system-wide)
+    Global,
+    /// User configuration (user-specific)
+    User,
+    /// Project configuration (project-specific)
+    Project,
+    /// Runtime configuration (in-memory only)
+    Runtime,
+}
+
+/// Configuration file formats.
+///
+/// This enum defines the supported file formats for configuration files,
+/// allowing the system to properly parse and serialize configuration data.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::monorepo::types::ConfigFormat;
+///
+/// // Supporting different configuration formats
+/// let json_format = ConfigFormat::Json;
+/// let toml_format = ConfigFormat::Toml;
+/// let yaml_format = ConfigFormat::Yaml;
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigFormat {
+    /// JSON format
+    Json,
+    /// TOML format
+    Toml,
+    /// YAML format
+    Yaml,
+}
+
+/// A configuration value that can represent different data types.
+///
+/// This enum provides a flexible way to store and manipulate configuration values
+/// of various types, including strings, numbers, booleans, arrays, and nested maps.
+///
+/// # Examples
+///
+/// ```
+/// use std::collections::HashMap;
+/// use sublime_standard_tools::monorepo::types::ConfigValue;
+///
+/// // String value
+/// let name = ConfigValue::String("Project Name".to_string());
+///
+/// // Boolean value
+/// let debug_mode = ConfigValue::Boolean(true);
+///
+/// // Number value
+/// let version = ConfigValue::Float(1.5);
+///
+/// // Array value
+/// let tags = ConfigValue::Array(vec![
+///     ConfigValue::String("tag1".to_string()),
+///     ConfigValue::String("tag2".to_string()),
+/// ]);
+///
+/// // Map (object) value
+/// let mut settings = HashMap::new();
+/// settings.insert("name".to_string(), ConfigValue::String("My Project".to_string()));
+/// settings.insert("version".to_string(), ConfigValue::Float(2.0));
+/// let config = ConfigValue::Map(settings);
+/// ``
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ConfigValue {
+    /// String value
+    String(String),
+    /// Integer value
+    Integer(i64),
+    /// Float value
+    Float(f64),
+    /// Boolean value
+    Boolean(bool),
+    /// Array of values
+    Array(Vec<ConfigValue>),
+    /// Map of values
+    Map(HashMap<String, ConfigValue>),
+    /// Null value
+    Null,
+}
+
+/// Manages configuration across different scopes and file formats.
+///
+/// This struct provides functionality to load, save, and manipulate configuration
+/// settings. It supports multiple scopes (global, user, project, runtime) and
+/// different file formats (JSON, TOML, YAML).
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::monorepo::types::{ConfigManager, ConfigScope, ConfigValue};
+/// use std::path::PathBuf;
+///
+/// // Create a new configuration manager
+/// let mut config_manager = ConfigManager::new();
+///
+/// // Set paths for different configuration scopes
+/// config_manager.set_path(ConfigScope::User, PathBuf::from("~/.config/myapp.json"));
+/// config_manager.set_path(ConfigScope::Project, PathBuf::from("./project-config.json"));
+///
+/// // Set a configuration value
+/// config_manager.set("theme", ConfigValue::String("dark".to_string()));
+///
+/// // Get a configuration value
+/// if let Some(theme) = config_manager.get("theme") {
+///     if let Some(theme_str) = theme.as_string() {
+///         println!("Current theme: {}", theme_str);
+///     }
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct ConfigManager {
+    /// Configuration settings
+    pub(crate) settings: Arc<RwLock<HashMap<String, ConfigValue>>>,
+    /// Paths for different configuration scopes
+    pub(crate) files: HashMap<ConfigScope, PathBuf>,
 }
