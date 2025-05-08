@@ -16,6 +16,7 @@
 use core::result::Result as CoreResult;
 use std::io;
 use std::path::PathBuf;
+use std::time::Duration;
 use thiserror::Error as ThisError;
 
 /// Errors that can occur during filesystem operations.
@@ -244,6 +245,123 @@ pub enum WorkspaceError {
 /// ```
 pub type WorkspaceResult<T> = CoreResult<T, WorkspaceError>;
 
+/// Errors that can occur during command execution.
+///
+/// This enum represents the various ways that command execution can fail,
+/// from spawn failures to timeouts to non-zero exit codes, with specific
+/// variants for common error conditions.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::error::{CommandError, Error};
+/// use std::time::Duration;
+///
+/// // Creating a timeout error
+/// let error = CommandError::Timeout {
+///     duration: Duration::from_secs(30)
+/// };
+///
+/// // Converting to the general Error type
+/// let general_error: Error = error.into();
+/// ```
+#[derive(ThisError, Debug)]
+pub enum CommandError {
+    /// The command failed to start (e.g., not found).
+    #[error("Failed to spawn command '{cmd}': {source}")]
+    SpawnFailed {
+        /// The command that failed to start
+        cmd: String,
+        /// The underlying IO error that caused the spawn failure
+        #[source]
+        source: io::Error,
+    },
+
+    /// The command execution process itself failed (e.g., internal I/O error).
+    #[error("Command execution failed for '{cmd}': {source:?}")]
+    ExecutionFailed {
+        /// The command that failed during execution
+        cmd: String,
+        /// The optional IO error that caused the execution failure
+        #[source]
+        source: Option<io::Error>,
+    },
+
+    /// The command executed but returned a non-zero exit code.
+    #[error("Command '{cmd}' failed with exit code {code:?}. Stderr: {stderr}")]
+    NonZeroExitCode {
+        /// The command that returned a non-zero exit code
+        cmd: String,
+        /// The exit code returned by the command
+        code: Option<i32>,
+        /// The error output captured from the command
+        stderr: String,
+    },
+
+    /// The command timed out after the specified duration.
+    #[error("Command timed out after {duration:?}")]
+    Timeout {
+        /// The time period after which the command timed out
+        duration: Duration,
+    },
+
+    /// The command was killed (e.g., by a signal).
+    #[error("Command was killed: {reason}")]
+    Killed {
+        /// The reason why the command was killed
+        reason: String,
+    },
+
+    /// Invalid configuration provided for the command.
+    #[error("Invalid command configuration: {description}")]
+    Configuration {
+        /// Description of the configuration error
+        description: String,
+    },
+
+    /// Failed to capture stdout or stderr.
+    #[error("Failed to capture {stream} stream")]
+    CaptureFailed {
+        /// Name of the stream that failed to capture (stdout/stderr)
+        stream: String,
+    },
+
+    /// Error occurred while reading stdout or stderr stream.
+    #[error("Error reading {stream} stream: {source}")]
+    StreamReadError {
+        /// Name of the stream that encountered a read error
+        stream: String,
+        /// The underlying IO error that caused the read failure
+        #[source]
+        source: io::Error,
+    },
+
+    /// Generic error during command processing.
+    #[error("Command processing error: {0}")]
+    Generic(String),
+}
+
+/// Result type for command operations.
+///
+/// This is a convenience type alias for Results with CommandError.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::error::{CommandResult, CommandError};
+///
+/// fn execute_build_command(args: &[&str]) -> CommandResult<String> {
+///     if args.is_empty() {
+///         return Err(CommandError::Configuration {
+///             description: "No build arguments provided".to_string(),
+///         });
+///     }
+///     // Actual implementation would execute the command
+///     Ok("Build completed successfully".to_string())
+/// }
+/// ```
+pub type CommandResult<T> = CoreResult<T, CommandError>;
+
 /// General error type for the standard tools library.
 ///
 /// This enum serves as a composite error type that aggregates all domain-specific
@@ -282,6 +400,9 @@ pub enum Error {
     /// Workspace-related error.
     #[error("Workspace execution error")]
     Workspace(#[from] WorkspaceError),
+    /// Command-related error.
+    #[error("Command execution error")]
+    Command(#[from] CommandError),
     /// General purpose errors with a custom message.
     #[error("Operation error: {0}")]
     Operation(String),

@@ -23,6 +23,6 @@ mod types;
 mod tests;
 
 pub use types::{
-    Error, FileSystemError, FileSystemResult, MonorepoError, MonorepoResult, Result,
-    WorkspaceError, WorkspaceResult,
+    CommandError, CommandResult, Error, FileSystemError, FileSystemResult, MonorepoError,
+    MonorepoResult, Result, WorkspaceError, WorkspaceResult,
 };

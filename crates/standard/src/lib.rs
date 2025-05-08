@@ -21,6 +21,7 @@
 //! structure detection. This crate abstracts these common tasks into a reusable
 //! library with consistent error handling and cross-platform support.
 
+#![doc = include_str!("../SPEC.md")]
 #![warn(missing_docs)]
 #![warn(rustdoc::missing_crate_level_docs)]
 #![deny(unused_must_use)]
@@ -30,6 +31,7 @@
 #![deny(clippy::unimplemented)]
 #![deny(clippy::panic)]
 
+pub mod command;
 pub mod error;
 pub mod filesystem;
 pub mod monorepo;
