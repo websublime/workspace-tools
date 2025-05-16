@@ -240,6 +240,7 @@ impl CommandQueue {
     pub fn with_executor<E: CommandExecutor + 'static>(executor: E) -> Self;
     pub fn start(mut self) -> Result<Self>;
     pub async fn enqueue(&self, command: Command, priority: CommandPriority) -> Result<String>;
+    pub async fn enqueue_batch(&self, commands: Vec<(Command, CommandPriority)>) -> Result<Vec<String>>;
     pub fn get_status(&self, id: &str) -> Option<CommandStatus>;
     pub fn get_result(&self, id: &str) -> Option<CommandQueueResult>;
     pub async fn wait_for_command(&self, id: &str, timeout: Duration) -> Result<CommandQueueResult>;

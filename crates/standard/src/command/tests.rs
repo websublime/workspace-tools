@@ -369,6 +369,7 @@ mod tests {
     #[allow(clippy::items_after_statements)]
     #[allow(clippy::print_stdout)]
     #[allow(clippy::assertions_on_constants)]
+    #[allow(clippy::vec_init_then_push)]
     #[tokio::test]
     async fn test_command_queue_priority_execution() {
         // Set up a simple executor that records execution order
@@ -468,8 +469,22 @@ mod tests {
             timeout: None,
         };
 
+        let mut batch = Vec::new();
+        batch.push((cmd_normal, CommandPriority::Normal));
+        batch.push((cmd_low, CommandPriority::Low));
+        batch.push((cmd_high, CommandPriority::High));
+        batch.push((cmd_critical, CommandPriority::Critical));
+
+        println!("Enqueueing commands as a batch");
+        let ids = queue.enqueue_batch(batch).await.expect("Failed to enqueue batch");
+
+        let id_normal = &ids[0];
+        let id_low = &ids[1];
+        let id_high = &ids[2];
+        let id_critical = &ids[3];
+
         // Enqueue them in specific order: normal, low, high, critical
-        println!("Enqueueing normal priority command");
+        /*println!("Enqueueing normal priority command");
         let id_normal = queue
             .enqueue(cmd_normal, CommandPriority::Normal)
             .await
@@ -493,7 +508,7 @@ mod tests {
             .await
             .expect("Failed to enqueue critical command");
 
-        // Wait for all commands to finish
+        // Wait for all commands to finish*/
         println!("Waiting for completion");
         queue.wait_for_completion().await.expect("Failed waiting for completion");
 
@@ -514,10 +529,10 @@ mod tests {
             // Provide more diagnostic info
             for i in 0..4 {
                 let status = match i {
-                    0 => queue.get_status(&id_critical),
-                    1 => queue.get_status(&id_high),
-                    2 => queue.get_status(&id_normal),
-                    3 => queue.get_status(&id_low),
+                    0 => queue.get_status(id_critical),
+                    1 => queue.get_status(id_high),
+                    2 => queue.get_status(id_normal),
+                    3 => queue.get_status(id_low),
                     _ => None,
                 };
                 println!("Command {i} status: {status:?}");

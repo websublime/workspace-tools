@@ -432,6 +432,113 @@ impl CommandQueue {
         Ok(id)
     }
 
+    /// Enqueues multiple commands as a batch, ensuring proper priority ordering.
+    ///
+    /// This method guarantees that all commands in the batch are enqueued and
+    /// properly prioritized before any of them start executing, solving race
+    /// conditions with priority ordering.
+    ///
+    /// # Arguments
+    ///
+    /// * `commands` - Vector of (Command, CommandPriority) tuples to enqueue
+    ///
+    /// # Returns
+    ///
+    /// Vector of command IDs in the same order as the input commands
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::command::{CommandQueue, Command, CommandPriority};
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let queue = CommandQueue::new().start()?;
+    ///
+    /// let mut commands = Vec::new();
+    /// commands.push((Command::new("echo", &["Critical task"]), CommandPriority::Critical));
+    /// commands.push((Command::new("echo", &["High task"]), CommandPriority::High));
+    /// commands.push((Command::new("echo", &["Normal task"]), CommandPriority::Normal));
+    ///
+    /// // Enqueue all commands as a batch, ensuring proper priority ordering
+    /// let command_ids = queue.enqueue_batch(commands).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn enqueue_batch(
+        &self,
+        commands: Vec<(Command, CommandPriority)>,
+    ) -> Result<Vec<String>> {
+        if commands.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let Some(sender) = &self.queue_sender else {
+            return Err(Error::operation("Command queue not started".to_string()));
+        };
+
+        // Signal the start of a batch operation
+        sender.send(QueueMessage::BatchStart).await.map_err(|_| {
+            Error::operation(
+                "Failed to start batch operation, queue processor has shut down".to_string(),
+            )
+        })?;
+
+        // Generate command IDs for all commands
+        let ids = {
+            let mut counter = self
+                .command_counter
+                .lock()
+                .map_err(|e| Error::operation(format!("Failed to lock command counter: {e}")))?;
+
+            let mut ids = Vec::with_capacity(commands.len());
+            for _i in 0..commands.len() {
+                *counter += 1;
+                ids.push(format!("cmd-{counter}"));
+            }
+            ids
+        };
+
+        // Update all command statuses to Queued
+        {
+            let mut statuses = self
+                .statuses
+                .lock()
+                .map_err(|e| Error::operation(format!("Failed to lock command statuses: {e}")))?;
+
+            for id in &ids {
+                statuses.insert(id.clone(), CommandStatus::Queued);
+            }
+        }
+
+        // Prepare all queued commands
+        let now = Instant::now();
+        let mut queued_commands = Vec::with_capacity(commands.len());
+
+        for ((command, priority), id) in commands.into_iter().zip(ids.iter()) {
+            let queued_command =
+                QueuedCommand { id: id.clone(), command, priority, enqueued_at: now };
+            queued_commands.push(queued_command);
+        }
+
+        // Send all commands to queue
+        for cmd in queued_commands {
+            sender.send(QueueMessage::Execute(Box::new(cmd))).await.map_err(|_| {
+                Error::operation(
+                    "Failed to enqueue batch, queue processor has shut down".to_string(),
+                )
+            })?;
+        }
+
+        // Signal the end of batch operation, allowing processing to begin
+        sender.send(QueueMessage::BatchEnd).await.map_err(|_| {
+            Error::operation(
+                "Failed to end batch operation, queue processor has shut down".to_string(),
+            )
+        })?;
+
+        Ok(ids)
+    }
+
     /// Gets the status of a queued command.
     ///
     /// # Arguments
@@ -734,6 +841,7 @@ impl QueueProcessor {
             results,
             last_execution: None,
             running: true,
+            batch_mode: false,
         }
     }
 
@@ -782,6 +890,15 @@ impl QueueProcessor {
                         self.queue.push(*boxed_cmd);
                         collected_commands = true;
                     }
+                    Ok(QueueMessage::BatchStart) => {
+                        // Enter batch mode - pause processing
+                        self.batch_mode = true;
+                    }
+                    Ok(QueueMessage::BatchEnd) => {
+                        // Exit batch mode - resume processing
+                        self.batch_mode = false;
+                        collected_commands = true; // Force queue processing
+                    }
                     Ok(QueueMessage::Shutdown) => {
                         self.running = false;
                         break;
@@ -802,7 +919,7 @@ impl QueueProcessor {
             }
 
             // If we collected any commands or already had some, process the highest priority one
-            if collected_commands || !self.queue.is_empty() {
+            if !self.batch_mode && (collected_commands || !self.queue.is_empty()) {
                 self.process_next_command().await;
             } else if self.running {
                 // No commands in queue and channel empty, wait a bit to avoid CPU spin

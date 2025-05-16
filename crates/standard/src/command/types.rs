@@ -288,6 +288,10 @@ pub(crate) struct QueuedCommand {
 pub(crate) enum QueueMessage {
     /// Execute a command
     Execute(Box<QueuedCommand>),
+    /// Start a batch operation - pause processing
+    BatchStart,
+    /// End a batch operation - resume processing with all commands properly prioritized
+    BatchEnd,
     /// Shutdown the queue
     Shutdown,
 }
@@ -446,4 +450,6 @@ pub(crate) struct QueueProcessor {
     pub(crate) last_execution: Option<Instant>,
     /// Whether the processor is running
     pub(crate) running: bool,
+    /// Flag indicating if we're in batch mode
+    pub(crate) batch_mode: bool,
 }
