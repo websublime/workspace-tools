@@ -414,7 +414,7 @@ mod tests {
         // Create a queue with a configuration that ensures predictable ordering
         let config = CommandQueueConfig {
             max_concurrent_commands: 1, // Process one at a time
-            rate_limit: None,           // No additional rate limiting
+            rate_limit: Some(Duration::from_millis(50)),
             default_timeout: Duration::from_secs(5),
             shutdown_timeout: Duration::from_secs(5),
         };
