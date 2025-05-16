@@ -259,8 +259,10 @@ mod tests {
             .build();
 
         #[cfg(target_family = "windows")]
-        let cmd = CommandBuilder::new("timeout")
-            .arg("2") // Wait for 2 seconds
+        let cmd = CommandBuilder::new("ping")
+            .arg("-n")
+            .arg("10") // Ping 10 times with default 1-second interval
+            .arg("127.0.0.1") // Localhost
             .timeout(Duration::from_millis(100)) // But timeout after 100ms
             .build();
 
