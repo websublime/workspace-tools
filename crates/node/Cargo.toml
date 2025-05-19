@@ -1,12 +1,17 @@
 [package]
 name = "sublime_node_tools"
 version = "0.1.0"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "Napi bindings for NodeJs"
+documentation = "https://docs.rs/sublime_node_tools"
+readme = "README.md"
+keywords = ["nodejs", "npm", "napi", "bindings", "native", "ffi"]
+categories = ["development-tools", "command-line-utilities"]
 
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
