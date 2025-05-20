@@ -1,23 +1,7 @@
 import {
-  getProjectRootPath,
-  detectPackageManager,
-  executeCommand,
-  GitRepository,
-  Dependency,
-  bumpMajor,
-  bumpMinor,
-  bumpPatch,
-  bumpSnapshot,
+  getVersion
 } from './binding'
 
 export {
-  getProjectRootPath,
-  detectPackageManager,
-  executeCommand,
-  GitRepository,
-  Dependency,
-  bumpMajor,
-  bumpMinor,
-  bumpPatch,
-  bumpSnapshot,
+  getVersion
 }
