@@ -155,7 +155,7 @@ pub struct RepoTags {
 pub enum RepoError {
     /// Failed to canonicalize a path
     #[error("Failed to canonicalize path: {0}")]
-    CanonicPathFailure(#[source] std::io::Error),
+    CanonicalPathFailure(#[source] std::io::Error),
 
     /// Generic Git operation failure
     #[error("Failed to execute git: {0}")]

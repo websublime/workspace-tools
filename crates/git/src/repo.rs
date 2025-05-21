@@ -87,7 +87,7 @@ use crate::{GitChangedFile, GitFileStatus, Repo, RepoCommit, RepoError, RepoTags
 /// ```
 fn canonicalize_path(path: &str) -> Result<String, RepoError> {
     let location = PathBuf::from(path);
-    let path = canonicalize(location.as_os_str()).map_err(RepoError::CanonicPathFailure)?;
+    let path = canonicalize(location.as_os_str()).map_err(RepoError::CanonicalPathFailure)?;
     Ok(path.display().to_string())
 }
 
@@ -103,10 +103,10 @@ impl From<Git2Error> for RepoError {
 impl Clone for RepoError {
     fn clone(&self) -> Self {
         match self {
-            RepoError::CanonicPathFailure(_) => {
+            RepoError::CanonicalPathFailure(_) => {
                 // We'll create a new IO error with the same message
                 let io_err = std::io::Error::new(std::io::ErrorKind::Other, format!("{self}"));
-                RepoError::CanonicPathFailure(io_err)
+                RepoError::CanonicalPathFailure(io_err)
             }
             RepoError::GitFailure(_) => {
                 // Create a new Git2Error with the same message
@@ -257,7 +257,7 @@ impl AsRef<str> for RepoError {
             RepoError::PeelError(_) => "PeelError",
             RepoError::BranchError(_) => "BranchError",
             RepoError::GitFailure(_) => "GitFailure",
-            RepoError::CanonicPathFailure(_) => "CanonicPathFailure",
+            RepoError::CanonicalPathFailure(_) => "CanonicalPathFailure",
             RepoError::SignatureError(_) => "SignatureError",
             RepoError::IndexError(_) => "IndexError",
             RepoError::AddFilesError(_) => "AddFilesError",
