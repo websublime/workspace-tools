@@ -375,4 +375,5 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
+module.exports.MonorepoProject = nativeBinding.MonorepoProject
 module.exports.getVersion = nativeBinding.getVersion

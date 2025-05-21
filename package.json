@@ -1,6 +1,7 @@
 {
   "name": "workspace-tools-monorepo",
   "description": "Tools for monorepos",
+  "version": "0.0.0",
   "private": true,
   "packageManager": "pnpm@9.4.0",
   "engines": {
