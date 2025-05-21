@@ -203,6 +203,136 @@ export declare class MonorepoRepository {
    * ```
    */
   get currentBranch(): string
+  /**
+   * Creates a new tag at the current HEAD.
+   *
+   * @param name - The name for the new tag
+   * @param message - Optional message for the tag
+   * @returns The MonorepoRepository instance for method chaining
+   * @throws If the tag cannot be created
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-repo');
+   * repo.createTag('v1.0.0', 'Version 1.0.0 release');
+   * ```
+   */
+  createTag(name: string, message?: string): MonorepoRepository
+  /**
+   * Adds a file to the Git index.
+   *
+   * @param file_path - The path to the file to add
+   * @returns The MonorepoRepository instance for method chaining
+   * @throws If the file cannot be added
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-repo');
+   * repo.add('src/main.js');
+   * ```
+   */
+  add(filePath: string): MonorepoRepository
+  /**
+   * Adds all changed files to the Git index.
+   *
+   * @returns The MonorepoRepository instance for method chaining
+   * @throws If files cannot be added
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-repo');
+   * repo.addAll();
+   * ```
+   */
+  addAll(): MonorepoRepository
+  /**
+   * Gets the name of the last tag in the repository.
+   *
+   * @returns The last tag name
+   * @throws If no tags are found or an error occurs
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-repo');
+   * console.log(`Last tag: ${repo.last_tag}`);
+   * ```
+   */
+  get lastTag(): string
+  /**
+   * Gets the SHA of the current HEAD commit.
+   *
+   * @returns The current commit SHA
+   * @throws If the SHA cannot be retrieved
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-repo');
+   * console.log(`Current commit: ${repo.currentSha}`);
+   * ```
+   */
+  get currentSha(): string
+  /**
+   * Gets the SHA of the parent of the current HEAD commit.
+   *
+   * @returns The previous commit SHA
+   * @throws If the SHA cannot be retrieved
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-repo');
+   * console.log(`Previous commit: ${repo.previousSha}`);
+   * ```
+   */
+  get previousSha(): string
+  /**
+   * Creates a new commit with the current index.
+   *
+   * @param message - The commit message
+   * @returns The new commit's SHA
+   * @throws If the commit cannot be created
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-repo');
+   * repo.add('src/main.js');
+   * const commitId = repo.commit('fix: update main.js');
+   * console.log(`Created commit: ${commitId}`);
+   * ```
+   */
+  commit(message: string): string
+  /**
+   * Adds all changes and creates a new commit.
+   * This method performs both addAll() and commit() in one step.
+   *
+   * @param message - The commit message
+   * @returns The new commit's SHA
+   * @throws If the commit cannot be created
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-repo');
+   * const commitId = repo.commitChanges('feat: add new feature');
+   * console.log(`Created commit: ${commitId}`);
+   * ```
+   */
+  commitChanges(message: string): string
+  /**
+   * Gets the status of the repository in porcelain format.
+   * Returns a list of changed file paths.
+   *
+   * @returns List of changed file paths
+   * @throws If status cannot be retrieved
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-repo');
+   * const status = repo.status;
+   * for (const file of status) {
+   *   console.log(`Changed file: ${file}`);
+   * }
+   * ```
+   */
+  get status(): Array<string>
 }
 
 export declare function getVersion(): string

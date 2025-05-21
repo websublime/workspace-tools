@@ -214,4 +214,183 @@ impl MonorepoRepository {
         let branch = repo_instance.get_current_branch().map_err(repo_format_napi_error)?;
         Ok(branch)
     }
+
+    /// Creates a new tag at the current HEAD.
+    ///
+    /// @param name - The name for the new tag
+    /// @param message - Optional message for the tag
+    /// @returns The MonorepoRepository instance for method chaining
+    /// @throws If the tag cannot be created
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// repo.createTag('v1.0.0', 'Version 1.0.0 release');
+    /// ```
+    #[napi(ts_args_type = "name: string, message?: string")]
+    pub fn create_tag(
+        &self,
+        name: String,
+        message: Option<String>,
+    ) -> Result<Self, MonorepoRepositoryError> {
+        let repo_instance = self.repo_instance.borrow();
+        repo_instance.create_tag(name.as_str(), message).map_err(repo_format_napi_error)?;
+
+        Ok(MonorepoRepository { repo_instance: Rc::clone(&self.repo_instance) })
+    }
+
+    /// Adds a file to the Git index.
+    ///
+    /// @param file_path - The path to the file to add
+    /// @returns The MonorepoRepository instance for method chaining
+    /// @throws If the file cannot be added
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// repo.add('src/main.js');
+    /// ```
+    #[napi]
+    pub fn add(&self, file_path: String) -> Result<Self, MonorepoRepositoryError> {
+        let repo_instance = self.repo_instance.borrow();
+        repo_instance.add(file_path.as_str()).map_err(repo_format_napi_error)?;
+
+        Ok(MonorepoRepository { repo_instance: Rc::clone(&self.repo_instance) })
+    }
+
+    /// Adds all changed files to the Git index.
+    ///
+    /// @returns The MonorepoRepository instance for method chaining
+    /// @throws If files cannot be added
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// repo.addAll();
+    /// ```
+    #[napi]
+    pub fn add_all(&self) -> Result<Self, MonorepoRepositoryError> {
+        let repo_instance = self.repo_instance.borrow();
+        repo_instance.add_all().map_err(repo_format_napi_error)?;
+
+        Ok(MonorepoRepository { repo_instance: Rc::clone(&self.repo_instance) })
+    }
+
+    /// Gets the name of the last tag in the repository.
+    ///
+    /// @returns The last tag name
+    /// @throws If no tags are found or an error occurs
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// console.log(`Last tag: ${repo.last_tag}`);
+    /// ```
+    #[napi(getter)]
+    pub fn last_tag(&self) -> Result<String, MonorepoRepositoryError> {
+        let repo_instance = self.repo_instance.borrow();
+        let tag = repo_instance.get_last_tag().map_err(repo_format_napi_error)?;
+
+        Ok(tag)
+    }
+
+    /// Gets the SHA of the current HEAD commit.
+    ///
+    /// @returns The current commit SHA
+    /// @throws If the SHA cannot be retrieved
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// console.log(`Current commit: ${repo.currentSha}`);
+    /// ```
+    #[napi(getter)]
+    pub fn current_sha(&self) -> Result<String, MonorepoRepositoryError> {
+        let repo_instance = self.repo_instance.borrow();
+        let sha = repo_instance.get_current_sha().map_err(repo_format_napi_error)?;
+
+        Ok(sha)
+    }
+
+    /// Gets the SHA of the parent of the current HEAD commit.
+    ///
+    /// @returns The previous commit SHA
+    /// @throws If the SHA cannot be retrieved
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// console.log(`Previous commit: ${repo.previousSha}`);
+    /// ```
+    #[napi(getter)]
+    pub fn previous_sha(&self) -> Result<String, MonorepoRepositoryError> {
+        let repo_instance = self.repo_instance.borrow();
+        let sha = repo_instance.get_previous_sha().map_err(repo_format_napi_error)?;
+
+        Ok(sha)
+    }
+
+    /// Creates a new commit with the current index.
+    ///
+    /// @param message - The commit message
+    /// @returns The new commit's SHA
+    /// @throws If the commit cannot be created
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// repo.add('src/main.js');
+    /// const commitId = repo.commit('fix: update main.js');
+    /// console.log(`Created commit: ${commitId}`);
+    /// ```
+    #[napi]
+    pub fn commit(&self, message: String) -> Result<String, MonorepoRepositoryError> {
+        let repo_instance = self.repo_instance.borrow();
+        let oid = repo_instance.commit(message.as_str()).map_err(repo_format_napi_error)?;
+
+        Ok(oid)
+    }
+
+    /// Adds all changes and creates a new commit.
+    /// This method performs both addAll() and commit() in one step.
+    ///
+    /// @param message - The commit message
+    /// @returns The new commit's SHA
+    /// @throws If the commit cannot be created
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// const commitId = repo.commitChanges('feat: add new feature');
+    /// console.log(`Created commit: ${commitId}`);
+    /// ```
+    #[napi]
+    pub fn commit_changes(&self, message: String) -> Result<String, MonorepoRepositoryError> {
+        let repo_instance = self.repo_instance.borrow();
+        let oid = repo_instance.commit_changes(message.as_str()).map_err(repo_format_napi_error)?;
+
+        Ok(oid)
+    }
+
+    /// Gets the status of the repository in porcelain format.
+    /// Returns a list of changed file paths.
+    ///
+    /// @returns List of changed file paths
+    /// @throws If status cannot be retrieved
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// const status = repo.status;
+    /// for (const file of status) {
+    ///   console.log(`Changed file: ${file}`);
+    /// }
+    /// ```
+    #[napi(getter)]
+    pub fn status(&self) -> Result<Vec<String>, MonorepoRepositoryError> {
+        let repo_instance = self.repo_instance.borrow();
+        let status = repo_instance.status_porcelain().map_err(repo_format_napi_error)?;
+
+        Ok(status)
+    }
 }

@@ -29,6 +29,11 @@ try {
   console.log(monorepoRepository.path);
   console.log(monorepoRepository.branches);
   console.log(monorepoRepository.config);
+  console.log(monorepoRepository.currentBranch);
+  console.log(monorepoRepository.currentSha);
+  console.log(monorepoRepository.lastTag);
+  console.log(monorepoRepository.status);
+  //monorepoRepository.checkout('feature-branch-awesome');
 } catch (e) {
-  console.error('Error:', e);
+  console.error(e);
 }
