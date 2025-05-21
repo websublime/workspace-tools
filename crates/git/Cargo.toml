@@ -1,0 +1,45 @@
+[package]
+name = "sublime_git_tools"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A high-level Rust interface to Git operations with robust error handling, built on libgit2"
+documentation = "https://docs.rs/sublime_git_tools"
+readme = "README.md"
+keywords = ["git", "repository", "version-control", "libgit2", "development"]
+categories = ["development-tools", "version-control"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+chrono = "0.4"
+git2 = { version = "0.20", features = [
+  "default",
+  "vendored-libgit2",
+  "vendored-openssl",
+] }
+libgit2-sys = { version = "*", features = [
+  "ssh",
+  "https",
+  "vendored",
+  "vendored-openssl",
+] }
+dirs = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.19.1"
+sublime_standard_tools = { workspace = true }
