@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate napi_derive;
 
+mod git;
 mod standard;
 
 #[cfg(all(not(target_os = "linux"), not(target_family = "wasm")))]
@@ -21,4 +22,5 @@ pub fn get_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+pub use git::{MonorepoRepository, MonorepoRepositoryError};
 pub use standard::{MonorepoProject, MonorepoProjectDescription, MonorepoProjectError};

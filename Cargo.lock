@@ -1447,6 +1447,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "sublime_git_tools",
  "sublime_standard_tools",
  "tempfile",
 ]

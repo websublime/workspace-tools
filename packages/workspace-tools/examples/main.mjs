@@ -1,9 +1,10 @@
 // @ts-check
-import { getVersion, MonorepoProject } from '../dist/esm/index.mjs';
+import { getVersion, MonorepoProject, MonorepoRepository } from '../dist/esm/index.mjs';
 
 /**
  * @typedef {import('../dist/types').getVersion} getVersion
  * @typedef {import('../dist/types').MonorepoProject} MonorepoProject
+ * @typedef {import('../dist/types').MonorepoRepository} MonorepoRepository
  */
 
 /** @type {getVersion} */
@@ -22,6 +23,12 @@ try {
   console.log(workspaceDescriptor);
   console.log(monorepoProject.getPackageDescriptor('@websublime/workspace-tools'));
   console.log(monorepoProject.getWorkspaceDependencyGraph());
+
+  /** @type {MonorepoRepository} */
+  const monorepoRepository = MonorepoRepository.open(description.root);
+  console.log(monorepoRepository.path);
+  console.log(monorepoRepository.branches);
+  console.log(monorepoRepository.config);
 } catch (e) {
   console.error('Error:', e);
 }

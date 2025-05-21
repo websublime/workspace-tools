@@ -58,6 +58,153 @@ getPackageDescriptor(package: string): {absolute_path: string; location: string;
 getWorkspaceDependencyGraph(): Record<string, string[]>
 }
 
+export declare class MonorepoRepository {
+  /**
+   * Opens an existing Git repository at the specified path.
+   *
+   * @param root_path - The path to the existing repository
+   * @returns A new MonorepoRepository instance
+   * @throws If the repository cannot be opened
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-project');
+   * console.log(`Opened repository at: ${repo.path}`);
+   * ```
+   */
+  static open(rootPath: string): MonorepoRepository
+  /**
+   * Creates a new Git repository at the specified path.
+   * This initializes a new Git repository with an initial commit on the 'main' branch.
+   *
+   * @param root_path - The path where the repository should be created
+   * @returns A new MonorepoRepository instance
+   * @throws If the repository cannot be created
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.create('./new-project');
+   * console.log(`Created repository at: ${repo.path}`);
+   * ```
+   */
+  static create(rootPath: string): MonorepoRepository
+  /**
+   * Clones a Git repository from a URL to a local path.
+   *
+   * @param url - The URL of the repository to clone
+   * @param root_path - The local path where the repository should be cloned
+   * @returns A new MonorepoRepository instance
+   * @throws If the repository cannot be cloned
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.clone('https://github.com/example/repo.git', './cloned-repo');
+   * console.log(`Cloned repository to: ${repo.path}`);
+   * ```
+   */
+  static clone(url: string, rootPath: string): MonorepoRepository
+  /**
+   * Gets the local path of the repository.
+   *
+   * @returns The path to the repository
+   *
+   * @example
+   * ```js
+   * const repo = GitRepository.open('./my-repo');
+   * console.log(`Repository path: ${repo.path}`);
+   * ```
+   */
+  get path(): string
+  /**
+   * Configures the repository with user information.
+   *
+   * @param username - The Git user name
+   * @param email - The Git user email
+   * @returns The MonorepoRepository instance for method chaining
+   * @throws If the configuration cannot be set
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-repo');
+   * repo.setConfig('Jane Doe', 'jane@example.com');
+   * ```
+   */
+  setConfig(username: string, email: string): MonorepoRepository
+  /**
+   * Creates a new branch based on the current HEAD.
+   *
+   * @param name - The name for the new branch
+   * @returns The MonorepoRepository instance for method chaining
+   * @throws If the branch cannot be created
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-repo');
+   * repo.createBranch('feature/new-feature');
+   * ```
+   */
+  createBranch(name: string): MonorepoRepository
+  /**
+   * Lists all local branches in the repository.
+   *
+   * @returns A list of branch names
+   * @throws If branches cannot be listed
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-repo');
+   * const branches = repo.branches;
+   * for (const branch of branches) {
+   *   console.log(`Branch: ${branch}`);
+   * }
+   * ```
+   */
+  get branches(): Array<string>
+  /**
+   * Lists all configuration entries for the repository.
+   *
+   * @returns A map of config keys to values
+   * @throws If config cannot be retrieved
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-repo');
+   * const config = repo.config;
+   * for (const [key, value] of Object.entries(config)) {
+   *   console.log(`${key} = ${value}`);
+   * }
+   * ```
+   */
+  get config(): Record<string, string>
+  /**
+   * Checks out a local branch.
+   *
+   * @param branch_name - The name of the branch to checkout
+   * @returns The MonorepoRepository instance for method chaining
+   * @throws If checkout fails
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-repo');
+   * repo.checkout('feature-branch');
+   * ```
+   */
+  checkout(branchName: string): MonorepoRepository
+  /**
+   * Gets the name of the currently checked out branch.
+   *
+   * @returns The current branch name
+   * @throws If the current branch cannot be determined
+   *
+   * @example
+   * ```js
+   * const repo = MonorepoRepository.open('./my-repo');
+   * console.log(`Current branch: ${repo.currentBranch}`);
+   * ```
+   */
+  get currentBranch(): string
+}
+
 export declare function getVersion(): string
 
 export interface MonorepoProjectDescription {
