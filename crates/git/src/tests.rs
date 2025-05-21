@@ -1,3 +1,6 @@
+#[allow(clippy::unwrap_used)]
+#[allow(clippy::get_unwrap)]
+#[allow(clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use sublime_standard_tools::monorepo::MonorepoDetector;

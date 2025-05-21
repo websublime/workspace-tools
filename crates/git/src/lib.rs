@@ -103,6 +103,16 @@
 //! # }
 //! ```
 
+#![doc = include_str!("../SPEC.md")]
+#![warn(missing_docs)]
+#![warn(rustdoc::missing_crate_level_docs)]
+#![deny(unused_must_use)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::todo)]
+#![deny(clippy::unimplemented)]
+#![deny(clippy::panic)]
+
 mod repo;
 mod types;
 
