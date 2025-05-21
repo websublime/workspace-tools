@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/standard"]
+members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
@@ -12,7 +12,8 @@ repository = "https://github.com/websublime/workspace-node-tools"
 
 [workspace.dependencies]
 # Internal crates
-#sublime_standard_tools = { version = "0.1.0", path = "./crates/standard" }
+sublime_standard_tools = { version = "0.1.0", path = "./crates/standard" }
+sublime_node_tools = { version = "0.1.0", path = "./crates/node" }
 
 # Core dependencies
 async-trait = "0.1.74"

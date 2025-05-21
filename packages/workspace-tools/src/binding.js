@@ -35,7 +35,11 @@ const isMuslFromFilesystem = () => {
 }
 
 const isMuslFromReport = () => {
-  const report = typeof process.report.getReport === 'function' ? process.report.getReport() : null
+  let report = null
+  if (typeof process.report?.getReport === 'function') {
+    process.report.excludeNetwork = true
+    report = process.report.getReport()
+  }
   if (!report) {
     return null
   }
@@ -60,7 +64,13 @@ const isMuslFromChildProcess = () => {
 }
 
 function requireNative() {
-  if (process.platform === 'android') {
+  if (process.env.NAPI_RS_NATIVE_LIBRARY_PATH) {
+    try {
+      nativeBinding = require(process.env.NAPI_RS_NATIVE_LIBRARY_PATH);
+    } catch (err) {
+      loadErrors.push(err)
+    }
+  } else if (process.platform === 'android') {
     if (process.arch === 'arm64') {
       try {
         return require('./workspace-tools.android-arm64.node')
@@ -364,17 +374,6 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-module.exports.Dependency = nativeBinding.Dependency
-module.exports.GitChangedFile = nativeBinding.GitChangedFile
-module.exports.GitCommit = nativeBinding.GitCommit
-module.exports.GitRepository = nativeBinding.GitRepository
-module.exports.GitTag = nativeBinding.GitTag
-module.exports.bumpMajor = nativeBinding.bumpMajor
-module.exports.bumpMinor = nativeBinding.bumpMinor
-module.exports.bumpPatch = nativeBinding.bumpPatch
-module.exports.bumpSnapshot = nativeBinding.bumpSnapshot
-module.exports.detectPackageManager = nativeBinding.detectPackageManager
-module.exports.executeCommand = nativeBinding.executeCommand
-module.exports.getProjectRootPath = nativeBinding.getProjectRootPath
+module.exports = nativeBinding
+module.exports.MonorepoProject = nativeBinding.MonorepoProject
 module.exports.getVersion = nativeBinding.getVersion
-module.exports.GitFileStatus = nativeBinding.GitFileStatus
