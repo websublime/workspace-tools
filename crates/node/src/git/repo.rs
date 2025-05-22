@@ -1,8 +1,14 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
-use super::types::{MonorepoRepository, MonorepoRepositoryError};
-use napi::{Error, Result};
-use sublime_git_tools::{Repo, RepoError};
+use super::{
+    types::{MonorepoRepository, MonorepoRepositoryError},
+    GitChangedFile, GitCommit, GitFileStatus, GitTag,
+};
+use napi::{bindgen_prelude::Undefined, Either, Error, Result};
+use sublime_git_tools::{
+    GitChangedFile as RepoGitChangedFile, GitFileStatus as RepoGitFileStatus, Repo, RepoCommit,
+    RepoError, RepoTags,
+};
 
 fn repo_format_napi_error(err: RepoError) -> Error<MonorepoRepositoryError> {
     Error::new(err.clone().into(), err.to_string())
@@ -20,6 +26,40 @@ impl AsRef<str> for MonorepoRepositoryError {
 impl From<RepoError> for MonorepoRepositoryError {
     fn from(err: RepoError) -> Self {
         MonorepoRepositoryError::RepoError(err)
+    }
+}
+
+impl From<RepoGitFileStatus> for GitFileStatus {
+    fn from(status: RepoGitFileStatus) -> Self {
+        match status {
+            RepoGitFileStatus::Added => GitFileStatus::Added,
+            RepoGitFileStatus::Deleted => GitFileStatus::Deleted,
+            RepoGitFileStatus::Modified => GitFileStatus::Modified,
+        }
+    }
+}
+
+impl From<RepoGitChangedFile> for GitChangedFile {
+    fn from(file: RepoGitChangedFile) -> Self {
+        GitChangedFile { path: file.path, status: file.status.into() }
+    }
+}
+
+impl From<RepoCommit> for GitCommit {
+    fn from(commit: RepoCommit) -> Self {
+        GitCommit {
+            hash: commit.hash,
+            message: commit.message,
+            author_date: commit.author_date,
+            author_email: commit.author_email,
+            author_name: commit.author_name,
+        }
+    }
+}
+
+impl From<RepoTags> for GitTag {
+    fn from(tag: RepoTags) -> Self {
+        GitTag { hash: tag.hash, tag: tag.tag }
     }
 }
 
@@ -392,5 +432,443 @@ impl MonorepoRepository {
         let status = repo_instance.status_porcelain().map_err(repo_format_napi_error)?;
 
         Ok(status)
+    }
+
+    /// Finds the branch that contains a specific commit.
+    ///
+    /// @param commit_sha - The commit SHA to find
+    /// @returns The branch name if found, undefined if not found
+    /// @throws If the search fails
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// const commitSha = repo.currentSha;
+    /// const branch = repo.getBranchFromCommit(commitSha);
+    /// if (branch) {
+    ///   console.log(`Commit ${commitSha} is in branch: ${branch}`);
+    /// } else {
+    ///   console.log(`Commit ${commitSha} is not in any branch`);
+    /// }
+    /// ```
+    #[napi]
+    pub fn get_branch_from_commit(
+        &self,
+        commit_sha: String,
+    ) -> Result<Option<Either<String, Undefined>>, MonorepoRepositoryError> {
+        let repo_instance = self.repo_instance.borrow();
+        let branch = repo_instance
+            .get_branch_from_commit(commit_sha.as_str())
+            .map_err(repo_format_napi_error)?;
+
+        Ok(branch.map(Either::A))
+    }
+
+    /// Finds all branches that contain a specific commit.
+    ///
+    /// @param commit_sha - The commit SHA to find
+    /// @returns List of branch names containing the commit
+    /// @throws If the search fails
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// const commitSha = repo.currentSha;
+    /// const branches = repo.getBranchesContainingCommit(commitSha);
+    /// for (const branch of branches) {
+    ///   console.log(`Branch contains commit: ${branch}`);
+    /// }
+    /// ```
+    #[napi]
+    pub fn get_branches_containing_commit(
+        &self,
+        commit_sha: String,
+    ) -> Result<Vec<String>, MonorepoRepositoryError> {
+        let repo_instance = self.repo_instance.borrow();
+        let branches = repo_instance
+            .get_branches_containing_commit(commit_sha.as_str())
+            .map_err(repo_format_napi_error)?;
+
+        Ok(branches)
+    }
+
+    /// Pushes the current branch to a remote repository.
+    ///
+    /// @param remote_name - The name of the remote (defaults to "origin")
+    /// @param follow_tags - Whether to also push tags (defaults to false)
+    /// @returns Success indicator
+    /// @throws If the push fails
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// // Push current branch with tags
+    /// repo.push("origin", true);
+    /// ```
+    #[napi(ts_args_type = "remote_name?: string, follow_tags?: boolean")]
+    pub fn push(
+        &self,
+        remote_name: Option<Either<String, Undefined>>,
+        follow_tags: Option<Either<bool, Undefined>>,
+    ) -> Result<bool, MonorepoRepositoryError> {
+        let remote = match remote_name {
+            Some(Either::A(name)) => name,
+            Some(Either::B(_)) | None => String::from("origin"),
+        };
+
+        let follow = match follow_tags {
+            Some(Either::A(follow)) => follow,
+            Some(Either::B(_)) | None => false,
+        };
+
+        let repo_instance = self.repo_instance.borrow();
+        let result = repo_instance.push(&remote, Some(follow)).map_err(repo_format_napi_error)?;
+        Ok(result)
+    }
+
+    /// Pushes the current branch to a remote repository with custom SSH key paths.
+    ///
+    /// @param remote_name - The name of the remote (defaults to "origin")
+    /// @param follow_tags - Whether to also push tags (defaults to false)
+    /// @param ssh_key_paths - Paths to SSH keys to try for authentication
+    /// @returns Success indicator
+    /// @throws If the push fails
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// // Push with custom SSH keys
+    /// repo.push_with_ssh_config(
+    ///   "origin",
+    ///   true,
+    ///   ["/home/user/.ssh/id_ed25519", "/home/user/.ssh/id_rsa"]
+    /// );
+    /// ```
+    #[napi(ts_args_type = "remote_name?: string, follow_tags?: boolean, ssh_key_paths?: [string]")]
+    pub fn push_with_ssh_config(
+        &self,
+        remote_name: Option<Either<String, Undefined>>,
+        follow_tags: Option<Either<bool, Undefined>>,
+        ssh_key_paths: Option<Either<Vec<String>, Undefined>>,
+    ) -> Result<bool, MonorepoRepositoryError> {
+        let remote = match remote_name {
+            Some(Either::A(name)) => name,
+            Some(Either::B(_)) | None => String::from("origin"),
+        };
+
+        let follow = match follow_tags {
+            Some(Either::A(follow)) => follow,
+            Some(Either::B(_)) | None => false,
+        };
+
+        let key_paths = match ssh_key_paths {
+            Some(Either::A(paths)) => paths.into_iter().map(PathBuf::from).collect(),
+            Some(Either::B(_)) | None => Vec::new(),
+        };
+
+        let repo_instance = self.repo_instance.borrow();
+        let result = repo_instance
+            .push_with_ssh_config(&remote, Some(follow), key_paths)
+            .map_err(repo_format_napi_error)?;
+        Ok(result)
+    }
+
+    /// Fetches changes from a remote repository.
+    ///
+    /// @param remote_name - The name of the remote (defaults to "origin")
+    /// @param refspecs - Optional reference specs to fetch
+    /// @param prune - Whether to prune deleted references (defaults to false)
+    /// @returns Success indicator
+    /// @throws If the fetch fails
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// // Fetch with default refspecs and no pruning
+    /// repo.fetch("origin");
+    ///
+    /// // Fetch a specific branch and prune
+    /// repo.fetch(
+    ///   "origin",
+    ///   ["refs/heads/main:refs/remotes/origin/main"],
+    ///   true
+    /// );
+    /// ```
+    #[napi(ts_args_type = "remote_name?: string, refspecs?: [string], prune?: boolean")]
+    pub fn fetch(
+        &self,
+        remote_name: Option<Either<String, Undefined>>,
+        refspecs: Option<Vec<String>>,
+        prune: Option<Either<bool, Undefined>>,
+    ) -> Result<bool, MonorepoRepositoryError> {
+        let remote = match remote_name {
+            Some(Either::A(name)) => name,
+            Some(Either::B(_)) | None => String::from("origin"),
+        };
+
+        let prune = match prune {
+            Some(Either::A(prune)) => prune,
+            Some(Either::B(_)) | None => false,
+        };
+
+        let repo_instance = self.repo_instance.borrow();
+
+        let result = match refspecs {
+            Some(specs) => {
+                // Convert Vec<String> to Vec<&str> for the API
+                let ref_slices: Vec<&str> = specs.iter().map(|s| s.as_str()).collect();
+                repo_instance
+                    .fetch(&remote, Some(&ref_slices), prune)
+                    .map_err(repo_format_napi_error)?
+            }
+            None => repo_instance.fetch(&remote, None, prune).map_err(repo_format_napi_error)?,
+        };
+
+        Ok(result)
+    }
+
+    /// Pulls changes from a remote repository.
+    /// This fetches from the remote and merges the changes into the current branch.
+    ///
+    /// @param remote_name - The name of the remote (defaults to "origin")
+    /// @param branch_name - Optional branch name to pull from (defaults to tracking branch)
+    /// @returns Success indicator
+    /// @throws If the pull fails or if there are merge conflicts
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// try {
+    ///   // Pull from the tracking branch
+    ///   repo.pull("origin");
+    ///
+    ///   // Pull from a specific branch
+    ///   repo.pull("origin", "feature-branch");
+    /// } catch (error) {
+    ///   console.error(`Pull failed: ${error.message}`);
+    /// }
+    /// ```
+    #[napi(ts_args_type = "remote_name?: string, branch_name?: string")]
+    pub fn pull(
+        &self,
+        remote_name: Option<Either<String, Undefined>>,
+        branch_name: Option<Either<String, Undefined>>,
+    ) -> Result<bool, MonorepoRepositoryError> {
+        let remote = match remote_name {
+            Some(Either::A(name)) => name,
+            Some(Either::B(_)) | None => String::from("origin"),
+        };
+
+        let branch_owned = match branch_name {
+            Some(Either::A(name)) => Some(name),
+            Some(Either::B(_)) | None => None,
+        };
+
+        let repo_instance = self.repo_instance.borrow();
+
+        let result = match branch_owned {
+            Some(ref branch) => repo_instance.pull(&remote, Some(branch.as_str())),
+            None => repo_instance.pull(&remote, None),
+        }
+        .map_err(repo_format_napi_error)?;
+
+        Ok(result)
+    }
+
+    /// Finds the common ancestor (merge base) between HEAD and another reference.
+    ///
+    /// @param git_ref - The reference to compare with HEAD (branch name, tag, or commit SHA)
+    /// @returns The SHA of the common ancestor commit
+    /// @throws If the common ancestor cannot be found
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// const mergeBase = repo.get_diverged_commits("feature-branch");
+    /// console.log(`Common ancestor commit: ${mergeBase}`);
+    /// ```
+    #[napi]
+    pub fn get_diverged_commits(&self, git_ref: String) -> Result<String, MonorepoRepositoryError> {
+        let repo_instance = self.repo_instance.borrow();
+        let result = repo_instance.get_diverged_commit(&git_ref).map_err(repo_format_napi_error)?;
+
+        Ok(result)
+    }
+
+    /// Gets all files changed since a specific reference with their status.
+    ///
+    /// @param git_ref - The reference to compare with HEAD (branch name, tag, or commit SHA)
+    /// @returns List of changed files with status
+    /// @throws If changed files cannot be determined
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// const changedFiles = repo.get_all_files_changed_since_sha_with_status("v1.0.0");
+    /// for (const file of changedFiles) {
+    ///   console.log(`File: ${file.path} - ${file.status}`);
+    /// }
+    /// ```
+    #[napi]
+    pub fn get_all_files_changed_since_sha_with_status(
+        &self,
+        git_ref: String,
+    ) -> Result<Vec<GitChangedFile>, MonorepoRepositoryError> {
+        let repo_instance = self.repo_instance.borrow();
+        let changed_status_list = repo_instance
+            .get_all_files_changed_since_sha_with_status(&git_ref)
+            .map_err(repo_format_napi_error)?;
+
+        let result = changed_status_list
+            .into_iter()
+            .map(GitChangedFile::from)
+            .collect::<Vec<GitChangedFile>>();
+
+        Ok(result)
+    }
+
+    /// Gets all files changed since a specific reference.
+    ///
+    /// @param git_ref - The reference to compare with HEAD (branch name, tag, or commit SHA)
+    /// @returns List of changed file paths
+    /// @throws If changed files cannot be determined
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// const changedFiles = repo.get_all_files_changed_since_sha("v1.0.0");
+    /// for (const file of changedFiles) {
+    ///   console.log(`Changed file: ${file}`);
+    /// }
+    /// ```
+    #[napi]
+    pub fn get_all_files_changed_since_sha(
+        &self,
+        git_ref: String,
+    ) -> Result<Vec<String>, MonorepoRepositoryError> {
+        let repo_instance = self.repo_instance.borrow();
+        let result = repo_instance
+            .get_all_files_changed_since_sha(&git_ref)
+            .map_err(repo_format_napi_error)?;
+
+        Ok(result)
+    }
+
+    /// Gets all files changed since a specific branch within specified package paths.
+    ///
+    /// @param packages_paths - List of package paths to filter by
+    /// @param branch_name - The branch to compare against
+    /// @returns List of changed file paths within the packages
+    /// @throws If changed files cannot be determined
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    /// const packages = ['packages/pkg1', 'packages/pkg2'];
+    /// const changedFiles = repo.get_all_files_changed_since_branch(packages, 'main');
+    /// for (const file of changedFiles) {
+    ///   console.log(`Changed file: ${file}`);
+    /// }
+    /// ```
+    #[napi]
+    pub fn get_all_files_changed_since_branch(
+        &self,
+        packages_paths: Vec<String>,
+        branch_name: String,
+    ) -> Result<Vec<String>, MonorepoRepositoryError> {
+        let repo_instance = self.repo_instance.borrow();
+        let result = repo_instance
+            .get_all_files_changed_since_branch(&packages_paths, &branch_name)
+            .map_err(repo_format_napi_error)?;
+
+        Ok(result)
+    }
+
+    /// Gets commits made since a specific reference or from the beginning.
+    ///
+    /// @param since - Optional reference to start from (branch, tag, or commit SHA)
+    /// @param relative - Optional path to filter commits by (only commits touching this path)
+    /// @returns List of commits
+    /// @throws If commits cannot be retrieved
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    ///
+    /// // Get all commits since v1.0.0
+    /// const commits = repo.get_commits_since("v1.0.0");
+    ///
+    /// // Get all commits that touched a specific file
+    /// const fileCommits = repo.get_commits_since("v1.0.0", "src/main.js");
+    ///
+    /// for (const commit of commits) {
+    ///   console.log(`${commit.hash}: ${commit.message} (${commit.author_name})`);
+    /// }
+    /// ```
+    #[napi(ts_args_type = "since?: string, relative?: string")]
+    pub fn get_commits_since(
+        &self,
+        since: Option<Either<String, Undefined>>,
+        relative: Option<Either<String, Undefined>>,
+    ) -> Result<Vec<GitCommit>, MonorepoRepositoryError> {
+        let since_owned = match since {
+            Some(Either::A(since)) => since,
+            Some(Either::B(_)) | None => String::from("main"),
+        };
+
+        let repo_instance = self.repo_instance.borrow();
+
+        let commits = match relative {
+            Some(Either::A(relative)) => repo_instance
+                .get_commits_since(Some(since_owned), &Some(relative))
+                .map_err(repo_format_napi_error)?,
+            Some(Either::B(_)) | None => repo_instance
+                .get_commits_since(Some(since_owned), &None)
+                .map_err(repo_format_napi_error)?,
+        };
+
+        let result = commits.into_iter().map(GitCommit::from).collect::<Vec<GitCommit>>();
+
+        Ok(result)
+    }
+
+    /// Gets tags from either local repository or remote.
+    ///
+    /// @param local - If true, gets local tags; if false or undefined, gets remote tags
+    /// @returns List of tags
+    /// @throws If tags cannot be retrieved
+    ///
+    /// @example
+    /// ```js
+    /// const repo = MonorepoRepository.open('./my-repo');
+    ///
+    /// // Get local tags
+    /// const localTags = repo.get_remote_or_local_tags(true);
+    ///
+    /// // Get remote tags (default)
+    /// const remoteTags = repo.get_remote_or_local_tags();
+    ///
+    /// for (const tag of localTags) {
+    ///   console.log(`Tag: ${tag.tag} (${tag.hash})`);
+    /// }
+    /// ```
+    #[napi(ts_args_type = "local?: boolean")]
+    pub fn get_remote_or_local_tags(
+        &self,
+        local: Option<Either<bool, Undefined>>,
+    ) -> Result<Vec<GitTag>, MonorepoRepositoryError> {
+        let local_tag = match local {
+            Some(Either::A(local)) => local,
+            Some(Either::B(_)) | None => false,
+        };
+
+        let repo_instance = self.repo_instance.borrow();
+        let local_remote_tags = repo_instance
+            .get_remote_or_local_tags(Some(local_tag))
+            .map_err(repo_format_napi_error)?;
+
+        let result = local_remote_tags.into_iter().map(GitTag::from).collect::<Vec<GitTag>>();
+
+        Ok(result)
     }
 }

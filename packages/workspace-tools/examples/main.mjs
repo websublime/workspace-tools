@@ -33,6 +33,10 @@ try {
   console.log(monorepoRepository.currentSha);
   console.log(monorepoRepository.lastTag);
   console.log(monorepoRepository.status);
+
+  //monorepoRepository.getAllFilesChangedSinceBranch(packagesPaths, branchName)
+  const changedFiles = monorepoRepository.getAllFilesChangedSinceSha('main');
+  console.log(changedFiles);
   //monorepoRepository.checkout('feature-branch-awesome');
 } catch (e) {
   console.error(e);

@@ -22,5 +22,7 @@ pub fn get_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-pub use git::{MonorepoRepository, MonorepoRepositoryError};
+pub use git::{
+    GitChangedFile, GitCommit, GitFileStatus, GitTag, MonorepoRepository, MonorepoRepositoryError,
+};
 pub use standard::{MonorepoProject, MonorepoProjectDescription, MonorepoProjectError};
