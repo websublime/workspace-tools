@@ -375,5 +375,10 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
+module.exports.GitChangedFile = nativeBinding.GitChangedFile
+module.exports.GitCommit = nativeBinding.GitCommit
+module.exports.GitTag = nativeBinding.GitTag
 module.exports.MonorepoProject = nativeBinding.MonorepoProject
+module.exports.MonorepoRepository = nativeBinding.MonorepoRepository
 module.exports.getVersion = nativeBinding.getVersion
+module.exports.GitFileStatus = nativeBinding.GitFileStatus
