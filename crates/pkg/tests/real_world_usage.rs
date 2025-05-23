@@ -10,24 +10,20 @@
 //! - Graph validation and visualization
 //! - Change tracking and diff generation
 
-#![warn(missing_docs)]
-#![warn(rustdoc::missing_crate_level_docs)]
-#![deny(unused_must_use)]
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::todo)]
-#![deny(clippy::unimplemented)]
-#![deny(clippy::panic)]
+#![allow(clippy::unwrap_used)]
+#![allow(clippy::expect_used)]
+#![allow(clippy::print_stdout)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::unnecessary_wraps)]
 
 use serde_json::{json, Value};
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 use sublime_package_tools::{
-    build_dependency_graph_from_packages, generate_ascii, generate_dot, save_dot_to_file,
-    AvailableUpgrade, ChangeType, Dependency, DependencyChange, DependencyFilter, DependencyGraph,
-    DependencyRegistry, DotOptions, ExecutionMode, LocalRegistry, NpmRegistry, Package,
-    PackageDiff, PackageInfo, PackageRegistry, RegistryAuth, RegistryManager, RegistryType,
-    ResolutionResult, UpgradeConfig, UpgradeStatus, Upgrader, ValidationIssue, ValidationOptions,
-    Version, VersionRelationship, VersionStability, VersionUpdateStrategy,
+    build_dependency_graph_from_packages, generate_ascii, generate_dot, AvailableUpgrade,
+    ChangeType, Dependency, DependencyGraph, DependencyRegistry, DotOptions, ExecutionMode,
+    LocalRegistry, Package, PackageDiff, PackageInfo, RegistryAuth, RegistryManager, RegistryType,
+    UpgradeConfig, UpgradeStatus, Upgrader, ValidationOptions, Version, VersionStability,
+    VersionUpdateStrategy,
 };
 
 /// Comprehensive real-world monorepo simulation test
@@ -63,7 +59,7 @@ fn test_comprehensive_monorepo_workflow() -> Result<(), Box<dyn std::error::Erro
 
     // === Phase 6: Create Package Infos and Track Changes ===
     println!("\n📋 Phase 6: Creating package infos and tracking changes");
-    let package_infos = create_package_infos(&packages)?;
+    create_package_infos(&packages)?;
     track_package_changes(&packages)?;
 
     // === Phase 7: Check for Upgrades ===
@@ -253,13 +249,13 @@ fn analyze_dependency_graph(
 
     // Check if all dependencies are internally resolvable
     let internally_resolvable = graph.is_internally_resolvable();
-    println!("    • Internally resolvable: {}", internally_resolvable);
+    println!("    • Internally resolvable: {internally_resolvable}");
 
     // Count resolved vs unresolved dependencies
     let resolved_count = graph.resolved_dependencies().count();
     let unresolved_count = graph.unresolved_dependencies().count();
-    println!("    • Resolved dependencies: {}", resolved_count);
-    println!("    • External dependencies: {}", unresolved_count);
+    println!("    • Resolved dependencies: {resolved_count}");
+    println!("    • External dependencies: {unresolved_count}");
 
     // List external dependencies
     if unresolved_count > 0 {
@@ -351,7 +347,7 @@ fn resolve_version_conflicts(
 
     println!("    📦 Resolved versions:");
     for (package, version) in &resolution.resolved_versions {
-        println!("      - {}: {}", package, version);
+        println!("      - {package}: {version}");
     }
 
     if !resolution.updates_required.is_empty() {
@@ -401,9 +397,9 @@ fn create_package_infos(
 
         let package_info = PackageInfo::new(
             package.clone(),
-            format!("/workspace/packages/package-{}/package.json", i),
-            format!("/workspace/packages/package-{}", i),
-            format!("packages/package-{}", i),
+            format!("/workspace/packages/package-{i}/package.json"),
+            format!("/workspace/packages/package-{i}"),
+            format!("packages/package-{i}"),
             pkg_json,
         );
 
@@ -431,7 +427,7 @@ fn create_package_infos(
             first_info.update_dependency_version(&dep_name, "^99.0.0")?;
             let new_version = first_dep.borrow().version().to_string();
 
-            println!("      - Dependency {} updated: {} → {}", dep_name, old_version, new_version);
+            println!("      - Dependency {dep_name} updated: {old_version} → {new_version}");
         }
     }
 
@@ -463,7 +459,7 @@ fn track_package_changes(packages: &[Package]) -> Result<(), Box<dyn std::error:
     // Generate diff
     let diff = PackageDiff::between(original, &modified)?;
     println!("    📋 Package diff:");
-    println!("      {}", diff);
+    println!("      {diff}");
 
     // Demonstrate individual dependency changes
     println!("    🔍 Individual dependency changes:");
@@ -496,7 +492,7 @@ fn track_package_changes(packages: &[Package]) -> Result<(), Box<dyn std::error:
     let counts = diff.count_changes_by_type();
     println!("    📈 Change summary:");
     for (change_type, count) in counts {
-        println!("      - {}: {}", change_type, count);
+        println!("      - {change_type}: {count}");
     }
 
     println!("    🚨 Breaking changes: {}", diff.count_breaking_changes());
@@ -519,7 +515,7 @@ fn check_available_upgrades(
         ..UpgradeConfig::default()
     };
 
-    let mut conservative_upgrader = Upgrader::create(conservative_config, registry_manager.clone());
+    Upgrader::create(conservative_config, registry_manager.clone());
 
     // Mock some available versions in a local registry for testing
     let local_registry = setup_mock_local_registry()?;
@@ -537,13 +533,13 @@ fn check_available_upgrades(
         ..UpgradeConfig::default()
     };
 
-    let aggressive_upgrader = Upgrader::create(aggressive_config, registry_manager.clone());
+    Upgrader::create(aggressive_config, registry_manager.clone());
     println!("    ✓ Created upgraders with different strategies");
 
     // Demonstrate upgrade report generation
     let mock_upgrades = create_mock_upgrades();
     let report = Upgrader::generate_upgrade_report(&mock_upgrades);
-    println!("    📄 Sample upgrade report:\n{}", report);
+    println!("    📄 Sample upgrade report:\n{report}");
 
     Ok(())
 }
@@ -611,7 +607,7 @@ fn demonstrate_version_management() -> Result<(), Box<dyn std::error::Error>> {
     println!("  🏷️  Demonstrating version management:");
 
     let current_version = "1.2.3";
-    println!("    📦 Current version: {}", current_version);
+    println!("    📦 Current version: {current_version}");
 
     // Test version bumping
     let major_bump = Version::bump_major(current_version)?;
@@ -620,10 +616,10 @@ fn demonstrate_version_management() -> Result<(), Box<dyn std::error::Error>> {
     let snapshot = Version::bump_snapshot(current_version, "abc123")?;
 
     println!("    ⬆️  Version bumps:");
-    println!("      - Major: {}", major_bump);
-    println!("      - Minor: {}", minor_bump);
-    println!("      - Patch: {}", patch_bump);
-    println!("      - Snapshot: {}", snapshot);
+    println!("      - Major: {major_bump}");
+    println!("      - Minor: {minor_bump}");
+    println!("      - Patch: {patch_bump}");
+    println!("      - Snapshot: {snapshot}");
 
     // Test version comparison
     println!("    🔍 Version comparisons:");
@@ -650,6 +646,7 @@ fn demonstrate_version_management() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[allow(clippy::comparison_chain)]
 /// Visualize the dependency graph in multiple formats
 fn visualize_dependency_graph(
     graph: &DependencyGraph<Package>,
@@ -662,7 +659,7 @@ fn visualize_dependency_graph(
     // Print only first few lines to avoid cluttering test output
     for (i, line) in ascii.lines().enumerate() {
         if i < 10 {
-            println!("      {}", line);
+            println!("      {line}");
         } else if i == 10 {
             println!("      ... (truncated)");
             break;
@@ -687,7 +684,7 @@ fn visualize_dependency_graph(
     if dot_lines.len() > 5 {
         println!("    📝 DOT sample:");
         for line in &dot_lines[0..5] {
-            println!("      {}", line);
+            println!("      {line}");
         }
         println!("      ... (truncated)");
     }
@@ -724,8 +721,8 @@ fn test_advanced_scenarios(
     let ptr_equal = Rc::ptr_eq(&dep1, &dep2);
     let version_updated = dep1.borrow().version().to_string() == "^1.2.0";
 
-    println!("      - Same instance: {}", ptr_equal);
-    println!("      - Version updated to higher: {}", version_updated);
+    println!("      - Same instance: {ptr_equal}");
+    println!("      - Version updated to higher: {version_updated}");
 
     // Test complex version requirements
     println!("    📏 Testing complex version requirements:");
@@ -742,11 +739,10 @@ fn test_advanced_scenarios(
                 let matches_higher = dep.matches("1.5.0").unwrap_or(false);
                 let matches_lower = dep.matches("0.9.0").unwrap_or(false);
                 println!(
-                    "      - {} ({}): matches 1.5.0={}, matches 0.9.0={}",
-                    name, version, matches_higher, matches_lower
+                    "      - {name} ({version}): matches 1.5.0={matches_higher}, matches 0.9.0={matches_lower}",
                 );
             }
-            Err(e) => println!("      - {} failed: {}", name, e),
+            Err(e) => println!("      - {name} failed: {e}"),
         }
     }
 

@@ -71,10 +71,23 @@ impl PathUtils {
     /// ```
     pub fn find_project_root(start: &Path) -> Option<PathBuf> {
         let mut current = Some(start);
+
+        // Lock files that indicate project root
+        let lock_files = [
+            "package-lock.json", // npm
+            "yarn.lock",         // yarn
+            "pnpm-lock.yaml",    // pnpm
+            "bun.lockb",         // bun
+            "jsr.json",          // JSR
+        ];
+
         while let Some(path) = current {
-            if path.join("package.json").exists() {
-                return Some(path.to_path_buf());
+            for lock_file in &lock_files {
+                if path.join(lock_file).exists() {
+                    return Some(path.to_path_buf());
+                }
             }
+
             current = path.parent();
         }
         None
