@@ -112,6 +112,25 @@ mod registry_tests {
             fn as_any_mut(&mut self) -> &mut dyn Any {
                 self
             }
+
+            fn download_package(
+                &self,
+                _package_name: &str,
+                _version: &str,
+            ) -> Result<Vec<u8>, PackageRegistryError> {
+                // Mock implementation for testing
+                Ok(vec![0x1f, 0x8b, 0x08, 0x00]) // gzip magic bytes
+            }
+
+            fn download_and_extract_package(
+                &self,
+                _package_name: &str,
+                _version: &str,
+                _destination: &std::path::Path,
+            ) -> Result<(), PackageRegistryError> {
+                // Mock implementation for testing
+                Ok(())
+            }
         }
 
         // Create and test the registry
@@ -348,5 +367,171 @@ mod registry_tests {
         // Optional: Try loading from npmrc just to see if it completes without error
         let result = manager.load_from_npmrc(Some(&npmrc_path));
         assert!(result.is_ok(), "load_from_npmrc failed with: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_npm_registry_download_url_generation() {
+        let registry = NpmRegistry::default();
+
+        // Test regular package
+        let regular_url = registry.get_download_url("lodash", "4.17.21");
+        assert_eq!(regular_url, "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz");
+
+        // Test scoped package
+        let scoped_url = registry.get_download_url("@types/node", "18.15.0");
+        assert_eq!(scoped_url, "https://registry.npmjs.org/@types/node/-/node-18.15.0.tgz");
+
+        // Test scoped package with complex name
+        let complex_scoped_url = registry.get_download_url("@babel/core", "7.21.0");
+        assert_eq!(complex_scoped_url, "https://registry.npmjs.org/@babel/core/-/core-7.21.0.tgz");
+
+        // Test another regular package
+        let react_url = registry.get_download_url("react", "18.2.0");
+        assert_eq!(react_url, "https://registry.npmjs.org/react/-/react-18.2.0.tgz");
+    }
+
+    #[test]
+    fn test_npm_registry_download_url_with_custom_registry() {
+        let registry = NpmRegistry::new("https://custom-registry.example.com");
+
+        // Test regular package with custom registry
+        let regular_url = registry.get_download_url("lodash", "4.17.21");
+        assert_eq!(regular_url, "https://custom-registry.example.com/lodash/-/lodash-4.17.21.tgz");
+
+        // Test scoped package with custom registry
+        let scoped_url = registry.get_download_url("@types/node", "18.15.0");
+        assert_eq!(
+            scoped_url,
+            "https://custom-registry.example.com/@types/node/-/node-18.15.0.tgz"
+        );
+    }
+
+    #[test]
+    fn test_npm_registry_download_methods_exist() {
+        use std::path::Path;
+
+        // Create a test registry implementation to verify the trait methods exist
+        struct TestDownloadRegistry;
+
+        impl PackageRegistry for TestDownloadRegistry {
+            fn get_latest_version(
+                &self,
+                _package_name: &str,
+            ) -> Result<Option<String>, PackageRegistryError> {
+                Ok(Some("1.0.0".to_string()))
+            }
+
+            fn get_all_versions(
+                &self,
+                _package_name: &str,
+            ) -> Result<Vec<String>, PackageRegistryError> {
+                Ok(vec!["1.0.0".to_string()])
+            }
+
+            fn get_package_info(
+                &self,
+                package_name: &str,
+                version: &str,
+            ) -> Result<Value, PackageRegistryError> {
+                Ok(json!({
+                    "name": package_name,
+                    "version": version
+                }))
+            }
+
+            fn as_any(&self) -> &dyn Any {
+                self
+            }
+
+            fn as_any_mut(&mut self) -> &mut dyn Any {
+                self
+            }
+
+            fn download_package(
+                &self,
+                _package_name: &str,
+                _version: &str,
+            ) -> Result<Vec<u8>, PackageRegistryError> {
+                // Mock implementation - return some test bytes
+                Ok(vec![0x1f, 0x8b, 0x08, 0x00]) // gzip magic bytes
+            }
+
+            fn download_and_extract_package(
+                &self,
+                _package_name: &str,
+                _version: &str,
+                _destination: &Path,
+            ) -> Result<(), PackageRegistryError> {
+                // Mock implementation - just return success
+                Ok(())
+            }
+        }
+
+        let registry = TestDownloadRegistry;
+
+        // Test that download_package method exists and can be called
+        let result = registry.download_package("test-package", "1.0.0");
+        assert!(result.is_ok());
+        let bytes = result.unwrap();
+        assert_eq!(bytes, vec![0x1f, 0x8b, 0x08, 0x00]);
+
+        // Test that download_and_extract_package method exists and can be called
+        let extract_result =
+            registry.download_and_extract_package("test-package", "1.0.0", Path::new("/tmp/test"));
+        assert!(extract_result.is_ok());
+    }
+
+    #[allow(clippy::assertions_on_constants)]
+    #[test]
+    fn test_npm_registry_error_variants() {
+        use sublime_package_tools::PackageRegistryError;
+
+        // Test that new error variants exist and can be created
+        // Note: We can't easily create reqwest::Error in tests, so we'll test the structure
+        let io_error = std::io::Error::new(std::io::ErrorKind::Other, "test error");
+
+        // Test that we can match against the error variants
+        let test_error = PackageRegistryError::DirectoryCreationFailure {
+            path: "/tmp/test".to_string(),
+            source: io_error,
+        };
+
+        // Verify the error structure by converting a known error type
+        match test_error {
+            PackageRegistryError::DirectoryCreationFailure { .. } => {
+                // This proves the variant exists and matches
+                assert!(true);
+            }
+            _ => panic!("Wrong error variant"),
+        }
+
+        // Test other error variants
+        let extraction_error = PackageRegistryError::ExtractionFailure {
+            package_name: "test".to_string(),
+            version: "1.0.0".to_string(),
+            destination: "/tmp/test".to_string(),
+            source: std::io::Error::new(std::io::ErrorKind::Other, "extraction failed"),
+        };
+
+        let invalid_tarball_error = PackageRegistryError::InvalidTarball {
+            package_name: "test".to_string(),
+            version: "1.0.0".to_string(),
+            reason: "corrupt archive".to_string(),
+        };
+
+        let directory_error = PackageRegistryError::DirectoryCreationFailure {
+            path: "/tmp/test2".to_string(),
+            source: std::io::Error::new(std::io::ErrorKind::PermissionDenied, "permission denied"),
+        };
+
+        // Test error messages
+        assert!(extraction_error.to_string().contains("Failed to extract package"));
+        assert!(invalid_tarball_error.to_string().contains("Invalid package tarball format"));
+        assert!(directory_error.to_string().contains("Failed to create destination directory"));
+
+        // Test AsRef implementation
+        assert_eq!(extraction_error.as_ref(), "ExtractionFailure");
+        assert_eq!(invalid_tarball_error.as_ref(), "InvalidTarball");
+        assert_eq!(directory_error.as_ref(), "DirectoryCreationFailure");
     }
 }

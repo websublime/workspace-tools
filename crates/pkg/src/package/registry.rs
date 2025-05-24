@@ -4,14 +4,19 @@
 //! retrieving package metadata, and managing version information.
 
 use crate::{CacheEntry, PackageRegistryError};
+use flate2::read::GzDecoder;
 use reqwest::blocking::{Client, RequestBuilder};
 use serde_json::Value;
 use std::{
     any::Any,
     collections::HashMap,
+    fs,
+    io,
+    path::Path,
     sync::{Arc, Mutex},
     time::Duration,
 };
+use tar::Archive;
 
 /// Interface for package registry operations
 ///
@@ -67,6 +72,67 @@ pub trait PackageRegistry {
 
     /// Get the registry as mutable Any for downcasting
     fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    /// Download a package tarball and return the bytes
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to download
+    /// * `version` - Version of the package to download
+    ///
+    /// # Returns
+    ///
+    /// Package tarball as bytes, or a `PackageRegistryError` if the download fails
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_package_tools::{NpmRegistry, PackageRegistry};
+    ///
+    /// let registry = NpmRegistry::default();
+    /// let tarball_bytes = registry.download_package("lodash", "4.17.21")?;
+    /// println!("Downloaded {} bytes", tarball_bytes.len());
+    /// # Ok::<(), sublime_package_tools::PackageRegistryError>(())
+    /// ```
+    fn download_package(
+        &self,
+        package_name: &str,
+        version: &str,
+    ) -> Result<Vec<u8>, PackageRegistryError>;
+
+    /// Download and extract a package to a destination directory
+    ///
+    /// This method downloads the package tarball and extracts it to the specified
+    /// destination directory. The extracted contents will include the `package/`
+    /// directory structure as provided by npm.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to download and extract
+    /// * `version` - Version of the package to download and extract
+    /// * `destination` - Path where the package should be extracted
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, or a `PackageRegistryError` if any operation fails
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_package_tools::{NpmRegistry, PackageRegistry};
+    /// use std::path::Path;
+    ///
+    /// let registry = NpmRegistry::default();
+    /// let dest = Path::new("./packages/lodash");
+    /// registry.download_and_extract_package("lodash", "4.17.21", dest)?;
+    /// # Ok::<(), sublime_package_tools::PackageRegistryError>(())
+    /// ```
+    fn download_and_extract_package(
+        &self,
+        package_name: &str,
+        version: &str,
+        destination: &Path,
+    ) -> Result<(), PackageRegistryError>;
 }
 
 /// NPM registry client implementation
@@ -203,6 +269,75 @@ impl PackageRegistry for NpmRegistry {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
+
+    fn download_package(
+        &self,
+        package_name: &str,
+        version: &str,
+    ) -> Result<Vec<u8>, PackageRegistryError> {
+        let download_url = self.get_download_url(package_name, version);
+
+        let response = self
+            .build_request(&download_url)
+            .send()
+            .map_err(|e| PackageRegistryError::DownloadFailure {
+                package_name: package_name.to_string(),
+                version: version.to_string(),
+                source: e,
+            })?;
+
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Err(PackageRegistryError::NotFound {
+                package_name: package_name.to_string(),
+                version: version.to_string(),
+            });
+        }
+
+        let bytes = response.bytes().map_err(|e| PackageRegistryError::DownloadFailure {
+            package_name: package_name.to_string(),
+            version: version.to_string(),
+            source: e,
+        })?;
+
+        Ok(bytes.to_vec())
+    }
+
+    fn download_and_extract_package(
+        &self,
+        package_name: &str,
+        version: &str,
+        destination: &Path,
+    ) -> Result<(), PackageRegistryError> {
+        // Create destination directory if it doesn't exist
+        if let Err(e) = fs::create_dir_all(destination) {
+            return Err(PackageRegistryError::DirectoryCreationFailure {
+                path: destination.display().to_string(),
+                source: e,
+            });
+        }
+
+        // Download the package tarball
+        let tarball_bytes = self.download_package(package_name, version)?;
+
+        // Create a cursor from the bytes for reading
+        let cursor = io::Cursor::new(tarball_bytes);
+
+        // Create a gzip decoder
+        let gz_decoder = GzDecoder::new(cursor);
+
+        // Create a tar archive from the decompressed data
+        let mut archive = Archive::new(gz_decoder);
+
+        // Extract the archive to the destination
+        archive.unpack(destination).map_err(|e| PackageRegistryError::ExtractionFailure {
+            package_name: package_name.to_string(),
+            version: version.to_string(),
+            destination: destination.display().to_string(),
+            source: e,
+        })?;
+
+        Ok(())
+    }
 }
 
 impl NpmRegistry {
@@ -297,6 +432,45 @@ impl NpmRegistry {
         };
 
         format!("{}/{}", self.base_url, encoded_name)
+    }
+
+    /// Build a download URL for the package tarball
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package
+    /// * `version` - Version of the package
+    ///
+    /// # Returns
+    ///
+    /// Complete URL to download the package tarball
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::NpmRegistry;
+    ///
+    /// let registry = NpmRegistry::default();
+    /// let url = registry.get_download_url("lodash", "4.17.21");
+    /// assert!(url.contains("lodash"));
+    /// assert!(url.contains("4.17.21"));
+    /// ```
+    pub fn get_download_url(&self, package_name: &str, version: &str) -> String {
+        if package_name.starts_with('@') {
+            // Handle scoped packages: @scope/package -> @scope/package/-/package-version.tgz
+            let parts: Vec<&str> = package_name.splitn(2, '/').collect();
+            if parts.len() == 2 {
+                let _scope = parts[0]; // @scope
+                let name = parts[1]; // package
+                format!("{}/{}/-/{}-{}.tgz", self.base_url, package_name, name, version)
+            } else {
+                // Fallback for malformed scoped package names
+                format!("{}/{}/-/{}-{}.tgz", self.base_url, package_name, package_name, version)
+            }
+        } else {
+            // Regular packages: package -> package/-/package-version.tgz
+            format!("{}/{}/-/{}-{}.tgz", self.base_url, package_name, package_name, version)
+        }
     }
 
     /// Build a request with appropriate headers

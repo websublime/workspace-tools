@@ -92,6 +92,33 @@ pub enum PackageRegistryError {
     NotFound { package_name: String, version: String },
     #[error("Failed to acquire lock on packages")]
     LockFailure,
+    #[error("Failed to download package {package_name}@{version}: {source}")]
+    DownloadFailure {
+        package_name: String,
+        version: String,
+        #[source]
+        source: reqwest::Error,
+    },
+    #[error("Failed to extract package {package_name}@{version} to {destination}: {source}")]
+    ExtractionFailure {
+        package_name: String,
+        version: String,
+        destination: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("Invalid package tarball format for {package_name}@{version}: {reason}")]
+    InvalidTarball {
+        package_name: String,
+        version: String,
+        reason: String,
+    },
+    #[error("Failed to create destination directory {path}: {source}")]
+    DirectoryCreationFailure {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 impl AsRef<str> for PackageRegistryError {
@@ -101,6 +128,10 @@ impl AsRef<str> for PackageRegistryError {
             PackageRegistryError::JsonParseFailure(_) => "JsonParseFailure",
             PackageRegistryError::NotFound { package_name: _, version: _ } => "NotFound",
             PackageRegistryError::LockFailure => "LockFailure",
+            PackageRegistryError::DownloadFailure { package_name: _, version: _, source: _ } => "DownloadFailure",
+            PackageRegistryError::ExtractionFailure { package_name: _, version: _, destination: _, source: _ } => "ExtractionFailure",
+            PackageRegistryError::InvalidTarball { package_name: _, version: _, reason: _ } => "InvalidTarball",
+            PackageRegistryError::DirectoryCreationFailure { path: _, source: _ } => "DirectoryCreationFailure",
         }
     }
 }

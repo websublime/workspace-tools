@@ -10,6 +10,7 @@ use serde_json::{json, Value};
 use std::{
     any::Any,
     collections::HashMap,
+    path::Path,
     sync::{Arc, Mutex},
 };
 
@@ -117,6 +118,106 @@ impl PackageRegistry for LocalRegistry {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn download_package(
+        &self,
+        package_name: &str,
+        version: &str,
+    ) -> Result<Vec<u8>, PackageRegistryError> {
+        // For LocalRegistry, we simulate a package download by checking if the package exists
+        // and returning mock tarball data
+        let packages = self.packages.lock()?;
+
+        if let Some(versions) = packages.get(package_name) {
+            if versions.contains_key(version) {
+                // Return mock gzip tarball header followed by some data
+                // This simulates a real tarball without actual tar content
+                let mock_tarball = vec![
+                    0x1f, 0x8b, 0x08, 0x00, // gzip magic header
+                    0x00, 0x00, 0x00, 0x00, // timestamp
+                    0x00, 0xff, // extra flags
+                    // Mock tar content would follow here
+                    0x70, 0x61, 0x63, 0x6b, 0x61, 0x67, 0x65, 0x2e, 0x6a, 0x73, 0x6f, 0x6e, // "package.json"
+                ];
+                Ok(mock_tarball)
+            } else {
+                Err(PackageRegistryError::NotFound {
+                    package_name: package_name.to_string(),
+                    version: version.to_string(),
+                })
+            }
+        } else {
+            Err(PackageRegistryError::NotFound {
+                package_name: package_name.to_string(),
+                version: version.to_string(),
+            })
+        }
+    }
+
+    fn download_and_extract_package(
+        &self,
+        package_name: &str,
+        version: &str,
+        destination: &Path,
+    ) -> Result<(), PackageRegistryError> {
+        // For LocalRegistry, we simulate extraction by creating a basic directory structure
+        use std::fs;
+
+        // Check if package exists
+        let packages = self.packages.lock()?;
+        if let Some(versions) = packages.get(package_name) {
+            if !versions.contains_key(version) {
+                return Err(PackageRegistryError::NotFound {
+                    package_name: package_name.to_string(),
+                    version: version.to_string(),
+                });
+            }
+        } else {
+            return Err(PackageRegistryError::NotFound {
+                package_name: package_name.to_string(),
+                version: version.to_string(),
+            });
+        }
+
+        // Create destination directory
+        if let Err(e) = fs::create_dir_all(destination) {
+            return Err(PackageRegistryError::DirectoryCreationFailure {
+                path: destination.display().to_string(),
+                source: e,
+            });
+        }
+
+        // Create package subdirectory (npm packages are extracted to package/ subdirectory)
+        let package_dir = destination.join("package");
+        if let Err(e) = fs::create_dir_all(&package_dir) {
+            return Err(PackageRegistryError::DirectoryCreationFailure {
+                path: package_dir.display().to_string(),
+                source: e,
+            });
+        }
+
+        // Create a mock package.json file
+        let package_info = packages.get(package_name)
+            .and_then(|versions| versions.get(version))
+            .cloned()
+            .unwrap_or_else(|| json!({
+                "name": package_name,
+                "version": version,
+                "_note": "Mock package created by LocalRegistry"
+            }));
+
+        let package_json_path = package_dir.join("package.json");
+        if let Err(e) = fs::write(&package_json_path, serde_json::to_string_pretty(&package_info).unwrap()) {
+            return Err(PackageRegistryError::ExtractionFailure {
+                package_name: package_name.to_string(),
+                version: version.to_string(),
+                destination: destination.display().to_string(),
+                source: e,
+            });
+        }
+
+        Ok(())
     }
 }
 
