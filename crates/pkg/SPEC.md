@@ -1,6 +1,6 @@
 # sublime_package_tools API Specification
 
-This document provides a comprehensive overview of the `sublime_package_tools` crate, designed for managing Node.js packages, dependency graphs, and version handling in Rust.
+A comprehensive API specification for the sublime_package_tools Rust library.
 
 ## Table of Contents
 
@@ -27,6 +27,7 @@ This document provides a comprehensive overview of the `sublime_package_tools` c
   - [Graph Building](#graph-building)
 - [Registry Management](#registry-management)
   - [PackageRegistry](#packageregistry)
+  - [PackageRegistryClone](#packageregistryclone)
   - [NpmRegistry](#npmregistry)
   - [LocalRegistry](#localregistry)
   - [RegistryManager](#registrymanager)
@@ -50,19 +51,20 @@ This document provides a comprehensive overview of the `sublime_package_tools` c
 
 ## Overview
 
-`sublime_package_tools` is a robust library for managing Node.js packages, dependency graphs, and version handling in Rust. Key features include:
+The `sublime_package_tools` library provides comprehensive tools for managing Node.js packages, dependencies, and version handling in Rust applications. It supports dependency graph analysis, package registry interactions, version comparisons, and automated dependency upgrades.
 
-- **Dependency Management**: Parse, validate, and manipulate package dependencies
-- **Version Handling**: Semantic versioning utilities, compatibility checking, and upgrade strategies
-- **Dependency Graph**: Build and visualize dependency graphs with cycle detection
-- **Package Registry**: Interface with npm and other package registries
-- **Upgrader**: Find and apply dependency upgrades with various strategies
+Key features include:
+- Package and dependency management with semantic versioning
+- Dependency graph construction and analysis with cycle detection
+- Integration with npm and custom package registries
+- Automated dependency upgrade detection and application
+- Comprehensive error handling and validation
 
 ## Package Management
 
 ### Package
 
-Represents a Node.js package with name, version, and dependencies.
+Represents a Node.js package with its dependencies and version information.
 
 ```rust
 pub struct Package {
@@ -70,14 +72,14 @@ pub struct Package {
 }
 
 impl Package {
-    // Create a new package with dependencies
+    // Create a new package with name, version, and optional dependencies
     pub fn new(
         name: &str,
         version: &str,
         dependencies: Option<Vec<Rc<RefCell<Dependency>>>>
     ) -> Result<Self, VersionError>;
     
-    // Create a new package using a dependency registry
+    // Create a new package using the dependency registry
     pub fn new_with_registry(
         name: &str,
         version: &str,
@@ -88,8 +90,8 @@ impl Package {
     // Get the package name
     pub fn name(&self) -> &str;
     
-    // Get the package version as a semver::Version
-    pub fn version(&self) -> semver::Version;
+    // Get the package version
+    pub fn version(&self) -> Version;
     
     // Get the package version as a string
     pub fn version_str(&self) -> String;
@@ -97,7 +99,7 @@ impl Package {
     // Update the package version
     pub fn update_version(&self, new_version: &str) -> Result<(), VersionError>;
     
-    // Get package dependencies
+    // Get the package dependencies
     pub fn dependencies(&self) -> &[Rc<RefCell<Dependency>>];
     
     // Update a dependency version
@@ -121,7 +123,6 @@ impl Node for Package {
     type DependencyType = Dependency;
     type Identifier = String;
     
-    // Implement Node trait methods for dependency graph operations
     fn dependencies(&self) -> Vec<&Self::DependencyType>;
     fn dependencies_vec(&self) -> Vec<Self::DependencyType>;
     fn matches(&self, dependency: &Self::DependencyType) -> bool;
@@ -131,7 +132,7 @@ impl Node for Package {
 
 ### PackageInfo
 
-Bridges structured `Package` representation with raw package.json content.
+Represents a package along with its JSON data and file paths.
 
 ```rust
 pub struct PackageInfo {
@@ -139,7 +140,7 @@ pub struct PackageInfo {
     pub package_json_path: String,
     pub package_path: String,
     pub package_relative_path: String,
-    pub pkg_json: Rc<RefCell<serde_json::Value>>,
+    pub pkg_json: Rc<RefCell<Value>>,
 }
 
 impl PackageInfo {
@@ -149,7 +150,7 @@ impl PackageInfo {
         package_json_path: String,
         package_path: String,
         package_relative_path: String,
-        pkg_json: serde_json::Value
+        pkg_json: Value
     ) -> Self;
     
     // Update the package version
@@ -175,7 +176,7 @@ impl PackageInfo {
 
 ### PackageDiff
 
-Represents differences between two versions of a package.
+Represents the differences between two versions of a package.
 
 ```rust
 pub struct PackageDiff {
@@ -225,7 +226,7 @@ impl<T: Clone> CacheEntry<T> {
 
 ### Package Scoping
 
-Utilities for parsing and manipulating scoped package names.
+Utilities for working with scoped package names.
 
 ```rust
 pub struct PackageScopeMetadata {
@@ -258,13 +259,13 @@ impl Dependency {
     pub fn name(&self) -> &str;
     
     // Returns the version requirement of the dependency
-    pub fn version(&self) -> semver::VersionReq;
+    pub fn version(&self) -> VersionReq;
     
     // Extracts the fixed version from the version requirement
-    pub fn fixed_version(&self) -> Result<semver::Version, VersionError>;
+    pub fn fixed_version(&self) -> Result<Version, VersionError>;
     
     // Compares the dependency's version with another version string
-    pub fn compare_versions(&self, other: &str) -> Result<std::cmp::Ordering, VersionError>;
+    pub fn compare_versions(&self, other: &str) -> Result<Ordering, VersionError>;
     
     // Updates the version requirement to a new value
     pub fn update_version(&self, new_version: &str) -> Result<(), VersionError>;
@@ -274,14 +275,13 @@ impl Dependency {
 }
 
 impl std::fmt::Display for Dependency {
-    // Formats a dependency as "name@version"
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
 }
 ```
 
 ### DependencyRegistry
 
-Central repository for managing dependencies.
+A registry for managing and reusing dependency instances.
 
 ```rust
 pub struct DependencyRegistry {
@@ -291,6 +291,12 @@ pub struct DependencyRegistry {
 impl DependencyRegistry {
     // Creates a new, empty dependency registry
     pub fn new() -> Self;
+    
+    // Creates a new dependency registry with a package registry for enhanced version resolution
+    pub fn with_package_registry(package_registry: Box<dyn PackageRegistryClone>) -> Self;
+    
+    // Sets the package registry for this dependency registry
+    pub fn set_package_registry(&mut self, package_registry: Box<dyn PackageRegistryClone>);
     
     // Gets an existing dependency or creates a new one
     pub fn get_or_create(
@@ -305,12 +311,18 @@ impl DependencyRegistry {
     // Resolve version conflicts between dependencies
     pub fn resolve_version_conflicts(&self) -> Result<ResolutionResult, VersionError>;
     
+    // Get all versions of a package from the package registry
+    pub fn get_package_versions(&self, package_name: &str) -> Result<Vec<String>, PackageRegistryError>;
+    
+    // Check if the registry has package registry capabilities
+    pub fn has_package_registry(&self) -> bool;
+    
     // Find highest version that is compatible with all requirements
     pub fn find_highest_compatible_version(
         &self,
         name: &str,
         requirements: &[&VersionReq]
-    ) -> String;
+    ) -> Result<String, PackageRegistryError>;
     
     // Apply the resolution result to update all dependencies
     pub fn apply_resolution_result(
@@ -359,7 +371,6 @@ pub enum DependencyFilter {
 }
 
 impl Default for DependencyFilter {
-    // Returns the default filter configuration (WithDevelopment)
     fn default() -> Self;
 }
 ```
@@ -396,25 +407,31 @@ A graph representation of dependencies between packages.
 
 ```rust
 pub struct DependencyGraph<'a, N: Node> {
-    pub graph: petgraph::stable_graph::StableDiGraph<Step<'a, N>, ()>,
-    pub node_indices: HashMap<N::Identifier, petgraph::stable_graph::NodeIndex>,
+    pub graph: StableDiGraph<Step<'a, N>, ()>,
+    pub node_indices: HashMap<N::Identifier, NodeIndex>,
     pub dependents: HashMap<N::Identifier, Vec<N::Identifier>>,
     pub cycles: Vec<Vec<N::Identifier>>,
 }
 
-impl<'a, N> From<&'a [N]> for DependencyGraph<'a, N> where N: Node {
-    // Creates a dependency graph from a slice of nodes
+impl<'a, N> From<&'a [N]> for DependencyGraph<'a, N>
+where
+    N: Node,
+{
     fn from(nodes: &'a [N]) -> Self;
 }
 
-impl<'a, N> Iterator for DependencyGraph<'a, N> where N: Node {
+impl<'a, N> Iterator for DependencyGraph<'a, N>
+where
+    N: Node,
+{
     type Item = Step<'a, N>;
-
-    // Returns the next resolved node in topological order (leaf nodes first)
     fn next(&mut self) -> Option<Self::Item>;
 }
 
-impl<'a, N> DependencyGraph<'a, N> where N: Node {
+impl<'a, N> DependencyGraph<'a, N>
+where
+    N: Node,
+{
     // Checks if all dependencies in the graph can be resolved internally
     pub fn is_internally_resolvable(&self) -> bool;
     
@@ -425,7 +442,7 @@ impl<'a, N> DependencyGraph<'a, N> where N: Node {
     pub fn resolved_dependencies(&self) -> impl Iterator<Item = &N>;
     
     // Gets the graph index for a node with the given identifier
-    pub fn get_node_index(&self, id: &N::Identifier) -> Option<petgraph::stable_graph::NodeIndex>;
+    pub fn get_node_index(&self, id: &N::Identifier) -> Option<NodeIndex>;
     
     // Gets the node with the given identifier
     pub fn get_node(&self, id: &N::Identifier) -> Option<&Step<'a, N>>;
@@ -443,31 +460,45 @@ impl<'a, N> DependencyGraph<'a, N> where N: Node {
     pub fn get_cycle_strings(&self) -> Vec<Vec<String>>;
     
     // Find all external dependencies in the workspace
-    pub fn find_external_dependencies(&self) -> Vec<String> where N: Node<DependencyType = Dependency>;
+    pub fn find_external_dependencies(&self) -> Vec<String>
+    where
+        N: Node<DependencyType = Dependency>;
     
     // Find all version conflicts in the graph for Package nodes
-    pub fn find_version_conflicts_for_package(&self) -> HashMap<String, Vec<String>> 
-        where N: Node<DependencyType = Dependency>;
+    pub fn find_version_conflicts_for_package(&self) -> HashMap<String, Vec<String>>
+    where
+        N: Node<DependencyType = Dependency>;
     
     // Find all version conflicts in the dependency graph
-    pub fn find_version_conflicts(&self) -> Option<HashMap<String, Vec<String>>> 
-        where N: Node<DependencyType = Dependency>;
+    pub fn find_version_conflicts(&self) -> Option<HashMap<String, Vec<String>>>
+    where
+        N: Node<DependencyType = Dependency>;
     
     // Validates the dependency graph for Package nodes, checking for various issues
-    pub fn validate_package_dependencies(&self) -> Result<ValidationReport, DependencyResolutionError> 
-        where N: Node<DependencyType = Dependency>;
+    pub fn validate_package_dependencies(
+        &self,
+    ) -> Result<ValidationReport, DependencyResolutionError>
+    where
+        N: Node<DependencyType = Dependency>;
     
     // Get dependents of a node, even if cycles exist
-    pub fn get_dependents(&mut self, id: &N::Identifier) -> Result<&Vec<N::Identifier>, PackageError>;
+    pub fn get_dependents(
+        &mut self,
+        id: &N::Identifier,
+    ) -> Result<&Vec<N::Identifier>, PackageError>;
     
     // Check if dependencies can be upgraded to newer compatible versions
-    pub fn check_upgradable_dependencies(&self) -> HashMap<String, Vec<(String, String)>> 
-        where N: Node<DependencyType = Dependency>;
+    pub fn check_upgradable_dependencies(&self) -> HashMap<String, Vec<(String, String)>>
+    where
+        N: Node<DependencyType = Dependency>;
     
-    // Validates the dependency graph for Package nodes with custom options
-    pub fn validate_with_options(&self, options: &ValidationOptions) 
-        -> Result<ValidationReport, DependencyResolutionError> 
-        where N: Node<DependencyType = Dependency>;
+    // Validates the dependency graph with custom options
+    pub fn validate_with_options(
+        &self,
+        options: &ValidationOptions,
+    ) -> Result<ValidationReport, DependencyResolutionError>
+    where
+        N: Node<DependencyType = Dependency>;
 }
 ```
 
@@ -486,7 +517,7 @@ pub trait Node {
     fn dependencies(&self) -> Vec<&Self::DependencyType>;
     // Returns dependencies as owned values
     fn dependencies_vec(&self) -> Vec<Self::DependencyType>;
-    // Returns true if the `dependency` can be met by this node
+    // Returns true if the dependency can be met by this node
     fn matches(&self, dependency: &Self::DependencyType) -> bool;
     // Returns the unique identifier for this node
     fn identifier(&self) -> Self::Identifier;
@@ -516,22 +547,17 @@ impl<'a, N: Node> std::fmt::Display for Step<'a, N> {
 
 ### Validation
 
-Types and functions for validating dependency graphs.
+Validation types for dependency graphs.
 
 ```rust
 pub enum ValidationIssue {
-    // Circular dependency detected
     CircularDependency { path: Vec<String> },
-    // Unresolved dependency
     UnresolvedDependency { name: String, version_req: String },
-    // Version conflict
     VersionConflict { name: String, versions: Vec<String> },
 }
 
 impl ValidationIssue {
-    // Returns true if this is a critical issue that should be fixed
     pub fn is_critical(&self) -> bool;
-    // Returns a descriptive message for this issue
     pub fn message(&self) -> String;
 }
 
@@ -556,21 +582,19 @@ pub struct ValidationOptions {
 }
 
 impl ValidationOptions {
-    // Create new validation options with default settings
     pub fn new() -> Self;
-    // Treat unresolved dependencies as external (don't flag them as errors)
     pub fn treat_unresolved_as_external(self, value: bool) -> Self;
-    // Set list of packages that should be considered internal
     pub fn with_internal_packages<I, S>(self, packages: I) -> Self
-        where I: IntoIterator<Item = S>, S: Into<String>;
-    // Check if a dependency should be treated as internal
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>;
     pub fn is_internal_dependency(&self, name: &str) -> bool;
 }
 ```
 
 ### Graph Visualization
 
-Functions for visualizing dependency graphs.
+Generate visual representations of dependency graphs.
 
 ```rust
 pub struct DotOptions {
@@ -586,7 +610,7 @@ impl Default for DotOptions {
 // Generate DOT format representation of a dependency graph
 pub fn generate_dot<N: Node>(
     graph: &DependencyGraph<N>,
-    options: &DotOptions
+    options: &DotOptions,
 ) -> Result<String, std::fmt::Error>;
 
 // Save DOT output to a file
@@ -598,7 +622,7 @@ pub fn generate_ascii<N: Node>(graph: &DependencyGraph<N>) -> Result<String, std
 
 ### Graph Building
 
-Functions for building dependency graphs.
+Utility functions for building dependency graphs.
 
 ```rust
 // Build a dependency graph from packages
@@ -607,7 +631,7 @@ pub fn build_dependency_graph_from_packages(packages: &[Package]) -> DependencyG
 // Build a dependency graph from package infos
 pub fn build_dependency_graph_from_package_infos<'a>(
     package_infos: &[PackageInfo],
-    packages: &'a mut Vec<Package>
+    packages: &'a mut Vec<Package>,
 ) -> DependencyGraph<'a, Package>;
 ```
 
@@ -626,13 +650,24 @@ pub trait PackageRegistry {
     fn get_all_versions(&self, package_name: &str) -> Result<Vec<String>, PackageRegistryError>;
     
     // Get metadata about a package
-    fn get_package_info(&self, package_name: &str, version: &str) -> Result<serde_json::Value, PackageRegistryError>;
+    fn get_package_info(&self, package_name: &str, version: &str) -> Result<Value, PackageRegistryError>;
     
     // Get the registry as Any for downcasting
-    fn as_any(&self) -> &dyn std::any::Any;
+    fn as_any(&self) -> &dyn Any;
     
     // Get the registry as mutable Any for downcasting
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+```
+
+### PackageRegistryClone
+
+Trait for package registries that can be cloned.
+
+```rust
+pub trait PackageRegistryClone: PackageRegistry {
+    // Clone the package registry implementation
+    fn clone_box(&self) -> Box<dyn PackageRegistryClone>;
 }
 ```
 
@@ -651,6 +686,10 @@ impl Default for NpmRegistry {
 
 impl PackageRegistry for NpmRegistry {
     // Implements the PackageRegistry trait
+}
+
+impl PackageRegistryClone for NpmRegistry {
+    fn clone_box(&self) -> Box<dyn PackageRegistryClone>;
 }
 
 impl NpmRegistry {
@@ -686,6 +725,33 @@ impl Default for LocalRegistry {
 
 impl PackageRegistry for LocalRegistry {
     // Implements the PackageRegistry trait
+}
+
+impl PackageRegistryClone for LocalRegistry {
+    fn clone_box(&self) -> Box<dyn PackageRegistryClone>;
+}
+
+impl LocalRegistry {
+    // Add a package version to the local registry
+    pub fn add_package_version(
+        &self,
+        package_name: &str,
+        version: &str,
+        metadata: Option<Value>,
+    ) -> Result<(), PackageRegistryError>;
+    
+    // Add multiple versions for a package at once
+    pub fn add_package_versions(
+        &self,
+        package_name: &str,
+        versions: &[&str],
+    ) -> Result<(), PackageRegistryError>;
+    
+    // Clear all packages from the registry
+    pub fn clear(&self) -> Result<(), PackageRegistryError>;
+    
+    // Check if a package exists in the registry
+    pub fn has_package(&self, package_name: &str) -> Result<bool, PackageRegistryError>;
 }
 ```
 
@@ -725,32 +791,49 @@ impl RegistryManager {
     pub fn add_registry_instance(
         &mut self,
         url: &str,
-        registry: Arc<dyn PackageRegistry + Send + Sync>
+        registry: Arc<dyn PackageRegistry + Send + Sync>,
     ) -> &Self;
     
     // Set authentication for a registry
-    pub fn set_auth(&mut self, registry_url: &str, auth: RegistryAuth) -> Result<&Self, RegistryError>;
+    pub fn set_auth(
+        &mut self,
+        registry_url: &str,
+        auth: RegistryAuth,
+    ) -> Result<&Self, RegistryError>;
     
     // Associate a scope with a specific registry
-    pub fn associate_scope(&mut self, scope: &str, registry_url: &str) -> Result<&Self, RegistryError>;
+    pub fn associate_scope(
+        &mut self,
+        scope: &str,
+        registry_url: &str,
+    ) -> Result<&Self, RegistryError>;
     
     // Set the default registry
     pub fn set_default_registry(&mut self, registry_url: &str) -> Result<&Self, RegistryError>;
     
     // Get the appropriate registry for a package
-    pub fn get_registry_for_package(&self, package_name: &str) -> Arc<dyn PackageRegistry + Send + Sync>;
+    pub fn get_registry_for_package(
+        &self,
+        package_name: &str,
+    ) -> Arc<dyn PackageRegistry + Send + Sync>;
     
     // Get the latest version of a package
-    pub fn get_latest_version(&self, package_name: &str) -> Result<Option<String>, PackageRegistryError>;
+    pub fn get_latest_version(
+        &self,
+        package_name: &str,
+    ) -> Result<Option<String>, PackageRegistryError>;
     
     // Get all available versions of a package
-    pub fn get_all_versions(&self, package_name: &str) -> Result<Vec<String>, PackageRegistryError>;
+    pub fn get_all_versions(
+        &self,
+        package_name: &str,
+    ) -> Result<Vec<String>, PackageRegistryError>;
     
     // Get metadata about a package
     pub fn get_package_info(
         &self,
         package_name: &str,
-        version: &str
+        version: &str,
     ) -> Result<serde_json::Value, PackageRegistryError>;
     
     // Load configuration from .npmrc file
@@ -810,26 +893,26 @@ impl Upgrader {
     pub fn check_dependency_upgrade(
         &mut self,
         package_name: &str,
-        dependency: &Dependency
+        dependency: &Dependency,
     ) -> Result<AvailableUpgrade, PackageRegistryError>;
     
     // Check all dependencies in a package for available upgrades
     pub fn check_package_upgrades(
         &mut self,
-        package: &Package
+        package: &Package,
     ) -> Result<Vec<AvailableUpgrade>, PackageRegistryError>;
     
     // Check all packages in a collection for available upgrades
     pub fn check_all_upgrades(
         &mut self,
-        packages: &[Package]
+        packages: &[Package],
     ) -> Result<Vec<AvailableUpgrade>, PackageRegistryError>;
     
     // Apply upgrades to packages based on what was found
     pub fn apply_upgrades(
         &self,
         packages: &[Rc<RefCell<Package>>],
-        upgrades: &[AvailableUpgrade]
+        upgrades: &[AvailableUpgrade],
     ) -> Result<Vec<AvailableUpgrade>, DependencyResolutionError>;
     
     // Generate a report of upgrades in a human-readable format
@@ -872,17 +955,11 @@ Status of a dependency in relation to available updates.
 
 ```rust
 pub enum UpgradeStatus {
-    // Dependency is up to date
     UpToDate,
-    // Patch update available (0.0.x)
     PatchAvailable(String),
-    // Minor update available (0.x.0)
     MinorAvailable(String),
-    // Major update available (x.0.0)
     MajorAvailable(String),
-    // Version requirements don't allow update
     Constrained(String),
-    // Failed to check for updates
     CheckFailed(String),
 }
 
@@ -916,13 +993,11 @@ impl fmt::Display for AvailableUpgrade {
 
 ### ExecutionMode
 
-Determines whether upgrades should be applied or only reported.
+Execution mode for upgrades.
 
 ```rust
 pub enum ExecutionMode {
-    // Only report potential upgrades without applying them
     DryRun,
-    // Apply upgrades to packages
     Apply,
 }
 
@@ -950,21 +1025,21 @@ impl From<&str> for Version {
 }
 
 impl Display for Version {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult;
+    fn fmt(&self, f: &mut Formatter) -> Result;
 }
 
 impl Version {
     // Bumps the version of the package to major
-    pub fn bump_major(version: &str) -> Result<semver::Version, VersionError>;
+    pub fn bump_major(version: &str) -> Result<SemVersion, VersionError>;
     
     // Bumps the version of the package to minor
-    pub fn bump_minor(version: &str) -> Result<semver::Version, VersionError>;
+    pub fn bump_minor(version: &str) -> Result<SemVersion, VersionError>;
     
     // Bumps the version of the package to patch
-    pub fn bump_patch(version: &str) -> Result<semver::Version, VersionError>;
+    pub fn bump_patch(version: &str) -> Result<SemVersion, VersionError>;
     
     // Bumps the version of the package to snapshot appending the sha to the version
-    pub fn bump_snapshot(version: &str, sha: &str) -> Result<semver::Version, VersionError>;
+    pub fn bump_snapshot(version: &str, sha: &str) -> Result<SemVersion, VersionError>;
     
     // Compare two version strings and return their relationship
     pub fn compare_versions(v1: &str, v2: &str) -> VersionRelationship;
@@ -973,7 +1048,7 @@ impl Version {
     pub fn is_breaking_change(v1: &str, v2: &str) -> bool;
     
     // Parse a version string into a semantic version
-    pub fn parse(version: &str) -> Result<semver::Version, VersionError>;
+    pub fn parse(version: &str) -> Result<SemVersion, VersionError>;
 }
 ```
 
@@ -983,11 +1058,8 @@ Controls what types of version updates are allowed when upgrading dependencies.
 
 ```rust
 pub enum VersionUpdateStrategy {
-    // Only upgrade patch versions (0.0.x)
     PatchOnly,
-    // Upgrade patch and minor versions (0.x.y)
     MinorAndPatch,
-    // Upgrade all versions including major ones (x.y.z)
     AllUpdates,
 }
 
@@ -1002,9 +1074,7 @@ Controls whether prerelease versions are included in upgrades.
 
 ```rust
 pub enum VersionStability {
-    // Only include stable versions
     StableOnly,
-    // Include prereleases and stable versions
     IncludePrerelease,
 }
 
@@ -1015,38 +1085,26 @@ impl Default for VersionStability {
 
 ### VersionRelationship
 
-Describes how two versions relate to each other.
+Relationship between two semantic versions.
 
 ```rust
 pub enum VersionRelationship {
-    // Second version is a major upgrade (1.0.0 -> 2.0.0)
     MajorUpgrade,
-    // Second version is a minor upgrade (1.0.0 -> 1.1.0)
     MinorUpgrade,
-    // Second version is a patch upgrade (1.0.0 -> 1.0.1)
     PatchUpgrade,
-    // Moved from prerelease to stable (1.0.0-alpha -> 1.0.0)
     PrereleaseToStable,
-    // Newer prerelease version (1.0.0-alpha -> 1.0.0-beta)
     NewerPrerelease,
-    // Versions are identical (1.0.0 == 1.0.0)
     Identical,
-    // Second version is a major downgrade (2.0.0 -> 1.0.0)
     MajorDowngrade,
-    // Second version is a minor downgrade (1.1.0 -> 1.0.0)
     MinorDowngrade,
-    // Second version is a patch downgrade (1.0.1 -> 1.0.0)
     PatchDowngrade,
-    // Moved from stable to prerelease (1.0.0 -> 1.0.0-alpha)
     StableToPrerelease,
-    // Older prerelease version (1.0.0-beta -> 1.0.0-alpha)
     OlderPrerelease,
-    // Version comparison couldn't be determined (invalid versions)
     Indeterminate,
 }
 
 impl Display for VersionRelationship {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> FmtResult;
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result;
 }
 ```
 
@@ -1058,12 +1116,10 @@ Errors that can occur when working with semantic versions.
 
 ```rust
 pub enum VersionError {
-    // Indicates that a version string couldn't be parsed according to semver rules
     Parse {
         error: semver::Error,
         message: String,
     },
-    // Indicates that a version is invalid for business logic reasons
     InvalidVersion(String),
 }
 
@@ -1189,4 +1245,3 @@ impl Clone for RegistryError {
     fn clone(&self) -> Self;
 }
 ```
-
