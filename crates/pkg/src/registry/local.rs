@@ -4,8 +4,9 @@
 //! useful for testing and simulating registry behavior without network calls.
 
 use crate::{PackageRegistry, PackageRegistryError};
+use crate::package::registry::PackageRegistryClone;
 use semver::Version;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::{
     any::Any,
     collections::HashMap,
@@ -116,5 +117,182 @@ impl PackageRegistry for LocalRegistry {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+}
+
+impl PackageRegistryClone for LocalRegistry {
+    fn clone_box(&self) -> Box<dyn PackageRegistryClone> {
+        Box::new(self.clone())
+    }
+}
+
+impl LocalRegistry {
+    /// Add a package version to the local registry
+    ///
+    /// This method is primarily useful for testing scenarios where you need
+    /// to populate the registry with known package versions.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package
+    /// * `version` - Version string of the package
+    /// * `metadata` - Optional JSON metadata for the package version
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if the package was added successfully, or a `PackageRegistryError` if the operation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::LocalRegistry;
+    /// use serde_json::json;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let registry = LocalRegistry::default();
+    /// 
+    /// // Add a package version
+    /// registry.add_package_version(
+    ///     "react",
+    ///     "18.2.0",
+    ///     Some(json!({"name": "react", "version": "18.2.0"}))
+    /// )?;
+    ///
+    /// // Add another version
+    /// registry.add_package_version("react", "17.0.2", None)?;
+    ///
+    /// // Now the registry contains these versions
+    /// let versions = registry.get_all_versions("react")?;
+    /// assert_eq!(versions.len(), 2);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn add_package_version(
+        &self,
+        package_name: &str,
+        version: &str,
+        metadata: Option<Value>,
+    ) -> Result<(), PackageRegistryError> {
+        let mut packages = self.packages.lock()?;
+        
+        let package_metadata = metadata.unwrap_or_else(|| {
+            json!({
+                "name": package_name,
+                "version": version
+            })
+        });
+        
+        packages
+            .entry(package_name.to_string())
+            .or_default()
+            .insert(version.to_string(), package_metadata);
+        
+        Ok(())
+    }
+
+    /// Add multiple versions for a package at once
+    ///
+    /// This is a convenience method for adding several versions of the same package.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package
+    /// * `versions` - List of version strings to add
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if all versions were added successfully, or a `PackageRegistryError` if any operation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::LocalRegistry;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let registry = LocalRegistry::default();
+    /// 
+    /// // Add multiple versions at once
+    /// registry.add_package_versions("lodash", &["4.17.20", "4.17.21"])?;
+    ///
+    /// let versions = registry.get_all_versions("lodash")?;
+    /// assert_eq!(versions.len(), 2);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn add_package_versions(
+        &self,
+        package_name: &str,
+        versions: &[&str],
+    ) -> Result<(), PackageRegistryError> {
+        for version in versions {
+            self.add_package_version(package_name, version, None)?;
+        }
+        Ok(())
+    }
+
+    /// Clear all packages from the registry
+    ///
+    /// This method removes all packages and their versions from the registry,
+    /// useful for resetting the registry state in tests.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if the registry was cleared successfully, or a `PackageRegistryError` if the operation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::LocalRegistry;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let registry = LocalRegistry::default();
+    /// 
+    /// // Add some packages
+    /// registry.add_package_version("react", "18.2.0", None)?;
+    /// registry.add_package_version("lodash", "4.17.21", None)?;
+    ///
+    /// // Clear the registry
+    /// registry.clear()?;
+    ///
+    /// // Registry should now be empty
+    /// let react_versions = registry.get_all_versions("react")?;
+    /// assert!(react_versions.is_empty());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn clear(&self) -> Result<(), PackageRegistryError> {
+        let mut packages = self.packages.lock()?;
+        packages.clear();
+        Ok(())
+    }
+
+    /// Check if a package exists in the registry
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to check
+    ///
+    /// # Returns
+    ///
+    /// `Ok(true)` if the package exists, `Ok(false)` if it doesn't, or a `PackageRegistryError` if the operation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::LocalRegistry;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let registry = LocalRegistry::default();
+    /// 
+    /// assert!(!registry.has_package("react")?);
+    /// 
+    /// registry.add_package_version("react", "18.2.0", None)?;
+    /// assert!(registry.has_package("react")?);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn has_package(&self, package_name: &str) -> Result<bool, PackageRegistryError> {
+        let packages = self.packages.lock()?;
+        Ok(packages.contains_key(package_name))
     }
 }

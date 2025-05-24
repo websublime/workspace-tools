@@ -168,7 +168,7 @@ mod dependency_tests {
         // Test find_highest_compatible_version
         let req1 = semver::VersionReq::parse("^18.0.0").unwrap();
         let req2 = semver::VersionReq::parse("^18.0.1").unwrap();
-        let highest = registry.find_highest_compatible_version("react", &[&req1, &req2]);
+        let highest = registry.find_highest_compatible_version("react", &[&req1, &req2]).unwrap();
         assert!(!highest.is_empty());
     }
 

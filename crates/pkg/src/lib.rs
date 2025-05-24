@@ -184,7 +184,7 @@ pub use package::{
     diff::PackageDiff,
     info::PackageInfo,
     package::Package,
-    registry::{NpmRegistry, PackageRegistry},
+    registry::{NpmRegistry, PackageRegistry, PackageRegistryClone},
     scope::{package_scope_name_version, PackageScopeMetadata},
 };
 

@@ -319,3 +319,30 @@ impl NpmRegistry {
         builder
     }
 }
+
+impl Clone for NpmRegistry {
+    fn clone(&self) -> Self {
+        Self {
+            base_url: self.base_url.clone(),
+            client: Client::new(),
+            user_agent: self.user_agent.clone(),
+            cache_ttl: self.cache_ttl,
+            versions_cache: Arc::new(Mutex::new(HashMap::new())),
+            latest_version_cache: Arc::new(Mutex::new(HashMap::new())),
+            auth_token: self.auth_token.clone(),
+            auth_type: self.auth_type.clone(),
+        }
+    }
+}
+
+/// Trait for package registries that can be cloned
+pub trait PackageRegistryClone: PackageRegistry {
+    /// Clone the package registry implementation
+    fn clone_box(&self) -> Box<dyn PackageRegistryClone>;
+}
+
+impl PackageRegistryClone for NpmRegistry {
+    fn clone_box(&self) -> Box<dyn PackageRegistryClone> {
+        Box::new(self.clone())
+    }
+}

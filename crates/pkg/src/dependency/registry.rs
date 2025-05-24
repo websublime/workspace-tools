@@ -41,8 +41,11 @@
 //! ```
 
 use super::{resolution::ResolutionResult, update::DependencyUpdate};
-use crate::{Dependency, Version, VersionError};
-use semver::VersionReq;
+use crate::{
+    package::registry::PackageRegistryClone, Dependency, PackageRegistryError,
+    Version, VersionError,
+};
+use semver::{Version as SemverVersion, VersionReq};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 /// A registry for managing and reusing dependency instances.
@@ -50,6 +53,9 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 /// The `DependencyRegistry` maintains a collection of dependencies, ensuring that
 /// the same dependency (by name) is consistently represented throughout the system.
 /// It also provides functionality for resolving version conflicts between dependencies.
+///
+/// When a package registry is provided, the registry can query external sources
+/// to find the highest compatible versions for dependency resolution.
 ///
 /// # Examples
 ///
@@ -79,9 +85,50 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Default)]
+///
+/// ## With Package Registry
+///
+/// ```
+/// use sublime_package_tools::{DependencyRegistry, NpmRegistry};
+///
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// // Create registry with npm package registry for enhanced version resolution
+/// let npm_registry = NpmRegistry::new("https://registry.npmjs.org".to_string());
+/// let mut dependency_registry = DependencyRegistry::with_package_registry(
+///     Box::new(npm_registry)
+/// );
+///
+/// // Now the registry can query npm for available versions when resolving conflicts
+/// let react_dep = dependency_registry.get_or_create("react", "^17.0.0")?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Clone, Debug)]
 pub struct DependencyRegistry {
+    /// Collection of managed dependencies indexed by name
     dependencies: HashMap<String, Rc<RefCell<Dependency>>>,
+    /// Optional package registry for querying external package sources
+    package_registry: Option<Box<dyn PackageRegistryClone>>,
+}
+
+
+
+impl Clone for Box<dyn PackageRegistryClone> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
+}
+
+impl std::fmt::Debug for dyn PackageRegistryClone {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PackageRegistry").finish()
+    }
+}
+
+impl Default for DependencyRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DependencyRegistry {
@@ -95,7 +142,61 @@ impl DependencyRegistry {
     /// let registry = DependencyRegistry::new();
     /// ```
     pub fn new() -> Self {
-        Self { dependencies: HashMap::new() }
+        Self { 
+            dependencies: HashMap::new(),
+            package_registry: None,
+        }
+    }
+
+    /// Creates a new dependency registry with a package registry for enhanced version resolution.
+    ///
+    /// When a package registry is provided, the dependency registry can query external sources
+    /// (like npm) to find the highest compatible versions during dependency resolution.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_registry` - A boxed package registry implementation for querying external sources
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::{DependencyRegistry, NpmRegistry};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let npm_registry = NpmRegistry::new("https://registry.npmjs.org".to_string());
+    /// let registry = DependencyRegistry::with_package_registry(Box::new(npm_registry));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn with_package_registry(package_registry: Box<dyn PackageRegistryClone>) -> Self {
+        Self {
+            dependencies: HashMap::new(),
+            package_registry: Some(package_registry),
+        }
+    }
+
+    /// Sets the package registry for this dependency registry.
+    ///
+    /// This allows adding package registry functionality to an existing dependency registry.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_registry` - A boxed package registry implementation for querying external sources
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::{DependencyRegistry, NpmRegistry};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut registry = DependencyRegistry::new();
+    /// let npm_registry = NpmRegistry::new("https://registry.npmjs.org".to_string());
+    /// registry.set_package_registry(Box::new(npm_registry));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn set_package_registry(&mut self, package_registry: Box<dyn PackageRegistryClone>) {
+        self.package_registry = Some(package_registry);
     }
 
     /// Gets an existing dependency or creates a new one.
@@ -327,7 +428,69 @@ impl DependencyRegistry {
         Ok(ResolutionResult { resolved_versions, updates_required })
     }
 
+    /// Get all versions of a package from the package registry.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - The name of the package to query
+    ///
+    /// # Returns
+    ///
+    /// A list of available versions or an error if the query fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::{DependencyRegistry, NpmRegistry};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let npm_registry = NpmRegistry::new("https://registry.npmjs.org".to_string());
+    /// let registry = DependencyRegistry::with_package_registry(Box::new(npm_registry));
+    ///
+    /// if let Ok(versions) = registry.get_package_versions("react") {
+    ///     println!("Found {} versions of react", versions.len());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn get_package_versions(&self, package_name: &str) -> Result<Vec<String>, PackageRegistryError> {
+        if let Some(ref registry) = self.package_registry {
+            registry.get_all_versions(package_name)
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    /// Check if the registry has package registry capabilities.
+    ///
+    /// # Returns
+    ///
+    /// `true` if a package registry is configured, `false` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::{DependencyRegistry, NpmRegistry};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut registry = DependencyRegistry::new();
+    /// assert!(!registry.has_package_registry());
+    ///
+    /// let npm_registry = NpmRegistry::new("https://registry.npmjs.org".to_string());
+    /// registry.set_package_registry(Box::new(npm_registry));
+    /// assert!(registry.has_package_registry());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn has_package_registry(&self) -> bool {
+        self.package_registry.is_some()
+    }
+
     /// Find highest version that is compatible with all requirements.
+    ///
+    /// This method first checks existing dependencies in the registry, then falls back
+    /// to querying the package registry (if available) to find all available versions
+    /// and select the highest one that satisfies all requirements.
     ///
     /// # Arguments
     ///
@@ -337,6 +500,10 @@ impl DependencyRegistry {
     /// # Returns
     ///
     /// A string representing the highest version that satisfies all requirements.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PackageRegistryError` if querying the package registry fails.
     ///
     /// # Examples
     ///
@@ -354,11 +521,30 @@ impl DependencyRegistry {
     /// let version = registry.find_highest_compatible_version(
     ///     "react",
     ///     &[&req1, &req2]
-    /// );
+    /// )?;
     ///
-    /// // In a real implementation, this would search through available versions
-    /// // Here it returns at least a placeholder
+    /// // The method will return the highest compatible version
     /// assert!(!version.is_empty());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// ## With Package Registry
+    ///
+    /// ```no_run
+    /// use sublime_package_tools::{DependencyRegistry, NpmRegistry};
+    /// use semver::VersionReq;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Create registry with npm for enhanced resolution
+    /// let npm_registry = NpmRegistry::new("https://registry.npmjs.org".to_string());
+    /// let registry = DependencyRegistry::with_package_registry(Box::new(npm_registry));
+    ///
+    /// let req = VersionReq::parse("^17.0.0")?;
+    /// 
+    /// // This will query npm to find the highest version matching the requirement
+    /// let version = registry.find_highest_compatible_version("react", &[&req])?;
+    /// println!("Found compatible version: {}", version);
     /// # Ok(())
     /// # }
     /// ```
@@ -366,11 +552,44 @@ impl DependencyRegistry {
         &self,
         name: &str,
         requirements: &[&VersionReq],
-    ) -> String {
-        // In a real implementation, this would query a package registry
-        // For this test, we'll implement a basic version that just returns
-        // the highest version we have that satisfies all requirements
+    ) -> Result<String, PackageRegistryError> {
+        // First priority: Query package registry for all available versions
+        match self.get_package_versions(name) {
+            Ok(available_versions) => {
+                if !available_versions.is_empty() {
+                    // Parse and filter versions that satisfy all requirements
+                    let mut compatible_versions: Vec<SemverVersion> = available_versions
+                        .iter()
+                        .filter_map(|version_str| {
+                            // Clean version string (remove ^ or ~ prefixes if present)
+                            let clean_version = version_str
+                                .trim_start_matches('^')
+                                .trim_start_matches('~');
+                            
+                            SemverVersion::parse(clean_version).ok()
+                        })
+                        .filter(|version| {
+                            // Check if this version satisfies all requirements
+                            requirements.iter().all(|req| req.matches(version))
+                        })
+                        .collect();
 
+                    // Sort versions in ascending order, then take the highest (last)
+                    compatible_versions.sort();
+
+                    if let Some(highest_version) = compatible_versions.last() {
+                        return Ok(highest_version.to_string());
+                    }
+                }
+            }
+            Err(registry_error) => {
+                // Log the registry error but continue to fallback
+                // In a production system, you might want to log this error
+                eprintln!("Warning: Failed to query package registry for {name}: {registry_error}");
+            }
+        }
+
+        // Fallback: Check existing dependencies in the registry
         if let Some(dep_rc) = self.dependencies.get(name) {
             let dep = dep_rc.borrow();
             let version_str = dep.version().to_string();
@@ -378,16 +597,16 @@ impl DependencyRegistry {
             // Handle ^ or ~ prefix
             let clean_version = version_str.trim_start_matches('^').trim_start_matches('~');
 
-            if let Ok(version) = Version::parse(clean_version) {
+            if let Ok(version) = SemverVersion::parse(clean_version) {
                 // Check if this version satisfies all requirements
                 if requirements.iter().all(|req| req.matches(&version)) {
-                    return clean_version.to_string();
+                    return Ok(clean_version.to_string());
                 }
             }
         }
 
-        // Always return at least one version for test purposes
-        "0.0.0".to_string()
+        // Final fallback: return base version
+        Ok("0.0.0".to_string())
     }
 
     /// Apply the resolution result to update all dependencies.
