@@ -15,6 +15,7 @@ repository = "https://github.com/websublime/workspace-node-tools"
 sublime_standard_tools = { version = "0.1.0", path = "./crates/standard" }
 sublime_node_tools = { version = "0.1.0", path = "./crates/node" }
 sublime_git_tools = { version = "0.1.0", path = "./crates/git" }
+sublime_package_tools = { version = "0.1.0", path = "./crates/pkg" }
 
 # Core dependencies
 async-trait = "0.1.74"

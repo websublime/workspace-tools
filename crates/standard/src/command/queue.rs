@@ -810,6 +810,20 @@ impl CommandQueue {
     }
 }
 
+impl std::fmt::Debug for CommandQueue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CommandQueue")
+            .field("config", &self.config)
+            .field("executor", &"Arc<dyn CommandExecutor>")
+            .field("queue_sender", &self.queue_sender.as_ref().map(|_| "Sender<QueueMessage>"))
+            .field("statuses", &self.statuses)
+            .field("results", &self.results)
+            .field("processor_handle", &self.processor_handle.as_ref().map(|_| "JoinHandle<()>"))
+            .field("command_counter", &self.command_counter)
+            .finish()
+    }
+}
+
 impl QueueProcessor {
     /// Creates a new queue processor.
     ///

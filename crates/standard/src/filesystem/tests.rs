@@ -174,6 +174,8 @@ mod tests {
         let project_root = temp_dir.path();
         fs.write_file_string(&project_root.join("package.json"), "{\"name\": \"test-project\"}")
             .unwrap();
+        fs.write_file_string(&project_root.join("pnpm-lock.yaml"), "lockfileVersion: '9.0'")
+            .unwrap();
 
         // Test find_project_root
         let nested_path = project_root.join("a/b/c");
