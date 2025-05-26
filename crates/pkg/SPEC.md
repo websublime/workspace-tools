@@ -657,6 +657,12 @@ pub trait PackageRegistry {
     
     // Get the registry as mutable Any for downcasting
     fn as_any_mut(&mut self) -> &mut dyn Any;
+    
+    // Download a package tarball and return the bytes
+    fn download_package(&self, package_name: &str, version: &str) -> Result<Vec<u8>, PackageRegistryError>;
+    
+    // Download and extract a package to a destination directory
+    fn download_and_extract_package(&self, package_name: &str, version: &str, destination: &Path) -> Result<(), PackageRegistryError>;
 }
 ```
 
