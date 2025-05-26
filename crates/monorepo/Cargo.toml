@@ -1,0 +1,47 @@
+[package]
+name = "sublime_monorepo_tools"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A robust library for managing Node.js monorepos"
+documentation = "https://docs.rs/sublime_package_tools"
+readme = "README.md"
+keywords = ["nodejs", "package", "dependency", "semver", "graph"]
+categories = ["development-tools", "monorepo"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sublime_standard_tools = { workspace = true }
+sublime_git_tools = { workspace = true }
+sublime_package_tools = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+semver = { version = "1.0.23", features = ["serde"] }
+pathdiff = "0.2"
+petgraph = "0.6"
+globset = "0.4"
+glob = "0.3"
+log = { workspace = true }
+chrono = { workspace = true }
+uuid = { version = "1.2", features = ["v4", "serde"] }
+num_cpus = "1.16"
+serde_yaml = "0.9"
+tokio = { workspace = true }
+
+[dev-dependencies]
+rstest = "0.25.0"
+tempfile = "3.19.1"
