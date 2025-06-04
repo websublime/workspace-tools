@@ -42,7 +42,7 @@ pub struct Repo {
 ///     GitFileStatus::Deleted => println!("File was deleted"),
 /// }
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GitFileStatus {
     /// File has been added to the repository
     Added,

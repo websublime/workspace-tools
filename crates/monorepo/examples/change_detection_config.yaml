@@ -1,0 +1,164 @@
+# Example configuration for change detection rules
+change_type_rules:
+  - name: "package_json_changes"
+    priority: 100
+    patterns:
+      - pattern_type: "Exact"
+        pattern: "package.json"
+        exclude: false
+      - pattern_type: "Exact"
+        pattern: "package-lock.json"
+        exclude: false
+    change_type: "Dependencies"
+    
+  - name: "source_code_typescript"
+    priority: 90
+    patterns:
+      - pattern_type: "Glob"
+        pattern: "src/**/*.{ts,tsx}"
+        exclude: false
+      - pattern_type: "Glob"
+        pattern: "lib/**/*.{ts,tsx}"
+        exclude: false
+    change_type: "SourceCode"
+    
+  - name: "source_code_javascript"
+    priority: 85
+    patterns:
+      - pattern_type: "Glob"
+        pattern: "src/**/*.{js,jsx,mjs,cjs}"
+        exclude: false
+    change_type: "SourceCode"
+    
+  - name: "test_files"
+    priority: 70
+    patterns:
+      - pattern_type: "Glob"
+        pattern: "**/*.{test,spec}.{js,ts,jsx,tsx}"
+        exclude: false
+      - pattern_type: "Glob"
+        pattern: "{test,tests,__tests__}/**/*"
+        exclude: false
+    change_type: "Tests"
+    
+  - name: "documentation"
+    priority: 60
+    patterns:
+      - pattern_type: "Extension"
+        pattern: "md"
+        exclude: false
+      - pattern_type: "Glob"
+        pattern: "docs/**/*"
+        exclude: false
+    change_type: "Documentation"
+    
+  - name: "configuration_files"
+    priority: 80
+    patterns:
+      - pattern_type: "Glob"
+        pattern: "*.{json,yaml,yml,toml,ini}"
+        exclude: false
+      - pattern_type: "Glob"
+        pattern: ".{eslint,prettier,babel}*"
+        exclude: false
+    change_type: "Configuration"
+
+significance_rules:
+  - name: "public_api_breaking"
+    priority: 100
+    patterns:
+      - pattern_type: "Glob"
+        pattern: "src/index.{ts,js}"
+        exclude: false
+      - pattern_type: "Glob"
+        pattern: "src/api/**/*.{ts,js}"
+        exclude: false
+      - pattern_type: "Glob"
+        pattern: "src/public/**/*.{ts,js}"
+        exclude: false
+    significance: "Breaking"
+    
+  - name: "deleted_source_files"
+    priority: 95
+    patterns:
+      - pattern_type: "Glob"
+        pattern: "src/**/*.{ts,js,tsx,jsx}"
+        exclude: false
+    git_status: ["Deleted"]
+    significance: "Breaking"
+    
+  - name: "major_config_changes"
+    priority: 90
+    patterns:
+      - pattern_type: "Exact"
+        pattern: "package.json"
+        exclude: false
+    significance: "Breaking"
+    conditions:
+      min_files: 1
+      
+  - name: "new_features"
+    priority: 80
+    patterns:
+      - pattern_type: "Glob"
+        pattern: "src/**/*.{ts,js,tsx,jsx}"
+        exclude: false
+    git_status: ["Added"]
+    significance: "Feature"
+    
+  - name: "default_patch"
+    priority: 10
+    patterns:
+      - pattern_type: "Glob"
+        pattern: "**/*"
+        exclude: false
+    significance: "Patch"
+
+version_bump_rules:
+  - name: "breaking_changes"
+    significance: "Breaking"
+    version_bump: "Major"
+    priority: 100
+    
+  - name: "new_features"
+    significance: "Feature"
+    version_bump: "Minor"
+    priority: 90
+    
+  - name: "patches"
+    significance: "Patch"
+    version_bump: "Patch"
+    priority: 80
+    
+  - name: "docs_only"
+    change_type: "Documentation"
+    version_bump: "Patch"
+    priority: 70
+    
+  - name: "tests_only"
+    change_type: "Tests"
+    version_bump: "Patch"
+    priority: 60
+
+# Project-specific overrides
+project_overrides:
+  "@myorg/core-lib":
+    disabled_rules: ["default_patch"]
+    significance_thresholds:
+      breaking_patterns:
+        - pattern_type: "Glob"
+          pattern: "src/core/**/*.{ts,js}"
+          exclude: false
+      feature_patterns:
+        - pattern_type: "Glob"
+          pattern: "src/features/**/*.{ts,js}"
+          exclude: false
+          
+  "@myorg/docs-site":
+    disabled_rules: ["public_api_breaking"]
+    additional_rules:
+      version_bump_rules:
+        - name: "content_changes"
+          change_type: "Documentation"
+          version_bump: "Patch"
+          priority: 100
