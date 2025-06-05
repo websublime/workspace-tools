@@ -7,11 +7,36 @@
 mod types;
 mod project;
 mod package;
+mod version;
+
+#[cfg(test)]
+mod tests;
 
 pub use types::{
+    // Core package types
     Changeset,
     ChangesetStatus,
     MonorepoPackageInfo,
     VersionStatus,
+    // Version management types
+    VersioningResult,
+    PackageVersionUpdate,
+    PropagationResult,
+    VersionConflict,
+    ConflictType,
+    VersionImpactAnalysis,
+    PackageImpactAnalysis,
+    BreakingChangeAnalysis,
+    DependencyChainImpact,
+    VersioningPlan,
+    VersioningPlanStep,
+    // Versioning strategy implementations
+    DefaultVersioningStrategy,
+    ConservativeVersioningStrategy,
+    AggressiveVersioningStrategy,
 };
 pub use project::MonorepoProject;
+pub use version::{
+    VersionManager,
+    VersioningStrategy,
+};

@@ -456,11 +456,9 @@ impl ConfigManager {
     pub fn pattern_matches_package(&self, pattern: &str, package_path: &str) -> bool {
         // Simple glob-style matching - could be enhanced with proper glob library
         if pattern.contains('*') {
-            if pattern.ends_with("/*") {
-                let base = &pattern[..pattern.len() - 2];
+            if let Some(base) = pattern.strip_suffix("/*") {
                 package_path.starts_with(base)
-            } else if pattern.starts_with('*') {
-                let suffix = &pattern[1..];
+            } else if let Some(suffix) = pattern.strip_prefix('*') {
                 package_path.ends_with(suffix)
             } else if let Some(star_pos) = pattern.find('*') {
                 let prefix = &pattern[..star_pos];

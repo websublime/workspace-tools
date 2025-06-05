@@ -153,4 +153,9 @@ impl Error {
     pub fn generic(msg: impl Into<String>) -> Self {
         Error::Generic(msg.into())
     }
+    
+    /// Create a package not found error
+    pub fn package_not_found(package_name: &str) -> Self {
+        Error::Package(format!("Package not found: {package_name}"))
+    }
 }

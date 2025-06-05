@@ -2,4 +2,7 @@
 
 mod error;
 
+#[cfg(test)]
+mod tests;
+
 pub use error::{Error, Result};

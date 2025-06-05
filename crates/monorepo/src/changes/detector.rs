@@ -3,11 +3,12 @@
 use std::collections::HashSet;
 use std::path::Path;
 use sublime_git_tools::GitChangedFile;
-use super::change_engine::ChangeDetectionEngine;
+use super::engine::ChangeDetectionEngine;
 
 /// Analyzes changes in the repository to determine affected packages
 pub struct ChangeDetector {
     /// Root path of the monorepo
+    #[allow(dead_code)]
     root_path: std::path::PathBuf,
     
     /// Configurable detection engine
@@ -102,7 +103,7 @@ impl ChangeDetector {
             affected.insert(package_name.clone());
 
             // Find and add all dependents
-            self.add_dependents(package_name, packages, &mut affected);
+            Self::add_dependents(package_name, packages, &mut affected);
         }
 
         affected
@@ -110,7 +111,6 @@ impl ChangeDetector {
 
     /// Recursively add dependent packages
     fn add_dependents(
-        &self,
         package_name: &str,
         packages: &[crate::core::MonorepoPackageInfo],
         affected: &mut HashSet<String>,
@@ -121,7 +121,7 @@ impl ChangeDetector {
                 let dep_name = package.name().to_string();
                 if affected.insert(dep_name.clone()) {
                     // Recursively add dependents of this package
-                    self.add_dependents(&dep_name, packages, affected);
+                    Self::add_dependents(&dep_name, packages, affected);
                 }
             }
         }
@@ -147,5 +147,5 @@ pub struct PackageChange {
     pub suggested_version_bump: VersionBumpType,
 }
 
-// Re-export types from change_rules for convenience
-pub use super::change_rules::{PackageChangeType, ChangeSignificance, VersionBumpType};
+// Re-export types from types module for convenience
+pub use super::types::{PackageChangeType, ChangeSignificance, VersionBumpType};

@@ -1,11 +1,9 @@
 //! Configurable change detection engine
 
-use crate::{
-    analysis::{
-        ChangeDetectionRules, ChangeTypeRule, FilePattern, PatternType, RuleConditions,
-        SignificanceRule,
-    },
-    core::MonorepoPackageInfo,
+use crate::core::MonorepoPackageInfo;
+use super::types::{
+    ChangeDetectionRules, ChangeTypeRule, FilePattern, PatternType, RuleConditions,
+    SignificanceRule,
 };
 use glob::Pattern;
 use log::warn;
@@ -18,7 +16,7 @@ enum CompiledPattern<T> {
     /// Successfully compiled pattern
     Valid(T),
     /// Failed to compile, stores the error message
-    Invalid(String),
+    Invalid(()),
 }
 
 /// Configurable change detection engine
@@ -51,7 +49,7 @@ impl ChangeDetectionEngine {
         // Validate change type rules
         for rule in &self.rules.change_type_rules {
             for pattern in &rule.patterns {
-                if let Err(e) = self.validate_pattern(pattern) {
+                if let Err(e) = Self::validate_pattern(pattern) {
                     errors.push(format!("Rule '{}': {}", rule.name, e));
                 }
             }
@@ -60,7 +58,7 @@ impl ChangeDetectionEngine {
         // Validate significance rules
         for rule in &self.rules.significance_rules {
             for pattern in &rule.patterns {
-                if let Err(e) = self.validate_pattern(pattern) {
+                if let Err(e) = Self::validate_pattern(pattern) {
                     errors.push(format!("Rule '{}': {}", rule.name, e));
                 }
             }
@@ -70,7 +68,7 @@ impl ChangeDetectionEngine {
     }
 
     /// Validate a single pattern
-    fn validate_pattern(&self, pattern: &FilePattern) -> Result<(), String> {
+    fn validate_pattern(pattern: &FilePattern) -> Result<(), String> {
         match &pattern.pattern_type {
             PatternType::Glob => Pattern::new(&pattern.pattern)
                 .map(|_| ())
@@ -167,7 +165,7 @@ impl ChangeDetectionEngine {
         }
 
         // Default fallback
-        ChangeSignificance::Patch
+        ChangeSignificance::Low
     }
 
     /// Suggest version bump
@@ -201,9 +199,9 @@ impl ChangeDetectionEngine {
 
         // Default fallback based on significance
         match significance {
-            ChangeSignificance::Breaking => VersionBumpType::Major,
-            ChangeSignificance::Feature => VersionBumpType::Minor,
-            ChangeSignificance::Patch => VersionBumpType::Patch,
+            ChangeSignificance::High => VersionBumpType::Major,
+            ChangeSignificance::Medium => VersionBumpType::Minor,
+            ChangeSignificance::Low => VersionBumpType::Patch,
         }
     }
 
@@ -225,7 +223,7 @@ impl ChangeDetectionEngine {
 
         // Check additional conditions
         if let Some(conditions) = &rule.conditions {
-            if !self.evaluate_conditions(conditions, &matching_files) {
+            if !Self::evaluate_conditions(conditions, &matching_files) {
                 return false;
             }
         }
@@ -262,7 +260,7 @@ impl ChangeDetectionEngine {
 
         // Check additional conditions
         if let Some(conditions) = &rule.conditions {
-            if !self.evaluate_conditions(conditions, &matching_files) {
+            if !Self::evaluate_conditions(conditions, &matching_files) {
                 return false;
             }
         }
@@ -300,14 +298,14 @@ impl ChangeDetectionEngine {
                                         "Invalid glob pattern '{}': {}. Pattern will never match.",
                                         pattern.pattern, e
                                     );
-                                    CompiledPattern::Invalid(e.to_string())
+                                    CompiledPattern::Invalid(())
                                 }
                             }
                         });
 
                     match compiled {
                         CompiledPattern::Valid(glob) => glob.matches(&relative_path),
-                        CompiledPattern::Invalid(_) => false,
+                        CompiledPattern::Invalid(()) => false,
                     }
                 }
                 PatternType::Regex => {
@@ -320,14 +318,14 @@ impl ChangeDetectionEngine {
                                         "Invalid regex pattern '{}': {}. Pattern will never match.",
                                         pattern.pattern, e
                                     );
-                                    CompiledPattern::Invalid(e.to_string())
+                                    CompiledPattern::Invalid(())
                                 }
                             }
                         });
 
                     match compiled {
                         CompiledPattern::Valid(regex) => regex.is_match(&relative_path),
-                        CompiledPattern::Invalid(_) => false,
+                        CompiledPattern::Invalid(()) => false,
                     }
                 }
                 PatternType::Contains => relative_path.contains(&pattern.pattern),
@@ -351,7 +349,7 @@ impl ChangeDetectionEngine {
     }
 
     /// Evaluate additional rule conditions
-    fn evaluate_conditions(&self, conditions: &RuleConditions, files: &[&GitChangedFile]) -> bool {
+    fn evaluate_conditions(conditions: &RuleConditions, files: &[&GitChangedFile]) -> bool {
         // Check file count conditions
         if let Some(min_files) = conditions.min_files {
             if files.len() < min_files {
@@ -388,4 +386,4 @@ impl Default for ChangeDetectionEngine {
 }
 
 // Re-export types for convenience
-pub use super::change_rules::{ChangeSignificance, PackageChangeType, VersionBumpType};
+pub use super::types::{ChangeSignificance, PackageChangeType, VersionBumpType};

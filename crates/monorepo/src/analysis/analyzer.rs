@@ -180,7 +180,7 @@ impl MonorepoAnalyzer {
 
         for package in packages {
             if !visited.contains(package.name()) {
-                let depth = self.calculate_package_depth(package, packages, &mut visited, 0);
+                let depth = Self::calculate_package_depth(package, packages, &mut visited, 0);
                 max_depth = max_depth.max(depth);
             }
         }
@@ -190,7 +190,6 @@ impl MonorepoAnalyzer {
 
     /// Calculate depth for a specific package
     fn calculate_package_depth(
-        &self,
         package: &crate::core::MonorepoPackageInfo,
         all_packages: &[crate::core::MonorepoPackageInfo],
         visited: &mut std::collections::HashSet<String>,
@@ -205,7 +204,7 @@ impl MonorepoAnalyzer {
 
         for dep_name in &package.workspace_package.workspace_dependencies {
             if let Some(dep_package) = all_packages.iter().find(|p| p.name() == dep_name) {
-                let child_depth = self.calculate_package_depth(
+                let child_depth = Self::calculate_package_depth(
                     dep_package,
                     all_packages,
                     visited,
@@ -753,12 +752,10 @@ impl MonorepoAnalyzer {
 
         // Convert locations with multiple packages to patterns
         for (location, count) in location_counts {
-            if count > 1 {
-                // Multiple packages in this directory - create a pattern
-                patterns.push(format!("{location}/*"));
-            } else if count == 1 {
-                // Single package - might be a specific pattern
-                patterns.push(location);
+            match count {
+                0 => {}, // Skip empty locations
+                1 => patterns.push(location),
+                _ => patterns.push(format!("{location}/*")),
             }
         }
 
