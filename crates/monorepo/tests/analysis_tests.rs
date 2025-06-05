@@ -260,9 +260,11 @@ fn test_glob_pattern_matching() {
 fn test_config_workspace_patterns() {
     let (analyzer, _temp_dir) = create_test_analyzer().unwrap();
     
-    // Should return empty for now since we don't have workspace patterns in config
+    // Should return patterns now - either from config or auto-detected common patterns
     let patterns = analyzer.get_config_workspace_patterns().unwrap();
-    assert!(patterns.is_empty());
+    // The function now has robust fallbacks, so it should not be empty
+    // It should include common patterns like packages/* or apps/*
+    assert!(!patterns.is_empty());
 }
 
 #[test]

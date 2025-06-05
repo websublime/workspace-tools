@@ -2,16 +2,16 @@
 
 use crate::analysis::{
     DependencyGraphAnalysis, PackageClassificationResult, PackageInformation,
-    PackageManagerAnalysis, RegistryAnalysisResult, RegistryInfo, UpgradeAnalysisResult,
-    WorkspaceConfigAnalysis,
+    PackageManagerAnalysis, PatternStatistics, RegistryAnalysisResult, RegistryInfo,
+    UpgradeAnalysisResult, WorkspaceConfigAnalysis, WorkspacePatternAnalysis,
 };
+use crate::config::PackageManagerType;
 use crate::core::MonorepoProject;
 use crate::error::Result;
 use crate::MonorepoAnalysisResult;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-
 use sublime_package_tools::Upgrader;
 use sublime_standard_tools::monorepo::MonorepoDetector;
 
@@ -678,13 +678,220 @@ impl MonorepoAnalyzer {
     }
 
     /// Get workspace patterns from configuration
+    /// This is a robust implementation that leverages the monorepo configuration system
     pub fn get_config_workspace_patterns(&self) -> Result<Vec<String>> {
-        // Check if custom workspace patterns are defined in monorepo config
-        let _config = &self.project.config;
+        // Determine current package manager type
+        let current_pm_type = match self.project.package_manager.kind() {
+            sublime_standard_tools::monorepo::PackageManagerKind::Npm => PackageManagerType::Npm,
+            sublime_standard_tools::monorepo::PackageManagerKind::Yarn => PackageManagerType::Yarn,
+            sublime_standard_tools::monorepo::PackageManagerKind::Pnpm => PackageManagerType::Pnpm,
+            sublime_standard_tools::monorepo::PackageManagerKind::Bun => PackageManagerType::Bun,
+            sublime_standard_tools::monorepo::PackageManagerKind::Jsr => {
+                PackageManagerType::Custom("jsr".to_string())
+            }
+        };
 
-        // For now, return empty as we don't have workspace patterns in config yet
-        // This could be extended to read from monorepo configuration
+        // Get auto-detected patterns from the current workspace structure
+        let auto_detected_patterns = self.get_auto_detected_patterns()?;
+
+        // Get effective patterns combining config and auto-detected
+        let effective_patterns = self.project.config_manager.get_effective_workspace_patterns(
+            auto_detected_patterns,
+            Some(current_pm_type.clone()),
+            None, // No specific environment
+        )?;
+
+        // If we have effective patterns, return them
+        if !effective_patterns.is_empty() {
+            return Ok(effective_patterns);
+        }
+
+        // Fallback: Try package manager specific patterns
+        let pm_specific_patterns =
+            self.project.config_manager.get_package_manager_patterns(current_pm_type)?;
+
+        if !pm_specific_patterns.is_empty() {
+            return Ok(pm_specific_patterns);
+        }
+
+        // Last fallback: Use discovery patterns from config
+        let workspace_config = self.project.config_manager.get_workspace()?;
+        if workspace_config.discovery.scan_common_patterns {
+            return Ok(workspace_config.discovery.common_patterns);
+        }
+
+        // Ultimate fallback: return empty
         Ok(Vec::new())
+    }
+
+    /// Get auto-detected workspace patterns based on current project structure
+    pub fn get_auto_detected_patterns(&self) -> Result<Vec<String>> {
+        let mut patterns = Vec::new();
+        let workspace_config = self.project.config_manager.get_workspace()?;
+
+        // Skip auto-detection if disabled
+        if !workspace_config.discovery.auto_detect {
+            return Ok(patterns);
+        }
+
+        // Get existing package locations
+        let package_locations: Vec<String> = self
+            .project
+            .descriptor
+            .packages()
+            .iter()
+            .filter_map(|pkg| pkg.location.parent().map(|p| p.to_string_lossy().to_string()))
+            .collect();
+
+        // Infer patterns from existing package locations
+        let mut location_counts: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for location in &package_locations {
+            // Count how many packages are in each parent directory
+            *location_counts.entry(location.clone()).or_insert(0) += 1;
+        }
+
+        // Convert locations with multiple packages to patterns
+        for (location, count) in location_counts {
+            if count > 1 {
+                // Multiple packages in this directory - create a pattern
+                patterns.push(format!("{location}/*"));
+            } else if count == 1 {
+                // Single package - might be a specific pattern
+                patterns.push(location);
+            }
+        }
+
+        // Add common patterns if configured and they exist
+        if workspace_config.discovery.scan_common_patterns {
+            for common_pattern in &workspace_config.discovery.common_patterns {
+                if self.pattern_has_matches(common_pattern)? && !patterns.contains(common_pattern) {
+                    patterns.push(common_pattern.clone());
+                }
+            }
+        }
+
+        // Remove patterns that match excluded directories
+        patterns.retain(|pattern| {
+            !workspace_config
+                .discovery
+                .exclude_directories
+                .iter()
+                .any(|excluded| pattern.contains(excluded))
+        });
+
+        // Sort by specificity (more specific patterns first)
+        patterns.sort_by(|a, b| {
+            let specificity_a = self.calculate_pattern_specificity(a);
+            let specificity_b = self.calculate_pattern_specificity(b);
+            specificity_b.cmp(&specificity_a)
+        });
+
+        Ok(patterns)
+    }
+
+    /// Check if a pattern has any matches in the current workspace
+    #[allow(clippy::unnecessary_wraps)]
+    #[allow(clippy::manual_strip)]
+    fn pattern_has_matches(&self, pattern: &str) -> Result<bool> {
+        let packages = self.project.descriptor.packages();
+
+        for package in packages {
+            let package_path = package.location.to_string_lossy();
+            if self.matches_glob_pattern(&package_path, pattern) {
+                return Ok(true);
+            }
+        }
+
+        // Also check if the pattern directory structure exists
+        let pattern_path = if pattern.ends_with("/*") {
+            self.project.root_path().join(&pattern[..pattern.len() - 2])
+        } else {
+            self.project.root_path().join(pattern)
+        };
+
+        Ok(pattern_path.exists())
+    }
+
+    /// Calculate pattern specificity for sorting (higher is more specific)
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn calculate_pattern_specificity(&self, pattern: &str) -> u32 {
+        let mut specificity = 0;
+
+        // More path components = higher specificity
+        let components = pattern.split('/').count() as u32;
+        specificity += components * 10;
+
+        // Count wildcards and non-wildcard components
+        let wildcard_count = pattern.matches('*').count() as u32;
+        let non_wildcard_components =
+            pattern.split('/').filter(|&comp| !comp.contains('*')).count() as u32;
+
+        // Patterns without wildcards are more specific
+        if wildcard_count == 0 {
+            specificity += 100; // Exact matches get highest bonus
+        } else {
+            // Fewer wildcards = more specific
+            specificity += 50 - (wildcard_count * 10);
+
+            // More non-wildcard components = more specific
+            specificity += non_wildcard_components * 5;
+        }
+
+        // Bonus for specific directory names vs wildcards
+        if pattern.contains('*') {
+            let specific_parts = pattern.split('/').filter(|&part| !part.contains('*')).count();
+            specificity += (specific_parts as u32) * 3;
+        }
+
+        specificity
+    }
+
+    /// Get workspace patterns with full context and validation
+    pub fn get_validated_workspace_patterns(&self) -> Result<WorkspacePatternAnalysis> {
+        let config_patterns = self.get_config_workspace_patterns()?;
+        let auto_detected = self.get_auto_detected_patterns()?;
+
+        // Validate patterns against existing packages
+        let existing_packages: Vec<String> = self
+            .project
+            .descriptor
+            .packages()
+            .iter()
+            .map(|pkg| pkg.location.to_string_lossy().to_string())
+            .collect();
+
+        let validation_errors =
+            self.project.config_manager.validate_workspace_config(&existing_packages)?;
+
+        // Calculate pattern effectiveness
+        let mut pattern_stats = Vec::new();
+        for pattern in &config_patterns {
+            let matches = existing_packages
+                .iter()
+                .filter(|pkg| self.matches_glob_pattern(pkg, pattern))
+                .count();
+
+            pattern_stats.push(PatternStatistics {
+                pattern: pattern.clone(),
+                matches,
+                is_effective: matches > 0,
+                specificity: self.calculate_pattern_specificity(pattern),
+            });
+        }
+
+        Ok(WorkspacePatternAnalysis {
+            config_patterns: config_patterns.clone(),
+            auto_detected_patterns: auto_detected,
+            effective_patterns: pattern_stats
+                .iter()
+                .filter(|stats| stats.is_effective)
+                .map(|stats| stats.pattern.clone())
+                .collect(),
+            validation_errors,
+            pattern_statistics: pattern_stats,
+            orphaned_packages: self.find_orphaned_packages(&config_patterns),
+        })
     }
 
     /// Find packages that don't match any workspace pattern

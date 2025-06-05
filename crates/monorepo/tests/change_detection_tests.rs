@@ -271,3 +271,96 @@ fn test_significance_with_git_status() {
     // Verify the rule uses GitFileStatus correctly
     assert_eq!(rules.git_status, Some(vec![GitFileStatus::Deleted]));
 }
+
+#[test]
+fn test_invalid_patterns_handling() {
+    // Test with invalid regex pattern
+    let rules = ChangeDetectionRules {
+        change_type_rules: vec![
+            ChangeTypeRule {
+                name: "invalid_regex".to_string(),
+                priority: 100,
+                patterns: vec![
+                    FilePattern {
+                        pattern_type: PatternType::Regex,
+                        pattern: "[invalid(regex".to_string(), // Invalid regex
+                        exclude: false,
+                    }
+                ],
+                change_type: PackageChangeType::SourceCode,
+                conditions: None,
+            }
+        ],
+        significance_rules: vec![
+            SignificanceRule {
+                name: "invalid_glob_sig".to_string(),
+                priority: 100,
+                patterns: vec![
+                    FilePattern {
+                        pattern_type: PatternType::Glob,
+                        pattern: "src/[unclosed".to_string(), // Invalid glob
+                        exclude: false,
+                    }
+                ],
+                git_status: None,
+                significance: ChangeSignificance::Breaking,
+                conditions: None,
+            }
+        ],
+        version_bump_rules: vec![],
+        project_overrides: Default::default(),
+    };
+    
+    let engine = ChangeDetectionEngine::with_rules(rules);
+    let errors = engine.validate_rules();
+    
+    // Should report both invalid patterns
+    assert!(!errors.is_empty());
+    assert!(errors.len() >= 2);
+    
+    // Check for regex error
+    let has_regex_error = errors.iter().any(|e| e.contains("invalid_regex") && e.contains("Invalid regex pattern"));
+    assert!(has_regex_error, "Should report invalid regex pattern");
+    
+    // Check for glob error
+    let has_glob_error = errors.iter().any(|e| e.contains("invalid_glob_sig") && e.contains("Invalid glob pattern"));
+    assert!(has_glob_error, "Should report invalid glob pattern");
+}
+
+
+#[test]
+fn test_engine_continues_with_invalid_patterns() {
+    // Test that engine continues to work even with invalid patterns
+    let rules = ChangeDetectionRules {
+        change_type_rules: vec![
+            ChangeTypeRule {
+                name: "mixed_patterns".to_string(),
+                priority: 100,
+                patterns: vec![
+                    FilePattern {
+                        pattern_type: PatternType::Regex,
+                        pattern: "[invalid(regex".to_string(), // Invalid
+                        exclude: false,
+                    },
+                    FilePattern {
+                        pattern_type: PatternType::Contains,
+                        pattern: ".js".to_string(), // Valid - using Contains instead of Glob
+                        exclude: false,
+                    }
+                ],
+                change_type: PackageChangeType::SourceCode,
+                conditions: None,
+            }
+        ],
+        significance_rules: vec![],
+        version_bump_rules: vec![],
+        project_overrides: Default::default(),
+    };
+    
+    let engine = ChangeDetectionEngine::with_rules(rules);
+    
+    // Validate patterns and confirm we have invalid ones
+    let errors = engine.validate_rules();
+    assert!(!errors.is_empty());
+    assert!(errors[0].contains("Invalid regex pattern"));
+}
