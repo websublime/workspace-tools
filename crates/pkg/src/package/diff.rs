@@ -365,6 +365,7 @@ impl PackageDiff {
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn count_breaking_changes(&self) -> usize {
         self.dependency_changes.iter().filter(|c| c.breaking).count()
     }
@@ -417,6 +418,7 @@ impl PackageDiff {
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn count_changes_by_type(&self) -> HashMap<ChangeType, usize> {
         let mut counts = HashMap::new();
 

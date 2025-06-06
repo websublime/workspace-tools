@@ -1,5 +1,5 @@
 use git2::{Error as Git2Error, Repository};
-use std::{path::PathBuf, rc::Rc};
+use std::{path::PathBuf, sync::Arc};
 use thiserror::Error;
 
 /// Represents a Git repository with high-level operation methods
@@ -24,7 +24,8 @@ use thiserror::Error;
 /// ```
 #[derive(Clone)]
 pub struct Repo {
-    pub(crate) repo: Rc<Repository>,
+    #[allow(clippy::arc_with_non_send_sync)]
+    pub(crate) repo: Arc<Repository>,
     pub(crate) local_path: PathBuf,
 }
 

@@ -10,7 +10,7 @@ impl FileSystemError {
 }
 
 impl FileSystemError {
-    /// Creates a FileSystemError from an io::Error and associated path.
+    /// Creates a `FileSystemError` from an `io::Error` and associated path.
     pub fn from_io(error: io::Error, path: impl Into<PathBuf>) -> Self {
         let path_buf = path.into();
         match error.kind() {

@@ -102,8 +102,9 @@ use petgraph::{stable_graph::StableDiGraph, Direction};
 /// # Ok(())
 /// # }
 /// ```
+#[allow(clippy::struct_field_names)]
 #[derive(Debug, Clone)]
-pub struct DependencyGraph<'a, N: Node> {
+pub struct Graph<'a, N: Node> {
     /// The underlying graph structure
     pub graph: StableDiGraph<Step<'a, N>, ()>,
     /// Mapping from node identifiers to graph indices
@@ -114,7 +115,7 @@ pub struct DependencyGraph<'a, N: Node> {
     pub cycles: Vec<Vec<N::Identifier>>,
 }
 
-impl<'a, N> From<&'a [N]> for DependencyGraph<'a, N>
+impl<'a, N> From<&'a [N]> for Graph<'a, N>
 where
     N: Node,
 {
@@ -129,7 +130,7 @@ where
     ///
     /// # Returns
     ///
-    /// A `DependencyGraph` representing the dependencies between the provided nodes.
+    /// A `Graph` representing the dependencies between the provided nodes.
     ///
     /// # Examples
     ///
@@ -145,7 +146,7 @@ where
     /// ];
     ///
     /// // Create a dependency graph
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     /// # Ok(())
     /// # }
     /// ```
@@ -251,7 +252,7 @@ where
     }
 }
 
-impl<'a, N> Iterator for DependencyGraph<'a, N>
+impl<'a, N> Iterator for Graph<'a, N>
 where
     N: Node,
 {
@@ -281,7 +282,7 @@ where
     /// ];
     ///
     /// // Create a dependency graph
-    /// let mut graph = DependencyGraph::from(packages.as_slice());
+    /// let mut graph = Graph::from(packages.as_slice());
     ///
     /// // Process nodes in dependency order (leaves first)
     /// while let Some(step) = graph.next() {
@@ -303,7 +304,7 @@ where
     }
 }
 
-impl<'a, N> DependencyGraph<'a, N>
+impl<'a, N> Graph<'a, N>
 where
     N: Node,
 {
@@ -328,7 +329,7 @@ where
     ///     Package::new_with_registry("lib", "1.0.0", Some(vec![]), &mut registry)?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     ///
     /// if graph.is_internally_resolvable() {
     ///     println!("All dependencies are resolved within the workspace");
@@ -338,6 +339,7 @@ where
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn is_internally_resolvable(&self) -> bool {
         self.graph.node_weights().all(Step::is_resolved)
     }
@@ -369,7 +371,7 @@ where
     ///     Package::new_with_registry("lib", "1.0.0", Some(vec![]), &mut registry)?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     ///
     /// println!("External dependencies:");
     /// for dep in graph.unresolved_dependencies() {
@@ -403,7 +405,7 @@ where
     ///     Package::new_with_registry("lib", "1.0.0", Some(vec![]), &mut registry)?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     ///
     /// println!("Resolved packages:");
     /// for pkg in graph.resolved_dependencies() {
@@ -437,7 +439,7 @@ where
     ///     Package::new_with_registry("app", "1.0.0", Some(vec![]), &mut registry)?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     ///
     /// if let Some(idx) = graph.get_node_index(&"app".to_string()) {
     ///     println!("Found node index for 'app'");
@@ -447,6 +449,7 @@ where
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn get_node_index(&self, id: &N::Identifier) -> Option<NodeIndex> {
         self.node_indices.get(id).copied()
     }
@@ -472,7 +475,7 @@ where
     ///     Package::new_with_registry("app", "1.0.0", Some(vec![]), &mut registry)?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     ///
     /// if let Some(node) = graph.get_node(&"app".to_string()) {
     ///     if let Step::Resolved(pkg) = node {
@@ -482,12 +485,13 @@ where
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn get_node(&self, id: &N::Identifier) -> Option<&Step<'a, N>> {
         self.get_node_index(id).and_then(|idx| self.graph.node_weight(idx))
     }
 }
 
-impl<'a, N> DependencyGraph<'a, N>
+impl<'a, N> Graph<'a, N>
 where
     N: Node,
 {
@@ -515,7 +519,7 @@ where
     ///     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![("pkg-a", "^1.0.0")]), &mut registry)?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     /// let graph = graph.detect_circular_dependencies();
     ///
     /// if graph.has_cycles() {
@@ -527,6 +531,7 @@ where
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn detect_circular_dependencies(&self) -> &Self {
         // Cycles were already detected during construction
         self
@@ -550,7 +555,7 @@ where
     ///     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![("pkg-a", "^1.0.0")]), &mut registry)?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     ///
     /// if graph.has_cycles() {
     ///     println!("Warning: Circular dependencies detected!");
@@ -558,6 +563,7 @@ where
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn has_cycles(&self) -> bool {
         !self.cycles.is_empty()
     }
@@ -582,7 +588,7 @@ where
     ///     Package::new_with_registry("pkg-c", "1.0.0", Some(vec![("pkg-a", "^1.0.0")]), &mut registry)?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     ///
     /// for cycle in graph.get_cycles() {
     ///     println!("Cycle detected: {:?}", cycle);
@@ -590,6 +596,7 @@ where
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn get_cycles(&self) -> &Vec<Vec<N::Identifier>> {
         &self.cycles
     }
@@ -612,7 +619,7 @@ where
     ///     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![("pkg-a", "^1.0.0")]), &mut registry)?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     ///
     /// for cycle in graph.get_cycle_strings() {
     ///     println!("Cycle: {}", cycle.join(" -> "));
@@ -620,6 +627,7 @@ where
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn get_cycle_strings(&self) -> Vec<Vec<String>> {
         self.cycles
             .iter()
@@ -653,13 +661,14 @@ where
     ///     Package::new_with_registry("lib", "1.0.0", Some(vec![]), &mut registry)?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     ///
     /// let externals = graph.find_external_dependencies();
     /// println!("External dependencies: {:?}", externals);  // Should contain "react"
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn find_external_dependencies(&self) -> Vec<String>
     where
         N: Node<DependencyType = Dependency>,
@@ -687,7 +696,7 @@ where
     ///
     /// # Returns
     ///
-    /// A HashMap where keys are package names with conflicts and values are lists of conflicting versions.
+    /// A `HashMap` where keys are package names with conflicts and values are lists of conflicting versions.
     ///
     /// # Examples
     ///
@@ -701,7 +710,7 @@ where
     ///     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![("shared", "^2.0.0")]), &mut registry)?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     ///
     /// if let Some(conflicts) = graph.find_version_conflicts() {
     ///     println!("Version conflicts detected:");
@@ -712,6 +721,7 @@ where
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn find_version_conflicts_for_package(&self) -> HashMap<String, Vec<String>>
     where
         N: Node<DependencyType = Dependency>,
@@ -767,7 +777,7 @@ where
     ///     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![("react", "^17.0.0")]), &mut registry)?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     ///
     /// match graph.find_version_conflicts() {
     ///     Some(conflicts) => {
@@ -781,6 +791,7 @@ where
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn find_version_conflicts(&self) -> Option<HashMap<String, Vec<String>>>
     where
         N: Node<DependencyType = Dependency>,
@@ -820,7 +831,7 @@ where
     ///     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![("pkg-a", "^1.0.0")]), &mut registry)?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     /// let report = graph.validate_package_dependencies()?;
     ///
     /// if report.has_issues() {
@@ -834,6 +845,7 @@ where
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(clippy::unnecessary_wraps)]
     pub fn validate_package_dependencies(
         &self,
     ) -> Result<ValidationReport, DependencyResolutionError>
@@ -894,7 +906,7 @@ where
     ///     Package::new_with_registry("lib", "1.0.0", Some(vec![]), &mut registry)?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     ///
     /// // Find packages that depend on 'lib'
     /// let dependents = graph.get_dependents(&"lib".to_string())?;
@@ -937,7 +949,7 @@ where
     ///     Package::new_with_registry("app", "1.0.0", Some(vec![("react", "^16.0.0")]), &mut registry)?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     /// let upgrades = graph.check_upgradable_dependencies();
     ///
     /// // In a real implementation, this might contain upgrade information
@@ -945,6 +957,7 @@ where
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn check_upgradable_dependencies(&self) -> HashMap<String, Vec<(String, String)>>
     where
         N: Node<DependencyType = Dependency>,
@@ -954,7 +967,7 @@ where
     }
 }
 
-impl<'a, N> DependencyGraph<'a, N>
+impl<'a, N> Graph<'a, N>
 where
     N: Node,
 {
@@ -992,7 +1005,7 @@ where
     ///     )?,
     /// ];
     ///
-    /// let graph = DependencyGraph::from(packages.as_slice());
+    /// let graph = Graph::from(packages.as_slice());
     ///
     /// // Create custom validation options
     /// let options = ValidationOptions::new()
@@ -1050,3 +1063,11 @@ where
         Ok(report)
     }
 }
+
+/// Type alias for backward compatibility
+/// 
+/// # Deprecation
+/// 
+/// This alias maintains compatibility with existing code.
+/// Prefer using `Graph` directly in new code.
+pub type DependencyGraph<'a, N> = Graph<'a, N>;

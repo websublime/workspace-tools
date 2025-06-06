@@ -1,4 +1,4 @@
-Rust Rules
+# Rust Rules
 
 This rules are mandatory to apply to any answer given by AI.
 
@@ -25,3 +25,19 @@ This rules are mandatory to apply to any answer given by AI.
 - Remember to follow best practices for error handling and logging
 - Reuse all the crates from the api specs if needed, and ensure that the code is well-documented and follows the Rust community's style guide
 - Detail information, file location and no methods with no implementation or saying in a real case we would use this or that or even doing this or that.
+
+# Additional instructions
+
+- base crates
+  - sublime-standard-tools:
+    - directory: crates/standard
+    - spec: crates/standard/SPEC.md
+  - sublime-package-tools:
+    - directory: crates/pkg
+    - spec: crates/pkg/SPEC.md
+  - sublime-git-tools:
+    - directory: crates/git
+    - spec: crates/git/SPEC.md
+  - sublime-monorepo-tools:
+    - directory: crates/monorepo
+    - spec: crates/monorepo/SPEC.md (In progress)

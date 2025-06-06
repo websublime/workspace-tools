@@ -95,6 +95,7 @@ impl<T: Clone> CacheEntry<T> {
     ///     println!("Cache is still valid");
     /// }
     /// ```
+    #[must_use]
     pub fn is_valid(&self, ttl: Duration) -> bool {
         self.timestamp.elapsed() < ttl
     }
@@ -117,6 +118,7 @@ impl<T: Clone> CacheEntry<T> {
     /// let data = entry.get();
     /// assert_eq!(data, vec![1, 2, 3]);
     /// ```
+    #[must_use]
     pub fn get(&self) -> T {
         self.data.clone()
     }

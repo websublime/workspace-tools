@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 use sublime_git_tools::Repo;
 use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package, RegistryManager};
 use sublime_standard_tools::{
-    command::CommandQueue,
     filesystem::FileSystemManager,
     monorepo::{MonorepoDescriptor, PackageManager},
 };
@@ -30,8 +29,6 @@ pub struct MonorepoProject {
     /// Registry manager for package lookups
     pub registry_manager: RegistryManager,
 
-    /// Command execution queue
-    pub command_queue: CommandQueue,
 
     /// Configuration manager
     pub config_manager: ConfigManager,
@@ -85,8 +82,6 @@ impl MonorepoProject {
             sublime_package_tools::LocalRegistry::default(),
         ));
 
-        // Create command queue
-        let command_queue = CommandQueue::new().start().map_err(Error::Standard)?;
 
         // Initialize empty packages list - will be populated by analyze_packages
         let packages = Vec::new();
@@ -97,7 +92,6 @@ impl MonorepoProject {
             package_manager,
             dependency_registry,
             registry_manager,
-            command_queue,
             config_manager,
             file_system,
             packages,
@@ -107,59 +101,6 @@ impl MonorepoProject {
         })
     }
 
-    /// Create a new MonorepoProject for testing (without starting command queue)
-    pub fn new_for_test(path: impl AsRef<Path>) -> Result<Self> {
-        let path = path.as_ref();
-
-        // Open git repository
-        let repository =
-            Repo::open(path.to_str().ok_or_else(|| Error::project_init("Invalid path encoding"))?)?;
-
-        // Detect monorepo using standard-tools
-        let detector = sublime_standard_tools::monorepo::MonorepoDetector::new();
-        let descriptor = detector.detect_monorepo(path)?;
-
-        // Detect package manager
-        let package_manager = PackageManager::detect(path)?;
-
-        // Create file system manager
-        let file_system = FileSystemManager::new();
-
-        // Load or create configuration
-        let (config_manager, config) = Self::load_configuration(path)?;
-
-        // Create registry manager
-        let mut registry_manager = RegistryManager::new();
-        if registry_manager.load_from_npmrc(None).is_ok() {
-            // Successfully loaded npmrc configuration
-        }
-
-        // Create dependency registry with package registry
-        let dependency_registry = DependencyRegistry::with_package_registry(Box::new(
-            sublime_package_tools::LocalRegistry::default(),
-        ));
-
-        // Create command queue without starting it for tests
-        let command_queue = CommandQueue::new();
-
-        // Initialize empty packages list - will be populated by analyze_packages
-        let packages = Vec::new();
-
-        Ok(Self {
-            repository,
-            descriptor,
-            package_manager,
-            dependency_registry,
-            registry_manager,
-            command_queue,
-            config_manager,
-            file_system,
-            packages,
-            dependency_graph: None,
-            config,
-            root_path: path.to_path_buf(),
-        })
-    }
 
     /// Load configuration from file or create default
     fn load_configuration(path: &Path) -> Result<(ConfigManager, MonorepoConfig)> {

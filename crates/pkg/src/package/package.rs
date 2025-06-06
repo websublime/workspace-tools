@@ -128,6 +128,11 @@ impl Package {
     ///
     /// A new `Package` instance, or a `VersionError` if the version string is invalid
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The version string is not a valid semantic version
+    ///
     /// # Examples
     ///
     /// ```
@@ -169,6 +174,12 @@ impl Package {
     /// # Returns
     ///
     /// A new `Package` instance, or a `VersionError` if any version is invalid
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The package version string is not a valid semantic version
+    /// - Any dependency version string is not a valid semantic version
     ///
     /// # Examples
     ///
@@ -212,6 +223,7 @@ impl Package {
     /// # Returns
     ///
     /// The name of the package as a string slice
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -221,6 +233,7 @@ impl Package {
     /// # Returns
     ///
     /// A clone of the package's semantic version
+    #[must_use]
     pub fn version(&self) -> Version {
         self.version.borrow().clone()
     }
@@ -230,6 +243,7 @@ impl Package {
     /// # Returns
     ///
     /// The package version formatted as a string
+    #[must_use]
     pub fn version_str(&self) -> String {
         self.version.borrow().to_string()
     }
@@ -243,6 +257,11 @@ impl Package {
     /// # Returns
     ///
     /// `Ok(())` if successful, or a `VersionError` if the version is invalid
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The new version string is not a valid semantic version
     ///
     /// # Examples
     ///
@@ -268,6 +287,7 @@ impl Package {
     /// # Returns
     ///
     /// A slice containing the package's dependencies
+    #[must_use]
     pub fn dependencies(&self) -> &[Rc<RefCell<Dependency>>] {
         &self.dependencies
     }
@@ -283,6 +303,12 @@ impl Package {
     ///
     /// `Ok(())` if successful, or a `DependencyResolutionError` if the dependency is not found
     /// or the version is invalid
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The dependency with the specified name is not found in the package
+    /// - The new version string is not a valid semantic version
     ///
     /// # Examples
     ///
@@ -365,6 +391,12 @@ impl Package {
     ///
     /// A vector of tuples with (dependency_name, old_version, new_version) for dependencies
     /// that were updated, or a `VersionError` if any version update fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Any version string in the resolution result is not a valid semantic version
+    /// - The underlying dependency version updates fail
     ///
     /// # Examples
     ///

@@ -17,7 +17,7 @@ use crate::error::{Error, MonorepoError, Result};
 use std::path::{Path, PathBuf};
 
 impl PackageManager {
-    /// Creates a new PackageManager instance with the specified kind and root directory.
+    /// Creates a new `PackageManager` instance with the specified kind and root directory.
     ///
     /// # Arguments
     ///
@@ -26,7 +26,7 @@ impl PackageManager {
     ///
     /// # Returns
     ///
-    /// A new PackageManager instance.
+    /// A new `PackageManager` instance.
     ///
     /// # Examples
     ///
@@ -53,6 +53,12 @@ impl PackageManager {
     /// # Arguments
     ///
     /// * `path` - The directory path to check for package manager lock files
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`MonorepoError`] if:
+    /// - No package manager lock files are found in the specified path
+    /// - An I/O error occurs while checking for lock files
     ///
     /// # Returns
     ///
@@ -102,7 +108,7 @@ impl PackageManager {
     ///
     /// # Returns
     ///
-    /// The PackageManagerKind enum value representing the type of package manager.
+    /// The `PackageManagerKind` enum value representing the type of package manager.
     ///
     /// # Examples
     ///
@@ -144,7 +150,7 @@ impl PackageManager {
     ///
     /// # Returns
     ///
-    /// A PathBuf with the complete path to the lock file.
+    /// A `PathBuf` with the complete path to the lock file.
     ///
     /// # Examples
     ///

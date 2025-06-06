@@ -1,4 +1,4 @@
-//! # sublime_package_tools
+//! # `sublime_package_tools`
 //!
 //! A robust library for managing Node.js packages, dependency graphs, and version handling in Rust.
 //!

@@ -67,6 +67,9 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or does not exist.
     fn read_file(&self, path: &Path) -> Result<Vec<u8>>;
 
     /// Writes data to a file, creating the file and any parent directories if they don't exist.
@@ -94,6 +97,9 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
     fn write_file(&self, path: &Path, contents: &[u8]) -> Result<()>;
 
     /// Reads a file and returns its contents as a UTF-8 encoded string.
@@ -120,6 +126,9 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read, does not exist, or contains invalid UTF-8.
     fn read_file_string(&self, path: &Path) -> Result<String>;
 
     /// Writes a string to a file, creating the file and any parent directories if they don't exist.
@@ -146,6 +155,9 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
     fn write_file_string(&self, path: &Path, contents: &str) -> Result<()>;
 
     /// Creates a directory and all of its parent directories if they don't exist.
@@ -171,6 +183,9 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be created.
     fn create_dir_all(&self, path: &Path) -> Result<()>;
 
     /// Removes a file or directory (recursively if it's a directory).
@@ -198,6 +213,9 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the path cannot be removed.
     fn remove(&self, path: &Path) -> Result<()>;
 
     /// Checks if a path exists.
@@ -252,6 +270,9 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be read or does not exist.
     fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>>;
 
     /// Walks a directory recursively, listing all files and directories.
@@ -278,13 +299,16 @@ pub trait FileSystem: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be read or does not exist.
     fn walk_dir(&self, path: &Path) -> Result<Vec<PathBuf>>;
 }
 
 /// Represents common directory and file types in Node.js projects.
 ///
 /// This enum provides a type-safe way to reference conventional Node.js
-/// project paths like "node_modules", "src", etc.
+/// project paths like `"node_modules"`, `"src"`, etc.
 ///
 /// # Examples
 ///
@@ -426,7 +450,7 @@ pub trait PathExt {
 
     /// Joins a Node.js path kind to this path.
     ///
-    /// This is a convenience method for joining paths like "node_modules",
+    /// This is a convenience method for joining paths like `"node_modules"`,
     /// "package.json", etc. to the current path.
     ///
     /// # Arguments
@@ -453,6 +477,15 @@ pub trait PathExt {
     ///
     /// If the path is a symlink, it resolves to the target path.
     /// Otherwise, it returns the path as-is.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`FileSystemError`] if:
+    /// - The path does not exist
+    /// - Insufficient permissions to access the path
+    /// - The path contains invalid characters for the current platform
+    /// - A symbolic link loop is encountered
+    /// - An I/O error occurs during path resolution
     ///
     /// # Returns
     ///

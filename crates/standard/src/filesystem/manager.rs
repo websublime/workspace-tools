@@ -1,4 +1,4 @@
-//! # FileSystem Manager Implementation
+//! # `FileSystem` Manager Implementation
 //!
 //! ## What
 //! This file implements the `FileSystem` trait for the `FileSystemManager` struct,
@@ -26,7 +26,7 @@ use std::{
 use walkdir::WalkDir;
 
 impl FileSystemManager {
-    /// Creates a new FileSystemManager instance.
+    /// Creates a new `FileSystemManager` instance.
     ///
     /// # Returns
     ///

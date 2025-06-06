@@ -69,6 +69,7 @@ impl PathUtils {
     /// // This will find the project root if running from within a Node.js project
     /// let project_root = PathUtils::find_project_root(Path::new("."));
     /// ```
+    #[must_use]
     pub fn find_project_root(start: &Path) -> Option<PathBuf> {
         let mut current = Some(start);
 
@@ -93,7 +94,7 @@ impl PathUtils {
         None
     }
 
-    /// Gets the current working directory as a PathBuf.
+    /// Gets the current working directory as a `PathBuf`.
     ///
     /// # Returns
     ///
@@ -111,6 +112,9 @@ impl PathUtils {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the current directory cannot be determined.
     pub fn current_dir() -> FileSystemResult<PathBuf> {
         std::env::current_dir().map_err(std::convert::Into::into)
     }
@@ -141,6 +145,9 @@ impl PathUtils {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the path is not a child of the base path.
     pub fn make_relative(path: &Path, base: &Path) -> FileSystemResult<PathBuf> {
         path.strip_prefix(base).map(std::path::Path::to_path_buf).map_err(|e| {
             FileSystemError::Validation {
@@ -259,7 +266,7 @@ impl PathExt for Path {
 
     /// Joins a Node.js path kind to this path.
     ///
-    /// This is a convenience method for joining paths like "node_modules",
+    /// This is a convenience method for joining paths like "`node_modules`",
     /// "package.json", etc. to the current path.
     ///
     /// # Arguments

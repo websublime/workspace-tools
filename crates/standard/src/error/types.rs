@@ -2,7 +2,7 @@
 //!
 //! ## What
 //! This file contains the core type definitions for errors used throughout
-//! the sublime_standard_tools crate. It defines error enums and result type
+//! the `sublime_standard_tools` crate. It defines error enums and result type
 //! aliases for various domains.
 //!
 //! ## How
@@ -97,7 +97,7 @@ pub enum FileSystemError {
 
 /// Result type for filesystem operations.
 ///
-/// This is a convenience type alias for Results with FileSystemError.
+/// This is a convenience type alias for Results with `FileSystemError`.
 ///
 /// # Examples
 ///
@@ -171,7 +171,7 @@ pub enum MonorepoError {
 
 /// Result type for monorepo operations.
 ///
-/// This is a convenience type alias for Results with MonorepoError.
+/// This is a convenience type alias for Results with `MonorepoError`.
 ///
 /// # Examples
 ///
@@ -228,7 +228,7 @@ pub enum WorkspaceError {
 
 /// Result type for workspace operations.
 ///
-/// This is a convenience type alias for Results with WorkspaceError.
+/// This is a convenience type alias for Results with `WorkspaceError`.
 ///
 /// # Examples
 ///
@@ -343,7 +343,7 @@ pub enum CommandError {
 
 /// Result type for command operations.
 ///
-/// This is a convenience type alias for Results with CommandError.
+/// This is a convenience type alias for Results with `CommandError`.
 ///
 /// # Examples
 ///

@@ -47,8 +47,9 @@ use crate::ChangeType;
 ///     println!("Safe to update lodash");
 /// }
 /// ```
+#[allow(clippy::struct_field_names)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DependencyChange {
+pub struct Change {
     /// Name of the dependency
     pub name: String,
     /// Previous version (None if newly added)
@@ -61,7 +62,7 @@ pub struct DependencyChange {
     pub breaking: bool,
 }
 
-impl DependencyChange {
+impl Change {
     /// Creates a new dependency change record.
     ///
     /// # Arguments
@@ -73,7 +74,7 @@ impl DependencyChange {
     ///
     /// # Returns
     ///
-    /// A new `DependencyChange` with automatically calculated `breaking` flag based on:
+    /// A new `Change` with automatically calculated `breaking` flag based on:
     /// - Removals are always breaking
     /// - Major version upgrades are breaking
     /// - Adding or minor/patch updates are not breaking
@@ -156,3 +157,12 @@ impl DependencyChange {
         }
     }
 }
+
+/// Type alias for backward compatibility
+/// 
+/// # Deprecation
+/// 
+/// This alias maintains compatibility with existing code.
+/// Prefer using `Change` directly in new code.
+#[allow(clippy::module_name_repetitions)]
+pub type DependencyChange = Change;

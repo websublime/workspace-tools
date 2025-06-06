@@ -128,6 +128,7 @@ impl UpgradeConfig {
     ///     "https://npm.pkg.github.com".to_string(),
     /// ]);
     /// ```
+    #[must_use]
     pub fn with_registries(registries: Vec<String>) -> Self {
         Self {
             dependency_types: DependencyFilter::WithDevelopment,

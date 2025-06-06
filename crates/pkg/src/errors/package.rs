@@ -73,10 +73,12 @@ impl Clone for PackageError {
 }
 
 impl PackageError {
+    #[must_use]
     pub fn into_parse_error(error: serde_json::Error, path: String) -> PackageError {
         PackageError::PackageJsonParseFailure { path, error }
     }
 
+    #[must_use]
     pub fn into_io_error(error: io::Error, path: String) -> PackageError {
         PackageError::PackageJsonIoFailure { path, error }
     }

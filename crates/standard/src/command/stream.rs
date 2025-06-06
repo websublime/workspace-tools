@@ -2,7 +2,7 @@
 //!
 //! ## What
 //! This file contains the core type definitions for errors used throughout
-//! the sublime_standard_tools crate. It defines error enums and result type
+//! the `sublime_standard_tools` crate. It defines error enums and result type
 //! aliases for various domains.
 //!
 //! ## How
@@ -37,7 +37,7 @@ impl Default for StreamConfig {
 }
 
 impl StreamConfig {
-    /// Creates a new StreamConfig with custom settings
+    /// Creates a new `StreamConfig` with custom settings
     ///
     /// # Arguments
     ///
@@ -87,6 +87,7 @@ impl CommandStream {
     /// let stream = CommandStream::new(stdout, stderr, StreamConfig::default());
     /// # }
     /// ```
+    #[must_use]
     pub fn new(stdout: ChildStdout, stderr: ChildStderr, config: &StreamConfig) -> Self {
         let (tx, rx) = mpsc::channel(config.buffer_size);
         let cancel = Arc::new(AtomicBool::new(false));
@@ -149,6 +150,9 @@ impl CommandStream {
     /// }
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the timeout is reached while waiting for output.
     pub async fn next_timeout(
         &mut self,
         timeout_duration: Duration,

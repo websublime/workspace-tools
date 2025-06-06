@@ -3,7 +3,7 @@
 //! This module provides functionality for working with package information,
 //! including both parsed package data and the raw package.json content.
 //!
-//! The `PackageInfo` structure bridges the structured `Package` representation
+//! The `Info` structure bridges the structured `Package` representation
 //! with the raw JSON content of a package.json file, allowing operations on both
 //! and keeping them synchronized. This is particularly useful for tools that need
 //! to read, modify, and write package.json files while preserving formatting
@@ -65,7 +65,7 @@ use std::{cell::RefCell, rc::Rc};
 /// # }
 /// ```
 #[derive(Debug, Clone)]
-pub struct PackageInfo {
+pub struct Info {
     /// The parsed package structure
     pub package: Rc<RefCell<Package>>,
     /// Absolute path to the package.json file
@@ -78,7 +78,7 @@ pub struct PackageInfo {
     pub pkg_json: Rc<RefCell<Value>>,
 }
 
-impl PackageInfo {
+impl Info {
     /// Create a new package info.
     ///
     /// # Arguments
@@ -396,3 +396,11 @@ impl PackageInfo {
         Ok(())
     }
 }
+
+/// Type alias for backward compatibility
+/// 
+/// # Deprecation
+/// 
+/// This alias maintains compatibility with existing code.
+/// Prefer using `Info` directly in new code.
+pub type PackageInfo = Info;

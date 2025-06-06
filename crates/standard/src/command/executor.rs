@@ -74,7 +74,7 @@ use super::types::{
 /// # }
 /// ``
 #[async_trait::async_trait]
-pub trait CommandExecutor: Send + Sync {
+pub trait Executor: Send + Sync {
     /// Executes a command and returns its output.
     ///
     /// # Arguments
@@ -84,6 +84,10 @@ pub trait CommandExecutor: Send + Sync {
     /// # Returns
     ///
     /// * `Ok(CommandOutput)` - If the command executed successfully
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the command fails to execute or times out.
     /// * `Err(Error)` - If the command failed to execute
     async fn execute(&self, command: CmdConfig) -> Result<CommandOutput>;
 
@@ -97,6 +101,10 @@ pub trait CommandExecutor: Send + Sync {
     /// # Returns
     ///
     /// * `Ok((CommandStream, Child))` - If the command was started successfully
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the command fails to start.
     /// * `Err(Error)` - If the command failed to start
     async fn execute_stream(
         &self,
@@ -106,7 +114,7 @@ pub trait CommandExecutor: Send + Sync {
 }
 
 impl DefaultCommandExecutor {
-    /// Creates a new DefaultCommandExecutor.
+    /// Creates a new `DefaultCommandExecutor`.
     ///
     /// # Returns
     ///
@@ -132,7 +140,7 @@ impl DefaultCommandExecutor {
     ///
     /// # Returns
     ///
-    /// A tokio Command configured based on the inputs
+    /// A tokio `Command` configured based on the inputs
     ///
     /// # Examples
     ///
@@ -164,7 +172,7 @@ impl DefaultCommandExecutor {
 }
 
 #[async_trait::async_trait]
-impl CommandExecutor for DefaultCommandExecutor {
+impl Executor for DefaultCommandExecutor {
     /// Executes a command and returns its complete output.
     ///
     /// This method spawns the command, waits for it to complete with
@@ -178,6 +186,10 @@ impl CommandExecutor for DefaultCommandExecutor {
     /// # Returns
     ///
     /// * `Ok(CommandOutput)` - Command output if successful
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the command fails to execute, times out, or returns a non-zero exit code.
     /// * `Err(Error)` - If the command failed to execute
     ///
     /// # Examples
@@ -271,6 +283,10 @@ impl CommandExecutor for DefaultCommandExecutor {
     /// # Returns
     ///
     /// * `Ok((CommandStream, Child))` - The output stream and process handle
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the command fails to start or if stdout/stderr cannot be captured.
     /// * `Err(Error)` - If the command failed to start
     ///
     /// # Examples

@@ -35,6 +35,12 @@ pub trait PackageRegistry {
     ///
     /// `Ok(Some(version))` if the package exists, `Ok(None)` if the package doesn't exist,
     /// or a `PackageRegistryError` if the query fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
     fn get_latest_version(
         &self,
         package_name: &str,
@@ -49,6 +55,12 @@ pub trait PackageRegistry {
     /// # Returns
     ///
     /// A list of version strings, or a `PackageRegistryError` if the query fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
     fn get_all_versions(&self, package_name: &str) -> Result<Vec<String>, PackageRegistryError>;
 
     /// Get metadata about a package
@@ -61,6 +73,13 @@ pub trait PackageRegistry {
     /// # Returns
     ///
     /// Package metadata as JSON, or a `PackageRegistryError` if the query fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The specified package or version is not found
+    /// - The response cannot be parsed as JSON
     fn get_package_info(
         &self,
         package_name: &str,
@@ -83,6 +102,13 @@ pub trait PackageRegistry {
     /// # Returns
     ///
     /// Package tarball as bytes, or a `PackageRegistryError` if the download fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to download the package fails
+    /// - The specified package or version is not found
+    /// - The downloaded data cannot be read
     ///
     /// # Examples
     ///
@@ -115,6 +141,14 @@ pub trait PackageRegistry {
     /// # Returns
     ///
     /// `Ok(())` on success, or a `PackageRegistryError` if any operation fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The destination directory cannot be created
+    /// - The package download fails
+    /// - The tarball extraction fails
+    /// - File system operations fail
     ///
     /// # Examples
     ///
@@ -455,6 +489,7 @@ impl NpmRegistry {
     /// assert!(url.contains("lodash"));
     /// assert!(url.contains("4.17.21"));
     /// ```
+    #[must_use]
     pub fn get_download_url(&self, package_name: &str, version: &str) -> String {
         if package_name.starts_with('@') {
             // Handle scoped packages: @scope/package -> @scope/package/-/package-version.tgz

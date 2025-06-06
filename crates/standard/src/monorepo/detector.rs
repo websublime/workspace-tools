@@ -1,7 +1,7 @@
 //! # Monorepo Detection Implementation
 //!
 //! ## What
-//! This file implements the MonorepoDetector struct, providing methods to identify
+//! This file implements the `MonorepoDetector` struct, providing methods to identify
 //! and analyze monorepo structures in a filesystem. It supports detection of various
 //! monorepo types including npm, yarn, pnpm, bun, and others.
 //!
@@ -29,11 +29,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 impl MonorepoDetector<FileSystemManager> {
-    /// Creates a new MonorepoDetector with the default filesystem implementation.
+    /// Creates a new `MonorepoDetector` with the default filesystem implementation.
     ///
     /// # Returns
     ///
-    /// A new MonorepoDetector instance using the FileSystemManager.
+    /// A new `MonorepoDetector` instance using the `FileSystemManager`.
     ///
     /// # Examples
     ///
@@ -49,7 +49,7 @@ impl MonorepoDetector<FileSystemManager> {
 }
 
 impl<F: FileSystem> MonorepoDetector<F> {
-    /// Creates a new MonorepoDetector with a custom filesystem implementation.
+    /// Creates a new `MonorepoDetector` with a custom filesystem implementation.
     ///
     /// # Arguments
     ///
@@ -57,7 +57,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
     ///
     /// # Returns
     ///
-    /// A new MonorepoDetector instance using the provided filesystem.
+    /// A new `MonorepoDetector` instance using the provided filesystem.
     ///
     /// # Examples
     ///
@@ -81,6 +81,13 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Arguments
     ///
     /// * `path` - The path to check
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if:
+    /// - An I/O error occurs while accessing the filesystem
+    /// - The path cannot be read or accessed
+    /// - Configuration files cannot be parsed
     ///
     /// # Returns
     ///
@@ -142,6 +149,13 @@ impl<F: FileSystem> MonorepoDetector<F> {
     ///
     /// * `start_path` - The path to start searching from
     ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if:
+    /// - An I/O error occurs while accessing the filesystem
+    /// - Any path in the traversal cannot be read or accessed
+    /// - Configuration files cannot be parsed during detection
+    ///
     /// # Returns
     ///
     /// * `Ok(Some((PathBuf, MonorepoKind)))` - The path and kind of monorepo if found
@@ -194,6 +208,15 @@ impl<F: FileSystem> MonorepoDetector<F> {
     /// # Arguments
     ///
     /// * `path` - The path to analyze for a monorepo structure
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if:
+    /// - The path is not a monorepo root
+    /// - An I/O error occurs while scanning the filesystem
+    /// - Package configuration files cannot be read or parsed
+    /// - Workspace configuration files are invalid
+    /// - Glob patterns in workspace configurations are malformed
     ///
     /// # Returns
     ///
@@ -583,7 +606,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
         Ok(packages)
     }
 
-    /// Reads and parses a package.json file to create a WorkspacePackage.
+    /// Reads and parses a package.json file to create a `WorkspacePackage`.
     ///
     /// # Arguments
     ///

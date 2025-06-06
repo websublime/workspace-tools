@@ -243,6 +243,11 @@ impl LocalRegistry {
     ///
     /// `Ok(())` if the package was added successfully, or a `PackageRegistryError` if the operation fails.
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The internal lock for the package storage fails
+    ///
     /// # Examples
     ///
     /// ```
@@ -304,6 +309,12 @@ impl LocalRegistry {
     ///
     /// `Ok(())` if all versions were added successfully, or a `PackageRegistryError` if any operation fails.
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The internal lock for the package storage fails
+    /// - Any individual package version addition fails
+    ///
     /// # Examples
     ///
     /// ```
@@ -339,6 +350,11 @@ impl LocalRegistry {
     /// # Returns
     ///
     /// `Ok(())` if the registry was cleared successfully, or a `PackageRegistryError` if the operation fails.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The internal lock for the package storage fails
     ///
     /// # Examples
     ///
@@ -377,6 +393,11 @@ impl LocalRegistry {
     ///
     /// `Ok(true)` if the package exists, `Ok(false)` if it doesn't, or a `PackageRegistryError` if the operation fails.
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The internal lock for the package storage fails
+    ///
     /// # Examples
     ///
     /// ```
@@ -392,6 +413,7 @@ impl LocalRegistry {
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn has_package(&self, package_name: &str) -> Result<bool, PackageRegistryError> {
         let packages = self.packages.lock()?;
         Ok(packages.contains_key(package_name))

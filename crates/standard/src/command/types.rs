@@ -7,17 +7,17 @@
 //!
 //! ## How
 //! Types are organized into several categories:
-//! - Command representation (Command, CommandBuilder)
-//! - Command execution results (CommandOutput)
-//! - Command queuing and prioritization (CommandQueue, QueuedCommand, CommandPriority)
-//! - Stream handling for command output (StreamOutput, CommandStream)
+//! - Command representation (Command, `CommandBuilder`)
+//! - Command execution results (`CommandOutput`)
+//! - Command queuing and prioritization (`CommandQueue`, `QueuedCommand`, `CommandPriority`)
+//! - Stream handling for command output (`StreamOutput`, `CommandStream`)
 //!
 //! ## Why
 //! These types provide a robust foundation for executing shell commands with
 //! various execution strategies (synchronous, asynchronous, queued) while handling
 //! timeouts, priorities, concurrency, and output streaming in a consistent way.
 
-use super::executor::CommandExecutor;
+use super::executor::Executor;
 use std::{
     collections::{BinaryHeap, HashMap},
     path::PathBuf,
@@ -250,7 +250,7 @@ pub struct CommandQueueConfig {
     pub shutdown_timeout: Duration,
 }
 
-/// Default implementation of the CommandExecutor trait.
+/// Default implementation of the `CommandExecutor` trait.
 ///
 /// Provides a standard implementation for executing commands directly without
 /// any custom behavior.
@@ -283,7 +283,7 @@ pub(crate) struct QueuedCommand {
 ///
 /// Used for sending commands to be executed or signaling queue shutdown.
 ///
-/// This is an internal enum used by the CommandQueue implementation.
+/// This is an internal enum used by the `CommandQueue` implementation.
 #[derive(Debug)]
 pub(crate) enum QueueMessage {
     /// Execute a command
@@ -298,7 +298,7 @@ pub(crate) enum QueueMessage {
 
 /// A queue for managing command execution with priorities and concurrency control.
 ///
-/// The CommandQueue provides an asynchronous interface for queuing up commands
+/// The `CommandQueue` provides an asynchronous interface for queuing up commands
 /// to be executed with specific priorities, managing concurrency limits, and
 /// collecting results.
 ///
@@ -331,7 +331,7 @@ pub struct CommandQueue {
     /// Queue configuration
     pub(crate) config: CommandQueueConfig,
     /// Command executor for running commands
-    pub(crate) executor: Arc<dyn CommandExecutor>,
+    pub(crate) executor: Arc<dyn Executor>,
     /// Sender for the command queue
     pub(crate) queue_sender: Option<Sender<QueueMessage>>,
     /// Status of queued commands
@@ -430,14 +430,14 @@ pub struct CommandStream {
 /// Internal processor for the command queue.
 ///
 /// Manages the execution of queued commands based on priority, concurrency limits,
-/// and rate limiting. This is an internal structure used by CommandQueue.
+/// and rate limiting. This is an internal structure used by `CommandQueue`.
 pub(crate) struct QueueProcessor {
     /// Queue configuration
     pub(crate) config: CommandQueueConfig,
     /// Receiver for command queue messages
     pub(crate) receiver: Receiver<QueueMessage>,
     /// Command executor for running commands
-    pub(crate) executor: Arc<dyn CommandExecutor>,
+    pub(crate) executor: Arc<dyn Executor>,
     /// Command queue for prioritizing commands
     pub(crate) queue: BinaryHeap<QueuedCommand>,
     /// Semaphore to limit concurrent commands

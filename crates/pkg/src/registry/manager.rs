@@ -294,6 +294,7 @@ impl RegistryManager {
     /// # Returns
     ///
     /// Reference to the appropriate registry
+    #[must_use]
     pub fn get_registry_for_package(
         &self,
         package_name: &str,
@@ -323,6 +324,12 @@ impl RegistryManager {
     ///
     /// Latest version string, or `None` if the package doesn't exist,
     /// or a `PackageRegistryError` if the query fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
     pub fn get_latest_version(
         &self,
         package_name: &str,
@@ -340,6 +347,12 @@ impl RegistryManager {
     /// # Returns
     ///
     /// List of available versions, or a `PackageRegistryError` if the query fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
     pub fn get_all_versions(
         &self,
         package_name: &str,
@@ -358,6 +371,13 @@ impl RegistryManager {
     /// # Returns
     ///
     /// Package metadata as JSON, or a `PackageRegistryError` if the query fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The specified package or version is not found
+    /// - The response cannot be parsed as JSON
     pub fn get_package_info(
         &self,
         package_name: &str,
@@ -457,6 +477,7 @@ impl RegistryManager {
     /// # Returns
     ///
     /// URL of the default registry
+    #[must_use]
     pub fn default_registry(&self) -> &str {
         &self.default_registry
     }
@@ -470,6 +491,7 @@ impl RegistryManager {
     /// # Returns
     ///
     /// `true` if the scope is associated with a registry, `false` otherwise
+    #[must_use]
     pub fn has_scope(&self, scope: &str) -> bool {
         let clean_scope = scope.trim_start_matches('@');
         self.scopes.contains_key(clean_scope)
@@ -484,6 +506,7 @@ impl RegistryManager {
     /// # Returns
     ///
     /// URL of the associated registry, or `None` if the scope isn't associated
+    #[must_use]
     pub fn get_registry_for_scope(&self, scope: &str) -> Option<&str> {
         let clean_scope = scope.trim_start_matches('@');
         self.scopes.get(clean_scope).map(std::string::String::as_str)
@@ -494,6 +517,7 @@ impl RegistryManager {
     /// # Returns
     ///
     /// List of all registered registry URLs
+    #[must_use]
     pub fn registry_urls(&self) -> Vec<&str> {
         self.registries.keys().map(std::string::String::as_str).collect()
     }

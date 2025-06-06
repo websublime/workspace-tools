@@ -59,6 +59,7 @@ pub mod changes;
 pub mod config;
 pub mod core;
 pub mod error;
+pub mod tasks;
 
 // Re-exports
 use std::sync::Arc;
@@ -72,7 +73,7 @@ pub use crate::changes::{
     ChangeDetector, ChangeDetectionEngine, ChangeDetectionRules,
     PackageChange, PackageChangeType, ChangeSignificance,
     ChangeTypeRule, SignificanceRule, VersionBumpRule,
-    FilePattern, PatternType,
+    FilePattern as ChangeFilePattern, PatternType,
 };
 pub use crate::config::{ConfigManager, Environment, MonorepoConfig, VersionBumpType};
 pub use crate::core::{
@@ -83,6 +84,13 @@ pub use crate::core::{
     VersioningPlan, VersioningPlanStep,
 };
 pub use crate::error::{Error, Result};
+pub use crate::tasks::{
+    TaskDefinition, TaskCommand, PackageScript, TaskPriority,
+    TaskCondition, TaskScope, TaskTrigger, FilePattern, FilePatternType,
+    TaskExecutionResult, TaskStatus, TaskOutput, TaskError,
+    TaskExecutionStats, TaskExecutionLog,
+    TaskManager, TaskRegistry, TaskExecutor,
+};
 
 // Main entry point - will be implemented in later phases
 /// The main orchestrator for monorepo tools functionality
@@ -116,6 +124,11 @@ impl MonorepoTools {
     /// Get a version manager with custom strategy (Phase 2 functionality)
     pub fn version_manager_with_strategy(&self, strategy: Box<dyn VersioningStrategy>) -> VersionManager {
         VersionManager::with_strategy(Arc::clone(&self.project), strategy)
+    }
+
+    /// Get a reference to the task manager (Phase 3 functionality)
+    pub fn task_manager(&self) -> Result<TaskManager> {
+        TaskManager::new(Arc::clone(&self.project))
     }
 
     /// Analyze changes between branches (Phase 2 functionality)

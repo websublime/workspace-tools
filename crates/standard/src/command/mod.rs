@@ -35,8 +35,16 @@ mod tests;
 
 pub use types::{
     Command, CommandBuilder, CommandOutput, CommandPriority, CommandQueue, CommandQueueConfig,
-    CommandQueueResult, CommandStatus, CommandStream, DefaultCommandExecutor, StreamConfig,
-    StreamOutput,
+    CommandQueueResult, CommandStatus, CommandStream, DefaultCommandExecutor,
+    StreamConfig, StreamOutput,
 };
 
-pub use executor::CommandExecutor;
+// Short aliases to avoid module name repetitions in user code
+pub use types::{
+    CommandBuilder as Builder, CommandOutput as Output, CommandPriority as Priority, 
+    CommandQueue as Queue, CommandQueueConfig as QueueConfig,
+    CommandQueueResult as QueueResult, CommandStatus as Status, CommandStream as Stream, 
+    DefaultCommandExecutor as DefaultExecutor,
+};
+
+pub use executor::Executor;

@@ -134,6 +134,7 @@ impl Upgrader {
     /// # Returns
     ///
     /// Reference to the upgrader's registry manager
+    #[must_use]
     pub fn registry_manager(&self) -> &RegistryManager {
         &self.registry_manager
     }
@@ -161,6 +162,7 @@ impl Upgrader {
     /// # Returns
     ///
     /// Reference to the upgrader's configuration
+    #[must_use]
     pub fn config(&self) -> &UpgradeConfig {
         &self.config
     }
@@ -174,6 +176,12 @@ impl Upgrader {
     /// # Returns
     ///
     /// List of available versions, or a `PackageRegistryError` if the lookup fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
     fn get_cached_versions(
         &mut self,
         package_name: &str,
@@ -198,6 +206,12 @@ impl Upgrader {
     ///
     /// The highest satisfying version string, or `None` if no satisfying version exists,
     /// or a `PackageRegistryError` if the lookup fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
     fn find_highest_satisfying_version(
         &mut self,
         package_name: &str,
@@ -276,6 +290,12 @@ impl Upgrader {
     ///
     /// The highest version string, or `None` if no versions exist,
     /// or a `PackageRegistryError` if the lookup fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
     fn find_latest_version(
         &mut self,
         package_name: &str,
@@ -405,6 +425,13 @@ impl Upgrader {
     ///
     /// Information about available upgrades, or a `PackageRegistryError` if the check fails
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
+    /// - Package versions cannot be compared due to invalid format
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -492,6 +519,13 @@ impl Upgrader {
     ///
     /// List of available upgrades, or a `PackageRegistryError` if any check fails
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
+    /// - Package versions cannot be compared due to invalid format
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -570,6 +604,13 @@ impl Upgrader {
     ///
     /// List of available upgrades across all packages, or a `PackageRegistryError` if any check fails
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
+    /// - Package versions cannot be compared due to invalid format
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -609,6 +650,12 @@ impl Upgrader {
     /// # Returns
     ///
     /// List of upgrades that were actually applied, or a `DependencyResolutionError` if any update fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The dependency with the specified name is not found in the package
+    /// - The new version string is not a valid semantic version
     ///
     /// # Examples
     ///
@@ -677,6 +724,7 @@ impl Upgrader {
     /// # Returns
     ///
     /// A formatted string report of the upgrades
+    #[must_use]
     ///
     /// # Examples
     ///

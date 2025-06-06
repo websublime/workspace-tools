@@ -7,7 +7,7 @@
 //! - Development dependencies (devDependencies)
 //! - Optional dependencies (optionalDependencies)
 //!
-//! The `DependencyFilter` enum allows configuring which types of dependencies
+//! The `Filter` enum allows configuring which types of dependencies
 //! to include in various operations throughout the library.
 
 /// Filter to control which types of dependencies are included in operations.
@@ -32,7 +32,7 @@
 /// assert!(matches!(default_filter, DependencyFilter::WithDevelopment));
 /// ```
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub enum DependencyFilter {
+pub enum Filter {
     /// Include only production dependencies
     ///
     /// Only includes dependencies from the main "dependencies" section of package.json.
@@ -47,7 +47,7 @@ pub enum DependencyFilter {
     AllDependencies,
 }
 
-impl Default for DependencyFilter {
+impl Default for Filter {
     /// Returns the default filter configuration.
     ///
     /// By default, both production and development dependencies are included.
@@ -55,3 +55,12 @@ impl Default for DependencyFilter {
         Self::WithDevelopment
     }
 }
+
+/// Type alias for backward compatibility
+/// 
+/// # Deprecation
+/// 
+/// This alias maintains compatibility with existing code.
+/// Prefer using `Filter` directly in new code.
+#[allow(clippy::module_name_repetitions)]
+pub type DependencyFilter = Filter;

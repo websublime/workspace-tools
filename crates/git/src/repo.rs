@@ -63,7 +63,7 @@ use git2::{
 use std::collections::HashMap;
 use std::fs::canonicalize;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::{GitChangedFile, GitFileStatus, Repo, RepoCommit, RepoError, RepoTags};
 
@@ -76,6 +76,14 @@ use crate::{GitChangedFile, GitFileStatus, Repo, RepoCommit, RepoError, RepoTags
 /// # Returns
 ///
 /// * `Result<String, RepoError>` - The canonicalized path as a string, or an error
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// - The path does not exist
+/// - File system permissions prevent accessing the path
+/// - The path contains invalid characters or sequences
+/// - I/O errors occur while resolving the path
 ///
 /// # Examples
 ///
@@ -309,6 +317,14 @@ impl Repo {
     ///
     /// * `Result<Self, RepoError>` - A new `Repo` instance or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The path cannot be canonicalized
+    /// - The directory cannot be created
+    /// - Git repository initialization fails
+    /// - The repository cannot be opened after creation
+    ///
     /// # Examples
     ///
     /// ```
@@ -329,7 +345,7 @@ impl Repo {
         .map_err(RepoError::CreateRepoFailure)?;
 
         // Just return the repo without making any commits
-        let result = Self { repo: Rc::new(repo), local_path: location_buf };
+        let result = Self { repo: Arc::new(repo), local_path: location_buf };
 
         // Now make the initial commit using our new instance
         result.make_initial_commit()?;
@@ -347,6 +363,14 @@ impl Repo {
     ///
     /// * `Result<Self, RepoError>` - A `Repo` instance or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The path cannot be canonicalized
+    /// - The path does not contain a valid Git repository
+    /// - The repository cannot be opened due to permission issues
+    /// - The repository is corrupted or invalid
+    ///
     /// # Examples
     ///
     /// ```
@@ -360,7 +384,7 @@ impl Repo {
         let local_path = canonicalize_path(path)?;
         let repo = Repository::open(path).map_err(RepoError::OpenRepoFailure)?;
 
-        Ok(Self { repo: Rc::new(repo), local_path: PathBuf::from(local_path) })
+        Ok(Self { repo: Arc::new(repo), local_path: PathBuf::from(local_path) })
     }
 
     /// Clones a Git repository from a URL to a local path
@@ -374,6 +398,16 @@ impl Repo {
     ///
     /// * `Result<Self, RepoError>` - A `Repo` instance or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The path cannot be canonicalized
+    /// - The URL is invalid or unreachable
+    /// - Network connectivity issues prevent cloning
+    /// - Authentication is required but not provided or fails
+    /// - The destination path already exists or cannot be created
+    /// - Insufficient disk space or permissions
+    ///
     /// # Examples
     ///
     /// ```
@@ -386,7 +420,7 @@ impl Repo {
         let local_path = canonicalize_path(path)?;
         let repo = Repository::clone(url, path).map_err(RepoError::CloneRepoFailure)?;
 
-        Ok(Self { repo: Rc::new(repo), local_path: PathBuf::from(local_path) })
+        Ok(Self { repo: Arc::new(repo), local_path: PathBuf::from(local_path) })
     }
 
     /// Gets the local path of the repository
@@ -403,6 +437,7 @@ impl Repo {
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// println!("Repository path: {}", repo.get_repo_path().display());
     /// ```
+    #[must_use]
     pub fn get_repo_path(&self) -> &Path {
         self.local_path.as_path()
     }
@@ -417,6 +452,14 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<&Self, RepoError>` - A reference to self for method chaining, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The repository configuration cannot be accessed
+    /// - The configuration settings cannot be written
+    /// - Invalid configuration values are provided
+    /// - File system permissions prevent configuration changes
     ///
     /// # Examples
     ///
@@ -446,6 +489,15 @@ impl Repo {
     ///
     /// * `Result<&Self, RepoError>` - A reference to self for method chaining, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The current HEAD reference cannot be accessed
+    /// - The HEAD cannot be peeled to a commit
+    /// - A branch with the same name already exists
+    /// - The repository is in an invalid state
+    /// - Insufficient permissions to create the branch
+    ///
     /// # Examples
     ///
     /// ```
@@ -467,6 +519,14 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<Vec<String>, RepoError>` - A list of branch names, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The repository's branch references cannot be accessed
+    /// - Branch iteration fails due to corrupted references
+    /// - Branch names contain invalid UTF-8 sequences
+    /// - The repository is in an invalid state
     ///
     /// # Examples
     ///
@@ -503,6 +563,14 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<HashMap<String, String>, RepoError>` - A map of config keys to values, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The repository configuration cannot be accessed
+    /// - Configuration entries cannot be read or iterated
+    /// - Configuration values contain invalid data
+    /// - File system permissions prevent reading configuration
     ///
     /// # Examples
     ///
@@ -544,6 +612,15 @@ impl Repo {
     ///
     /// * `Result<&Self, RepoError>` - A reference to self for method chaining, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The specified branch does not exist
+    /// - The branch reference is invalid or corrupted
+    /// - The HEAD reference cannot be updated
+    /// - There are uncommitted changes that would be lost
+    /// - File system permissions prevent checkout
+    ///
     /// # Examples
     ///
     /// ```
@@ -577,6 +654,14 @@ impl Repo {
     ///
     /// * `Result<String, RepoError>` - The current branch name, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The HEAD reference cannot be accessed
+    /// - The HEAD reference is invalid or corrupted
+    /// - The repository is in a detached HEAD state
+    /// - The branch name contains invalid characters
+    ///
     /// # Examples
     ///
     /// ```
@@ -605,6 +690,15 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<(), RepoError>` - Success or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - A tag with the same name already exists
+    /// - The repository signature cannot be created
+    /// - The HEAD reference cannot be accessed
+    /// - The target object for the tag cannot be found
+    /// - Insufficient permissions to create the tag
     ///
     /// # Examples
     ///
@@ -651,6 +745,15 @@ impl Repo {
     ///
     /// * `Result<&Self, RepoError>` - A reference to self for method chaining, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The specified file does not exist
+    /// - The file path is invalid or inaccessible
+    /// - The Git index cannot be accessed or modified
+    /// - The index cannot be written to disk
+    /// - Insufficient permissions to read the file or write the index
+    ///
     /// # Examples
     ///
     /// ```
@@ -679,6 +782,15 @@ impl Repo {
     ///
     /// * `Result<&Self, RepoError>` - A reference to self for method chaining, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The Git index cannot be accessed or modified
+    /// - Files cannot be read due to permission issues
+    /// - The index cannot be written to disk
+    /// - Some files are locked or in use by other processes
+    /// - The working directory contains invalid or corrupted files
+    ///
     /// # Examples
     ///
     /// ```
@@ -705,6 +817,14 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<String, RepoError>` - The last tag name, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - No tags exist in the repository
+    /// - Tag references cannot be accessed
+    /// - Tag names are corrupted or invalid
+    /// - The repository state is invalid
     ///
     /// # Examples
     ///
@@ -733,6 +853,14 @@ impl Repo {
     ///
     /// * `Result<String, RepoError>` - The current commit SHA, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The HEAD reference cannot be accessed
+    /// - The HEAD reference has no target (repository is empty)
+    /// - The repository is in an invalid state
+    /// - The commit object cannot be found
+    ///
     /// # Examples
     ///
     /// ```
@@ -757,6 +885,15 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<String, RepoError>` - The previous commit SHA, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The HEAD reference cannot be accessed
+    /// - The HEAD cannot be peeled to a commit
+    /// - The parent commit cannot be found or accessed
+    /// - The repository has no commits (empty repository)
+    /// - The commit objects are corrupted
     ///
     /// # Examples
     ///
@@ -798,6 +935,16 @@ impl Repo {
     ///
     /// * `Result<String, RepoError>` - The new commit's SHA, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The repository signature cannot be created
+    /// - The HEAD reference cannot be accessed
+    /// - The index cannot be accessed or is empty
+    /// - The tree cannot be written or found
+    /// - The commit cannot be created due to repository state issues
+    /// - Insufficient permissions to write the commit
+    ///
     /// # Examples
     ///
     /// ```
@@ -832,7 +979,7 @@ impl Repo {
 
     /// Adds all changes and creates a new commit
     ///
-    /// This method performs both add_all() and commit() in one step.
+    /// This method performs both `add_all()` and `commit()` in one step.
     ///
     /// # Arguments
     ///
@@ -841,6 +988,16 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<String, RepoError>` - The new commit's SHA, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The repository signature cannot be created
+    /// - The HEAD reference cannot be accessed
+    /// - Files cannot be added to the index due to permission issues
+    /// - The tree cannot be written or found
+    /// - The commit cannot be created due to repository state issues
+    /// - There are no changes to commit
     ///
     /// # Examples
     ///
@@ -881,6 +1038,14 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<Vec<String>, RepoError>` - List of changed file paths, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The repository status cannot be read
+    /// - File system permissions prevent accessing working directory files
+    /// - The index is corrupted or cannot be read
+    /// - The working directory contains invalid or inaccessible files
     ///
     /// # Examples
     ///
@@ -925,6 +1090,15 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<Option<String>, RepoError>` - The branch name if found, None if not found, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The provided SHA string is not a valid commit hash
+    /// - The commit object cannot be found in the repository
+    /// - Branch references cannot be accessed or iterated
+    /// - Branch names are corrupted or invalid
+    /// - The repository graph cannot be analyzed
     ///
     /// # Examples
     ///
@@ -992,6 +1166,15 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<Vec<String>, RepoError>` - List of branch names containing the commit, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The provided SHA string is not a valid commit hash
+    /// - The commit object cannot be found in the repository
+    /// - Branch references cannot be accessed or iterated
+    /// - Branch names are corrupted or invalid
+    /// - The repository graph cannot be analyzed
     ///
     /// # Examples
     ///
@@ -1064,6 +1247,16 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<(), RepoError>` - Success or an error, including `MergeConflictError`.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The current HEAD reference cannot be accessed
+    /// - The branch to merge does not exist or cannot be resolved
+    /// - Merge conflicts occur that cannot be automatically resolved
+    /// - The repository is in an invalid state for merging
+    /// - File system permissions prevent merge operations
+    /// - The working directory has uncommitted changes that would conflict
     ///
     /// # Examples
     ///
@@ -1217,6 +1410,17 @@ impl Repo {
     ///
     /// * `Result<bool, RepoError>` - Success indicator or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The specified remote does not exist
+    /// - Authentication fails (SSH keys, credentials)
+    /// - Network connectivity issues prevent pushing
+    /// - The remote repository rejects the push (non-fast-forward, etc.)
+    /// - The current branch has no commits to push
+    /// - File system permissions prevent accessing SSH keys
+    /// - The remote server is unreachable or down
+    ///
     /// # Examples
     ///
     /// ```
@@ -1288,6 +1492,17 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<bool, RepoError>` - Success indicator or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The specified remote does not exist
+    /// - Authentication fails (SSH keys, credentials)
+    /// - Network connectivity issues prevent fetching
+    /// - Invalid refspecs are provided
+    /// - The remote repository is unreachable
+    /// - File system permissions prevent accessing SSH keys
+    /// - The local repository cannot be updated with fetched data
     ///
     /// # Examples
     ///
@@ -1385,6 +1600,18 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<bool, RepoError>` - Success indicator or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The specified remote does not exist
+    /// - Authentication fails during fetch operation
+    /// - Network connectivity issues prevent fetching
+    /// - The remote branch does not exist
+    /// - Merge conflicts occur during the pull
+    /// - The current branch cannot be fast-forwarded
+    /// - The working directory has uncommitted changes that would be lost
+    /// - The repository state prevents merging
     ///
     /// # Examples
     ///
@@ -1509,6 +1736,17 @@ impl Repo {
     ///
     /// * `Result<bool, RepoError>` - Success indicator or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The specified remote does not exist
+    /// - None of the provided SSH keys are valid or accessible
+    /// - Authentication fails with all provided SSH keys
+    /// - Network connectivity issues prevent pushing
+    /// - The remote repository rejects the push
+    /// - The current branch has no commits to push
+    /// - File system permissions prevent accessing SSH key files
+    ///
     /// # Examples
     ///
     /// ```
@@ -1582,6 +1820,15 @@ impl Repo {
     ///
     /// * `Result<String, RepoError>` - The SHA of the common ancestor commit, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The provided git reference does not exist or is invalid
+    /// - The reference cannot be resolved to a commit object
+    /// - The HEAD reference cannot be accessed
+    /// - No common ancestor exists between the references
+    /// - The repository graph is corrupted or invalid
+    ///
     /// # Examples
     ///
     /// ```
@@ -1620,6 +1867,16 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<Vec<GitChangedFile>, RepoError>` - List of changed files with status, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The provided git reference does not exist or is invalid
+    /// - The reference cannot be resolved to a commit object
+    /// - The HEAD reference cannot be accessed
+    /// - Commit trees cannot be accessed or are corrupted
+    /// - The diff operation fails due to repository state issues
+    /// - File paths cannot be processed due to encoding issues
     ///
     /// # Examples
     ///
@@ -1776,6 +2033,16 @@ impl Repo {
     ///
     /// * `Result<Vec<String>, RepoError>` - List of changed file paths, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The provided git reference does not exist or is invalid
+    /// - The reference cannot be resolved to a commit object
+    /// - The HEAD reference cannot be accessed
+    /// - Commit trees cannot be accessed or are corrupted
+    /// - The diff operation fails due to repository state issues
+    /// - File paths cannot be processed due to encoding issues
+    ///
     /// # Examples
     ///
     /// ```
@@ -1809,6 +2076,15 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<Vec<String>, RepoError>` - List of changed file paths within the packages, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The provided branch reference does not exist or is invalid
+    /// - Package paths cannot be canonicalized or are invalid
+    /// - The underlying `get_all_files_changed_since_sha` function fails
+    /// - File paths cannot be processed due to encoding issues
+    /// - File system permissions prevent path access
     ///
     /// # Examples
     ///
@@ -1875,6 +2151,16 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<Vec<RepoCommit>, RepoError>` - List of commits, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The provided reference (since) does not exist or is invalid
+    /// - The reference cannot be resolved to a commit object
+    /// - The revision walk cannot be initialized
+    /// - Commit objects cannot be accessed or are corrupted
+    /// - File path filtering fails due to invalid paths
+    /// - The repository state is invalid or corrupted
     ///
     /// # Examples
     ///
@@ -1999,6 +2285,17 @@ impl Repo {
     ///
     /// * `Result<Vec<RepoTags>, RepoError>` - List of tags, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Local tags: Tag references cannot be accessed or are corrupted
+    /// - Local tags: Tag objects cannot be found or are invalid
+    /// - Remote tags: The 'origin' remote does not exist
+    /// - Remote tags: Authentication fails when connecting to remote
+    /// - Remote tags: Network connectivity issues prevent remote access
+    /// - Remote tags: The remote repository is unreachable
+    /// - Tag names contain invalid UTF-8 sequences
+    ///
     /// # Examples
     ///
     /// ```
@@ -2072,27 +2369,26 @@ impl Repo {
         };
 
         // Try to find a username from public key if username wasn't provided in URL
-        let username = match username_from_url {
-            Some(name) => name.to_string(),
-            None => {
-                // Try to extract username from the public key files
-                for key_path in &key_paths {
-                    let pub_key_path = key_path.with_extension("pub");
-                    if let Ok(content) = std::fs::read_to_string(&pub_key_path) {
-                        // Public key format is typically: ssh-xxx AAAAB3Nza... username@host
-                        if let Some(username_part) = content.split_whitespace().nth(2) {
-                            if let Some(username) = username_part.split('@').next() {
-                                return Cred::ssh_key(username, None, key_path, None);
-                            }
+        let username = if let Some(name) = username_from_url { 
+            name.to_string() 
+        } else {
+            // Try to extract username from the public key files
+            for key_path in &key_paths {
+                let pub_key_path = key_path.with_extension("pub");
+                if let Ok(content) = std::fs::read_to_string(&pub_key_path) {
+                    // Public key format is typically: ssh-xxx AAAAB3Nza... username@host
+                    if let Some(username_part) = content.split_whitespace().nth(2) {
+                        if let Some(username) = username_part.split('@').next() {
+                            return Cred::ssh_key(username, None, key_path, None);
                         }
                     }
                 }
+            }
 
-                // Fallback to environment user or "git"
-                match std::env::var("USER").or_else(|_| std::env::var("USERNAME")) {
-                    Ok(name) => name,
-                    Err(_) => "git".to_string(),
-                }
+            // Fallback to environment user or "git"
+            match std::env::var("USER").or_else(|_| std::env::var("USERNAME")) {
+                Ok(name) => name,
+                Err(_) => "git".to_string(),
             }
         };
 
@@ -2115,7 +2411,7 @@ impl Repo {
 
     /// Checks if a commit touches a specific path
     ///
-    /// This is an internal helper method used by get_commits_since.
+    /// This is an internal helper method used by `get_commits_since`.
     ///
     /// # Arguments
     ///
@@ -2157,7 +2453,7 @@ impl Repo {
 
     /// Gets all local tags in the repository
     ///
-    /// This is an internal helper method used by get_remote_or_local_tags.
+    /// This is an internal helper method used by `get_remote_or_local_tags`.
     ///
     /// # Returns
     ///
@@ -2203,7 +2499,7 @@ impl Repo {
 
     /// Gets all remote tags from the 'origin' remote
     ///
-    /// This is an internal helper method used by get_remote_or_local_tags.
+    /// This is an internal helper method used by `get_remote_or_local_tags`.
     ///
     /// # Returns
     ///

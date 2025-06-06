@@ -4,7 +4,7 @@
 //!
 //! ## Overview
 //!
-//! The `DependencyRegistry` is a central repository for managing dependencies, ensuring:
+//! The `Registry` is a central repository for managing dependencies, ensuring:
 //! - Dependencies with the same name are consistently represented
 //! - Version conflicts between dependencies can be detected and resolved
 //! - Memory usage is optimized by reusing dependency instances
@@ -40,7 +40,7 @@
 //! # }
 //! ```
 
-use super::{resolution::ResolutionResult, update::DependencyUpdate};
+use super::{resolution::ResolutionResult, update::{Update as DependencyUpdate}};
 use crate::{
     package::registry::PackageRegistryClone, Dependency, PackageRegistryError,
     Version, VersionError,
@@ -104,7 +104,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 /// # }
 /// ```
 #[derive(Clone, Debug)]
-pub struct DependencyRegistry {
+pub struct Registry {
     /// Collection of managed dependencies indexed by name
     dependencies: HashMap<String, Rc<RefCell<Dependency>>>,
     /// Optional package registry for querying external package sources
@@ -125,13 +125,13 @@ impl std::fmt::Debug for dyn PackageRegistryClone {
     }
 }
 
-impl Default for DependencyRegistry {
+impl Default for Registry {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl DependencyRegistry {
+impl Registry {
     /// Creates a new, empty dependency registry.
     ///
     /// # Examples
@@ -319,6 +319,7 @@ impl DependencyRegistry {
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn get(&self, name: &str) -> Option<Rc<RefCell<Dependency>>> {
         self.dependencies.get(name).cloned()
     }
@@ -482,6 +483,7 @@ impl DependencyRegistry {
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn has_package_registry(&self) -> bool {
         self.package_registry.is_some()
     }
@@ -675,3 +677,11 @@ impl DependencyRegistry {
         Ok(())
     }
 }
+
+/// Type alias for backward compatibility
+/// 
+/// # Deprecation
+/// 
+/// This alias maintains compatibility with existing code.
+/// Prefer using `Registry` directly in new code.
+pub type DependencyRegistry = Registry;

@@ -3,7 +3,7 @@
 //! This module provides functionality for working with Node.js package dependencies.
 //!
 //! The main structure is `Dependency`, which represents a package dependency with
-//! semantic versioning requirements. Dependencies are often used with Rc<RefCell<>> to
+//! semantic versioning requirements. Dependencies are often used with `Rc<RefCell<>>` to
 //! allow sharing and mutation across package structures.
 //!
 //! ## Key Features
@@ -151,6 +151,7 @@ impl Dependency {
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -170,6 +171,7 @@ impl Dependency {
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn version(&self) -> VersionReq {
         self.version.borrow().clone()
     }
@@ -182,6 +184,10 @@ impl Dependency {
     /// # Returns
     ///
     /// The parsed `Version` without operators, or an error if parsing fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns `VersionError` if the version string cannot be parsed as a valid semver.
     ///
     /// # Examples
     ///
@@ -220,7 +226,7 @@ impl Dependency {
     ///
     /// # Errors
     ///
-    /// Returns a `VersionError` if either version can't be parsed.
+    /// Returns `VersionError` if either version can't be parsed.
     ///
     /// # Examples
     ///
@@ -298,7 +304,7 @@ impl Dependency {
     ///
     /// # Errors
     ///
-    /// Returns a `VersionError` if the version string can't be parsed.
+    /// Returns `VersionError` if the version string can't be parsed.
     ///
     /// # Examples
     ///
