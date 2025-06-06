@@ -7,7 +7,14 @@
       "Bash(cargo test:*)",
       "Bash(cargo check:*)",
       "Bash(grep:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(rm:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(find:*)",
+      "Bash(cargo doc:*)",
+      "Bash(rg:*)",
+      "Bash(awk:*)",
+      "Bash(rustc:*)"
     ],
     "deny": []
   }
