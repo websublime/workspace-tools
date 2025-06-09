@@ -40,10 +40,10 @@
 //! # }
 //! ```
 
-use super::{resolution::ResolutionResult, update::{Update as DependencyUpdate}};
+use super::{resolution::ResolutionResult, update::Update as DependencyUpdate};
 use crate::{
-    package::registry::PackageRegistryClone, Dependency, PackageRegistryError,
-    Version, VersionError,
+    package::registry::PackageRegistryClone, Dependency, PackageRegistryError, Version,
+    VersionError,
 };
 use semver::{Version as SemverVersion, VersionReq};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -111,8 +111,6 @@ pub struct Registry {
     package_registry: Option<Box<dyn PackageRegistryClone>>,
 }
 
-
-
 impl Clone for Box<dyn PackageRegistryClone> {
     fn clone(&self) -> Self {
         self.clone_box()
@@ -142,10 +140,7 @@ impl Registry {
     /// let registry = DependencyRegistry::new();
     /// ```
     pub fn new() -> Self {
-        Self { 
-            dependencies: HashMap::new(),
-            package_registry: None,
-        }
+        Self { dependencies: HashMap::new(), package_registry: None }
     }
 
     /// Creates a new dependency registry with a package registry for enhanced version resolution.
@@ -169,10 +164,7 @@ impl Registry {
     /// # }
     /// ```
     pub fn with_package_registry(package_registry: Box<dyn PackageRegistryClone>) -> Self {
-        Self {
-            dependencies: HashMap::new(),
-            package_registry: Some(package_registry),
-        }
+        Self { dependencies: HashMap::new(), package_registry: Some(package_registry) }
     }
 
     /// Sets the package registry for this dependency registry.
@@ -454,7 +446,10 @@ impl Registry {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_package_versions(&self, package_name: &str) -> Result<Vec<String>, PackageRegistryError> {
+    pub fn get_package_versions(
+        &self,
+        package_name: &str,
+    ) -> Result<Vec<String>, PackageRegistryError> {
         if let Some(ref registry) = self.package_registry {
             registry.get_all_versions(package_name)
         } else {
@@ -543,13 +538,14 @@ impl Registry {
     /// let registry = DependencyRegistry::with_package_registry(Box::new(npm_registry));
     ///
     /// let req = VersionReq::parse("^17.0.0")?;
-    /// 
+    ///
     /// // This will query npm to find the highest version matching the requirement
     /// let version = registry.find_highest_compatible_version("react", &[&req])?;
     /// println!("Found compatible version: {}", version);
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(clippy::unnecessary_wraps)]
     pub fn find_highest_compatible_version(
         &self,
         name: &str,
@@ -564,10 +560,9 @@ impl Registry {
                         .iter()
                         .filter_map(|version_str| {
                             // Clean version string (remove ^ or ~ prefixes if present)
-                            let clean_version = version_str
-                                .trim_start_matches('^')
-                                .trim_start_matches('~');
-                            
+                            let clean_version =
+                                version_str.trim_start_matches('^').trim_start_matches('~');
+
                             SemverVersion::parse(clean_version).ok()
                         })
                         .filter(|version| {
@@ -679,9 +674,9 @@ impl Registry {
 }
 
 /// Type alias for backward compatibility
-/// 
+///
 /// # Deprecation
-/// 
+///
 /// This alias maintains compatibility with existing code.
 /// Prefer using `Registry` directly in new code.
 pub type DependencyRegistry = Registry;

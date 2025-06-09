@@ -19,6 +19,7 @@ pub enum GitFileStatus {
     Added,
     Deleted,
     Modified,
+    Untracked,
 }
 
 /// Represents a changed file in a Git repository.

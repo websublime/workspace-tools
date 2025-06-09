@@ -59,6 +59,7 @@ pub mod changes;
 pub mod config;
 pub mod core;
 pub mod error;
+pub mod hooks;
 pub mod tasks;
 
 // Re-exports
@@ -84,6 +85,13 @@ pub use crate::core::{
     VersioningPlan, VersioningPlanStep,
 };
 pub use crate::error::{Error, Result};
+pub use crate::hooks::{
+    HookType, HookDefinition, HookScript, HookCondition, HookExecutionContext,
+    HookExecutionResult, PreCommitResult, PrePushResult, PostCommitResult,
+    HookStatus, HookError, HookErrorCode, HookValidationResult, ValidationCheck,
+    GitOperationType, RemoteInfo, CommitInfo,
+    HookManager, HookInstaller, HookValidator,
+};
 pub use crate::tasks::{
     TaskDefinition, TaskCommand, PackageScript, TaskPriority,
     TaskCondition, TaskScope, TaskTrigger, FilePattern, FilePatternType,
@@ -102,13 +110,13 @@ impl MonorepoTools {
     /// Initialize MonorepoTools by detecting and opening a monorepo at the given path
     pub fn initialize(_path: impl AsRef<std::path::Path>) -> Result<Self> {
         // Placeholder - will be implemented in Phase 6
-        unimplemented!("MonorepoTools::initialize will be implemented in Phase 6")
+        Err(Error::workflow("MonorepoTools::initialize will be implemented in Phase 6"))
     }
 
     /// Get a reference to the monorepo analyzer
-    pub fn analyzer(&self) -> &MonorepoAnalyzer {
+    pub fn analyzer(&self) -> Result<&MonorepoAnalyzer> {
         // Placeholder - will be implemented in Phase 6
-        unimplemented!("MonorepoTools::analyzer will be implemented in Phase 6")
+        Err(Error::workflow("MonorepoTools::analyzer will be implemented in Phase 6"))
     }
 
     /// Get a reference to the diff analyzer (Phase 2 functionality)
@@ -129,6 +137,11 @@ impl MonorepoTools {
     /// Get a reference to the task manager (Phase 3 functionality)
     pub fn task_manager(&self) -> Result<TaskManager> {
         TaskManager::new(Arc::clone(&self.project))
+    }
+
+    /// Get a reference to the hook manager (Phase 3 functionality)
+    pub fn hook_manager(&self) -> Result<HookManager> {
+        HookManager::new(Arc::clone(&self.project))
     }
 
     /// Analyze changes between branches (Phase 2 functionality)
@@ -188,7 +201,7 @@ impl MonorepoTools {
     #[allow(clippy::unused_async)]
     pub async fn development_workflow(&self, _since: Option<&str>) -> Result<DevelopmentResult> {
         // Placeholder - will be implemented in Phase 6
-        unimplemented!("MonorepoTools::development_workflow will be implemented in Phase 6")
+        Err(Error::workflow("MonorepoTools::development_workflow will be implemented in Phase 6"))
     }
 }
 

@@ -333,6 +333,7 @@ impl Repo {
     /// let repo = Repo::create("/tmp/new-repo").expect("Failed to create repository");
     /// println!("Repository created at: {}", repo.get_repo_path().display());
     /// ```
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn create(path: &str) -> Result<Self, RepoError> {
         let location = canonicalize_path(path)?;
         let location_buf = PathBuf::from(location);
@@ -380,6 +381,7 @@ impl Repo {
     /// let branch = repo.get_current_branch().expect("Failed to get current branch");
     /// println!("Current branch: {}", branch);
     /// ```
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn open(path: &str) -> Result<Self, RepoError> {
         let local_path = canonicalize_path(path)?;
         let repo = Repository::open(path).map_err(RepoError::OpenRepoFailure)?;
@@ -416,6 +418,7 @@ impl Repo {
     /// let repo = Repo::clone("https://github.com/example/repo.git", "./cloned-repo")
     ///     .expect("Failed to clone repository");
     /// ```
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn clone(url: &str, path: &str) -> Result<Self, RepoError> {
         let local_path = canonicalize_path(path)?;
         let repo = Repository::clone(url, path).map_err(RepoError::CloneRepoFailure)?;
@@ -1079,6 +1082,111 @@ impl Repo {
         }
 
         Ok(result)
+    }
+
+    /// Get detailed file status information including staging state
+    ///
+    /// Returns detailed information about file changes including whether files
+    /// are staged, have working directory changes, and their status type.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Vec<GitChangedFile>, RepoError>` - List of files with detailed status
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Git status cannot be read
+    /// - Repository is in an invalid state
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use git::repo::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let detailed_status = repo.get_status_detailed()
+    ///     .expect("Failed to get detailed status");
+    ///
+    /// for file in detailed_status {
+    ///     if file.staged {
+    ///         println!("Staged: {} ({:?})", file.path, file.status);
+    ///     }
+    ///     if file.workdir {
+    ///         println!("Working dir: {} ({:?})", file.path, file.status);
+    ///     }
+    /// }
+    /// ```
+    pub fn get_status_detailed(&self) -> Result<Vec<GitChangedFile>, RepoError> {
+        let mut status_options = StatusOptions::new();
+        status_options
+            .include_untracked(true)
+            .include_ignored(false)
+            .include_unmodified(false)
+            .recurse_untracked_dirs(true)
+            .show(git2::StatusShow::IndexAndWorkdir);
+
+        let statuses =
+            self.repo.statuses(Some(&mut status_options)).map_err(RepoError::StatusError)?;
+
+        let mut result = Vec::new();
+
+        for entry in statuses.iter() {
+            let path = entry.path().unwrap_or("").to_string();
+            let git2_status = entry.status();
+            
+            // Determine primary status and staging information
+            let (status, staged, workdir) = if git2_status.is_index_new() || git2_status.is_wt_new() {
+                (GitFileStatus::Added, git2_status.is_index_new(), git2_status.is_wt_new())
+            } else if git2_status.is_index_modified() || git2_status.is_wt_modified() {
+                (GitFileStatus::Modified, git2_status.is_index_modified(), git2_status.is_wt_modified())
+            } else if git2_status.is_index_deleted() || git2_status.is_wt_deleted() {
+                (GitFileStatus::Deleted, git2_status.is_index_deleted(), git2_status.is_wt_deleted())
+            } else {
+                // For untracked files and other cases
+                (GitFileStatus::Untracked, false, true)
+            };
+
+            result.push(GitChangedFile {
+                path,
+                status,
+                staged,
+                workdir,
+            });
+        }
+
+        Ok(result)
+    }
+
+    /// Get only staged files (files in the index ready for commit)
+    ///
+    /// Returns a list of files that are currently staged and ready to be committed.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Vec<String>, RepoError>` - List of staged file paths
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use git::repo::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let staged_files = repo.get_staged_files()
+    ///     .expect("Failed to get staged files");
+    ///
+    /// println!("Files ready for commit: {:?}", staged_files);
+    /// ```
+    pub fn get_staged_files(&self) -> Result<Vec<String>, RepoError> {
+        let detailed_status = self.get_status_detailed()?;
+        
+        let staged_files: Vec<String> = detailed_status
+            .into_iter()
+            .filter(|file| file.staged)
+            .map(|file| file.path)
+            .collect();
+            
+        Ok(staged_files)
     }
 
     /// Finds the branch that contains a specific commit
@@ -1963,7 +2071,12 @@ impl Repo {
                         // Only add if we haven't seen it yet
                         if !file_exists {
                             changed_files
-                                .push(GitChangedFile { path: path_str.to_string(), status });
+                                .push(GitChangedFile { 
+                                    path: path_str.to_string(), 
+                                    status,
+                                    staged: false,    // Historical changes are not staged
+                                    workdir: false,   // Historical changes are already committed
+                                });
                         }
                     }
                 }
@@ -2014,6 +2127,8 @@ impl Repo {
                         changed_files.push(GitChangedFile {
                             path: path_str.to_string(),
                             status: GitFileStatus::Deleted,
+                            staged: false,    // Historical changes are not staged
+                            workdir: false,   // Historical changes are already committed
                         });
                     }
                 }
@@ -2369,8 +2484,8 @@ impl Repo {
         };
 
         // Try to find a username from public key if username wasn't provided in URL
-        let username = if let Some(name) = username_from_url { 
-            name.to_string() 
+        let username = if let Some(name) = username_from_url {
+            name.to_string()
         } else {
             // Try to extract username from the public key files
             for key_path in &key_paths {

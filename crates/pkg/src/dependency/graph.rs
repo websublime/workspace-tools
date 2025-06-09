@@ -957,6 +957,7 @@ where
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(clippy::unused_self)]
     #[must_use]
     pub fn check_upgradable_dependencies(&self) -> HashMap<String, Vec<(String, String)>>
     where
@@ -1021,6 +1022,7 @@ where
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(clippy::unnecessary_wraps)]
     pub fn validate_with_options(
         &self,
         options: &ValidationOptions,
@@ -1065,9 +1067,9 @@ where
 }
 
 /// Type alias for backward compatibility
-/// 
+///
 /// # Deprecation
-/// 
+///
 /// This alias maintains compatibility with existing code.
 /// Prefer using `Graph` directly in new code.
 pub type DependencyGraph<'a, N> = Graph<'a, N>;

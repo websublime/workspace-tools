@@ -54,10 +54,8 @@ impl DiffAnalyzer {
         let merge_base = self.project.repository.get_diverged_commit(base_branch)?;
 
         // Get all changed files between branches
-        let changed_files = self
-            .project
-            .repository
-            .get_all_files_changed_since_sha_with_status(base_branch)?;
+        let changed_files =
+            self.project.repository.get_all_files_changed_since_sha_with_status(base_branch)?;
 
         // Map changes to packages
         let affected_packages_analysis = self.identify_affected_packages(&changed_files)?;
@@ -84,10 +82,8 @@ impl DiffAnalyzer {
         let to_ref = until_ref.unwrap_or("HEAD");
 
         // Get changed files
-        let changed_files = self
-            .project
-            .repository
-            .get_all_files_changed_since_sha_with_status(since_ref)?;
+        let changed_files =
+            self.project.repository.get_all_files_changed_since_sha_with_status(since_ref)?;
 
         // Map changes to packages
         let package_changes = self.map_changes_to_packages(&changed_files);
@@ -114,7 +110,9 @@ impl DiffAnalyzer {
 
         for file in changed_files {
             // Find which package this file belongs to
-            if let Some(package) = self.project.descriptor.find_package_for_path(Path::new(&file.path)) {
+            if let Some(package) =
+                self.project.descriptor.find_package_for_path(Path::new(&file.path))
+            {
                 let package_name = package.name.clone();
 
                 // Get or create package change builder
@@ -136,10 +134,7 @@ impl DiffAnalyzer {
         }
 
         // Convert builders to final PackageChange objects
-        package_changes
-            .into_values()
-            .map(PackageChangeBuilder::build)
-            .collect()
+        package_changes.into_values().map(PackageChangeBuilder::build).collect()
     }
 
     /// Identify all affected packages including dependents
@@ -159,10 +154,12 @@ impl DiffAnalyzer {
 
             // Find all packages that depend on this changed package
             let dependents = self.project.get_dependents(&package_change.package_name);
-            
+
             for dependent_pkg in dependents {
                 let dependent_name = dependent_pkg.name().to_string();
-                if !directly_affected.contains(&dependent_name) && !dependents_affected.contains(&dependent_name) {
+                if !directly_affected.contains(&dependent_name)
+                    && !dependents_affected.contains(&dependent_name)
+                {
                     dependents_affected.push(dependent_name.clone());
                 }
 
@@ -176,7 +173,7 @@ impl DiffAnalyzer {
 
         // Calculate impact score based on dependency depth and breadth
         let impact_scores = self.calculate_impact_scores(&directly_affected, &dependents_affected);
-        
+
         let total_affected_count = directly_affected.len() + dependents_affected.len();
 
         Ok(AffectedPackagesAnalysis {
@@ -208,9 +205,10 @@ impl DiffAnalyzer {
                     }
 
                     // Check if package is a core/shared library
-                    if package_info.name().contains("core") 
-                        || package_info.name().contains("shared") 
-                        || package_info.name().contains("utils") {
+                    if package_info.name().contains("core")
+                        || package_info.name().contains("shared")
+                        || package_info.name().contains("utils")
+                    {
                         significance = significance.elevate();
                         reasons.push("Core/shared library package".to_string());
                     }
@@ -229,20 +227,16 @@ impl DiffAnalyzer {
                 }
 
                 // Analyze change patterns
-                let breaking_change_indicators = [
-                    "BREAKING",
-                    "breaking",
-                    "Breaking",
-                    "API",
-                    "interface",
-                    "contract",
-                ];
+                let breaking_change_indicators =
+                    ["BREAKING", "breaking", "Breaking", "API", "interface", "contract"];
 
                 for file_change in &change.changed_files {
                     for indicator in &breaking_change_indicators {
                         if file_change.path.contains(indicator) {
                             significance = ChangeSignificance::High;
-                            reasons.push(format!("File path contains breaking change indicator: {indicator}"));
+                            reasons.push(format!(
+                                "File path contains breaking change indicator: {indicator}"
+                            ));
                             break;
                         }
                     }
@@ -253,7 +247,10 @@ impl DiffAnalyzer {
                     original_significance: change.significance,
                     final_significance: significance,
                     reasons,
-                    suggested_version_bump: Self::suggest_version_bump(significance, change.change_type),
+                    suggested_version_bump: Self::suggest_version_bump(
+                        significance,
+                        change.change_type,
+                    ),
                 }
             })
             .collect()
@@ -268,9 +265,20 @@ impl DiffAnalyzer {
 
         match (significance, change_type) {
             (ChangeSignificance::High, _) => VersionBumpType::Major,
-            (ChangeSignificance::Medium, PackageChangeType::SourceCode | PackageChangeType::Dependencies) => VersionBumpType::Minor,
-            (ChangeSignificance::Low, PackageChangeType::SourceCode | PackageChangeType::Dependencies) 
-            | (_, PackageChangeType::Documentation | PackageChangeType::Tests | PackageChangeType::Configuration) => VersionBumpType::Patch,
+            (
+                ChangeSignificance::Medium,
+                PackageChangeType::SourceCode | PackageChangeType::Dependencies,
+            ) => VersionBumpType::Minor,
+            (
+                ChangeSignificance::Low,
+                PackageChangeType::SourceCode | PackageChangeType::Dependencies,
+            )
+            | (
+                _,
+                PackageChangeType::Documentation
+                | PackageChangeType::Tests
+                | PackageChangeType::Configuration,
+            ) => VersionBumpType::Patch,
         }
     }
 
@@ -314,15 +322,10 @@ impl DiffAnalyzer {
         let mut conflicts = Vec::new();
 
         // Get changes in both branches since common ancestor
-        let base_changes = self
-            .project
-            .repository
-            .get_all_files_changed_since_sha(base_branch)?;
-            
-        let target_changes = self
-            .project
-            .repository
-            .get_all_files_changed_since_sha(target_branch)?;
+        let base_changes = self.project.repository.get_all_files_changed_since_sha(base_branch)?;
+
+        let target_changes =
+            self.project.repository.get_all_files_changed_since_sha(target_branch)?;
 
         // Find files changed in both branches
         for base_file in &base_changes {
@@ -340,7 +343,7 @@ impl DiffAnalyzer {
 pub struct BranchComparisonResult {
     /// Base branch name
     pub base_branch: String,
-    /// Target branch name  
+    /// Target branch name
     pub target_branch: String,
     /// Files that changed between branches
     pub changed_files: Vec<GitChangedFile>,
@@ -420,7 +423,7 @@ pub struct ChangeSignificanceResult {
 pub trait ChangeAnalyzer: Send + Sync {
     /// Check if this analyzer can handle the given file
     fn can_analyze(&self, file_path: &str) -> bool;
-    
+
     /// Analyze a file change and return analysis result
     fn analyze_change(&self, change: &GitChangedFile) -> ChangeAnalysisResult;
 }
@@ -464,11 +467,11 @@ impl PackageChangeBuilder {
         if !self.change_types.contains(&analysis.change_type) {
             self.change_types.push(analysis.change_type);
         }
-        
+
         if analysis.significance > self.significance {
             self.significance = analysis.significance;
         }
-        
+
         self.contexts.extend(analysis.context);
     }
 
@@ -486,7 +489,8 @@ impl PackageChangeBuilder {
             PackageChangeType::Documentation
         };
 
-        let suggested_version_bump = DiffAnalyzer::suggest_version_bump(self.significance, change_type);
+        let suggested_version_bump =
+            DiffAnalyzer::suggest_version_bump(self.significance, change_type);
 
         PackageChange {
             package_name: self.package_name,
@@ -529,18 +533,22 @@ impl ChangeAnalyzer for SourceCodeAnalyzer {
     fn analyze_change(&self, change: &GitChangedFile) -> ChangeAnalysisResult {
         let significance = match change.status {
             GitFileStatus::Added | GitFileStatus::Deleted => ChangeSignificance::Medium,
-            GitFileStatus::Modified => ChangeSignificance::Low,
+            GitFileStatus::Modified | GitFileStatus::Untracked => ChangeSignificance::Low,
         };
 
         ChangeAnalysisResult {
             change_type: PackageChangeType::SourceCode,
             significance,
-            context: vec![format!("Source code {} in {}", 
+            context: vec![format!(
+                "Source code {} in {}",
                 match change.status {
                     GitFileStatus::Added => "added",
-                    GitFileStatus::Modified => "modified", 
+                    GitFileStatus::Modified => "modified",
                     GitFileStatus::Deleted => "deleted",
-                }, change.path)],
+                    GitFileStatus::Untracked => "untracked",
+                },
+                change.path
+            )],
         }
     }
 }
@@ -551,10 +559,21 @@ struct ConfigurationAnalyzer;
 impl ChangeAnalyzer for ConfigurationAnalyzer {
     fn can_analyze(&self, file_path: &str) -> bool {
         let config_files = [
-            ".json", ".yaml", ".yml", ".toml", ".ini", ".env",
-            "tsconfig.json", "babel.config.", "webpack.config.", 
-            "rollup.config.", "vite.config.", "jest.config.",
-            ".eslintrc", ".prettierrc", "Dockerfile"
+            ".json",
+            ".yaml",
+            ".yml",
+            ".toml",
+            ".ini",
+            ".env",
+            "tsconfig.json",
+            "babel.config.",
+            "webpack.config.",
+            "rollup.config.",
+            "vite.config.",
+            "jest.config.",
+            ".eslintrc",
+            ".prettierrc",
+            "Dockerfile",
         ];
         config_files.iter().any(|pattern| file_path.contains(pattern))
     }
@@ -594,8 +613,8 @@ struct TestAnalyzer;
 
 impl ChangeAnalyzer for TestAnalyzer {
     fn can_analyze(&self, file_path: &str) -> bool {
-        file_path.contains("test") 
-            || file_path.contains("spec") 
+        file_path.contains("test")
+            || file_path.contains("spec")
             || file_path.contains("__tests__")
             || file_path.ends_with(".test.js")
             || file_path.ends_with(".test.ts")

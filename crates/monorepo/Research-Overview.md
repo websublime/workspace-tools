@@ -332,3 +332,4 @@ Deliniar um plano de desenvolvimento para o crate `sublime-monorepo-tools`, um p
 6. **Documentação**: Documentar a API e as funcionalidades do crate, incluindo exemplos de uso e guias de integração bem como um ficheiro SPEC que exponha toda a funcionilidade da API.
 
 Posteriormente ao iteramos no chat eu partilho a api spec de cada um dos crates para que possas entender melhor as suas funcionalidades e como utilizá-los. A ideia é que possamos iterar juntos na construção deste crate, garantindo que ele atenda às necessidades dos utilizadores e seja fácil de usar.
+

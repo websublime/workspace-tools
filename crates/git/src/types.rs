@@ -51,9 +51,11 @@ pub enum GitFileStatus {
     Modified,
     /// File has been deleted
     Deleted,
+    /// File is untracked (not in the repository)
+    Untracked,
 }
 
-/// Represents a changed file in the Git repository
+/// Represents a changed file in the Git repository with staging information
 ///
 /// # Examples
 ///
@@ -63,6 +65,8 @@ pub enum GitFileStatus {
 /// let file = GitChangedFile {
 ///     path: "src/main.rs".to_string(),
 ///     status: GitFileStatus::Modified,
+///     staged: true,
+///     workdir: false,
 /// };
 ///
 /// println!("Changed file: {} ({})", file.path,
@@ -70,15 +74,24 @@ pub enum GitFileStatus {
 ///         GitFileStatus::Added => "added",
 ///         GitFileStatus::Modified => "modified",
 ///         GitFileStatus::Deleted => "deleted",
+///         GitFileStatus::Untracked => "untracked",
 ///     }
 /// );
+/// 
+/// if file.staged {
+///     println!("File is staged for commit");
+/// }
 /// ```
 #[derive(Debug, Clone)]
 pub struct GitChangedFile {
     /// The path to the changed file
     pub path: String,
-    /// The status of the file (Added, Modified, or Deleted)
+    /// The status of the file (Added, Modified, Deleted, or Untracked)
     pub status: GitFileStatus,
+    /// Whether the file is staged in the index
+    pub staged: bool,
+    /// Whether the file has changes in the working directory
+    pub workdir: bool,
 }
 
 /// Represents a commit in the Git repository

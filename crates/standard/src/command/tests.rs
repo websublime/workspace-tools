@@ -20,8 +20,9 @@
 mod tests {
     use crate::command::types::QueuedCommand;
     use crate::command::{
-        Command, CommandBuilder, CommandExecutor, CommandOutput, CommandPriority, CommandQueue,
-        CommandQueueConfig, CommandStatus, DefaultCommandExecutor, StreamConfig, StreamOutput,
+        Command, CommandBuilder, CommandOutput, CommandPriority, CommandQueue, CommandQueueConfig,
+        CommandStatus, DefaultCommandExecutor, Executor as CommandExecutor, StreamConfig,
+        StreamOutput,
     };
     use crate::error::{CommandError, Error, Result};
     use async_trait::async_trait;

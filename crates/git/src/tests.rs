@@ -46,14 +46,12 @@ mod tests {
     fn create_workspace() -> Result<PathBuf, std::io::Error> {
         use std::sync::atomic::{AtomicUsize, Ordering};
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
-        
+
         let temp_dir = temp_dir();
         let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let monorepo_root_dir = temp_dir.join(format!("monorepo-workspace-{}-{}", counter, timestamp));
+        let timestamp =
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let monorepo_root_dir = temp_dir.join(format!("monorepo-workspace-{counter}-{timestamp}"));
 
         if monorepo_root_dir.exists() {
             remove_dir_all(&monorepo_root_dir)?;
@@ -310,6 +308,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::panic)]
     fn test_get_all_files_changed_since_sha_with_status() -> Result<(), RepoError> {
         let workspace = TestWorkspace::new().unwrap();
         let workspace_path = workspace.path();
@@ -373,6 +372,10 @@ mod tests {
                 GitFileStatus::Deleted => {
                     has_deleted = true;
                     assert!(change.path.contains("TEMP_FILE.md"));
+                }
+                GitFileStatus::Untracked => {
+                    // Untracked files should not be in the result
+                    panic!("Unexpected untracked file in changes: {}", change.path);
                 }
             }
         }

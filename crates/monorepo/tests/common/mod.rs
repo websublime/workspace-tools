@@ -31,6 +31,30 @@ pub fn setup_test_monorepo(root_path: &Path) {
         serde_json::to_string_pretty(&root_package_json).expect("Should serialize JSON")
     ).expect("Should write root package.json");
     
+    // Create package-lock.json to make it detectable as an npm monorepo
+    let package_lock = json!({
+        "name": "test-monorepo",
+        "version": "1.0.0",
+        "lockfileVersion": 3,
+        "requires": true,
+        "packages": {
+            "": {
+                "name": "test-monorepo",
+                "version": "1.0.0",
+                "workspaces": ["packages/*"],
+                "devDependencies": {
+                    "typescript": "^5.0.0",
+                    "jest": "^29.0.0"
+                }
+            }
+        }
+    });
+    
+    fs::write(
+        root_path.join("package-lock.json"),
+        serde_json::to_string_pretty(&package_lock).expect("Should serialize JSON")
+    ).expect("Should write package-lock.json");
+    
     // Create packages directory
     let packages_dir = root_path.join("packages");
     fs::create_dir_all(&packages_dir).expect("Should create packages directory");
@@ -325,6 +349,7 @@ pub fn create_package_change(package_dir: &Path, change_type: &str) {
 pub fn verify_test_structure(root_path: &Path) -> bool {
     let required_files = vec![
         "package.json",
+        "package-lock.json",
         "packages/core/package.json",
         "packages/utils/package.json", 
         "packages/app/package.json",

@@ -42,6 +42,8 @@ mod tests {
         GitChangedFile {
             path: path.to_string(),
             status,
+            staged: false,     // Default for tests - working directory changes
+            workdir: true,     // Default for tests - working directory changes
         }
     }
 
