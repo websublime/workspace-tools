@@ -1,6 +1,6 @@
 //! Hook execution context implementation
 //!
-//! This module provides implementation methods for the HookExecutionContext,
+//! This module provides implementation methods for the `HookExecutionContext`,
 //! following the project's pattern of separating declarations from implementations.
 
 use super::{HookExecutionContext, GitOperationType, RemoteInfo, CommitInfo};

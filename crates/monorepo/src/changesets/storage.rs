@@ -1,0 +1,379 @@
+//! Changeset storage implementation
+//!
+//! This module provides persistent storage for changesets using the `FileSystemManager`
+//! from standard-tools. Changesets are stored as JSON files in the configured
+//! changeset directory with structured naming for easy querying.
+
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use serde_json;
+use sublime_standard_tools::filesystem::FileSystem;
+
+use super::types::{Changeset, ChangesetFilter};
+use crate::config::types::ChangesetsConfig;
+use crate::core::MonorepoProject;
+use crate::error::Error;
+
+/// Storage interface for changesets
+///
+/// Provides methods for persisting and retrieving changesets from the filesystem.
+/// Uses the `FileSystemManager` for all file operations to ensure consistency
+/// with the rest of the monorepo tooling.
+///
+/// # Examples
+///
+/// ```rust
+/// use std::sync::Arc;
+/// use std::path::Path;
+/// use sublime_monorepo_tools::{ChangesetStorage, Changeset};
+/// use sublime_standard_tools::FileSystemManager;
+///
+/// let fs_manager = Arc::new(FileSystemManager::new(Path::new("/project")));
+/// let config = ChangesetsConfig::default();
+/// let storage = ChangesetStorage::new(fs_manager, config);
+/// ```
+pub struct ChangesetStorage {
+    /// Reference to the monorepo project
+    project: Arc<MonorepoProject>,
+
+    /// Changeset configuration
+    config: ChangesetsConfig,
+}
+
+impl ChangesetStorage {
+    /// Creates a new changeset storage instance
+    ///
+    /// # Arguments
+    ///
+    /// * `project` - Reference to the monorepo project
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use std::sync::Arc;
+    /// use std::path::Path;
+    /// use sublime_monorepo_tools::{ChangesetStorage, MonorepoProject};
+    ///
+    /// let project = Arc::new(MonorepoProject::new(Path::new("/project"))?);
+    /// let storage = ChangesetStorage::new(project);
+    /// ```
+    #[must_use]
+    pub fn new(project: Arc<MonorepoProject>) -> Self {
+        let config = project.config.changesets.clone();
+        Self { project, config }
+    }
+
+    /// Saves a changeset to storage
+    ///
+    /// Serializes the changeset to JSON and saves it to the configured
+    /// changeset directory with a filename based on the configured format.
+    ///
+    /// # Arguments
+    ///
+    /// * `changeset` - The changeset to save
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or failure of the save operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The changeset directory cannot be created
+    /// - The changeset cannot be serialized
+    /// - The file cannot be written
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use sublime_monorepo_tools::{ChangesetStorage, Changeset};
+    /// # let storage = create_test_storage();
+    /// # let changeset = create_test_changeset();
+    /// storage.save(&changeset).await?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn save(&self, changeset: &Changeset) -> Result<(), Error> {
+        // Ensure changeset directory exists
+        let changeset_dir = self.get_changeset_directory();
+        self.project
+            .file_system
+            .create_dir_all(&changeset_dir)
+            .map_err(|e| Error::changeset(format!("Failed to create changeset directory: {e}")))?;
+
+        // Generate filename
+        let filename = self.generate_filename(changeset);
+        let filepath = changeset_dir.join(filename);
+
+        // Serialize changeset
+        let content = serde_json::to_string_pretty(changeset)
+            .map_err(|e| Error::changeset(format!("Failed to serialize changeset: {e}")))?;
+
+        // Write to file
+        self.project
+            .file_system
+            .write_file_string(&filepath, &content)
+            .map_err(|e| Error::changeset(format!("Failed to write changeset file: {e}")))?;
+
+        Ok(())
+    }
+
+    /// Loads a changeset by ID
+    ///
+    /// Searches for a changeset file with the given ID and loads it.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The changeset ID to load
+    ///
+    /// # Returns
+    ///
+    /// The changeset if found, or None if not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file exists but cannot be read or parsed.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use sublime_monorepo_tools::ChangesetStorage;
+    /// # let storage = create_test_storage();
+    /// if let Some(changeset) = storage.load("abc123").await? {
+    ///     println!("Found changeset: {}", changeset.description);
+    /// }
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn load(&self, id: &str) -> Result<Option<Changeset>, Error> {
+        let changeset_dir = self.get_changeset_directory();
+
+        // Find file with this ID
+        if !self.project.file_system.exists(&changeset_dir) {
+            // Directory doesn't exist, so no changesets
+            return Ok(None);
+        }
+
+        let files = self
+            .project
+            .file_system
+            .walk_dir(&changeset_dir)
+            .map_err(|e| Error::changeset(format!("Failed to list changeset files: {e}")))?
+            .into_iter()
+            .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
+            .collect::<Vec<_>>();
+
+        for file in files {
+            if let Some(filename) = file.file_name().and_then(|n| n.to_str()) {
+                if filename.contains(id) {
+                    let content =
+                        self.project.file_system.read_file_string(&file).map_err(|e| {
+                            Error::changeset(format!("Failed to read changeset file: {e}"))
+                        })?;
+
+                    let changeset: Changeset = serde_json::from_str(&content)
+                        .map_err(|e| Error::changeset(format!("Failed to parse changeset: {e}")))?;
+
+                    if changeset.id == id {
+                        return Ok(Some(changeset));
+                    }
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Lists all changesets matching the given filter
+    ///
+    /// Scans the changeset directory and returns all changesets that match
+    /// the provided filter criteria.
+    ///
+    /// # Arguments
+    ///
+    /// * `filter` - Filter criteria for changesets
+    ///
+    /// # Returns
+    ///
+    /// Vector of changesets matching the filter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the changeset directory cannot be read or
+    /// if changeset files cannot be parsed.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use sublime_monorepo_tools::{ChangesetStorage, ChangesetFilter};
+    /// # let storage = create_test_storage();
+    /// let filter = ChangesetFilter {
+    ///     package: Some("@test/core".to_string()),
+    ///     ..Default::default()
+    /// };
+    /// let changesets = storage.list(&filter).await?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn list(&self, filter: &ChangesetFilter) -> Result<Vec<Changeset>, Error> {
+        let changeset_dir = self.get_changeset_directory();
+
+        // Get all JSON files in the changeset directory
+        if !self.project.file_system.exists(&changeset_dir) {
+            // Directory doesn't exist, so no changesets
+            return Ok(Vec::new());
+        }
+
+        let files = self
+            .project
+            .file_system
+            .walk_dir(&changeset_dir)
+            .map_err(|e| Error::changeset(format!("Failed to list changeset files: {e}")))?
+            .into_iter()
+            .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
+            .collect::<Vec<_>>();
+
+        let mut changesets = Vec::new();
+
+        for file in files {
+            let content = self
+                .project
+                .file_system
+                .read_file(&file)
+                .map_err(|e| Error::changeset(format!("Failed to read changeset file: {e}")))?;
+
+            let changeset: Changeset = serde_json::from_slice(&content)
+                .map_err(|e| Error::changeset(format!("Failed to parse changeset: {e}")))?;
+
+            if self.matches_filter(&changeset, filter) {
+                changesets.push(changeset);
+            }
+        }
+
+        // Sort by creation date (newest first)
+        changesets.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+        Ok(changesets)
+    }
+
+    /// Deletes a changeset by ID
+    ///
+    /// Removes the changeset file from storage.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The changeset ID to delete
+    ///
+    /// # Returns
+    ///
+    /// True if the changeset was found and deleted, false if not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file exists but cannot be deleted.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use sublime_monorepo_tools::ChangesetStorage;
+    /// # let storage = create_test_storage();
+    /// let deleted = storage.delete("abc123").await?;
+    /// if deleted {
+    ///     println!("Changeset deleted successfully");
+    /// }
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn delete(&self, id: &str) -> Result<bool, Error> {
+        let changeset_dir = self.get_changeset_directory();
+
+        // Find file with this ID
+        if !self.project.file_system.exists(&changeset_dir) {
+            // Directory doesn't exist, so changeset doesn't exist
+            return Ok(false);
+        }
+
+        let files = self
+            .project
+            .file_system
+            .walk_dir(&changeset_dir)
+            .map_err(|e| Error::changeset(format!("Failed to list changeset files: {e}")))?
+            .into_iter()
+            .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
+            .collect::<Vec<_>>();
+
+        for file in files {
+            if let Some(filename) = file.file_name().and_then(|n| n.to_str()) {
+                if filename.contains(id) {
+                    // Verify this is the correct changeset
+                    let content =
+                        self.project.file_system.read_file_string(&file).map_err(|e| {
+                            Error::changeset(format!("Failed to read changeset file: {e}"))
+                        })?;
+
+                    let changeset: Changeset = serde_json::from_str(&content)
+                        .map_err(|e| Error::changeset(format!("Failed to parse changeset: {e}")))?;
+
+                    if changeset.id == id {
+                        self.project.file_system.remove(&file).map_err(|e| {
+                            Error::changeset(format!("Failed to delete changeset file: {e}"))
+                        })?;
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+
+        Ok(false)
+    }
+
+    /// Gets the full path to the changeset directory
+    fn get_changeset_directory(&self) -> PathBuf {
+        self.project.root_path().join(&self.config.changeset_dir)
+    }
+
+    /// Generates a filename for a changeset based on the configured format
+    fn generate_filename(&self, changeset: &Changeset) -> String {
+        let timestamp = changeset.created_at.timestamp();
+        let short_hash = &changeset.id[..8]; // Use first 8 characters of ID as hash
+
+        self.config
+            .filename_format
+            .replace("{timestamp}", &timestamp.to_string())
+            .replace("{branch}", &changeset.branch.replace('/', "-"))
+            .replace("{hash}", short_hash)
+    }
+
+    /// Checks if a changeset matches the given filter
+    #[allow(clippy::unused_self)]
+    fn matches_filter(&self, changeset: &Changeset, filter: &ChangesetFilter) -> bool {
+        if let Some(ref package) = filter.package {
+            if changeset.package != *package {
+                return false;
+            }
+        }
+
+        if let Some(ref status) = filter.status {
+            if changeset.status != *status {
+                return false;
+            }
+        }
+
+        if let Some(ref environment) = filter.environment {
+            if !changeset.development_environments.contains(environment) {
+                return false;
+            }
+        }
+
+        if let Some(ref branch) = filter.branch {
+            if changeset.branch != *branch {
+                return false;
+            }
+        }
+
+        if let Some(ref author) = filter.author {
+            if changeset.author != *author {
+                return false;
+            }
+        }
+
+        true
+    }
+}

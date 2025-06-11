@@ -33,17 +33,17 @@ pub struct ChangeDetectionEngine {
 
 impl ChangeDetectionEngine {
     /// Create a new engine with default rules
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
         Self::with_rules(ChangeDetectionRules::default())
     }
 
     /// Create engine with custom rules
-    pub fn with_rules(rules: ChangeDetectionRules) -> Self {
+    #[must_use] pub fn with_rules(rules: ChangeDetectionRules) -> Self {
         Self { rules, regex_cache: HashMap::new(), glob_cache: HashMap::new() }
     }
 
     /// Validate all patterns in the rules and return any errors found
-    pub fn validate_rules(&self) -> Vec<String> {
+    #[must_use] pub fn validate_rules(&self) -> Vec<String> {
         let mut errors = Vec::new();
 
         // Validate change type rules
@@ -169,7 +169,7 @@ impl ChangeDetectionEngine {
     }
 
     /// Suggest version bump
-    pub fn suggest_version_bump(
+    #[must_use] pub fn suggest_version_bump(
         &self,
         change_type: &PackageChangeType,
         significance: &ChangeSignificance,
@@ -365,18 +365,21 @@ impl ChangeDetectionEngine {
 
         // Check file size conditions (if available)
         if let Some(_file_size) = &conditions.file_size {
-            // File size checking would require additional git info
-            // This is a placeholder for more sophisticated analysis
+            // File size checking implementation would go here
+            // For now, this is a basic placeholder that always passes
+            log::debug!("File size condition checking not yet implemented");
         }
 
         // Custom script execution (if specified)
         if let Some(_script) = &conditions.custom_script {
-            // Execute custom validation script
-            // This is a placeholder for extensibility
+            // Custom script execution would go here
+            // For now, this is a basic placeholder that always passes
+            log::debug!("Custom script execution not yet implemented");
         }
 
         true
     }
+
 }
 
 impl Default for ChangeDetectionEngine {

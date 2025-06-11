@@ -1,7 +1,7 @@
 //! Hook installer for setting up Git hooks
 //!
-//! The HookInstaller manages the installation, uninstallation, and status checking
-//! of Git hooks in the repository, leveraging FileSystemManager for file operations.
+//! The `HookInstaller` manages the installation, uninstallation, and status checking
+//! of Git hooks in the repository, leveraging `FileSystemManager` for file operations.
 
 use super::{HookDefinition, HookType};
 use crate::core::MonorepoProject;

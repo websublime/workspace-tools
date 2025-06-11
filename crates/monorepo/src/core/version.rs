@@ -28,12 +28,12 @@ pub struct VersionManager {
 
 impl VersionManager {
     /// Create a new version manager with the default strategy
-    pub fn new(project: Arc<MonorepoProject>) -> Self {
+    #[must_use] pub fn new(project: Arc<MonorepoProject>) -> Self {
         Self { project, strategy: Box::new(DefaultVersioningStrategy) }
     }
 
     /// Create a version manager with a custom strategy
-    pub fn with_strategy(
+    #[must_use] pub fn with_strategy(
         project: Arc<MonorepoProject>,
         strategy: Box<dyn VersioningStrategy>,
     ) -> Self {

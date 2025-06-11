@@ -8,9 +8,9 @@
 //! including changeset verification, affected package task execution, and custom hook scripts.
 //!
 //! # How
-//! Leverages FileSystemManager from standard-tools for hook installation, integrates with
-//! TaskManager for executing tasks on affected packages, and provides changeset validation
-//! through ChangesetManager integration.
+//! Leverages `FileSystemManager` from standard-tools for hook installation, integrates with
+//! `TaskManager` for executing tasks on affected packages, and provides changeset validation
+//! through `ChangesetManager` integration.
 //!
 //! # Why
 //! Essential for maintaining code quality and ensuring proper changeset management in

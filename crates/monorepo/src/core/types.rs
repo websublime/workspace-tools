@@ -109,8 +109,8 @@ pub struct MonorepoPackageInfo {
 }
 
 impl MonorepoPackageInfo {
-    /// Create a new MonorepoPackageInfo
-    pub fn new(
+    /// Create a new `MonorepoPackageInfo`
+    #[must_use] pub fn new(
         package_info: PackageInfo,
         workspace_package: WorkspacePackage,
         is_internal: bool,
@@ -127,32 +127,32 @@ impl MonorepoPackageInfo {
     }
     
     /// Get the package name
-    pub fn name(&self) -> &str {
+    #[must_use] pub fn name(&self) -> &str {
         &self.workspace_package.name
     }
     
     /// Get the package version
-    pub fn version(&self) -> &str {
+    #[must_use] pub fn version(&self) -> &str {
         &self.workspace_package.version
     }
     
     /// Get the package path
-    pub fn path(&self) -> &PathBuf {
+    #[must_use] pub fn path(&self) -> &PathBuf {
         &self.workspace_package.absolute_path
     }
     
     /// Get the relative path from monorepo root
-    pub fn relative_path(&self) -> &PathBuf {
+    #[must_use] pub fn relative_path(&self) -> &PathBuf {
         &self.workspace_package.location
     }
     
     /// Check if this package has pending changesets
-    pub fn has_pending_changesets(&self) -> bool {
+    #[must_use] pub fn has_pending_changesets(&self) -> bool {
         self.changesets.iter().any(|cs| matches!(cs.status, ChangesetStatus::Pending))
     }
     
     /// Get pending changesets
-    pub fn pending_changesets(&self) -> Vec<&Changeset> {
+    #[must_use] pub fn pending_changesets(&self) -> Vec<&Changeset> {
         self.changesets
             .iter()
             .filter(|cs| matches!(cs.status, ChangesetStatus::Pending))
@@ -160,7 +160,7 @@ impl MonorepoPackageInfo {
     }
     
     /// Check if package is dirty (has uncommitted changes)
-    pub fn is_dirty(&self) -> bool {
+    #[must_use] pub fn is_dirty(&self) -> bool {
         matches!(self.version_status, VersionStatus::Dirty)
     }
 }

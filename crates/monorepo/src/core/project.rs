@@ -1,4 +1,4 @@
-//! Core MonorepoProject implementation that integrates all base crates
+//! Core `MonorepoProject` implementation that integrates all base crates
 
 use super::types::MonorepoPackageInfo;
 use crate::config::{ConfigManager, MonorepoConfig};
@@ -50,7 +50,7 @@ pub struct MonorepoProject {
 }
 
 impl MonorepoProject {
-    /// Create a new MonorepoProject by discovering and analyzing a monorepo
+    /// Create a new `MonorepoProject` by discovering and analyzing a monorepo
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
 
@@ -117,12 +117,12 @@ impl MonorepoProject {
     }
 
     /// Get the root path of the monorepo
-    pub fn root_path(&self) -> &Path {
+    #[must_use] pub fn root_path(&self) -> &Path {
         &self.root_path
     }
 
     /// Get a package by name
-    pub fn get_package(&self, name: &str) -> Option<&MonorepoPackageInfo> {
+    #[must_use] pub fn get_package(&self, name: &str) -> Option<&MonorepoPackageInfo> {
         self.packages.iter().find(|p| p.name() == name)
     }
 
@@ -132,12 +132,12 @@ impl MonorepoProject {
     }
 
     /// Get all internal packages (part of the monorepo)
-    pub fn internal_packages(&self) -> Vec<&MonorepoPackageInfo> {
+    #[must_use] pub fn internal_packages(&self) -> Vec<&MonorepoPackageInfo> {
         self.packages.iter().filter(|p| p.is_internal).collect()
     }
 
     /// Get all external dependencies across all packages
-    pub fn external_dependencies(&self) -> Vec<String> {
+    #[must_use] pub fn external_dependencies(&self) -> Vec<String> {
         let mut deps = Vec::new();
         for package in &self.packages {
             deps.extend(package.dependencies_external.clone());
@@ -148,12 +148,12 @@ impl MonorepoProject {
     }
 
     /// Check if a package name is internal to the monorepo
-    pub fn is_internal_package(&self, name: &str) -> bool {
+    #[must_use] pub fn is_internal_package(&self, name: &str) -> bool {
         self.packages.iter().any(|p| p.name() == name && p.is_internal)
     }
 
     /// Get packages that depend on a given package
-    pub fn get_dependents(&self, package_name: &str) -> Vec<&MonorepoPackageInfo> {
+    #[must_use] pub fn get_dependents(&self, package_name: &str) -> Vec<&MonorepoPackageInfo> {
         self.packages.iter().filter(|p| p.dependents.contains(&package_name.to_string())).collect()
     }
 

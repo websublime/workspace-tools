@@ -8,7 +8,7 @@
 //! support for conditional execution, scoping, and parallel execution.
 //!
 //! # How
-//! Leverages the CommandQueue from standard-tools for execution, integrates with
+//! Leverages the `CommandQueue` from standard-tools for execution, integrates with
 //! change detection to run tasks on affected packages, and provides sophisticated
 //! condition checking for when tasks should run.
 //!

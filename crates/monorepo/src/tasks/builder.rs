@@ -143,7 +143,7 @@ impl TaskCommand {
     }
     
     /// Create from command core
-    pub fn from_core(command: TaskCommandCore) -> Self {
+    #[must_use] pub fn from_core(command: TaskCommandCore) -> Self {
         Self {
             command,
             shell: false,
@@ -245,7 +245,7 @@ impl PackageScript {
 
 impl TaskEnvironment {
     /// Create new environment configuration
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
         Self::default()
     }
     
@@ -321,12 +321,12 @@ impl TaskExecutionResult {
     }
     
     /// Check if execution was successful
-    pub fn is_success(&self) -> bool {
+    #[must_use] pub fn is_success(&self) -> bool {
         matches!(self.status, TaskStatus::Success)
     }
     
     /// Check if execution failed
-    pub fn is_failure(&self) -> bool {
+    #[must_use] pub fn is_failure(&self) -> bool {
         matches!(self.status, TaskStatus::Failed { .. })
     }
 }
@@ -401,7 +401,7 @@ impl TaskExecutionLog {
 
 impl TaskOutput {
     /// Check if the command execution was successful
-    pub fn is_success(&self) -> bool {
+    #[must_use] pub fn is_success(&self) -> bool {
         matches!(self.exit_code, Some(0))
     }
 }

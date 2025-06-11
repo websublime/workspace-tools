@@ -8,7 +8,7 @@ use thiserror::Error;
 /// Main error type for monorepo tools operations
 #[derive(Error, Debug)]
 pub enum Error {
-    /// Git-related errors from sublime_git_tools
+    /// Git-related errors from `sublime_git_tools`
     #[error("Git operation failed")]
     Git(#[from] sublime_git_tools::RepoError),
     
@@ -155,7 +155,7 @@ impl Error {
     }
     
     /// Create a package not found error
-    pub fn package_not_found(package_name: &str) -> Self {
+    #[must_use] pub fn package_not_found(package_name: &str) -> Self {
         Error::Package(format!("Package not found: {package_name}"))
     }
 }

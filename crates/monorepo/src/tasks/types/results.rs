@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
 /// Result of task execution
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskExecutionResult {
     /// Task that was executed
     pub task_name: String,
@@ -80,7 +80,7 @@ pub enum TaskStatus {
 }
 
 /// Output from a single command execution
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskOutput {
     /// Command that was executed
     pub command: String,
@@ -105,7 +105,7 @@ pub struct TaskOutput {
 }
 
 /// Task execution error
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskError {
     /// Error code
     pub code: TaskErrorCode,
@@ -158,7 +158,7 @@ pub enum TaskErrorCode {
 }
 
 /// Task execution statistics
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskExecutionStats {
     /// Number of commands executed
     pub commands_executed: usize,
@@ -186,7 +186,7 @@ pub struct TaskExecutionStats {
 }
 
 /// Task execution log entry
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskExecutionLog {
     /// Timestamp
     pub timestamp: SystemTime,
@@ -218,7 +218,7 @@ pub enum TaskLogLevel {
 }
 
 /// Artifact produced by task execution
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskArtifact {
     /// Artifact name
     pub name: String,

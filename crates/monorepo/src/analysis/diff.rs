@@ -5,6 +5,7 @@
 
 use crate::core::MonorepoProject;
 use crate::error::Result;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -23,7 +24,7 @@ pub struct DiffAnalyzer {
 
 impl DiffAnalyzer {
     /// Create a new diff analyzer with the given project
-    pub fn new(project: Arc<MonorepoProject>) -> Self {
+    #[must_use] pub fn new(project: Arc<MonorepoProject>) -> Self {
         // Add built-in analyzers
         let analyzers: Vec<Box<dyn ChangeAnalyzer>> = vec![
             Box::new(PackageJsonAnalyzer),
@@ -37,7 +38,7 @@ impl DiffAnalyzer {
     }
 
     /// Create a new diff analyzer with custom analyzers
-    pub fn with_analyzers(
+    #[must_use] pub fn with_analyzers(
         project: Arc<MonorepoProject>,
         analyzers: Vec<Box<dyn ChangeAnalyzer>>,
     ) -> Self {
@@ -186,7 +187,7 @@ impl DiffAnalyzer {
     }
 
     /// Analyze the significance of package changes
-    pub fn analyze_change_significance(
+    #[must_use] pub fn analyze_change_significance(
         &self,
         package_changes: &[PackageChange],
     ) -> Vec<ChangeSignificanceResult> {
@@ -356,7 +357,7 @@ pub struct BranchComparisonResult {
 }
 
 /// Complete analysis of changes in a monorepo
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ChangeAnalysis {
     /// Starting reference
     pub from_ref: String,
@@ -390,7 +391,7 @@ pub struct PackageChange {
 // Types are now imported from change_rules module for consistency
 
 /// Analysis of all affected packages
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AffectedPackagesAnalysis {
     /// Packages directly changed
     pub directly_affected: Vec<String>,
@@ -405,7 +406,7 @@ pub struct AffectedPackagesAnalysis {
 }
 
 /// Result of change significance analysis
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChangeSignificanceResult {
     /// Package name
     pub package_name: String,
@@ -439,7 +440,7 @@ pub struct ChangeAnalysisResult {
     pub context: Vec<String>,
 }
 
-/// Helper for building PackageChange objects
+/// Helper for building `PackageChange` objects
 struct PackageChangeBuilder {
     package_name: String,
     changed_files: Vec<GitChangedFile>,

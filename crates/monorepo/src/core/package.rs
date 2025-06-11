@@ -125,7 +125,7 @@ impl MonorepoPackageInfo {
     }
 
     /// Get suggested version bump based on changesets
-    pub fn suggested_version_bump(&self) -> Option<VersionBumpType> {
+    #[must_use] pub fn suggested_version_bump(&self) -> Option<VersionBumpType> {
         let pending = self.pending_changesets();
         if pending.is_empty() {
             return None;
@@ -145,7 +145,7 @@ impl MonorepoPackageInfo {
     }
 
     /// Check if package has been deployed to a specific environment
-    pub fn is_deployed_to(&self, environment: &Environment) -> bool {
+    #[must_use] pub fn is_deployed_to(&self, environment: &Environment) -> bool {
         self.changesets.iter().any(|cs| {
             cs.development_environments.contains(environment)
                 || (environment == &Environment::Production && cs.production_deployment)
@@ -153,7 +153,7 @@ impl MonorepoPackageInfo {
     }
 
     /// Get deployment status across environments
-    pub fn deployment_status(&self) -> HashMap<Environment, bool> {
+    #[must_use] pub fn deployment_status(&self) -> HashMap<Environment, bool> {
         let mut status = HashMap::new();
 
         for changeset in &self.changesets {

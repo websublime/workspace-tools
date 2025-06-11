@@ -86,12 +86,12 @@ impl ChangeDetector {
     }
     
     /// Get read-only access to the engine
-    pub fn engine(&self) -> &ChangeDetectionEngine {
+    #[must_use] pub fn engine(&self) -> &ChangeDetectionEngine {
         &self.engine
     }
 
     /// Find all packages affected by changes (including dependents)
-    pub fn find_affected_packages(
+    #[must_use] pub fn find_affected_packages(
         &self,
         direct_changes: &[String],
         packages: &[crate::core::MonorepoPackageInfo],

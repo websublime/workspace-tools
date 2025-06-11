@@ -23,7 +23,7 @@ pub struct ConfigManager {
 
 impl ConfigManager {
     /// Create a new configuration manager with default config
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
         Self {
             config: Arc::new(RwLock::new(MonorepoConfig::default())),
             config_path: None,
@@ -32,7 +32,7 @@ impl ConfigManager {
     }
 
     /// Create a configuration manager with a specific config
-    pub fn with_config(config: MonorepoConfig) -> Self {
+    #[must_use] pub fn with_config(config: MonorepoConfig) -> Self {
         Self { config: Arc::new(RwLock::new(config)), config_path: None, auto_save: false }
     }
 
@@ -184,7 +184,7 @@ impl ConfigManager {
     }
 
     /// Get the config file path
-    pub fn config_path(&self) -> Option<&Path> {
+    #[must_use] pub fn config_path(&self) -> Option<&Path> {
         self.config_path.as_deref()
     }
 
@@ -453,7 +453,7 @@ impl ConfigManager {
     }
 
     /// Check if a pattern matches a package path
-    pub fn pattern_matches_package(&self, pattern: &str, package_path: &str) -> bool {
+    #[must_use] pub fn pattern_matches_package(&self, pattern: &str, package_path: &str) -> bool {
         // Simple glob-style matching - could be enhanced with proper glob library
         if pattern.contains('*') {
             if let Some(base) = pattern.strip_suffix("/*") {

@@ -4,6 +4,7 @@ use crate::analysis::{
     DependencyGraphAnalysis, PackageClassificationResult, PackageInformation,
     PackageManagerAnalysis, PatternStatistics, RegistryAnalysisResult, RegistryInfo,
     UpgradeAnalysisResult, WorkspaceConfigAnalysis, WorkspacePatternAnalysis,
+    diff::{ChangeAnalysis, BranchComparisonResult, DiffAnalyzer},
 };
 use crate::config::PackageManagerType;
 use crate::core::MonorepoProject;
@@ -11,9 +12,10 @@ use crate::error::Result;
 use crate::MonorepoAnalysisResult;
 use std::collections::HashMap;
 use std::path::Path;
+use std::process::Command;
 use std::sync::Arc;
 use sublime_package_tools::Upgrader;
-use sublime_standard_tools::monorepo::MonorepoDetector;
+use sublime_standard_tools::monorepo::{MonorepoDetector, PackageManagerKind};
 
 /// Analyzer for comprehensive monorepo analysis
 pub struct MonorepoAnalyzer {
@@ -23,11 +25,22 @@ pub struct MonorepoAnalyzer {
 
 impl MonorepoAnalyzer {
     /// Create a new analyzer for a monorepo project
+    #[must_use]
     pub fn new(project: Arc<MonorepoProject>) -> Self {
         Self { project }
     }
 
     /// Perform complete monorepo detection and analysis
+    ///
+    /// # Errors
+    /// 
+    /// Returns an error if:
+    /// - Monorepo detection fails
+    /// - Package manager analysis fails
+    /// - Dependency graph building fails
+    /// - Package classification fails
+    /// - Registry analysis fails
+    /// - Workspace configuration analysis fails
     pub fn detect_monorepo_info(&self, path: &Path) -> Result<MonorepoAnalysisResult> {
         // Use standard-tools detector
         let detector = MonorepoDetector::new();
@@ -64,8 +77,8 @@ impl MonorepoAnalyzer {
         let pm = &self.project.package_manager;
         let kind = pm.kind();
 
-        // Get package manager version (would need to execute command)
-        let version = "unknown".to_string(); // Placeholder
+        // Get package manager version by executing the appropriate command
+        let version = self.detect_package_manager_version(kind);
 
         // Get workspace configuration from package.json
         let package_json_path = pm.root().join("package.json");
@@ -174,6 +187,7 @@ impl MonorepoAnalyzer {
     }
 
     /// Calculate maximum dependency depth
+    #[must_use]
     pub fn calculate_max_depth(&self, packages: &[crate::core::MonorepoPackageInfo]) -> usize {
         let mut max_depth = 0;
         let mut visited = std::collections::HashSet::new();
@@ -219,6 +233,7 @@ impl MonorepoAnalyzer {
     }
 
     /// Find packages with most dependencies
+    #[must_use]
     pub fn find_packages_with_most_dependencies(
         &self,
         packages: &[crate::core::MonorepoPackageInfo],
@@ -233,6 +248,7 @@ impl MonorepoAnalyzer {
     }
 
     /// Find packages with most dependents
+    #[must_use]
     pub fn find_packages_with_most_dependents(
         &self,
         packages: &[crate::core::MonorepoPackageInfo],
@@ -367,6 +383,7 @@ impl MonorepoAnalyzer {
     }
 
     /// Check if a registry has authentication configured
+    #[must_use]
     pub fn check_registry_auth(&self, registry_url: &str) -> bool {
         // Check .npmrc for auth tokens
         let npmrc_paths = [
@@ -419,6 +436,7 @@ impl MonorepoAnalyzer {
     }
 
     /// Get package information
+    #[must_use]
     pub fn get_package_information(&self) -> Vec<PackageInformation> {
         self.project
             .packages
@@ -439,6 +457,13 @@ impl MonorepoAnalyzer {
     }
 
     /// Analyze available upgrades using the Upgrader from package-tools
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Package extraction fails
+    /// - Upgrader initialization fails
+    /// - Upgrade analysis fails
     pub fn analyze_available_upgrades(&self) -> Result<UpgradeAnalysisResult> {
         let total_packages = self.project.packages.len();
         let mut major_upgrades = Vec::new();
@@ -480,8 +505,8 @@ impl MonorepoAnalyzer {
 
         // Check for upgrades across all packages
         match upgrader.check_all_upgrades(&packages) {
-            Ok(upgrades) => {
-                for upgrade in upgrades {
+            Ok(upgrade_results) => {
+                for upgrade in upgrade_results {
                     let upgrade_info = super::types::UpgradeInfo {
                         package_name: upgrade.package_name.clone(),
                         dependency_name: upgrade.dependency_name.clone(),
@@ -812,6 +837,7 @@ impl MonorepoAnalyzer {
 
     /// Calculate pattern specificity for sorting (higher is more specific)
     #[allow(clippy::cast_possible_truncation)]
+    #[must_use]
     pub fn calculate_pattern_specificity(&self, pattern: &str) -> u32 {
         let mut specificity = 0;
 
@@ -845,6 +871,13 @@ impl MonorepoAnalyzer {
     }
 
     /// Get workspace patterns with full context and validation
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Configuration patterns cannot be retrieved
+    /// - Auto-detected patterns cannot be generated
+    /// - Workspace configuration validation fails
     pub fn get_validated_workspace_patterns(&self) -> Result<WorkspacePatternAnalysis> {
         let config_patterns = self.get_config_workspace_patterns()?;
         let auto_detected = self.get_auto_detected_patterns()?;
@@ -892,6 +925,7 @@ impl MonorepoAnalyzer {
     }
 
     /// Find packages that don't match any workspace pattern
+    #[must_use]
     pub fn find_orphaned_packages(&self, patterns: &[String]) -> Vec<String> {
         let mut orphaned = Vec::new();
 
@@ -914,31 +948,137 @@ impl MonorepoAnalyzer {
         orphaned
     }
 
-    /// Simple glob pattern matching
-    #[allow(clippy::manual_strip)]
+    /// Real glob pattern matching using the glob library
+    ///
+    /// Provides proper glob pattern matching capabilities including:
+    /// - Wildcard patterns (*, **)
+    /// - Character classes ([abc], [a-z])
+    /// - Escape sequences
+    /// - Case sensitivity handling
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to match against
+    /// * `pattern` - The glob pattern to use for matching
+    ///
+    /// # Returns
+    ///
+    /// True if the path matches the glob pattern, false otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use sublime_monorepo_tools::MonorepoAnalyzer;
+    /// # let analyzer = create_test_analyzer();
+    /// assert!(analyzer.matches_glob_pattern("packages/core/src/lib.rs", "packages/*/src/**"));
+    /// assert!(analyzer.matches_glob_pattern("src/test.js", "src/*.js"));
+    /// assert!(!analyzer.matches_glob_pattern("src/test.ts", "src/*.js"));
+    /// ```
+    #[must_use]
     pub fn matches_glob_pattern(&self, path: &str, pattern: &str) -> bool {
-        // Simple glob matching - could be enhanced with a proper glob library
-        if pattern.ends_with("/*") {
-            let base_pattern = &pattern[..pattern.len() - 2];
-            path.starts_with(base_pattern)
-        } else if pattern.contains('*') {
-            // More complex patterns - for now just check if the non-wildcard parts match
-            let parts: Vec<&str> = pattern.split('*').collect();
-            if parts.len() == 2 {
-                let prefix = parts[0];
-                let suffix = parts[1];
-
-                // Check if path starts with prefix and ends with suffix
-                if path.len() >= prefix.len() + suffix.len() {
-                    path.starts_with(prefix) && path.ends_with(suffix)
-                } else {
-                    false
-                }
-            } else {
-                false
+        use glob::Pattern;
+        
+        match Pattern::new(pattern) {
+            Ok(glob_pattern) => glob_pattern.matches(path),
+            Err(e) => {
+                log::warn!(
+                    "Invalid glob pattern '{}': {}. Falling back to exact string match.",
+                    pattern,
+                    e
+                );
+                // Fallback to exact match if pattern is invalid
+                path == pattern
             }
-        } else {
-            path == pattern
+        }
+    }
+
+    /// Detect changes since a specific reference using `DiffAnalyzer`
+    ///
+    /// This is a synchronous operation as it only performs git operations
+    /// and data analysis, which are CPU-bound operations.
+    pub fn detect_changes_since(
+        &self,
+        since_ref: &str,
+        until_ref: Option<&str>,
+    ) -> Result<ChangeAnalysis> {
+        let diff_analyzer = DiffAnalyzer::new(Arc::clone(&self.project));
+        diff_analyzer.detect_changes_since(since_ref, until_ref)
+    }
+
+    /// Compare two branches using `DiffAnalyzer`
+    ///
+    /// This is a synchronous operation as it only performs git operations
+    /// and data analysis, which are CPU-bound operations.
+    pub fn compare_branches(
+        &self,
+        base_branch: &str,
+        target_branch: &str,
+    ) -> Result<BranchComparisonResult> {
+        let diff_analyzer = DiffAnalyzer::new(Arc::clone(&self.project));
+        diff_analyzer.compare_branches(base_branch, target_branch)
+    }
+
+    /// Detect the actual version of the package manager by executing the appropriate command
+    ///
+    /// # Arguments
+    ///
+    /// * `kind` - The package manager kind to detect version for
+    ///
+    /// # Returns
+    ///
+    /// The version string of the package manager, or "unknown" if detection fails.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use sublime_node_tools::PackageManagerKind;
+    /// # use sublime_monorepo_tools::MonorepoAnalyzer;
+    /// # let analyzer = create_test_analyzer();
+    /// let version = analyzer.detect_package_manager_version(PackageManagerKind::Npm);
+    /// println!("NPM version: {}", version);
+    /// ```
+    fn detect_package_manager_version(&self, kind: PackageManagerKind) -> String {
+        let (command, args) = match &kind {
+            PackageManagerKind::Npm => ("npm", vec!["--version"]),
+            PackageManagerKind::Pnpm => ("pnpm", vec!["--version"]),
+            PackageManagerKind::Yarn => ("yarn", vec!["--version"]),
+            PackageManagerKind::Bun => ("bun", vec!["--version"]),
+            PackageManagerKind::Jsr => ("jsr", vec!["--version"]),
+        };
+
+        let output = Command::new(command)
+            .args(&args)
+            .current_dir(self.project.root_path())
+            .output();
+
+        match output {
+            Ok(output) if output.status.success() => {
+                let version = String::from_utf8_lossy(&output.stdout)
+                    .trim()
+                    .to_string();
+                if version.is_empty() {
+                    "unknown".to_string()
+                } else {
+                    version
+                }
+            },
+            Ok(output) => {
+                log::warn!(
+                    "Package manager '{}' command failed with status: {}. stderr: {}",
+                    command,
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                "unknown".to_string()
+            },
+            Err(e) => {
+                log::warn!(
+                    "Failed to execute package manager '{}' command: {}",
+                    command,
+                    e
+                );
+                "unknown".to_string()
+            }
         }
     }
 }

@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use super::Environment;
 
 /// Task management configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,6 +21,9 @@ pub struct TasksConfig {
 
     /// Task timeout in seconds
     pub timeout: u64,
+
+    /// Deployment tasks for each environment
+    pub deployment_tasks: HashMap<Environment, Vec<String>>,
 }
 
 impl Default for TasksConfig {
@@ -30,6 +34,7 @@ impl Default for TasksConfig {
             parallel: true,
             max_concurrent: 4,
             timeout: 300, // 5 minutes
+            deployment_tasks: HashMap::new(),
         }
     }
 }

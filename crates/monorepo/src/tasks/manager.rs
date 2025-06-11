@@ -1,6 +1,6 @@
 //! Task manager implementation
 //!
-//! The TaskManager orchestrates task execution, manages dependencies,
+//! The `TaskManager` orchestrates task execution, manages dependencies,
 //! and coordinates with other monorepo systems for comprehensive workflow management.
 
 // TODO: Remove after Phase 4 - currently some methods don't need async but will in complete implementation
@@ -202,12 +202,12 @@ impl TaskManager {
     }
 
     /// Get all registered tasks
-    pub fn list_tasks(&self) -> Vec<&TaskDefinition> {
+    #[must_use] pub fn list_tasks(&self) -> Vec<&TaskDefinition> {
         self.registry.list_tasks()
     }
 
     /// Get task by name
-    pub fn get_task(&self, name: &str) -> Option<&TaskDefinition> {
+    #[must_use] pub fn get_task(&self, name: &str) -> Option<&TaskDefinition> {
         self.registry.get_task(name)
     }
 

@@ -1,6 +1,6 @@
 //! Task executor implementation
 //!
-//! The TaskExecutor handles the actual execution of tasks, including command
+//! The `TaskExecutor` handles the actual execution of tasks, including command
 //! execution, package script running, and result collection.
 
 // TODO: Remove after Phase 4 - currently simplified implementation, full async integration pending
@@ -171,10 +171,19 @@ impl TaskExecutor {
                 Ok(matching_packages)
             }
 
-            TaskScope::Custom { filter: _ } => {
-                // For custom scopes, use affected packages as fallback
-                // In a real implementation, this would call a registered filter function
-                Ok(context.affected_packages.clone())
+            TaskScope::Custom { filter } => {
+                // Execute the custom filter function
+                let mut matching_packages = Vec::new();
+                
+                for package in &self.project.packages {
+                    // Parse the filter as a simple expression
+                    // For now, support basic property access like "package.name.includes('@myorg/')"
+                    if self.evaluate_custom_filter(filter, package.name(), context) {
+                        matching_packages.push(package.name().to_string());
+                    }
+                }
+                
+                Ok(matching_packages)
             }
         }
     }
@@ -364,21 +373,117 @@ impl TaskExecutor {
         }
     }
 
-    /// Check if a string matches a pattern (basic glob-style matching)
+    /// Check if a string matches a pattern using glob-style matching
+    ///
+    /// Uses the glob crate for proper pattern matching support including:
+    /// - `*` matches any sequence of characters
+    /// - `?` matches any single character  
+    /// - `[seq]` matches any character in seq
+    /// - `[!seq]` matches any character not in seq
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - The text to match against
+    /// * `pattern` - The glob pattern to use
+    ///
+    /// # Returns
+    ///
+    /// True if the text matches the pattern, false otherwise
     #[allow(clippy::unused_self)]
     fn matches_pattern(&self, text: &str, pattern: &str) -> bool {
-        // Simple pattern matching - could be enhanced with proper glob library
-        if pattern.contains('*') {
-            if let Some(prefix) = pattern.strip_suffix('*') {
-                text.starts_with(prefix)
-            } else if let Some(suffix) = pattern.strip_prefix('*') {
-                text.ends_with(suffix)
-            } else {
-                // More complex patterns would need proper glob matching
-                text.contains(pattern.trim_matches('*'))
+        use glob::Pattern;
+        
+        // Create the glob pattern
+        match Pattern::new(pattern) {
+            Ok(glob_pattern) => glob_pattern.matches(text),
+            Err(_) => {
+                // If pattern is invalid, fall back to exact match
+                text == pattern
             }
-        } else {
-            text == pattern
         }
     }
+
+    /// Evaluate a custom filter expression for a package
+    ///
+    /// Supports simple expressions like:
+    /// - `package.name.includes('@scope/')`
+    /// - `package.name.startsWith('@myorg/')`
+    /// - `context.affected.includes(package.name)`
+    ///
+    /// # Arguments
+    ///
+    /// * `filter` - The filter expression to evaluate
+    /// * `package_name` - Name of the package being evaluated
+    /// * `context` - Execution context with affected packages
+    ///
+    /// # Returns
+    ///
+    /// True if the package matches the filter, false otherwise
+    #[allow(clippy::unused_self)]
+    fn evaluate_custom_filter(&self, filter: &str, package_name: &str, context: &ExecutionContext) -> bool {
+        // Parse common filter patterns
+        let filter = filter.trim();
+        
+        // Handle package.name.includes('...') pattern
+        if let Some(search_str) = extract_string_argument(filter, "package.name.includes(") {
+            return package_name.contains(&search_str);
+        }
+        
+        // Handle package.name.startsWith('...') pattern
+        if let Some(prefix) = extract_string_argument(filter, "package.name.startsWith(") {
+            return package_name.starts_with(&prefix);
+        }
+        
+        // Handle package.name.endsWith('...') pattern
+        if let Some(suffix) = extract_string_argument(filter, "package.name.endsWith(") {
+            return package_name.ends_with(&suffix);
+        }
+        
+        // Handle context.affected.includes(package.name) pattern
+        if filter == "context.affected.includes(package.name)" {
+            return context.affected_packages.contains(&package_name.to_string());
+        }
+        
+        // Handle package.name === '...' pattern
+        if let Some(exact_match) = extract_string_argument(filter, "package.name === ") {
+            return package_name == exact_match;
+        }
+        
+        // Default to false for unsupported expressions
+        false
+    }
+}
+
+/// Helper function to extract string argument from filter expressions
+///
+/// Extracts the string argument from patterns like `method('arg')` or `method("arg")`
+///
+/// # Arguments
+///
+/// * `filter` - The full filter expression
+/// * `prefix` - The method prefix to match (e.g., "package.name.includes(")
+///
+/// # Returns
+///
+/// The extracted string argument if found, None otherwise
+fn extract_string_argument(filter: &str, prefix: &str) -> Option<String> {
+    if !filter.starts_with(prefix) {
+        return None;
+    }
+    
+    let remaining = &filter[prefix.len()..];
+    
+    // Find the closing parenthesis
+    if let Some(close_idx) = remaining.rfind(')') {
+        let arg_part = &remaining[..close_idx].trim();
+        
+        // Remove quotes if present
+        if (arg_part.starts_with('\'') && arg_part.ends_with('\'')) ||
+           (arg_part.starts_with('"') && arg_part.ends_with('"')) {
+            let unquoted = &arg_part[1..arg_part.len()-1];
+            return Some(unquoted.to_string());
+        }
+    }
+    
+    None
 }

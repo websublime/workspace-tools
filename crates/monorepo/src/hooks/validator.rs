@@ -1,6 +1,6 @@
 //! Hook validator for checking conditions and requirements
 //!
-//! The HookValidator evaluates hook conditions, validates changeset requirements,
+//! The `HookValidator` evaluates hook conditions, validates changeset requirements,
 //! and coordinates with other monorepo systems for comprehensive validation.
 
 // Allow clippy lints during Phase 3 implementation - will be refined in Phase 4
@@ -306,22 +306,23 @@ impl HookValidator {
         ])
     }
 
-    /// Check if a string matches a pattern (simple glob-style matching)
+    /// Check if a string matches a pattern using proper glob matching
+    ///
+    /// Uses the glob crate for standard glob pattern support including:
+    /// - `*` matches any sequence of characters
+    /// - `?` matches any single character
+    /// - `[seq]` matches any character in seq
+    /// - `[!seq]` matches any character not in seq
     fn matches_pattern(&self, text: &str, pattern: &str) -> bool {
-        if pattern.contains('*') {
-            if let Some(prefix) = pattern.strip_suffix('*') {
-                text.starts_with(prefix)
-            } else if let Some(suffix) = pattern.strip_prefix('*') {
-                text.ends_with(suffix)
-            } else if let Some(star_pos) = pattern.find('*') {
-                let prefix = &pattern[..star_pos];
-                let suffix = &pattern[star_pos + 1..];
-                text.starts_with(prefix) && text.ends_with(suffix)
-            } else {
-                false
+        use glob::Pattern;
+        
+        // Create the glob pattern
+        match Pattern::new(pattern) {
+            Ok(glob_pattern) => glob_pattern.matches(text),
+            Err(_) => {
+                // If pattern is invalid, fall back to exact match
+                text == pattern
             }
-        } else {
-            text == pattern
         }
     }
 

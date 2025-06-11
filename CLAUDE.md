@@ -25,6 +25,7 @@ This rules are mandatory to apply to any answer given by AI.
 - Remember to follow best practices for error handling and logging
 - Reuse all the crates from the api specs if needed, and ensure that the code is well-documented and follows the Rust community's style guide
 - Detail information, file location and no methods with no implementation or saying in a real case we would use this or that or even doing this or that.
+- When clippy rules clash with implementation, always prefer to follow clippy rules, if you can't let' signed with a comment explaining why the rule was not followed and allow the exception.
 
 # Additional instructions
 

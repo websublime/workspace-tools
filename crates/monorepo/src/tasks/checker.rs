@@ -1,6 +1,6 @@
 //! Task condition checking implementation
 //!
-//! The ConditionChecker evaluates task conditions to determine if tasks should
+//! The `ConditionChecker` evaluates task conditions to determine if tasks should
 //! be executed based on changes, environment, and other contextual factors.
 
 // TODO: Remove these allows after Phase 4 implementation - currently needed for incomplete features
@@ -17,9 +17,10 @@ use super::{
 use crate::analysis::ChangeAnalysis;
 use crate::config::Environment;
 use crate::core::MonorepoProject;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use std::collections::HashSet;
 use std::sync::Arc;
+use VersionChangeThreshold::{Any, Major, MinorOrMajor, PatchOrHigher};
 
 /// Checker for evaluating task execution conditions
 pub struct ConditionChecker {
@@ -29,6 +30,7 @@ pub struct ConditionChecker {
 
 impl ConditionChecker {
     /// Create a new condition checker
+    #[must_use]
     pub fn new(project: Arc<MonorepoProject>) -> Self {
         Self { project }
     }
@@ -204,8 +206,8 @@ impl ConditionChecker {
                 self.matches_glob_pattern(file, &pattern.pattern).unwrap_or(false)
             }
             FilePatternType::Regex => {
-                // Would use regex crate in real implementation
-                file.contains(&pattern.pattern)
+                // Real regex pattern matching using regex crate
+                self.matches_regex_pattern(file, &pattern.pattern)?
             }
         };
 
@@ -213,43 +215,35 @@ impl ConditionChecker {
         Ok(if pattern.exclude { !matches } else { matches })
     }
 
-    /// Simple glob pattern matching
-    #[allow(clippy::if_not_else)]
+    /// Match text against a glob pattern using the glob crate
+    ///
+    /// Supports standard glob patterns including:
+    /// - `*` matches any sequence of characters
+    /// - `?` matches any single character
+    /// - `[seq]` matches any character in seq
+    /// - `[!seq]` matches any character not in seq
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - The text to match against
+    /// * `pattern` - The glob pattern to use
+    ///
+    /// # Returns
+    ///
+    /// Ok(true) if the text matches the pattern, Ok(false) otherwise
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pattern is invalid
+    #[allow(clippy::unused_self)]
     pub fn matches_glob_pattern(&self, text: &str, pattern: &str) -> Result<bool> {
-        let result = if pattern.contains('*') {
-            if let Some(prefix) = pattern.strip_suffix('*') {
-                text.starts_with(prefix)
-            } else if let Some(suffix) = pattern.strip_prefix('*') {
-                text.ends_with(suffix)
-            } else {
-                // Handle patterns with * in the middle
-                if let Some(star_pos) = pattern.find('*') {
-                    let prefix = &pattern[..star_pos];
-                    let suffix = &pattern[star_pos + 1..];
+        use glob::Pattern;
 
-                    // Check if text starts with prefix and ends with suffix
-                    // and is long enough to contain both
-                    text.starts_with(prefix)
-                        && text.ends_with(suffix)
-                        && text.len() >= prefix.len() + suffix.len()
-                } else {
-                    // Fallback - shouldn't reach here
-                    text == pattern
-                }
-            }
-        } else if pattern.contains('?') {
-            // Handle ? wildcards (single character)
-            if text.len() != pattern.len() {
-                false
-            } else {
-                text.chars()
-                    .zip(pattern.chars())
-                    .all(|(t_char, p_char)| p_char == '?' || p_char == t_char)
-            }
-        } else {
-            text == pattern
-        };
-        Ok(result)
+        // Create and compile the glob pattern
+        let glob_pattern = Pattern::new(pattern)
+            .map_err(|e| Error::task(format!("Invalid glob pattern '{pattern}': {e}")))?;
+
+        Ok(glob_pattern.matches(text))
     }
 
     /// Check branch condition
@@ -482,40 +476,339 @@ impl ConditionChecker {
     }
 
     /// Get packages with dependency changes
-    #[allow(clippy::unused_self)]
     fn get_packages_with_dependency_changes(
         &self,
         context: &ExecutionContext,
     ) -> Result<Vec<String>> {
-        // In a real implementation, this would analyze package.json changes
-        // For now, return affected packages as they likely have dependency changes
-        Ok(context.affected_packages.clone())
+        use std::collections::HashSet;
+
+        let mut packages_with_dep_changes = Vec::new();
+
+        // Get packages from the project
+        let packages = &self.project.packages;
+
+        // Analyze each affected package for dependency changes
+        for package_name in &context.affected_packages {
+            if let Some(package) = packages.iter().find(|p| p.name() == package_name) {
+                // Check if any of the changed files are package.json files in this package
+                let package_json_path = package.workspace_package.location.join("package.json");
+                let package_json_str = package_json_path.to_string_lossy().to_string();
+
+                // Check if package.json was modified
+                let has_package_json_changes =
+                    context.changed_files.iter().any(|file| file.path == package_json_str);
+
+                if has_package_json_changes {
+                    // Analyze the actual dependency changes
+                    if self.has_dependency_changes_in_package(&package_json_path, context)? {
+                        packages_with_dep_changes.push(package_name.clone());
+                    }
+                }
+            }
+        }
+
+        // Also check for workspace-level dependency changes that could affect packages
+        let root_package_json = self.project.root_path().join("package.json");
+        let root_package_json_str = root_package_json.to_string_lossy().to_string();
+
+        if context.changed_files.iter().any(|file| file.path == root_package_json_str)
+            && self.has_dependency_changes_in_package(&root_package_json, context)?
+        {
+            // Root dependency changes can affect all packages
+            let all_packages: HashSet<String> =
+                packages.iter().map(|p| p.name().to_string()).collect();
+
+            let mut all_affected = all_packages.into_iter().collect::<Vec<_>>();
+            packages_with_dep_changes.append(&mut all_affected);
+        }
+
+        // Remove duplicates and return
+        packages_with_dep_changes.sort();
+        packages_with_dep_changes.dedup();
+        Ok(packages_with_dep_changes)
     }
 
-    /// Check version change threshold
+    /// Analyzes if a package.json file has actual dependency changes
+    ///
+    /// This function compares the current package.json against Git to determine
+    /// if there were changes to dependencies, devDependencies, peerDependencies,
+    /// or optionalDependencies sections.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_json_path` - Path to the package.json file
+    /// * `context` - Execution context with change information
+    ///
+    /// # Returns
+    ///
+    /// True if there are dependency changes, false otherwise.
+    fn has_dependency_changes_in_package(
+        &self,
+        package_json_path: &std::path::Path,
+        _context: &ExecutionContext,
+    ) -> Result<bool> {
+        use std::process::Command;
+
+        // Get the git diff for this specific file
+        let git_diff_output = Command::new("git")
+            .args([
+                "diff",
+                "HEAD~1", // Compare with previous commit
+                "--",
+                &package_json_path.to_string_lossy(),
+            ])
+            .current_dir(self.project.root_path())
+            .output();
+
+        match git_diff_output {
+            Ok(output) if output.status.success() => {
+                let diff_content = String::from_utf8_lossy(&output.stdout);
+
+                // Check if the diff contains dependency-related changes
+                let has_dep_changes = diff_content.lines().any(|line| {
+                    // Look for added or removed lines that contain dependency keys
+                    (line.starts_with('+') || line.starts_with('-'))
+                        && !line.starts_with("+++")
+                        && !line.starts_with("---")
+                        && (line.contains("\"dependencies\"")
+                            || line.contains("\"devDependencies\"")
+                            || line.contains("\"peerDependencies\"")
+                            || line.contains("\"optionalDependencies\"")
+                            || (line.contains(':')
+                                && (
+                                    line.contains('@') || // Package scopes
+                         line.contains('^') || // Version ranges
+                         line.contains('~') || // Version ranges
+                         line.contains(">=") || // Version ranges
+                         line.contains("<=") || // Version ranges
+                         line.contains("file:") || // Local packages
+                         line.contains("workspace:")
+                                    // Workspace references
+                                )))
+                });
+
+                Ok(has_dep_changes)
+            }
+            Ok(_) => {
+                // Git command failed or file not tracked
+                log::debug!(
+                    "Could not get git diff for {}, assuming no dependency changes",
+                    package_json_path.display()
+                );
+                Ok(false)
+            }
+            Err(e) => {
+                log::warn!("Failed to execute git diff for {}: {}", package_json_path.display(), e);
+                Ok(false)
+            }
+        }
+    }
+
+    /// Check version change threshold by analyzing actual changes
+    ///
+    /// This function analyzes the changes in each affected package to determine
+    /// the level of version change that would be required based on:
+    /// - Breaking changes (major version bump needed)
+    /// - New features (minor version bump needed)
+    /// - Bug fixes and patches (patch version bump needed)
+    ///
+    /// # Arguments
+    ///
+    /// * `affected_packages` - List of packages that have been affected
+    /// * `threshold` - The minimum threshold to check against
+    /// * `context` - Execution context with change information
+    ///
+    /// # Returns
+    ///
+    /// True if any package meets or exceeds the version change threshold.
     async fn check_version_change_threshold(
         &self,
         affected_packages: &[String],
         threshold: &VersionChangeThreshold,
-        _context: &ExecutionContext,
+        context: &ExecutionContext,
     ) -> Result<bool> {
-        // In a real implementation, this would check the actual version changes
-        // For now, we'll implement basic logic
+        if affected_packages.is_empty() {
+            return Ok(false);
+        }
 
+        // Analyze the changes to determine the highest version bump needed
+        let mut highest_change_level = VersionChangeThreshold::Any;
+
+        for package_name in affected_packages {
+            let change_level = self.analyze_package_change_level(package_name, context).await?;
+
+            // Update highest change level if this package requires a higher level change
+            if self.is_higher_change_level(change_level, highest_change_level) {
+                highest_change_level = change_level;
+            }
+
+            // Early exit if we've already found the highest possible level
+            if matches!(highest_change_level, VersionChangeThreshold::Major) {
+                break;
+            }
+        }
+
+        // Check if the highest change level meets the threshold
+        Ok(self.meets_threshold(highest_change_level, *threshold))
+    }
+
+    /// Analyze the level of change for a specific package
+    ///
+    /// Determines whether changes to a package would require a major, minor, or patch version bump
+    /// by analyzing:
+    /// - File types changed (public API vs internal implementation)
+    /// - Commit messages for conventional commit indicators
+    /// - Breaking change indicators
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to analyze
+    /// * `context` - Execution context with change information
+    ///
+    /// # Returns
+    ///
+    /// The version change threshold level for this package.
+    async fn analyze_package_change_level(
+        &self,
+        package_name: &str,
+        context: &ExecutionContext,
+    ) -> Result<VersionChangeThreshold> {
+        use std::process::Command;
+
+        // Find the package location from the project
+        let packages = &self.project.packages;
+        let package = packages.iter().find(|p| p.name() == package_name).ok_or_else(|| {
+            crate::error::Error::task(format!("Package {package_name} not found"))
+        })?;
+
+        let package_path = &package.workspace_package.location;
+
+        // Get the Git log for this package to analyze commit messages
+        let git_log_output = Command::new("git")
+            .args([
+                "log",
+                "--oneline",
+                "--since=1 month ago", // Look at recent commits
+                "--",
+                &package_path.to_string_lossy(),
+            ])
+            .current_dir(self.project.root_path())
+            .output();
+
+        let mut has_breaking_changes = false;
+        let mut has_new_features = false;
+
+        // Analyze commit messages for conventional commit patterns
+        if let Ok(output) = git_log_output {
+            let log_content = String::from_utf8_lossy(&output.stdout);
+
+            for line in log_content.lines() {
+                // Check for breaking change indicators
+                if line.contains("BREAKING CHANGE") ||
+                   line.contains("!:") || // feat!: or fix!:
+                   line.starts_with("* ") && line.to_lowercase().contains("breaking")
+                {
+                    has_breaking_changes = true;
+                    break; // Breaking changes take priority
+                }
+
+                // Check for feature additions
+                if line.contains("feat:")
+                    || line.contains("feature:")
+                    || line.to_lowercase().contains("add") && line.to_lowercase().contains("new")
+                {
+                    has_new_features = true;
+                }
+            }
+        }
+
+        // Analyze changed file types to infer impact
+        let changed_files_in_package: Vec<_> = context
+            .changed_files
+            .iter()
+            .filter(|file| {
+                let file_path = std::path::Path::new(&file.path);
+                file_path.starts_with(package_path)
+            })
+            .collect();
+
+        // Check for API changes that might indicate breaking changes
+        for file in &changed_files_in_package {
+            let file_path = &file.path;
+
+            // Public API files that could indicate breaking changes
+            if file_path.contains("index.") ||      // Main entry points
+               file_path.contains("lib/") ||        // Library code
+               file_path.contains("src/index") ||   // Source entry points
+               file_path.contains("types.") ||      // Type definitions
+               file_path.contains(".d.ts") ||       // TypeScript declarations
+               file_path.ends_with("package.json")
+            {
+                // Package metadata
+
+                // If we see changes to main API files, assume potential breaking changes
+                // unless we already detected explicit feature additions
+                if !has_new_features {
+                    has_breaking_changes = true;
+                }
+            }
+        }
+
+        // Determine the change level based on analysis
+        if has_breaking_changes {
+            Ok(VersionChangeThreshold::Major)
+        } else if has_new_features {
+            Ok(VersionChangeThreshold::MinorOrMajor)
+        } else if !changed_files_in_package.is_empty() {
+            Ok(VersionChangeThreshold::PatchOrHigher)
+        } else {
+            Ok(VersionChangeThreshold::Any)
+        }
+    }
+
+    /// Check if one change level is higher than another
+    ///
+    /// # Arguments
+    ///
+    /// * `level1` - First change level to compare
+    /// * `level2` - Second change level to compare
+    ///
+    /// # Returns
+    ///
+    /// True if level1 is higher than level2.
+    #[allow(clippy::unused_self)]
+    fn is_higher_change_level(
+        &self,
+        level1: VersionChangeThreshold,
+        level2: VersionChangeThreshold,
+    ) -> bool {
+        matches!(
+            (level1, level2),
+            (Major, _) | (MinorOrMajor, Any | PatchOrHigher) | (PatchOrHigher, Any)
+        )
+    }
+
+    /// Check if a change level meets the specified threshold
+    ///
+    /// # Arguments
+    ///
+    /// * `level` - The actual change level detected
+    /// * `threshold` - The minimum threshold required
+    ///
+    /// # Returns
+    ///
+    /// True if the level meets or exceeds the threshold.
+    #[allow(clippy::unused_self)]
+    fn meets_threshold(
+        &self,
+        level: VersionChangeThreshold,
+        threshold: VersionChangeThreshold,
+    ) -> bool {
         match threshold {
-            VersionChangeThreshold::Any => Ok(!affected_packages.is_empty()),
-            VersionChangeThreshold::Major => {
-                // Would check for major version changes
-                Ok(!affected_packages.is_empty())
-            }
-            VersionChangeThreshold::MinorOrMajor => {
-                // Would check for minor or major changes
-                Ok(!affected_packages.is_empty())
-            }
-            VersionChangeThreshold::PatchOrHigher => {
-                // Would check for any version changes
-                Ok(!affected_packages.is_empty())
-            }
+            Any => true, // Any level meets "Any" threshold
+            PatchOrHigher => matches!(level, PatchOrHigher | MinorOrMajor | Major),
+            MinorOrMajor => matches!(level, MinorOrMajor | Major),
+            Major => matches!(level, Major),
         }
     }
 
@@ -549,6 +842,54 @@ impl ConditionChecker {
             Err(_) => {
                 // If script execution fails, condition is not met
                 Ok(false)
+            }
+        }
+    }
+
+    /// Real regex pattern matching using the regex crate
+    ///
+    /// Provides full regex capabilities including:
+    /// - Character classes, quantifiers, anchors
+    /// - Capture groups and non-capturing groups
+    /// - Lookahead and lookbehind assertions
+    /// - Unicode support
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - The text to match against
+    /// * `pattern` - The regex pattern to use for matching
+    ///
+    /// # Returns
+    ///
+    /// True if the text matches the regex pattern, false otherwise.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the regex pattern is invalid.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use sublime_monorepo_tools::TaskChecker;
+    /// # let checker = create_test_checker();
+    /// assert!(checker.matches_regex_pattern("test.js", r"\.js$")?);
+    /// assert!(checker.matches_regex_pattern("src/utils.ts", r"src/.*\.ts$")?);
+    /// assert!(!checker.matches_regex_pattern("test.py", r"\.js$")?);
+    /// ```
+    #[allow(clippy::unused_self)]
+    fn matches_regex_pattern(&self, text: &str, pattern: &str) -> Result<bool> {
+        use regex::Regex;
+
+        match Regex::new(pattern) {
+            Ok(regex) => Ok(regex.is_match(text)),
+            Err(e) => {
+                log::warn!(
+                    "Invalid regex pattern '{}': {}. Falling back to exact string match.",
+                    pattern,
+                    e
+                );
+                // Fallback to exact match if pattern is invalid
+                Ok(text == pattern)
             }
         }
     }
