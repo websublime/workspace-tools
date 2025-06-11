@@ -56,7 +56,7 @@ impl WorkflowProgress {
         if self.current_step >= self.total_steps {
             self.status = WorkflowStatus::Completed;
             self.finished_at = Some(chrono::Utc::now());
-            
+
             // Mark last step as completed
             if let Some(step) = self.steps.last_mut() {
                 step.status = WorkflowStatus::Completed;
@@ -80,18 +80,19 @@ impl WorkflowProgress {
     }
 
     /// Get completion percentage (0.0 to 100.0)
+    #[allow(clippy::cast_precision_loss)]
     #[must_use]
     pub fn completion_percentage(&self) -> f64 {
         if self.total_steps == 0 {
             return 100.0;
         }
-        
+
         let completed_steps = if self.is_completed() {
             self.total_steps
         } else {
             self.current_step.saturating_sub(1) // Don't count current running step as completed
         };
-        
+
         (completed_steps as f64 / self.total_steps as f64) * 100.0
     }
 
@@ -114,6 +115,7 @@ impl WorkflowProgress {
     }
 
     /// Get estimated time remaining
+    #[allow(clippy::cast_possible_wrap)]
     #[must_use]
     pub fn estimated_time_remaining(&self) -> Option<chrono::Duration> {
         if self.is_completed() || self.is_failed() || self.started_at.is_none() {
@@ -122,7 +124,7 @@ impl WorkflowProgress {
 
         let started_at = self.started_at?;
         let elapsed = chrono::Utc::now().signed_duration_since(started_at);
-        
+
         if self.current_step == 0 {
             return None;
         }
@@ -130,7 +132,7 @@ impl WorkflowProgress {
         let avg_time_per_step = elapsed.num_milliseconds() / self.current_step as i64;
         let remaining_steps = self.total_steps.saturating_sub(self.current_step);
         let estimated_remaining_ms = avg_time_per_step * remaining_steps as i64;
-        
+
         chrono::Duration::milliseconds(estimated_remaining_ms).into()
     }
 

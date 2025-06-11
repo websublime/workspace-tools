@@ -7,13 +7,12 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use super::types::{AffectedPackageInfo, ChangeAnalysisResult, DevelopmentResult, ImpactLevel};
 use crate::analysis::{AffectedPackagesAnalysis, ChangeAnalysis, MonorepoAnalyzer};
 use crate::changesets::{types::ChangesetFilter, ChangesetManager};
 use crate::core::MonorepoProject;
 use crate::error::Error;
 use crate::tasks::TaskManager;
-use crate::PackageChange;
+use crate::{AffectedPackageInfo, ChangeAnalysisResult, ImpactLevel, PackageChange};
 use std::collections::HashMap;
 
 /// Simple facts about package changes - no decisions, just data
@@ -131,7 +130,7 @@ impl DevelopmentWorkflow {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn execute(&self, since: Option<&str>) -> Result<DevelopmentResult, Error> {
+    pub async fn execute(&self, since: Option<&str>) -> Result<super::DevelopmentResult, Error> {
         let start_time = Instant::now();
 
         // Default to comparing against HEAD~1 if no reference provided
@@ -158,7 +157,7 @@ impl DevelopmentWorkflow {
         // Step 4: Generate recommendations
         let recommendations = self.generate_recommendations(&changes, &affected_tasks)?;
 
-        Ok(DevelopmentResult {
+        Ok(super::DevelopmentResult {
             changes,
             affected_tasks,
             recommendations,
@@ -406,15 +405,11 @@ impl DevelopmentWorkflow {
     #[allow(clippy::unused_self)]
     fn generate_recommendation_reason(&self, package_change: &crate::PackageChange) -> String {
         let total_files = package_change.metadata.get("total_files").map_or("0", String::as_str);
-        
-        let example_files = package_change
-            .metadata
-            .get("example_files")
-            .map_or("No files", String::as_str);
 
-        format!(
-            "Changes detected: {total_files} files modified. Examples: {example_files}"
-        )
+        let example_files =
+            package_change.metadata.get("example_files").map_or("No files", String::as_str);
+
+        format!("Changes detected: {total_files} files modified. Examples: {example_files}")
     }
 
     /// Checks if changesets are required for the affected packages
@@ -465,9 +460,10 @@ impl DevelopmentWorkflow {
             // Store facts in metadata - no decisions made about significance or type
             let mut metadata = HashMap::new();
             metadata.insert("total_files".to_string(), facts.total_files.to_string());
-            
+
             // Store the first few changed files as examples
-            let example_files = facts.files_changed.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
+            let example_files =
+                facts.files_changed.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
             metadata.insert("example_files".to_string(), example_files);
 
             package_changes.push(PackageChange {
@@ -493,9 +489,6 @@ impl DevelopmentWorkflow {
         let total_files = files.len();
         let files_changed: Vec<String> = files.iter().map(|f| f.path.clone()).collect();
 
-        PackageChangeFacts {
-            total_files,
-            files_changed,
-        }
+        PackageChangeFacts { total_files, files_changed }
     }
 }

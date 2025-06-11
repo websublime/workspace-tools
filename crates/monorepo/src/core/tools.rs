@@ -1,11 +1,12 @@
 //! MonorepoTools implementation - main orchestrator for monorepo functionality
 
-use crate::analysis::{BranchComparisonResult, ChangeAnalysis, DiffAnalyzer, MonorepoAnalyzer};
-use crate::core::{MonorepoProject, VersionManager, VersioningPlan, VersioningResult, VersioningStrategy};
+use crate::analysis::{DiffAnalyzer, MonorepoAnalyzer};
+use crate::core::{MonorepoProject, VersionManager, VersioningPlan, VersioningStrategy};
 use crate::error::{Error, Result};
 use crate::hooks::HookManager;
 use crate::tasks::TaskManager;
 use crate::workflows::{DevelopmentResult, DevelopmentWorkflow};
+use crate::{ChangeAnalysisWorkflowResult, VersioningWorkflowResult};
 use std::sync::Arc;
 
 /// The main orchestrator for monorepo tools functionality
@@ -140,17 +141,17 @@ impl MonorepoTools {
         &self,
         from_branch: &str,
         to_branch: Option<&str>,
-    ) -> Result<super::ChangeAnalysisWorkflowResult> {
+    ) -> Result<ChangeAnalysisWorkflowResult> {
         let diff_analyzer = self.diff_analyzer();
 
         let analysis = if let Some(to_branch) = to_branch {
             // Compare between specific branches
             let comparison = diff_analyzer.compare_branches(from_branch, to_branch)?;
-            super::ChangeAnalysisWorkflowResult::BranchComparison(comparison)
+            ChangeAnalysisWorkflowResult::BranchComparison(comparison)
         } else {
             // Analyze changes since a reference
             let analysis = diff_analyzer.detect_changes_since(from_branch, None)?;
-            super::ChangeAnalysisWorkflowResult::ChangeAnalysis(analysis)
+            ChangeAnalysisWorkflowResult::ChangeAnalysis(analysis)
         };
 
         Ok(analysis)
@@ -161,14 +162,14 @@ impl MonorepoTools {
     pub async fn versioning_workflow(
         &self,
         plan: Option<VersioningPlan>,
-    ) -> Result<super::VersioningWorkflowResult> {
+    ) -> Result<VersioningWorkflowResult> {
         let start_time = std::time::Instant::now();
         let version_manager = self.version_manager();
 
         if let Some(plan) = plan {
             // Execute provided plan
             let result = version_manager.execute_versioning_plan(&plan)?;
-            Ok(super::VersioningWorkflowResult {
+            Ok(VersioningWorkflowResult {
                 versioning_result: result,
                 plan_executed: Some(plan),
                 duration: start_time.elapsed(),
@@ -180,7 +181,7 @@ impl MonorepoTools {
             let plan = version_manager.create_versioning_plan(&changes)?;
             let result = version_manager.execute_versioning_plan(&plan)?;
 
-            Ok(super::VersioningWorkflowResult {
+            Ok(VersioningWorkflowResult {
                 versioning_result: result,
                 plan_executed: Some(plan),
                 duration: start_time.elapsed(),

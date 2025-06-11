@@ -11,9 +11,7 @@
 mod options;
 mod results;
 mod status;
-mod lib_results;
 
 pub use options::*;
 pub use results::*;
 pub use status::*;
-pub use lib_results::*;

@@ -3,12 +3,12 @@
 //! Result types for different workflow executions including release,
 //! development, and change analysis workflows.
 
-use std::time::Duration;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
-use crate::ChangeAnalysis;
 use crate::changesets::types::ChangesetApplication;
 use crate::tasks::types::results::TaskExecutionResult;
+use crate::{BranchComparisonResult, ChangeAnalysis, VersioningPlan, VersioningResult};
 
 /// Result of a release workflow execution
 ///
@@ -35,22 +35,22 @@ use crate::tasks::types::results::TaskExecutionResult;
 pub struct ReleaseResult {
     /// Analysis of changes included in this release
     pub changes: ChangeAnalysis,
-    
+
     /// Tasks that were executed during the release
     pub tasks: Vec<TaskExecutionResult>,
-    
+
     /// Changesets that were applied
     pub changesets_applied: Vec<ChangesetApplication>,
-    
+
     /// Whether the release was successful
     pub success: bool,
-    
+
     /// Total duration of the release process
     pub duration: Duration,
-    
+
     /// Any errors that occurred during the release
     pub errors: Vec<String>,
-    
+
     /// Warnings generated during the release
     pub warnings: Vec<String>,
 }
@@ -78,16 +78,16 @@ pub struct ReleaseResult {
 pub struct DevelopmentResult {
     /// Analysis of current changes
     pub changes: ChangeAnalysis,
-    
+
     /// Tasks executed for affected packages
     pub affected_tasks: Vec<TaskExecutionResult>,
-    
+
     /// Recommendations for the developer
     pub recommendations: Vec<String>,
-    
+
     /// Whether development checks passed
     pub checks_passed: bool,
-    
+
     /// Duration of the development workflow
     pub duration: Duration,
 }
@@ -115,16 +115,16 @@ pub struct DevelopmentResult {
 pub struct ChangeAnalysisResult {
     /// The change analysis data
     pub analysis: ChangeAnalysis,
-    
+
     /// Affected packages with their impact level
     pub affected_packages: Vec<AffectedPackageInfo>,
-    
+
     /// Recommended version bumps
     pub version_recommendations: Vec<VersionRecommendation>,
-    
+
     /// Whether changesets are required
     pub changesets_required: bool,
-    
+
     /// Analysis duration
     pub duration: Duration,
 }
@@ -150,13 +150,13 @@ pub struct ChangeAnalysisResult {
 pub struct AffectedPackageInfo {
     /// Package name
     pub name: String,
-    
+
     /// Impact level of changes
     pub impact_level: ImpactLevel,
-    
+
     /// Files changed in this package
     pub changed_files: Vec<String>,
-    
+
     /// Dependent packages that might be affected
     pub dependents: Vec<String>,
 }
@@ -169,13 +169,13 @@ pub struct AffectedPackageInfo {
 pub enum ImpactLevel {
     /// Low impact - documentation, tests, or minor changes
     Low,
-    
+
     /// Medium impact - feature additions or non-breaking changes
     Medium,
-    
+
     /// High impact - breaking changes or major features
     High,
-    
+
     /// Critical impact - major breaking changes or security fixes
     Critical,
 }
@@ -201,13 +201,13 @@ pub enum ImpactLevel {
 pub struct VersionRecommendation {
     /// Package name
     pub package: String,
-    
+
     /// Recommended version bump type
     pub recommended_bump: crate::VersionBumpType,
-    
+
     /// Reason for the recommendation
     pub reason: String,
-    
+
     /// Confidence level of the recommendation
     pub confidence: ConfidenceLevel,
 }
@@ -220,10 +220,30 @@ pub struct VersionRecommendation {
 pub enum ConfidenceLevel {
     /// Low confidence - manual review recommended
     Low,
-    
+
     /// Medium confidence - probably correct but worth reviewing
     Medium,
-    
+
     /// High confidence - very likely to be correct
     High,
+}
+
+/// Result of a change analysis workflow (Phase 2)
+#[derive(Debug)]
+pub enum ChangeAnalysisWorkflowResult {
+    /// Result of branch comparison
+    BranchComparison(BranchComparisonResult),
+    /// Result of change analysis since a reference
+    ChangeAnalysis(ChangeAnalysis),
+}
+
+/// Result of a versioning workflow execution (Phase 2)
+#[derive(Debug)]
+pub struct VersioningWorkflowResult {
+    /// The versioning operation result
+    pub versioning_result: VersioningResult,
+    /// The plan that was executed
+    pub plan_executed: Option<VersioningPlan>,
+    /// Duration of the workflow execution
+    pub duration: std::time::Duration,
 }
