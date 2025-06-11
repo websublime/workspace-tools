@@ -9,6 +9,9 @@ use crate::{Environment, MonorepoConfig};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
+/// Type alias for pattern matcher function
+type PatternMatcher = Box<dyn Fn(&str) -> bool + Send + Sync>;
+
 /// Configuration manager that handles loading, saving, and managing monorepo configurations
 pub struct ConfigManager {
     /// The current configuration
@@ -23,7 +26,8 @@ pub struct ConfigManager {
 
 impl ConfigManager {
     /// Create a new configuration manager with default config
-    #[must_use] pub fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             config: Arc::new(RwLock::new(MonorepoConfig::default())),
             config_path: None,
@@ -32,7 +36,8 @@ impl ConfigManager {
     }
 
     /// Create a configuration manager with a specific config
-    #[must_use] pub fn with_config(config: MonorepoConfig) -> Self {
+    #[must_use]
+    pub fn with_config(config: MonorepoConfig) -> Self {
         Self { config: Arc::new(RwLock::new(config)), config_path: None, auto_save: false }
     }
 
@@ -184,7 +189,8 @@ impl ConfigManager {
     }
 
     /// Get the config file path
-    #[must_use] pub fn config_path(&self) -> Option<&Path> {
+    #[must_use]
+    pub fn config_path(&self) -> Option<&Path> {
         self.config_path.as_deref()
     }
 
@@ -453,22 +459,173 @@ impl ConfigManager {
     }
 
     /// Check if a pattern matches a package path
-    #[must_use] pub fn pattern_matches_package(&self, pattern: &str, package_path: &str) -> bool {
-        // Simple glob-style matching - could be enhanced with proper glob library
-        if pattern.contains('*') {
-            if let Some(base) = pattern.strip_suffix("/*") {
-                package_path.starts_with(base)
-            } else if let Some(suffix) = pattern.strip_prefix('*') {
-                package_path.ends_with(suffix)
-            } else if let Some(star_pos) = pattern.find('*') {
-                let prefix = &pattern[..star_pos];
-                let suffix = &pattern[star_pos + 1..];
-                package_path.starts_with(prefix) && package_path.ends_with(suffix)
-            } else {
-                false
+    ///
+    /// Supports full glob pattern matching including:
+    /// - `*` - matches any sequence of characters within a path segment
+    /// - `**` - matches zero or more path segments
+    /// - `?` - matches any single character
+    /// - `[seq]` - matches any character in seq
+    /// - `[!seq]` - matches any character not in seq
+    /// - `{a,b}` - matches either pattern a or pattern b
+    ///
+    /// # Examples
+    /// ```ignore
+    /// pattern_matches_package("packages/*", "packages/core") // true
+    /// pattern_matches_package("packages/**", "packages/apps/web") // true
+    /// pattern_matches_package("@scope/*", "@scope/package") // true
+    /// pattern_matches_package("*/lib", "core/lib") // true
+    /// pattern_matches_package("packages/[!_]*", "packages/core") // true
+    /// pattern_matches_package("packages/[!_]*", "packages/_internal") // false
+    /// ```
+    #[must_use]
+    pub fn pattern_matches_package(&self, pattern: &str, package_path: &str) -> bool {
+        use glob::Pattern;
+        
+        // Early return for exact matches (optimization)
+        if !pattern.contains(['*', '?', '[', '{']) {
+            return package_path == pattern;
+        }
+        
+        // Normalize paths for consistent matching
+        let normalized_pattern = pattern.replace('\\', "/");
+        let normalized_path = package_path.replace('\\', "/");
+        
+        // Try to compile the pattern
+        match Pattern::new(&normalized_pattern) {
+            Ok(glob_pattern) => {
+                // First check if pattern matches
+                if !glob_pattern.matches(&normalized_path) {
+                    return false;
+                }
+                
+                // For patterns with single *, ensure we're not matching across path segments
+                // Count segments in pattern and path to ensure proper depth matching
+                if normalized_pattern.contains('*') && !normalized_pattern.contains("**") {
+                    let pattern_segments = normalized_pattern.split('/').count();
+                    let path_segments = normalized_path.split('/').count();
+                    
+                    // For single * patterns, the path should have the same number of segments
+                    if pattern_segments != path_segments {
+                        return false;
+                    }
+                }
+                
+                true
             }
-        } else {
-            package_path == pattern
+            Err(e) => {
+                // Log pattern compilation error and fall back to exact match
+                log::warn!("Invalid glob pattern '{pattern}': {e}. Falling back to exact match.");
+                package_path == pattern
+            }
+        }
+    }
+
+    /// Check multiple patterns against multiple package paths efficiently
+    ///
+    /// This is an optimized version for checking many patterns against many packages.
+    /// It pre-compiles all patterns once and reuses them.
+    ///
+    /// # Returns
+    /// A vector of tuples containing (pattern_index, package_index) for all matches
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let patterns = vec!["packages/*", "@scope/*", "apps/**"];
+    /// let packages = vec!["packages/core", "@scope/lib", "apps/web/src"];
+    /// let matches = manager.batch_pattern_matches(&patterns, &packages);
+    /// // Returns: [(0, 0), (1, 1), (2, 2)]
+    /// ```
+    pub fn batch_pattern_matches(&self, patterns: &[String], packages: &[String]) -> Vec<(usize, usize)> {
+        use glob::Pattern;
+        
+        // Pre-compile all patterns
+        let compiled_patterns: Vec<Option<Pattern>> = patterns
+            .iter()
+            .map(|pattern| {
+                let normalized = pattern.replace('\\', "/");
+                Pattern::new(&normalized).ok()
+            })
+            .collect();
+        
+        let mut matches = Vec::new();
+        
+        for (pattern_idx, pattern_opt) in compiled_patterns.iter().enumerate() {
+            if let Some(pattern) = pattern_opt {
+                for (package_idx, package) in packages.iter().enumerate() {
+                    let normalized_package = package.replace('\\', "/");
+                    
+                    if pattern.matches(&normalized_package) {
+                        // Check segment count for single * patterns
+                        if patterns[pattern_idx].contains('*') && !patterns[pattern_idx].contains("**") {
+                            let pattern_segments = patterns[pattern_idx].split('/').count();
+                            let path_segments = normalized_package.split('/').count();
+                            
+                            if pattern_segments == path_segments {
+                                matches.push((pattern_idx, package_idx));
+                            }
+                        } else {
+                            matches.push((pattern_idx, package_idx));
+                        }
+                    }
+                }
+            } else {
+                // For invalid patterns, check exact matches
+                for (package_idx, package) in packages.iter().enumerate() {
+                    if patterns[pattern_idx] == *package {
+                        matches.push((pattern_idx, package_idx));
+                    }
+                }
+            }
+        }
+        
+        matches
+    }
+
+    /// Create a pattern matcher that can be reused for multiple checks
+    ///
+    /// This is useful when you need to check the same pattern against many packages.
+    ///
+    /// # Returns
+    /// A closure that can be used to check if a package matches the pattern
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let matcher = manager.create_pattern_matcher("packages/*")?;
+    /// assert!(matcher("packages/core"));
+    /// assert!(!matcher("apps/core"));
+    /// ```
+    pub fn create_pattern_matcher(&self, pattern: &str) -> Result<PatternMatcher> {
+        use glob::Pattern;
+        
+        let normalized_pattern = pattern.replace('\\', "/");
+        
+        // Try to compile the pattern
+        match Pattern::new(&normalized_pattern) {
+            Ok(glob_pattern) => {
+                let glob_pattern = Arc::new(glob_pattern);
+                let pattern_for_closure = normalized_pattern.clone();
+                
+                Ok(Box::new(move |package_path: &str| {
+                    let normalized_path = package_path.replace('\\', "/");
+                    
+                    if !glob_pattern.matches(&normalized_path) {
+                        return false;
+                    }
+                    
+                    // Check segment count for single * patterns
+                    if pattern_for_closure.contains('*') && !pattern_for_closure.contains("**") {
+                        let pattern_segments = pattern_for_closure.split('/').count();
+                        let path_segments = normalized_path.split('/').count();
+                        
+                        if pattern_segments != path_segments {
+                            return false;
+                        }
+                    }
+                    
+                    true
+                }))
+            }
+            Err(e) => Err(Error::config(format!("Invalid glob pattern '{pattern}': {e}"))),
         }
     }
 }
@@ -512,5 +669,137 @@ mod tests {
         let config = manager.get().unwrap();
         assert_eq!(config.versioning.default_bump, VersionBumpType::Minor);
         assert!(!config.versioning.auto_tag);
+    }
+
+    #[test]
+    fn test_pattern_matches_package_exact() {
+        let manager = ConfigManager::new();
+        
+        // Exact matches
+        assert!(manager.pattern_matches_package("packages/core", "packages/core"));
+        assert!(!manager.pattern_matches_package("packages/core", "packages/ui"));
+        assert!(!manager.pattern_matches_package("packages", "packages/core"));
+    }
+
+    #[test]
+    fn test_pattern_matches_package_wildcard() {
+        let manager = ConfigManager::new();
+        
+        // Single wildcard
+        assert!(manager.pattern_matches_package("packages/*", "packages/core"));
+        assert!(manager.pattern_matches_package("packages/*", "packages/ui"));
+        assert!(!manager.pattern_matches_package("packages/*", "packages/apps/web"));
+        assert!(!manager.pattern_matches_package("packages/*", "apps/core"));
+        
+        // Wildcard at beginning
+        assert!(manager.pattern_matches_package("*/core", "packages/core"));
+        assert!(manager.pattern_matches_package("*/core", "apps/core"));
+        assert!(!manager.pattern_matches_package("*/core", "packages/ui"));
+        
+        // Multiple segments with wildcard
+        assert!(manager.pattern_matches_package("packages/*/src", "packages/core/src"));
+        assert!(manager.pattern_matches_package("packages/*/src", "packages/ui/src"));
+        assert!(!manager.pattern_matches_package("packages/*/src", "packages/core/dist"));
+    }
+
+    #[test]
+    fn test_pattern_matches_package_double_wildcard() {
+        let manager = ConfigManager::new();
+        
+        // Double wildcard for recursive matching
+        assert!(manager.pattern_matches_package("packages/**", "packages/core"));
+        assert!(manager.pattern_matches_package("packages/**", "packages/apps/web"));
+        assert!(manager.pattern_matches_package("packages/**", "packages/libs/shared/utils"));
+        assert!(!manager.pattern_matches_package("packages/**", "apps/core"));
+        
+        // Double wildcard in the middle
+        assert!(manager.pattern_matches_package("packages/**/lib", "packages/core/lib"));
+        assert!(manager.pattern_matches_package("packages/**/lib", "packages/apps/web/lib"));
+        assert!(!manager.pattern_matches_package("packages/**/lib", "packages/core/dist"));
+    }
+
+    #[test]
+    fn test_pattern_matches_package_scoped() {
+        let manager = ConfigManager::new();
+        
+        // Scoped packages
+        assert!(manager.pattern_matches_package("@company/*", "@company/core"));
+        assert!(manager.pattern_matches_package("@company/*", "@company/ui"));
+        assert!(!manager.pattern_matches_package("@company/*", "@other/core"));
+        assert!(!manager.pattern_matches_package("@company/*", "company/core"));
+        
+        // Multiple scopes
+        assert!(manager.pattern_matches_package("@*/core", "@company/core"));
+        assert!(manager.pattern_matches_package("@*/core", "@org/core"));
+        assert!(!manager.pattern_matches_package("@*/core", "@company/ui"));
+    }
+
+    #[test]
+    fn test_pattern_matches_package_character_classes() {
+        let manager = ConfigManager::new();
+        
+        // Character classes
+        assert!(manager.pattern_matches_package("packages/[abc]ore", "packages/core"));
+        assert!(manager.pattern_matches_package("packages/[abc]ore", "packages/bore"));
+        assert!(!manager.pattern_matches_package("packages/[abc]ore", "packages/dore"));
+        
+        // Negated character classes
+        assert!(manager.pattern_matches_package("packages/[!_]*", "packages/core"));
+        assert!(manager.pattern_matches_package("packages/[!_]*", "packages/ui"));
+        assert!(!manager.pattern_matches_package("packages/[!_]*", "packages/_internal"));
+        
+        // Range in character class
+        assert!(manager.pattern_matches_package("packages/v[0-9]", "packages/v1"));
+        assert!(manager.pattern_matches_package("packages/v[0-9]", "packages/v5"));
+        assert!(!manager.pattern_matches_package("packages/v[0-9]", "packages/v10"));
+    }
+
+    #[test]
+    fn test_pattern_matches_package_question_mark() {
+        let manager = ConfigManager::new();
+        
+        // Question mark for single character
+        assert!(manager.pattern_matches_package("packages/cor?", "packages/core"));
+        assert!(manager.pattern_matches_package("packages/cor?", "packages/cord"));
+        assert!(!manager.pattern_matches_package("packages/cor?", "packages/cores"));
+        assert!(!manager.pattern_matches_package("packages/cor?", "packages/cor"));
+    }
+
+    #[test]
+    fn test_pattern_matches_package_edge_cases() {
+        let manager = ConfigManager::new();
+        
+        // Empty strings
+        assert!(manager.pattern_matches_package("", ""));
+        assert!(!manager.pattern_matches_package("", "packages"));
+        assert!(!manager.pattern_matches_package("packages", ""));
+        
+        // Windows path separators (should be normalized)
+        assert!(manager.pattern_matches_package("packages\\*", "packages/core"));
+        assert!(manager.pattern_matches_package("packages/*", "packages\\core"));
+        
+        // Special characters in package names
+        assert!(manager.pattern_matches_package("packages/*-utils", "packages/string-utils"));
+        assert!(manager.pattern_matches_package("packages/*_utils", "packages/string_utils"));
+        assert!(manager.pattern_matches_package("packages/*.js", "packages/index.js"));
+        
+        // Invalid patterns should fall back to exact match
+        assert!(!manager.pattern_matches_package("[invalid", "packages/core"));
+        assert!(manager.pattern_matches_package("[invalid", "[invalid"));
+    }
+
+    #[test]
+    fn test_pattern_matches_package_complex_patterns() {
+        let manager = ConfigManager::new();
+        
+        // Complex real-world patterns
+        assert!(manager.pattern_matches_package("packages/*/src/**/*.ts", "packages/core/src/index.ts"));
+        assert!(manager.pattern_matches_package("packages/*/src/**/*.ts", "packages/ui/src/components/Button.ts"));
+        assert!(!manager.pattern_matches_package("packages/*/src/**/*.ts", "packages/core/dist/index.js"));
+        
+        // Patterns with multiple wildcards
+        assert!(manager.pattern_matches_package("**/node_modules/**", "packages/core/node_modules/react/index.js"));
+        assert!(manager.pattern_matches_package("**/node_modules/**", "node_modules/react/index.js"));
+        assert!(!manager.pattern_matches_package("**/node_modules/**", "packages/core/src/index.js"));
     }
 }

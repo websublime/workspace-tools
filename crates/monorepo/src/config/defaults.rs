@@ -4,7 +4,8 @@ use crate::{Environment, MonorepoConfig, VersionBumpType};
 
 impl MonorepoConfig {
     /// Create a configuration optimized for small projects
-    #[must_use] pub fn small_project() -> Self {
+    #[must_use]
+    pub fn small_project() -> Self {
         let mut config = Self::default();
         config.tasks.parallel = false;
         config.tasks.max_concurrent = 2;
@@ -13,7 +14,8 @@ impl MonorepoConfig {
     }
 
     /// Create a configuration optimized for large monorepos
-    #[must_use] pub fn large_project() -> Self {
+    #[must_use]
+    pub fn large_project() -> Self {
         let mut config = Self::default();
         config.tasks.parallel = true;
         config.tasks.max_concurrent = 8;
@@ -24,7 +26,8 @@ impl MonorepoConfig {
     }
 
     /// Create a configuration for library projects
-    #[must_use] pub fn library_project() -> Self {
+    #[must_use]
+    pub fn library_project() -> Self {
         let mut config = Self::default();
         config.versioning.default_bump = VersionBumpType::Minor;
         config.changelog.include_breaking_changes = true;
@@ -34,7 +37,8 @@ impl MonorepoConfig {
     }
 
     /// Create a configuration for application projects
-    #[must_use] pub fn application_project() -> Self {
+    #[must_use]
+    pub fn application_project() -> Self {
         let mut config = Self::default();
         config.versioning.snapshot_format = "{version}-{branch}.{sha}".to_string();
         config.environments = vec![

@@ -10,8 +10,11 @@ use super::{
     HookExecutionResult, HookInstaller, HookScript, HookType, HookValidationResult, HookValidator,
     PreCommitResult, PrePushResult, ValidationCheck,
 };
+use crate::changesets::ChangesetManager;
 use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
+use crate::tasks::types::results::TaskStatus;
+use crate::tasks::{TaskManager, TaskScope};
 use crate::Changeset;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -183,21 +186,34 @@ impl HookManager {
             if let Some(changeset) = changeset_check.changeset {
                 result = result.with_changeset(changeset);
             }
-        } else {
+        } else if self.project.config.changesets.required {
             result = result.with_required_action("Create a changeset for the affected packages");
         }
 
-        // Run pre-commit tasks if configured
+        // Run pre-commit tasks if configured using real TaskManager
         let pre_commit_tasks = self.get_pre_commit_tasks()?;
-        for task_name in &pre_commit_tasks {
-            // Note: This is now async but we're in a sync context
-            // In a real implementation, the entire validation would be async
-            // For now, we'll handle this as a placeholder
-            result = result.with_required_action(format!("Task {task_name} needs validation"));
+        let mut tasks_passed = true;
+
+        if !pre_commit_tasks.is_empty() && !affected_packages.is_empty() {
+            // Execute tasks synchronously by using a runtime
+            let rt = tokio::runtime::Runtime::new()
+                .map_err(|e| Error::hook(format!("Failed to create async runtime: {e}")))?;
+
+            for task_name in &pre_commit_tasks {
+                let task_success = rt.block_on(async {
+                    self.execute_task_for_validation(task_name, &affected_packages).await
+                })?;
+
+                if !task_success {
+                    tasks_passed = false;
+                    result = result.with_required_action(format!("Fix failing task: {task_name}"));
+                }
+            }
         }
 
         // Overall validation status
-        let validation_passed = result.changeset.is_some() && result.required_actions.is_empty();
+        let validation_passed =
+            result.changeset.is_some() && result.required_actions.is_empty() && tasks_passed;
         result = result.with_validation_passed(validation_passed);
 
         Ok(result)
@@ -229,12 +245,23 @@ impl HookManager {
         // Get pre-push tasks to execute
         let pre_push_tasks = self.get_pre_push_tasks()?;
 
-        // Execute tasks for affected packages
-        for task_name in &pre_push_tasks {
-            // Note: This is now async but we're in a sync context
-            // In a real implementation, the entire validation would be async
-            // For now, we'll simulate task execution
-            result = result.with_task_result(task_name, true);
+        // Execute tasks for affected packages using real TaskManager
+        if !pre_push_tasks.is_empty() && !affected_packages.is_empty() {
+            // Execute tasks synchronously by using a runtime
+            let rt = tokio::runtime::Runtime::new()
+                .map_err(|e| Error::hook(format!("Failed to create async runtime: {e}")))?;
+
+            for task_name in &pre_push_tasks {
+                let task_success = rt.block_on(async {
+                    self.execute_task_for_validation(task_name, &affected_packages).await
+                })?;
+
+                result = result.with_task_result(task_name, task_success);
+
+                if !task_success {
+                    result = result.with_required_action(format!("Fix failing task: {task_name}"));
+                }
+            }
         }
 
         // Determine overall validation status
@@ -252,9 +279,6 @@ impl HookManager {
     /// - Changeset creation fails
     /// - File system operations fail
     pub fn prompt_for_changeset(&self) -> Result<Changeset> {
-        // Now integrate with ChangesetManager from Phase 4
-        use crate::changesets::ChangesetManager;
-
         let changeset_manager = ChangesetManager::new(Arc::clone(&self.project))
             .map_err(|e| Error::hook(format!("Failed to create changeset manager: {e}")))?;
 
@@ -317,70 +341,225 @@ impl HookManager {
     }
 
     /// Get default hook definition for a hook type
-    fn get_default_hook_definition(_hook_type: &HookType) -> &'static HookDefinition {
-        // This would be stored in a lazy static or similar
-        // For now, return a reference to a default definition
-        // In a real implementation, this would have proper defaults for each hook type
-        static DEFAULT_HOOK: once_cell::sync::Lazy<HookDefinition> =
-            once_cell::sync::Lazy::new(|| {
-                HookDefinition::new(
-                    HookScript::tasks(vec!["lint".to_string(), "test".to_string()]),
-                    "Default hook configuration",
-                )
-            });
-        &DEFAULT_HOOK
+    ///
+    /// Provides sensible defaults for each hook type based on common development workflows.
+    /// Each hook type has specific tasks that are typically run during that Git operation.
+    fn get_default_hook_definition(hook_type: &HookType) -> &'static HookDefinition {
+        use once_cell::sync::Lazy;
+        
+        match hook_type {
+            HookType::PreCommit => {
+                static PRE_COMMIT_HOOK: Lazy<HookDefinition> = Lazy::new(|| {
+                    HookDefinition::new(
+                        HookScript::tasks(vec!["lint".to_string(), "test".to_string()]),
+                        "Pre-commit validation: lint and test affected packages",
+                    )
+                });
+                &PRE_COMMIT_HOOK
+            }
+            HookType::PrePush => {
+                static PRE_PUSH_HOOK: Lazy<HookDefinition> = Lazy::new(|| {
+                    HookDefinition::new(
+                        HookScript::tasks(vec!["build".to_string(), "test".to_string()]),
+                        "Pre-push validation: build and test affected packages",
+                    )
+                });
+                &PRE_PUSH_HOOK
+            }
+            HookType::PostMerge => {
+                static POST_MERGE_HOOK: Lazy<HookDefinition> = Lazy::new(|| {
+                    HookDefinition::new(
+                        HookScript::tasks(vec!["install".to_string()]),
+                        "Post-merge: install dependencies after merge",
+                    )
+                });
+                &POST_MERGE_HOOK
+            }
+            HookType::PostCheckout => {
+                static POST_CHECKOUT_HOOK: Lazy<HookDefinition> = Lazy::new(|| {
+                    HookDefinition::new(
+                        HookScript::tasks(vec!["install".to_string()]),
+                        "Post-checkout: install dependencies after checkout",
+                    )
+                });
+                &POST_CHECKOUT_HOOK
+            }
+            HookType::PostCommit => {
+                static POST_COMMIT_HOOK: Lazy<HookDefinition> = Lazy::new(|| {
+                    HookDefinition::new(
+                        HookScript::tasks(vec!["install".to_string()]),
+                        "Post-commit: install dependencies after commit",
+                    )
+                });
+                &POST_COMMIT_HOOK
+            }
+        }
     }
 
     /// Execute a hook script
     #[allow(clippy::only_used_in_recursion)]
+    #[allow(clippy::too_many_lines)]
     fn execute_hook_script(
         &self,
         definition: &HookDefinition,
         context: &HookExecutionContext,
     ) -> Result<HookExecutionResult> {
         let hook_type = HookType::from(context.operation_type);
-        let result = HookExecutionResult::new(hook_type);
+        let mut result = HookExecutionResult::new(hook_type);
 
         match &definition.script {
             HookScript::TaskExecution { tasks, parallel: _ } => {
-                // Execute tasks through TaskManager
-                // Note: This is now async but we're in a sync context
-                // In a real implementation, hook execution would be async
+                // Execute tasks through real TaskManager
+                if tasks.is_empty() {
+                    return Ok(result.with_success());
+                }
+
+                // Get affected packages from context
+                let affected_packages = &context.affected_packages;
+                if affected_packages.is_empty() {
+                    return Ok(result.with_success());
+                }
+
+                // Execute tasks synchronously by using a runtime
+                let rt = tokio::runtime::Runtime::new()
+                    .map_err(|e| Error::hook(format!("Failed to create async runtime: {e}")))?;
+
                 for task_name in tasks {
-                    // For now, simulate successful task execution
-                    // In Phase 4+, this would use the async execute_task_for_validation
                     if task_name.is_empty() {
                         return Ok(result.with_failure(HookError::new(
                             HookErrorCode::TaskFailed,
                             "Empty task name".to_string(),
                         )));
                     }
+
+                    let task_success = rt.block_on(async {
+                        self.execute_task_for_validation(task_name, affected_packages).await
+                    })?;
+
+                    if !task_success {
+                        return Ok(result.with_failure(HookError::new(
+                            HookErrorCode::TaskFailed,
+                            format!("Task '{task_name}' failed execution"),
+                        )));
+                    }
                 }
                 Ok(result.with_success())
             }
-            HookScript::Command { cmd: _, args: _ } => {
-                // Execute shell command
-                // This would use CommandQueue from standard-tools
-                Ok(result.with_success().with_stdout("Command executed successfully"))
+            HookScript::Command { cmd, args } => {
+                // Execute shell command using sublime-standard-tools command system
+                use sublime_standard_tools::command::{CommandBuilder, DefaultExecutor, Executor};
+                
+                let mut command_builder = CommandBuilder::new(cmd)
+                    .current_dir(self.project.root_path());
+                
+                // Add each argument individually
+                for arg in args {
+                    command_builder = command_builder.arg(arg);
+                }
+                
+                let command = command_builder.build();
+                let executor = DefaultExecutor;
+                
+                // Execute synchronously by using a runtime
+                let rt = tokio::runtime::Runtime::new()
+                    .map_err(|e| Error::hook(format!("Failed to create async runtime: {e}")))?;
+                
+                let output = rt.block_on(async {
+                    executor.execute(command).await
+                }).map_err(|e| Error::hook(format!("Failed to execute command '{cmd}': {e}")))?;
+
+                if output.status() == 0 {
+                    Ok(result.with_success().with_stdout(output.stdout()))
+                } else {
+                    Ok(result.with_failure(HookError::new(
+                        HookErrorCode::ExecutionFailed,
+                        format!("Command '{cmd}' failed: {}", output.stderr()),
+                    )))
+                }
             }
-            HookScript::ScriptFile { path: _, args: _ } => {
-                // Execute script file
-                // This would use CommandQueue from standard-tools
-                Ok(result.with_success().with_stdout("Script executed successfully"))
+            HookScript::ScriptFile { path, args } => {
+                // Execute script file using sublime-standard-tools command system
+                use sublime_standard_tools::command::{CommandBuilder, DefaultExecutor, Executor};
+                
+                let script_path = self.project.root_path().join(path);
+                if !script_path.exists() {
+                    return Ok(result.with_failure(HookError::new(
+                        HookErrorCode::SystemError,
+                        format!("Script file not found: {}", script_path.display()),
+                    )));
+                }
+
+                let mut command_builder = CommandBuilder::new(script_path.to_string_lossy())
+                    .current_dir(self.project.root_path());
+                
+                // Add each argument individually
+                for arg in args {
+                    command_builder = command_builder.arg(arg);
+                }
+                
+                let command = command_builder.build();
+                let executor = DefaultExecutor;
+                
+                // Execute synchronously by using a runtime
+                let rt = tokio::runtime::Runtime::new()
+                    .map_err(|e| Error::hook(format!("Failed to create async runtime: {e}")))?;
+                
+                let output = rt.block_on(async {
+                    executor.execute(command).await
+                }).map_err(|e| {
+                    Error::hook(format!(
+                        "Failed to execute script '{}': {e}",
+                        script_path.display()
+                    ))
+                })?;
+
+                if output.status() == 0 {
+                    Ok(result.with_success().with_stdout(output.stdout()))
+                } else {
+                    Ok(result.with_failure(HookError::new(
+                        HookErrorCode::ExecutionFailed,
+                        format!("Script '{}' failed: {}", script_path.display(), output.stderr()),
+                    )))
+                }
             }
             HookScript::Sequence { scripts, stop_on_failure } => {
                 // Execute scripts in sequence
+                let mut all_outputs = Vec::new();
+
                 for script in scripts {
                     let script_result = self.execute_hook_script(
                         &HookDefinition::new(script.clone(), "Sequence script"),
                         context,
                     )?;
 
-                    if script_result.is_failure() && *stop_on_failure {
-                        return Ok(script_result);
+                    // Collect outputs
+                    if !script_result.stdout.is_empty() {
+                        all_outputs.push(script_result.stdout.clone());
+                    }
+
+                    if script_result.is_failure() {
+                        if *stop_on_failure {
+                            return Ok(script_result);
+                        }
+                        // Continue execution but track the failure
+                        result = result.with_failure(
+                            script_result.error.clone().unwrap_or_else(|| {
+                                HookError::new(
+                                    HookErrorCode::ExecutionFailed,
+                                    "Sequence script failed".to_string(),
+                                )
+                            }),
+                        );
                     }
                 }
-                Ok(result.with_success())
+
+                // If we made it here without stopping, combine all outputs
+                let combined_output = all_outputs.join("\n");
+                if result.is_failure() {
+                    Ok(result.with_stdout(&combined_output))
+                } else {
+                    Ok(result.with_success().with_stdout(&combined_output))
+                }
             }
         }
     }
@@ -444,10 +623,6 @@ impl HookManager {
         task_name: &str,
         packages: &[String],
     ) -> Result<bool> {
-        // Now integrate with TaskManager for real task execution
-        use crate::tasks::types::results::TaskStatus;
-        use crate::tasks::{TaskManager, TaskScope};
-
         if packages.is_empty() {
             // If no packages affected, consider it successful
             return Ok(true);
@@ -527,14 +702,17 @@ impl HookManager {
     }
 }
 
-// Temporary conversion for development - would be properly implemented
+/// Convert Git operation types to appropriate hook types
+///
+/// Maps Git operations to their corresponding hook types based on when
+/// the hooks should be triggered during the Git workflow.
 impl From<GitOperationType> for HookType {
     fn from(op: GitOperationType) -> Self {
         match op {
             GitOperationType::Push => Self::PrePush,
             GitOperationType::Merge => Self::PostMerge,
             GitOperationType::Checkout => Self::PostCheckout,
-            _ => Self::PreCommit, // Default fallback for Commit and others
+            GitOperationType::Commit | GitOperationType::Rebase | GitOperationType::Receive | GitOperationType::Update | GitOperationType::Unknown => Self::PreCommit, // Default fallback
         }
     }
 }
