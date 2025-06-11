@@ -4,7 +4,7 @@
 //! including dependency graph analysis, change detection, version management,
 //! and package classification.
 
-mod types;
+pub mod types;
 mod analyzer;
 mod diff;
 

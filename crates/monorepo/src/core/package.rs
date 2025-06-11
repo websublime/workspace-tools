@@ -7,6 +7,68 @@ use std::collections::HashMap;
 use sublime_package_tools::Version;
 
 impl MonorepoPackageInfo {
+    /// Create a new `MonorepoPackageInfo`
+    #[must_use] 
+    pub fn new(
+        package_info: sublime_package_tools::PackageInfo,
+        workspace_package: sublime_standard_tools::monorepo::WorkspacePackage,
+        is_internal: bool,
+    ) -> Self {
+        Self {
+            package_info,
+            workspace_package,
+            is_internal,
+            dependents: Vec::new(),
+            dependencies_external: Vec::new(),
+            version_status: VersionStatus::Stable,
+            changesets: Vec::new(),
+        }
+    }
+    
+    /// Get the package name
+    #[must_use] 
+    pub fn name(&self) -> &str {
+        &self.workspace_package.name
+    }
+    
+    /// Get the package version
+    #[must_use] 
+    pub fn version(&self) -> &str {
+        &self.workspace_package.version
+    }
+    
+    /// Get the package path
+    #[must_use] 
+    pub fn path(&self) -> &std::path::PathBuf {
+        &self.workspace_package.absolute_path
+    }
+    
+    /// Get the relative path from monorepo root
+    #[must_use] 
+    pub fn relative_path(&self) -> &std::path::PathBuf {
+        &self.workspace_package.location
+    }
+    
+    /// Check if this package has pending changesets
+    #[must_use] 
+    pub fn has_pending_changesets(&self) -> bool {
+        self.changesets.iter().any(|cs| matches!(cs.status, ChangesetStatus::Pending))
+    }
+    
+    /// Get pending changesets
+    #[must_use] 
+    pub fn pending_changesets(&self) -> Vec<&Changeset> {
+        self.changesets
+            .iter()
+            .filter(|cs| matches!(cs.status, ChangesetStatus::Pending))
+            .collect()
+    }
+    
+    /// Check if package is dirty (has uncommitted changes)
+    #[must_use] 
+    pub fn is_dirty(&self) -> bool {
+        matches!(self.version_status, VersionStatus::Dirty)
+    }
     /// Update the package version
     pub fn update_version(&mut self, new_version: &str) -> Result<()> {
         // Update in PackageInfo

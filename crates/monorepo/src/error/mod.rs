@@ -1,8 +1,8 @@
 //! Error handling module for monorepo tools
 
-mod error;
+mod types;
 
 #[cfg(test)]
 mod tests;
 
-pub use error::{Error, Result};
+pub use types::{Error, Result};

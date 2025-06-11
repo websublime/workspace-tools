@@ -4,10 +4,11 @@
 //! functionality from all base crates, as well as the enhanced `MonorepoPackageInfo`
 //! type that provides monorepo-specific package information.
 
-mod types;
+pub mod types;
 mod project;
 mod package;
 mod version;
+mod tools;
 
 #[cfg(test)]
 mod tests;
@@ -40,3 +41,4 @@ pub use version::{
     VersionManager,
     VersioningStrategy,
 };
+pub use tools::MonorepoTools;

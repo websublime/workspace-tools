@@ -8,6 +8,7 @@ pub mod release;
 pub mod development;
 pub mod integration;
 pub mod types;
+mod status_impl;
 
 #[cfg(test)]
 mod tests;

@@ -21,7 +21,8 @@
       "Bash(/Users/ramosmig/.nvm/versions/node/v22.12.0/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg -n -A 2 -B 2 \"Ok\\(vec!\\[\\]\\)|Ok\\(Vec::new\\(\\)\\)|Ok\\(HashMap::new\\(\\)\\)|return Ok\\(false\\)|return Ok\\(true\\)|\\\"unknown\\\"\" --type rust)",
       "Bash(/Users/ramosmig/.nvm/versions/node/v22.12.0/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg -n -A 2 -B 2 \"Ok\\(vec!\\[\\]\\)\" --type rust)",
       "Bash(/Users/ramosmig/.nvm/versions/node/v22.12.0/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg -n \"vec!\\[\\]|Vec::new\\(\\)|HashMap::new\\(\\)\" --type rust)",
-      "Bash(touch:*)"
+      "Bash(touch:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }
