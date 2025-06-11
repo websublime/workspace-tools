@@ -91,4 +91,169 @@ mod tests {
         assert_ne!(dev, prod);
         assert_ne!(staging, integration);
     }
+
+    // ConfigManager tests moved from manager.rs
+    
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_config_manager_default_config() {
+        let manager = ConfigManager::new();
+        let config = manager.get().unwrap();
+
+        assert_eq!(config.versioning.default_bump, VersionBumpType::Patch);
+        assert!(config.versioning.propagate_changes);
+        assert!(config.hooks.enabled);
+        assert_eq!(config.environments.len(), 3);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_config_manager_update_config() {
+        let manager = ConfigManager::new();
+
+        manager
+            .update(|config| {
+                config.versioning.default_bump = VersionBumpType::Minor;
+                config.versioning.auto_tag = false;
+            })
+            .unwrap();
+
+        let config = manager.get().unwrap();
+        assert_eq!(config.versioning.default_bump, VersionBumpType::Minor);
+        assert!(!config.versioning.auto_tag);
+    }
+
+    // Pattern matching tests moved from manager.rs
+
+    #[test]
+    fn test_pattern_matches_package_exact() {
+        let manager = ConfigManager::new();
+        
+        // Exact matches
+        assert!(manager.pattern_matches_package("packages/core", "packages/core"));
+        assert!(!manager.pattern_matches_package("packages/core", "packages/ui"));
+        assert!(!manager.pattern_matches_package("packages", "packages/core"));
+    }
+
+    #[test]
+    fn test_pattern_matches_package_wildcard() {
+        let manager = ConfigManager::new();
+        
+        // Single wildcard
+        assert!(manager.pattern_matches_package("packages/*", "packages/core"));
+        assert!(manager.pattern_matches_package("packages/*", "packages/ui"));
+        assert!(!manager.pattern_matches_package("packages/*", "packages/apps/web"));
+        assert!(!manager.pattern_matches_package("packages/*", "apps/core"));
+        
+        // Wildcard at beginning
+        assert!(manager.pattern_matches_package("*/core", "packages/core"));
+        assert!(manager.pattern_matches_package("*/core", "apps/core"));
+        assert!(!manager.pattern_matches_package("*/core", "packages/ui"));
+        
+        // Multiple segments with wildcard
+        assert!(manager.pattern_matches_package("packages/*/src", "packages/core/src"));
+        assert!(manager.pattern_matches_package("packages/*/src", "packages/ui/src"));
+        assert!(!manager.pattern_matches_package("packages/*/src", "packages/core/dist"));
+    }
+
+    #[test]
+    fn test_pattern_matches_package_double_wildcard() {
+        let manager = ConfigManager::new();
+        
+        // Double wildcard for recursive matching
+        assert!(manager.pattern_matches_package("packages/**", "packages/core"));
+        assert!(manager.pattern_matches_package("packages/**", "packages/apps/web"));
+        assert!(manager.pattern_matches_package("packages/**", "packages/libs/shared/utils"));
+        assert!(!manager.pattern_matches_package("packages/**", "apps/core"));
+        
+        // Double wildcard in the middle
+        assert!(manager.pattern_matches_package("packages/**/lib", "packages/core/lib"));
+        assert!(manager.pattern_matches_package("packages/**/lib", "packages/apps/web/lib"));
+        assert!(!manager.pattern_matches_package("packages/**/lib", "packages/core/dist"));
+    }
+
+    #[test]
+    fn test_pattern_matches_package_scoped() {
+        let manager = ConfigManager::new();
+        
+        // Scoped packages
+        assert!(manager.pattern_matches_package("@company/*", "@company/core"));
+        assert!(manager.pattern_matches_package("@company/*", "@company/ui"));
+        assert!(!manager.pattern_matches_package("@company/*", "@other/core"));
+        assert!(!manager.pattern_matches_package("@company/*", "company/core"));
+        
+        // Multiple scopes
+        assert!(manager.pattern_matches_package("@*/core", "@company/core"));
+        assert!(manager.pattern_matches_package("@*/core", "@org/core"));
+        assert!(!manager.pattern_matches_package("@*/core", "@company/ui"));
+    }
+
+    #[test]
+    fn test_pattern_matches_package_character_classes() {
+        let manager = ConfigManager::new();
+        
+        // Character classes
+        assert!(manager.pattern_matches_package("packages/[abc]ore", "packages/core"));
+        assert!(manager.pattern_matches_package("packages/[abc]ore", "packages/bore"));
+        assert!(!manager.pattern_matches_package("packages/[abc]ore", "packages/dore"));
+        
+        // Negated character classes
+        assert!(manager.pattern_matches_package("packages/[!_]*", "packages/core"));
+        assert!(manager.pattern_matches_package("packages/[!_]*", "packages/ui"));
+        assert!(!manager.pattern_matches_package("packages/[!_]*", "packages/_internal"));
+        
+        // Range in character class
+        assert!(manager.pattern_matches_package("packages/v[0-9]", "packages/v1"));
+        assert!(manager.pattern_matches_package("packages/v[0-9]", "packages/v5"));
+        assert!(!manager.pattern_matches_package("packages/v[0-9]", "packages/v10"));
+    }
+
+    #[test]
+    fn test_pattern_matches_package_question_mark() {
+        let manager = ConfigManager::new();
+        
+        // Question mark for single character
+        assert!(manager.pattern_matches_package("packages/cor?", "packages/core"));
+        assert!(manager.pattern_matches_package("packages/cor?", "packages/cord"));
+        assert!(!manager.pattern_matches_package("packages/cor?", "packages/cores"));
+        assert!(!manager.pattern_matches_package("packages/cor?", "packages/cor"));
+    }
+
+    #[test]
+    fn test_pattern_matches_package_edge_cases() {
+        let manager = ConfigManager::new();
+        
+        // Empty strings
+        assert!(manager.pattern_matches_package("", ""));
+        assert!(!manager.pattern_matches_package("", "packages"));
+        assert!(!manager.pattern_matches_package("packages", ""));
+        
+        // Windows path separators (should be normalized)
+        assert!(manager.pattern_matches_package("packages\\*", "packages/core"));
+        assert!(manager.pattern_matches_package("packages/*", "packages\\core"));
+        
+        // Special characters in package names
+        assert!(manager.pattern_matches_package("packages/*-utils", "packages/string-utils"));
+        assert!(manager.pattern_matches_package("packages/*_utils", "packages/string_utils"));
+        assert!(manager.pattern_matches_package("packages/*.js", "packages/index.js"));
+        
+        // Invalid patterns should fall back to exact match
+        assert!(!manager.pattern_matches_package("[invalid", "packages/core"));
+        assert!(manager.pattern_matches_package("[invalid", "[invalid"));
+    }
+
+    #[test]
+    fn test_pattern_matches_package_complex_patterns() {
+        let manager = ConfigManager::new();
+        
+        // Complex real-world patterns
+        assert!(manager.pattern_matches_package("packages/*/src/**/*.ts", "packages/core/src/index.ts"));
+        assert!(manager.pattern_matches_package("packages/*/src/**/*.ts", "packages/ui/src/components/Button.ts"));
+        assert!(!manager.pattern_matches_package("packages/*/src/**/*.ts", "packages/core/dist/index.js"));
+        
+        // Patterns with multiple wildcards
+        assert!(manager.pattern_matches_package("**/node_modules/**", "packages/core/node_modules/react/index.js"));
+        assert!(manager.pattern_matches_package("**/node_modules/**", "node_modules/react/index.js"));
+        assert!(!manager.pattern_matches_package("**/node_modules/**", "packages/core/src/index.js"));
+    }
 }
