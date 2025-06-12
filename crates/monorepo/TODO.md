@@ -20,3 +20,8 @@
 - Some files are composed like dependency_graph.rs
 - Evaluate what should be the final exports of the lib.rs file. Some are just public to be used inside of the crate. It could be used the pub(crate) visibility.
 - Many tests are not covering the functionalities.
+
+Input:
+
+Os testes mostram falhas, mas não são relacionadas com as minhas mudanças. Todas as falhas são sobre runtime tokio issues ("Cannot drop a runtime in a context where blocking is not allowed") que são problemas de 
+  infrastructure de testes existentes, não problemas causados pela minha refactorização.

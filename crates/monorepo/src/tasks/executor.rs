@@ -18,8 +18,8 @@ use glob::Pattern;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
-use sublime_standard_tools::command::{Command, CommandPriority, CommandQueue};
+use std::time::SystemTime;
+use sublime_standard_tools::command::{Command, DefaultCommandExecutor, Executor};
 
 /// Executor for running tasks with various scopes and configurations
 pub struct TaskExecutor {
@@ -230,49 +230,22 @@ impl TaskExecutor {
 
         let start_time = SystemTime::now();
 
-        // DRY: Create CommandQueue for this execution (lazy initialization)
-        let command_queue = CommandQueue::new()
-            .start()
-            .map_err(|e| Error::task(format!("Failed to start command queue: {e}")))?;
-
-        let command_id = command_queue
-            .enqueue(std_command, CommandPriority::Normal)
-            .await
-            .map_err(|e| Error::task(format!("Failed to enqueue command: {e}")))?;
-
-        // Wait for command completion
-        let result = command_queue
-            .wait_for_command(&command_id, Duration::from_secs(300))
-            .await
+        // Use DefaultCommandExecutor from standard crate instead of manual CommandQueue
+        let executor = DefaultCommandExecutor::new();
+        let output = executor.execute(std_command).await
             .map_err(|e| Error::task(format!("Command execution failed: {e}")))?;
 
         let duration = start_time.elapsed().unwrap_or_default();
 
-        // Convert result to TaskOutput
-        let task_output = if result.is_successful() {
-            let output =
-                result.output.ok_or_else(|| Error::task("Command result missing output"))?;
-            TaskOutput {
-                command: format!("{} {}", command.command.program, command.command.args.join(" ")),
-                working_dir,
-                exit_code: Some(output.status()),
-                stdout: output.stdout().to_string(),
-                stderr: output.stderr().to_string(),
-                duration,
-                environment: command.command.env.clone(),
-            }
-        } else {
-            // Command failed
-            let error_msg = result.error.unwrap_or_else(|| "Unknown error".to_string());
-            TaskOutput {
-                command: format!("{} {}", command.command.program, command.command.args.join(" ")),
-                working_dir,
-                exit_code: Some(-1),
-                stdout: String::new(),
-                stderr: error_msg,
-                duration,
-                environment: command.command.env.clone(),
-            }
+        // Convert CommandOutput to TaskOutput  
+        let task_output = TaskOutput {
+            command: format!("{} {}", command.command.program, command.command.args.join(" ")),
+            working_dir,
+            exit_code: Some(output.status()),
+            stdout: output.stdout().to_string(),
+            stderr: output.stderr().to_string(),
+            duration,
+            environment: command.command.env.clone(),
         };
 
         Ok(task_output)

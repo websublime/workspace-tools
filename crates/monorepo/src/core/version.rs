@@ -14,7 +14,7 @@ use crate::core::{
 use crate::error::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
-use sublime_package_tools::Version;
+use sublime_package_tools::{Version, DependencyRegistry};
 // Import the diff_analyzer types for consistency
 use crate::analysis::{ChangeAnalysis, DiffPackageChange as PackageChange};
 
@@ -56,18 +56,8 @@ impl VersionManager {
 
         let current_version = package_info.version();
 
-        // Perform the version bump
-        let new_version = match bump_type {
-            VersionBumpType::Major => Version::bump_major(current_version)?,
-            VersionBumpType::Minor => Version::bump_minor(current_version)?,
-            VersionBumpType::Patch => Version::bump_patch(current_version)?,
-            VersionBumpType::Snapshot => {
-                let sha = commit_sha.unwrap_or("unknown");
-                Version::bump_snapshot(current_version, sha)?
-            }
-        };
-
-        let new_version_str = new_version.to_string();
+        // Perform the version bump using helper method
+        let new_version_str = self.perform_version_bump(current_version, bump_type, commit_sha)?;
 
         // Create primary update
         let primary_update = PackageVersionUpdate {
@@ -85,11 +75,13 @@ impl VersionManager {
             PropagationResult::default()
         };
 
-        // Resolve any dependency conflicts (simplified for now)
-        let dependency_updates = sublime_package_tools::ResolutionResult {
-            resolved_versions: HashMap::new(),
-            updates_required: Vec::new(),
-        };
+        // Resolve any dependency conflicts using DependencyRegistry
+        let dependency_registry = DependencyRegistry::new();
+        let dependency_updates = dependency_registry.resolve_version_conflicts()
+            .unwrap_or_else(|_| sublime_package_tools::ResolutionResult {
+                resolved_versions: HashMap::new(),
+                updates_required: Vec::new(),
+            });
 
         Ok(VersioningResult {
             primary_updates: vec![primary_update],
@@ -115,20 +107,14 @@ impl VersionManager {
 
             if let Some(bump_type) = bump_type {
                 let current_version = dependent_pkg.version();
-                let new_version = match bump_type {
-                    VersionBumpType::Major => Version::bump_major(current_version)?,
-                    VersionBumpType::Minor => Version::bump_minor(current_version)?,
-                    VersionBumpType::Patch => Version::bump_patch(current_version)?,
-                    VersionBumpType::Snapshot => {
-                        // For dependents, we don't usually create snapshots
-                        continue;
-                    }
-                };
+                
+                // DRY: Use the same version bumping logic as bump_package_version
+                let new_version_str = self.perform_version_bump(current_version, bump_type, None)?;
 
                 let update = PackageVersionUpdate {
                     package_name: dependent_name.to_string(),
                     old_version: current_version.to_string(),
-                    new_version: new_version.to_string(),
+                    new_version: new_version_str,
                     bump_type,
                     reason: format!("Propagated from {updated_package}"),
                 };
@@ -434,6 +420,29 @@ impl VersionManager {
         conflicts
     }
 
+    /// Perform version bump based on bump type
+    /// 
+    /// DRY: Centralized version bumping logic to avoid duplication
+    fn perform_version_bump(
+        &self,
+        current_version: &str,
+        bump_type: VersionBumpType,
+        commit_sha: Option<&str>,
+    ) -> Result<String> {
+        let result = match bump_type {
+            VersionBumpType::Major => Version::bump_major(current_version),
+            VersionBumpType::Minor => Version::bump_minor(current_version),
+            VersionBumpType::Patch => Version::bump_patch(current_version),
+            VersionBumpType::Snapshot => {
+                let sha = commit_sha.unwrap_or("unknown");
+                Version::bump_snapshot(current_version, sha)
+            }
+        }
+        .map_err(|e| crate::error::Error::versioning(format!("Version bump failed: {e}")))?;
+        
+        Ok(result.to_string())
+    }
+
     /// Calculate execution order for version plan steps
     fn calculate_execution_order(steps: &mut [VersioningPlanStep]) {
         // Simple ordering for now - can be enhanced with topological sort
@@ -459,11 +468,13 @@ impl VersionManager {
             all_conflicts.extend(result.conflicts);
         }
 
-        // Resolve final dependency conflicts
-        let dependency_updates = sublime_package_tools::ResolutionResult {
-            resolved_versions: HashMap::new(),
-            updates_required: Vec::new(),
-        };
+        // Resolve final dependency conflicts using DependencyRegistry
+        let dependency_registry = DependencyRegistry::new();
+        let dependency_updates = dependency_registry.resolve_version_conflicts()
+            .unwrap_or_else(|_| sublime_package_tools::ResolutionResult {
+                resolved_versions: HashMap::new(),
+                updates_required: Vec::new(),
+            });
 
         Ok(VersioningResult {
             primary_updates,
