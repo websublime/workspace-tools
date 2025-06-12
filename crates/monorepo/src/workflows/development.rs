@@ -109,7 +109,7 @@ impl DevelopmentWorkflow {
     ///
     /// # Arguments
     ///
-    /// * `since` - Optional reference to compare changes against (defaults to HEAD~1)
+    /// * `since` - Optional reference to compare changes against (defaults to configured git.default_since_ref)
     ///
     /// # Returns
     ///
@@ -135,8 +135,9 @@ impl DevelopmentWorkflow {
     pub async fn execute(&self, since: Option<&str>) -> Result<super::DevelopmentResult, Error> {
         let start_time = Instant::now();
 
-        // Default to comparing against HEAD~1 if no reference provided
-        let since_ref = since.unwrap_or("HEAD~1");
+        // Default to comparing against configured git reference if no reference provided
+        let git_config = &self.project.config.git;
+        let since_ref = since.unwrap_or(&git_config.default_since_ref);
 
         // Step 1: Detect changes
         let changes = self.analyzer.detect_changes_since(since_ref, None)?;

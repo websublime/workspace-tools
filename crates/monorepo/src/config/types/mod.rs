@@ -43,3 +43,7 @@ pub use workspace::{
     PnpmWorkspaceConfig, BunWorkspaceConfig,
     WorkspaceValidationConfig, PackageDiscoveryConfig,
 };
+
+// Git configuration types
+pub mod git;
+pub use git::{GitConfig, BranchConfig, BranchType};

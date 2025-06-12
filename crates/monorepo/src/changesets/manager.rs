@@ -357,9 +357,8 @@ impl ChangesetManager {
             let has_valid_prefix =
                 valid_prefixes.iter().any(|prefix| changeset.branch.starts_with(prefix));
 
-            if !has_valid_prefix
-                && !matches!(changeset.branch.as_str(), "main" | "master" | "develop")
-            {
+            let branch_config = &self.project.config.git.branches;
+            if !has_valid_prefix && !branch_config.is_protected_branch(&changeset.branch) {
                 warnings.push(format!(
                     "Branch '{}' doesn't follow conventional naming (feature/, fix/, etc.)",
                     changeset.branch

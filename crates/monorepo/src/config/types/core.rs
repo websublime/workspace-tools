@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use super::{
     VersioningConfig, TasksConfig, ChangelogConfig, HooksConfig,
-    ChangesetsConfig, PluginsConfig, WorkspaceConfig,
+    ChangesetsConfig, PluginsConfig, WorkspaceConfig, GitConfig,
 };
 
 /// Main configuration for monorepo tools
@@ -30,6 +30,9 @@ pub struct MonorepoConfig {
     /// Workspace configuration
     pub workspace: WorkspaceConfig,
 
+    /// Git configuration
+    pub git: GitConfig,
+
     /// Deployment environments
     pub environments: Vec<Environment>,
 }
@@ -44,6 +47,7 @@ impl Default for MonorepoConfig {
             changesets: ChangesetsConfig::default(),
             plugins: PluginsConfig::default(),
             workspace: WorkspaceConfig::default(),
+            git: GitConfig::default(),
             environments: vec![
                 Environment::Development,
                 Environment::Staging,

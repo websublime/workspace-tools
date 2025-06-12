@@ -4,6 +4,7 @@
 //! following the project's pattern of separating declarations from implementations.
 
 use super::{HookExecutionContext, GitOperationType, RemoteInfo, CommitInfo};
+use glob::Pattern;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -169,21 +170,121 @@ impl HookExecutionContext {
     }
 
     /// Check if any file matching pattern was changed
+    ///
+    /// Supports comprehensive glob patterns including:
+    /// - `*.rs` - Files with .rs extension
+    /// - `src/**/*.ts` - TypeScript files in src directory and subdirectories
+    /// - `tests/**/test_*.rs` - Test files in any subdirectory of tests
+    /// - `{src,lib}/**/*.rs` - Rust files in src or lib directories
+    /// - `!target/**` - Exclude target directory (when used with other patterns)
     #[must_use]
     pub fn has_changed_files_matching(&self, pattern: &str) -> bool {
-        self.changed_files.iter().any(|f| {
-            if pattern.contains('*') {
-                // Simple glob matching
-                if let Some(prefix) = pattern.strip_suffix('*') {
-                    f.starts_with(prefix)
-                } else if let Some(suffix) = pattern.strip_prefix('*') {
-                    f.ends_with(suffix)
-                } else {
+        // Handle exact matches first for performance
+        if !pattern.contains(['*', '?', '[', '{']) {
+            return self.changed_files.iter().any(|f| f == pattern);
+        }
+
+        // Compile the glob pattern
+        match Pattern::new(pattern) {
+            Ok(glob_pattern) => {
+                self.changed_files.iter().any(|file_path| {
+                    // Try matching the full path
+                    if glob_pattern.matches(file_path) {
+                        return true;
+                    }
+                    
+                    // Also try matching just the filename for patterns like "*.rs"
+                    if let Some(filename) = std::path::Path::new(file_path).file_name() {
+                        if let Some(filename_str) = filename.to_str() {
+                            return glob_pattern.matches(filename_str);
+                        }
+                    }
+                    
                     false
-                }
-            } else {
-                f == pattern
+                })
             }
+            Err(e) => {
+                log::warn!("Invalid glob pattern '{}': {}. Falling back to simple string matching.", pattern, e);
+                
+                // Fallback to simple string matching for invalid patterns
+                self.changed_files.iter().any(|f| {
+                    f.contains(pattern) || f == pattern
+                })
+            }
+        }
+    }
+
+    /// Check if any file matches multiple patterns with optional exclusions
+    ///
+    /// # Arguments
+    ///
+    /// * `include_patterns` - Patterns that files must match
+    /// * `exclude_patterns` - Patterns that files must NOT match (optional)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// // Match TypeScript files but exclude test files
+    /// context.has_changed_files_matching_multiple(&["**/*.ts"], &["**/*.test.ts"]);
+    ///
+    /// // Match source files in multiple directories
+    /// context.has_changed_files_matching_multiple(&["src/**/*.rs", "lib/**/*.rs"], &[]);
+    /// ```
+    #[must_use]
+    pub fn has_changed_files_matching_multiple(
+        &self,
+        include_patterns: &[&str],
+        exclude_patterns: &[&str],
+    ) -> bool {
+        // Compile include patterns
+        let compiled_includes: Vec<Pattern> = include_patterns
+            .iter()
+            .filter_map(|pattern| {
+                Pattern::new(pattern).map_err(|e| {
+                    log::warn!("Invalid include pattern '{}': {}", pattern, e);
+                    e
+                }).ok()
+            })
+            .collect();
+
+        // Compile exclude patterns
+        let compiled_excludes: Vec<Pattern> = exclude_patterns
+            .iter()
+            .filter_map(|pattern| {
+                Pattern::new(pattern).map_err(|e| {
+                    log::warn!("Invalid exclude pattern '{}': {}", pattern, e);
+                    e
+                }).ok()
+            })
+            .collect();
+
+        self.changed_files.iter().any(|file_path| {
+            // Check if file matches any include pattern
+            let matches_include = compiled_includes.is_empty() || 
+                compiled_includes.iter().any(|pattern| {
+                    pattern.matches(file_path) || {
+                        // Also try matching just the filename
+                        std::path::Path::new(file_path)
+                            .file_name()
+                            .and_then(|f| f.to_str())
+                            .map(|filename| pattern.matches(filename))
+                            .unwrap_or(false)
+                    }
+                });
+
+            // Check if file matches any exclude pattern
+            let matches_exclude = compiled_excludes.iter().any(|pattern| {
+                pattern.matches(file_path) || {
+                    // Also try matching just the filename
+                    std::path::Path::new(file_path)
+                        .file_name()
+                        .and_then(|f| f.to_str())
+                        .map(|filename| pattern.matches(filename))
+                        .unwrap_or(false)
+                }
+            });
+
+            matches_include && !matches_exclude
         })
     }
 

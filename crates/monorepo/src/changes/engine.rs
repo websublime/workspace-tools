@@ -10,6 +10,7 @@ use glob::Pattern;
 use log::warn;
 use regex::Regex;
 use std::collections::HashMap;
+use std::path::Path;
 use sublime_git_tools::GitChangedFile;
 
 impl ChangeDetectionEngine {
@@ -349,17 +350,107 @@ impl ChangeDetectionEngine {
         }
 
         // Check file size conditions (if available)
-        if let Some(_file_size) = &conditions.file_size {
-            // File size checking implementation would go here
-            // For now, this is a basic placeholder that always passes
-            log::debug!("File size condition checking not yet implemented");
+        if let Some(file_size) = &conditions.file_size {
+            log::debug!("Evaluating file size conditions for {} files", files.len());
+            
+            let mut total_size = 0u64;
+            let mut largest_file_size = 0u64;
+            
+            // Calculate file sizes for all changed files
+            for file in files {
+                let file_path = Path::new(&file.path);
+                
+                // Only check size for existing files (not deleted ones)
+                if file_path.exists() {
+                    match std::fs::metadata(file_path) {
+                        Ok(metadata) => {
+                            let size = metadata.len();
+                            total_size += size;
+                            largest_file_size = largest_file_size.max(size);
+                            log::trace!("File {} has size {} bytes", file.path, size);
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to get size for file {}: {}", file.path, e);
+                            // Continue with other files rather than failing
+                        }
+                    }
+                }
+            }
+            
+            log::debug!("Total size: {} bytes, largest file: {} bytes", total_size, largest_file_size);
+            
+            // Check minimum total size constraint
+            if let Some(min_total_size) = file_size.min_total_size {
+                if total_size < min_total_size {
+                    log::debug!("Total size {} < min required {}, condition failed", total_size, min_total_size);
+                    return false;
+                }
+            }
+            
+            // Check maximum total size constraint
+            if let Some(max_total_size) = file_size.max_total_size {
+                if total_size > max_total_size {
+                    log::debug!("Total size {} > max allowed {}, condition failed", total_size, max_total_size);
+                    return false;
+                }
+            }
+            
+            // Check minimum largest file size constraint
+            if let Some(min_largest_file) = file_size.min_largest_file {
+                if largest_file_size < min_largest_file {
+                    log::debug!("Largest file size {} < min required {}, condition failed", largest_file_size, min_largest_file);
+                    return false;
+                }
+            }
+            
+            log::debug!("All file size conditions passed");
         }
 
         // Custom script execution (if specified)
-        if let Some(_script) = &conditions.custom_script {
-            // Custom script execution would go here
-            // For now, this is a basic placeholder that always passes
-            log::debug!("Custom script execution not yet implemented");
+        if let Some(script) = &conditions.custom_script {
+            log::debug!("Executing custom validation script: {}", script);
+            
+            // Prepare environment variables for the script
+            let changed_files = files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>().join(",");
+            let file_count = files.len().to_string();
+            
+            // Create and execute the command
+            let mut command = if script.contains(' ') || script.contains('|') || script.contains(';') {
+                // Complex script - run through shell
+                let shell = if cfg!(windows) { "cmd" } else { "sh" };
+                let shell_flag = if cfg!(windows) { "/C" } else { "-c" };
+                let mut cmd = std::process::Command::new(shell);
+                cmd.arg(shell_flag).arg(script);
+                cmd
+            } else {
+                // Simple command
+                std::process::Command::new(script)
+            };
+            
+            // Add environment variables
+            command
+                .env("CHANGED_FILES", &changed_files)
+                .env("FILE_COUNT", &file_count);
+            
+            // Execute the script
+            match command.output() {
+                Ok(output) => {
+                    if output.status.success() {
+                        log::debug!("Custom script succeeded: {}", String::from_utf8_lossy(&output.stdout));
+                    } else {
+                        log::debug!("Custom script failed with exit code {}: {}", 
+                            output.status.code().unwrap_or(-1),
+                            String::from_utf8_lossy(&output.stderr));
+                        return false;
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to execute custom script '{}': {}", script, e);
+                    return false;
+                }
+            }
+            
+            log::debug!("Custom script validation passed");
         }
 
         true

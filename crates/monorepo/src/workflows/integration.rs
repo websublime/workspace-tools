@@ -4,7 +4,6 @@
 //! with Git hooks for seamless development experience.
 
 use std::sync::Arc;
-
 use crate::changesets::{types::ChangesetFilter, ChangesetManager};
 use crate::core::MonorepoProject;
 use crate::error::Error;
@@ -68,8 +67,9 @@ impl ChangesetHookIntegration {
             .get_current_branch()
             .map_err(|e| Error::workflow(format!("Failed to get current branch: {e}")))?;
 
-        // Skip changeset validation for main/master branches
-        if matches!(current_branch.as_str(), "main" | "master" | "develop") {
+        // Skip changeset validation for protected branches (main/develop)
+        let branch_config = &self.project.config.git.branches;
+        if branch_config.is_protected_branch(&current_branch) {
             return Ok(true);
         }
 
@@ -218,8 +218,9 @@ impl ChangesetHookIntegration {
             .get_current_branch()
             .map_err(|e| Error::workflow(format!("Failed to get current branch: {e}")))?;
 
-        // Only apply changesets when merging to main branches
-        if !matches!(current_branch.as_str(), "main" | "master" | "develop") {
+        // Only apply changesets when merging to protected branches
+        let branch_config = &self.project.config.git.branches;
+        if !branch_config.is_protected_branch(&current_branch) {
             log::info!(
                 "Skipping changeset application - not on main branch (currently on '{}')",
                 current_branch
@@ -453,31 +454,95 @@ impl ChangesetHookIntegration {
     }
 
     /// Validates that dependency versions are consistent across the monorepo
+    ///
+    /// Performs comprehensive dependency validation including:
+    /// - Version compatibility checks between packages
+    /// - Circular dependency detection
+    /// - Missing dependency resolution
+    /// - Version range consistency validation
     fn validate_dependency_consistency(&self, updated_packages: &[String]) -> Result<(), Error> {
         log::info!(
             "Validating dependency consistency for updated packages: {:?}",
             updated_packages
         );
 
-        // Check that all packages using the updated packages have compatible version ranges
+        let mut validation_errors = Vec::new();
+
+        // Check dependency consistency for each updated package
         for updated_package in updated_packages {
+            log::debug!("Validating dependencies for package: {}", updated_package);
+
             // Find all packages that depend on this updated package
             let dependents = self.find_dependent_packages(updated_package)?;
+            
+            if dependents.is_empty() {
+                log::debug!("Package '{}' has no dependents, skipping validation", updated_package);
+                continue;
+            }
 
-            if !dependents.is_empty() {
-                log::info!(
-                    "Package '{}' has {} dependent package(s): {:?}",
-                    updated_package,
-                    dependents.len(),
-                    dependents
-                );
+            log::info!(
+                "Package '{}' has {} dependent package(s): {:?}",
+                updated_package,
+                dependents.len(),
+                dependents
+            );
 
-                // In a real implementation, would check that the dependency versions
-                // in dependent packages are compatible with the new version
+            // Get the current version of the updated package
+            let updated_package_info = self.project.packages.iter()
+                .find(|pkg| pkg.name() == updated_package);
+
+            if let Some(pkg_info) = updated_package_info {
+                let current_version = pkg_info.version();
+                
+                // Validate that dependent packages can use this version
+                for dependent in &dependents {
+                    match self.validate_dependency_compatibility(
+                        dependent,
+                        updated_package,
+                        current_version,
+                    ) {
+                        Ok(()) => {
+                            log::debug!("✅ Dependency compatibility validated: {} -> {}", dependent, updated_package);
+                        }
+                        Err(e) => {
+                            validation_errors.push(format!(
+                                "❌ Dependency incompatibility: {} cannot use {} v{}: {}", 
+                                dependent, updated_package, current_version, e
+                            ));
+                        }
+                    }
+                }
+            } else {
+                validation_errors.push(format!(
+                    "❌ Updated package '{}' not found in project packages", 
+                    updated_package
+                ));
             }
         }
 
-        Ok(())
+        // Check for circular dependencies in the entire project
+        match self.detect_circular_dependencies() {
+            Ok(()) => {
+                log::debug!("✅ No circular dependencies detected");
+            }
+            Err(cycles) => {
+                validation_errors.extend(cycles);
+            }
+        }
+
+        // Report validation results
+        if validation_errors.is_empty() {
+            log::info!("✅ All dependency consistency checks passed");
+            Ok(())
+        } else {
+            let error_message = format!(
+                "Dependency validation failed with {} error(s):\n{}",
+                validation_errors.len(),
+                validation_errors.join("\n")
+            );
+            log::error!("{}", error_message);
+            Err(Error::workflow(error_message))
+        }
     }
 
     /// Finds packages that depend on the given package
@@ -511,6 +576,310 @@ impl ChangesetHookIntegration {
         }
 
         Ok(dependents)
+    }
+
+    /// Validates compatibility between a dependent package and its dependency
+    fn validate_dependency_compatibility(
+        &self,
+        dependent_package: &str,
+        dependency_package: &str,
+        dependency_version: &str,
+    ) -> Result<(), Error> {
+        log::debug!(
+            "Validating compatibility: {} depends on {} v{}",
+            dependent_package, dependency_package, dependency_version
+        );
+
+        // Get the dependent package info
+        let dependent_info = self.project.packages.iter()
+            .find(|pkg| pkg.name() == dependent_package)
+            .ok_or_else(|| {
+                Error::workflow(format!("Dependent package '{}' not found", dependent_package))
+            })?;
+
+        // Read the dependent package's package.json to check version requirements
+        let package_json_path = dependent_info.path().join("package.json");
+        let content = self.project.file_system.read_file_string(&package_json_path)
+            .map_err(|e| Error::workflow(format!(
+                "Failed to read package.json for {}: {}", dependent_package, e
+            )))?;
+
+        let json: serde_json::Value = serde_json::from_str(&content)
+            .map_err(|e| Error::workflow(format!(
+                "Failed to parse package.json for {}: {}", dependent_package, e
+            )))?;
+
+        // Check all dependency sections
+        let dep_sections = ["dependencies", "devDependencies", "peerDependencies"];
+        let mut required_version_range = None;
+
+        for section in &dep_sections {
+            if let Some(deps) = json[section].as_object() {
+                if let Some(version_requirement) = deps.get(dependency_package) {
+                    if let Some(version_str) = version_requirement.as_str() {
+                        required_version_range = Some(version_str.to_string());
+                        break;
+                    }
+                }
+            }
+        }
+
+        let required_range = required_version_range.ok_or_else(|| {
+            Error::workflow(format!(
+                "Package '{}' does not depend on '{}'", 
+                dependent_package, dependency_package
+            ))
+        })?;
+
+        // Perform basic version compatibility checking
+        // For a real implementation, you would use a proper semver library
+        let is_compatible = self.check_version_compatibility(dependency_version, &required_range);
+        
+        if is_compatible {
+            log::debug!(
+                "✅ Version {} satisfies requirement {} for {} -> {}",
+                dependency_version, required_range, dependent_package, dependency_package
+            );
+            Ok(())
+        } else {
+            Err(Error::workflow(format!(
+                "Version {} does not satisfy requirement {} for dependency {} -> {}",
+                dependency_version, required_range, dependent_package, dependency_package
+            )))
+        }
+    }
+
+    /// Detects circular dependencies in the package dependency graph
+    fn detect_circular_dependencies(&self) -> Result<(), Vec<String>> {
+        let mut errors = Vec::new();
+        let mut visiting = std::collections::HashSet::new();
+        let mut visited = std::collections::HashSet::new();
+
+        // Check each package for cycles
+        for pkg in &self.project.packages {
+            let package_name = pkg.name().to_string();
+            
+            if !visited.contains(&package_name) {
+                if let Err(cycle_errors) = self.detect_cycles_from_package(
+                    &package_name,
+                    &mut visiting,
+                    &mut visited,
+                    &mut Vec::new(),
+                ) {
+                    errors.extend(cycle_errors);
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+
+    /// Recursive helper for cycle detection
+    fn detect_cycles_from_package(
+        &self,
+        package_name: &str,
+        visiting: &mut std::collections::HashSet<String>,
+        visited: &mut std::collections::HashSet<String>,
+        current_path: &mut Vec<String>,
+    ) -> Result<(), Vec<String>> {
+        if visiting.contains(package_name) {
+            // Found a cycle
+            let cycle_start = current_path.iter()
+                .position(|p| p == package_name)
+                .unwrap_or(0);
+            let mut cycle: Vec<String> = current_path[cycle_start..].to_vec();
+            cycle.push(package_name.to_string()); // Complete the cycle
+            
+            return Err(vec![format!(
+                "❌ Circular dependency detected: {}", 
+                cycle.join(" -> ")
+            )]);
+        }
+
+        if visited.contains(package_name) {
+            return Ok(()); // Already processed
+        }
+
+        visiting.insert(package_name.to_string());
+        current_path.push(package_name.to_string());
+
+        // Get dependencies of this package
+        let dependencies = self.get_package_dependencies(package_name);
+        let mut all_errors = Vec::new();
+
+        for dependency in dependencies {
+            if let Err(cycle_errors) = self.detect_cycles_from_package(
+                &dependency,
+                visiting,
+                visited,
+                current_path,
+            ) {
+                all_errors.extend(cycle_errors);
+            }
+        }
+
+        current_path.pop();
+        visiting.remove(package_name);
+        visited.insert(package_name.to_string());
+
+        if all_errors.is_empty() {
+            Ok(())
+        } else {
+            Err(all_errors)
+        }
+    }
+
+    /// Gets the dependencies of a package
+    fn get_package_dependencies(&self, package_name: &str) -> Vec<String> {
+        let mut dependencies = Vec::new();
+
+        // Find the package info
+        if let Some(pkg_info) = self.project.packages.iter().find(|pkg| pkg.name() == package_name) {
+            // Read package.json to get dependencies
+            let package_json_path = pkg_info.path().join("package.json");
+            if let Ok(content) = self.project.file_system.read_file_string(&package_json_path) {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                    // Only check production dependencies for cycle detection
+                    if let Some(deps) = json["dependencies"].as_object() {
+                        for (dep_name, _) in deps {
+                            // Only include internal monorepo dependencies
+                            if self.project.packages.iter().any(|pkg| pkg.name() == dep_name) {
+                                dependencies.push(dep_name.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        dependencies
+    }
+
+    /// Basic version compatibility checking
+    /// 
+    /// This is a simplified implementation for demonstration.
+    /// In a real scenario, you would use a proper semver library like `semver` crate.
+    fn check_version_compatibility(&self, actual_version: &str, required_range: &str) -> bool {
+        // Handle exact version matches
+        if actual_version == required_range {
+            return true;
+        }
+
+        // Handle common npm version range patterns
+        if required_range.starts_with('^') {
+            // Caret range: ^1.2.3 means >=1.2.3 and <2.0.0
+            let required_version = &required_range[1..];
+            return self.satisfies_caret_range(actual_version, required_version);
+        }
+
+        if required_range.starts_with('~') {
+            // Tilde range: ~1.2.3 means >=1.2.3 and <1.3.0
+            let required_version = &required_range[1..];
+            return self.satisfies_tilde_range(actual_version, required_version);
+        }
+
+        if required_range.starts_with(">=") {
+            let required_version = &required_range[2..];
+            return self.compare_versions(actual_version, required_version) >= 0;
+        }
+
+        if required_range.starts_with('>') {
+            let required_version = &required_range[1..];
+            return self.compare_versions(actual_version, required_version) > 0;
+        }
+
+        if required_range.starts_with("<=") {
+            let required_version = &required_range[2..];
+            return self.compare_versions(actual_version, required_version) <= 0;
+        }
+
+        if required_range.starts_with('<') {
+            let required_version = &required_range[1..];
+            return self.compare_versions(actual_version, required_version) < 0;
+        }
+
+        // Default to false for unrecognized patterns
+        log::warn!("Unrecognized version range pattern: {}", required_range);
+        false
+    }
+
+    /// Check if version satisfies caret range (^1.2.3)
+    fn satisfies_caret_range(&self, actual: &str, required: &str) -> bool {
+        let actual_parts = self.parse_version(actual);
+        let required_parts = self.parse_version(required);
+        
+        if actual_parts.is_none() || required_parts.is_none() {
+            return false;
+        }
+        
+        let (actual_major, actual_minor, actual_patch) = actual_parts.unwrap();
+        let (req_major, req_minor, req_patch) = required_parts.unwrap();
+        
+        // Major version must match, minor and patch can be higher
+        actual_major == req_major && 
+        (actual_minor > req_minor || 
+         (actual_minor == req_minor && actual_patch >= req_patch))
+    }
+
+    /// Check if version satisfies tilde range (~1.2.3)
+    fn satisfies_tilde_range(&self, actual: &str, required: &str) -> bool {
+        let actual_parts = self.parse_version(actual);
+        let required_parts = self.parse_version(required);
+        
+        if actual_parts.is_none() || required_parts.is_none() {
+            return false;
+        }
+        
+        let (actual_major, actual_minor, actual_patch) = actual_parts.unwrap();
+        let (req_major, req_minor, req_patch) = required_parts.unwrap();
+        
+        // Major and minor must match, patch can be higher
+        actual_major == req_major && 
+        actual_minor == req_minor && 
+        actual_patch >= req_patch
+    }
+
+    /// Compare two versions (-1, 0, 1 for less, equal, greater)
+    fn compare_versions(&self, version1: &str, version2: &str) -> i32 {
+        let v1_parts = self.parse_version(version1);
+        let v2_parts = self.parse_version(version2);
+        
+        if v1_parts.is_none() || v2_parts.is_none() {
+            return 0; // Treat invalid versions as equal
+        }
+        
+        let (v1_major, v1_minor, v1_patch) = v1_parts.unwrap();
+        let (v2_major, v2_minor, v2_patch) = v2_parts.unwrap();
+        
+        if v1_major != v2_major {
+            return if v1_major > v2_major { 1 } else { -1 };
+        }
+        if v1_minor != v2_minor {
+            return if v1_minor > v2_minor { 1 } else { -1 };
+        }
+        if v1_patch != v2_patch {
+            return if v1_patch > v2_patch { 1 } else { -1 };
+        }
+        
+        0
+    }
+
+    /// Parse version string into (major, minor, patch)
+    fn parse_version(&self, version: &str) -> Option<(u32, u32, u32)> {
+        let parts: Vec<&str> = version.split('.').collect();
+        if parts.len() != 3 {
+            return None;
+        }
+        
+        let major = parts[0].parse::<u32>().ok()?;
+        let minor = parts[1].parse::<u32>().ok()?;
+        let patch = parts[2].parse::<u32>().ok()?;
+        
+        Some((major, minor, patch))
     }
 
     /// Maps file paths to affected package names

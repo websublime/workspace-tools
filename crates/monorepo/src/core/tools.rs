@@ -172,7 +172,8 @@ impl MonorepoTools {
         } else {
             // Create plan from current changes
             let diff_analyzer = self.diff_analyzer();
-            let changes = diff_analyzer.detect_changes_since("HEAD~1", None)?;
+            let git_config = &self.project.config.git;
+            let changes = diff_analyzer.detect_changes_since(&git_config.default_since_ref, None)?;
             let plan = version_manager.create_versioning_plan(&changes)?;
             let result = version_manager.execute_versioning_plan(&plan)?;
 
@@ -191,7 +192,7 @@ impl MonorepoTools {
     ///
     /// # Arguments
     ///
-    /// * `since` - Optional reference point for change detection (defaults to "HEAD~1")
+    /// * `since` - Optional reference point for change detection (defaults to configured git.default_since_ref)
     ///
     /// # Returns
     ///

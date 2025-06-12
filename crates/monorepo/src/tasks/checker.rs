@@ -264,21 +264,24 @@ impl ConditionChecker {
             BranchCondition::NoneOf(branches) => Ok(!branches.contains(&current_branch)),
 
             BranchCondition::IsMain => {
-                // Common main branch names
-                let main_branches = ["main", "master", "develop", "trunk"];
-                Ok(main_branches.contains(&current_branch.as_str()))
+                // Use configured main branches
+                let branch_config = &self.project.config.git.branches;
+                Ok(branch_config.is_main_branch(&current_branch))
             }
 
             BranchCondition::IsFeature => {
-                Ok(current_branch.starts_with("feature/") || current_branch.starts_with("feat/"))
+                let branch_config = &self.project.config.git.branches;
+                Ok(branch_config.is_feature_branch(&current_branch))
             }
 
             BranchCondition::IsRelease => {
-                Ok(current_branch.starts_with("release/") || current_branch.starts_with("rel/"))
+                let branch_config = &self.project.config.git.branches;
+                Ok(branch_config.is_release_branch(&current_branch))
             }
 
             BranchCondition::IsHotfix => {
-                Ok(current_branch.starts_with("hotfix/") || current_branch.starts_with("fix/"))
+                let branch_config = &self.project.config.git.branches;
+                Ok(branch_config.is_hotfix_branch(&current_branch))
             }
         }
     }
@@ -544,7 +547,7 @@ impl ConditionChecker {
         let git_diff_output = Command::new("git")
             .args([
                 "diff",
-                "HEAD~1", // Compare with previous commit
+                &self.project.config.git.default_since_ref, // Compare with configured reference
                 "--",
                 &package_json_path.to_string_lossy(),
             ])
