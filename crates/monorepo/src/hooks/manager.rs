@@ -16,6 +16,7 @@ use crate::error::{Error, Result};
 use crate::tasks::types::results::TaskStatus;
 use crate::tasks::{TaskManager, TaskScope};
 use crate::Changeset;
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -345,8 +346,6 @@ impl HookManager {
     /// Provides sensible defaults for each hook type based on common development workflows.
     /// Each hook type has specific tasks that are typically run during that Git operation.
     fn get_default_hook_definition(hook_type: &HookType) -> &'static HookDefinition {
-        use once_cell::sync::Lazy;
-        
         match hook_type {
             HookType::PreCommit => {
                 static PRE_COMMIT_HOOK: Lazy<HookDefinition> = Lazy::new(|| {
@@ -448,25 +447,25 @@ impl HookManager {
             HookScript::Command { cmd, args } => {
                 // Execute shell command using sublime-standard-tools command system
                 use sublime_standard_tools::command::{CommandBuilder, DefaultExecutor, Executor};
-                
-                let mut command_builder = CommandBuilder::new(cmd)
-                    .current_dir(self.project.root_path());
-                
+
+                let mut command_builder =
+                    CommandBuilder::new(cmd).current_dir(self.project.root_path());
+
                 // Add each argument individually
                 for arg in args {
                     command_builder = command_builder.arg(arg);
                 }
-                
+
                 let command = command_builder.build();
                 let executor = DefaultExecutor;
-                
+
                 // Execute synchronously by using a runtime
                 let rt = tokio::runtime::Runtime::new()
                     .map_err(|e| Error::hook(format!("Failed to create async runtime: {e}")))?;
-                
-                let output = rt.block_on(async {
-                    executor.execute(command).await
-                }).map_err(|e| Error::hook(format!("Failed to execute command '{cmd}': {e}")))?;
+
+                let output = rt
+                    .block_on(async { executor.execute(command).await })
+                    .map_err(|e| Error::hook(format!("Failed to execute command '{cmd}': {e}")))?;
 
                 if output.status() == 0 {
                     Ok(result.with_success().with_stdout(output.stdout()))
@@ -480,7 +479,7 @@ impl HookManager {
             HookScript::ScriptFile { path, args } => {
                 // Execute script file using sublime-standard-tools command system
                 use sublime_standard_tools::command::{CommandBuilder, DefaultExecutor, Executor};
-                
+
                 let script_path = self.project.root_path().join(path);
                 if !script_path.exists() {
                     return Ok(result.with_failure(HookError::new(
@@ -491,27 +490,26 @@ impl HookManager {
 
                 let mut command_builder = CommandBuilder::new(script_path.to_string_lossy())
                     .current_dir(self.project.root_path());
-                
+
                 // Add each argument individually
                 for arg in args {
                     command_builder = command_builder.arg(arg);
                 }
-                
+
                 let command = command_builder.build();
                 let executor = DefaultExecutor;
-                
+
                 // Execute synchronously by using a runtime
                 let rt = tokio::runtime::Runtime::new()
                     .map_err(|e| Error::hook(format!("Failed to create async runtime: {e}")))?;
-                
-                let output = rt.block_on(async {
-                    executor.execute(command).await
-                }).map_err(|e| {
-                    Error::hook(format!(
-                        "Failed to execute script '{}': {e}",
-                        script_path.display()
-                    ))
-                })?;
+
+                let output =
+                    rt.block_on(async { executor.execute(command).await }).map_err(|e| {
+                        Error::hook(format!(
+                            "Failed to execute script '{}': {e}",
+                            script_path.display()
+                        ))
+                    })?;
 
                 if output.status() == 0 {
                     Ok(result.with_success().with_stdout(output.stdout()))
@@ -542,14 +540,13 @@ impl HookManager {
                             return Ok(script_result);
                         }
                         // Continue execution but track the failure
-                        result = result.with_failure(
-                            script_result.error.clone().unwrap_or_else(|| {
+                        result =
+                            result.with_failure(script_result.error.clone().unwrap_or_else(|| {
                                 HookError::new(
                                     HookErrorCode::ExecutionFailed,
                                     "Sequence script failed".to_string(),
                                 )
-                            }),
-                        );
+                            }));
                     }
                 }
 
@@ -712,7 +709,11 @@ impl From<GitOperationType> for HookType {
             GitOperationType::Push => Self::PrePush,
             GitOperationType::Merge => Self::PostMerge,
             GitOperationType::Checkout => Self::PostCheckout,
-            GitOperationType::Commit | GitOperationType::Rebase | GitOperationType::Receive | GitOperationType::Update | GitOperationType::Unknown => Self::PreCommit, // Default fallback
+            GitOperationType::Commit
+            | GitOperationType::Rebase
+            | GitOperationType::Receive
+            | GitOperationType::Update
+            | GitOperationType::Unknown => Self::PreCommit, // Default fallback
         }
     }
 }

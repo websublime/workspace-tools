@@ -8,7 +8,7 @@ use sublime_package_tools::Version;
 
 impl MonorepoPackageInfo {
     /// Create a new `MonorepoPackageInfo`
-    #[must_use] 
+    #[must_use]
     pub fn new(
         package_info: sublime_package_tools::PackageInfo,
         workspace_package: sublime_standard_tools::monorepo::WorkspacePackage,
@@ -24,48 +24,45 @@ impl MonorepoPackageInfo {
             changesets: Vec::new(),
         }
     }
-    
+
     /// Get the package name
-    #[must_use] 
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.workspace_package.name
     }
-    
+
     /// Get the package version
-    #[must_use] 
+    #[must_use]
     pub fn version(&self) -> &str {
         &self.workspace_package.version
     }
-    
+
     /// Get the package path
-    #[must_use] 
+    #[must_use]
     pub fn path(&self) -> &std::path::PathBuf {
         &self.workspace_package.absolute_path
     }
-    
+
     /// Get the relative path from monorepo root
-    #[must_use] 
+    #[must_use]
     pub fn relative_path(&self) -> &std::path::PathBuf {
         &self.workspace_package.location
     }
-    
+
     /// Check if this package has pending changesets
-    #[must_use] 
+    #[must_use]
     pub fn has_pending_changesets(&self) -> bool {
         self.changesets.iter().any(|cs| matches!(cs.status, ChangesetStatus::Pending))
     }
-    
+
     /// Get pending changesets
-    #[must_use] 
+    #[must_use]
     pub fn pending_changesets(&self) -> Vec<&Changeset> {
-        self.changesets
-            .iter()
-            .filter(|cs| matches!(cs.status, ChangesetStatus::Pending))
-            .collect()
+        self.changesets.iter().filter(|cs| matches!(cs.status, ChangesetStatus::Pending)).collect()
     }
-    
+
     /// Check if package is dirty (has uncommitted changes)
-    #[must_use] 
+    #[must_use]
     pub fn is_dirty(&self) -> bool {
         matches!(self.version_status, VersionStatus::Dirty)
     }
@@ -187,7 +184,8 @@ impl MonorepoPackageInfo {
     }
 
     /// Get suggested version bump based on changesets
-    #[must_use] pub fn suggested_version_bump(&self) -> Option<VersionBumpType> {
+    #[must_use]
+    pub fn suggested_version_bump(&self) -> Option<VersionBumpType> {
         let pending = self.pending_changesets();
         if pending.is_empty() {
             return None;
@@ -207,7 +205,8 @@ impl MonorepoPackageInfo {
     }
 
     /// Check if package has been deployed to a specific environment
-    #[must_use] pub fn is_deployed_to(&self, environment: &Environment) -> bool {
+    #[must_use]
+    pub fn is_deployed_to(&self, environment: &Environment) -> bool {
         self.changesets.iter().any(|cs| {
             cs.development_environments.contains(environment)
                 || (environment == &Environment::Production && cs.production_deployment)
@@ -215,7 +214,8 @@ impl MonorepoPackageInfo {
     }
 
     /// Get deployment status across environments
-    #[must_use] pub fn deployment_status(&self) -> HashMap<Environment, bool> {
+    #[must_use]
+    pub fn deployment_status(&self) -> HashMap<Environment, bool> {
         let mut status = HashMap::new();
 
         for changeset in &self.changesets {

@@ -6,6 +6,7 @@ use crate::config::{
 };
 use crate::error::{Error, Result};
 use crate::{Environment, MonorepoConfig};
+use glob::Pattern;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
@@ -479,17 +480,15 @@ impl ConfigManager {
     /// ```
     #[must_use]
     pub fn pattern_matches_package(&self, pattern: &str, package_path: &str) -> bool {
-        use glob::Pattern;
-        
         // Early return for exact matches (optimization)
         if !pattern.contains(['*', '?', '[', '{']) {
             return package_path == pattern;
         }
-        
+
         // Normalize paths for consistent matching
         let normalized_pattern = pattern.replace('\\', "/");
         let normalized_path = package_path.replace('\\', "/");
-        
+
         // Try to compile the pattern
         match Pattern::new(&normalized_pattern) {
             Ok(glob_pattern) => {
@@ -497,19 +496,19 @@ impl ConfigManager {
                 if !glob_pattern.matches(&normalized_path) {
                     return false;
                 }
-                
+
                 // For patterns with single *, ensure we're not matching across path segments
                 // Count segments in pattern and path to ensure proper depth matching
                 if normalized_pattern.contains('*') && !normalized_pattern.contains("**") {
                     let pattern_segments = normalized_pattern.split('/').count();
                     let path_segments = normalized_path.split('/').count();
-                    
+
                     // For single * patterns, the path should have the same number of segments
                     if pattern_segments != path_segments {
                         return false;
                     }
                 }
-                
+
                 true
             }
             Err(e) => {
@@ -535,9 +534,11 @@ impl ConfigManager {
     /// let matches = manager.batch_pattern_matches(&patterns, &packages);
     /// // Returns: [(0, 0), (1, 1), (2, 2)]
     /// ```
-    pub fn batch_pattern_matches(&self, patterns: &[String], packages: &[String]) -> Vec<(usize, usize)> {
-        use glob::Pattern;
-        
+    pub fn batch_pattern_matches(
+        &self,
+        patterns: &[String],
+        packages: &[String],
+    ) -> Vec<(usize, usize)> {
         // Pre-compile all patterns
         let compiled_patterns: Vec<Option<Pattern>> = patterns
             .iter()
@@ -546,20 +547,22 @@ impl ConfigManager {
                 Pattern::new(&normalized).ok()
             })
             .collect();
-        
+
         let mut matches = Vec::new();
-        
+
         for (pattern_idx, pattern_opt) in compiled_patterns.iter().enumerate() {
             if let Some(pattern) = pattern_opt {
                 for (package_idx, package) in packages.iter().enumerate() {
                     let normalized_package = package.replace('\\', "/");
-                    
+
                     if pattern.matches(&normalized_package) {
                         // Check segment count for single * patterns
-                        if patterns[pattern_idx].contains('*') && !patterns[pattern_idx].contains("**") {
+                        if patterns[pattern_idx].contains('*')
+                            && !patterns[pattern_idx].contains("**")
+                        {
                             let pattern_segments = patterns[pattern_idx].split('/').count();
                             let path_segments = normalized_package.split('/').count();
-                            
+
                             if pattern_segments == path_segments {
                                 matches.push((pattern_idx, package_idx));
                             }
@@ -577,7 +580,7 @@ impl ConfigManager {
                 }
             }
         }
-        
+
         matches
     }
 
@@ -595,33 +598,31 @@ impl ConfigManager {
     /// assert!(!matcher("apps/core"));
     /// ```
     pub fn create_pattern_matcher(&self, pattern: &str) -> Result<PatternMatcher> {
-        use glob::Pattern;
-        
         let normalized_pattern = pattern.replace('\\', "/");
-        
+
         // Try to compile the pattern
         match Pattern::new(&normalized_pattern) {
             Ok(glob_pattern) => {
                 let glob_pattern = Arc::new(glob_pattern);
                 let pattern_for_closure = normalized_pattern.clone();
-                
+
                 Ok(Box::new(move |package_path: &str| {
                     let normalized_path = package_path.replace('\\', "/");
-                    
+
                     if !glob_pattern.matches(&normalized_path) {
                         return false;
                     }
-                    
+
                     // Check segment count for single * patterns
                     if pattern_for_closure.contains('*') && !pattern_for_closure.contains("**") {
                         let pattern_segments = pattern_for_closure.split('/').count();
                         let path_segments = normalized_path.split('/').count();
-                        
+
                         if pattern_segments != path_segments {
                             return false;
                         }
                     }
-                    
+
                     true
                 }))
             }
@@ -635,4 +636,3 @@ impl Default for ConfigManager {
         Self::new()
     }
 }
-

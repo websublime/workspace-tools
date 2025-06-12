@@ -1,10 +1,10 @@
 //! Configurable change detection engine
 
-use crate::core::MonorepoPackageInfo;
 use super::types::{
     ChangeDetectionRules, ChangeTypeRule, FilePattern, PatternType, RuleConditions,
     SignificanceRule,
 };
+use crate::core::MonorepoPackageInfo;
 use glob::Pattern;
 use log::warn;
 use regex::Regex;
@@ -33,17 +33,20 @@ pub struct ChangeDetectionEngine {
 
 impl ChangeDetectionEngine {
     /// Create a new engine with default rules
-    #[must_use] pub fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         Self::with_rules(ChangeDetectionRules::default())
     }
 
     /// Create engine with custom rules
-    #[must_use] pub fn with_rules(rules: ChangeDetectionRules) -> Self {
+    #[must_use]
+    pub fn with_rules(rules: ChangeDetectionRules) -> Self {
         Self { rules, regex_cache: HashMap::new(), glob_cache: HashMap::new() }
     }
 
     /// Validate all patterns in the rules and return any errors found
-    #[must_use] pub fn validate_rules(&self) -> Vec<String> {
+    #[must_use]
+    pub fn validate_rules(&self) -> Vec<String> {
         let mut errors = Vec::new();
 
         // Validate change type rules
@@ -169,7 +172,8 @@ impl ChangeDetectionEngine {
     }
 
     /// Suggest version bump
-    #[must_use] pub fn suggest_version_bump(
+    #[must_use]
+    pub fn suggest_version_bump(
         &self,
         change_type: &PackageChangeType,
         significance: &ChangeSignificance,
@@ -379,7 +383,6 @@ impl ChangeDetectionEngine {
 
         true
     }
-
 }
 
 impl Default for ChangeDetectionEngine {

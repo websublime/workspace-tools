@@ -2,17 +2,17 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::core::*;
     use crate::config::{Environment, VersionBumpType};
+    use crate::core::*;
+    use chrono::Utc;
 
     #[test]
     fn test_changeset_status_variants() {
         // Test that all ChangesetStatus variants exist
         let pending = ChangesetStatus::Pending;
-        let partially_deployed = ChangesetStatus::PartiallyDeployed { 
-            environments: vec![Environment::Development] 
-        };
-        
+        let partially_deployed =
+            ChangesetStatus::PartiallyDeployed { environments: vec![Environment::Development] };
+
         // Test comparison
         assert_eq!(pending, ChangesetStatus::Pending);
         assert_ne!(pending, partially_deployed);
@@ -25,7 +25,7 @@ mod tests {
         let dirty = VersionStatus::Dirty;
         let snapshot = VersionStatus::Snapshot { sha: "abc123".to_string() };
         let pre_release = VersionStatus::PreRelease { tag: "alpha.1".to_string() };
-        
+
         // Test comparison
         assert_eq!(stable, VersionStatus::Stable);
         assert_ne!(stable, dirty);
@@ -39,7 +39,7 @@ mod tests {
         let staging = Environment::Staging;
         let prod = Environment::Production;
         let integration = Environment::Integration;
-        
+
         assert_eq!(dev, Environment::Development);
         assert_ne!(dev, prod);
         assert_ne!(staging, integration);
@@ -52,7 +52,7 @@ mod tests {
         let breaking_change = ConflictType::PotentialBreakingChange;
         let dep_mismatch = ConflictType::DependencyMismatch;
         let circular_dep = ConflictType::CircularDependency;
-        
+
         assert_eq!(pending_changesets, ConflictType::PendingChangesets);
         assert_ne!(pending_changesets, dirty_wd);
         assert_ne!(dirty_wd, breaking_change);
@@ -65,7 +65,7 @@ mod tests {
         let default_strategy = DefaultVersioningStrategy;
         let conservative_strategy = ConservativeVersioningStrategy;
         let aggressive_strategy = AggressiveVersioningStrategy;
-        
+
         // Test that strategies can be created
         assert_eq!(
             std::any::type_name_of_val(&default_strategy),
@@ -83,8 +83,6 @@ mod tests {
 
     #[test]
     fn test_changeset_creation() {
-        use chrono::Utc;
-        
         let changeset = Changeset {
             id: "test-changeset".to_string(),
             package: "test-package".to_string(),
@@ -120,7 +118,7 @@ mod tests {
             dependency_chain_impacts: vec![],
             estimated_propagation_depth: 1,
         };
-        
+
         assert_eq!(analysis.total_packages_affected, 2);
         assert_eq!(analysis.breaking_changes.len(), 1);
         assert_eq!(analysis.estimated_propagation_depth, 1);
@@ -141,7 +139,7 @@ mod tests {
                 estimated_propagation_depth: 0,
             },
         };
-        
+
         assert_eq!(plan.total_packages, 5);
         assert!(plan.conflicts.is_empty());
         assert_eq!(plan.estimated_duration.as_secs(), 30);

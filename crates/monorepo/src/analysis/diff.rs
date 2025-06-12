@@ -24,7 +24,8 @@ pub struct DiffAnalyzer {
 
 impl DiffAnalyzer {
     /// Create a new diff analyzer with the given project
-    #[must_use] pub fn new(project: Arc<MonorepoProject>) -> Self {
+    #[must_use]
+    pub fn new(project: Arc<MonorepoProject>) -> Self {
         // Add built-in analyzers
         let analyzers: Vec<Box<dyn ChangeAnalyzer>> = vec![
             Box::new(PackageJsonAnalyzer),
@@ -38,7 +39,8 @@ impl DiffAnalyzer {
     }
 
     /// Create a new diff analyzer with custom analyzers
-    #[must_use] pub fn with_analyzers(
+    #[must_use]
+    pub fn with_analyzers(
         project: Arc<MonorepoProject>,
         analyzers: Vec<Box<dyn ChangeAnalyzer>>,
     ) -> Self {
@@ -187,7 +189,8 @@ impl DiffAnalyzer {
     }
 
     /// Analyze the significance of package changes
-    #[must_use] pub fn analyze_change_significance(
+    #[must_use]
+    pub fn analyze_change_significance(
         &self,
         package_changes: &[PackageChange],
     ) -> Vec<ChangeSignificanceResult> {
@@ -617,10 +620,17 @@ impl ChangeAnalyzer for TestAnalyzer {
         file_path.contains("test")
             || file_path.contains("spec")
             || file_path.contains("__tests__")
+            || file_path.contains("tests")
             || file_path.ends_with(".test.js")
+            || file_path.ends_with(".test.mjs")
+            || file_path.ends_with(".test.cjs")
             || file_path.ends_with(".test.ts")
+            || file_path.ends_with(".test.mts")
             || file_path.ends_with(".spec.js")
+            || file_path.ends_with(".spec.mjs")
+            || file_path.ends_with(".spec.cjs")
             || file_path.ends_with(".spec.ts")
+            || file_path.ends_with(".spec.mts")
     }
 
     fn analyze_change(&self, _change: &GitChangedFile) -> ChangeAnalysisResult {

@@ -22,7 +22,8 @@ pub struct TaskRegistry {
 
 impl TaskRegistry {
     /// Create a new empty task registry
-    #[must_use] pub fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         Self { tasks: HashMap::new(), scope_index: HashMap::new(), priority_index: HashMap::new() }
     }
 
@@ -53,17 +54,20 @@ impl TaskRegistry {
     }
 
     /// Get a task by name
-    #[must_use] pub fn get_task(&self, name: &str) -> Option<&TaskDefinition> {
+    #[must_use]
+    pub fn get_task(&self, name: &str) -> Option<&TaskDefinition> {
         self.tasks.get(name)
     }
 
     /// Get all tasks
-    #[must_use] pub fn list_tasks(&self) -> Vec<&TaskDefinition> {
+    #[must_use]
+    pub fn list_tasks(&self) -> Vec<&TaskDefinition> {
         self.tasks.values().collect()
     }
 
     /// Get tasks by scope
-    #[must_use] pub fn get_tasks_for_scope(&self, scope: &TaskScope) -> Vec<&TaskDefinition> {
+    #[must_use]
+    pub fn get_tasks_for_scope(&self, scope: &TaskScope) -> Vec<&TaskDefinition> {
         self.scope_index
             .get(scope)
             .map(|task_names| task_names.iter().filter_map(|name| self.tasks.get(name)).collect())
@@ -71,7 +75,8 @@ impl TaskRegistry {
     }
 
     /// Get tasks by priority (sorted by priority, highest first)
-    #[must_use] pub fn get_tasks_by_priority(&self) -> Vec<&TaskDefinition> {
+    #[must_use]
+    pub fn get_tasks_by_priority(&self) -> Vec<&TaskDefinition> {
         let mut priorities: Vec<_> = self.priority_index.keys().collect();
         priorities.sort_by(|a, b| b.cmp(a)); // Highest priority first
 
@@ -90,12 +95,14 @@ impl TaskRegistry {
     }
 
     /// Get tasks that have package scripts
-    #[must_use] pub fn get_package_script_tasks(&self) -> Vec<&TaskDefinition> {
+    #[must_use]
+    pub fn get_package_script_tasks(&self) -> Vec<&TaskDefinition> {
         self.tasks.values().filter(|task| !task.package_scripts.is_empty()).collect()
     }
 
     /// Get tasks that match a pattern
-    #[must_use] pub fn find_tasks_by_pattern(&self, pattern: &str) -> Vec<&TaskDefinition> {
+    #[must_use]
+    pub fn find_tasks_by_pattern(&self, pattern: &str) -> Vec<&TaskDefinition> {
         self.tasks
             .values()
             .filter(|task| task.name.contains(pattern) || task.description.contains(pattern))
@@ -103,7 +110,8 @@ impl TaskRegistry {
     }
 
     /// Get tasks that depend on a specific task
-    #[must_use] pub fn get_dependent_tasks(&self, task_name: &str) -> Vec<&TaskDefinition> {
+    #[must_use]
+    pub fn get_dependent_tasks(&self, task_name: &str) -> Vec<&TaskDefinition> {
         self.tasks
             .values()
             .filter(|task| task.dependencies.contains(&task_name.to_string()))
@@ -111,7 +119,8 @@ impl TaskRegistry {
     }
 
     /// Get tasks for a specific package
-    #[must_use] pub fn get_package_tasks(&self, package_name: &str) -> Vec<&TaskDefinition> {
+    #[must_use]
+    pub fn get_package_tasks(&self, package_name: &str) -> Vec<&TaskDefinition> {
         self.tasks
             .values()
             .filter(|task| match &task.scope {
@@ -172,17 +181,20 @@ impl TaskRegistry {
     }
 
     /// Get task count
-    #[must_use] pub fn count(&self) -> usize {
+    #[must_use]
+    pub fn count(&self) -> usize {
         self.tasks.len()
     }
 
     /// Check if registry is empty
-    #[must_use] pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
         self.tasks.is_empty()
     }
 
     /// Get task names
-    #[must_use] pub fn task_names(&self) -> Vec<String> {
+    #[must_use]
+    pub fn task_names(&self) -> Vec<String> {
         self.tasks.keys().cloned().collect()
     }
 
@@ -195,7 +207,8 @@ impl TaskRegistry {
     }
 
     /// Get tasks with circular dependencies
-    #[must_use] pub fn find_circular_dependencies(&self) -> Vec<Vec<String>> {
+    #[must_use]
+    pub fn find_circular_dependencies(&self) -> Vec<Vec<String>> {
         let mut cycles = Vec::new();
         let mut visited = std::collections::HashSet::new();
         let mut rec_stack = std::collections::HashSet::new();

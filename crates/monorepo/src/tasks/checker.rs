@@ -18,6 +18,8 @@ use crate::analysis::ChangeAnalysis;
 use crate::config::Environment;
 use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
+use glob::Pattern;
+use regex::Regex;
 use std::collections::HashSet;
 use std::sync::Arc;
 use VersionChangeThreshold::{Any, Major, MinorOrMajor, PatchOrHigher};
@@ -202,7 +204,6 @@ impl ConditionChecker {
             FilePatternType::Prefix => file.starts_with(&pattern.pattern),
             FilePatternType::Suffix => file.ends_with(&pattern.pattern),
             FilePatternType::Glob => {
-                // Simple glob matching (could be enhanced with proper glob library)
                 self.matches_glob_pattern(file, &pattern.pattern).unwrap_or(false)
             }
             FilePatternType::Regex => {
@@ -237,8 +238,6 @@ impl ConditionChecker {
     /// Returns an error if the pattern is invalid
     #[allow(clippy::unused_self)]
     pub fn matches_glob_pattern(&self, text: &str, pattern: &str) -> Result<bool> {
-        use glob::Pattern;
-
         // Create and compile the glob pattern
         let glob_pattern = Pattern::new(pattern)
             .map_err(|e| Error::task(format!("Invalid glob pattern '{pattern}': {e}")))?;
@@ -480,8 +479,6 @@ impl ConditionChecker {
         &self,
         context: &ExecutionContext,
     ) -> Result<Vec<String>> {
-        use std::collections::HashSet;
-
         let mut packages_with_dep_changes = Vec::new();
 
         // Get packages from the project
@@ -878,8 +875,6 @@ impl ConditionChecker {
     /// ```
     #[allow(clippy::unused_self)]
     fn matches_regex_pattern(&self, text: &str, pattern: &str) -> Result<bool> {
-        use regex::Regex;
-
         match Regex::new(pattern) {
             Ok(regex) => Ok(regex.is_match(text)),
             Err(e) => {

@@ -202,12 +202,14 @@ impl TaskManager {
     }
 
     /// Get all registered tasks
-    #[must_use] pub fn list_tasks(&self) -> Vec<&TaskDefinition> {
+    #[must_use]
+    pub fn list_tasks(&self) -> Vec<&TaskDefinition> {
         self.registry.list_tasks()
     }
 
     /// Get task by name
-    #[must_use] pub fn get_task(&self, name: &str) -> Option<&TaskDefinition> {
+    #[must_use]
+    pub fn get_task(&self, name: &str) -> Option<&TaskDefinition> {
         self.registry.get_task(name)
     }
 

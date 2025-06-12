@@ -252,7 +252,6 @@ impl ReleaseWorkflow {
     }
 
     /// Detects changes since the last release
-    // TODO: unused async for function with no await statements
     fn detect_changes_since_last_release(&self) -> Result<crate::ChangeAnalysis, Error> {
         // Get the last release tag
         let last_tag = self

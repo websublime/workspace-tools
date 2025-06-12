@@ -75,5 +75,3 @@ pub struct WorkflowProgress {
     /// Individual workflow steps
     pub steps: Vec<WorkflowStep>,
 }
-
-// Implementation moved to ../status_impl.rs for better separation of concerns

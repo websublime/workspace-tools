@@ -6,10 +6,10 @@
 use crate::changes::ChangeSignificance;
 use crate::config::VersionBumpType;
 use crate::core::{
-    MonorepoProject, VersioningResult, PackageVersionUpdate, PropagationResult, VersionConflict,
-    ConflictType, VersionImpactAnalysis, PackageImpactAnalysis, BreakingChangeAnalysis,
-    DependencyChainImpact, VersioningPlan, VersioningPlanStep, DefaultVersioningStrategy,
-    ConservativeVersioningStrategy, AggressiveVersioningStrategy,
+    AggressiveVersioningStrategy, BreakingChangeAnalysis, ConflictType,
+    ConservativeVersioningStrategy, DefaultVersioningStrategy, DependencyChainImpact,
+    MonorepoProject, PackageImpactAnalysis, PackageVersionUpdate, PropagationResult,
+    VersionConflict, VersionImpactAnalysis, VersioningPlan, VersioningPlanStep, VersioningResult,
 };
 use crate::error::Result;
 use std::collections::HashMap;
@@ -28,12 +28,14 @@ pub struct VersionManager {
 
 impl VersionManager {
     /// Create a new version manager with the default strategy
-    #[must_use] pub fn new(project: Arc<MonorepoProject>) -> Self {
+    #[must_use]
+    pub fn new(project: Arc<MonorepoProject>) -> Self {
         Self { project, strategy: Box::new(DefaultVersioningStrategy) }
     }
 
     /// Create a version manager with a custom strategy
-    #[must_use] pub fn with_strategy(
+    #[must_use]
+    pub fn with_strategy(
         project: Arc<MonorepoProject>,
         strategy: Box<dyn VersioningStrategy>,
     ) -> Self {
@@ -98,10 +100,7 @@ impl VersionManager {
     }
 
     /// Propagate version changes to dependent packages
-    pub fn propagate_version_changes(
-        &self,
-        updated_package: &str,
-    ) -> Result<PropagationResult> {
+    pub fn propagate_version_changes(&self, updated_package: &str) -> Result<PropagationResult> {
         let mut updates = Vec::new();
         let conflicts = Vec::new();
 
@@ -185,10 +184,7 @@ impl VersionManager {
     }
 
     /// Analyze impact for a single package
-    fn analyze_single_package_impact(
-        &self,
-        change: &PackageChange,
-    ) -> PackageImpactAnalysis {
+    fn analyze_single_package_impact(&self, change: &PackageChange) -> PackageImpactAnalysis {
         let package_name = &change.package_name;
         let dependents = self.project.get_dependents(package_name);
 
@@ -266,10 +262,7 @@ impl VersionManager {
     }
 
     /// Analyze dependency chain impact
-    fn analyze_dependency_chain_impact(
-        &self,
-        package_name: &str,
-    ) -> DependencyChainImpact {
+    fn analyze_dependency_chain_impact(&self, package_name: &str) -> DependencyChainImpact {
         let mut chain = Vec::new();
         let mut visited = std::collections::HashSet::new();
 
@@ -457,8 +450,8 @@ impl VersionManager {
 
         for step in &plan.steps {
             // Execute the version bump
-            let result = self
-                .bump_package_version(&step.package_name, step.planned_version_bump, None)?;
+            let result =
+                self.bump_package_version(&step.package_name, step.planned_version_bump, None)?;
 
             // Collect results
             primary_updates.extend(result.primary_updates);
