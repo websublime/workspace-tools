@@ -35,8 +35,8 @@ pub struct MonorepoProject {
     /// All packages in the monorepo with enhanced information
     pub(crate) packages: Vec<super::MonorepoPackageInfo>,
 
-    /// Dependency graph of all packages
-    pub(crate) dependency_graph: Option<DependencyGraph<'static, Package>>,
+    /// Dependency graph of all packages (built on-demand)
+    pub(crate) dependency_graph: Option<()>, // TODO: Store graph metadata instead of the graph itself
 
     /// Current configuration
     pub(crate) config: MonorepoConfig,
