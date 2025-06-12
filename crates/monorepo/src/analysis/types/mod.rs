@@ -5,9 +5,9 @@
 //!
 //! The module is organized as follows:
 //! - `core`: Core analysis result types
-//! - `package_manager`: Package manager analysis types
+//! - `package`: Package manager analysis types (submodule structure)
 //! - `packages`: Package classification and information types
-//! - `dependency_graph`: Dependency graph analysis types
+//! - `dependency`: Dependency graph analysis types (submodule structure)
 //! - `registries`: Registry analysis types
 //! - `workspace`: Workspace configuration analysis types
 //! - `upgrades`: Package upgrade analysis types
@@ -15,9 +15,9 @@
 
 mod analyzer;
 mod core;
-mod package_manager;
+pub mod package;
 mod packages;
-mod dependency_graph;
+pub mod dependency;
 mod registries;
 mod workspace;
 mod upgrades;
@@ -30,13 +30,13 @@ pub use analyzer::MonorepoAnalyzer;
 pub use core::MonorepoAnalysisResult;
 
 // Package manager types
-pub use package_manager::PackageManagerAnalysis;
+pub use package::PackageManagerAnalysis;
 
 // Package types
 pub use packages::{PackageClassificationResult, PackageInformation};
 
 // Dependency graph types
-pub use dependency_graph::DependencyGraphAnalysis;
+pub use dependency::DependencyGraphAnalysis;
 
 // Registry types
 pub use registries::{RegistryAnalysisResult, RegistryInfo};

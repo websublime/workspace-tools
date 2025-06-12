@@ -7,8 +7,8 @@
 //! - `changeset`: Changeset-related types and status definitions
 //! - `package`: Package information and version status types
 //! - `versioning`: Version management types and result structures
-//! - `impact_analysis`: Version impact analysis types
-//! - `versioning_plan`: Versioning plan and step types
+//! - `impact`: Version impact analysis types (submodule structure)
+//! - `versioning`: Versioning plan and step types (submodule structure)
 //! - `strategies`: Versioning strategy implementations
 //! - `project`: Monorepo project implementation struct
 //! - `version_manager`: Version manager implementation struct
@@ -16,9 +16,9 @@
 
 mod changeset;
 mod package;
-mod versioning;
-mod impact_analysis;
-mod versioning_plan;
+mod versioning_old;
+pub mod impact;
+pub mod versioning;
 mod strategies;
 
 // Implementation structs (moved from main modules)
@@ -35,19 +35,18 @@ pub use changeset::{Changeset, ChangesetStatus};
 pub use package::{MonorepoPackageInfo, VersionStatus};
 
 // Versioning types
-pub use versioning::{
+pub use versioning_old::{
     VersioningResult, PackageVersionUpdate, PropagationResult, 
     VersionConflict, ConflictType
 };
 
 // Impact analysis types
-pub use impact_analysis::{
-    VersionImpactAnalysis, PackageImpactAnalysis, 
-    BreakingChangeAnalysis, DependencyChainImpact
+pub use impact::{
+    VersionImpactAnalysis, PackageImpactAnalysis, BreakingChangeAnalysis, DependencyChainImpact
 };
 
 // Versioning plan types
-pub use versioning_plan::{VersioningPlan, VersioningPlanStep};
+pub use versioning::{VersioningPlan, VersioningPlanStep};
 
 // Strategy types
 pub use strategies::{

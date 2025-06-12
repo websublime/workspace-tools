@@ -10,9 +10,9 @@ pub struct VersioningPlan {
     /// Estimated execution duration
     pub estimated_duration: std::time::Duration,
     /// Potential conflicts
-    pub conflicts: Vec<super::VersionConflict>,
+    pub conflicts: Vec<crate::core::VersionConflict>,
     /// Impact analysis
-    pub impact_analysis: super::VersionImpactAnalysis,
+    pub impact_analysis: crate::core::VersionImpactAnalysis,
 }
 
 /// A single step in a versioning plan
