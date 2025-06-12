@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use sublime_package_tools::{Version, DependencyRegistry};
 // Import the diff_analyzer types for consistency
-use crate::analysis::{ChangeAnalysis, DiffPackageChange as PackageChange};
+use crate::analysis::{ChangeAnalysis, PackageChange};
 
 /// Manager for package versioning with dependency propagation
 pub struct VersionManager {

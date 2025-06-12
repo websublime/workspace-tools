@@ -12,11 +12,4 @@ mod engine;
 mod tests;
 
 // Re-export the main types for convenience
-pub use detector::ChangeDetector;
-pub use types::{
-    PackageChange, PackageChangeType, ChangeSignificance, VersionBumpType,
-    ChangeDetectionRules, ChangeTypeRule, SignificanceRule, VersionBumpRule,
-    FilePattern, PatternType, RuleConditions, FileSizeCondition,
-    ProjectRuleOverrides, SignificanceThresholds,
-};
-pub use engine::ChangeDetectionEngine;
+pub use types::*;

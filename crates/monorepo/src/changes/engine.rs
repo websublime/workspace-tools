@@ -2,34 +2,15 @@
 
 use super::types::{
     ChangeDetectionRules, ChangeTypeRule, FilePattern, PatternType, RuleConditions,
-    SignificanceRule,
+    SignificanceRule, ChangeDetectionEngine,
 };
+use super::types::engine::CompiledPattern;
 use crate::core::MonorepoPackageInfo;
 use glob::Pattern;
 use log::warn;
 use regex::Regex;
 use std::collections::HashMap;
 use sublime_git_tools::GitChangedFile;
-
-/// Result type for compiled patterns
-enum CompiledPattern<T> {
-    /// Successfully compiled pattern
-    Valid(T),
-    /// Failed to compile, stores the error message
-    Invalid(()),
-}
-
-/// Configurable change detection engine
-pub struct ChangeDetectionEngine {
-    /// Rules configuration
-    rules: ChangeDetectionRules,
-
-    /// Compiled regex patterns cache
-    regex_cache: HashMap<String, CompiledPattern<Regex>>,
-
-    /// Compiled glob patterns cache
-    glob_cache: HashMap<String, CompiledPattern<Pattern>>,
-}
 
 impl ChangeDetectionEngine {
     /// Create a new engine with default rules

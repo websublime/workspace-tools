@@ -2,7 +2,7 @@
 
 // Core change detection types
 pub mod core;
-pub use core::{PackageChangeType, ChangeSignificance, VersionBumpType, PackageChange};
+pub use core::{PackageChangeType, ChangeSignificance, VersionBumpType};
 
 // Rule definitions
 pub mod rules;
@@ -15,3 +15,10 @@ pub use patterns::{FilePattern, PatternType, RuleConditions, FileSizeCondition};
 // Project overrides and thresholds
 pub mod overrides;
 pub use overrides::{ProjectRuleOverrides, SignificanceThresholds};
+
+// Implementation structs (moved from main modules)
+pub mod detector;
+pub use detector::{ChangeDetector, PackageChange};
+
+pub mod engine;
+pub use engine::ChangeDetectionEngine;

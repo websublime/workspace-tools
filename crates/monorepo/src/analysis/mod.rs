@@ -12,14 +12,3 @@ mod diff;
 mod tests;
 
 pub use types::*;
-pub use analyzer::MonorepoAnalyzer;
-pub use diff::{
-    DiffAnalyzer,
-    BranchComparisonResult,
-    ChangeAnalysis,
-    AffectedPackagesAnalysis,
-    ChangeSignificanceResult,
-    ChangeAnalyzer,
-    ChangeAnalysisResult,
-    PackageChange as DiffPackageChange,
-};

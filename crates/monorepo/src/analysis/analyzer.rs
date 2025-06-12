@@ -4,7 +4,7 @@ use crate::analysis::{
     DependencyGraphAnalysis, PackageClassificationResult, PackageInformation,
     PackageManagerAnalysis, PatternStatistics, RegistryAnalysisResult, RegistryInfo,
     UpgradeAnalysisResult, WorkspaceConfigAnalysis, WorkspacePatternAnalysis,
-    diff::{ChangeAnalysis, BranchComparisonResult, DiffAnalyzer},
+    ChangeAnalysis, BranchComparisonResult, DiffAnalyzer, MonorepoAnalyzer,
 };
 use crate::config::PackageManagerType;
 use crate::core::MonorepoProject;
@@ -18,11 +18,6 @@ use sublime_package_tools::Upgrader;
 use sublime_standard_tools::monorepo::{MonorepoDetector, PackageManagerKind};
 use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
 
-/// Analyzer for comprehensive monorepo analysis
-pub struct MonorepoAnalyzer {
-    /// Reference to the monorepo project
-    project: Arc<MonorepoProject>,
-}
 
 impl MonorepoAnalyzer {
     /// Create a new analyzer for a monorepo project

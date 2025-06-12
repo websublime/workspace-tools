@@ -14,6 +14,7 @@ use crate::error::Error;
 use crate::tasks::TaskManager;
 use crate::{AffectedPackageInfo, ChangeAnalysisResult, ImpactLevel, PackageChange};
 use std::collections::HashMap;
+use sublime_git_tools::GitChangedFile;
 
 /// Simple facts about package changes - no decisions, just data
 #[derive(Debug, Clone)]
@@ -222,7 +223,7 @@ impl DevelopmentWorkflow {
 
         // For now, use empty package changes since we have a type mismatch
         // TODO: Properly convert between the two PackageChange types in a future phase
-        let package_changes: Vec<crate::analysis::DiffPackageChange> = Vec::new();
+        let package_changes: Vec<crate::analysis::PackageChange> = Vec::new();
 
         // Create a complete ChangeAnalysis from the comparison
         let analysis = ChangeAnalysis {
@@ -340,7 +341,9 @@ impl DevelopmentWorkflow {
         for package_change in package_changes {
             let impact_level = self.determine_impact_level(package_change);
 
-            let changed_files: Vec<String> = package_change.changed_files.clone();
+            let changed_files: Vec<String> = package_change.changed_files.iter()
+                .map(|f| f.path.clone())
+                .collect();
 
             // For now, simulate dependents (would normally query dependency graph)
             let dependents = Vec::new();
@@ -359,9 +362,8 @@ impl DevelopmentWorkflow {
     /// Determines the impact level based on facts - simple file count heuristic
     #[allow(clippy::unused_self)]
     pub fn determine_impact_level(&self, package_change: &crate::PackageChange) -> ImpactLevel {
-        // Use facts from metadata - just file count since we don't have line info
-        let total_files: usize =
-            package_change.metadata.get("total_files").and_then(|s| s.parse().ok()).unwrap_or(0);
+        // Use actual changed files count
+        let total_files = package_change.changed_files.len();
 
         // Simple heuristic based on number of files changed
         match total_files {
@@ -404,10 +406,13 @@ impl DevelopmentWorkflow {
     /// Generates reason for version recommendation based on facts
     #[allow(clippy::unused_self)]
     fn generate_recommendation_reason(&self, package_change: &crate::PackageChange) -> String {
-        let total_files = package_change.metadata.get("total_files").map_or("0", String::as_str);
+        let total_files = package_change.changed_files.len();
 
-        let example_files =
-            package_change.metadata.get("example_files").map_or("No files", String::as_str);
+        let example_files = if !package_change.changed_files.is_empty() {
+            package_change.changed_files[0].path.clone()
+        } else {
+            "No files".to_string()
+        };
 
         format!("Changes detected: {total_files} files modified. Examples: {example_files}")
     }
@@ -458,20 +463,22 @@ impl DevelopmentWorkflow {
             let facts = self.create_change_facts(&files);
 
             // Store facts in metadata - no decisions made about significance or type
-            let mut metadata = HashMap::new();
-            metadata.insert("total_files".to_string(), facts.total_files.to_string());
-
-            // Store the first few changed files as examples
-            let example_files =
-                facts.files_changed.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
-            metadata.insert("example_files".to_string(), example_files);
+            // Convert string file paths to GitChangedFile format
+            let changed_files = facts.files_changed.iter()
+                .map(|file_path| GitChangedFile {
+                    path: file_path.clone(),
+                    status: sublime_git_tools::GitFileStatus::Modified,
+                    staged: false,
+                    workdir: true,
+                })
+                .collect();
 
             package_changes.push(PackageChange {
                 package_name,
-                changed_files: facts.files_changed,
+                changed_files,
                 change_type: crate::PackageChangeType::SourceCode, // Always the same - no decisions
                 significance: crate::ChangeSignificance::Low,      // Always the same - no decisions
-                metadata,
+                suggested_version_bump: crate::config::VersionBumpType::Patch,
             });
         }
 

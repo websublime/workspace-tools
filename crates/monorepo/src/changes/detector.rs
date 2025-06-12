@@ -3,17 +3,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 use sublime_git_tools::GitChangedFile;
-use super::engine::ChangeDetectionEngine;
-
-/// Analyzes changes in the repository to determine affected packages
-pub struct ChangeDetector {
-    /// Root path of the monorepo
-    #[allow(dead_code)]
-    root_path: std::path::PathBuf,
-    
-    /// Configurable detection engine
-    engine: ChangeDetectionEngine,
-}
+use super::types::{ChangeDetector, ChangeDetectionEngine, PackageChange};
 
 impl ChangeDetector {
     /// Create a new change detector with default rules
@@ -126,25 +116,6 @@ impl ChangeDetector {
             }
         }
     }
-}
-
-/// Represents a change to a package
-#[derive(Debug, Clone)]
-pub struct PackageChange {
-    /// Name of the affected package
-    pub package_name: String,
-
-    /// Files changed in this package
-    pub changed_files: Vec<GitChangedFile>,
-
-    /// Type of changes
-    pub change_type: PackageChangeType,
-
-    /// Significance of the changes
-    pub significance: ChangeSignificance,
-
-    /// Suggested version bump
-    pub suggested_version_bump: VersionBumpType,
 }
 
 // Re-export types from types module for convenience
