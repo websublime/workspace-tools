@@ -4,6 +4,10 @@
 pub mod core;
 pub use core::{MonorepoConfig, Environment};
 
+// Implementation structs (moved from main modules)
+pub mod manager;
+pub use manager::{ConfigManager, PatternMatcher};
+
 // Versioning configuration types
 pub mod versioning;
 pub use versioning::{VersioningConfig, VersionBumpType};

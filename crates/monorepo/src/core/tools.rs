@@ -2,18 +2,13 @@
 
 use crate::analysis::{DiffAnalyzer, MonorepoAnalyzer};
 use crate::core::{MonorepoProject, VersionManager, VersioningPlan, VersioningStrategy};
+use crate::core::types::MonorepoTools;
 use crate::error::{Error, Result};
 use crate::hooks::HookManager;
 use crate::tasks::TaskManager;
 use crate::workflows::{DevelopmentResult, DevelopmentWorkflow};
 use crate::{ChangeAnalysisWorkflowResult, VersioningWorkflowResult};
 use std::sync::Arc;
-
-/// The main orchestrator for monorepo tools functionality
-pub struct MonorepoTools {
-    project: Arc<MonorepoProject>,
-    analyzer: MonorepoAnalyzer,
-}
 
 impl MonorepoTools {
     /// Initialize `MonorepoTools` by detecting and opening a monorepo at the given path

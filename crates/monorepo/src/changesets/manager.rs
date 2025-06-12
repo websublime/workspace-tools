@@ -10,10 +10,10 @@ use chrono::Utc;
 use sublime_standard_tools::filesystem::FileSystem;
 use uuid::Uuid;
 
-use super::storage::ChangesetStorage;
 use super::types::{
     Changeset, ChangesetApplication, ChangesetFilter, ChangesetSpec, ChangesetStatus,
     DeploymentResult, EnvironmentDeploymentResult, ValidationResult,
+    ChangesetManager, ChangesetStorage,
 };
 use crate::config::types::Environment;
 use crate::core::MonorepoProject;
@@ -21,34 +21,6 @@ use crate::error::Error;
 use crate::tasks::TaskManager;
 use crate::VersionBumpType;
 
-/// Manager for changeset operations
-///
-/// The `ChangesetManager` provides the main interface for working with changesets.
-/// It handles creation, validation, storage, and deployment of changesets across
-/// different environments during the development workflow.
-///
-/// # Examples
-///
-/// ```rust
-/// use std::sync::Arc;
-/// use sublime_monorepo_tools::{ChangesetManager, MonorepoProject};
-///
-/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let project = Arc::new(MonorepoProject::new("/path/to/monorepo")?);
-/// let manager = ChangesetManager::new(project).await?;
-/// # Ok(())
-/// # }
-/// ```
-pub struct ChangesetManager {
-    /// Reference to the monorepo project
-    project: Arc<MonorepoProject>,
-
-    /// Storage for changeset persistence
-    storage: ChangesetStorage,
-
-    /// Task manager for executing deployment tasks
-    task_manager: TaskManager,
-}
 
 impl ChangesetManager {
     /// Creates a new changeset manager

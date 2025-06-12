@@ -8,17 +8,11 @@
 #![allow(clippy::unused_self)]
 
 use super::{HookCondition, HookExecutionContext, HookValidationResult, ValidationCheck};
+use super::types::{HookValidator, ChangesetValidationResult};
 use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
 use crate::{Changeset, Environment};
 use std::sync::Arc;
-
-/// Validator for hook conditions and requirements
-pub struct HookValidator {
-    /// Reference to the monorepo project
-    #[allow(dead_code)] // Will be used when full integration is implemented
-    project: Arc<MonorepoProject>,
-}
 
 impl HookValidator {
     /// Create a new hook validator
@@ -375,55 +369,3 @@ impl HookValidator {
     }
 }
 
-/// Result of changeset validation
-#[derive(Debug, Clone)]
-pub struct ChangesetValidationResult {
-    /// Whether a changeset exists for the changes
-    pub changeset_exists: bool,
-
-    /// The changeset if found
-    pub changeset: Option<Changeset>,
-
-    /// Detailed validation information
-    pub validation_details: HookValidationResult,
-}
-
-impl ChangesetValidationResult {
-    /// Create a new changeset validation result
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            changeset_exists: false,
-            changeset: None,
-            validation_details: HookValidationResult::new(),
-        }
-    }
-
-    /// Set changeset exists status
-    #[must_use]
-    pub fn with_changeset_exists(mut self, exists: bool) -> Self {
-        self.changeset_exists = exists;
-        self
-    }
-
-    /// Set the changeset
-    #[must_use]
-    pub fn with_changeset(mut self, changeset: Changeset) -> Self {
-        self.changeset = Some(changeset);
-        self.changeset_exists = true;
-        self
-    }
-
-    /// Set validation details
-    #[must_use]
-    pub fn with_validation_details(mut self, details: HookValidationResult) -> Self {
-        self.validation_details = details;
-        self
-    }
-}
-
-impl Default for ChangesetValidationResult {
-    fn default() -> Self {
-        Self::new()
-    }
-}

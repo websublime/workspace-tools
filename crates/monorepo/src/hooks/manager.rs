@@ -10,6 +10,7 @@ use super::{
     HookExecutionResult, HookInstaller, HookScript, HookType, HookValidationResult, HookValidator,
     PreCommitResult, PrePushResult, ValidationCheck,
 };
+use super::types::HookManager;
 use crate::changesets::ChangesetManager;
 use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
@@ -19,25 +20,6 @@ use crate::Changeset;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Arc;
-
-/// Central manager for Git hook installation, execution, and validation
-pub struct HookManager {
-    /// Reference to the monorepo project
-    #[allow(dead_code)] // Will be used when full integration is implemented
-    project: Arc<MonorepoProject>,
-
-    /// Hook installer for setting up Git hooks
-    installer: HookInstaller,
-
-    /// Hook validator for checking conditions and requirements
-    validator: HookValidator,
-
-    /// Registry of custom hook definitions
-    custom_hooks: HashMap<HookType, HookDefinition>,
-
-    /// Whether hooks are currently enabled
-    enabled: bool,
-}
 
 impl HookManager {
     /// Create a new hook manager

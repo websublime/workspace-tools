@@ -101,4 +101,3 @@ mod tests;
 
 // Re-export main types
 pub use types::*;
-pub use manager::ChangesetManager;

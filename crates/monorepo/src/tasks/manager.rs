@@ -7,31 +7,14 @@
 #![allow(clippy::unused_async)]
 
 use super::{
-    ConditionChecker, TaskDefinition, TaskExecutionResult, TaskExecutor, TaskRegistry, TaskScope,
+    types::{ConditionChecker, ExecutionContext, TaskExecutor, TaskManager, TaskRegistry},
+    TaskDefinition, TaskExecutionResult, TaskScope,
 };
 use crate::analysis::ChangeAnalysis;
 use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-
-/// Central manager for task execution and coordination
-pub struct TaskManager {
-    /// Reference to the monorepo project
-    project: Arc<MonorepoProject>,
-
-    /// Task registry for storing and managing task definitions
-    registry: TaskRegistry,
-
-    /// Task executor for running tasks
-    executor: TaskExecutor,
-
-    /// Condition checker for evaluating task conditions
-    condition_checker: ConditionChecker,
-
-    /// Current execution context
-    execution_context: ExecutionContext,
-}
 
 impl TaskManager {
     /// Create a new task manager
@@ -307,52 +290,6 @@ impl TaskManager {
     }
 }
 
-/// Execution context for tasks
-#[derive(Debug, Clone, Default)]
-pub struct ExecutionContext {
-    /// Packages that are affected by changes
-    pub affected_packages: Vec<String>,
-
-    /// Files that have changed
-    pub changed_files: Vec<sublime_git_tools::GitChangedFile>,
-
-    /// Current branch
-    pub current_branch: Option<String>,
-
-    /// Environment variables
-    pub environment: HashMap<String, String>,
-
-    /// Working directory
-    pub working_directory: Option<std::path::PathBuf>,
-
-    /// Additional metadata
-    pub metadata: HashMap<String, serde_json::Value>,
-}
-
-impl ExecutionContext {
-    /// Create new execution context
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Set affected packages
-    pub fn with_affected_packages(mut self, packages: Vec<String>) -> Self {
-        self.affected_packages = packages;
-        self
-    }
-
-    /// Set changed files
-    pub fn with_changed_files(mut self, files: Vec<sublime_git_tools::GitChangedFile>) -> Self {
-        self.changed_files = files;
-        self
-    }
-
-    /// Set current branch
-    pub fn with_branch(mut self, branch: impl Into<String>) -> Self {
-        self.current_branch = Some(branch.into());
-        self
-    }
-}
 
 impl TaskExecutionResult {
     /// Create result with skipped status

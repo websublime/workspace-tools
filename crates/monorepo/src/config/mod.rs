@@ -12,4 +12,3 @@ mod tests;
 
 // Re-export all types from the types module
 pub use types::*;
-pub use manager::ConfigManager;

@@ -7,8 +7,7 @@
 #![allow(clippy::unused_async)]
 
 use super::{
-    manager::ExecutionContext,
-    types::{TaskCommand, TaskCommandCore},
+    types::{ExecutionContext, TaskCommand, TaskCommandCore, TaskExecutor},
     PackageScript, TaskDefinition, TaskError, TaskErrorCode, TaskExecutionLog, TaskExecutionResult,
     TaskOutput, TaskScope,
 };
@@ -20,12 +19,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::SystemTime;
 use sublime_standard_tools::command::{Command, DefaultCommandExecutor, Executor};
-
-/// Executor for running tasks with various scopes and configurations
-pub struct TaskExecutor {
-    /// Reference to the monorepo project
-    project: Arc<MonorepoProject>,
-}
 
 impl TaskExecutor {
     /// Create a new task executor

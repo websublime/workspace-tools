@@ -7,6 +7,11 @@ mod definitions;
 mod results;
 mod context;
 
+// Implementation structs (moved from main modules)
+mod installer;
+mod manager;
+mod validator;
+
 pub use definitions::{
     HookType, HookDefinition, HookScript, HookCondition, DependencyType,
 };
@@ -19,3 +24,7 @@ pub use results::{
 pub use context::{
     HookExecutionContext, GitOperationType, RemoteInfo, CommitInfo,
 };
+
+pub use installer::HookInstaller;
+pub use manager::HookManager;
+pub use validator::{HookValidator, ChangesetValidationResult};

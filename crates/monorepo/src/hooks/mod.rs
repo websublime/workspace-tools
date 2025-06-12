@@ -34,8 +34,6 @@ pub use types::{
     HookExecutionResult, PreCommitResult, PrePushResult, PostCommitResult,
     HookStatus, HookError, HookErrorCode, HookValidationResult, ValidationCheck,
     GitOperationType, RemoteInfo, CommitInfo,
+    // Implementation structs
+    HookManager, HookInstaller, HookValidator, ChangesetValidationResult,
 };
-
-pub use manager::HookManager;
-pub use installer::HookInstaller;
-pub use validator::HookValidator;

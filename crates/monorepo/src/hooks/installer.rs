@@ -4,24 +4,12 @@
 //! of Git hooks in the repository, leveraging `FileSystemManager` for file operations.
 
 use super::{HookDefinition, HookType};
+use super::types::HookInstaller;
 use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-
-/// Installer for Git hooks that manages hook files and permissions
-pub struct HookInstaller {
-    /// Reference to the monorepo project
-    #[allow(dead_code)] // Will be used when full integration is implemented
-    project: Arc<MonorepoProject>,
-
-    /// Path to the Git hooks directory
-    hooks_dir: PathBuf,
-
-    /// Template for the hook script wrapper
-    hook_template: String,
-}
 
 impl HookInstaller {
     /// Create a new hook installer

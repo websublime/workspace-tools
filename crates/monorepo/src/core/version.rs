@@ -10,6 +10,7 @@ use crate::core::{
     ConservativeVersioningStrategy, DefaultVersioningStrategy, DependencyChainImpact,
     MonorepoProject, PackageImpactAnalysis, PackageVersionUpdate, PropagationResult,
     VersionConflict, VersionImpactAnalysis, VersioningPlan, VersioningPlanStep, VersioningResult,
+    VersionManager, VersioningStrategy,
 };
 use crate::error::Result;
 use std::collections::HashMap;
@@ -17,14 +18,6 @@ use std::sync::Arc;
 use sublime_package_tools::{Version, DependencyRegistry};
 // Import the diff_analyzer types for consistency
 use crate::analysis::{ChangeAnalysis, PackageChange};
-
-/// Manager for package versioning with dependency propagation
-pub struct VersionManager {
-    /// Reference to the monorepo project
-    project: Arc<MonorepoProject>,
-    /// Versioning strategy to use
-    strategy: Box<dyn VersioningStrategy>,
-}
 
 impl VersionManager {
     /// Create a new version manager with the default strategy
@@ -485,77 +478,4 @@ impl VersionManager {
     }
 }
 
-/// Strategy for determining version bumps and propagation
-pub trait VersioningStrategy: Send + Sync {
-    /// Determine the bump type for a package based on changes
-    fn determine_bump_type(&self, changes: &PackageChange) -> VersionBumpType;
 
-    /// Determine if a change should propagate to dependents
-    fn should_propagate(&self, bump_type: VersionBumpType) -> bool;
-
-    /// Determine bump type for a dependent package
-    fn determine_bump_type_for_dependent(
-        &self,
-        _changed_package: &str,
-        _dependent_package: &str,
-    ) -> Option<VersionBumpType>;
-}
-
-impl VersioningStrategy for DefaultVersioningStrategy {
-    fn determine_bump_type(&self, changes: &PackageChange) -> VersionBumpType {
-        changes.suggested_version_bump
-    }
-
-    fn should_propagate(&self, bump_type: VersionBumpType) -> bool {
-        matches!(bump_type, VersionBumpType::Major | VersionBumpType::Minor)
-    }
-
-    fn determine_bump_type_for_dependent(
-        &self,
-        _changed_package: &str,
-        _dependent_package: &str,
-    ) -> Option<VersionBumpType> {
-        // Conservative strategy: only bump patch versions for dependents
-        Some(VersionBumpType::Patch)
-    }
-}
-
-impl VersioningStrategy for ConservativeVersioningStrategy {
-    fn determine_bump_type(&self, changes: &PackageChange) -> VersionBumpType {
-        match changes.significance {
-            ChangeSignificance::High => VersionBumpType::Major,
-            ChangeSignificance::Medium => VersionBumpType::Minor,
-            ChangeSignificance::Low => VersionBumpType::Patch,
-        }
-    }
-
-    fn should_propagate(&self, bump_type: VersionBumpType) -> bool {
-        matches!(bump_type, VersionBumpType::Major)
-    }
-
-    fn determine_bump_type_for_dependent(
-        &self,
-        _changed_package: &str,
-        _dependent_package: &str,
-    ) -> Option<VersionBumpType> {
-        None // No automatic propagation
-    }
-}
-
-impl VersioningStrategy for AggressiveVersioningStrategy {
-    fn determine_bump_type(&self, changes: &PackageChange) -> VersionBumpType {
-        changes.suggested_version_bump
-    }
-
-    fn should_propagate(&self, _bump_type: VersionBumpType) -> bool {
-        true // Always propagate
-    }
-
-    fn determine_bump_type_for_dependent(
-        &self,
-        _changed_package: &str,
-        _dependent_package: &str,
-    ) -> Option<VersionBumpType> {
-        Some(VersionBumpType::Patch) // Always bump dependents
-    }
-}

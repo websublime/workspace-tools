@@ -9,9 +9,9 @@
 #![allow(clippy::unnecessary_wraps)] // Will be fixed when error handling is complete
 #![allow(dead_code)] // Will be fixed when all condition types are implemented
 
-use super::types::{DependencyFilter, VersionChangeThreshold};
+use super::types::{ConditionChecker, DependencyFilter, ExecutionContext, VersionChangeThreshold};
 use super::{
-    manager::ExecutionContext, BranchCondition, EnvironmentCondition, FilePattern, FilePatternType,
+    BranchCondition, EnvironmentCondition, FilePattern, FilePatternType,
     TaskCondition, TaskDefinition,
 };
 use crate::analysis::ChangeAnalysis;
@@ -23,12 +23,6 @@ use regex::Regex;
 use std::collections::HashSet;
 use std::sync::Arc;
 use VersionChangeThreshold::{Any, Major, MinorOrMajor, PatchOrHigher};
-
-/// Checker for evaluating task execution conditions
-pub struct ConditionChecker {
-    /// Reference to the monorepo project
-    project: Arc<MonorepoProject>,
-}
 
 impl ConditionChecker {
     /// Create a new condition checker

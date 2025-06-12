@@ -3,22 +3,9 @@
 //! The `TaskRegistry` provides storage, retrieval, and organization of task definitions,
 //! with support for filtering, searching, and validation.
 
-use super::{TaskDefinition, TaskScope};
+use super::{types::TaskRegistry, TaskDefinition, TaskScope};
 use crate::error::{Error, Result};
 use std::collections::HashMap;
-
-/// Registry for storing and managing task definitions
-#[derive(Debug, Clone)]
-pub struct TaskRegistry {
-    /// All registered tasks indexed by name
-    tasks: HashMap<String, TaskDefinition>,
-
-    /// Tasks organized by scope for quick filtering
-    scope_index: HashMap<TaskScope, Vec<String>>,
-
-    /// Tasks organized by priority
-    priority_index: HashMap<u32, Vec<String>>,
-}
 
 impl TaskRegistry {
     /// Create a new empty task registry

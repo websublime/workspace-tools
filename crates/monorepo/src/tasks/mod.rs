@@ -33,9 +33,6 @@ pub use types::{
     EnvironmentCondition, BranchCondition,
     TaskExecutionResult, TaskStatus, TaskOutput, TaskError,
     TaskErrorCode, TaskExecutionStats, TaskExecutionLog, TaskLogLevel,
+    // Implementation structs
+    TaskManager, TaskRegistry, TaskExecutor, ConditionChecker, ExecutionContext,
 };
-
-pub use manager::TaskManager;
-pub use registry::TaskRegistry;
-pub use executor::TaskExecutor;
-pub use checker::ConditionChecker;

@@ -1,6 +1,6 @@
 //! Core `MonorepoProject` implementation that integrates all base crates
 
-use super::types::MonorepoPackageInfo;
+use super::types::{MonorepoPackageInfo, MonorepoProject};
 use crate::config::{ConfigManager, MonorepoConfig};
 use crate::error::{Error, Result};
 use std::path::{Path, PathBuf};
@@ -11,42 +11,6 @@ use sublime_standard_tools::{
     filesystem::FileSystemManager,
     monorepo::{MonorepoDescriptor, PackageManager},
 };
-
-/// Main project structure that aggregates all monorepo information
-pub struct MonorepoProject {
-    /// Git repository
-    pub repository: Repo,
-
-    /// Monorepo descriptor from standard-tools
-    pub descriptor: MonorepoDescriptor,
-
-    /// Package manager information
-    pub package_manager: PackageManager,
-
-    /// Dependency registry for package management
-    pub dependency_registry: DependencyRegistry,
-
-    /// Registry manager for package lookups
-    pub registry_manager: RegistryManager,
-
-    /// Configuration manager
-    pub config_manager: ConfigManager,
-
-    /// File system manager
-    pub file_system: FileSystemManager,
-
-    /// All packages in the monorepo with enhanced information
-    pub packages: Vec<MonorepoPackageInfo>,
-
-    /// Dependency graph of all packages
-    pub dependency_graph: Option<DependencyGraph<'static, Package>>,
-
-    /// Current configuration
-    pub config: MonorepoConfig,
-
-    /// Root path of the monorepo
-    root_path: PathBuf,
-}
 
 impl MonorepoProject {
     /// Create a new `MonorepoProject` by discovering and analyzing a monorepo

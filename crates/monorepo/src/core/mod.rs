@@ -32,13 +32,12 @@ pub use types::{
     VersioningPlan,
     VersioningPlanStep,
     // Versioning strategy implementations
+    VersioningStrategy,
     DefaultVersioningStrategy,
     ConservativeVersioningStrategy,
     AggressiveVersioningStrategy,
-};
-pub use project::MonorepoProject;
-pub use version::{
+    // Core implementation types
+    MonorepoProject,
     VersionManager,
-    VersioningStrategy,
+    MonorepoTools,
 };
-pub use tools::MonorepoTools;

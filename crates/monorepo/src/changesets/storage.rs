@@ -10,36 +10,11 @@ use std::sync::Arc;
 use serde_json;
 use sublime_standard_tools::filesystem::FileSystem;
 
-use super::types::{Changeset, ChangesetFilter};
+use super::types::{Changeset, ChangesetFilter, ChangesetStorage};
 use crate::config::types::ChangesetsConfig;
 use crate::core::MonorepoProject;
 use crate::error::Error;
 
-/// Storage interface for changesets
-///
-/// Provides methods for persisting and retrieving changesets from the filesystem.
-/// Uses the `FileSystemManager` for all file operations to ensure consistency
-/// with the rest of the monorepo tooling.
-///
-/// # Examples
-///
-/// ```rust
-/// use std::sync::Arc;
-/// use std::path::Path;
-/// use sublime_monorepo_tools::{ChangesetStorage, Changeset};
-/// use sublime_standard_tools::FileSystemManager;
-///
-/// let fs_manager = Arc::new(FileSystemManager::new(Path::new("/project")));
-/// let config = ChangesetsConfig::default();
-/// let storage = ChangesetStorage::new(fs_manager, config);
-/// ```
-pub struct ChangesetStorage {
-    /// Reference to the monorepo project
-    project: Arc<MonorepoProject>,
-
-    /// Changeset configuration
-    config: ChangesetsConfig,
-}
 
 impl ChangesetStorage {
     /// Creates a new changeset storage instance

@@ -2,7 +2,7 @@
 
 use crate::config::{
     ChangelogConfig, ChangesetsConfig, HooksConfig, PackageManagerType, PluginsConfig, TasksConfig,
-    VersioningConfig, WorkspaceConfig, WorkspacePattern,
+    VersioningConfig, WorkspaceConfig, WorkspacePattern, ConfigManager, PatternMatcher,
 };
 use crate::error::{Error, Result};
 use crate::{Environment, MonorepoConfig};
@@ -10,21 +10,6 @@ use glob::Pattern;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
-
-/// Type alias for pattern matcher function
-type PatternMatcher = Box<dyn Fn(&str) -> bool + Send + Sync>;
-
-/// Configuration manager that handles loading, saving, and managing monorepo configurations
-pub struct ConfigManager {
-    /// The current configuration
-    config: Arc<RwLock<MonorepoConfig>>,
-
-    /// Path to the configuration file
-    config_path: Option<PathBuf>,
-
-    /// Whether to auto-save on changes
-    auto_save: bool,
-}
 
 impl ConfigManager {
     /// Create a new configuration manager with default config

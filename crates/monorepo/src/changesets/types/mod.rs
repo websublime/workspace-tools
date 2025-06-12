@@ -6,4 +6,10 @@
 
 pub mod core;
 
+// Implementation structs (moved from main modules)
+pub mod manager;
+pub mod storage;
+
 pub use core::*;
+pub use manager::ChangesetManager;
+pub use storage::ChangesetStorage;
