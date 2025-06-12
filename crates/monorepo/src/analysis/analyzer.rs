@@ -16,6 +16,7 @@ use std::process::Command;
 use std::sync::Arc;
 use sublime_package_tools::Upgrader;
 use sublime_standard_tools::monorepo::{MonorepoDetector, PackageManagerKind};
+use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
 
 /// Analyzer for comprehensive monorepo analysis
 pub struct MonorepoAnalyzer {
@@ -80,10 +81,11 @@ impl MonorepoAnalyzer {
         // Get package manager version by executing the appropriate command
         let version = self.detect_package_manager_version(kind);
 
-        // Get workspace configuration from package.json
+        // DRY: Use FileSystemManager instead of manual std::fs operations
+        let fs = FileSystemManager::new();
         let package_json_path = pm.root().join("package.json");
-        let workspaces_config = if package_json_path.exists() {
-            let content = std::fs::read_to_string(&package_json_path)?;
+        let workspaces_config = if fs.exists(&package_json_path) {
+            let content = fs.read_file_string(&package_json_path)?;
             let json: serde_json::Value = serde_json::from_str(&content)?;
             json.get("workspaces").cloned().unwrap_or(serde_json::Value::Null)
         } else {
@@ -96,12 +98,12 @@ impl MonorepoAnalyzer {
         match kind {
             sublime_standard_tools::monorepo::PackageManagerKind::Pnpm => {
                 let workspace_yaml = pm.root().join("pnpm-workspace.yaml");
-                if workspace_yaml.exists() {
+                if fs.exists(&workspace_yaml) {
                     config_files.push(workspace_yaml);
                 }
             }
             _ => {
-                if package_json_path.exists() {
+                if fs.exists(&package_json_path) {
                     config_files.push(package_json_path);
                 }
             }
@@ -335,9 +337,10 @@ impl MonorepoAnalyzer {
             // Find scopes associated with this registry
             let mut scopes = Vec::new();
 
-            // Check for common scoped packages patterns
+            // DRY: Use FileSystemManager for .npmrc file reading
+            let fs = FileSystemManager::new();
             if let Ok(npmrc_content) =
-                std::fs::read_to_string(self.project.root_path().join(".npmrc"))
+                fs.read_file_string(&self.project.root_path().join(".npmrc"))
             {
                 for line in npmrc_content.lines() {
                     if line.contains(url) && line.contains('@') {
@@ -391,8 +394,10 @@ impl MonorepoAnalyzer {
             dirs::home_dir().map(|h| h.join(".npmrc")).unwrap_or_default(),
         ];
 
+        // DRY: Use FileSystemManager for file operations
+        let fs = FileSystemManager::new();
         for npmrc_path in &npmrc_paths {
-            if let Ok(content) = std::fs::read_to_string(npmrc_path) {
+            if let Ok(content) = fs.read_file_string(npmrc_path) {
                 for line in content.lines() {
                     // Look for auth tokens or auth entries for this registry
                     if line.contains(registry_url)
@@ -585,14 +590,18 @@ impl MonorepoAnalyzer {
         let mut patterns = Vec::new();
         let mut has_nohoist = false;
         let mut nohoist_patterns = Vec::new();
+        
+        // DRY: Create FileSystemManager once for the entire function
+        let fs = FileSystemManager::new();
 
         // Extract workspace patterns from package manager configuration
         match self.project.package_manager.kind() {
             sublime_standard_tools::monorepo::PackageManagerKind::Npm
             | sublime_standard_tools::monorepo::PackageManagerKind::Yarn => {
-                // Read workspace patterns from package.json
+                // DRY: Use FileSystemManager for package.json reading
+                let fs = FileSystemManager::new();
                 let package_json_path = self.project.package_manager.root().join("package.json");
-                if let Ok(content) = std::fs::read_to_string(&package_json_path) {
+                if let Ok(content) = fs.read_file_string(&package_json_path) {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                         // Handle different workspace configurations
                         if let Some(workspaces) = json.get("workspaces") {
@@ -638,10 +647,10 @@ impl MonorepoAnalyzer {
                 }
             }
             sublime_standard_tools::monorepo::PackageManagerKind::Pnpm => {
-                // Read from pnpm-workspace.yaml
+                // DRY: Use FileSystemManager for pnpm-workspace.yaml reading
                 let workspace_yaml =
                     self.project.package_manager.root().join("pnpm-workspace.yaml");
-                if let Ok(content) = std::fs::read_to_string(&workspace_yaml) {
+                if let Ok(content) = fs.read_file_string(&workspace_yaml) {
                     if let Ok(config) = serde_yaml::from_str::<serde_yaml::Value>(&content) {
                         if let Some(packages) = config.get("packages").and_then(|p| p.as_sequence())
                         {
