@@ -9,6 +9,7 @@
 - [ ] In tasks module, checker.rs file on functions execute_custom_script and execute_custom_environment_checker evaluate if we can use command from standard crate, on functions has_dependency_changes_in_package and analyze_package_change_level evaluate if git can be used from git crate
 - [ ] In workflows module, integration.rs file on function validate_dependency_consistency needs a real implementation
 - [ ] In workflows module, progress.rs file on function add_substep needs a implementation for substeps tracking
+- [ ] We will need to implement logging in every module and crate. we are missing a lot of logs in the code, and we need to define a standard for logging.
 
 # Inconsistencias
 
