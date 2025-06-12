@@ -13,7 +13,7 @@ use crate::changesets::ChangesetManager;
 use crate::core::MonorepoProject;
 use crate::error::Error;
 use crate::tasks::TaskManager;
-use crate::ChangeAnalysis;
+use crate::analysis::ChangeAnalysis;
 
 /// Release workflow orchestrator
 ///
@@ -252,7 +252,7 @@ impl ReleaseWorkflow {
     }
 
     /// Detects changes since the last release
-    fn detect_changes_since_last_release(&self) -> Result<crate::ChangeAnalysis, Error> {
+    fn detect_changes_since_last_release(&self) -> Result<ChangeAnalysis, Error> {
         // Get the last release tag
         let last_tag = self
             .project
@@ -282,9 +282,9 @@ impl ReleaseWorkflow {
     /// Executes all release-related tasks
     async fn execute_release_tasks(
         &self,
-        changes: &crate::ChangeAnalysis,
+        changes: &ChangeAnalysis,
         _options: &ReleaseOptions,
-    ) -> Result<Vec<crate::TaskExecutionResult>, Error> {
+    ) -> Result<Vec<crate::tasks::TaskExecutionResult>, Error> {
         // Get affected packages
         let affected_packages: Vec<String> =
             changes.package_changes.iter().map(|pc| pc.package_name.clone()).collect();
@@ -426,7 +426,7 @@ impl ReleaseWorkflow {
     // TODO: implement when changelog manager is available (fase 5)
     #[allow(clippy::unnecessary_wraps)]
     #[allow(clippy::unused_self)]
-    fn generate_release_changelogs(&self, _changes: &crate::ChangeAnalysis) -> Result<(), Error> {
+    fn generate_release_changelogs(&self, _changes: &ChangeAnalysis) -> Result<(), Error> {
         // This would generate changelogs using the changelog manager
         // For now, simulate success
         Ok(())

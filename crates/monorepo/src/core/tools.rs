@@ -7,7 +7,7 @@ use crate::error::{Error, Result};
 use crate::hooks::HookManager;
 use crate::tasks::TaskManager;
 use crate::workflows::{DevelopmentResult, DevelopmentWorkflow};
-use crate::{ChangeAnalysisWorkflowResult, VersioningWorkflowResult};
+use crate::workflows::{ChangeAnalysisWorkflowResult, VersioningWorkflowResult};
 use std::sync::Arc;
 
 impl MonorepoTools {

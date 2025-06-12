@@ -70,46 +70,35 @@ pub mod hooks;
 pub mod tasks;
 pub mod workflows;
 
-// Re-exports - organized by module for clarity
+// Essential API surface - reduced from 100+ to ~20 core re-exports
+// Users can access other types through module paths if needed
 
-pub use crate::analysis::{
-    AffectedPackagesAnalysis, BranchComparisonResult, ChangeAnalysis, ChangeSignificanceResult,
-    DiffAnalyzer, MonorepoAnalysisResult, MonorepoAnalyzer,
-};
-pub use crate::changes::{
-    ChangeDetectionEngine, ChangeDetectionRules, ChangeDetector, ChangeSignificance,
-    ChangeTypeRule, FilePattern as ChangeFilePattern, PackageChange, PackageChangeType,
-    PatternType, SignificanceRule, VersionBumpRule,
-};
-pub use crate::changesets::{
-    Changeset, ChangesetApplication, ChangesetFilter, ChangesetManager, ChangesetSpec,
-    ChangesetStatus, DeploymentResult, EnvironmentDeploymentResult, ValidationResult,
-};
-pub use crate::config::{ConfigManager, Environment, MonorepoConfig, VersionBumpType};
-pub use crate::core::{
-    AggressiveVersioningStrategy, ConservativeVersioningStrategy, DefaultVersioningStrategy,
-    MonorepoPackageInfo, MonorepoProject, MonorepoTools, PackageVersionUpdate, VersionImpactAnalysis,
-    VersionManager, VersionStatus, VersioningPlan, VersioningPlanStep, VersioningResult,
-    VersioningStrategy,
-};
+// Core entry point and project management
+pub use crate::core::{MonorepoTools, MonorepoProject};
+
+// Essential result and error types
 pub use crate::error::{Error, Result};
-pub use crate::hooks::{
-    CommitInfo, GitOperationType, HookCondition, HookDefinition, HookError, HookErrorCode,
-    HookExecutionContext, HookExecutionResult, HookInstaller, HookManager, HookScript, HookStatus,
-    HookType, HookValidationResult, HookValidator, PostCommitResult, PreCommitResult,
-    PrePushResult, RemoteInfo, ValidationCheck,
-};
-pub use crate::tasks::{
-    FilePattern, FilePatternType, PackageScript, TaskCommand, TaskCondition, TaskDefinition,
-    TaskError, TaskExecutionLog, TaskExecutionResult, TaskExecutionStats, TaskExecutor,
-    TaskManager, TaskOutput, TaskPriority, TaskRegistry, TaskScope, TaskStatus, TaskTrigger,
-};
-pub use crate::workflows::{
-    AffectedPackageInfo, ChangeAnalysisResult, ChangeAnalysisWorkflowResult, ChangesetHookIntegration,
-    ConfidenceLevel, DevelopmentResult as WorkflowDevelopmentResult, DevelopmentWorkflow, ImpactLevel,
-    ReleaseOptions, ReleaseResult, ReleaseWorkflow, VersionRecommendation, VersioningWorkflowResult,
-    WorkflowProgress, WorkflowStatus,
-};
+
+// Main workflow types - the primary interfaces users interact with
+pub use crate::workflows::{DevelopmentWorkflow, ReleaseWorkflow, ReleaseResult};
+
+// Core analysis types
+pub use crate::analysis::{MonorepoAnalyzer, MonorepoAnalysisResult, DiffAnalyzer};
+
+// Essential configuration
+pub use crate::config::{MonorepoConfig, Environment, VersionBumpType};
+
+// Core version management
+pub use crate::core::{VersionManager, VersioningStrategy, VersioningResult};
+
+// Essential changesets
+pub use crate::changesets::{ChangesetManager, ChangesetSpec, Changeset};
+
+// Core task management  
+pub use crate::tasks::{TaskManager, TaskExecutor};
+
+// Essential hooks
+pub use crate::hooks::{HookManager, HookInstaller};
 
 // Main entry point struct re-exported from core module
 // Implementation moved to core/tools.rs for better separation

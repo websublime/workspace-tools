@@ -12,6 +12,17 @@ mod options;
 mod results;
 mod status;
 
-pub use options::*;
-pub use results::*;
-pub use status::*;
+// Explicit exports to avoid wildcard re-exports
+
+// Options types
+pub use options::ReleaseOptions;
+
+// Results types
+pub use results::{
+    ReleaseResult, DevelopmentResult, ChangeAnalysisResult,
+    AffectedPackageInfo, VersionRecommendation, VersioningWorkflowResult,
+    ImpactLevel, ConfidenceLevel, ChangeAnalysisWorkflowResult
+};
+
+// Status types
+pub use status::{WorkflowStep, WorkflowProgress, WorkflowStatus};

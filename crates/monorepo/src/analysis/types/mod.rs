@@ -23,12 +23,33 @@ mod workspace;
 mod upgrades;
 pub mod diff;
 
+// Explicit exports to avoid wildcard re-exports
 pub use analyzer::MonorepoAnalyzer;
-pub use core::*;
-pub use package_manager::*;
-pub use packages::*;
-pub use dependency_graph::*;
-pub use registries::*;
-pub use workspace::*;
-pub use upgrades::*;
-pub use diff::*;
+
+// Core types
+pub use core::MonorepoAnalysisResult;
+
+// Package manager types
+pub use package_manager::PackageManagerAnalysis;
+
+// Package types
+pub use packages::{PackageClassificationResult, PackageInformation};
+
+// Dependency graph types
+pub use dependency_graph::DependencyGraphAnalysis;
+
+// Registry types
+pub use registries::{RegistryAnalysisResult, RegistryInfo};
+
+// Workspace types
+pub use workspace::{WorkspaceConfigAnalysis, WorkspacePatternAnalysis, PatternStatistics};
+
+// Upgrade types
+pub use upgrades::{UpgradeAnalysisResult, UpgradeInfo};
+
+// Diff types
+pub use diff::{
+    ChangeAnalyzer, ChangeAnalysisResult, DiffAnalyzer, BranchComparisonResult,
+    ChangeAnalysis, PackageChange, AffectedPackagesAnalysis, ChangeSignificanceResult,
+    ComprehensiveChangeAnalysisResult
+};

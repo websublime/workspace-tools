@@ -20,9 +20,6 @@ use super::types::diff::{
     AffectedPackagesAnalysis, ChangeSignificanceResult, ChangeAnalysisResult, ChangeAnalyzer,
 };
 
-// Re-export the types so they can be used by other modules
-pub use super::types::diff::*;
-
 
 impl DiffAnalyzer {
     /// Create a new diff analyzer with the given project

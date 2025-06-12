@@ -26,17 +26,38 @@ mod project;
 mod version_manager;
 mod tools;
 
-pub use changeset::*;
-pub use package::*;
-pub use versioning::*;
-pub use impact_analysis::*;
-pub use versioning_plan::*;
+// Explicit exports to avoid wildcard re-exports
+
+// Changeset types
+pub use changeset::{Changeset, ChangesetStatus};
+
+// Package types
+pub use package::{MonorepoPackageInfo, VersionStatus};
+
+// Versioning types
+pub use versioning::{
+    VersioningResult, PackageVersionUpdate, PropagationResult, 
+    VersionConflict, ConflictType
+};
+
+// Impact analysis types
+pub use impact_analysis::{
+    VersionImpactAnalysis, PackageImpactAnalysis, 
+    BreakingChangeAnalysis, DependencyChainImpact
+};
+
+// Versioning plan types
+pub use versioning_plan::{VersioningPlan, VersioningPlanStep};
+
+// Strategy types
 pub use strategies::{
     VersioningStrategy,
     DefaultVersioningStrategy,
     ConservativeVersioningStrategy,
     AggressiveVersioningStrategy,
 };
+
+// Implementation structs
 pub use project::MonorepoProject;
 pub use version_manager::VersionManager;
 pub use tools::MonorepoTools;

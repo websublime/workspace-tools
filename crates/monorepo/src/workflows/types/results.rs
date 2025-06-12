@@ -8,7 +8,8 @@ use std::time::Duration;
 
 use crate::changesets::types::ChangesetApplication;
 use crate::tasks::types::results::TaskExecutionResult;
-use crate::{BranchComparisonResult, ChangeAnalysis, VersioningPlan, VersioningResult};
+use crate::analysis::{BranchComparisonResult, ChangeAnalysis};
+use crate::core::{VersioningPlan, VersioningResult};
 
 /// Result of a release workflow execution
 ///

@@ -12,7 +12,8 @@ use crate::changesets::{types::ChangesetFilter, ChangesetManager};
 use crate::core::MonorepoProject;
 use crate::error::Error;
 use crate::tasks::TaskManager;
-use crate::{AffectedPackageInfo, ChangeAnalysisResult, ImpactLevel, PackageChange};
+use crate::workflows::{AffectedPackageInfo, ChangeAnalysisResult, ImpactLevel};
+use crate::changes::{PackageChange, PackageChangeType, ChangeSignificance};
 use std::collections::HashMap;
 use sublime_git_tools::GitChangedFile;
 
@@ -263,7 +264,7 @@ impl DevelopmentWorkflow {
     /// Generates development recommendations based on analysis
     pub fn generate_recommendations(
         &self,
-        changes: &crate::ChangeAnalysis,
+        changes: &ChangeAnalysis,
         task_results: &[crate::tasks::types::results::TaskExecutionResult],
     ) -> Result<Vec<String>, Error> {
         let mut recommendations = Vec::new();
@@ -320,7 +321,7 @@ impl DevelopmentWorkflow {
 
         // Package-specific recommendations
         for package_change in &changes.package_changes {
-            if package_change.change_type == crate::PackageChangeType::Dependencies {
+            if package_change.change_type == crate::changes::PackageChangeType::Dependencies {
                 recommendations.push(format!(
                     "📦 Dependencies changed in {}: Consider updating version locks",
                     package_change.package_name
@@ -334,7 +335,7 @@ impl DevelopmentWorkflow {
     /// Builds detailed information about affected packages
     fn build_affected_package_info(
         &self,
-        package_changes: &[crate::PackageChange],
+        package_changes: &[PackageChange],
     ) -> Vec<AffectedPackageInfo> {
         let mut affected_packages = Vec::new();
 
@@ -361,7 +362,7 @@ impl DevelopmentWorkflow {
 
     /// Determines the impact level based on facts - simple file count heuristic
     #[allow(clippy::unused_self)]
-    pub fn determine_impact_level(&self, package_change: &crate::PackageChange) -> ImpactLevel {
+    pub fn determine_impact_level(&self, package_change: &PackageChange) -> ImpactLevel {
         // Use actual changed files count
         let total_files = package_change.changed_files.len();
 
@@ -376,7 +377,7 @@ impl DevelopmentWorkflow {
     /// Generates version bump recommendations based on facts
     fn generate_version_recommendations(
         &self,
-        package_changes: &[crate::PackageChange],
+        package_changes: &[PackageChange],
     ) -> Vec<super::types::VersionRecommendation> {
         let mut recommendations = Vec::new();
 
@@ -405,7 +406,7 @@ impl DevelopmentWorkflow {
 
     /// Generates reason for version recommendation based on facts
     #[allow(clippy::unused_self)]
-    fn generate_recommendation_reason(&self, package_change: &crate::PackageChange) -> String {
+    fn generate_recommendation_reason(&self, package_change: &PackageChange) -> String {
         let total_files = package_change.changed_files.len();
 
         let example_files = if !package_change.changed_files.is_empty() {
@@ -442,7 +443,7 @@ impl DevelopmentWorkflow {
     fn map_files_to_package_changes(
         &self,
         changed_files: &[sublime_git_tools::GitChangedFile],
-    ) -> Result<Vec<crate::PackageChange>, Error> {
+    ) -> Result<Vec<PackageChange>, Error> {
         // Group files by package
         let mut package_file_groups: HashMap<String, Vec<sublime_git_tools::GitChangedFile>> =
             HashMap::new();
@@ -476,8 +477,8 @@ impl DevelopmentWorkflow {
             package_changes.push(PackageChange {
                 package_name,
                 changed_files,
-                change_type: crate::PackageChangeType::SourceCode, // Always the same - no decisions
-                significance: crate::ChangeSignificance::Low,      // Always the same - no decisions
+                change_type: PackageChangeType::SourceCode, // Always the same - no decisions
+                significance: ChangeSignificance::Low,      // Always the same - no decisions
                 suggested_version_bump: crate::config::VersionBumpType::Patch,
             });
         }
