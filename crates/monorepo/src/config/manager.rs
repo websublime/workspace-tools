@@ -9,6 +9,7 @@ use crate::{Environment, MonorepoConfig};
 use glob::Pattern;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
+use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
 
 /// Type alias for pattern matcher function
 type PatternMatcher = Box<dyn Fn(&str) -> bool + Send + Sync>;
@@ -45,7 +46,10 @@ impl ConfigManager {
     /// Load configuration from a file
     pub fn load_from_file(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
-        let content = std::fs::read_to_string(path)
+        
+        // DRY: Use FileSystemManager instead of manual std::fs operations
+        let fs = FileSystemManager::new();
+        let content = fs.read_file_string(path)
             .map_err(|e| Error::config(format!("Failed to read config file: {e}")))?;
 
         let config: MonorepoConfig = match path.extension().and_then(|s| s.to_str()) {
@@ -79,7 +83,9 @@ impl ConfigManager {
             _ => return Err(Error::config("Unsupported config file format")),
         };
 
-        std::fs::write(path, content)
+        // DRY: Use FileSystemManager instead of manual std::fs operations
+        let fs = FileSystemManager::new();
+        fs.write_file_string(path, &content)
             .map_err(|e| Error::config(format!("Failed to write config file: {e}")))?;
 
         Ok(())
@@ -200,22 +206,25 @@ impl ConfigManager {
         let dir = dir.as_ref();
         let config = MonorepoConfig::default();
 
+        // DRY: Use FileSystemManager instead of manual std::fs operations
+        let fs = FileSystemManager::new();
+        
         // Create .monorepo directory
         let config_dir = dir.join(".monorepo");
-        std::fs::create_dir_all(&config_dir)
+        fs.create_dir_all(&config_dir)
             .map_err(|e| Error::config(format!("Failed to create config directory: {e}")))?;
 
         // Save as JSON
         let json_path = config_dir.join("config.json");
         let json_content = serde_json::to_string_pretty(&config)?;
-        std::fs::write(&json_path, json_content)
+        fs.write_file_string(&json_path, &json_content)
             .map_err(|e| Error::config(format!("Failed to write JSON config: {e}")))?;
 
         // Save as TOML (alternative)
         let toml_path = config_dir.join("config.toml");
         let toml_content = toml::to_string_pretty(&config)
             .map_err(|e| Error::config(format!("Failed to serialize to TOML: {e}")))?;
-        std::fs::write(&toml_path, toml_content)
+        fs.write_file_string(&toml_path, &toml_content)
             .map_err(|e| Error::config(format!("Failed to write TOML config: {e}")))?;
 
         Ok(())
@@ -237,12 +246,15 @@ impl ConfigManager {
             "monorepo.config.yml",
         ];
 
+        // DRY: Use FileSystemManager for file existence checks
+        let fs = FileSystemManager::new();
+        
         // Check current directory and parent directories
         let mut current = start_dir.to_path_buf();
         loop {
             for config_name in &config_names {
                 let config_path = current.join(config_name);
-                if config_path.exists() {
+                if fs.exists(&config_path) {
                     return Some(config_path);
                 }
             }
@@ -461,27 +473,20 @@ impl ConfigManager {
 
     /// Check if a pattern matches a package path
     ///
-    /// Supports full glob pattern matching including:
-    /// - `*` - matches any sequence of characters within a path segment
-    /// - `**` - matches zero or more path segments
-    /// - `?` - matches any single character
-    /// - `[seq]` - matches any character in seq
-    /// - `[!seq]` - matches any character not in seq
-    /// - `{a,b}` - matches either pattern a or pattern b
+    /// DRY: Simplified pattern matching using standard glob functionality
+    /// Supports glob patterns: `*`, `**`, `?`, `[seq]`, `[!seq]`
+    /// Maintains backward compatibility for single `*` patterns.
     ///
     /// # Examples
     /// ```ignore
     /// pattern_matches_package("packages/*", "packages/core") // true
     /// pattern_matches_package("packages/**", "packages/apps/web") // true
     /// pattern_matches_package("@scope/*", "@scope/package") // true
-    /// pattern_matches_package("*/lib", "core/lib") // true
-    /// pattern_matches_package("packages/[!_]*", "packages/core") // true
-    /// pattern_matches_package("packages/[!_]*", "packages/_internal") // false
     /// ```
     #[must_use]
     pub fn pattern_matches_package(&self, pattern: &str, package_path: &str) -> bool {
         // Early return for exact matches (optimization)
-        if !pattern.contains(['*', '?', '[', '{']) {
+        if !pattern.contains(['*', '?', '[']) {
             return package_path == pattern;
         }
 
@@ -489,31 +494,27 @@ impl ConfigManager {
         let normalized_pattern = pattern.replace('\\', "/");
         let normalized_path = package_path.replace('\\', "/");
 
-        // Try to compile the pattern
+        // DRY: Use standard Pattern matching with backward compatibility
         match Pattern::new(&normalized_pattern) {
             Ok(glob_pattern) => {
-                // First check if pattern matches
                 if !glob_pattern.matches(&normalized_path) {
                     return false;
                 }
-
-                // For patterns with single *, ensure we're not matching across path segments
-                // Count segments in pattern and path to ensure proper depth matching
+                
+                // Maintain backward compatibility: single * should not match across path segments
                 if normalized_pattern.contains('*') && !normalized_pattern.contains("**") {
                     let pattern_segments = normalized_pattern.split('/').count();
                     let path_segments = normalized_path.split('/').count();
-
-                    // For single * patterns, the path should have the same number of segments
+                    
                     if pattern_segments != path_segments {
                         return false;
                     }
                 }
-
+                
                 true
             }
-            Err(e) => {
-                // Log pattern compilation error and fall back to exact match
-                log::warn!("Invalid glob pattern '{pattern}': {e}. Falling back to exact match.");
+            Err(_) => {
+                // DRY: Simplified error handling - fall back to exact match
                 package_path == pattern
             }
         }
@@ -521,8 +522,7 @@ impl ConfigManager {
 
     /// Check multiple patterns against multiple package paths efficiently
     ///
-    /// This is an optimized version for checking many patterns against many packages.
-    /// It pre-compiles all patterns once and reuses them.
+    /// DRY: Simplified batch pattern matching using standard functionality
     ///
     /// # Returns
     /// A vector of tuples containing (pattern_index, package_index) for all matches
@@ -532,51 +532,18 @@ impl ConfigManager {
     /// let patterns = vec!["packages/*", "@scope/*", "apps/**"];
     /// let packages = vec!["packages/core", "@scope/lib", "apps/web/src"];
     /// let matches = manager.batch_pattern_matches(&patterns, &packages);
-    /// // Returns: [(0, 0), (1, 1), (2, 2)]
     /// ```
     pub fn batch_pattern_matches(
         &self,
         patterns: &[String],
         packages: &[String],
     ) -> Vec<(usize, usize)> {
-        // Pre-compile all patterns
-        let compiled_patterns: Vec<Option<Pattern>> = patterns
-            .iter()
-            .map(|pattern| {
-                let normalized = pattern.replace('\\', "/");
-                Pattern::new(&normalized).ok()
-            })
-            .collect();
-
         let mut matches = Vec::new();
 
-        for (pattern_idx, pattern_opt) in compiled_patterns.iter().enumerate() {
-            if let Some(pattern) = pattern_opt {
-                for (package_idx, package) in packages.iter().enumerate() {
-                    let normalized_package = package.replace('\\', "/");
-
-                    if pattern.matches(&normalized_package) {
-                        // Check segment count for single * patterns
-                        if patterns[pattern_idx].contains('*')
-                            && !patterns[pattern_idx].contains("**")
-                        {
-                            let pattern_segments = patterns[pattern_idx].split('/').count();
-                            let path_segments = normalized_package.split('/').count();
-
-                            if pattern_segments == path_segments {
-                                matches.push((pattern_idx, package_idx));
-                            }
-                        } else {
-                            matches.push((pattern_idx, package_idx));
-                        }
-                    }
-                }
-            } else {
-                // For invalid patterns, check exact matches
-                for (package_idx, package) in packages.iter().enumerate() {
-                    if patterns[pattern_idx] == *package {
-                        matches.push((pattern_idx, package_idx));
-                    }
+        for (pattern_idx, pattern) in patterns.iter().enumerate() {
+            for (package_idx, package) in packages.iter().enumerate() {
+                if self.pattern_matches_package(pattern, package) {
+                    matches.push((pattern_idx, package_idx));
                 }
             }
         }
@@ -586,7 +553,7 @@ impl ConfigManager {
 
     /// Create a pattern matcher that can be reused for multiple checks
     ///
-    /// This is useful when you need to check the same pattern against many packages.
+    /// DRY: Simplified pattern matcher using standard glob functionality
     ///
     /// # Returns
     /// A closure that can be used to check if a package matches the pattern
@@ -600,34 +567,16 @@ impl ConfigManager {
     pub fn create_pattern_matcher(&self, pattern: &str) -> Result<PatternMatcher> {
         let normalized_pattern = pattern.replace('\\', "/");
 
-        // Try to compile the pattern
-        match Pattern::new(&normalized_pattern) {
-            Ok(glob_pattern) => {
-                let glob_pattern = Arc::new(glob_pattern);
-                let pattern_for_closure = normalized_pattern.clone();
-
-                Ok(Box::new(move |package_path: &str| {
-                    let normalized_path = package_path.replace('\\', "/");
-
-                    if !glob_pattern.matches(&normalized_path) {
-                        return false;
-                    }
-
-                    // Check segment count for single * patterns
-                    if pattern_for_closure.contains('*') && !pattern_for_closure.contains("**") {
-                        let pattern_segments = pattern_for_closure.split('/').count();
-                        let path_segments = normalized_path.split('/').count();
-
-                        if pattern_segments != path_segments {
-                            return false;
-                        }
-                    }
-
-                    true
-                }))
-            }
-            Err(e) => Err(Error::config(format!("Invalid glob pattern '{pattern}': {e}"))),
-        }
+        // DRY: Simplified pattern compilation using standard functionality
+        let glob_pattern = Pattern::new(&normalized_pattern)
+            .map_err(|e| Error::config(format!("Invalid glob pattern '{pattern}': {e}")))?;
+        
+        let glob_pattern = Arc::new(glob_pattern);
+        
+        Ok(Box::new(move |package_path: &str| {
+            let normalized_path = package_path.replace('\\', "/");
+            glob_pattern.matches(&normalized_path)
+        }))
     }
 }
 
