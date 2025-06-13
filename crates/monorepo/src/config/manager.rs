@@ -31,20 +31,44 @@ impl ConfigManager {
     /// Load configuration from a file
     pub fn load_from_file(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
+        log::info!("Loading configuration from file: {}", path.display());
         
         // DRY: Use FileSystemManager instead of manual std::fs operations
         let fs = FileSystemManager::new();
         let content = fs.read_file_string(path)
-            .map_err(|e| Error::config(format!("Failed to read config file: {e}")))?;
+            .map_err(|e| {
+                log::error!("Failed to read config file '{}': {}", path.display(), e);
+                Error::config(format!("Failed to read config file: {e}"))
+            })?;
+        
+        log::debug!("Read {} bytes from config file", content.len());
 
-        let config: MonorepoConfig = match path.extension().and_then(|s| s.to_str()) {
-            Some("json") => serde_json::from_str(&content)?,
-            Some("toml") => toml::from_str(&content)
-                .map_err(|e| Error::config(format!("Failed to parse TOML: {e}")))?,
-            Some("yaml" | "yml") => serde_yaml::from_str(&content)
-                .map_err(|e| Error::config(format!("Failed to parse YAML: {e}")))?,
-            _ => return Err(Error::config("Unsupported config file format")),
+        let format = path.extension().and_then(|s| s.to_str()).unwrap_or("unknown");
+        log::debug!("Parsing configuration file as format: {}", format);
+        
+        let config: MonorepoConfig = match format {
+            "json" => serde_json::from_str(&content)
+                .map_err(|e| {
+                    log::error!("Failed to parse JSON config: {}", e);
+                    Error::config(format!("Failed to parse JSON: {e}"))
+                })?,
+            "toml" => toml::from_str(&content)
+                .map_err(|e| {
+                    log::error!("Failed to parse TOML config: {}", e);
+                    Error::config(format!("Failed to parse TOML: {e}"))
+                })?,
+            "yaml" | "yml" => serde_yaml::from_str(&content)
+                .map_err(|e| {
+                    log::error!("Failed to parse YAML config: {}", e);
+                    Error::config(format!("Failed to parse YAML: {e}"))
+                })?,
+            _ => {
+                log::error!("Unsupported config file format: {}", format);
+                return Err(Error::config("Unsupported config file format"));
+            }
         };
+        
+        log::info!("Successfully loaded configuration from {}", path.display());
 
         Ok(Self {
             config: Arc::new(RwLock::new(config)),
@@ -56,31 +80,65 @@ impl ConfigManager {
     /// Save configuration to a file
     pub fn save_to_file(&self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
-        let config =
-            self.config.read().map_err(|_| Error::config("Failed to acquire read lock"))?;
+        log::info!("Saving configuration to file: {}", path.display());
+        
+        let config = self.config.read().map_err(|_| {
+            log::error!("Failed to acquire read lock on configuration");
+            Error::config("Failed to acquire read lock")
+        })?;
 
-        let content = match path.extension().and_then(|s| s.to_str()) {
-            Some("json") => serde_json::to_string_pretty(&*config)?,
-            Some("toml") => toml::to_string_pretty(&*config)
-                .map_err(|e| Error::config(format!("Failed to serialize to TOML: {e}")))?,
-            Some("yaml" | "yml") => serde_yaml::to_string(&*config)
-                .map_err(|e| Error::config(format!("Failed to serialize to YAML: {e}")))?,
-            _ => return Err(Error::config("Unsupported config file format")),
+        let format = path.extension().and_then(|s| s.to_str()).unwrap_or("unknown");
+        log::debug!("Serializing configuration as format: {}", format);
+        
+        let content = match format {
+            "json" => serde_json::to_string_pretty(&*config)
+                .map_err(|e| {
+                    log::error!("Failed to serialize config to JSON: {}", e);
+                    Error::config(format!("Failed to serialize to JSON: {e}"))
+                })?,
+            "toml" => toml::to_string_pretty(&*config)
+                .map_err(|e| {
+                    log::error!("Failed to serialize config to TOML: {}", e);
+                    Error::config(format!("Failed to serialize to TOML: {e}"))
+                })?,
+            "yaml" | "yml" => serde_yaml::to_string(&*config)
+                .map_err(|e| {
+                    log::error!("Failed to serialize config to YAML: {}", e);
+                    Error::config(format!("Failed to serialize to YAML: {e}"))
+                })?,
+            _ => {
+                log::error!("Unsupported config file format for saving: {}", format);
+                return Err(Error::config("Unsupported config file format"));
+            }
         };
+
+        log::debug!("Serialized configuration to {} bytes", content.len());
 
         // DRY: Use FileSystemManager instead of manual std::fs operations
         let fs = FileSystemManager::new();
         fs.write_file_string(path, &content)
-            .map_err(|e| Error::config(format!("Failed to write config file: {e}")))?;
+            .map_err(|e| {
+                log::error!("Failed to write config file '{}': {}", path.display(), e);
+                Error::config(format!("Failed to write config file: {e}"))
+            })?;
+        
+        log::info!("Successfully saved configuration to {}", path.display());
 
         Ok(())
     }
 
     /// Save configuration to the loaded path
     pub fn save(&self) -> Result<()> {
+        log::debug!("Attempting to save configuration to loaded path");
         match &self.config_path {
-            Some(path) => self.save_to_file(path),
-            None => Err(Error::config("No config file path set")),
+            Some(path) => {
+                log::debug!("Using config path: {}", path.display());
+                self.save_to_file(path)
+            }
+            None => {
+                log::error!("Cannot save configuration: no config file path set");
+                Err(Error::config("No config file path set"))
+            }
         }
     }
 
@@ -97,14 +155,20 @@ impl ConfigManager {
     where
         F: FnOnce(&mut MonorepoConfig),
     {
-        let mut config =
-            self.config.write().map_err(|_| Error::config("Failed to acquire write lock"))?;
+        log::debug!("Updating configuration with provided updater function");
+        
+        let mut config = self.config.write().map_err(|_| {
+            log::error!("Failed to acquire write lock for configuration update");
+            Error::config("Failed to acquire write lock")
+        })?;
 
         updater(&mut config);
+        log::debug!("Configuration updated successfully");
 
         drop(config); // Explicitly drop the lock
 
         if self.auto_save {
+            log::debug!("Auto-save enabled, saving configuration");
             self.save()?;
         }
 
@@ -189,6 +253,8 @@ impl ConfigManager {
     /// Create default configuration files in a directory
     pub fn create_default_config_files(dir: impl AsRef<Path>) -> Result<()> {
         let dir = dir.as_ref();
+        log::info!("Creating default configuration files in: {}", dir.display());
+        
         let config = MonorepoConfig::default();
 
         // DRY: Use FileSystemManager instead of manual std::fs operations
@@ -196,21 +262,45 @@ impl ConfigManager {
         
         // Create .monorepo directory
         let config_dir = dir.join(".monorepo");
+        log::debug!("Creating config directory: {}", config_dir.display());
+        
         fs.create_dir_all(&config_dir)
-            .map_err(|e| Error::config(format!("Failed to create config directory: {e}")))?;
+            .map_err(|e| {
+                log::error!("Failed to create config directory '{}': {}", config_dir.display(), e);
+                Error::config(format!("Failed to create config directory: {e}"))
+            })?;
 
         // Save as JSON
         let json_path = config_dir.join("config.json");
-        let json_content = serde_json::to_string_pretty(&config)?;
+        log::debug!("Writing JSON config to: {}", json_path.display());
+        let json_content = serde_json::to_string_pretty(&config)
+            .map_err(|e| {
+                log::error!("Failed to serialize default config to JSON: {}", e);
+                Error::config(format!("Failed to serialize to JSON: {e}"))
+            })?;
         fs.write_file_string(&json_path, &json_content)
-            .map_err(|e| Error::config(format!("Failed to write JSON config: {e}")))?;
+            .map_err(|e| {
+                log::error!("Failed to write JSON config file '{}': {}", json_path.display(), e);
+                Error::config(format!("Failed to write JSON config: {e}"))
+            })?;
+        log::debug!("Successfully wrote JSON config file");
 
         // Save as TOML (alternative)
         let toml_path = config_dir.join("config.toml");
+        log::debug!("Writing TOML config to: {}", toml_path.display());
         let toml_content = toml::to_string_pretty(&config)
-            .map_err(|e| Error::config(format!("Failed to serialize to TOML: {e}")))?;
+            .map_err(|e| {
+                log::error!("Failed to serialize default config to TOML: {}", e);
+                Error::config(format!("Failed to serialize to TOML: {e}"))
+            })?;
         fs.write_file_string(&toml_path, &toml_content)
-            .map_err(|e| Error::config(format!("Failed to write TOML config: {e}")))?;
+            .map_err(|e| {
+                log::error!("Failed to write TOML config file '{}': {}", toml_path.display(), e);
+                Error::config(format!("Failed to write TOML config: {e}"))
+            })?;
+        log::debug!("Successfully wrote TOML config file");
+        
+        log::info!("Successfully created default configuration files in {}", config_dir.display());
 
         Ok(())
     }
@@ -218,6 +308,7 @@ impl ConfigManager {
     /// Look for configuration file in standard locations
     pub fn find_config_file(start_dir: impl AsRef<Path>) -> Option<PathBuf> {
         let start_dir = start_dir.as_ref();
+        log::debug!("Searching for configuration file starting from: {}", start_dir.display());
 
         // Check for config files in order of preference
         let config_names = [
@@ -237,9 +328,12 @@ impl ConfigManager {
         // Check current directory and parent directories
         let mut current = start_dir.to_path_buf();
         loop {
+            log::debug!("Checking directory: {}", current.display());
             for config_name in &config_names {
                 let config_path = current.join(config_name);
+                log::debug!("Looking for config file: {}", config_path.display());
                 if fs.exists(&config_path) {
+                    log::info!("Found configuration file: {}", config_path.display());
                     return Some(config_path);
                 }
             }
@@ -249,6 +343,7 @@ impl ConfigManager {
             }
         }
 
+        log::debug!("No configuration file found in directory tree starting from {}", start_dir.display());
         None
     }
 
