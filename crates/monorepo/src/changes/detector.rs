@@ -1,33 +1,30 @@
 //! Change detection logic for monorepo analysis
 
+use super::types::{ChangeDetectionEngine, ChangeDetector, PackageChange};
 use std::collections::HashSet;
 use std::path::Path;
 use sublime_git_tools::GitChangedFile;
-use super::types::{ChangeDetector, ChangeDetectionEngine, PackageChange};
 
 impl ChangeDetector {
     /// Create a new change detector with default rules
     pub fn new(root_path: impl AsRef<Path>) -> Self {
-        Self { 
-            root_path: root_path.as_ref().to_path_buf(),
-            engine: ChangeDetectionEngine::new(),
-        }
+        Self { root_path: root_path.as_ref().to_path_buf(), engine: ChangeDetectionEngine::new() }
     }
-    
+
     /// Create a new change detector with custom rules from config file
-    pub fn with_config_file(root_path: impl AsRef<Path>, config_path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn with_config_file(
+        root_path: impl AsRef<Path>,
+        config_path: &Path,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             root_path: root_path.as_ref().to_path_buf(),
             engine: ChangeDetectionEngine::from_config_file(config_path)?,
         })
     }
-    
+
     /// Create a new change detector with custom engine
     pub fn with_engine(root_path: impl AsRef<Path>, engine: ChangeDetectionEngine) -> Self {
-        Self {
-            root_path: root_path.as_ref().to_path_buf(),
-            engine,
-        }
+        Self { root_path: root_path.as_ref().to_path_buf(), engine }
     }
 
     /// Map changed files to affected packages
@@ -55,7 +52,8 @@ impl ChangeDetector {
             if !changes_for_package.is_empty() {
                 let change_type = self.engine.determine_change_type(&changes_for_package, package);
                 let significance = self.engine.analyze_significance(&changes_for_package, package);
-                let suggested_bump = self.engine.suggest_version_bump(&change_type, &significance, package);
+                let suggested_bump =
+                    self.engine.suggest_version_bump(&change_type, &significance, package);
 
                 package_changes.push(PackageChange {
                     package_name: package.name().to_string(),
@@ -75,14 +73,16 @@ impl ChangeDetector {
     pub fn engine_mut(&mut self) -> &mut ChangeDetectionEngine {
         &mut self.engine
     }
-    
+
     /// Get read-only access to the engine
-    #[must_use] pub fn engine(&self) -> &ChangeDetectionEngine {
+    #[must_use]
+    pub fn engine(&self) -> &ChangeDetectionEngine {
         &self.engine
     }
 
     /// Find all packages affected by changes (including dependents)
-    #[must_use] pub fn find_affected_packages(
+    #[must_use]
+    pub fn find_affected_packages(
         &self,
         direct_changes: &[String],
         packages: &[crate::core::MonorepoPackageInfo],
@@ -117,7 +117,55 @@ impl ChangeDetector {
             }
         }
     }
+
+    /// Elevate significance for changes that affect breaking changes in public APIs
+    pub fn elevate_significance_for_breaking_changes(
+        &self,
+        changes: &[crate::changes::PackageChange],
+    ) -> Vec<crate::changes::PackageChange> {
+        log::debug!("Elevating significance for {} package changes", changes.len());
+
+        changes
+            .iter()
+            .map(|change| {
+                let mut elevated_change = change.clone();
+
+                // Elevate significance based on breaking change patterns
+                if self.is_potential_breaking_change(change) {
+                    elevated_change.significance = match change.significance {
+                        ChangeSignificance::Low => ChangeSignificance::Medium,
+                        ChangeSignificance::Medium | ChangeSignificance::High => {
+                            ChangeSignificance::High
+                        }
+                    };
+                    log::debug!(
+                        "Elevated package {} from {:?} to {:?}",
+                        change.package_name,
+                        change.significance,
+                        elevated_change.significance
+                    );
+                }
+
+                elevated_change
+            })
+            .collect()
+    }
+
+    /// Check if a change is potentially breaking based on file patterns
+    #[allow(clippy::unused_self)]
+    fn is_potential_breaking_change(&self, change: &crate::changes::PackageChange) -> bool {
+        // Check for API-related file changes
+        change.changed_files.iter().any(|file| {
+            let file_path = &file.path;
+            file_path.contains("src/")
+                || file_path.contains("lib/")
+                || file_path.contains("index.")
+                || file_path.ends_with(".d.ts")
+                || file_path.contains("api/")
+                || file_path.contains("public/")
+        })
+    }
 }
 
 // Re-export types from types module for convenience
-pub use super::types::{PackageChangeType, ChangeSignificance, VersionBumpType};
+pub use super::types::ChangeSignificance;

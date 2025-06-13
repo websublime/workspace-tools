@@ -2,7 +2,7 @@
 //!
 //! This module defines configuration structures for validation rules, quality gates,
 //! and threshold values used throughout the monorepo analysis and validation processes.
-//! 
+//!
 //! ## What
 //! Provides comprehensive validation configuration including:
 //! - Task priority levels and scoring
@@ -12,24 +12,23 @@
 //! - Pattern scoring algorithms and weights
 //! - Validation patterns for commits, branches, files
 //! - Quality gate thresholds and limits
-//! 
+//!
 //! ## How
 //! Uses structured configuration with defaults based on best practices:
 //! - Priority-based rule systems for change detection and version bumps
 //! - Configurable thresholds for analysis depth and complexity limits
 //! - Pattern-based validation for naming conventions and structures
 //! - Quality gates with customizable pass/fail criteria
-//! 
+//!
 //! ## Why
 //! Centralizes all validation rules and thresholds that were previously
 //! hardcoded throughout the codebase, enabling users to tune validation
 //! behavior based on their specific project requirements and quality standards.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Comprehensive validation configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ValidationConfig {
     /// Task priority level configuration
     pub task_priorities: TaskPriorityConfig,
@@ -53,20 +52,6 @@ pub struct ValidationConfig {
     pub quality_gates: QualityGatesConfig,
 }
 
-impl Default for ValidationConfig {
-    fn default() -> Self {
-        Self {
-            task_priorities: TaskPriorityConfig::default(),
-            change_detection_rules: ChangeDetectionRulesConfig::default(),
-            version_bump_rules: VersionBumpRulesConfig::default(),
-            dependency_analysis: DependencyAnalysisConfig::default(),
-            pattern_scoring: PatternScoringConfig::default(),
-            validation_patterns: ValidationPatternsConfig::default(),
-            quality_gates: QualityGatesConfig::default(),
-        }
-    }
-}
-
 /// Task priority level configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskPriorityConfig {
@@ -85,12 +70,7 @@ pub struct TaskPriorityConfig {
 
 impl Default for TaskPriorityConfig {
     fn default() -> Self {
-        Self {
-            low: 0,
-            normal: 50,
-            high: 100,
-            critical: 200,
-        }
+        Self { low: 0, normal: 50, high: 100, critical: 200 }
     }
 }
 
@@ -310,10 +290,7 @@ impl Default for ValidationPatternsConfig {
                 "build".to_string(),
                 "revert".to_string(),
             ],
-            required_package_files: vec![
-                "package.json".to_string(),
-                "README.md".to_string(),
-            ],
+            required_package_files: vec!["package.json".to_string(), "README.md".to_string()],
             special_validation_patterns: vec![
                 "**/*.config.{js,ts,json}".to_string(),
                 "**/Dockerfile*".to_string(),
@@ -373,7 +350,7 @@ impl Default for QualityGatesConfig {
             max_lines_per_file: 1000,
             max_dependencies_per_package: 50,
             min_documentation_coverage: 70.0,
-            max_build_time_seconds: 600, // 10 minutes
+            max_build_time_seconds: 600,    // 10 minutes
             max_technical_debt_ratio: 0.05, // 5%
             security_thresholds: SecurityThresholds::default(),
         }
@@ -413,50 +390,45 @@ impl Default for SecurityThresholds {
 
 impl ValidationConfig {
     /// Get task priority value by name
+    #[allow(clippy::wildcard_in_or_patterns)]
     #[must_use]
     pub fn get_task_priority(&self, priority_name: &str) -> u32 {
         match priority_name.to_lowercase().as_str() {
             "low" => self.task_priorities.low,
-            "normal" => self.task_priorities.normal,
             "high" => self.task_priorities.high,
             "critical" => self.task_priorities.critical,
-            _ => self.task_priorities.normal,
+            "normal" | _ => self.task_priorities.normal,
         }
     }
 
     /// Check if a branch name follows naming conventions
     #[must_use]
     pub fn is_valid_branch_name(&self, branch_name: &str) -> bool {
-        self.validation_patterns.branch_naming_patterns
-            .iter()
-            .any(|pattern| {
-                // Simple pattern matching - would use proper glob library in production
-                if pattern.ends_with("/*") {
-                    let prefix = &pattern[..pattern.len() - 2];
-                    branch_name.starts_with(prefix)
-                } else {
-                    branch_name == pattern
-                }
-            })
+        self.validation_patterns.branch_naming_patterns.iter().any(|pattern| {
+            // Simple pattern matching - would use proper glob library in production
+            if pattern.ends_with("/*") {
+                let prefix = &pattern[..pattern.len() - 2];
+                branch_name.starts_with(prefix)
+            } else {
+                branch_name == pattern
+            }
+        })
     }
 
     /// Check if a commit type is valid according to conventional commits
     #[must_use]
     pub fn is_valid_commit_type(&self, commit_type: &str) -> bool {
-        self.validation_patterns.conventional_commit_types
-            .contains(&commit_type.to_string())
+        self.validation_patterns.conventional_commit_types.contains(&commit_type.to_string())
     }
 
     /// Check if a file is security-sensitive
     #[must_use]
     pub fn is_security_sensitive_file(&self, file_path: &str) -> bool {
-        self.validation_patterns.security_sensitive_patterns
-            .iter()
-            .any(|pattern| {
-                // Simplified pattern matching
-                let clean_pattern = pattern.replace("**/", "").replace("*", "");
-                file_path.contains(&clean_pattern)
-            })
+        self.validation_patterns.security_sensitive_patterns.iter().any(|pattern| {
+            // Simplified pattern matching
+            let clean_pattern = pattern.replace("**/", "").replace('*', "");
+            file_path.contains(&clean_pattern)
+        })
     }
 
     /// Validate if quality gates are met

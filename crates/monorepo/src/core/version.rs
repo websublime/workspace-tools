@@ -3,21 +3,20 @@
 //! This module provides comprehensive version management capabilities including
 //! version bumping, dependency propagation, and impact analysis.
 
-use crate::changes::ChangeSignificance;
 use crate::config::VersionBumpType;
 use crate::core::{
-    AggressiveVersioningStrategy, BreakingChangeAnalysis, ConflictType,
-    ConservativeVersioningStrategy, DefaultVersioningStrategy, DependencyChainImpact,
+    BreakingChangeAnalysis, ConflictType, DefaultVersioningStrategy, DependencyChainImpact,
     MonorepoProject, PackageImpactAnalysis, PackageVersionUpdate, PropagationResult,
-    VersionConflict, VersionImpactAnalysis, VersioningPlan, VersioningPlanStep, VersioningResult,
-    VersionManager, VersioningStrategy,
+    VersionConflict, VersionImpactAnalysis, VersionManager, VersioningPlan, VersioningPlanStep,
+    VersioningResult, VersioningStrategy,
 };
 use crate::error::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
-use sublime_package_tools::{Version, DependencyRegistry};
+use sublime_package_tools::{DependencyRegistry, Version};
 // Import the diff_analyzer types for consistency
-use crate::analysis::{ChangeAnalysis, PackageChange};
+use crate::analysis::ChangeAnalysis;
+use crate::changes::PackageChange;
 
 impl VersionManager {
     /// Create a new version manager with the default strategy
@@ -70,10 +69,12 @@ impl VersionManager {
 
         // Resolve any dependency conflicts using DependencyRegistry
         let dependency_registry = DependencyRegistry::new();
-        let dependency_updates = dependency_registry.resolve_version_conflicts()
-            .unwrap_or_else(|_| sublime_package_tools::ResolutionResult {
-                resolved_versions: HashMap::new(),
-                updates_required: Vec::new(),
+        let dependency_updates =
+            dependency_registry.resolve_version_conflicts().unwrap_or_else(|_| {
+                sublime_package_tools::ResolutionResult {
+                    resolved_versions: HashMap::new(),
+                    updates_required: Vec::new(),
+                }
             });
 
         Ok(VersioningResult {
@@ -100,9 +101,10 @@ impl VersionManager {
 
             if let Some(bump_type) = bump_type {
                 let current_version = dependent_pkg.version();
-                
+
                 // DRY: Use the same version bumping logic as bump_package_version
-                let new_version_str = self.perform_version_bump(current_version, bump_type, None)?;
+                let new_version_str =
+                    self.perform_version_bump(current_version, bump_type, None)?;
 
                 let update = PackageVersionUpdate {
                     package_name: dependent_name.to_string(),
@@ -314,7 +316,8 @@ impl VersionManager {
     fn calculate_max_propagation_depth(&self, changes: &[PackageChange]) -> usize {
         let mut max_depth = 0;
 
-        let max_analysis_depth = self.project.config.validation.dependency_analysis.max_analysis_depth;
+        let max_analysis_depth =
+            self.project.config.validation.dependency_analysis.max_analysis_depth;
         for change in changes {
             let depth = self.calculate_chain_depth(&change.package_name, 0, max_analysis_depth);
             max_depth = max_depth.max(depth);
@@ -324,6 +327,7 @@ impl VersionManager {
     }
 
     /// Create a comprehensive versioning plan
+    #[allow(clippy::cast_possible_truncation)]
     pub fn create_versioning_plan(&self, changes: &ChangeAnalysis) -> Result<VersioningPlan> {
         let mut plan_steps = Vec::new();
         let mut conflicts = Vec::new();
@@ -417,8 +421,9 @@ impl VersionManager {
     }
 
     /// Perform version bump based on bump type
-    /// 
+    ///
     /// DRY: Centralized version bumping logic to avoid duplication
+    #[allow(clippy::unused_self)]
     fn perform_version_bump(
         &self,
         current_version: &str,
@@ -435,7 +440,7 @@ impl VersionManager {
             }
         }
         .map_err(|e| crate::error::Error::versioning(format!("Version bump failed: {e}")))?;
-        
+
         Ok(result.to_string())
     }
 
@@ -466,10 +471,12 @@ impl VersionManager {
 
         // Resolve final dependency conflicts using DependencyRegistry
         let dependency_registry = DependencyRegistry::new();
-        let dependency_updates = dependency_registry.resolve_version_conflicts()
-            .unwrap_or_else(|_| sublime_package_tools::ResolutionResult {
-                resolved_versions: HashMap::new(),
-                updates_required: Vec::new(),
+        let dependency_updates =
+            dependency_registry.resolve_version_conflicts().unwrap_or_else(|_| {
+                sublime_package_tools::ResolutionResult {
+                    resolved_versions: HashMap::new(),
+                    updates_required: Vec::new(),
+                }
             });
 
         Ok(VersioningResult {
@@ -480,5 +487,3 @@ impl VersionManager {
         })
     }
 }
-
-

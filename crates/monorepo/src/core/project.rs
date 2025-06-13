@@ -3,14 +3,11 @@
 use super::types::{MonorepoPackageInfo, MonorepoProject};
 use crate::config::{ConfigManager, MonorepoConfig};
 use crate::error::{Error, Result};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use sublime_git_tools::Repo;
 use sublime_package_tools::{DependencyGraph, DependencyRegistry, RegistryManager};
-use sublime_standard_tools::{
-    filesystem::FileSystemManager,
-    monorepo::{MonorepoDescriptor, PackageManager},
-};
+use sublime_standard_tools::{filesystem::FileSystemManager, monorepo::PackageManager};
 
 impl MonorepoProject {
     /// Create a new `MonorepoProject` by discovering and analyzing a monorepo
@@ -145,19 +142,19 @@ impl MonorepoProject {
     /// Refresh packages information from disk
     pub fn refresh_packages(&mut self) -> Result<()> {
         log::info!("Refreshing packages for project at: {}", self.root_path.display());
-        
+
         // Use the detector to get fresh monorepo information
         let detector = sublime_standard_tools::monorepo::MonorepoDetector::new();
         let fresh_descriptor = detector.detect_monorepo(&self.root_path)?;
-        
+
         log::debug!("Detected {} packages from fresh scan", fresh_descriptor.packages().len());
-        
+
         // Convert discovered packages to MonorepoPackageInfo
         let mut refreshed_packages = Vec::new();
-        
+
         for package in fresh_descriptor.packages() {
             log::debug!("Processing package: {} at {}", package.name, package.location.display());
-            
+
             // Create PackageInfo using the workspace package information
             let package_info = sublime_package_tools::PackageInfo::new(
                 sublime_package_tools::Package::new(&package.name, &package.version, None)?,
@@ -166,23 +163,23 @@ impl MonorepoProject {
                 package.absolute_path.to_string_lossy().to_string(),
                 serde_json::Value::Object(serde_json::Map::new()), // Will be loaded from actual package.json
             );
-            
+
             // Create MonorepoPackageInfo with workspace information
             let monorepo_package = MonorepoPackageInfo::new(
                 package_info,
                 package.clone(),
                 true, // Assume internal packages for now
             );
-            
+
             refreshed_packages.push(monorepo_package);
         }
-        
+
         // Update the descriptor with fresh information
         self.descriptor = fresh_descriptor;
-        
+
         // Update the packages list
         self.packages = refreshed_packages;
-        
+
         log::info!("Successfully refreshed {} packages", self.packages.len());
         Ok(())
     }
@@ -190,42 +187,44 @@ impl MonorepoProject {
     /// Build or rebuild the dependency graph
     pub fn build_dependency_graph(&mut self) -> Result<()> {
         log::info!("Building dependency graph for {} packages", self.packages.len());
-        
+
         if self.packages.is_empty() {
             log::warn!("No packages found. Consider calling refresh_packages() first.");
             return Ok(());
         }
-        
+
         // Extract Package instances for the dependency graph
         let mut packages_for_graph = Vec::new();
-        
+
         for pkg_info in &self.packages {
             // Clone the Package from the Rc<RefCell<Package>>
             let package = pkg_info.package_info.package.borrow().clone();
             packages_for_graph.push(package);
         }
-        
+
         log::debug!("Creating dependency graph from {} packages", packages_for_graph.len());
-        
+
         // Create dependency graph from packages slice and detect cycles
         let graph = DependencyGraph::from(packages_for_graph.as_slice());
-        
+
         // The detect_circular_dependencies method returns a reference for method chaining
         let _graph_ref = graph.detect_circular_dependencies();
-        
+
         // Log workspace dependencies for debugging
         for package_info in &self.packages {
             let package_name = package_info.name();
-            
+
             // Log workspace dependencies for visibility
             for workspace_dep in &package_info.workspace_package.workspace_dependencies {
                 log::debug!("Workspace dependency: {} -> {}", package_name, workspace_dep);
             }
         }
-        
+
         // Check for cycles and log results
         if graph.has_cycles() {
-            log::warn!("Dependency graph contains cycles - this may cause issues in package resolution");
+            log::warn!(
+                "Dependency graph contains cycles - this may cause issues in package resolution"
+            );
             let cycles = graph.get_cycle_strings();
             for cycle in cycles {
                 log::warn!("Circular dependency detected: {}", cycle.join(" -> "));
@@ -233,13 +232,13 @@ impl MonorepoProject {
         } else {
             log::info!("Dependency graph is acyclic - no circular dependencies detected");
         }
-        
+
         // Mark that dependency graph analysis has been completed
         // In a future iteration, we could store summary information about the graph
         self.dependency_graph = Some(());
-        
+
         log::info!("Successfully built dependency graph with {} packages", self.packages.len());
-        
+
         Ok(())
     }
 }

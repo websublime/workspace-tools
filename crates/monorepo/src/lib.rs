@@ -89,9 +89,10 @@ pub use crate::analysis::{
 };
 
 // Essential configuration and change types
-pub use crate::config::{MonorepoConfig, Environment, VersionBumpType};
+pub use crate::config::{MonorepoConfig, Environment, VersionBumpType, ConfigManager};
 pub use crate::changes::{
-    PackageChange, PackageChangeType, ChangeSignificance
+    PackageChange, PackageChangeType, ChangeSignificance, ChangeDetector,
+    ChangeDetectionEngine, ChangeDetectionRules
 };
 
 // Core version management
@@ -101,14 +102,17 @@ pub use crate::core::{VersionManager, VersioningStrategy, VersioningResult};
 pub use crate::changesets::{
     ChangesetManager, ChangesetSpec, Changeset, ChangesetApplication, 
     ChangesetFilter, ChangesetStatus, DeploymentResult, 
-    EnvironmentDeploymentResult, ValidationResult
+    EnvironmentDeploymentResult, ValidationResult, ChangesetStorage
 };
 
 // Core task management  
-pub use crate::tasks::{TaskManager, TaskExecutor};
+pub use crate::tasks::{TaskManager, TaskExecutor, ExecutionContext};
 
 // Essential hooks
-pub use crate::hooks::{HookManager, HookInstaller};
+pub use crate::hooks::{
+    HookManager, HookInstaller, HookType, HookCondition, HookDefinition,
+    HookExecutionContext, HookScript, GitOperationType
+};
 
 // Main entry point struct re-exported from core module
 // Implementation moved to core/tools.rs for better separation

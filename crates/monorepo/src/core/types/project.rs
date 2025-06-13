@@ -1,13 +1,13 @@
 //! Monorepo project type definitions
 
 use crate::config::{ConfigManager, MonorepoConfig};
+use std::path::PathBuf;
 use sublime_git_tools::Repo;
-use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package, RegistryManager};
+use sublime_package_tools::{DependencyRegistry, RegistryManager};
 use sublime_standard_tools::{
     filesystem::FileSystemManager,
     monorepo::{MonorepoDescriptor, PackageManager},
 };
-use std::path::PathBuf;
 
 /// Main project structure that aggregates all monorepo information
 pub struct MonorepoProject {

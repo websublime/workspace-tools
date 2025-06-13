@@ -1,7 +1,7 @@
 //! Versioning strategy implementations
 
 use crate::config::VersionBumpType;
-use crate::analysis::PackageChange;
+use crate::changes::PackageChange;
 use crate::changes::ChangeSignificance;
 
 /// Strategy for determining version bumps and propagation

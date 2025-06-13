@@ -2,13 +2,13 @@
 //!
 //! This module contains all type definitions related to diff analysis and change detection.
 
-use crate::changes::{ChangeSignificance, PackageChangeType, PackageChange};
+use crate::changes::{ChangeSignificance, PackageChange, PackageChangeType};
 use crate::core::MonorepoProject;
+use chrono;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use sublime_git_tools::{GitChangedFile, GitFileStatus};
-use chrono;
+use sublime_git_tools::GitChangedFile;
 
 /// Trait for analyzing specific types of file changes
 pub trait ChangeAnalyzer: Send + Sync {

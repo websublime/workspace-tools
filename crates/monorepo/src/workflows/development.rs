@@ -8,51 +8,19 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::analysis::{AffectedPackagesAnalysis, ChangeAnalysis, MonorepoAnalyzer};
+use crate::changes::{ChangeSignificance, PackageChange, PackageChangeType};
 use crate::changesets::{types::ChangesetFilter, ChangesetManager};
 use crate::core::MonorepoProject;
 use crate::error::Error;
 use crate::tasks::TaskManager;
-use crate::workflows::{AffectedPackageInfo, ChangeAnalysisResult, ImpactLevel, PackageChangeFacts};
-use crate::changes::{PackageChange, PackageChangeType, ChangeSignificance};
+use crate::workflows::{
+    AffectedPackageInfo, ChangeAnalysisResult, ImpactLevel, PackageChangeFacts,
+};
 use std::collections::HashMap;
 use sublime_git_tools::GitChangedFile;
 
-/// Development workflow orchestrator
-///
-/// Manages development-time operations like running tests on affected packages,
-/// validating changesets, and providing recommendations to developers.
-///
-/// # Examples
-///
-/// ```rust
-/// use std::sync::Arc;
-/// use sublime_monorepo_tools::{DevelopmentWorkflow, MonorepoProject};
-///
-/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let project = Arc::new(MonorepoProject::new("/path/to/monorepo")?);
-/// let workflow = DevelopmentWorkflow::new(project).await?;
-///
-/// let result = workflow.execute(Some("HEAD~1")).await?;
-///
-/// if result.checks_passed {
-///     println!("All development checks passed!");
-/// }
-/// # Ok(())
-/// # }
-/// ```
-pub struct DevelopmentWorkflow {
-    /// Reference to the monorepo project
-    project: Arc<MonorepoProject>,
-
-    /// Analyzer for detecting changes and affected packages
-    analyzer: MonorepoAnalyzer,
-
-    /// Manager for changeset operations
-    changeset_manager: ChangesetManager,
-
-    /// Manager for task execution
-    task_manager: TaskManager,
-}
+// Import struct definition from types module
+use crate::workflows::types::DevelopmentWorkflow;
 
 impl DevelopmentWorkflow {
     /// Creates a new development workflow
@@ -216,7 +184,7 @@ impl DevelopmentWorkflow {
 
         // For now, use empty package changes since we have a type mismatch
         // TODO: Properly convert between the two PackageChange types in a future phase
-        let package_changes: Vec<crate::analysis::PackageChange> = Vec::new();
+        let package_changes: Vec<crate::changes::PackageChange> = Vec::new();
 
         // Create a complete ChangeAnalysis from the comparison
         let analysis = ChangeAnalysis {
@@ -334,9 +302,8 @@ impl DevelopmentWorkflow {
         for package_change in package_changes {
             let impact_level = self.determine_impact_level(package_change);
 
-            let changed_files: Vec<String> = package_change.changed_files.iter()
-                .map(|f| f.path.clone())
-                .collect();
+            let changed_files: Vec<String> =
+                package_change.changed_files.iter().map(|f| f.path.clone()).collect();
 
             // For now, simulate dependents (would normally query dependency graph)
             let dependents = Vec::new();
@@ -400,6 +367,7 @@ impl DevelopmentWorkflow {
 
     /// Generates reason for version recommendation based on facts
     #[allow(clippy::unused_self)]
+    #[allow(clippy::if_not_else)]
     fn generate_recommendation_reason(&self, package_change: &PackageChange) -> String {
         let total_files = package_change.changed_files.len();
 
@@ -459,7 +427,9 @@ impl DevelopmentWorkflow {
 
             // Store facts in metadata - no decisions made about significance or type
             // Convert string file paths to GitChangedFile format
-            let changed_files = facts.files_changed.iter()
+            let changed_files = facts
+                .files_changed
+                .iter()
                 .map(|file_path| GitChangedFile {
                     path: file_path.clone(),
                     status: sublime_git_tools::GitFileStatus::Modified,

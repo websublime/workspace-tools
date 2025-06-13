@@ -32,5 +32,5 @@ pub use types::{
     // Diff
     ChangeAnalyzer, ChangeAnalysisResult, DiffAnalyzer, BranchComparisonResult,
     ChangeAnalysis, AffectedPackagesAnalysis, ChangeSignificanceResult,
-    ComprehensiveChangeAnalysisResult, PackageChange,
+    ComprehensiveChangeAnalysisResult,
 };

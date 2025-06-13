@@ -5,7 +5,6 @@
 
 use crate::core::MonorepoProject;
 use crate::error::Result;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -16,11 +15,10 @@ use crate::changes::{ChangeSignificance, PackageChangeType};
 
 // Import types from types/diff and changes
 use super::types::diff::{
-    DiffAnalyzer, BranchComparisonResult, ChangeAnalysis,
-    AffectedPackagesAnalysis, ChangeSignificanceResult, ChangeAnalysisResult, ChangeAnalyzer,
+    AffectedPackagesAnalysis, BranchComparisonResult, ChangeAnalysis, ChangeAnalysisResult,
+    ChangeAnalyzer, ChangeSignificanceResult, DiffAnalyzer,
 };
 use crate::changes::PackageChange;
-
 
 impl DiffAnalyzer {
     /// Create a new diff analyzer with the given project
@@ -341,9 +339,6 @@ impl DiffAnalyzer {
         Ok(conflicts)
     }
 }
-
-
-
 
 /// Helper for building `PackageChange` objects
 struct PackageChangeBuilder {

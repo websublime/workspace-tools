@@ -3,7 +3,7 @@
 //! This module provides implementation methods for the `HookExecutionContext`,
 //! following the project's pattern of separating declarations from implementations.
 
-use super::{HookExecutionContext, GitOperationType, RemoteInfo, CommitInfo};
+use super::{CommitInfo, GitOperationType, HookExecutionContext, RemoteInfo};
 use glob::Pattern;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -192,24 +192,26 @@ impl HookExecutionContext {
                     if glob_pattern.matches(file_path) {
                         return true;
                     }
-                    
+
                     // Also try matching just the filename for patterns like "*.rs"
                     if let Some(filename) = std::path::Path::new(file_path).file_name() {
                         if let Some(filename_str) = filename.to_str() {
                             return glob_pattern.matches(filename_str);
                         }
                     }
-                    
+
                     false
                 })
             }
             Err(e) => {
-                log::warn!("Invalid glob pattern '{}': {}. Falling back to simple string matching.", pattern, e);
-                
+                log::warn!(
+                    "Invalid glob pattern '{}': {}. Falling back to simple string matching.",
+                    pattern,
+                    e
+                );
+
                 // Fallback to simple string matching for invalid patterns
-                self.changed_files.iter().any(|f| {
-                    f.contains(pattern) || f == pattern
-                })
+                self.changed_files.iter().any(|f| f.contains(pattern) || f == pattern)
             }
         }
     }
@@ -240,10 +242,12 @@ impl HookExecutionContext {
         let compiled_includes: Vec<Pattern> = include_patterns
             .iter()
             .filter_map(|pattern| {
-                Pattern::new(pattern).map_err(|e| {
-                    log::warn!("Invalid include pattern '{}': {}", pattern, e);
-                    e
-                }).ok()
+                Pattern::new(pattern)
+                    .map_err(|e| {
+                        log::warn!("Invalid include pattern '{}': {}", pattern, e);
+                        e
+                    })
+                    .ok()
             })
             .collect();
 
@@ -251,24 +255,25 @@ impl HookExecutionContext {
         let compiled_excludes: Vec<Pattern> = exclude_patterns
             .iter()
             .filter_map(|pattern| {
-                Pattern::new(pattern).map_err(|e| {
-                    log::warn!("Invalid exclude pattern '{}': {}", pattern, e);
-                    e
-                }).ok()
+                Pattern::new(pattern)
+                    .map_err(|e| {
+                        log::warn!("Invalid exclude pattern '{}': {}", pattern, e);
+                        e
+                    })
+                    .ok()
             })
             .collect();
 
         self.changed_files.iter().any(|file_path| {
             // Check if file matches any include pattern
-            let matches_include = compiled_includes.is_empty() || 
-                compiled_includes.iter().any(|pattern| {
+            let matches_include = compiled_includes.is_empty()
+                || compiled_includes.iter().any(|pattern| {
                     pattern.matches(file_path) || {
                         // Also try matching just the filename
                         std::path::Path::new(file_path)
                             .file_name()
                             .and_then(|f| f.to_str())
-                            .map(|filename| pattern.matches(filename))
-                            .unwrap_or(false)
+                            .is_some_and(|filename| pattern.matches(filename))
                     }
                 });
 
@@ -279,8 +284,7 @@ impl HookExecutionContext {
                     std::path::Path::new(file_path)
                         .file_name()
                         .and_then(|f| f.to_str())
-                        .map(|filename| pattern.matches(filename))
-                        .unwrap_or(false)
+                        .is_some_and(|filename| pattern.matches(filename))
                 }
             });
 
@@ -296,10 +300,7 @@ impl HookExecutionContext {
         } else {
             format!(".{extension}")
         };
-        
-        self.changed_files
-            .iter()
-            .filter(|f| f.ends_with(&ext_with_dot))
-            .collect()
+
+        self.changed_files.iter().filter(|f| f.ends_with(&ext_with_dot)).collect()
     }
 }

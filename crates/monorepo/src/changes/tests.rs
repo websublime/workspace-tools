@@ -66,39 +66,39 @@ mod tests {
 
         let package_changes = detector.map_changes_to_packages(&api_breaking_changes, &packages);
         assert_eq!(package_changes.len(), 1);
-        
+
         let api_change = &package_changes[0];
         assert_eq!(api_change.package_name, "api-package");
-        
+
         // Verify that API changes are automatically elevated to high significance
         // when they affect public interfaces
         let elevated_changes = detector.elevate_significance_for_breaking_changes(&package_changes);
         assert!(!elevated_changes.is_empty());
-        
+
         // Test elevation ordering: Low -> Medium -> High
         assert!(ChangeSignificance::High > ChangeSignificance::Medium);
         assert!(ChangeSignificance::Medium > ChangeSignificance::Low);
-        
+
         // Test elevation progression
         assert_eq!(ChangeSignificance::Low.elevate(), ChangeSignificance::Medium);
         assert_eq!(ChangeSignificance::Medium.elevate(), ChangeSignificance::High);
         assert_eq!(ChangeSignificance::High.elevate(), ChangeSignificance::High); // Max level
-        
+
         // Test that breaking changes in index files always elevate to High
-        let contains_index_change = api_breaking_changes.iter()
-            .any(|file| file.path.contains("index.ts"));
+        let contains_index_change =
+            api_breaking_changes.iter().any(|file| file.path.contains("index.ts"));
         assert!(contains_index_change);
     }
 
     #[test]
     fn test_package_change_type_classification_with_real_files() {
         // Test change type classification with realistic file scenarios
-        let detector = ChangeDetector::new("/test/monorepo");
+        let _detector = ChangeDetector::new("/test/monorepo");
         let packages = vec![create_test_package_info("full-package", "1.0.0", "packages/full")];
 
         // Test file pattern classification (without assuming the method signature)
         let mut detector = ChangeDetector::new("/test/monorepo");
-        
+
         // Test SourceCode classification - validate file types
         let source_changes = vec![
             create_changed_file("packages/full/src/lib.ts", GitFileStatus::Modified),
@@ -108,8 +108,8 @@ mod tests {
         let source_package_changes = detector.map_changes_to_packages(&source_changes, &packages);
         assert!(!source_package_changes.is_empty());
         assert_eq!(source_package_changes[0].package_name, "full-package");
-        
-        // Test Dependencies classification  
+
+        // Test Dependencies classification
         let deps_changes = vec![
             create_changed_file("packages/full/package.json", GitFileStatus::Modified),
             create_changed_file("packages/full/yarn.lock", GitFileStatus::Modified),
@@ -117,7 +117,7 @@ mod tests {
         let deps_package_changes = detector.map_changes_to_packages(&deps_changes, &packages);
         assert!(!deps_package_changes.is_empty());
         assert_eq!(deps_package_changes[0].package_name, "full-package");
-        
+
         // Test Configuration classification
         let config_changes = vec![
             create_changed_file("packages/full/tsconfig.json", GitFileStatus::Modified),
@@ -127,7 +127,7 @@ mod tests {
         let config_package_changes = detector.map_changes_to_packages(&config_changes, &packages);
         assert!(!config_package_changes.is_empty());
         assert_eq!(config_package_changes[0].package_name, "full-package");
-        
+
         // Test Documentation classification
         let docs_changes = vec![
             create_changed_file("packages/full/README.md", GitFileStatus::Modified),
@@ -137,7 +137,7 @@ mod tests {
         let docs_package_changes = detector.map_changes_to_packages(&docs_changes, &packages);
         assert!(!docs_package_changes.is_empty());
         assert_eq!(docs_package_changes[0].package_name, "full-package");
-        
+
         // Test Tests classification
         let tests_changes = vec![
             create_changed_file("packages/full/src/__tests__/lib.test.ts", GitFileStatus::Modified),
@@ -154,7 +154,7 @@ mod tests {
         let config = PackageChangeType::Configuration;
         let docs = PackageChangeType::Documentation;
         let tests = PackageChangeType::Tests;
-        
+
         assert_ne!(source, deps);
         assert_ne!(deps, config);
         assert_ne!(config, docs);
@@ -298,52 +298,55 @@ mod tests {
     #[test]
     fn test_git_file_status_impact_on_change_significance() {
         // Test how different Git file statuses affect change significance calculation
-        let detector = ChangeDetector::new("/test/monorepo");
+        let _detector = ChangeDetector::new("/test/monorepo");
         let packages = vec![create_test_package_info("impact-test", "1.0.0", "packages/impact")];
 
         // Test that DELETED files have higher significance than MODIFIED
-        let deleted_critical_file = vec![
-            create_changed_file("packages/impact/src/index.ts", GitFileStatus::Deleted),
-        ];
+        let deleted_critical_file =
+            vec![create_changed_file("packages/impact/src/index.ts", GitFileStatus::Deleted)];
         let mut detector = ChangeDetector::new("/test/monorepo");
         let deleted_changes = detector.map_changes_to_packages(&deleted_critical_file, &packages);
-        
+
         // Test that ADDED files for new features have medium-high significance
         let added_feature_files = vec![
             create_changed_file("packages/impact/src/features/new-api.ts", GitFileStatus::Added),
             create_changed_file("packages/impact/types/new-types.d.ts", GitFileStatus::Added),
         ];
         let added_changes = detector.map_changes_to_packages(&added_feature_files, &packages);
-        
+
         // Test that MODIFIED existing files have varying significance based on file type
         let modified_files = vec![
             create_changed_file("packages/impact/src/utils.ts", GitFileStatus::Modified),
             create_changed_file("packages/impact/README.md", GitFileStatus::Modified),
         ];
         let modified_changes = detector.map_changes_to_packages(&modified_files, &packages);
-        
+
         // Validate that each change type is detected
         assert!(!deleted_changes.is_empty());
         assert!(!added_changes.is_empty());
         assert!(!modified_changes.is_empty());
-        
+
         // Validate file status distinction
         let modified = GitFileStatus::Modified;
         let added = GitFileStatus::Added;
         let deleted = GitFileStatus::Deleted;
-        
+
         assert_ne!(modified, added);
         assert_ne!(added, deleted);
         assert_ne!(modified, deleted);
-        
+
         // Test significance rules: deleting main files should be high impact
         let deleted_change = &deleted_changes[0];
-        assert!(deleted_change.changed_files.iter()
+        assert!(deleted_change
+            .changed_files
+            .iter()
             .any(|f| f.path.contains("index.ts") && f.status == GitFileStatus::Deleted));
-            
+
         // Test that added feature files are detected correctly
         let added_change = &added_changes[0];
-        assert!(added_change.changed_files.iter()
+        assert!(added_change
+            .changed_files
+            .iter()
             .any(|f| f.path.contains("new-api.ts") && f.status == GitFileStatus::Added));
     }
 

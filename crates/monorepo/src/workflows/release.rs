@@ -40,19 +40,9 @@ use crate::analysis::ChangeAnalysis;
 /// # Ok(())
 /// # }
 /// ```
-pub struct ReleaseWorkflow {
-    /// Reference to the monorepo project
-    project: Arc<MonorepoProject>,
 
-    /// Analyzer for detecting changes and affected packages
-    analyzer: MonorepoAnalyzer,
-
-    /// Manager for changeset operations
-    changeset_manager: ChangesetManager,
-
-    /// Manager for task execution
-    task_manager: TaskManager,
-}
+// Import struct definition from types module
+use crate::workflows::types::ReleaseWorkflow;
 
 impl ReleaseWorkflow {
     /// Creates a new release workflow
@@ -85,8 +75,9 @@ impl ReleaseWorkflow {
         let analyzer = MonorepoAnalyzer::new(Arc::clone(&project));
         let changeset_manager = ChangesetManager::new(Arc::clone(&project))?;
         let task_manager = TaskManager::new(Arc::clone(&project))?;
+        let version_manager = crate::core::VersionManager::new(Arc::clone(&project));
 
-        Ok(Self { project, analyzer, changeset_manager, task_manager })
+        Ok(Self { project, analyzer, version_manager, changeset_manager, task_manager })
     }
 
     /// Executes the complete release workflow

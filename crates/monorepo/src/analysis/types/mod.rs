@@ -53,5 +53,4 @@ pub use diff::{
     ChangeAnalysis, AffectedPackagesAnalysis, ChangeSignificanceResult,
     ComprehensiveChangeAnalysisResult
 };
-// PackageChange is imported from changes module to avoid duplication
-pub use crate::changes::PackageChange;
+// PackageChange should be imported directly from changes module to avoid duplication

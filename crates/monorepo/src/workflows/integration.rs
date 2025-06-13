@@ -3,11 +3,11 @@
 //! This module provides workflows that integrate the changeset system
 //! with Git hooks for seamless development experience.
 
-use std::sync::Arc;
 use crate::changesets::{types::ChangesetFilter, ChangesetManager};
 use crate::core::MonorepoProject;
 use crate::error::Error;
 use crate::hooks::HookManager;
+use std::sync::Arc;
 use sublime_standard_tools::filesystem::FileSystem;
 
 /// Integration workflow that connects changesets with hooks
@@ -15,16 +15,8 @@ use sublime_standard_tools::filesystem::FileSystem;
 /// This workflow ensures that changesets are properly validated during
 /// Git operations and provides seamless integration between the changeset
 /// system and Git hooks.
-pub struct ChangesetHookIntegration {
-    /// Reference to the monorepo project
-    project: Arc<MonorepoProject>,
-
-    /// Changeset manager for changeset operations
-    changeset_manager: ChangesetManager,
-
-    /// Hook manager for Git hook operations
-    hook_manager: HookManager,
-}
+// Import struct definition from types module
+use crate::workflows::types::ChangesetHookIntegration;
 
 impl ChangesetHookIntegration {
     /// Creates a new changeset-hook integration
@@ -43,8 +35,9 @@ impl ChangesetHookIntegration {
     pub fn new(project: Arc<MonorepoProject>) -> Result<Self, Error> {
         let changeset_manager = ChangesetManager::new(Arc::clone(&project))?;
         let hook_manager = HookManager::new(Arc::clone(&project))?;
+        let task_manager = crate::tasks::TaskManager::new(Arc::clone(&project))?;
 
-        Ok(Self { project, changeset_manager, hook_manager })
+        Ok(Self { project, changeset_manager, hook_manager, task_manager })
     }
 
     /// Validates that required changesets exist for the current changes
@@ -474,7 +467,7 @@ impl ChangesetHookIntegration {
 
             // Find all packages that depend on this updated package
             let dependents = self.find_dependent_packages(updated_package)?;
-            
+
             if dependents.is_empty() {
                 log::debug!("Package '{}' has no dependents, skipping validation", updated_package);
                 continue;
@@ -488,12 +481,12 @@ impl ChangesetHookIntegration {
             );
 
             // Get the current version of the updated package
-            let updated_package_info = self.project.packages.iter()
-                .find(|pkg| pkg.name() == updated_package);
+            let updated_package_info =
+                self.project.packages.iter().find(|pkg| pkg.name() == updated_package);
 
             if let Some(pkg_info) = updated_package_info {
                 let current_version = pkg_info.version();
-                
+
                 // Validate that dependent packages can use this version
                 for dependent in &dependents {
                     match self.validate_dependency_compatibility(
@@ -502,20 +495,22 @@ impl ChangesetHookIntegration {
                         current_version,
                     ) {
                         Ok(()) => {
-                            log::debug!("✅ Dependency compatibility validated: {} -> {}", dependent, updated_package);
+                            log::debug!(
+                                "✅ Dependency compatibility validated: {} -> {}",
+                                dependent,
+                                updated_package
+                            );
                         }
                         Err(e) => {
                             validation_errors.push(format!(
-                                "❌ Dependency incompatibility: {} cannot use {} v{}: {}", 
-                                dependent, updated_package, current_version, e
+                                "❌ Dependency incompatibility: {dependent} cannot use {updated_package} v{current_version}: {e}"
                             ));
                         }
                     }
                 }
             } else {
                 validation_errors.push(format!(
-                    "❌ Updated package '{}' not found in project packages", 
-                    updated_package
+                    "❌ Updated package '{updated_package}' not found in project packages"
                 ));
             }
         }
@@ -587,27 +582,27 @@ impl ChangesetHookIntegration {
     ) -> Result<(), Error> {
         log::debug!(
             "Validating compatibility: {} depends on {} v{}",
-            dependent_package, dependency_package, dependency_version
+            dependent_package,
+            dependency_package,
+            dependency_version
         );
 
         // Get the dependent package info
-        let dependent_info = self.project.packages.iter()
-            .find(|pkg| pkg.name() == dependent_package)
-            .ok_or_else(|| {
-                Error::workflow(format!("Dependent package '{}' not found", dependent_package))
-            })?;
+        let dependent_info =
+            self.project.packages.iter().find(|pkg| pkg.name() == dependent_package).ok_or_else(
+                || Error::workflow(format!("Dependent package '{dependent_package}' not found")),
+            )?;
 
         // Read the dependent package's package.json to check version requirements
         let package_json_path = dependent_info.path().join("package.json");
-        let content = self.project.file_system.read_file_string(&package_json_path)
-            .map_err(|e| Error::workflow(format!(
-                "Failed to read package.json for {}: {}", dependent_package, e
-            )))?;
+        let content =
+            self.project.file_system.read_file_string(&package_json_path).map_err(|e| {
+                Error::workflow(format!("Failed to read package.json for {dependent_package}: {e}"))
+            })?;
 
-        let json: serde_json::Value = serde_json::from_str(&content)
-            .map_err(|e| Error::workflow(format!(
-                "Failed to parse package.json for {}: {}", dependent_package, e
-            )))?;
+        let json: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+            Error::workflow(format!("Failed to parse package.json for {dependent_package}: {e}"))
+        })?;
 
         // Check all dependency sections
         let dep_sections = ["dependencies", "devDependencies", "peerDependencies"];
@@ -626,25 +621,26 @@ impl ChangesetHookIntegration {
 
         let required_range = required_version_range.ok_or_else(|| {
             Error::workflow(format!(
-                "Package '{}' does not depend on '{}'", 
-                dependent_package, dependency_package
+                "Package '{dependent_package}' does not depend on '{dependency_package}'"
             ))
         })?;
 
         // Perform basic version compatibility checking
         // For a real implementation, you would use a proper semver library
         let is_compatible = self.check_version_compatibility(dependency_version, &required_range);
-        
+
         if is_compatible {
             log::debug!(
                 "✅ Version {} satisfies requirement {} for {} -> {}",
-                dependency_version, required_range, dependent_package, dependency_package
+                dependency_version,
+                required_range,
+                dependent_package,
+                dependency_package
             );
             Ok(())
         } else {
             Err(Error::workflow(format!(
-                "Version {} does not satisfy requirement {} for dependency {} -> {}",
-                dependency_version, required_range, dependent_package, dependency_package
+                "Version {dependency_version} does not satisfy requirement {required_range} for dependency {dependent_package} -> {dependency_package}"
             )))
         }
     }
@@ -658,7 +654,7 @@ impl ChangesetHookIntegration {
         // Check each package for cycles
         for pkg in &self.project.packages {
             let package_name = pkg.name().to_string();
-            
+
             if !visited.contains(&package_name) {
                 if let Err(cycle_errors) = self.detect_cycles_from_package(
                     &package_name,
@@ -688,16 +684,11 @@ impl ChangesetHookIntegration {
     ) -> Result<(), Vec<String>> {
         if visiting.contains(package_name) {
             // Found a cycle
-            let cycle_start = current_path.iter()
-                .position(|p| p == package_name)
-                .unwrap_or(0);
+            let cycle_start = current_path.iter().position(|p| p == package_name).unwrap_or(0);
             let mut cycle: Vec<String> = current_path[cycle_start..].to_vec();
             cycle.push(package_name.to_string()); // Complete the cycle
-            
-            return Err(vec![format!(
-                "❌ Circular dependency detected: {}", 
-                cycle.join(" -> ")
-            )]);
+
+            return Err(vec![format!("❌ Circular dependency detected: {}", cycle.join(" -> "))]);
         }
 
         if visited.contains(package_name) {
@@ -712,12 +703,9 @@ impl ChangesetHookIntegration {
         let mut all_errors = Vec::new();
 
         for dependency in dependencies {
-            if let Err(cycle_errors) = self.detect_cycles_from_package(
-                &dependency,
-                visiting,
-                visited,
-                current_path,
-            ) {
+            if let Err(cycle_errors) =
+                self.detect_cycles_from_package(&dependency, visiting, visited, current_path)
+            {
                 all_errors.extend(cycle_errors);
             }
         }
@@ -738,7 +726,8 @@ impl ChangesetHookIntegration {
         let mut dependencies = Vec::new();
 
         // Find the package info
-        if let Some(pkg_info) = self.project.packages.iter().find(|pkg| pkg.name() == package_name) {
+        if let Some(pkg_info) = self.project.packages.iter().find(|pkg| pkg.name() == package_name)
+        {
             // Read package.json to get dependencies
             let package_json_path = pkg_info.path().join("package.json");
             if let Ok(content) = self.project.file_system.read_file_string(&package_json_path) {
@@ -760,9 +749,10 @@ impl ChangesetHookIntegration {
     }
 
     /// Basic version compatibility checking
-    /// 
+    ///
     /// This is a simplified implementation for demonstration.
     /// In a real scenario, you would use a proper semver library like `semver` crate.
+    #[allow(clippy::manual_strip)]
     fn check_version_compatibility(&self, actual_version: &str, required_range: &str) -> bool {
         // Handle exact version matches
         if actual_version == required_range {
@@ -811,50 +801,48 @@ impl ChangesetHookIntegration {
     fn satisfies_caret_range(&self, actual: &str, required: &str) -> bool {
         let actual_parts = self.parse_version(actual);
         let required_parts = self.parse_version(required);
-        
+
         if actual_parts.is_none() || required_parts.is_none() {
             return false;
         }
-        
+
         let (actual_major, actual_minor, actual_patch) = actual_parts.unwrap();
         let (req_major, req_minor, req_patch) = required_parts.unwrap();
-        
+
         // Major version must match, minor and patch can be higher
-        actual_major == req_major && 
-        (actual_minor > req_minor || 
-         (actual_minor == req_minor && actual_patch >= req_patch))
+        actual_major == req_major
+            && (actual_minor > req_minor
+                || (actual_minor == req_minor && actual_patch >= req_patch))
     }
 
     /// Check if version satisfies tilde range (~1.2.3)
     fn satisfies_tilde_range(&self, actual: &str, required: &str) -> bool {
         let actual_parts = self.parse_version(actual);
         let required_parts = self.parse_version(required);
-        
+
         if actual_parts.is_none() || required_parts.is_none() {
             return false;
         }
-        
+
         let (actual_major, actual_minor, actual_patch) = actual_parts.unwrap();
         let (req_major, req_minor, req_patch) = required_parts.unwrap();
-        
+
         // Major and minor must match, patch can be higher
-        actual_major == req_major && 
-        actual_minor == req_minor && 
-        actual_patch >= req_patch
+        actual_major == req_major && actual_minor == req_minor && actual_patch >= req_patch
     }
 
     /// Compare two versions (-1, 0, 1 for less, equal, greater)
     fn compare_versions(&self, version1: &str, version2: &str) -> i32 {
         let v1_parts = self.parse_version(version1);
         let v2_parts = self.parse_version(version2);
-        
+
         if v1_parts.is_none() || v2_parts.is_none() {
             return 0; // Treat invalid versions as equal
         }
-        
+
         let (v1_major, v1_minor, v1_patch) = v1_parts.unwrap();
         let (v2_major, v2_minor, v2_patch) = v2_parts.unwrap();
-        
+
         if v1_major != v2_major {
             return if v1_major > v2_major { 1 } else { -1 };
         }
@@ -864,7 +852,7 @@ impl ChangesetHookIntegration {
         if v1_patch != v2_patch {
             return if v1_patch > v2_patch { 1 } else { -1 };
         }
-        
+
         0
     }
 
@@ -874,11 +862,11 @@ impl ChangesetHookIntegration {
         if parts.len() != 3 {
             return None;
         }
-        
+
         let major = parts[0].parse::<u32>().ok()?;
         let minor = parts[1].parse::<u32>().ok()?;
         let patch = parts[2].parse::<u32>().ok()?;
-        
+
         Some((major, minor, patch))
     }
 

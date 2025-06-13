@@ -11,10 +11,8 @@ use serde_json;
 use sublime_standard_tools::filesystem::FileSystem;
 
 use super::types::{Changeset, ChangesetFilter, ChangesetStorage};
-use crate::config::types::ChangesetsConfig;
 use crate::core::MonorepoProject;
 use crate::error::Error;
-
 
 impl ChangesetStorage {
     /// Creates a new changeset storage instance

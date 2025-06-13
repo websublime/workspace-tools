@@ -13,7 +13,7 @@ use super::{
 use crate::analysis::ChangeAnalysis;
 use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 impl TaskManager {
@@ -289,7 +289,6 @@ impl TaskManager {
         Ok(())
     }
 }
-
 
 impl TaskExecutionResult {
     /// Create result with skipped status

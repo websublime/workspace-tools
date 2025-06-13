@@ -7,8 +7,7 @@ use std::sync::Arc;
 use tempfile::TempDir;
 
 use super::{
-    integration::ChangesetHookIntegration,
-    types::{ImpactLevel, ReleaseOptions},
+    types::{ChangesetHookIntegration, ImpactLevel, ReleaseOptions},
     DevelopmentWorkflow, ReleaseWorkflow,
 };
 use crate::{core::MonorepoProject, AffectedPackagesAnalysis};
@@ -118,12 +117,14 @@ async fn test_impact_level_determination() {
         package_name: "@test/core".to_string(),
         change_type: PackageChangeType::SourceCode, // Fixed - no decisions made
         significance: ChangeSignificance::Low,      // Fixed - no decisions made
-        changed_files: (0..20).map(|i| sublime_git_tools::GitChangedFile {
-            path: format!("src/file{i}.ts"),
-            status: sublime_git_tools::GitFileStatus::Modified,
-            staged: false,
-            workdir: true,
-        }).collect(),
+        changed_files: (0..20)
+            .map(|i| sublime_git_tools::GitChangedFile {
+                path: format!("src/file{i}.ts"),
+                status: sublime_git_tools::GitFileStatus::Modified,
+                staged: false,
+                workdir: true,
+            })
+            .collect(),
         suggested_version_bump: crate::config::VersionBumpType::Patch,
         metadata: large_change_metadata,
     };

@@ -1,9 +1,6 @@
 //! Change detection engine type definitions
 
-use super::{
-    ChangeDetectionRules, ChangeTypeRule, FilePattern, PatternType, RuleConditions,
-    SignificanceRule,
-};
+use super::ChangeDetectionRules;
 use glob::Pattern;
 use regex::Regex;
 use std::collections::HashMap;

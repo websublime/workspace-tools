@@ -4,7 +4,8 @@
 //! condition checking, and result tracking.
 
 use super::*;
-use crate::analysis::{ChangeAnalysis, DiffPackageChange as PackageChange};
+use crate::analysis::ChangeAnalysis;
+use crate::changes::PackageChange;
 use crate::core::MonorepoProject;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -468,7 +469,7 @@ mod condition_checker_tests {
         let project = create_test_project();
         let checker = ConditionChecker::new(project);
 
-        let context = manager::ExecutionContext::default()
+        let context = ExecutionContext::default()
             .with_affected_packages(vec!["test-package-a".to_string()]);
 
         let condition =
@@ -491,7 +492,7 @@ mod condition_checker_tests {
             workdir: true,
         }];
 
-        let context = manager::ExecutionContext::default().with_changed_files(changed_files);
+        let context = ExecutionContext::default().with_changed_files(changed_files);
 
         let condition = TaskCondition::FilesChanged {
             patterns: vec![FilePattern {
@@ -511,7 +512,7 @@ mod condition_checker_tests {
         let project = create_test_project();
         let checker = ConditionChecker::new(project);
 
-        let mut context = manager::ExecutionContext::default();
+        let mut context = ExecutionContext::default();
         context.environment.insert("NODE_ENV".to_string(), "production".to_string());
 
         let condition = TaskCondition::Environment {
@@ -531,7 +532,7 @@ mod condition_checker_tests {
         let project = create_test_project();
         let checker = ConditionChecker::new(project);
 
-        let context = manager::ExecutionContext::default().with_branch("feature/new-feature");
+        let context = ExecutionContext::default().with_branch("feature/new-feature");
 
         let condition = TaskCondition::OnBranch { pattern: BranchCondition::IsFeature };
 
@@ -545,7 +546,7 @@ mod condition_checker_tests {
         let project = create_test_project();
         let checker = ConditionChecker::new(project);
 
-        let context = manager::ExecutionContext::default()
+        let context = ExecutionContext::default()
             .with_affected_packages(vec!["test-package-a".to_string()])
             .with_branch("feature/test");
 
@@ -581,7 +582,7 @@ mod condition_checker_tests {
         let project = create_test_project();
         let checker = ConditionChecker::new(project);
 
-        let context = manager::ExecutionContext::default().with_branch("main");
+        let context = ExecutionContext::default().with_branch("main");
 
         let not_condition = TaskCondition::Not {
             condition: Box::new(TaskCondition::OnBranch { pattern: BranchCondition::IsFeature }),
@@ -598,13 +599,13 @@ mod condition_checker_tests {
         let checker = ConditionChecker::new(project);
 
         // Test empty package list (should return true)
-        let context = manager::ExecutionContext::default();
+        let context = ExecutionContext::default();
         let result = run_async(checker.check_packages_changed(&[], &context));
         assert!(result.is_ok());
         assert!(result.unwrap());
 
         // Test with affected packages
-        let context = manager::ExecutionContext::default()
+        let context = ExecutionContext::default()
             .with_affected_packages(vec!["package-a".to_string(), "package-b".to_string()]);
 
         let result =
@@ -624,7 +625,7 @@ mod condition_checker_tests {
         let checker = ConditionChecker::new(project);
 
         // Test empty patterns (should return true)
-        let context = manager::ExecutionContext::default();
+        let context = ExecutionContext::default();
         let result = run_async(checker.check_files_changed(&[], &context));
         assert!(result.is_ok());
         assert!(result.unwrap());
@@ -645,7 +646,7 @@ mod condition_checker_tests {
             },
         ];
 
-        let context = manager::ExecutionContext::default().with_changed_files(changed_files);
+        let context = ExecutionContext::default().with_changed_files(changed_files);
 
         // Test glob pattern matching
         let patterns = vec![FilePattern {
@@ -675,7 +676,7 @@ mod condition_checker_tests {
         let project = create_test_project();
         let checker = ConditionChecker::new(project);
 
-        let mut context = manager::ExecutionContext::default();
+        let mut context = ExecutionContext::default();
         context.environment.insert("NODE_ENV".to_string(), "production".to_string());
 
         let condition = EnvironmentCondition::VariableEquals {
@@ -702,7 +703,7 @@ mod condition_checker_tests {
         let project = create_test_project();
         let checker = ConditionChecker::new(project);
 
-        let mut context = manager::ExecutionContext::default();
+        let mut context = ExecutionContext::default();
         context.environment.insert("TEST_VAR".to_string(), "value".to_string());
 
         let condition = EnvironmentCondition::VariableExists { key: "TEST_VAR".to_string() };
@@ -724,7 +725,7 @@ mod condition_checker_tests {
         let project = create_test_project();
         let checker = ConditionChecker::new(project);
 
-        let mut context = manager::ExecutionContext::default();
+        let mut context = ExecutionContext::default();
         context.environment.insert("VERSION".to_string(), "1.2.3".to_string());
 
         let condition = EnvironmentCondition::VariableMatches {
@@ -751,7 +752,7 @@ mod condition_checker_tests {
         let project = create_test_project();
         let checker = ConditionChecker::new(project);
 
-        let context = manager::ExecutionContext::default().with_branch("main");
+        let context = ExecutionContext::default().with_branch("main");
 
         let condition = BranchCondition::Equals("main".to_string());
 
@@ -776,7 +777,7 @@ mod condition_checker_tests {
             vec![("main", true), ("master", true), ("develop", true), ("feature/test", false)];
 
         for (branch_name, expected) in test_cases {
-            let context = manager::ExecutionContext::default().with_branch(branch_name);
+            let context = ExecutionContext::default().with_branch(branch_name);
 
             let condition = BranchCondition::IsMain;
 
@@ -806,7 +807,7 @@ mod condition_checker_tests {
         ];
 
         for (branch_name, expected) in test_cases {
-            let context = manager::ExecutionContext::default().with_branch(branch_name);
+            let context = ExecutionContext::default().with_branch(branch_name);
 
             let condition = BranchCondition::IsFeature;
 
@@ -836,7 +837,7 @@ mod condition_checker_tests {
         ];
 
         for (branch_name, expected) in test_cases {
-            let context = manager::ExecutionContext::default().with_branch(branch_name);
+            let context = ExecutionContext::default().with_branch(branch_name);
 
             let condition = BranchCondition::IsRelease;
 
@@ -866,7 +867,7 @@ mod condition_checker_tests {
         ];
 
         for (branch_name, expected) in test_cases {
-            let context = manager::ExecutionContext::default().with_branch(branch_name);
+            let context = ExecutionContext::default().with_branch(branch_name);
 
             let condition = BranchCondition::IsHotfix;
 
@@ -887,7 +888,7 @@ mod condition_checker_tests {
         let project = create_test_project();
         let checker = ConditionChecker::new(project);
 
-        let context = manager::ExecutionContext::default().with_branch("develop");
+        let context = ExecutionContext::default().with_branch("develop");
 
         let condition = BranchCondition::OneOf(vec![
             "main".to_string(),
@@ -899,7 +900,7 @@ mod condition_checker_tests {
         assert!(result.is_ok());
         assert!(result.unwrap(), "Should match one of the specified branches");
 
-        let context = manager::ExecutionContext::default().with_branch("feature/test");
+        let context = ExecutionContext::default().with_branch("feature/test");
 
         let result = run_async(checker.check_branch_condition(&condition, &context));
         assert!(result.is_ok());
@@ -911,7 +912,7 @@ mod condition_checker_tests {
         let project = create_test_project();
         let checker = ConditionChecker::new(project);
 
-        let context = manager::ExecutionContext::default().with_branch("feature/test");
+        let context = ExecutionContext::default().with_branch("feature/test");
 
         let condition = BranchCondition::NoneOf(vec![
             "main".to_string(),
@@ -923,7 +924,7 @@ mod condition_checker_tests {
         assert!(result.is_ok());
         assert!(result.unwrap(), "Should not match any of the excluded branches");
 
-        let context = manager::ExecutionContext::default().with_branch("main");
+        let context = ExecutionContext::default().with_branch("main");
 
         let result = run_async(checker.check_branch_condition(&condition, &context));
         assert!(result.is_ok());
@@ -935,7 +936,7 @@ mod condition_checker_tests {
         let project = create_test_project();
         let checker = ConditionChecker::new(project);
 
-        let context = manager::ExecutionContext::default().with_branch("feature/api-v2");
+        let context = ExecutionContext::default().with_branch("feature/api-v2");
 
         let condition = BranchCondition::Matches("feature/*".to_string());
 
@@ -943,7 +944,7 @@ mod condition_checker_tests {
         assert!(result.is_ok());
         assert!(result.unwrap(), "Should match glob pattern");
 
-        let context = manager::ExecutionContext::default().with_branch("release/1.0");
+        let context = ExecutionContext::default().with_branch("release/1.0");
 
         let result = run_async(checker.check_branch_condition(&condition, &context));
         assert!(result.is_ok());

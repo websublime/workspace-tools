@@ -13,6 +13,9 @@ mod options;
 mod results;
 mod status;
 mod data;
+mod development;
+mod release;
+mod integration;
 
 // Explicit exports to avoid wildcard re-exports
 
@@ -31,3 +34,8 @@ pub use status::{WorkflowStep, WorkflowProgress, WorkflowStatus};
 
 // Data types
 pub use data::PackageChangeFacts;
+
+// Implementation structs
+pub use development::DevelopmentWorkflow;
+pub use release::ReleaseWorkflow;
+pub use integration::ChangesetHookIntegration;

@@ -9,7 +9,7 @@ mod tests {
     use std::sync::Arc;
     use tempfile::TempDir;
 
-    use crate::changesets::storage::ChangesetStorage;
+    use crate::changesets::ChangesetStorage;
     use crate::config::types::Environment;
     use crate::core::MonorepoProject;
     use crate::{

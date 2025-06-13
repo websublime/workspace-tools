@@ -1,10 +1,10 @@
 //! Monorepo analyzer implementation
 
 use crate::analysis::{
-    DependencyGraphAnalysis, PackageClassificationResult, PackageInformation,
-    PackageManagerAnalysis, PatternStatistics, RegistryAnalysisResult, RegistryInfo,
-    UpgradeAnalysisResult, WorkspaceConfigAnalysis, WorkspacePatternAnalysis,
-    ChangeAnalysis, BranchComparisonResult, DiffAnalyzer, MonorepoAnalyzer,
+    BranchComparisonResult, ChangeAnalysis, DependencyGraphAnalysis, DiffAnalyzer,
+    MonorepoAnalyzer, PackageClassificationResult, PackageInformation, PackageManagerAnalysis,
+    PatternStatistics, RegistryAnalysisResult, RegistryInfo, UpgradeAnalysisResult,
+    WorkspaceConfigAnalysis, WorkspacePatternAnalysis,
 };
 use crate::config::PackageManagerType;
 use crate::core::MonorepoProject;
@@ -15,9 +15,8 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
 use sublime_package_tools::Upgrader;
-use sublime_standard_tools::monorepo::{MonorepoDetector, PackageManagerKind};
 use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
-
+use sublime_standard_tools::monorepo::{MonorepoDetector, PackageManagerKind};
 
 impl MonorepoAnalyzer {
     /// Create a new analyzer for a monorepo project
@@ -29,7 +28,7 @@ impl MonorepoAnalyzer {
     /// Perform complete monorepo detection and analysis
     ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if:
     /// - Monorepo detection fails
     /// - Package manager analysis fails
@@ -313,9 +312,8 @@ impl MonorepoAnalyzer {
         // Analyze each registry
         for url in registry_urls {
             // Determine registry type using configurable patterns
-            let registry_type = self.project.config.workspace.tool_configs
-                .get_registry_type(url)
-                .to_string();
+            let registry_type =
+                self.project.config.workspace.tool_configs.get_registry_type(url).to_string();
 
             // Check for authentication (basic heuristic)
             let has_auth = self.check_registry_auth(url);
@@ -325,8 +323,7 @@ impl MonorepoAnalyzer {
 
             // DRY: Use FileSystemManager for .npmrc file reading
             let fs = FileSystemManager::new();
-            if let Ok(npmrc_content) =
-                fs.read_file_string(&self.project.root_path().join(".npmrc"))
+            if let Ok(npmrc_content) = fs.read_file_string(&self.project.root_path().join(".npmrc"))
             {
                 for line in npmrc_content.lines() {
                     if line.contains(url) && line.contains('@') {
@@ -416,7 +413,7 @@ impl MonorepoAnalyzer {
         let tool_config = &self.project.config.workspace.tool_configs;
         let registry_type = tool_config.get_registry_type(registry_url);
         let auth_env_vars = tool_config.get_auth_env_vars(registry_type);
-        
+
         for env_var in auth_env_vars {
             if std::env::var(env_var).is_ok() {
                 return true;
@@ -576,7 +573,7 @@ impl MonorepoAnalyzer {
         let mut patterns = Vec::new();
         let mut has_nohoist = false;
         let mut nohoist_patterns = Vec::new();
-        
+
         // DRY: Create FileSystemManager once for the entire function
         let fs = FileSystemManager::new();
 
@@ -773,7 +770,7 @@ impl MonorepoAnalyzer {
         // Convert locations with multiple packages to patterns
         for (location, count) in location_counts {
             match count {
-                0 => {}, // Skip empty locations
+                0 => {} // Skip empty locations
                 1 => patterns.push(location),
                 _ => patterns.push(format!("{location}/*")),
             }
@@ -972,7 +969,7 @@ impl MonorepoAnalyzer {
     #[must_use]
     pub fn matches_glob_pattern(&self, path: &str, pattern: &str) -> bool {
         use glob::Pattern;
-        
+
         match Pattern::new(pattern) {
             Ok(glob_pattern) => glob_pattern.matches(path),
             Err(e) => {
@@ -1035,65 +1032,59 @@ impl MonorepoAnalyzer {
     fn detect_package_manager_version(&self, kind: PackageManagerKind) -> String {
         // Use configurable commands and arguments
         let pm_config = &self.project.config.workspace.package_manager_commands;
-        
+
         // Handle JSR separately due to lifetime issues
         if matches!(kind, PackageManagerKind::Jsr) {
             let output = Command::new("jsr")
-                .args(&["--version"])
+                .args(["--version"])
                 .current_dir(self.project.root_path())
                 .output();
-                
+
             return match output {
                 Ok(output) if output.status.success() => {
-                    let version = String::from_utf8_lossy(&output.stdout)
-                        .trim()
-                        .to_string();
+                    let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
                     if version.is_empty() {
                         "unknown".to_string()
                     } else {
                         version
                     }
-                },
+                }
                 _ => "unknown".to_string(),
             };
         }
-        
+
         let (command, args) = match &kind {
             PackageManagerKind::Npm => {
                 let pm_type = crate::config::types::workspace::PackageManagerType::Npm;
                 (pm_config.get_command(&pm_type), pm_config.get_version_args(&pm_type))
-            },
+            }
             PackageManagerKind::Pnpm => {
                 let pm_type = crate::config::types::workspace::PackageManagerType::Pnpm;
                 (pm_config.get_command(&pm_type), pm_config.get_version_args(&pm_type))
-            },
+            }
             PackageManagerKind::Yarn => {
                 let pm_type = crate::config::types::workspace::PackageManagerType::Yarn;
                 (pm_config.get_command(&pm_type), pm_config.get_version_args(&pm_type))
-            },
+            }
             PackageManagerKind::Bun => {
                 let pm_type = crate::config::types::workspace::PackageManagerType::Bun;
                 (pm_config.get_command(&pm_type), pm_config.get_version_args(&pm_type))
-            },
+            }
             PackageManagerKind::Jsr => unreachable!(), // Handled above
         };
 
-        let output = Command::new(command)
-            .args(args)
-            .current_dir(self.project.root_path())
-            .output();
+        let output =
+            Command::new(command).args(args).current_dir(self.project.root_path()).output();
 
         match output {
             Ok(output) if output.status.success() => {
-                let version = String::from_utf8_lossy(&output.stdout)
-                    .trim()
-                    .to_string();
+                let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
                 if version.is_empty() {
                     "unknown".to_string()
                 } else {
                     version
                 }
-            },
+            }
             Ok(output) => {
                 log::warn!(
                     "Package manager '{}' command failed with status: {}. stderr: {}",
@@ -1102,13 +1093,9 @@ impl MonorepoAnalyzer {
                     String::from_utf8_lossy(&output.stderr)
                 );
                 "unknown".to_string()
-            },
+            }
             Err(e) => {
-                log::warn!(
-                    "Failed to execute package manager '{}' command: {}",
-                    command,
-                    e
-                );
+                log::warn!("Failed to execute package manager '{}' command: {}", command, e);
                 "unknown".to_string()
             }
         }

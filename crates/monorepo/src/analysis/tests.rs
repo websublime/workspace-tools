@@ -2,8 +2,6 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::analysis::DiffAnalyzer;
-    use crate::analysis::MonorepoAnalyzer;
     use crate::analysis::*;
     use std::collections::HashMap;
     use std::path::PathBuf;
@@ -100,6 +98,7 @@ mod tests {
         assert_eq!(analysis.max_depth, 3);
     }
 
+    #[allow(clippy::len_zero)]
     #[test]
     fn test_workspace_config_analysis_with_orphaned_packages() {
         // Test workspace configuration analysis with complex scenarios including orphaned packages
@@ -121,19 +120,19 @@ mod tests {
         assert_eq!(analysis.patterns.len(), 2);
         assert!(analysis.patterns.contains(&"packages/*".to_string()));
         assert!(analysis.patterns.contains(&"apps/*".to_string()));
-        
+
         // Validate matched vs orphaned packages detection
         assert_eq!(analysis.matched_packages, 3);
         assert_eq!(analysis.orphaned_packages.len(), 2);
         assert!(analysis.orphaned_packages.contains(&"standalone-tool".to_string()));
         assert!(analysis.orphaned_packages.contains(&"legacy-package".to_string()));
-        
+
         // Validate nohoist configuration detection
         assert!(analysis.has_nohoist);
         assert_eq!(analysis.nohoist_patterns.len(), 2);
         assert!(analysis.nohoist_patterns.contains(&"**/react-native".to_string()));
         assert!(analysis.nohoist_patterns.iter().any(|p| p.contains("react-native-*")));
-        
+
         // Validate that orphaned packages indicate potential workspace configuration issues
         if !analysis.orphaned_packages.is_empty() {
             // This would trigger warnings in a real implementation
@@ -232,29 +231,30 @@ mod tests {
         assert_eq!(result.minor_upgrades.len(), 2);
         assert_eq!(result.patch_upgrades.len(), 2);
         assert_eq!(result.up_to_date.len(), 4);
-        
+
         // Validate that upgradable_count matches actual upgrades
-        let total_upgrades = result.major_upgrades.len() + result.minor_upgrades.len() + result.patch_upgrades.len();
+        let total_upgrades =
+            result.major_upgrades.len() + result.minor_upgrades.len() + result.patch_upgrades.len();
         assert_eq!(result.upgradable_count, total_upgrades);
-        
+
         // Validate that total_packages equals upgradable + up_to_date
         let accounted_packages = result.upgradable_count + result.up_to_date.len();
         assert_eq!(result.total_packages, accounted_packages);
-        
+
         // Validate major upgrade detection for breaking changes
         let react_upgrade = &result.major_upgrades[0];
         assert_eq!(react_upgrade.dependency_name, "react");
         assert!(react_upgrade.current_version.starts_with("17."));
         assert!(react_upgrade.available_version.starts_with("18."));
         assert_eq!(react_upgrade.upgrade_type, "major");
-        
+
         // Validate minor upgrade version increments
         let lodash_upgrade = &result.minor_upgrades[0];
         assert_eq!(lodash_upgrade.dependency_name, "lodash");
         assert!(lodash_upgrade.current_version.starts_with("4.17."));
         assert!(lodash_upgrade.available_version.starts_with("4.18."));
         assert_eq!(lodash_upgrade.upgrade_type, "minor");
-        
+
         // Validate patch upgrade safety
         let mongoose_upgrade = &result.patch_upgrades[0];
         assert_eq!(mongoose_upgrade.dependency_name, "mongoose");
@@ -290,7 +290,7 @@ mod tests {
     fn test_monorepo_analyzer_detects_npm_workspace_patterns() {
         // Test actual monorepo detection with realistic workspace patterns
         // Note: This test validates complex workspace detection without requiring real git repo
-        
+
         // Create a simulated analysis result with multiple workspace patterns
         let analysis = MonorepoAnalysisResult {
             kind: MonorepoKind::NpmWorkSpace,
@@ -353,29 +353,33 @@ mod tests {
                 auth_status: HashMap::new(),
             },
             workspace_config: WorkspaceConfigAnalysis {
-                patterns: vec!["packages/*".to_string(), "apps/*".to_string(), "tools/*".to_string()],
+                patterns: vec![
+                    "packages/*".to_string(),
+                    "apps/*".to_string(),
+                    "tools/*".to_string(),
+                ],
                 matched_packages: 2,
                 orphaned_packages: vec![],
                 has_nohoist: false,
                 nohoist_patterns: vec![],
             },
         };
-        
+
         // Validate workspace pattern detection
         assert_eq!(analysis.workspace_config.patterns.len(), 3);
         assert!(analysis.workspace_config.patterns.contains(&"packages/*".to_string()));
         assert!(analysis.workspace_config.patterns.contains(&"apps/*".to_string()));
         assert_eq!(analysis.workspace_config.matched_packages, 2);
-        
+
         // Validate internal package detection
         assert_eq!(analysis.packages.internal_packages.len(), 2);
         let utils_package = &analysis.packages.internal_packages[0];
         let app_package = &analysis.packages.internal_packages[1];
-        
+
         // Validate workspace dependency relationships
         assert!(app_package.workspace_dependencies.contains(&"@monorepo/utils".to_string()));
         assert!(utils_package.dependents.contains(&"@monorepo/app".to_string()));
-        
+
         // Validate dependency graph structure
         assert_eq!(analysis.dependency_graph.node_count, 2);
         assert_eq!(analysis.dependency_graph.edge_count, 1);
@@ -387,38 +391,37 @@ mod tests {
     fn test_dependency_graph_detects_circular_dependencies() {
         // Test circular dependency detection with realistic scenario
         let mut version_conflicts = HashMap::new();
-        version_conflicts.insert("@monorepo/core".to_string(), vec!["1.0.0".to_string(), "1.1.0".to_string()]);
-        
+        version_conflicts
+            .insert("@monorepo/core".to_string(), vec!["1.0.0".to_string(), "1.1.0".to_string()]);
+
         let analysis = DependencyGraphAnalysis {
             node_count: 3,
             edge_count: 3,
             has_cycles: true,
-            cycles: vec![
-                vec![
-                    "@monorepo/core".to_string(),
-                    "@monorepo/utils".to_string(), 
-                    "@monorepo/shared".to_string(),
-                    "@monorepo/core".to_string(), // Circle back
-                ]
-            ],
+            cycles: vec![vec![
+                "@monorepo/core".to_string(),
+                "@monorepo/utils".to_string(),
+                "@monorepo/shared".to_string(),
+                "@monorepo/core".to_string(), // Circle back
+            ]],
             version_conflicts,
             upgradable: HashMap::new(),
             max_depth: 0, // Infinite due to cycles
             most_dependencies: vec![("@monorepo/core".to_string(), 2)],
             most_dependents: vec![("@monorepo/utils".to_string(), 2)],
         };
-        
+
         // Validate circular dependency detection
         assert!(analysis.has_cycles);
         assert_eq!(analysis.cycles.len(), 1);
-        
+
         let cycle = &analysis.cycles[0];
         assert_eq!(cycle.len(), 4); // A -> B -> C -> A = 4 elements
         assert_eq!(cycle[0], cycle[3]); // First and last should be the same (circle)
         assert!(cycle.contains(&"@monorepo/core".to_string()));
         assert!(cycle.contains(&"@monorepo/utils".to_string()));
         assert!(cycle.contains(&"@monorepo/shared".to_string()));
-        
+
         // Validate version conflict detection in circular dependencies
         assert!(!analysis.version_conflicts.is_empty());
         assert!(analysis.version_conflicts.contains_key("@monorepo/core"));
@@ -426,11 +429,11 @@ mod tests {
         assert_eq!(core_conflicts.len(), 2);
         assert!(core_conflicts.contains(&"1.0.0".to_string()));
         assert!(core_conflicts.contains(&"1.1.0".to_string()));
-        
+
         // Validate that max_depth is 0 when cycles exist (infinite depth)
         assert_eq!(analysis.max_depth, 0);
     }
-    
+
     // Note: Helper functions would be added here for creating test repositories
     // when the actual Git integration APIs are finalized
 }

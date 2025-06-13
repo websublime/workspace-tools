@@ -1,8 +1,8 @@
 //! Workspace configuration types
 
+use super::Environment;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use super::Environment;
 
 /// Workspace configuration for monorepo structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -470,26 +470,26 @@ impl Default for ToolConfig {
 
         let mut auth_env_vars = HashMap::new();
         auth_env_vars.insert("npm".to_string(), vec!["NPM_TOKEN".to_string()]);
-        auth_env_vars.insert("github".to_string(), vec!["GITHUB_TOKEN".to_string(), "NPM_TOKEN".to_string()]);
+        auth_env_vars.insert(
+            "github".to_string(),
+            vec!["GITHUB_TOKEN".to_string(), "NPM_TOKEN".to_string()],
+        );
         auth_env_vars.insert("azure".to_string(), vec!["AZURE_TOKEN".to_string()]);
         auth_env_vars.insert("gitlab".to_string(), vec!["GITLAB_TOKEN".to_string()]);
 
         let mut default_task_groups = HashMap::new();
-        default_task_groups.insert("quality".to_string(), vec![
-            "lint".to_string(), 
-            "typecheck".to_string(), 
-            "test".to_string()
-        ]);
-        default_task_groups.insert("build".to_string(), vec![
-            "clean".to_string(), 
-            "compile".to_string(), 
-            "bundle".to_string()
-        ]);
-        default_task_groups.insert("release".to_string(), vec![
-            "quality".to_string(), 
-            "build".to_string(), 
-            "docs".to_string()
-        ]);
+        default_task_groups.insert(
+            "quality".to_string(),
+            vec!["lint".to_string(), "typecheck".to_string(), "test".to_string()],
+        );
+        default_task_groups.insert(
+            "build".to_string(),
+            vec!["clean".to_string(), "compile".to_string(), "bundle".to_string()],
+        );
+        default_task_groups.insert(
+            "release".to_string(),
+            vec!["quality".to_string(), "build".to_string(), "docs".to_string()],
+        );
 
         Self {
             registry_patterns,
@@ -513,25 +513,21 @@ impl PackageManagerCommandConfig {
     /// Get the command for a specific package manager
     #[must_use]
     pub fn get_command(&self, pm_type: &PackageManagerType) -> &str {
-        self.commands.get(pm_type)
-            .map(String::as_str)
-            .unwrap_or_else(|| self.commands.get(&self.default_manager).unwrap())
+        self.commands
+            .get(pm_type)
+            .map_or_else(|| &self.commands[&self.default_manager], String::as_str)
     }
 
     /// Get version check arguments for a package manager
     #[must_use]
     pub fn get_version_args(&self, pm_type: &PackageManagerType) -> &[String] {
-        self.version_args.get(pm_type)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
+        self.version_args.get(pm_type).map_or(&[], Vec::as_slice)
     }
 
     /// Get script run arguments for a package manager
     #[must_use]
     pub fn get_script_run_args(&self, pm_type: &PackageManagerType) -> &[String] {
-        self.script_run_args.get(pm_type)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
+        self.script_run_args.get(pm_type).map_or(&[], Vec::as_slice)
     }
 }
 
@@ -548,7 +544,7 @@ impl FilePatternConfig {
     /// Check if a file path matches any source code pattern
     #[must_use]
     pub fn is_source_file(&self, path: &str) -> bool {
-        self.source_patterns.iter().any(|pattern| {
+        self.source_patterns.iter().any(|_pattern| {
             // Simplified pattern matching - would use proper glob library in production
             let ext_patterns = ["ts", "js", "tsx", "jsx"];
             ext_patterns.iter().any(|ext| path.ends_with(&format!(".{ext}")))
@@ -580,9 +576,7 @@ impl ToolConfig {
     /// Get authentication environment variables for a registry type
     #[must_use]
     pub fn get_auth_env_vars(&self, registry_type: &str) -> &[String] {
-        self.auth_env_vars.get(registry_type)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
+        self.auth_env_vars.get(registry_type).map_or(&[], Vec::as_slice)
     }
 
     /// Get default task group commands

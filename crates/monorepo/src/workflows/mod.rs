@@ -13,9 +13,8 @@ pub mod types;
 #[cfg(test)]
 mod tests;
 
-pub use development::DevelopmentWorkflow;
-pub use integration::ChangesetHookIntegration;
-pub use release::ReleaseWorkflow;
+// Import from types module instead of implementation files
+pub use types::{DevelopmentWorkflow, ChangesetHookIntegration, ReleaseWorkflow};
 
 // Explicit re-exports from types module
 pub use types::{
