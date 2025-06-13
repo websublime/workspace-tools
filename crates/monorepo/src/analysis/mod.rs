@@ -11,4 +11,26 @@ mod diff;
 #[cfg(test)]
 mod tests;
 
-pub use types::*;
+// Explicit re-exports from types module
+pub use types::{
+    // Analyzer
+    MonorepoAnalyzer,
+    // Core
+    MonorepoAnalysisResult,
+    // Package manager
+    PackageManagerAnalysis,
+    // Package
+    PackageClassificationResult, PackageInformation,
+    // Dependency
+    DependencyGraphAnalysis,
+    // Registry
+    RegistryAnalysisResult, RegistryInfo,
+    // Workspace
+    WorkspaceConfigAnalysis, WorkspacePatternAnalysis, PatternStatistics,
+    // Upgrade
+    UpgradeAnalysisResult, UpgradeInfo,
+    // Diff
+    ChangeAnalyzer, ChangeAnalysisResult, DiffAnalyzer, BranchComparisonResult,
+    ChangeAnalysis, AffectedPackagesAnalysis, ChangeSignificanceResult,
+    ComprehensiveChangeAnalysisResult, PackageChange,
+};

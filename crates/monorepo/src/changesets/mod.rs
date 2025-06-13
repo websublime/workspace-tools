@@ -99,5 +99,11 @@ pub mod manager;
 #[cfg(test)]
 mod tests;
 
-// Re-export main types
-pub use types::*;
+// Explicit re-exports from types module
+pub use types::{
+    // Core types
+    Changeset, ChangesetStatus, ChangesetSpec, ChangesetApplication,
+    ChangesetFilter, ValidationResult, DeploymentResult, EnvironmentDeploymentResult,
+    // Implementation
+    ChangesetManager, ChangesetStorage,
+};

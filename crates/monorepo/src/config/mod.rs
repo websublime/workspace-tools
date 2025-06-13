@@ -10,5 +10,30 @@ mod defaults;
 #[cfg(test)]
 mod tests;
 
-// Re-export all types from the types module
-pub use types::*;
+// Explicit re-exports from types module
+pub use types::{
+    // Core
+    MonorepoConfig, Environment,
+    // Manager
+    ConfigManager, PatternMatcher,
+    // Versioning
+    VersioningConfig, VersionBumpType,
+    // Tasks
+    TasksConfig,
+    // Changelog
+    ChangelogConfig, ChangelogTemplate, CommitGrouping, ChangelogFormat,
+    // Hooks
+    HooksConfig, HookConfig,
+    // Changesets
+    ChangesetsConfig,
+    // Plugins
+    PluginsConfig,
+    // Workspace
+    WorkspaceConfig, WorkspacePattern, WorkspacePatternOptions,
+    PackageManagerType, PackageManagerConfigs,
+    NpmWorkspaceConfig, YarnWorkspaceConfig, YarnVersion,
+    PnpmWorkspaceConfig, BunWorkspaceConfig,
+    WorkspaceValidationConfig, PackageDiscoveryConfig,
+    // Git
+    GitConfig, BranchConfig, BranchType,
+};

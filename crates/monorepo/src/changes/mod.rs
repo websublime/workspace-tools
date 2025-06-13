@@ -11,5 +11,16 @@ mod engine;
 #[cfg(test)]
 mod tests;
 
-// Re-export the main types for convenience
-pub use types::*;
+// Explicit re-exports from types module
+pub use types::{
+    // Core types
+    PackageChangeType, ChangeSignificance, VersionBumpType, PackageChange,
+    // Rule definitions
+    ChangeDetectionRules, ChangeTypeRule, SignificanceRule, VersionBumpRule,
+    // Pattern matching
+    FilePattern, PatternType, RuleConditions, FileSizeCondition,
+    // Project overrides
+    ProjectRuleOverrides, SignificanceThresholds,
+    // Implementation structs
+    ChangeDetector, ChangeDetectionEngine,
+};

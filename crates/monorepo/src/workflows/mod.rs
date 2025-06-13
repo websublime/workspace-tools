@@ -16,4 +16,17 @@ mod tests;
 pub use development::DevelopmentWorkflow;
 pub use integration::ChangesetHookIntegration;
 pub use release::ReleaseWorkflow;
-pub use types::*;
+
+// Explicit re-exports from types module
+pub use types::{
+    // Options
+    ReleaseOptions,
+    // Results
+    ReleaseResult, DevelopmentResult, ChangeAnalysisResult,
+    AffectedPackageInfo, VersionRecommendation, VersioningWorkflowResult,
+    ImpactLevel, ConfidenceLevel, ChangeAnalysisWorkflowResult,
+    // Status
+    WorkflowStep, WorkflowProgress, WorkflowStatus,
+    // Data
+    PackageChangeFacts,
+};
