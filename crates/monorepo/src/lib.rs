@@ -83,16 +83,26 @@ pub use crate::error::{Error, Result};
 pub use crate::workflows::{DevelopmentWorkflow, ReleaseWorkflow, ReleaseResult};
 
 // Core analysis types
-pub use crate::analysis::{MonorepoAnalyzer, MonorepoAnalysisResult, DiffAnalyzer};
+pub use crate::analysis::{
+    MonorepoAnalyzer, MonorepoAnalysisResult, DiffAnalyzer, 
+    ChangeAnalysis, AffectedPackagesAnalysis
+};
 
-// Essential configuration
+// Essential configuration and change types
 pub use crate::config::{MonorepoConfig, Environment, VersionBumpType};
+pub use crate::changes::{
+    PackageChange, PackageChangeType, ChangeSignificance
+};
 
 // Core version management
 pub use crate::core::{VersionManager, VersioningStrategy, VersioningResult};
 
 // Essential changesets
-pub use crate::changesets::{ChangesetManager, ChangesetSpec, Changeset};
+pub use crate::changesets::{
+    ChangesetManager, ChangesetSpec, Changeset, ChangesetApplication, 
+    ChangesetFilter, ChangesetStatus, DeploymentResult, 
+    EnvironmentDeploymentResult, ValidationResult
+};
 
 // Core task management  
 pub use crate::tasks::{TaskManager, TaskExecutor};

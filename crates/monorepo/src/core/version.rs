@@ -358,8 +358,9 @@ impl VersionManager {
         // Calculate execution order based on dependency relationships
         Self::calculate_execution_order(&mut plan_steps);
 
-        // Estimate execution time
-        let estimated_duration = std::time::Duration::from_secs(plan_steps.len() as u64 * 5); // 5 seconds per package
+        // Estimate execution time using configurable per-package duration
+        let per_package_duration = self.project.config.tasks.get_version_planning_per_package();
+        let estimated_duration = per_package_duration * plan_steps.len() as u32;
 
         Ok(VersioningPlan {
             steps: plan_steps,

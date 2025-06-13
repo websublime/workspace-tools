@@ -49,12 +49,21 @@ impl HookDefinition {
             script,
             conditions: Vec::new(),
             fail_on_error: true,
-            timeout: Some(Duration::from_secs(300)), // 5 minutes default
+            timeout: Some(Self::default_timeout()),
             environment: HashMap::new(),
             working_directory: None,
             description: description.into(),
             enabled: true,
         }
+    }
+
+    /// Get the default timeout for hook execution
+    /// 
+    /// This can be overridden by configuration, but provides a sensible default
+    /// when no configuration is available.
+    #[must_use]
+    pub fn default_timeout() -> Duration {
+        Duration::from_secs(300) // 5 minutes default
     }
 
     /// Add a condition to the hook

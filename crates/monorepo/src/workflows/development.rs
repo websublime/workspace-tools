@@ -352,16 +352,18 @@ impl DevelopmentWorkflow {
         affected_packages
     }
 
-    /// Determines the impact level based on facts - simple file count heuristic
-    #[allow(clippy::unused_self)]
+    /// Determines the impact level based on facts using configurable thresholds
     pub fn determine_impact_level(&self, package_change: &PackageChange) -> ImpactLevel {
         // Use actual changed files count
         let total_files = package_change.changed_files.len();
 
-        // Simple heuristic based on number of files changed
+        // Get thresholds from configuration
+        let thresholds = &self.project.config.tasks.performance.impact_thresholds;
+
+        // Use configurable thresholds for impact level determination
         match total_files {
-            files if files > 15 => ImpactLevel::High,
-            files if files > 5 => ImpactLevel::Medium,
+            files if files > thresholds.high_impact_files => ImpactLevel::High,
+            files if files > thresholds.medium_impact_files => ImpactLevel::Medium,
             _ => ImpactLevel::Low,
         }
     }
