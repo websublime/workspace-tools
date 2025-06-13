@@ -47,3 +47,11 @@ pub use workspace::{
 // Git configuration types
 pub mod git;
 pub use git::{GitConfig, BranchConfig, BranchType};
+
+// Validation configuration types
+pub mod validation;
+pub use validation::{
+    ValidationConfig, TaskPriorityConfig, ChangeDetectionRulesConfig,
+    VersionBumpRulesConfig, DependencyAnalysisConfig, PatternScoringConfig,
+    ValidationPatternsConfig, QualityGatesConfig,
+};

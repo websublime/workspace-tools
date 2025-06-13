@@ -245,13 +245,14 @@ impl VersionManager {
         let mut chain = Vec::new();
         let mut visited = std::collections::HashSet::new();
 
-        self.build_dependency_chain(package_name, &mut chain, &mut visited, 0, 5); // Max depth 5
+        let max_depth = self.project.config.validation.dependency_analysis.max_chain_depth;
+        self.build_dependency_chain(package_name, &mut chain, &mut visited, 0, max_depth);
 
         DependencyChainImpact {
             root_package: package_name.to_string(),
             chain_length: chain.len(),
             affected_packages: chain,
-            max_propagation_depth: self.calculate_chain_depth(package_name, 0, 5),
+            max_propagation_depth: self.calculate_chain_depth(package_name, 0, max_depth),
         }
     }
 
@@ -313,8 +314,9 @@ impl VersionManager {
     fn calculate_max_propagation_depth(&self, changes: &[PackageChange]) -> usize {
         let mut max_depth = 0;
 
+        let max_analysis_depth = self.project.config.validation.dependency_analysis.max_analysis_depth;
         for change in changes {
-            let depth = self.calculate_chain_depth(&change.package_name, 0, 10);
+            let depth = self.calculate_chain_depth(&change.package_name, 0, max_analysis_depth);
             max_depth = max_depth.max(depth);
         }
 

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use super::{
     VersioningConfig, TasksConfig, ChangelogConfig, HooksConfig,
     ChangesetsConfig, PluginsConfig, WorkspaceConfig, GitConfig,
+    ValidationConfig,
 };
 
 /// Main configuration for monorepo tools
@@ -33,6 +34,9 @@ pub struct MonorepoConfig {
     /// Git configuration
     pub git: GitConfig,
 
+    /// Validation rules and quality gates configuration
+    pub validation: ValidationConfig,
+
     /// Deployment environments
     pub environments: Vec<Environment>,
 }
@@ -48,6 +52,7 @@ impl Default for MonorepoConfig {
             plugins: PluginsConfig::default(),
             workspace: WorkspaceConfig::default(),
             git: GitConfig::default(),
+            validation: ValidationConfig::default(),
             environments: vec![
                 Environment::Development,
                 Environment::Staging,

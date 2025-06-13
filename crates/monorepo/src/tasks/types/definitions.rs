@@ -119,6 +119,39 @@ impl Default for TaskPriority {
     }
 }
 
+impl TaskPriority {
+    /// Create a TaskPriority from a configured value
+    #[must_use]
+    pub fn from_config_value(value: u32) -> Self {
+        match value {
+            0 => Self::Low,
+            50 => Self::Normal,
+            100 => Self::High,
+            200 => Self::Critical,
+            custom => Self::Custom(custom),
+        }
+    }
+
+    /// Get the numeric value of the priority
+    #[must_use]
+    pub fn value(&self) -> u32 {
+        match self {
+            Self::Low => 0,
+            Self::Normal => 50,
+            Self::High => 100,
+            Self::Critical => 200,
+            Self::Custom(value) => *value,
+        }
+    }
+
+    /// Create TaskPriority from configuration using priority name
+    #[must_use]
+    pub fn from_config(config: &crate::config::types::ValidationConfig, priority_name: &str) -> Self {
+        let value = config.get_task_priority(priority_name);
+        Self::from_config_value(value)
+    }
+}
+
 /// Task timeout configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TaskTimeout {
