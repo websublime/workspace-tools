@@ -51,23 +51,14 @@ impl MonorepoConfig {
         config
     }
 
-    /// Create task groups for common workflows
+    /// Create task groups for common workflows using configurable defaults
     #[must_use]
     pub fn with_common_task_groups(mut self) -> Self {
-        self.tasks.groups.insert(
-            "quality".to_string(),
-            vec!["lint".to_string(), "typecheck".to_string(), "test".to_string()],
-        );
-
-        self.tasks.groups.insert(
-            "build".to_string(),
-            vec!["clean".to_string(), "compile".to_string(), "bundle".to_string()],
-        );
-
-        self.tasks.groups.insert(
-            "release".to_string(),
-            vec!["quality".to_string(), "build".to_string(), "docs".to_string()],
-        );
+        // Use task groups from workspace tool configuration
+        let tool_config = &self.workspace.tool_configs;
+        for (group_name, commands) in &tool_config.default_task_groups {
+            self.tasks.groups.insert(group_name.clone(), commands.clone());
+        }
 
         self
     }

@@ -312,19 +312,10 @@ impl MonorepoAnalyzer {
 
         // Analyze each registry
         for url in registry_urls {
-            // Determine registry type based on URL
-            let registry_type = if url.contains("registry.npmjs.org") {
-                "npm"
-            } else if url.contains("npm.pkg.github.com") {
-                "github"
-            } else if url.contains("pkgs.dev.azure.com") {
-                "azure"
-            } else if url.contains("gitlab.com") {
-                "gitlab"
-            } else {
-                "custom"
-            }
-            .to_string();
+            // Determine registry type using configurable patterns
+            let registry_type = self.project.config.workspace.tool_configs
+                .get_registry_type(url)
+                .to_string();
 
             // Check for authentication (basic heuristic)
             let has_auth = self.check_registry_auth(url);
@@ -421,15 +412,15 @@ impl MonorepoAnalyzer {
             }
         }
 
-        // Check environment variables for common auth patterns
-        if registry_url.contains("registry.npmjs.org") && std::env::var("NPM_TOKEN").is_ok() {
-            return true;
-        }
-
-        if registry_url.contains("npm.pkg.github.com")
-            && (std::env::var("GITHUB_TOKEN").is_ok() || std::env::var("NPM_TOKEN").is_ok())
-        {
-            return true;
+        // Check environment variables using configurable auth patterns
+        let tool_config = &self.project.config.workspace.tool_configs;
+        let registry_type = tool_config.get_registry_type(registry_url);
+        let auth_env_vars = tool_config.get_auth_env_vars(registry_type);
+        
+        for env_var in auth_env_vars {
+            if std::env::var(env_var).is_ok() {
+                return true;
+            }
         }
 
         false
@@ -1042,16 +1033,53 @@ impl MonorepoAnalyzer {
     /// println!("NPM version: {}", version);
     /// ```
     fn detect_package_manager_version(&self, kind: PackageManagerKind) -> String {
+        // Use configurable commands and arguments
+        let pm_config = &self.project.config.workspace.package_manager_commands;
+        
+        // Handle JSR separately due to lifetime issues
+        if matches!(kind, PackageManagerKind::Jsr) {
+            let output = Command::new("jsr")
+                .args(&["--version"])
+                .current_dir(self.project.root_path())
+                .output();
+                
+            return match output {
+                Ok(output) if output.status.success() => {
+                    let version = String::from_utf8_lossy(&output.stdout)
+                        .trim()
+                        .to_string();
+                    if version.is_empty() {
+                        "unknown".to_string()
+                    } else {
+                        version
+                    }
+                },
+                _ => "unknown".to_string(),
+            };
+        }
+        
         let (command, args) = match &kind {
-            PackageManagerKind::Npm => ("npm", vec!["--version"]),
-            PackageManagerKind::Pnpm => ("pnpm", vec!["--version"]),
-            PackageManagerKind::Yarn => ("yarn", vec!["--version"]),
-            PackageManagerKind::Bun => ("bun", vec!["--version"]),
-            PackageManagerKind::Jsr => ("jsr", vec!["--version"]),
+            PackageManagerKind::Npm => {
+                let pm_type = crate::config::types::workspace::PackageManagerType::Npm;
+                (pm_config.get_command(&pm_type), pm_config.get_version_args(&pm_type))
+            },
+            PackageManagerKind::Pnpm => {
+                let pm_type = crate::config::types::workspace::PackageManagerType::Pnpm;
+                (pm_config.get_command(&pm_type), pm_config.get_version_args(&pm_type))
+            },
+            PackageManagerKind::Yarn => {
+                let pm_type = crate::config::types::workspace::PackageManagerType::Yarn;
+                (pm_config.get_command(&pm_type), pm_config.get_version_args(&pm_type))
+            },
+            PackageManagerKind::Bun => {
+                let pm_type = crate::config::types::workspace::PackageManagerType::Bun;
+                (pm_config.get_command(&pm_type), pm_config.get_version_args(&pm_type))
+            },
+            PackageManagerKind::Jsr => unreachable!(), // Handled above
         };
 
         let output = Command::new(command)
-            .args(&args)
+            .args(args)
             .current_dir(self.project.root_path())
             .output();
 

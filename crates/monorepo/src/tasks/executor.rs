@@ -287,12 +287,24 @@ impl TaskExecutor {
             script_with_working_dir.working_directory = Some(package_info.path().clone());
         }
 
-        // DRY: Use PackageScript -> Command conversion, then recreate TaskCommandWrapper
-        // Build the TaskCommandWrapper directly (simpler than round-trip conversion)
-        let manager = script.package_manager.as_deref().unwrap_or("npm");
-        let mut args = vec!["run".to_string(), script.script_name.clone()];
+        // Use configurable package manager commands instead of hardcoded values
+        let pm_config = &self.project.config.workspace.package_manager_commands;
+        let pm_type = script.package_manager.as_deref()
+            .and_then(|pm| match pm {
+                "npm" => Some(crate::config::types::workspace::PackageManagerType::Npm),
+                "yarn" => Some(crate::config::types::workspace::PackageManagerType::Yarn),
+                "pnpm" => Some(crate::config::types::workspace::PackageManagerType::Pnpm),
+                "bun" => Some(crate::config::types::workspace::PackageManagerType::Bun),
+                _ => None,
+            })
+            .unwrap_or(pm_config.default_manager.clone());
+        
+        let manager = pm_config.get_command(&pm_type);
+        let mut args = pm_config.get_script_run_args(&pm_type).to_vec();
+        args.push(script.script_name.clone());
+        
         if !script.extra_args.is_empty() {
-            args.push("--".to_string());
+            args.push(pm_config.extra_args_separator.clone());
             args.extend(script.extra_args.clone());
         }
 

@@ -21,6 +21,15 @@ pub struct WorkspaceConfig {
 
     /// Package discovery settings
     pub discovery: PackageDiscoveryConfig,
+
+    /// Package manager command configurations
+    pub package_manager_commands: PackageManagerCommandConfig,
+
+    /// File pattern configurations for change detection
+    pub file_patterns: FilePatternConfig,
+
+    /// Registry and tool configurations
+    pub tool_configs: ToolConfig,
 }
 
 impl Default for WorkspaceConfig {
@@ -31,6 +40,9 @@ impl Default for WorkspaceConfig {
             package_manager_configs: PackageManagerConfigs::default(),
             validation: WorkspaceValidationConfig::default(),
             discovery: PackageDiscoveryConfig::default(),
+            package_manager_commands: PackageManagerCommandConfig::default(),
+            file_patterns: FilePatternConfig::default(),
+            tool_configs: ToolConfig::default(),
         }
     }
 }
@@ -75,7 +87,7 @@ impl Default for WorkspacePattern {
 }
 
 /// Package manager type enumeration
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PackageManagerType {
     /// npm package manager
@@ -300,5 +312,282 @@ impl Default for PackageDiscoveryConfig {
             cache_results: true,
             cache_duration: 300, // 5 minutes
         }
+    }
+}
+
+/// Package manager command configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackageManagerCommandConfig {
+    /// Command name for each package manager
+    pub commands: HashMap<PackageManagerType, String>,
+
+    /// Version check arguments for each package manager
+    pub version_args: HashMap<PackageManagerType, Vec<String>>,
+
+    /// Default package manager when none is detected
+    pub default_manager: PackageManagerType,
+
+    /// Script execution arguments (e.g., "run" for npm run)
+    pub script_run_args: HashMap<PackageManagerType, Vec<String>>,
+
+    /// Additional arguments for script execution
+    pub extra_args_separator: String,
+}
+
+impl Default for PackageManagerCommandConfig {
+    fn default() -> Self {
+        let mut commands = HashMap::new();
+        commands.insert(PackageManagerType::Npm, "npm".to_string());
+        commands.insert(PackageManagerType::Yarn, "yarn".to_string());
+        commands.insert(PackageManagerType::YarnBerry, "yarn".to_string());
+        commands.insert(PackageManagerType::Pnpm, "pnpm".to_string());
+        commands.insert(PackageManagerType::Bun, "bun".to_string());
+
+        let mut version_args = HashMap::new();
+        version_args.insert(PackageManagerType::Npm, vec!["--version".to_string()]);
+        version_args.insert(PackageManagerType::Yarn, vec!["--version".to_string()]);
+        version_args.insert(PackageManagerType::YarnBerry, vec!["--version".to_string()]);
+        version_args.insert(PackageManagerType::Pnpm, vec!["--version".to_string()]);
+        version_args.insert(PackageManagerType::Bun, vec!["--version".to_string()]);
+
+        let mut script_run_args = HashMap::new();
+        script_run_args.insert(PackageManagerType::Npm, vec!["run".to_string()]);
+        script_run_args.insert(PackageManagerType::Yarn, vec!["run".to_string()]);
+        script_run_args.insert(PackageManagerType::YarnBerry, vec!["run".to_string()]);
+        script_run_args.insert(PackageManagerType::Pnpm, vec!["run".to_string()]);
+        script_run_args.insert(PackageManagerType::Bun, vec!["run".to_string()]);
+
+        Self {
+            commands,
+            version_args,
+            default_manager: PackageManagerType::Npm,
+            script_run_args,
+            extra_args_separator: "--".to_string(),
+        }
+    }
+}
+
+/// File pattern configuration for change detection and workspace operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilePatternConfig {
+    /// Package definition file patterns
+    pub package_files: Vec<String>,
+
+    /// Lock file patterns for package managers
+    pub lock_files: Vec<String>,
+
+    /// Source code file patterns
+    pub source_patterns: Vec<String>,
+
+    /// Test file patterns
+    pub test_patterns: Vec<String>,
+
+    /// Documentation file patterns
+    pub docs_patterns: Vec<String>,
+
+    /// Configuration file patterns
+    pub config_patterns: Vec<String>,
+
+    /// Build output directory patterns to exclude
+    pub build_output_patterns: Vec<String>,
+}
+
+impl Default for FilePatternConfig {
+    fn default() -> Self {
+        Self {
+            package_files: vec![
+                "package.json".to_string(),
+                "package-lock.json".to_string(),
+                "yarn.lock".to_string(),
+                "pnpm-lock.yaml".to_string(),
+                "bun.lockb".to_string(),
+            ],
+            lock_files: vec![
+                "package-lock.json".to_string(),
+                "yarn.lock".to_string(),
+                "pnpm-lock.yaml".to_string(),
+                "bun.lockb".to_string(),
+            ],
+            source_patterns: vec![
+                "src/**/*.{ts,js,tsx,jsx}".to_string(),
+                "lib/**/*.{ts,js,tsx,jsx}".to_string(),
+                "**/*.{ts,js,tsx,jsx}".to_string(),
+            ],
+            test_patterns: vec![
+                "**/*.{test,spec}.{ts,js,tsx,jsx}".to_string(),
+                "**/__tests__/**/*.{ts,js,tsx,jsx}".to_string(),
+                "**/test/**/*.{ts,js,tsx,jsx}".to_string(),
+                "**/tests/**/*.{ts,js,tsx,jsx}".to_string(),
+            ],
+            docs_patterns: vec![
+                "**/*.md".to_string(),
+                "**/docs/**/*".to_string(),
+                "**/README*".to_string(),
+                "**/CHANGELOG*".to_string(),
+            ],
+            config_patterns: vec![
+                "**/*.config.{js,ts,json}".to_string(),
+                "**/.eslintrc*".to_string(),
+                "**/tsconfig*.json".to_string(),
+                "**/.gitignore".to_string(),
+                "**/.env*".to_string(),
+            ],
+            build_output_patterns: vec![
+                "dist".to_string(),
+                "build".to_string(),
+                "coverage".to_string(),
+                "tmp".to_string(),
+                ".next".to_string(),
+                ".nuxt".to_string(),
+            ],
+        }
+    }
+}
+
+/// Tool and registry configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolConfig {
+    /// Registry URL patterns and their types
+    pub registry_patterns: HashMap<String, String>,
+
+    /// Environment variable names for authentication
+    pub auth_env_vars: HashMap<String, Vec<String>>,
+
+    /// Configuration file search patterns
+    pub config_file_patterns: Vec<String>,
+
+    /// Default task groups and their commands
+    pub default_task_groups: HashMap<String, Vec<String>>,
+}
+
+impl Default for ToolConfig {
+    fn default() -> Self {
+        let mut registry_patterns = HashMap::new();
+        registry_patterns.insert("registry.npmjs.org".to_string(), "npm".to_string());
+        registry_patterns.insert("npm.pkg.github.com".to_string(), "github".to_string());
+        registry_patterns.insert("pkgs.dev.azure.com".to_string(), "azure".to_string());
+        registry_patterns.insert("gitlab.com".to_string(), "gitlab".to_string());
+
+        let mut auth_env_vars = HashMap::new();
+        auth_env_vars.insert("npm".to_string(), vec!["NPM_TOKEN".to_string()]);
+        auth_env_vars.insert("github".to_string(), vec!["GITHUB_TOKEN".to_string(), "NPM_TOKEN".to_string()]);
+        auth_env_vars.insert("azure".to_string(), vec!["AZURE_TOKEN".to_string()]);
+        auth_env_vars.insert("gitlab".to_string(), vec!["GITLAB_TOKEN".to_string()]);
+
+        let mut default_task_groups = HashMap::new();
+        default_task_groups.insert("quality".to_string(), vec![
+            "lint".to_string(), 
+            "typecheck".to_string(), 
+            "test".to_string()
+        ]);
+        default_task_groups.insert("build".to_string(), vec![
+            "clean".to_string(), 
+            "compile".to_string(), 
+            "bundle".to_string()
+        ]);
+        default_task_groups.insert("release".to_string(), vec![
+            "quality".to_string(), 
+            "build".to_string(), 
+            "docs".to_string()
+        ]);
+
+        Self {
+            registry_patterns,
+            auth_env_vars,
+            config_file_patterns: vec![
+                ".monorepo/config.json".to_string(),
+                ".monorepo/config.toml".to_string(),
+                ".monorepo/config.yaml".to_string(),
+                ".monorepo/config.yml".to_string(),
+                "monorepo.config.json".to_string(),
+                "monorepo.config.toml".to_string(),
+                "monorepo.config.yaml".to_string(),
+                "monorepo.config.yml".to_string(),
+            ],
+            default_task_groups,
+        }
+    }
+}
+
+impl PackageManagerCommandConfig {
+    /// Get the command for a specific package manager
+    #[must_use]
+    pub fn get_command(&self, pm_type: &PackageManagerType) -> &str {
+        self.commands.get(pm_type)
+            .map(String::as_str)
+            .unwrap_or_else(|| self.commands.get(&self.default_manager).unwrap())
+    }
+
+    /// Get version check arguments for a package manager
+    #[must_use]
+    pub fn get_version_args(&self, pm_type: &PackageManagerType) -> &[String] {
+        self.version_args.get(pm_type)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    /// Get script run arguments for a package manager
+    #[must_use]
+    pub fn get_script_run_args(&self, pm_type: &PackageManagerType) -> &[String] {
+        self.script_run_args.get(pm_type)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+}
+
+impl FilePatternConfig {
+    /// Check if a file path matches any package file pattern
+    #[must_use]
+    pub fn is_package_file(&self, path: &str) -> bool {
+        self.package_files.iter().any(|pattern| {
+            // Simple contains check for exact matches, could be extended with glob matching
+            path.ends_with(pattern)
+        })
+    }
+
+    /// Check if a file path matches any source code pattern
+    #[must_use]
+    pub fn is_source_file(&self, path: &str) -> bool {
+        self.source_patterns.iter().any(|pattern| {
+            // Simplified pattern matching - would use proper glob library in production
+            let ext_patterns = ["ts", "js", "tsx", "jsx"];
+            ext_patterns.iter().any(|ext| path.ends_with(&format!(".{ext}")))
+        })
+    }
+
+    /// Check if a file path matches any test pattern
+    #[must_use]
+    pub fn is_test_file(&self, path: &str) -> bool {
+        self.test_patterns.iter().any(|_pattern| {
+            // Simplified test file detection
+            path.contains("test") || path.contains("spec") || path.contains("__tests__")
+        })
+    }
+}
+
+impl ToolConfig {
+    /// Get registry type from URL
+    #[must_use]
+    pub fn get_registry_type(&self, url: &str) -> &str {
+        for (pattern, registry_type) in &self.registry_patterns {
+            if url.contains(pattern) {
+                return registry_type;
+            }
+        }
+        "custom"
+    }
+
+    /// Get authentication environment variables for a registry type
+    #[must_use]
+    pub fn get_auth_env_vars(&self, registry_type: &str) -> &[String] {
+        self.auth_env_vars.get(registry_type)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    /// Get default task group commands
+    #[must_use]
+    pub fn get_task_group(&self, group_name: &str) -> Option<&[String]> {
+        self.default_task_groups.get(group_name).map(Vec::as_slice)
     }
 }
