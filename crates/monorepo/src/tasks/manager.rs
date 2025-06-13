@@ -15,6 +15,7 @@ use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
 use std::collections::HashSet;
 use std::sync::Arc;
+use sublime_standard_tools::filesystem::FileSystem;
 
 impl TaskManager {
     /// Create a new task manager
@@ -143,9 +144,9 @@ impl TaskManager {
             .get_package(package_name)
             .ok_or_else(|| Error::task(format!("Package not found: {package_name}")))?;
 
-        // Read package.json to extract scripts
+        // Read package.json to extract scripts using FileSystem trait
         let package_json_path = package_info.path().join("package.json");
-        let package_json_content = std::fs::read_to_string(&package_json_path)
+        let package_json_content = self.project.file_system.read_file_string(&package_json_path)
             .map_err(|e| Error::task(format!("Failed to read package.json: {e}")))?;
 
         let package_json: serde_json::Value = serde_json::from_str(&package_json_content)

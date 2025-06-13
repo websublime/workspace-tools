@@ -212,16 +212,21 @@ impl PackageRegistry for LocalRegistry {
             });
 
         let package_json_path = package_dir.join("package.json");
-        if let Err(e) =
-            fs::write(&package_json_path, serde_json::to_string_pretty(&package_info).unwrap())
-        {
-            return Err(PackageRegistryError::ExtractionFailure {
+        let package_json_content = serde_json::to_string_pretty(&package_info)
+            .map_err(|e| PackageRegistryError::ExtractionFailure {
+                package_name: package_name.to_string(),
+                version: version.to_string(),
+                destination: destination.display().to_string(),
+                source: std::io::Error::new(std::io::ErrorKind::InvalidData, e),
+            })?;
+        
+        fs::write(&package_json_path, package_json_content)
+            .map_err(|e| PackageRegistryError::ExtractionFailure {
                 package_name: package_name.to_string(),
                 version: version.to_string(),
                 destination: destination.display().to_string(),
                 source: e,
-            });
-        }
+            })?;
 
         Ok(())
     }

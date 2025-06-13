@@ -802,12 +802,14 @@ impl ChangesetHookIntegration {
         let actual_parts = self.parse_version(actual);
         let required_parts = self.parse_version(required);
 
-        if actual_parts.is_none() || required_parts.is_none() {
-            return false;
-        }
-
-        let (actual_major, actual_minor, actual_patch) = actual_parts.unwrap();
-        let (req_major, req_minor, req_patch) = required_parts.unwrap();
+        let (actual_major, actual_minor, actual_patch) = match actual_parts {
+            Some(parts) => parts,
+            None => return false,
+        };
+        let (req_major, req_minor, req_patch) = match required_parts {
+            Some(parts) => parts,
+            None => return false,
+        };
 
         // Major version must match, minor and patch can be higher
         actual_major == req_major
@@ -820,12 +822,14 @@ impl ChangesetHookIntegration {
         let actual_parts = self.parse_version(actual);
         let required_parts = self.parse_version(required);
 
-        if actual_parts.is_none() || required_parts.is_none() {
-            return false;
-        }
-
-        let (actual_major, actual_minor, actual_patch) = actual_parts.unwrap();
-        let (req_major, req_minor, req_patch) = required_parts.unwrap();
+        let (actual_major, actual_minor, actual_patch) = match actual_parts {
+            Some(parts) => parts,
+            None => return false,
+        };
+        let (req_major, req_minor, req_patch) = match required_parts {
+            Some(parts) => parts,
+            None => return false,
+        };
 
         // Major and minor must match, patch can be higher
         actual_major == req_major && actual_minor == req_minor && actual_patch >= req_patch
@@ -836,12 +840,14 @@ impl ChangesetHookIntegration {
         let v1_parts = self.parse_version(version1);
         let v2_parts = self.parse_version(version2);
 
-        if v1_parts.is_none() || v2_parts.is_none() {
-            return 0; // Treat invalid versions as equal
-        }
-
-        let (v1_major, v1_minor, v1_patch) = v1_parts.unwrap();
-        let (v2_major, v2_minor, v2_patch) = v2_parts.unwrap();
+        let (v1_major, v1_minor, v1_patch) = match v1_parts {
+            Some(parts) => parts,
+            None => return 0, // Treat invalid versions as equal
+        };
+        let (v2_major, v2_minor, v2_patch) = match v2_parts {
+            Some(parts) => parts,
+            None => return 0, // Treat invalid versions as equal
+        };
 
         if v1_major != v2_major {
             return if v1_major > v2_major { 1 } else { -1 };
@@ -857,6 +863,7 @@ impl ChangesetHookIntegration {
     }
 
     /// Parse version string into (major, minor, patch)
+    #[allow(clippy::unused_self)]
     fn parse_version(&self, version: &str) -> Option<(u32, u32, u32)> {
         let parts: Vec<&str> = version.split('.').collect();
         if parts.len() != 3 {

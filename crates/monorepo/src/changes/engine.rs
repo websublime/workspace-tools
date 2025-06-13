@@ -12,6 +12,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::path::Path;
 use sublime_git_tools::GitChangedFile;
+use sublime_standard_tools::filesystem::FileSystem;
 
 impl ChangeDetectionEngine {
     /// Create a new engine with default rules
@@ -67,7 +68,9 @@ impl ChangeDetectionEngine {
 
     /// Load rules from configuration file
     pub fn from_config_file(path: &std::path::Path) -> Result<Self, Box<dyn std::error::Error>> {
-        let content = std::fs::read_to_string(path)?;
+        let fs = sublime_standard_tools::filesystem::FileSystemManager::new();
+        let content = fs.read_file_string(path)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         let rules: ChangeDetectionRules =
             if path.extension().and_then(|s| s.to_str()) == Some("yaml") {
                 serde_yaml::from_str(&content)?

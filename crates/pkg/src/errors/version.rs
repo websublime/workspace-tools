@@ -127,8 +127,12 @@ impl Clone for VersionError {
     fn clone(&self) -> Self {
         match self {
             VersionError::Parse { message, .. } => {
-                // Create a new semver::Error
-                let error = semver::Version::parse("invalid-version").unwrap_err();
+                // Create a new semver::Error by constructing a known invalid version
+                // This is safe because we're intentionally creating an error
+                let error = match semver::Version::parse("invalid-version") {
+                    Ok(_) => unreachable!("'invalid-version' should always fail to parse"),
+                    Err(e) => e,
+                };
                 VersionError::Parse { error, message: message.clone() }
             }
             VersionError::InvalidVersion(message) => VersionError::InvalidVersion(message.clone()),

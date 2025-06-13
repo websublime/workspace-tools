@@ -1,5 +1,5 @@
 //! Unit tests for core module functionality
-
+#![allow(clippy::panic)]
 #[cfg(test)]
 mod tests {
     use crate::config::{Environment, VersionBumpType};
@@ -21,16 +21,15 @@ mod tests {
             author: "developer".to_string(),
             status: ChangesetStatus::Pending,
         };
-        
+
         // Initial state: Pending
         assert_eq!(changeset.status, ChangesetStatus::Pending);
         assert!(!changeset.production_deployment);
-        
+
         // Transition 1: Deploy to development
-        changeset.status = ChangesetStatus::PartiallyDeployed {
-            environments: vec![Environment::Development]
-        };
-        
+        changeset.status =
+            ChangesetStatus::PartiallyDeployed { environments: vec![Environment::Development] };
+
         // Validate partial deployment state
         if let ChangesetStatus::PartiallyDeployed { ref environments } = changeset.status {
             assert_eq!(environments.len(), 1);
@@ -38,25 +37,23 @@ mod tests {
         } else {
             panic!("Expected PartiallyDeployed status");
         }
-        
+
         // Transition 2: Deploy to staging as well
         changeset.status = ChangesetStatus::PartiallyDeployed {
-            environments: vec![Environment::Development, Environment::Staging]
+            environments: vec![Environment::Development, Environment::Staging],
         };
-        
+
         // Validate multi-environment deployment
         if let ChangesetStatus::PartiallyDeployed { ref environments } = changeset.status {
             assert_eq!(environments.len(), 2);
             assert!(environments.contains(&Environment::Development));
             assert!(environments.contains(&Environment::Staging));
         }
-        
+
         // Transition 3: Full deployment to production
         changeset.production_deployment = true;
-        changeset.status = ChangesetStatus::FullyDeployed {
-            deployed_at: Utc::now()
-        };
-        
+        changeset.status = ChangesetStatus::FullyDeployed { deployed_at: Utc::now() };
+
         // Validate final deployed state
         if let ChangesetStatus::FullyDeployed { .. } = changeset.status {
             assert!(true); // Correctly fully deployed
@@ -64,34 +61,34 @@ mod tests {
             panic!("Expected FullyDeployed status");
         }
         assert!(changeset.production_deployment);
-        
+
         // Test status comparison and distinction
         let pending = ChangesetStatus::Pending;
-        let partially_deployed = ChangesetStatus::PartiallyDeployed {
-            environments: vec![Environment::Development]
-        };
-        let fully_deployed = ChangesetStatus::FullyDeployed {
-            deployed_at: Utc::now()
-        };
-        
+        let partially_deployed =
+            ChangesetStatus::PartiallyDeployed { environments: vec![Environment::Development] };
+        let fully_deployed = ChangesetStatus::FullyDeployed { deployed_at: Utc::now() };
+
         // Validate all statuses are distinct
         assert_ne!(pending, partially_deployed);
         assert_ne!(partially_deployed, fully_deployed);
         assert_ne!(pending, fully_deployed);
-        
+
         // Test workflow progression validation
         let valid_transitions = vec![
             (ChangesetStatus::Pending, "can transition to PartiallyDeployed"),
-            (ChangesetStatus::PartiallyDeployed { environments: vec![Environment::Development] }, "can transition to Deployed"),
+            (
+                ChangesetStatus::PartiallyDeployed { environments: vec![Environment::Development] },
+                "can transition to Deployed",
+            ),
         ];
-        
+
         for (status, description) in valid_transitions {
             // In a real implementation, this would validate legal state transitions
             assert!(!description.is_empty());
             match status {
                 ChangesetStatus::Pending => assert!(true), // Always valid initial state
                 ChangesetStatus::PartiallyDeployed { .. } => assert!(true), // Valid intermediate state
-                ChangesetStatus::FullyDeployed { .. } => assert!(true), // Valid final state
+                ChangesetStatus::FullyDeployed { .. } => assert!(true),     // Valid final state
                 ChangesetStatus::Merged { .. } => assert!(true), // Also valid final state
             }
         }
@@ -127,15 +124,17 @@ mod tests {
     #[test]
     fn test_version_conflict_resolution_scenarios() {
         // Test realistic version conflict scenarios and their resolutions
-        
+
         // Scenario 1: Pending changesets conflict
         let pending_conflict = VersionConflict {
             package_name: "api-package".to_string(),
             conflict_type: ConflictType::PendingChangesets,
-            description: "Package has 3 pending changesets that need to be resolved before versioning".to_string(),
+            description:
+                "Package has 3 pending changesets that need to be resolved before versioning"
+                    .to_string(),
             resolution_strategy: "Apply all pending changesets in chronological order".to_string(),
         };
-        
+
         // Scenario 2: Dirty working directory conflict
         let dirty_conflict = VersionConflict {
             package_name: "utils-package".to_string(),
@@ -143,7 +142,7 @@ mod tests {
             description: "Working directory has uncommitted changes in src/index.ts".to_string(),
             resolution_strategy: "Commit or stash changes before versioning".to_string(),
         };
-        
+
         // Scenario 3: Potential breaking change conflict
         let breaking_conflict = VersionConflict {
             package_name: "core-lib".to_string(),
@@ -151,55 +150,57 @@ mod tests {
             description: "API changes detected that may break dependent packages".to_string(),
             resolution_strategy: "Review API changes and consider major version bump".to_string(),
         };
-        
+
         // Scenario 4: Dependency version mismatch
         let dep_mismatch_conflict = VersionConflict {
             package_name: "frontend-app".to_string(),
             conflict_type: ConflictType::DependencyMismatch,
             description: "Package requires react@18.x but workspace has react@17.x".to_string(),
-            resolution_strategy: "Update workspace react version or downgrade package requirement".to_string(),
+            resolution_strategy: "Update workspace react version or downgrade package requirement"
+                .to_string(),
         };
-        
+
         // Scenario 5: Circular dependency detected
         let circular_conflict = VersionConflict {
             package_name: "shared-utils".to_string(),
             conflict_type: ConflictType::CircularDependency,
             description: "Circular dependency: shared-utils -> auth -> shared-utils".to_string(),
-            resolution_strategy: "Refactor to remove circular dependency or extract common code".to_string(),
+            resolution_strategy: "Refactor to remove circular dependency or extract common code"
+                .to_string(),
         };
-        
+
         // Validate conflict types are correctly assigned
         assert_eq!(pending_conflict.conflict_type, ConflictType::PendingChangesets);
         assert_eq!(dirty_conflict.conflict_type, ConflictType::DirtyWorkingDirectory);
         assert_eq!(breaking_conflict.conflict_type, ConflictType::PotentialBreakingChange);
         assert_eq!(dep_mismatch_conflict.conflict_type, ConflictType::DependencyMismatch);
         assert_eq!(circular_conflict.conflict_type, ConflictType::CircularDependency);
-        
+
         // Validate that each conflict has appropriate resolution strategy
         assert!(pending_conflict.resolution_strategy.contains("pending changesets"));
         assert!(dirty_conflict.resolution_strategy.contains("Commit or stash"));
         assert!(breaking_conflict.resolution_strategy.contains("major version"));
         assert!(dep_mismatch_conflict.resolution_strategy.contains("Update workspace"));
         assert!(circular_conflict.resolution_strategy.contains("Refactor"));
-        
+
         // Test conflict severity (some conflicts are more critical than others)
         let critical_conflicts = vec![&breaking_conflict, &circular_conflict];
         let _non_critical_conflicts = vec![&pending_conflict, &dirty_conflict];
-        
+
         // Critical conflicts should have more complex resolution strategies
         for conflict in critical_conflicts {
             assert!(conflict.resolution_strategy.len() > 50); // More detailed resolution needed
         }
-        
+
         // Test that all conflict types are distinct
-        let conflict_types = vec![
+        let conflict_types = [
             ConflictType::PendingChangesets,
             ConflictType::DirtyWorkingDirectory,
             ConflictType::PotentialBreakingChange,
             ConflictType::DependencyMismatch,
             ConflictType::CircularDependency,
         ];
-        
+
         // Ensure all types are unique
         for (i, conflict_type) in conflict_types.iter().enumerate() {
             for (j, other_type) in conflict_types.iter().enumerate() {
@@ -210,72 +211,75 @@ mod tests {
         }
     }
 
+    #[allow(unused_comparisons)]
+    #[allow(clippy::absurd_extreme_comparisons)]
     #[test]
     fn test_versioning_strategies_behavioral_differences() {
         // Test actual behavioral differences between versioning strategies
         let default_strategy = DefaultVersioningStrategy;
         let conservative_strategy = ConservativeVersioningStrategy;
         let aggressive_strategy = AggressiveVersioningStrategy;
-        
+
         // Create test changesets with different characteristics
-        let minor_changeset = create_test_changeset_with_changes("minor-feature", vec![
-            "src/features/new-api.ts".to_string(),
-            "types/api.d.ts".to_string(),
-        ]);
-        
-        let patch_changeset = create_test_changeset_with_changes("bug-fix", vec![
-            "src/utils/helper.ts".to_string(),
-            "tests/helper.test.ts".to_string(),
-        ]);
-        
-        let breaking_changeset = create_test_changeset_with_changes("breaking-change", vec![
-            "src/index.ts".to_string(),
-            "BREAKING_CHANGES.md".to_string(),
-        ]);
-        
+        let minor_changeset = create_test_changeset_with_changes(
+            "minor-feature",
+            vec!["src/features/new-api.ts".to_string(), "types/api.d.ts".to_string()],
+        );
+
+        let patch_changeset = create_test_changeset_with_changes(
+            "bug-fix",
+            vec!["src/utils/helper.ts".to_string(), "tests/helper.test.ts".to_string()],
+        );
+
+        let breaking_changeset = create_test_changeset_with_changes(
+            "breaking-change",
+            vec!["src/index.ts".to_string(), "BREAKING_CHANGES.md".to_string()],
+        );
+
         // Test that strategies can be instantiated and have different type signatures
         // This validates that the strategy pattern is properly implemented
-        
+
         // Validate that each strategy is a distinct type
         let default_type = std::any::type_name_of_val(&default_strategy);
         let conservative_type = std::any::type_name_of_val(&conservative_strategy);
         let aggressive_type = std::any::type_name_of_val(&aggressive_strategy);
-        
+
         assert!(default_type.contains("DefaultVersioningStrategy"));
         assert!(conservative_type.contains("ConservativeVersioningStrategy"));
         assert!(aggressive_type.contains("AggressiveVersioningStrategy"));
-        
+
         // Validate that all strategies are different types
         assert_ne!(default_type, conservative_type);
         assert_ne!(conservative_type, aggressive_type);
         assert_ne!(default_type, aggressive_type);
-        
+
         // Test changeset characteristics for future strategy implementations
         assert_eq!(minor_changeset.version_bump, VersionBumpType::Patch); // Initial value
         assert_eq!(patch_changeset.package, "test-package");
         assert_eq!(breaking_changeset.status, ChangesetStatus::Pending);
-        
+
         // Validate that changesets with different characteristics can be created
         assert_ne!(minor_changeset.id, patch_changeset.id);
         assert_ne!(patch_changeset.id, breaking_changeset.id);
-        
+
         // Test that different version bump types exist for future strategy logic
         let patch_bump = VersionBumpType::Patch;
         let minor_bump = VersionBumpType::Minor;
         let major_bump = VersionBumpType::Major;
-        
+
         assert_ne!(patch_bump, minor_bump);
         assert_ne!(minor_bump, major_bump);
         assert_ne!(patch_bump, major_bump);
-        
+
         // Validate strategy framework is ready for implementation
         // Note: actual calculate_version_bump methods would be implemented on a VersioningStrategy trait
         assert!(std::mem::size_of_val(&default_strategy) >= 0); // Strategies exist
         assert!(std::mem::size_of_val(&conservative_strategy) >= 0);
         assert!(std::mem::size_of_val(&aggressive_strategy) >= 0);
     }
-    
+
     /// Helper function to create changeset with specific file changes
+    #[allow(clippy::needless_pass_by_value)]
     fn create_test_changeset_with_changes(id: &str, _changed_files: Vec<String>) -> Changeset {
         Changeset {
             id: id.to_string(),
