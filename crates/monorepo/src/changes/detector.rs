@@ -59,10 +59,11 @@ impl ChangeDetector {
 
                 package_changes.push(PackageChange {
                     package_name: package.name().to_string(),
-                    changed_files: changes_for_package,
                     change_type,
                     significance,
+                    changed_files: changes_for_package,
                     suggested_version_bump: suggested_bump,
+                    metadata: std::collections::HashMap::new(),
                 });
             }
         }

@@ -477,10 +477,11 @@ impl DevelopmentWorkflow {
 
             package_changes.push(PackageChange {
                 package_name,
-                changed_files,
                 change_type: PackageChangeType::SourceCode, // Always the same - no decisions
                 significance: ChangeSignificance::Low,      // Always the same - no decisions
+                changed_files,
                 suggested_version_bump: crate::config::VersionBumpType::Patch,
+                metadata: std::collections::HashMap::new(),
             });
         }
 

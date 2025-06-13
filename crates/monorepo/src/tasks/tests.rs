@@ -1116,15 +1116,16 @@ mod condition_checker_tests {
         };
         changes.package_changes.push(PackageChange {
             package_name: "test-package-a".to_string(),
+            change_type: crate::changes::PackageChangeType::SourceCode,
+            significance: crate::changes::ChangeSignificance::Medium,
             changed_files: vec![sublime_git_tools::GitChangedFile {
                 path: "packages/test-package-a/src/main.ts".to_string(),
                 status: sublime_git_tools::GitFileStatus::Modified,
                 staged: false,
                 workdir: true,
             }],
-            change_type: crate::changes::PackageChangeType::SourceCode,
-            significance: crate::changes::ChangeSignificance::Medium,
             suggested_version_bump: crate::config::VersionBumpType::Minor,
+            metadata: std::collections::HashMap::new(),
         });
 
         let result = run_async(checker.task_matches_changes(&task, &changes));

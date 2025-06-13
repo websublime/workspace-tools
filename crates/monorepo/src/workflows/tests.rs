@@ -87,9 +87,23 @@ async fn test_impact_level_determination() {
 
     let small_change = PackageChange {
         package_name: "@test/core".to_string(),
-        changed_files: vec!["README.md".to_string(), "package.json".to_string()],
         change_type: PackageChangeType::SourceCode, // Fixed - no decisions made
         significance: ChangeSignificance::Low,      // Fixed - no decisions made
+        changed_files: vec![
+            sublime_git_tools::GitChangedFile {
+                path: "README.md".to_string(),
+                status: sublime_git_tools::GitFileStatus::Modified,
+                staged: false,
+                workdir: true,
+            },
+            sublime_git_tools::GitChangedFile {
+                path: "package.json".to_string(),
+                status: sublime_git_tools::GitFileStatus::Modified,
+                staged: false,
+                workdir: true,
+            },
+        ],
+        suggested_version_bump: crate::config::VersionBumpType::Patch,
         metadata: small_change_metadata,
     };
 
@@ -102,9 +116,15 @@ async fn test_impact_level_determination() {
 
     let large_change = PackageChange {
         package_name: "@test/core".to_string(),
-        changed_files: (0..20).map(|i| format!("src/file{i}.ts")).collect(),
         change_type: PackageChangeType::SourceCode, // Fixed - no decisions made
         significance: ChangeSignificance::Low,      // Fixed - no decisions made
+        changed_files: (0..20).map(|i| sublime_git_tools::GitChangedFile {
+            path: format!("src/file{i}.ts"),
+            status: sublime_git_tools::GitFileStatus::Modified,
+            staged: false,
+            workdir: true,
+        }).collect(),
+        suggested_version_bump: crate::config::VersionBumpType::Patch,
         metadata: large_change_metadata,
     };
 

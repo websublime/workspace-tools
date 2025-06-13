@@ -14,11 +14,12 @@ use sublime_git_tools::{GitChangedFile, GitFileStatus};
 // Import consistent types from changes module
 use crate::changes::{ChangeSignificance, PackageChangeType};
 
-// Import types from types/diff
+// Import types from types/diff and changes
 use super::types::diff::{
-    DiffAnalyzer, BranchComparisonResult, ChangeAnalysis, PackageChange,
+    DiffAnalyzer, BranchComparisonResult, ChangeAnalysis,
     AffectedPackagesAnalysis, ChangeSignificanceResult, ChangeAnalysisResult, ChangeAnalyzer,
 };
+use crate::changes::PackageChange;
 
 
 impl DiffAnalyzer {
@@ -397,12 +398,19 @@ impl PackageChangeBuilder {
         let suggested_version_bump =
             DiffAnalyzer::suggest_version_bump(self.significance, change_type);
 
+        // Build metadata from contexts and analysis
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("contexts".to_string(), self.contexts.join(", "));
+        metadata.insert("total_files".to_string(), self.changed_files.len().to_string());
+        metadata.insert("change_types_analyzed".to_string(), format!("{:?}", self.change_types));
+
         PackageChange {
             package_name: self.package_name,
-            changed_files: self.changed_files,
             change_type,
             significance: self.significance,
+            changed_files: self.changed_files,
             suggested_version_bump,
+            metadata,
         }
     }
 }

@@ -51,8 +51,10 @@ pub struct PackageChange {
     pub change_type: PackageChangeType,
     /// Significance level of the change
     pub significance: ChangeSignificance,
-    /// List of changed files in this package
-    pub changed_files: Vec<String>,
+    /// Git changed files in this package (structured change information)
+    pub changed_files: Vec<sublime_git_tools::GitChangedFile>,
+    /// Suggested version bump based on change analysis
+    pub suggested_version_bump: VersionBumpType,
     /// Additional metadata about the change
     pub metadata: std::collections::HashMap<String, String>,
 }

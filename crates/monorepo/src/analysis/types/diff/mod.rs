@@ -2,7 +2,7 @@
 //!
 //! This module contains all type definitions related to diff analysis and change detection.
 
-use crate::changes::{ChangeSignificance, PackageChangeType};
+use crate::changes::{ChangeSignificance, PackageChangeType, PackageChange};
 use crate::core::MonorepoProject;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -72,20 +72,7 @@ pub struct ChangeAnalysis {
     pub significance_analysis: Vec<ChangeSignificanceResult>,
 }
 
-/// Information about changes to a specific package
-#[derive(Debug, Clone)]
-pub struct PackageChange {
-    /// Name of the changed package
-    pub package_name: String,
-    /// Files that changed in this package
-    pub changed_files: Vec<GitChangedFile>,
-    /// Type of change detected
-    pub change_type: PackageChangeType,
-    /// Significance level of the change
-    pub significance: ChangeSignificance,
-    /// Suggested version bump
-    pub suggested_version_bump: crate::config::VersionBumpType,
-}
+// PackageChange is now imported from crate::changes - no duplication
 
 /// Analysis of how changes affect packages in the monorepo
 #[derive(Debug, Clone, Default)]

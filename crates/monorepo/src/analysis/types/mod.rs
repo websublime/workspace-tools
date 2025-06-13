@@ -50,6 +50,8 @@ pub use upgrades::{UpgradeAnalysisResult, UpgradeInfo};
 // Diff types
 pub use diff::{
     ChangeAnalyzer, ChangeAnalysisResult, DiffAnalyzer, BranchComparisonResult,
-    ChangeAnalysis, PackageChange, AffectedPackagesAnalysis, ChangeSignificanceResult,
+    ChangeAnalysis, AffectedPackagesAnalysis, ChangeSignificanceResult,
     ComprehensiveChangeAnalysisResult
 };
+// PackageChange is imported from changes module to avoid duplication
+pub use crate::changes::PackageChange;
