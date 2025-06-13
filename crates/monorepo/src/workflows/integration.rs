@@ -802,14 +802,8 @@ impl ChangesetHookIntegration {
         let actual_parts = self.parse_version(actual);
         let required_parts = self.parse_version(required);
 
-        let (actual_major, actual_minor, actual_patch) = match actual_parts {
-            Some(parts) => parts,
-            None => return false,
-        };
-        let (req_major, req_minor, req_patch) = match required_parts {
-            Some(parts) => parts,
-            None => return false,
-        };
+        let Some((actual_major, actual_minor, actual_patch)) = actual_parts else { return false };
+        let Some((req_major, req_minor, req_patch)) = required_parts else { return false };
 
         // Major version must match, minor and patch can be higher
         actual_major == req_major
@@ -822,14 +816,8 @@ impl ChangesetHookIntegration {
         let actual_parts = self.parse_version(actual);
         let required_parts = self.parse_version(required);
 
-        let (actual_major, actual_minor, actual_patch) = match actual_parts {
-            Some(parts) => parts,
-            None => return false,
-        };
-        let (req_major, req_minor, req_patch) = match required_parts {
-            Some(parts) => parts,
-            None => return false,
-        };
+        let Some((actual_major, actual_minor, actual_patch)) = actual_parts else { return false };
+        let Some((req_major, req_minor, req_patch)) = required_parts else { return false };
 
         // Major and minor must match, patch can be higher
         actual_major == req_major && actual_minor == req_minor && actual_patch >= req_patch
@@ -840,14 +828,8 @@ impl ChangesetHookIntegration {
         let v1_parts = self.parse_version(version1);
         let v2_parts = self.parse_version(version2);
 
-        let (v1_major, v1_minor, v1_patch) = match v1_parts {
-            Some(parts) => parts,
-            None => return 0, // Treat invalid versions as equal
-        };
-        let (v2_major, v2_minor, v2_patch) = match v2_parts {
-            Some(parts) => parts,
-            None => return 0, // Treat invalid versions as equal
-        };
+        let Some((v1_major, v1_minor, v1_patch)) = v1_parts else { return 0 };
+        let Some((v2_major, v2_minor, v2_patch)) = v2_parts else { return 0 };
 
         if v1_major != v2_major {
             return if v1_major > v2_major { 1 } else { -1 };
