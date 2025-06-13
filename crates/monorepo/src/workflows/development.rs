@@ -12,19 +12,10 @@ use crate::changesets::{types::ChangesetFilter, ChangesetManager};
 use crate::core::MonorepoProject;
 use crate::error::Error;
 use crate::tasks::TaskManager;
-use crate::workflows::{AffectedPackageInfo, ChangeAnalysisResult, ImpactLevel};
+use crate::workflows::{AffectedPackageInfo, ChangeAnalysisResult, ImpactLevel, PackageChangeFacts};
 use crate::changes::{PackageChange, PackageChangeType, ChangeSignificance};
 use std::collections::HashMap;
 use sublime_git_tools::GitChangedFile;
-
-/// Simple facts about package changes - no decisions, just data
-#[derive(Debug, Clone)]
-pub struct PackageChangeFacts {
-    /// Total number of files changed
-    pub total_files: usize,
-    /// List of all files that changed
-    pub files_changed: Vec<String>,
-}
 
 /// Development workflow orchestrator
 ///

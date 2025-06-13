@@ -7,10 +7,12 @@
 //! - `options`: Configuration options for different workflow types
 //! - `results`: Result types for workflow executions
 //! - `status`: Status tracking and progress monitoring types
+//! - `data`: Simple data structures used within workflows
 
 mod options;
 mod results;
 mod status;
+mod data;
 
 // Explicit exports to avoid wildcard re-exports
 
@@ -26,3 +28,6 @@ pub use results::{
 
 // Status types
 pub use status::{WorkflowStep, WorkflowProgress, WorkflowStatus};
+
+// Data types
+pub use data::PackageChangeFacts;
