@@ -4,6 +4,7 @@
 //! (git, standard, and package tools) as well as monorepo-specific errors.
 
 use thiserror::Error;
+use sublime_package_tools::errors::{VersionError, DependencyResolutionError, PackageRegistryError, RegistryError, PackageError};
 
 /// Main error type for monorepo tools operations
 #[derive(Error, Debug)]
@@ -22,19 +23,19 @@ pub enum Error {
 
     /// Version-related errors
     #[error("Version error: {0}")]
-    Version(#[from] sublime_package_tools::VersionError),
+    Version(#[from] VersionError),
 
     /// Dependency resolution errors
     #[error("Dependency resolution error: {0}")]
-    DependencyResolution(#[from] sublime_package_tools::DependencyResolutionError),
+    DependencyResolution(#[from] DependencyResolutionError),
 
     /// Package registry errors
     #[error("Package registry error: {0}")]
-    PackageRegistry(#[from] sublime_package_tools::PackageRegistryError),
+    PackageRegistry(#[from] PackageRegistryError),
 
     /// Registry management errors
     #[error("Registry error: {0}")]
-    Registry(#[from] sublime_package_tools::RegistryError),
+    Registry(#[from] RegistryError),
 
     /// Configuration errors
     #[error("Configuration error: {0}")]
@@ -92,9 +93,21 @@ pub enum Error {
 /// Result type alias for monorepo tools operations
 pub type Result<T> = std::result::Result<T, Error>;
 
-impl From<sublime_package_tools::PackageError> for Error {
-    fn from(err: sublime_package_tools::PackageError) -> Self {
+impl From<PackageError> for Error {
+    fn from(err: PackageError) -> Self {
         Error::Package(err.to_string())
+    }
+}
+
+impl From<String> for Error {
+    fn from(msg: String) -> Self {
+        Error::Generic(msg)
+    }
+}
+
+impl From<&str> for Error {
+    fn from(msg: &str) -> Self {
+        Error::Generic(msg.to_string())
     }
 }
 
@@ -122,6 +135,11 @@ impl Error {
     /// Create a changeset error
     pub fn changeset(msg: impl Into<String>) -> Self {
         Error::Changeset(msg.into())
+    }
+
+    /// Create a package error
+    pub fn package(msg: impl Into<String>) -> Self {
+        Error::Package(msg.into())
     }
 
     /// Create a hook error

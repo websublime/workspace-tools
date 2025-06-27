@@ -36,7 +36,7 @@ fn test_monorepo_project_analysis_workflow() {
 
 /// Test configuration integration with actual monorepo structure
 fn test_config_integration_with_monorepo(_root_path: &Path) {
-    let config_manager = ConfigManager::new();
+    let mut config_manager = ConfigManager::new();
     
     // Test that different project sizes have appropriate configurations
     let small_config = MonorepoConfig::small_project();
@@ -61,7 +61,7 @@ fn test_config_integration_with_monorepo(_root_path: &Path) {
         *config = large_config.clone();
     }).expect("Should update configuration");
     
-    let updated_config = config_manager.get().expect("Should get updated config");
+    let updated_config = config_manager.get_clone();
     assert_eq!(updated_config.tasks.max_concurrent, 8);
     assert!(updated_config.tasks.parallel);
 }
@@ -110,8 +110,7 @@ fn test_workspace_patterns_analysis(_root_path: &Path) {
     let config_manager = ConfigManager::new();
     
     // Test basic workspace pattern extraction
-    let workspace_config = config_manager.get_workspace()
-        .expect("Should get workspace config");
+    let workspace_config = config_manager.get_workspace();
     
     // Workspace config should be accessible (may or may not have default patterns)
     let _patterns_exist = !workspace_config.patterns.is_empty();
@@ -123,8 +122,7 @@ fn test_workspace_patterns_analysis(_root_path: &Path) {
         "packages/app".to_string(),
     ];
     
-    let _validation_errors = config_manager.validate_workspace_config(&existing_packages)
-        .expect("Should validate workspace config");
+    let _validation_errors = config_manager.validate_workspace_config(&existing_packages);
     
     // With proper test structure, there should be minimal validation errors
     // (some errors might be expected due to default patterns not matching test structure)

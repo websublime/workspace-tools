@@ -1,0 +1,61 @@
+[package]
+name = "sublime-monorepo-cli"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+description = "Command line interface for sublime monorepo tools"
+homepage = "https://github.com/websublime/workspace-node-tools"
+documentation = "https://docs.rs/sublime-monorepo-cli"
+keywords = ["cli", "monorepo", "workspace", "tools", "management"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "monorepo"
+path = "src/main.rs"
+
+[dependencies]
+# Internal crates
+sublime_monorepo_tools.workspace = true
+sublime_standard_tools.workspace = true
+sublime_git_tools.workspace = true
+sublime_package_tools.workspace = true
+
+# CLI dependencies
+clap = { version = "4.5", features = ["derive", "env", "color", "suggestions"] }
+clap_complete = "4.5"
+console = "0.15"
+indicatif = "0.17"
+tokio = { workspace = true, features = ["full"] }
+
+# Core dependencies
+log.workspace = true
+env_logger = "0.11"
+serde.workspace = true
+serde_json.workspace = true
+anyhow = "1.0"
+thiserror.workspace = true
+
+# Utility
+dirs.workspace = true
+chrono.workspace = true
+colored = "2.1"
+term_size = "0.3"
+serde_yaml = "0.9"
+toml = "0.8"
+
+[dev-dependencies]
+tempfile.workspace = true
+assert_cmd = "2.0"
+predicates = "3.1"
+
+[features]
+default = ["color", "suggestions"]
+color = []
+suggestions = []
+
+[lints]
+workspace = true

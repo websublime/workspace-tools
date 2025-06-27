@@ -4,6 +4,7 @@
 //! including versioning, tasks, changelogs, hooks, changesets, and plugins.
 
 pub mod types;
+pub mod components;
 mod manager;
 mod defaults;
 
@@ -36,4 +37,10 @@ pub use types::{
     WorkspaceValidationConfig, PackageDiscoveryConfig,
     // Git
     GitConfig, BranchConfig, BranchType,
+};
+
+// Re-export components
+pub use components::{
+    ConfigComponents, ConfigPersistence, ConfigReader, ConfigWriter,
+    WorkspacePatternManager, MultiPatternMatcher,
 };

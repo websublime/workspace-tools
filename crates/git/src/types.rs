@@ -1,5 +1,5 @@
 use git2::{Error as Git2Error, Repository};
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 use thiserror::Error;
 
 /// Represents a Git repository with high-level operation methods
@@ -22,10 +22,8 @@ use thiserror::Error;
 /// repo.add_all().expect("Failed to stage changes");
 /// let commit_id = repo.commit("feat: add new feature").expect("Failed to commit");
 /// ```
-#[derive(Clone)]
 pub struct Repo {
-    #[allow(clippy::arc_with_non_send_sync)]
-    pub(crate) repo: Arc<Repository>,
+    pub(crate) repo: Repository,
     pub(crate) local_path: PathBuf,
 }
 

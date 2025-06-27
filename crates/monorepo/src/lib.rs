@@ -62,57 +62,47 @@
 // Public modules
 pub mod analysis;
 pub mod changes;
+pub mod changelog;
 pub mod changesets;
 pub mod config;
 pub mod core;
 pub mod error;
+pub mod events;
 pub mod hooks;
+pub mod logging;
+pub mod plugins;
 pub mod tasks;
+pub mod validation;
 pub mod workflows;
 
-// Essential API surface - reduced from 100+ to ~20 core re-exports
-// Users can access other types through module paths if needed
+// Essential API surface - core re-exports for common usage
+// Advanced types available through module paths (e.g., crate::changesets::ChangesetApplication)
 
-// Core entry point and project management
+// Core entry point and project management (2 types)
 pub use crate::core::{MonorepoTools, MonorepoProject};
 
-// Essential result and error types
+// Essential result and error types (2 types)
 pub use crate::error::{Error, Result};
 
-// Main workflow types - the primary interfaces users interact with
-pub use crate::workflows::{DevelopmentWorkflow, ReleaseWorkflow, ReleaseResult};
+// Main workflow types - primary user interfaces (4 types)
+pub use crate::workflows::{DevelopmentWorkflow, ReleaseWorkflow, ReleaseResult, ReleaseOptions};
 
-// Core analysis types
-pub use crate::analysis::{
-    MonorepoAnalyzer, MonorepoAnalysisResult, DiffAnalyzer, 
-    ChangeAnalysis, AffectedPackagesAnalysis
-};
+// Core analysis types (3 types)
+pub use crate::analysis::{MonorepoAnalyzer, ChangeAnalysis, AffectedPackagesAnalysis};
 
-// Essential configuration and change types
-pub use crate::config::{MonorepoConfig, Environment, VersionBumpType, ConfigManager};
-pub use crate::changes::{
-    PackageChange, PackageChangeType, ChangeSignificance, ChangeDetector,
-    ChangeDetectionEngine, ChangeDetectionRules
-};
+// Essential configuration (3 types)
+pub use crate::config::{MonorepoConfig, Environment, VersionBumpType};
 
-// Core version management
-pub use crate::core::{VersionManager, VersioningStrategy, VersioningResult};
+// Core change detection (2 types)
+pub use crate::changes::{PackageChange, ChangeDetector};
 
-// Essential changesets
-pub use crate::changesets::{
-    ChangesetManager, ChangesetSpec, Changeset, ChangesetApplication, 
-    ChangesetFilter, ChangesetStatus, DeploymentResult, 
-    EnvironmentDeploymentResult, ValidationResult, ChangesetStorage
-};
+// Core version management (2 types)
+pub use crate::core::{VersionManager, VersioningResult};
 
-// Core task management  
-pub use crate::tasks::{TaskManager, TaskExecutor, ExecutionContext};
+// Plugin system - main interface (2 types)
+pub use crate::plugins::{PluginManager, MonorepoPlugin};
 
-// Essential hooks
-pub use crate::hooks::{
-    HookManager, HookInstaller, HookType, HookCondition, HookDefinition,
-    HookExecutionContext, HookScript, GitOperationType
-};
+// Total: 20 essential types - advanced functionality available via module paths
 
 // Main entry point struct re-exported from core module
 // Implementation moved to core/tools.rs for better separation

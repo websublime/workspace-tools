@@ -63,7 +63,6 @@ use git2::{
 use std::collections::HashMap;
 use std::fs::canonicalize;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use crate::{GitChangedFile, GitFileStatus, Repo, RepoCommit, RepoError, RepoTags};
 
@@ -333,7 +332,6 @@ impl Repo {
     /// let repo = Repo::create("/tmp/new-repo").expect("Failed to create repository");
     /// println!("Repository created at: {}", repo.get_repo_path().display());
     /// ```
-    #[allow(clippy::arc_with_non_send_sync)]
     pub fn create(path: &str) -> Result<Self, RepoError> {
         let location = canonicalize_path(path)?;
         let location_buf = PathBuf::from(location);
@@ -346,7 +344,7 @@ impl Repo {
         .map_err(RepoError::CreateRepoFailure)?;
 
         // Just return the repo without making any commits
-        let result = Self { repo: Arc::new(repo), local_path: location_buf };
+        let result = Self { repo, local_path: location_buf };
 
         // Now make the initial commit using our new instance
         result.make_initial_commit()?;
@@ -386,7 +384,7 @@ impl Repo {
         let local_path = canonicalize_path(path)?;
         let repo = Repository::open(path).map_err(RepoError::OpenRepoFailure)?;
 
-        Ok(Self { repo: Arc::new(repo), local_path: PathBuf::from(local_path) })
+        Ok(Self { repo, local_path: PathBuf::from(local_path) })
     }
 
     /// Clones a Git repository from a URL to a local path
@@ -418,12 +416,11 @@ impl Repo {
     /// let repo = Repo::clone("https://github.com/example/repo.git", "./cloned-repo")
     ///     .expect("Failed to clone repository");
     /// ```
-    #[allow(clippy::arc_with_non_send_sync)]
     pub fn clone(url: &str, path: &str) -> Result<Self, RepoError> {
         let local_path = canonicalize_path(path)?;
         let repo = Repository::clone(url, path).map_err(RepoError::CloneRepoFailure)?;
 
-        Ok(Self { repo: Arc::new(repo), local_path: PathBuf::from(local_path) })
+        Ok(Self { repo, local_path: PathBuf::from(local_path) })
     }
 
     /// Gets the local path of the repository
@@ -843,11 +840,162 @@ impl Repo {
     pub fn get_last_tag(&self) -> Result<String, RepoError> {
         let tags = self.repo.tag_names(None).map_err(RepoError::LastTagError)?;
 
-        let last_tag = tags.iter().flatten().max_by_key(|&tag| tag.parse::<u64>().unwrap_or(0));
+        let last_tag = tags
+            .iter()
+            .flatten()
+            .max_by(|&a, &b| self.compare_version_tags(a, b));
 
         last_tag
             .map(std::string::ToString::to_string)
             .ok_or_else(|| RepoError::LastTagError(Git2Error::from_str("No tags found")))
+    }
+
+    /// Compares two version tags for semantic version ordering
+    ///
+    /// This method handles various tag formats including:
+    /// - Semantic versions: "1.2.3", "v1.2.3"
+    /// - Pre-release versions: "1.2.3-alpha", "v2.0.0-beta.1"
+    /// - Non-semantic tags: falls back to string comparison
+    ///
+    /// # Arguments
+    ///
+    /// * `tag_a` - First tag to compare
+    /// * `tag_b` - Second tag to compare
+    ///
+    /// # Returns
+    ///
+    /// * `std::cmp::Ordering` - The comparison result
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use git::repo::Repo;
+    /// use std::cmp::Ordering;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let result = repo.compare_version_tags("v1.2.3", "v2.0.0");
+    /// assert_eq!(result, Ordering::Less);
+    /// ```
+    fn compare_version_tags(&self, tag_a: &str, tag_b: &str) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+
+        // Try to parse both tags as semantic versions
+        let version_a = self.parse_semantic_version(tag_a);
+        let version_b = self.parse_semantic_version(tag_b);
+
+        match (version_a, version_b) {
+            (Some(v_a), Some(v_b)) => {
+                // Both are semantic versions - compare properly
+                self.compare_semantic_versions(&v_a, &v_b)
+            }
+            (Some(_), None) => {
+                // Only A is semantic version - semantic versions are "newer"
+                Ordering::Greater
+            }
+            (None, Some(_)) => {
+                // Only B is semantic version - semantic versions are "newer"
+                Ordering::Less
+            }
+            (None, None) => {
+                // Neither is semantic version - fall back to string comparison
+                tag_a.cmp(tag_b)
+            }
+        }
+    }
+
+    /// Parses a tag into semantic version components
+    ///
+    /// Handles tags with or without "v" prefix and extracts major, minor, patch numbers.
+    /// Also handles pre-release identifiers for proper ordering.
+    ///
+    /// # Arguments
+    ///
+    /// * `tag` - The tag string to parse
+    ///
+    /// # Returns
+    ///
+    /// * `Option<(u32, u32, u32, Option<String>)>` - Major, minor, patch, and pre-release identifier
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use git::repo::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let version = repo.parse_semantic_version("v1.2.3-alpha");
+    /// assert_eq!(version, Some((1, 2, 3, Some("alpha".to_string()))));
+    /// ```
+    fn parse_semantic_version(&self, tag: &str) -> Option<(u32, u32, u32, Option<String>)> {
+        // Remove 'v' prefix if present
+        let version_str = tag.strip_prefix('v').unwrap_or(tag);
+
+        // Split on '-' to separate version from pre-release
+        let parts: Vec<&str> = version_str.splitn(2, '-').collect();
+        let version_part = parts[0];
+        let pre_release = parts.get(1).map(|s| s.to_string());
+
+        // Parse semantic version components
+        let version_components: Vec<&str> = version_part.split('.').collect();
+        
+        if version_components.len() < 3 {
+            return None; // Not a valid semantic version
+        }
+
+        let major = version_components[0].parse::<u32>().ok()?;
+        let minor = version_components[1].parse::<u32>().ok()?;
+        let patch = version_components[2].parse::<u32>().ok()?;
+
+        Some((major, minor, patch, pre_release))
+    }
+
+    /// Compare two semantic version tuples
+    ///
+    /// Properly implements semantic version precedence rules including pre-release handling.
+    /// According to SemVer spec: pre-release versions have lower precedence than normal versions.
+    ///
+    /// # Arguments
+    ///
+    /// * `version_a` - First version tuple (major, minor, patch, pre_release)
+    /// * `version_b` - Second version tuple (major, minor, patch, pre_release)
+    ///
+    /// # Returns
+    ///
+    /// * `std::cmp::Ordering` - The comparison result
+    fn compare_semantic_versions(
+        &self,
+        version_a: &(u32, u32, u32, Option<String>),
+        version_b: &(u32, u32, u32, Option<String>),
+    ) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+
+        let (maj_a, min_a, patch_a, pre_a) = version_a;
+        let (maj_b, min_b, patch_b, pre_b) = version_b;
+
+        // Compare major version first
+        match maj_a.cmp(maj_b) {
+            Ordering::Equal => {
+                // Major versions equal, compare minor
+                match min_a.cmp(min_b) {
+                    Ordering::Equal => {
+                        // Minor versions equal, compare patch
+                        match patch_a.cmp(patch_b) {
+                            Ordering::Equal => {
+                                // Patch versions equal, compare pre-release
+                                match (pre_a, pre_b) {
+                                    (None, None) => Ordering::Equal,
+                                    (Some(_), None) => Ordering::Less, // Pre-release < normal version
+                                    (None, Some(_)) => Ordering::Greater, // Normal version > pre-release
+                                    (Some(pre_a), Some(pre_b)) => pre_a.cmp(pre_b), // Compare pre-release strings
+                                }
+                            }
+                            other => other,
+                        }
+                    }
+                    other => other,
+                }
+            }
+            other => other,
+        }
     }
 
     /// Gets the SHA of the current HEAD commit
@@ -2677,5 +2825,78 @@ impl Repo {
             .map_err(RepoError::CommitError)?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_semantic_version() {
+        // Create a temporary directory for testing
+        let temp_dir = std::env::temp_dir().join("test_git_repo");
+        let _ = std::fs::remove_dir_all(&temp_dir); // Clean up if exists
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        
+        let repo = Repo {
+            repo: git2::Repository::init_bare(&temp_dir).unwrap(),
+            local_path: temp_dir,
+        };
+
+        // Test standard semantic versions
+        assert_eq!(repo.parse_semantic_version("1.2.3"), Some((1, 2, 3, None)));
+        assert_eq!(repo.parse_semantic_version("v1.2.3"), Some((1, 2, 3, None)));
+        assert_eq!(repo.parse_semantic_version("10.20.30"), Some((10, 20, 30, None)));
+
+        // Test pre-release versions
+        assert_eq!(
+            repo.parse_semantic_version("1.2.3-alpha"),
+            Some((1, 2, 3, Some("alpha".to_string())))
+        );
+        assert_eq!(
+            repo.parse_semantic_version("v2.0.0-beta.1"),
+            Some((2, 0, 0, Some("beta.1".to_string())))
+        );
+
+        // Test invalid versions
+        assert_eq!(repo.parse_semantic_version("1.2"), None);
+        assert_eq!(repo.parse_semantic_version("not-a-version"), None);
+        assert_eq!(repo.parse_semantic_version("v1.2.x"), None);
+    }
+
+    #[test]
+    fn test_compare_version_tags() {
+        use std::cmp::Ordering;
+        
+        // Create a temporary directory for testing
+        let temp_dir = std::env::temp_dir().join("test_git_repo_compare");
+        let _ = std::fs::remove_dir_all(&temp_dir); // Clean up if exists
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        
+        let repo = Repo {
+            repo: git2::Repository::init_bare(&temp_dir).unwrap(),
+            local_path: temp_dir,
+        };
+
+        // Test semantic version comparison
+        assert_eq!(repo.compare_version_tags("v1.2.3", "v2.0.0"), Ordering::Less);
+        assert_eq!(repo.compare_version_tags("v2.0.0", "v1.2.3"), Ordering::Greater);
+        assert_eq!(repo.compare_version_tags("v1.2.3", "v1.2.3"), Ordering::Equal);
+
+        // Test with and without 'v' prefix
+        assert_eq!(repo.compare_version_tags("1.2.3", "v1.2.3"), Ordering::Equal);
+        assert_eq!(repo.compare_version_tags("v1.2.3", "1.2.3"), Ordering::Equal);
+
+        // Test pre-release versions (pre-release should be less than regular)
+        assert_eq!(repo.compare_version_tags("v1.2.3-alpha", "v1.2.3"), Ordering::Less);
+        assert_eq!(repo.compare_version_tags("v1.2.3", "v1.2.3-alpha"), Ordering::Greater);
+
+        // Test non-semantic vs semantic (semantic should be greater)
+        assert_eq!(repo.compare_version_tags("release-1", "v1.0.0"), Ordering::Less);
+        assert_eq!(repo.compare_version_tags("v1.0.0", "release-1"), Ordering::Greater);
+
+        // Test non-semantic comparison
+        assert_eq!(repo.compare_version_tags("release-a", "release-b"), Ordering::Less);
     }
 }

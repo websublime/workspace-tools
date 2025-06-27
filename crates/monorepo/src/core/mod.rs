@@ -5,6 +5,8 @@
 //! type that provides monorepo-specific package information.
 
 pub mod types;
+pub mod interfaces;
+pub mod components;
 mod project;
 mod package;
 mod version;
@@ -40,4 +42,15 @@ pub use types::{
     MonorepoProject,
     VersionManager,
     MonorepoTools,
+};
+
+// Re-export interfaces for dependency injection
+pub use interfaces::{
+    PackageProvider,
+    ConfigProvider, 
+    FileSystemProvider,
+    GitProvider,
+    RegistryProvider,
+    MonorepoContext,
+    DependencyFactory,
 };

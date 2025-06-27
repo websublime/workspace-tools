@@ -7,6 +7,30 @@ use sublime_monorepo_tools::{
     MonorepoConfig, ConfigManager, ChangeDetector, Error,
 };
 
+// Include end-to-end integration tests
+mod end_to_end_integration;
+
+// Include configuration and components integration tests
+mod config_components_integration;
+
+// Include storage, manager, and validation integration tests
+mod storage_manager_validation_integration;
+
+// Include task, workflow, and error handling integration tests
+mod task_workflow_error_integration;
+
+// Include complex monorepo integration tests
+mod complex_monorepo_integration;
+
+// Include simultaneous changes integration tests
+mod simultaneous_changes_integration;
+
+// Include conflict and recovery integration tests
+mod conflict_recovery_integration;
+
+// Include performance and stress integration tests
+mod performance_stress_integration;
+
 /// Test public API accessibility and basic functionality
 #[test]
 fn test_public_api_accessibility() {
@@ -33,7 +57,7 @@ fn test_public_api_accessibility() {
 #[test]
 fn test_configuration_management() {
     let config_manager = ConfigManager::new();
-    let config = config_manager.get().expect("Should get default config");
+    let config = config_manager.get_clone();
     
     // Test default configuration values
     assert_eq!(config.versioning.default_bump, VersionBumpType::Patch);

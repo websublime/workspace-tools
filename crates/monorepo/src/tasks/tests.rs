@@ -308,7 +308,7 @@ mod task_manager_tests {
     #[test]
     fn test_task_manager_creation() {
         let project = create_test_project();
-        let manager = TaskManager::new(project);
+        let manager = TaskManager::from_project(project);
 
         assert!(manager.is_ok(), "Should create task manager successfully");
     }
@@ -316,7 +316,7 @@ mod task_manager_tests {
     #[test]
     fn test_register_and_get_task() {
         let project = create_test_project();
-        let mut manager = TaskManager::new(project).expect("Should create manager");
+        let mut manager = TaskManager::from_project(project).expect("Should create manager");
 
         let task = create_test_task();
         let task_name = task.name.clone();
@@ -331,7 +331,7 @@ mod task_manager_tests {
     #[test]
     fn test_register_multiple_tasks() {
         let project = create_test_project();
-        let mut manager = TaskManager::new(project).expect("Should create manager");
+        let mut manager = TaskManager::from_project(project).expect("Should create manager");
 
         let tasks = vec![
             create_test_task(),
@@ -349,7 +349,7 @@ mod task_manager_tests {
     #[test]
     fn test_resolve_package_tasks() {
         let project = create_test_project();
-        let manager = TaskManager::new(project).expect("Should create manager");
+        let manager = TaskManager::from_project(project).expect("Should create manager");
 
         // This would require a real package.json file in the test project
         // For now, we test the error case
@@ -454,7 +454,11 @@ mod condition_checker_tests {
     #[test]
     fn test_condition_checker_creation() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         // Basic creation test - checker should be created successfully
         let empty_conditions = vec![];
@@ -467,7 +471,11 @@ mod condition_checker_tests {
     #[test]
     fn test_packages_changed_condition() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let context = ExecutionContext::default()
             .with_affected_packages(vec!["test-package-a".to_string()]);
@@ -483,7 +491,11 @@ mod condition_checker_tests {
     #[test]
     fn test_files_changed_condition() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let changed_files = vec![sublime_git_tools::GitChangedFile {
             path: "src/main.ts".to_string(),
@@ -510,7 +522,11 @@ mod condition_checker_tests {
     #[test]
     fn test_environment_condition() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let mut context = ExecutionContext::default();
         context.environment.insert("NODE_ENV".to_string(), "production".to_string());
@@ -530,7 +546,11 @@ mod condition_checker_tests {
     #[test]
     fn test_branch_condition() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let context = ExecutionContext::default().with_branch("feature/new-feature");
 
@@ -544,7 +564,11 @@ mod condition_checker_tests {
     #[test]
     fn test_complex_conditions() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let context = ExecutionContext::default()
             .with_affected_packages(vec!["test-package-a".to_string()])
@@ -580,7 +604,11 @@ mod condition_checker_tests {
     #[test]
     fn test_not_condition() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let context = ExecutionContext::default().with_branch("main");
 
@@ -596,7 +624,11 @@ mod condition_checker_tests {
     #[test]
     fn test_check_packages_changed() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         // Test empty package list (should return true)
         let context = ExecutionContext::default();
@@ -622,7 +654,11 @@ mod condition_checker_tests {
     #[test]
     fn test_check_files_changed() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         // Test empty patterns (should return true)
         let context = ExecutionContext::default();
@@ -674,7 +710,11 @@ mod condition_checker_tests {
     #[test]
     fn test_check_environment_condition_variable_equals() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let mut context = ExecutionContext::default();
         context.environment.insert("NODE_ENV".to_string(), "production".to_string());
@@ -701,7 +741,11 @@ mod condition_checker_tests {
     #[test]
     fn test_check_environment_condition_variable_exists() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let mut context = ExecutionContext::default();
         context.environment.insert("TEST_VAR".to_string(), "value".to_string());
@@ -723,7 +767,11 @@ mod condition_checker_tests {
     #[test]
     fn test_check_environment_condition_variable_matches() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let mut context = ExecutionContext::default();
         context.environment.insert("VERSION".to_string(), "1.2.3".to_string());
@@ -750,7 +798,11 @@ mod condition_checker_tests {
     #[test]
     fn test_check_branch_condition_equals() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let context = ExecutionContext::default().with_branch("main");
 
@@ -771,7 +823,11 @@ mod condition_checker_tests {
     #[allow(clippy::uninlined_format_args)]
     fn test_check_branch_condition_is_main() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let test_cases =
             vec![("main", true), ("master", true), ("develop", true), ("feature/test", false)];
@@ -797,7 +853,11 @@ mod condition_checker_tests {
     #[allow(clippy::uninlined_format_args)]
     fn test_check_branch_condition_is_feature() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let test_cases = vec![
             ("feature/new-ui", true),
@@ -827,7 +887,11 @@ mod condition_checker_tests {
     #[allow(clippy::uninlined_format_args)]
     fn test_check_branch_condition_is_release() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let test_cases = vec![
             ("release/1.0", true),
@@ -857,7 +921,11 @@ mod condition_checker_tests {
     #[allow(clippy::uninlined_format_args)]
     fn test_check_branch_condition_is_hotfix() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let test_cases = vec![
             ("hotfix/urgent-fix", true),
@@ -886,7 +954,11 @@ mod condition_checker_tests {
     #[test]
     fn test_check_branch_condition_one_of() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let context = ExecutionContext::default().with_branch("develop");
 
@@ -910,7 +982,11 @@ mod condition_checker_tests {
     #[test]
     fn test_check_branch_condition_none_of() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let context = ExecutionContext::default().with_branch("feature/test");
 
@@ -934,7 +1010,11 @@ mod condition_checker_tests {
     #[test]
     fn test_check_branch_condition_matches_pattern() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let context = ExecutionContext::default().with_branch("feature/api-v2");
 
@@ -954,7 +1034,11 @@ mod condition_checker_tests {
     #[test]
     fn test_file_pattern_matching() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         // Test glob patterns
         let glob_pattern = FilePattern {
@@ -1035,7 +1119,11 @@ mod condition_checker_tests {
     #[test]
     fn test_glob_pattern_matching() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         // Test wildcard patterns
         let result = checker.matches_glob_pattern("anything", "*");
@@ -1095,7 +1183,11 @@ mod condition_checker_tests {
     #[test]
     fn test_task_matches_changes() {
         let project = create_test_project();
-        let checker = ConditionChecker::new(project);
+        let checker = ConditionChecker::new(
+            crate::core::interfaces::DependencyFactory::git_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            crate::core::interfaces::DependencyFactory::package_provider(project),
+        );
 
         let task = TaskDefinition::new("test-task", "Test task").with_condition(
             TaskCondition::PackagesChanged { packages: vec!["test-package-a".to_string()] },
@@ -1141,7 +1233,7 @@ mod integration_tests {
     #[test]
     fn test_full_task_workflow() {
         let project = create_test_project();
-        let mut manager = TaskManager::new(project).expect("Should create manager");
+        let mut manager = TaskManager::from_project(project).expect("Should create manager");
 
         // Register a simple task
         let task = create_test_task();
@@ -1164,7 +1256,7 @@ mod integration_tests {
     #[test]
     fn test_task_with_dependencies() {
         let project = create_test_project();
-        let mut manager = TaskManager::new(project).expect("Should create manager");
+        let mut manager = TaskManager::from_project(project).expect("Should create manager");
 
         // Create tasks with dependencies
         let prereq_task = TaskDefinition::new("prerequisite", "Prerequisite task")
@@ -1189,7 +1281,7 @@ mod integration_tests {
     #[test]
     fn test_conditional_task_execution() {
         let project = create_test_project();
-        let mut manager = TaskManager::new(project).expect("Should create manager");
+        let mut manager = TaskManager::from_project(project).expect("Should create manager");
 
         // Register conditional task
         let task = create_test_conditional_task();

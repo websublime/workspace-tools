@@ -7,6 +7,7 @@ use crate::core::MonorepoProject;
 use crate::error::Result;
 use std::collections::HashMap;
 use std::path::Path;
+use std::process::Command;
 use std::sync::Arc;
 use sublime_git_tools::{GitChangedFile, GitFileStatus};
 
@@ -21,9 +22,14 @@ use super::types::diff::{
 use crate::changes::PackageChange;
 
 impl DiffAnalyzer {
-    /// Create a new diff analyzer with the given project
+    /// Create a new diff analyzer with injected dependencies
     #[must_use]
-    pub fn new(project: Arc<MonorepoProject>) -> Self {
+    pub fn new(
+        git_provider: Box<dyn crate::core::GitProvider>,
+        package_provider: Box<dyn crate::core::PackageProvider>,
+        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+        package_discovery_provider: Box<dyn crate::core::interfaces::PackageDiscoveryProvider>,
+    ) -> Self {
         // Add built-in analyzers
         let analyzers: Vec<Box<dyn ChangeAnalyzer>> = vec![
             Box::new(PackageJsonAnalyzer),
@@ -33,16 +39,62 @@ impl DiffAnalyzer {
             Box::new(TestAnalyzer),
         ];
 
-        Self { project, analyzers }
+        Self {
+            analyzers,
+            git_provider,
+            package_provider,
+            file_system_provider,
+            package_discovery_provider,
+        }
+    }
+
+    /// Create a new diff analyzer from project (convenience method)
+    #[must_use]
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn from_project(project: Arc<MonorepoProject>) -> Self {
+        use crate::core::interfaces::DependencyFactory;
+
+        // Create providers but don't store the project
+        let git_provider = DependencyFactory::git_provider(Arc::clone(&project));
+        let package_provider = DependencyFactory::package_provider(Arc::clone(&project));
+        let file_system_provider = DependencyFactory::file_system_provider(Arc::clone(&project));
+        let package_discovery_provider =
+            DependencyFactory::package_discovery_provider(Arc::clone(&project));
+
+        // Add built-in analyzers
+        let analyzers: Vec<Box<dyn ChangeAnalyzer>> = vec![
+            Box::new(PackageJsonAnalyzer),
+            Box::new(SourceCodeAnalyzer),
+            Box::new(ConfigurationAnalyzer),
+            Box::new(DocumentationAnalyzer),
+            Box::new(TestAnalyzer),
+        ];
+
+        Self {
+            analyzers,
+            git_provider,
+            package_provider,
+            file_system_provider,
+            package_discovery_provider,
+        }
     }
 
     /// Create a new diff analyzer with custom analyzers
     #[must_use]
     pub fn with_analyzers(
-        project: Arc<MonorepoProject>,
+        git_provider: Box<dyn crate::core::GitProvider>,
+        package_provider: Box<dyn crate::core::PackageProvider>,
+        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+        package_discovery_provider: Box<dyn crate::core::interfaces::PackageDiscoveryProvider>,
         analyzers: Vec<Box<dyn ChangeAnalyzer>>,
     ) -> Self {
-        Self { project, analyzers }
+        Self {
+            analyzers,
+            git_provider,
+            package_provider,
+            file_system_provider,
+            package_discovery_provider,
+        }
     }
 
     /// Compare two branches and analyze the differences
@@ -51,12 +103,57 @@ impl DiffAnalyzer {
         base_branch: &str,
         target_branch: &str,
     ) -> Result<BranchComparisonResult> {
+        // Validate branch names
+        if base_branch.is_empty() {
+            return Err(crate::error::Error::Analysis(
+                "Base branch name cannot be empty".to_string(),
+            ));
+        }
+        if target_branch.is_empty() {
+            return Err(crate::error::Error::Analysis(
+                "Target branch name cannot be empty".to_string(),
+            ));
+        }
+
+        // Validate branches exist using git commands
+        let repo_root = self.git_provider.repository_root();
+
+        // Check if base branch exists
+        let base_check = Command::new("git")
+            .args(["rev-parse", "--verify", base_branch])
+            .current_dir(repo_root)
+            .output()
+            .map_err(|e| {
+                crate::error::Error::Analysis(format!("Failed to verify base branch: {e}"))
+            })?;
+
+        if !base_check.status.success() {
+            return Err(crate::error::Error::Analysis(format!(
+                "Base branch '{base_branch}' does not exist"
+            )));
+        }
+
+        // Check if target branch exists
+        let target_check = Command::new("git")
+            .args(["rev-parse", "--verify", target_branch])
+            .current_dir(repo_root)
+            .output()
+            .map_err(|e| {
+                crate::error::Error::Analysis(format!("Failed to verify target branch: {e}"))
+            })?;
+
+        if !target_check.status.success() {
+            return Err(crate::error::Error::Analysis(format!(
+                "Target branch '{target_branch}' does not exist"
+            )));
+        }
+
         // First, get the merge base between the branches
-        let merge_base = self.project.repository.get_diverged_commit(base_branch)?;
+        let merge_base = self.git_provider.get_diverged_commit(base_branch)?;
 
         // Get all changed files between branches
         let changed_files =
-            self.project.repository.get_all_files_changed_since_sha_with_status(base_branch)?;
+            self.git_provider.get_all_files_changed_since_sha_with_status(base_branch)?;
 
         // Map changes to packages
         let affected_packages_analysis = self.identify_affected_packages(&changed_files)?;
@@ -84,7 +181,7 @@ impl DiffAnalyzer {
 
         // Get changed files
         let changed_files =
-            self.project.repository.get_all_files_changed_since_sha_with_status(since_ref)?;
+            self.git_provider.get_all_files_changed_since_sha_with_status(since_ref)?;
 
         // Map changes to packages
         let package_changes = self.map_changes_to_packages(&changed_files);
@@ -111,9 +208,57 @@ impl DiffAnalyzer {
 
         for file in changed_files {
             // Find which package this file belongs to
-            if let Some(package) =
-                self.project.descriptor.find_package_for_path(Path::new(&file.path))
-            {
+            let file_path = Path::new(&file.path);
+
+            // Get the package discovery provider to access the descriptor
+            let descriptor = self.package_discovery_provider.get_package_descriptor();
+            // Get project root from the first package's parent directory
+            let project_root = if let Some(first_pkg) = descriptor.packages().first() {
+                // Get parent directory, fallback to package path if no parent exists
+                let first_parent =
+                    first_pkg.absolute_path.parent().unwrap_or(&first_pkg.absolute_path);
+                // Get grandparent directory, fallback to first parent if no grandparent exists
+                first_parent.parent().unwrap_or(first_parent)
+            } else {
+                Path::new(".")
+            };
+
+            // Resolve the file path relative to the project root if it's relative
+            let full_file_path = if file_path.is_absolute() {
+                file_path.to_path_buf()
+            } else {
+                project_root.join(file_path)
+            };
+
+            // Canonicalize the file path to handle symlinks like /private/var -> /var on macOS
+            // For deleted files, canonicalization will fail, so we fall back to the full path
+            let canonical_file_path = if file.status == sublime_git_tools::GitFileStatus::Deleted {
+                // For deleted files, canonicalize the parent directory and append the filename
+                if let Some(parent) = full_file_path.parent() {
+                    if let Some(filename) = full_file_path.file_name() {
+                        parent
+                            .canonicalize()
+                            .unwrap_or_else(|_| parent.to_path_buf())
+                            .join(filename)
+                    } else {
+                        full_file_path
+                    }
+                } else {
+                    full_file_path
+                }
+            } else {
+                full_file_path.canonicalize().unwrap_or(full_file_path)
+            };
+
+            // Find package by manually checking canonicalized paths since find_package_for_path
+            // might not handle symlinks properly
+            let package = descriptor.packages().iter().find(|pkg| {
+                let canonical_pkg_path =
+                    pkg.absolute_path.canonicalize().unwrap_or_else(|_| pkg.absolute_path.clone());
+                canonical_file_path.starts_with(&canonical_pkg_path)
+            });
+
+            if let Some(package) = package {
                 let package_name = package.name.clone();
 
                 // Get or create package change builder
@@ -145,23 +290,21 @@ impl DiffAnalyzer {
     ) -> Result<AffectedPackagesAnalysis> {
         let direct_changes = self.map_changes_to_packages(changes);
 
-        let mut directly_affected = Vec::new();
-        let mut dependents_affected = Vec::new();
+        let mut directly_affected = std::collections::HashSet::new();
+        let mut dependents_affected = std::collections::HashSet::new();
         let mut change_graph = HashMap::new();
 
         // Build change propagation graph
         for package_change in &direct_changes {
-            directly_affected.push(package_change.package_name.clone());
+            directly_affected.insert(package_change.package_name.clone());
 
             // Find all packages that depend on this changed package
-            let dependents = self.project.get_dependents(&package_change.package_name);
+            let dependents = self.package_provider.get_dependents(&package_change.package_name);
 
             for dependent_pkg in dependents {
                 let dependent_name = dependent_pkg.name().to_string();
-                if !directly_affected.contains(&dependent_name)
-                    && !dependents_affected.contains(&dependent_name)
-                {
-                    dependents_affected.push(dependent_name.clone());
+                if !directly_affected.contains(&dependent_name) {
+                    dependents_affected.insert(dependent_name.clone());
                 }
 
                 // Record the dependency relationship in the change graph
@@ -171,6 +314,10 @@ impl DiffAnalyzer {
                     .push(dependent_name);
             }
         }
+
+        // Convert HashSets to Vecs for the final result
+        let directly_affected: Vec<String> = directly_affected.into_iter().collect();
+        let dependents_affected: Vec<String> = dependents_affected.into_iter().collect();
 
         // Calculate impact score based on dependency depth and breadth
         let impact_scores = self.calculate_impact_scores(&directly_affected, &dependents_affected);
@@ -199,7 +346,8 @@ impl DiffAnalyzer {
                 let mut reasons = Vec::new();
 
                 // Enhance significance based on package role
-                if let Some(package_info) = self.project.get_package(&change.package_name) {
+                if let Some(package_info) = self.package_provider.get_package(&change.package_name)
+                {
                     // Check if package has many dependents
                     if package_info.dependents.len() > 5 {
                         significance = significance.elevate();
@@ -297,7 +445,7 @@ impl DiffAnalyzer {
             let mut score = 1.0;
 
             // Boost score based on number of dependents
-            if let Some(package_info) = self.project.get_package(package_name) {
+            if let Some(package_info) = self.package_provider.get_package(package_name) {
                 #[allow(clippy::cast_precision_loss)]
                 {
                     score += package_info.dependents.len() as f32 * 0.1;
@@ -321,20 +469,65 @@ impl DiffAnalyzer {
         base_branch: &str,
         target_branch: &str,
     ) -> Result<Vec<String>> {
-        let mut conflicts = Vec::new();
+        use std::collections::HashSet;
+        use std::process::Command;
 
-        // Get changes in both branches since common ancestor
-        let base_changes = self.project.repository.get_all_files_changed_since_sha(base_branch)?;
+        // Get the repository root for running git commands
+        let repo_root = self.git_provider.repository_root();
 
-        let target_changes =
-            self.project.repository.get_all_files_changed_since_sha(target_branch)?;
+        // Get merge base between the two branches
+        let merge_base_output = Command::new("git")
+            .args(["merge-base", base_branch, target_branch])
+            .current_dir(repo_root)
+            .output()
+            .map_err(|e| crate::error::Error::Analysis(format!("Failed to get merge base: {e}")))?;
 
-        // Find files changed in both branches
-        for base_file in &base_changes {
-            if target_changes.contains(base_file) {
-                conflicts.push(base_file.clone());
-            }
+        if !merge_base_output.status.success() {
+            return Ok(vec![]); // No common ancestor or invalid branches
         }
+
+        let merge_base = String::from_utf8_lossy(&merge_base_output.stdout).trim().to_string();
+
+        // Get files changed from merge base to base branch
+        let base_changes_output = Command::new("git")
+            .args(["diff", "--name-only", &merge_base, base_branch])
+            .current_dir(repo_root)
+            .output()
+            .map_err(|e| {
+                crate::error::Error::Analysis(format!("Failed to get base changes: {e}"))
+            })?;
+
+        let base_changes: HashSet<String> = if base_changes_output.status.success() {
+            String::from_utf8_lossy(&base_changes_output.stdout)
+                .lines()
+                .filter(|line| !line.trim().is_empty())
+                .map(|line| line.trim().to_string())
+                .collect()
+        } else {
+            HashSet::new()
+        };
+
+        // Get files changed from merge base to target branch
+        let target_changes_output = Command::new("git")
+            .args(["diff", "--name-only", &merge_base, target_branch])
+            .current_dir(repo_root)
+            .output()
+            .map_err(|e| {
+                crate::error::Error::Analysis(format!("Failed to get target changes: {e}"))
+            })?;
+
+        let target_changes: HashSet<String> = if target_changes_output.status.success() {
+            String::from_utf8_lossy(&target_changes_output.stdout)
+                .lines()
+                .filter(|line| !line.trim().is_empty())
+                .map(|line| line.trim().to_string())
+                .collect()
+        } else {
+            HashSet::new()
+        };
+
+        // Find files that were modified in both branches
+        let conflicts: Vec<String> = base_changes.intersection(&target_changes).cloned().collect();
 
         Ok(conflicts)
     }
@@ -377,15 +570,16 @@ impl PackageChangeBuilder {
     }
 
     fn build(self) -> PackageChange {
-        // Determine primary change type
+        // Determine primary change type - prioritize most specific types first
         let change_type = if self.change_types.contains(&PackageChangeType::Dependencies) {
             PackageChangeType::Dependencies
+        } else if self.change_types.contains(&PackageChangeType::Tests) {
+            // Tests should take priority over SourceCode for test files
+            PackageChangeType::Tests
         } else if self.change_types.contains(&PackageChangeType::SourceCode) {
             PackageChangeType::SourceCode
         } else if self.change_types.contains(&PackageChangeType::Configuration) {
             PackageChangeType::Configuration
-        } else if self.change_types.contains(&PackageChangeType::Tests) {
-            PackageChangeType::Tests
         } else {
             PackageChangeType::Documentation
         };
@@ -434,7 +628,8 @@ struct SourceCodeAnalyzer;
 
 impl ChangeAnalyzer for SourceCodeAnalyzer {
     fn can_analyze(&self, file_path: &str) -> bool {
-        let source_extensions = [".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".vue", ".svelte"];
+        let source_extensions =
+            [".js", ".ts", ".mts", ".jsx", ".tsx", ".mjs", ".cjs", ".vue", ".svelte"];
         source_extensions.iter().any(|ext| file_path.ends_with(ext))
     }
 
@@ -477,6 +672,7 @@ impl ChangeAnalyzer for ConfigurationAnalyzer {
             "babel.config.",
             "webpack.config.",
             "rollup.config.",
+            "rolldown.config.",
             "vite.config.",
             "jest.config.",
             ".eslintrc",

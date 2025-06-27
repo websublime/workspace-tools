@@ -3,9 +3,6 @@
 //! The `TaskManager` orchestrates task execution, manages dependencies,
 //! and coordinates with other monorepo systems for comprehensive workflow management.
 
-// TODO: Remove after Phase 4 - currently some methods don't need async but will in complete implementation
-#![allow(clippy::unused_async)]
-
 use super::{
     types::{ConditionChecker, ExecutionContext, TaskExecutor, TaskManager, TaskRegistry},
     TaskDefinition, TaskExecutionResult, TaskScope,
@@ -15,22 +12,70 @@ use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
 use std::collections::HashSet;
 use std::sync::Arc;
-use sublime_standard_tools::filesystem::FileSystem;
 
 impl TaskManager {
-    /// Create a new task manager
-    pub fn new(project: Arc<MonorepoProject>) -> Result<Self> {
+    /// Create a new task manager with injected dependencies
+    pub fn new(
+        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+        package_provider: Box<dyn crate::core::PackageProvider>,
+        executor_package_provider: Box<dyn crate::core::PackageProvider>,
+        executor_config_provider: Box<dyn crate::core::ConfigProvider>,
+        git_provider: Box<dyn crate::core::GitProvider>,
+        checker_config_provider: Box<dyn crate::core::ConfigProvider>,
+        checker_package_provider: Box<dyn crate::core::PackageProvider>,
+        checker_file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+    ) -> Result<Self> {
         let registry = TaskRegistry::new();
-        let executor = TaskExecutor::new(Arc::clone(&project))?;
-        let condition_checker = ConditionChecker::new(Arc::clone(&project));
+        
+        let executor = TaskExecutor::new(
+            executor_package_provider,
+            executor_config_provider,
+        )?;
+        
+        let condition_checker = ConditionChecker::new(
+            git_provider,
+            checker_config_provider,
+            checker_package_provider,
+            checker_file_system_provider,
+        );
 
         Ok(Self {
-            project,
+            file_system: file_system_provider,
+            package_provider,
             registry,
             executor,
             condition_checker,
             execution_context: ExecutionContext::default(),
         })
+    }
+
+    /// Create a new task manager from project (convenience method)
+    /// 
+    /// NOTE: This convenience method creates multiple provider instances from the same project.
+    /// For better performance and memory usage, prefer using the `new()` method with 
+    /// pre-created providers when creating multiple components.
+    pub fn from_project(project: Arc<MonorepoProject>) -> Result<Self> {
+        use crate::core::interfaces::DependencyFactory;
+        
+        // Create providers once and reuse them to avoid multiple Arc clones
+        let file_system_provider = DependencyFactory::file_system_provider(Arc::clone(&project));
+        let package_provider1 = DependencyFactory::package_provider(Arc::clone(&project));
+        let package_provider2 = DependencyFactory::package_provider(Arc::clone(&project));
+        let package_provider3 = DependencyFactory::package_provider(Arc::clone(&project));
+        let config_provider1 = DependencyFactory::config_provider(Arc::clone(&project));
+        let config_provider2 = DependencyFactory::config_provider(Arc::clone(&project));
+        let git_provider = DependencyFactory::git_provider(Arc::clone(&project));
+        
+        Self::new(
+            file_system_provider,
+            package_provider1,
+            package_provider2, // for executor
+            config_provider1,  // for executor
+            git_provider,
+            config_provider2,  // for checker
+            package_provider3, // for checker
+            DependencyFactory::file_system_provider(project), // for checker
+        )
     }
 
     /// Execute a single task by name
@@ -47,7 +92,7 @@ impl TaskManager {
         let effective_scope = scope.unwrap_or_else(|| task_definition.scope.clone());
 
         // Check conditions before execution
-        if !self.condition_checker.check_conditions(&task_definition.conditions).await? {
+        if !self.condition_checker.check_conditions(&task_definition.conditions)? {
             return Ok(
                 TaskExecutionResult::new(task_name).with_status_skipped("Conditions not met")
             );
@@ -97,7 +142,7 @@ impl TaskManager {
         context.changed_files.clone_from(&changes.changed_files);
 
         // Get tasks that match the change conditions
-        let applicable_tasks = self.get_tasks_for_changes(changes).await?;
+        let applicable_tasks = self.get_tasks_for_changes(changes)?;
 
         for task in applicable_tasks {
             let result = self.execute_task_with_context(&task, &context).await?;
@@ -138,15 +183,15 @@ impl TaskManager {
     }
 
     /// Resolve package tasks from package.json scripts
-    pub async fn resolve_package_tasks(&self, package_name: &str) -> Result<Vec<TaskDefinition>> {
+    pub fn resolve_package_tasks(&self, package_name: &str) -> Result<Vec<TaskDefinition>> {
         let package_info = self
-            .project
+            .package_provider
             .get_package(package_name)
             .ok_or_else(|| Error::task(format!("Package not found: {package_name}")))?;
 
         // Read package.json to extract scripts using FileSystem trait
         let package_json_path = package_info.path().join("package.json");
-        let package_json_content = self.project.file_system.read_file_string(&package_json_path)
+        let package_json_content = self.file_system.read_file_string(&package_json_path)
             .map_err(|e| Error::task(format!("Failed to read package.json: {e}")))?;
 
         let package_json: serde_json::Value = serde_json::from_str(&package_json_content)
@@ -216,7 +261,7 @@ impl TaskManager {
         context: &ExecutionContext,
     ) -> Result<TaskExecutionResult> {
         // Check conditions with context
-        if !self.condition_checker.check_conditions_with_context(&task.conditions, context).await? {
+        if !self.condition_checker.check_conditions_with_context(&task.conditions, context)? {
             return Ok(
                 TaskExecutionResult::new(&task.name).with_status_skipped("Conditions not met")
             );
@@ -227,12 +272,12 @@ impl TaskManager {
     }
 
     /// Get tasks that should run for given changes
-    async fn get_tasks_for_changes(&self, changes: &ChangeAnalysis) -> Result<Vec<TaskDefinition>> {
+    fn get_tasks_for_changes(&self, changes: &ChangeAnalysis) -> Result<Vec<TaskDefinition>> {
         let mut applicable_tasks = Vec::new();
 
         for task in self.registry.list_tasks() {
             // Check if task conditions match the changes
-            let matches = self.condition_checker.task_matches_changes(task, changes).await?;
+            let matches = self.condition_checker.task_matches_changes(task, changes)?;
             if matches {
                 applicable_tasks.push(task.clone());
             }

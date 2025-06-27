@@ -1,15 +1,19 @@
 //! Hook validator type definitions
 
 use super::HookValidationResult;
-use crate::core::MonorepoProject;
-use crate::Changeset;
-use std::sync::Arc;
+use crate::core::{GitProvider, PackageProvider, ConfigProvider};
+use crate::changesets::Changeset;
 
 /// Validator for hook conditions and requirements
 pub struct HookValidator {
-    /// Reference to the monorepo project
-    #[allow(dead_code)] // Will be used when full integration is implemented
-    pub(crate) project: Arc<MonorepoProject>,
+    /// Git operations provider
+    pub(crate) git_provider: Box<dyn GitProvider>,
+    
+    /// Package operations provider
+    pub(crate) package_provider: Box<dyn PackageProvider>,
+    
+    /// Configuration provider
+    pub(crate) config_provider: Box<dyn ConfigProvider>,
 }
 
 /// Result of changeset validation

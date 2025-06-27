@@ -3,7 +3,7 @@
 //! This module provides implementations for accessing package registries like npm,
 //! retrieving package metadata, and managing version information.
 
-use crate::{CacheEntry, PackageRegistryError};
+use crate::{CacheEntry, errors::PackageRegistryError};
 use flate2::read::GzDecoder;
 use reqwest::blocking::{Client, RequestBuilder};
 use serde_json::Value;

@@ -22,6 +22,7 @@ mod manager;
 mod registry;
 mod executor;
 mod checker;
+mod async_adapter;
 
 #[cfg(test)]
 mod tests;
@@ -36,3 +37,6 @@ pub use types::{
     // Implementation structs
     TaskManager, TaskRegistry, TaskExecutor, ConditionChecker, ExecutionContext,
 };
+
+// Re-export async boundary adapter
+pub use async_adapter::{AsyncConditionAdapter, AsyncConditionAdapterBuilder};

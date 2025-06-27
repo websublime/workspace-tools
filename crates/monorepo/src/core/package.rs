@@ -1,10 +1,17 @@
 //! Package-specific implementations and utilities
+//!
+//! This module provides the main MonorepoPackageInfo implementation that acts as a facade
+//! over the focused components. All complex operations are delegated to specialized components
+//! while maintaining backward compatibility through the main struct API.
 
 use super::types::{Changeset, ChangesetStatus, MonorepoPackageInfo, VersionStatus};
+use super::components::{
+    PackageInfoReader, PackageVersionManager, PackageChangesetManager,
+    PackagePersistence
+};
 use crate::config::{Environment, VersionBumpType};
-use crate::error::{Error, Result};
+use crate::error::Result;
 use std::collections::HashMap;
-use sublime_package_tools::Version;
 
 impl MonorepoPackageInfo {
     /// Create a new `MonorepoPackageInfo`
@@ -66,172 +73,84 @@ impl MonorepoPackageInfo {
     pub fn is_dirty(&self) -> bool {
         matches!(self.version_status, VersionStatus::Dirty)
     }
-    /// Update the package version
+    /// Update the package version using the version manager component
     pub fn update_version(&mut self, new_version: &str) -> Result<()> {
-        // Update in PackageInfo
-        self.package_info.update_version(new_version)?;
-
-        // Update in WorkspacePackage
-        self.workspace_package.version = new_version.to_string();
-
-        // Update version status
-        self.version_status = VersionStatus::Stable;
-
+        let mut version_manager = PackageVersionManager::new(self.clone());
+        version_manager.update_version(new_version)?;
+        *self = version_manager.into_package();
         Ok(())
     }
 
-    /// Set version as snapshot
+    /// Set version as snapshot using the version manager component
     pub fn set_snapshot_version(&mut self, version: &str, sha: &str) -> Result<()> {
-        let snapshot_version = format!("{}-snapshot.{}", version, &sha[..7]);
-        self.update_version(&snapshot_version)?;
-        self.version_status = VersionStatus::Snapshot { sha: sha.to_string() };
+        let mut version_manager = PackageVersionManager::new(self.clone());
+        version_manager.set_snapshot_version(version, sha)?;
+        *self = version_manager.into_package();
         Ok(())
     }
 
-    /// Mark package as having dirty (uncommitted) changes
+    /// Mark package as having dirty (uncommitted) changes using the version manager component
     pub fn mark_dirty(&mut self) {
-        self.version_status = VersionStatus::Dirty;
+        let mut version_manager = PackageVersionManager::new(self.clone());
+        version_manager.mark_dirty();
+        *self = version_manager.into_package();
     }
 
-    /// Add a changeset to this package
+    /// Add a changeset to this package using the changeset manager component
     pub fn add_changeset(&mut self, changeset: Changeset) {
-        self.changesets.push(changeset);
+        let mut changeset_manager = PackageChangesetManager::new(self.clone());
+        changeset_manager.add_changeset(changeset);
+        *self = changeset_manager.into_package();
     }
 
-    /// Apply a changeset and bump version accordingly
+    /// Apply a changeset and bump version accordingly using the changeset manager component
     pub fn apply_changeset(
         &mut self,
         changeset_id: &str,
         final_version: Option<&str>,
     ) -> Result<()> {
-        // Find changeset index first
-        let changeset_idx = self
-            .changesets
-            .iter()
-            .position(|cs| cs.id == changeset_id)
-            .ok_or_else(|| Error::changeset(format!("Changeset {changeset_id} not found")))?;
-
-        // Determine new version
-        let new_version = if let Some(version) = final_version {
-            version.to_string()
-        } else {
-            let current_version = self.version();
-            let version_bump = self.changesets[changeset_idx].version_bump;
-            match version_bump {
-                VersionBumpType::Major => Version::bump_major(current_version)?.to_string(),
-                VersionBumpType::Minor => Version::bump_minor(current_version)?.to_string(),
-                VersionBumpType::Patch => Version::bump_patch(current_version)?.to_string(),
-                VersionBumpType::Snapshot => {
-                    return Err(Error::changeset("Cannot apply snapshot changeset without SHA"));
-                }
-            }
-        };
-
-        // Update version
-        self.update_version(&new_version)?;
-
-        // Update changeset status
-        self.changesets[changeset_idx].status =
-            ChangesetStatus::Merged { merged_at: chrono::Utc::now(), final_version: new_version };
-
+        let mut changeset_manager = PackageChangesetManager::new(self.clone());
+        changeset_manager.apply_changeset(changeset_id, final_version)?;
+        *self = changeset_manager.into_package();
         Ok(())
     }
 
-    /// Deploy changeset to environments
+    /// Deploy changeset to environments using the changeset manager component
     pub fn deploy_changeset(
         &mut self,
         changeset_id: &str,
         environments: &[Environment],
     ) -> Result<()> {
-        let changeset = self
-            .changesets
-            .iter_mut()
-            .find(|cs| cs.id == changeset_id)
-            .ok_or_else(|| Error::changeset(format!("Changeset {changeset_id} not found")))?;
-
-        // Update deployment status
-        match &mut changeset.status {
-            ChangesetStatus::Pending => {
-                changeset.status =
-                    ChangesetStatus::PartiallyDeployed { environments: environments.to_vec() };
-            }
-            ChangesetStatus::PartiallyDeployed { environments: deployed } => {
-                for env in environments {
-                    if !deployed.contains(env) {
-                        deployed.push(env.clone());
-                    }
-                }
-            }
-            _ => {
-                return Err(Error::changeset("Changeset is already merged or fully deployed"));
-            }
-        }
-
-        // Update development environments
-        for env in environments {
-            if !changeset.development_environments.contains(env) {
-                changeset.development_environments.push(env.clone());
-            }
-        }
-
-        // Check if fully deployed
-        if environments.contains(&Environment::Production) {
-            changeset.production_deployment = true;
-            changeset.status = ChangesetStatus::FullyDeployed { deployed_at: chrono::Utc::now() };
-        }
-
+        let mut changeset_manager = PackageChangesetManager::new(self.clone());
+        changeset_manager.deploy_changeset(changeset_id, environments)?;
+        *self = changeset_manager.into_package();
         Ok(())
     }
 
-    /// Get suggested version bump based on changesets
+    /// Get suggested version bump based on changesets using the version manager component
     #[must_use]
     pub fn suggested_version_bump(&self) -> Option<VersionBumpType> {
-        let pending = self.pending_changesets();
-        if pending.is_empty() {
-            return None;
-        }
-
-        // Find the highest priority bump
-        let mut bump = VersionBumpType::Patch;
-        for changeset in pending {
-            match changeset.version_bump {
-                VersionBumpType::Major => return Some(VersionBumpType::Major),
-                VersionBumpType::Minor => bump = VersionBumpType::Minor,
-                VersionBumpType::Patch | VersionBumpType::Snapshot => {}
-            }
-        }
-
-        Some(bump)
+        let version_manager = PackageVersionManager::new(self.clone());
+        version_manager.suggested_version_bump()
     }
 
-    /// Check if package has been deployed to a specific environment
+    /// Check if package has been deployed to a specific environment using the info reader component
     #[must_use]
     pub fn is_deployed_to(&self, environment: &Environment) -> bool {
-        self.changesets.iter().any(|cs| {
-            cs.development_environments.contains(environment)
-                || (environment == &Environment::Production && cs.production_deployment)
-        })
+        let info_reader = PackageInfoReader::new(self);
+        info_reader.is_deployed_to(environment)
     }
 
-    /// Get deployment status across environments
+    /// Get deployment status across environments using the info reader component
     #[must_use]
     pub fn deployment_status(&self) -> HashMap<Environment, bool> {
-        let mut status = HashMap::new();
-
-        for changeset in &self.changesets {
-            for env in &changeset.development_environments {
-                status.insert(env.clone(), true);
-            }
-            if changeset.production_deployment {
-                status.insert(Environment::Production, true);
-            }
-        }
-
-        status
+        let info_reader = PackageInfoReader::new(self);
+        info_reader.deployment_status()
     }
 
-    /// Write package.json back to disk
+    /// Write package.json back to disk using the persistence component
     pub fn save(&self) -> Result<()> {
-        self.package_info.write_package_json().map_err(|e| Error::Package(e.to_string()))
+        let persistence = PackagePersistence::new(self.clone());
+        persistence.save()
     }
 }

@@ -64,7 +64,7 @@ impl MonorepoProject {
     fn load_configuration(path: &Path) -> Result<(ConfigManager, MonorepoConfig)> {
         if let Some(config_path) = ConfigManager::find_config_file(path) {
             let manager = ConfigManager::load_from_file(config_path)?;
-            let config = manager.get()?;
+            let config = manager.get_clone();
             Ok((manager, config))
         } else {
             // Create default configuration
@@ -78,6 +78,17 @@ impl MonorepoProject {
     #[must_use]
     pub fn root_path(&self) -> &Path {
         &self.root_path
+    }
+
+    /// Get a reference to the git repository
+    #[must_use]
+    pub fn repository(&self) -> &Repo {
+        &self.repository
+    }
+
+    /// Get a mutable reference to the git repository
+    pub fn repository_mut(&mut self) -> &mut Repo {
+        &mut self.repository
     }
 
     /// Get a package by name
@@ -118,11 +129,23 @@ impl MonorepoProject {
     /// Get packages that depend on a given package
     #[must_use]
     pub fn get_dependents(&self, package_name: &str) -> Vec<&MonorepoPackageInfo> {
-        self.packages.iter().filter(|p| p.dependents.contains(&package_name.to_string())).collect()
+        // Find the package first, then return its dependents
+        if let Some(package) = self.packages.iter().find(|pkg| pkg.name() == package_name) {
+            // Return packages that are listed as dependents of this package
+            package
+                .dependents
+                .iter()
+                .filter_map(|dependent_name| {
+                    self.packages.iter().find(|pkg| pkg.name() == dependent_name)
+                })
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Update configuration
-    pub fn update_config<F>(&self, updater: F) -> Result<()>
+    pub fn update_config<F>(&mut self, updater: F) -> Result<()>
     where
         F: FnOnce(&mut MonorepoConfig),
     {
@@ -233,12 +256,56 @@ impl MonorepoProject {
             log::info!("Dependency graph is acyclic - no circular dependencies detected");
         }
 
+        // Now populate the dependents field for each package
+        self.populate_dependents_mapping()?;
+
         // Mark that dependency graph analysis has been completed
-        // In a future iteration, we could store summary information about the graph
+        log::info!("Dependency graph build completed with dependents mapping");
         self.dependency_graph = Some(());
 
         log::info!("Successfully built dependency graph with {} packages", self.packages.len());
 
+        Ok(())
+    }
+
+    /// Populate the dependents field for all packages based on their dependencies
+    #[allow(clippy::unnecessary_wraps)]
+    fn populate_dependents_mapping(&mut self) -> Result<()> {
+        log::debug!("Populating dependents mapping for {} packages", self.packages.len());
+
+        // Clear existing dependents to rebuild from scratch
+        for package in &mut self.packages {
+            package.dependents.clear();
+        }
+
+        // Build reverse dependency mapping
+        // For each package, find its dependencies and add this package to their dependents list
+        let package_dependencies: Vec<(String, Vec<String>)> = self
+            .packages
+            .iter()
+            .map(|pkg| {
+                let package_name = pkg.name().to_string();
+                let dependencies = pkg.workspace_package.workspace_dependencies.clone();
+                (package_name, dependencies)
+            })
+            .collect();
+
+        // Now update the dependents fields
+        for (package_name, dependencies) in package_dependencies {
+            for dependency_name in dependencies {
+                // Find the dependency package and add this package as a dependent
+                if let Some(dependency_package) =
+                    self.packages.iter_mut().find(|pkg| pkg.name() == dependency_name)
+                {
+                    if !dependency_package.dependents.contains(&package_name) {
+                        dependency_package.dependents.push(package_name.clone());
+                        log::debug!("Added {} as dependent of {}", package_name, dependency_name);
+                    }
+                }
+            }
+        }
+
+        log::info!("Successfully populated dependents mapping");
         Ok(())
     }
 }

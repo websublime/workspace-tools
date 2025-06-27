@@ -88,7 +88,7 @@ impl VersionManager {
     /// Propagate version changes to dependent packages
     pub fn propagate_version_changes(&self, updated_package: &str) -> Result<PropagationResult> {
         let mut updates = Vec::new();
-        let conflicts = Vec::new();
+        let mut conflicts = Vec::new();
 
         let dependents = self.project.get_dependents(updated_package);
 
@@ -102,23 +102,45 @@ impl VersionManager {
             if let Some(bump_type) = bump_type {
                 let current_version = dependent_pkg.version();
 
-                // DRY: Use the same version bumping logic as bump_package_version
-                let new_version_str =
-                    self.perform_version_bump(current_version, bump_type, None)?;
+                // Check for conflicts before propagating
+                let package_conflicts = self.check_package_conflicts(dependent_name, bump_type);
+                conflicts.extend(package_conflicts);
 
-                let update = PackageVersionUpdate {
-                    package_name: dependent_name.to_string(),
-                    old_version: current_version.to_string(),
-                    new_version: new_version_str,
-                    bump_type,
-                    reason: format!("Propagated from {updated_package}"),
-                };
+                // Only proceed if no blocking conflicts
+                if !conflicts.iter().any(|c| c.conflict_type == ConflictType::DirtyWorkingDirectory) {
+                    // DRY: Use the same version bumping logic as bump_package_version
+                    let new_version_str =
+                        self.perform_version_bump(current_version, bump_type, None)?;
 
-                updates.push(update);
+                    let update = PackageVersionUpdate {
+                        package_name: dependent_name.to_string(),
+                        old_version: current_version.to_string(),
+                        new_version: new_version_str,
+                        bump_type,
+                        reason: format!("Propagated from {updated_package}"),
+                    };
+
+                    updates.push(update);
+                }
             }
         }
 
         Ok(PropagationResult { updates, conflicts })
+    }
+
+    /// Propagate version changes asynchronously with enhanced dependency analysis
+    pub async fn propagate_version_changes_async(
+        &self,
+        updated_package: &str,
+    ) -> Result<PropagationResult> {
+        // For now, use synchronous implementation with async wrapper
+        // Future enhancement: implement proper async dependency analysis
+        let result = self.propagate_version_changes(updated_package)?;
+        
+        // Add small delay to simulate async behavior
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        
+        Ok(result)
     }
 
     /// Analyze the impact of proposed version changes
@@ -444,12 +466,83 @@ impl VersionManager {
         Ok(result.to_string())
     }
 
-    /// Calculate execution order for version plan steps
+    /// Calculate execution order for version plan steps using topological sorting
+    ///
+    /// This ensures that packages are versioned in dependency order, with dependencies
+    /// being versioned before their dependents to avoid version conflicts.
     fn calculate_execution_order(steps: &mut [VersioningPlanStep]) {
-        // Simple ordering for now - can be enhanced with topological sort
-        for (index, step) in steps.iter_mut().enumerate() {
-            step.execution_order = index;
+        // Build a mapping from package name to step index
+        let mut package_to_index: HashMap<String, usize> = HashMap::new();
+        for (index, step) in steps.iter().enumerate() {
+            package_to_index.insert(step.package_name.clone(), index);
         }
+
+        // Build adjacency list for dependency graph
+        let mut adjacency_list: HashMap<usize, Vec<usize>> = HashMap::new();
+        let mut in_degree: HashMap<usize, usize> = HashMap::new();
+
+        // Initialize in-degree count for all packages
+        for i in 0..steps.len() {
+            in_degree.insert(i, 0);
+            adjacency_list.insert(i, Vec::new());
+        }
+
+        // For this implementation, we need access to project dependencies
+        // Since we don't have access to self in a static method, we'll use a simplified approach
+        // that orders packages alphabetically for now, but with proper structure for enhancement
+
+        // Build dependency relationships from the dependency information in steps
+        for (i, step) in steps.iter().enumerate() {
+            // For each dependency that this package needs to update
+            for dep_package in &step.dependencies_to_update {
+                if let Some(&dep_index) = package_to_index.get(dep_package) {
+                    // dep_package should be versioned before step.package_name
+                    adjacency_list.get_mut(&dep_index).unwrap().push(i);
+                    *in_degree.get_mut(&i).unwrap() += 1;
+                }
+            }
+        }
+
+        // Kahn's algorithm for topological sorting
+        let mut queue: Vec<usize> = Vec::new();
+        let mut execution_order = 0;
+
+        // Start with packages that have no dependencies (in-degree = 0)
+        for (&index, &degree) in &in_degree {
+            if degree == 0 {
+                queue.push(index);
+            }
+        }
+
+        // Process packages in topological order
+        while let Some(current_index) = queue.pop() {
+            steps[current_index].execution_order = execution_order;
+            execution_order += 1;
+
+            // Update in-degree for dependent packages
+            if let Some(dependents) = adjacency_list.get(&current_index) {
+                for &dependent_index in dependents {
+                    if let Some(degree) = in_degree.get_mut(&dependent_index) {
+                        *degree -= 1;
+                        if *degree == 0 {
+                            queue.push(dependent_index);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Handle any remaining packages (in case of cycles)
+        // These get assigned the remaining execution order numbers
+        for step in steps.iter_mut() {
+            if step.execution_order == 0 && execution_order > 0 {
+                step.execution_order = execution_order;
+                execution_order += 1;
+            }
+        }
+
+        // Sort steps by execution order for consistency
+        steps.sort_by_key(|step| step.execution_order);
     }
 
     /// Execute a versioning plan
@@ -485,5 +578,76 @@ impl VersionManager {
             conflicts: all_conflicts,
             dependency_updates,
         })
+    }
+
+    /// Execute a versioning plan asynchronously with progress tracking
+    pub async fn execute_versioning_plan_async(
+        &self,
+        plan: &VersioningPlan,
+    ) -> Result<VersioningResult> {
+        let mut primary_updates = Vec::new();
+        let mut propagated_updates = Vec::new();
+        let mut all_conflicts = plan.conflicts.clone();
+
+        log::info!("Starting versioning plan execution with {} steps", plan.steps.len());
+
+        for (index, step) in plan.steps.iter().enumerate() {
+            log::info!(
+                "Executing step {}/{}: {} -> {:?}",
+                index + 1,
+                plan.steps.len(),
+                step.package_name,
+                step.planned_version_bump
+            );
+
+            // Execute the version bump synchronously (for now)
+            let result = self.bump_package_version(&step.package_name, step.planned_version_bump, None)?;
+
+            // Collect results
+            primary_updates.extend(result.primary_updates);
+            propagated_updates.extend(result.propagated_updates);
+            all_conflicts.extend(result.conflicts);
+
+            // Small delay to prevent overwhelming the system
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+
+        // Resolve final dependency conflicts using DependencyRegistry
+        let dependency_registry = DependencyRegistry::new();
+        let dependency_updates =
+            dependency_registry.resolve_version_conflicts().unwrap_or_else(|_| {
+                sublime_package_tools::ResolutionResult {
+                    resolved_versions: HashMap::new(),
+                    updates_required: Vec::new(),
+                }
+            });
+
+        log::info!("Versioning plan execution completed successfully");
+
+        Ok(VersioningResult {
+            primary_updates,
+            propagated_updates,
+            conflicts: all_conflicts,
+            dependency_updates,
+        })
+    }
+
+    /// Get dependency update strategy for a package (placeholder implementation)
+    pub fn get_dependency_update_strategy(&self, package_name: &str) -> Result<Vec<PackageVersionUpdate>> {
+        let _package = self.project.get_package(package_name)
+            .ok_or_else(|| crate::error::Error::package_not_found(package_name))?;
+
+        // Placeholder implementation - will be enhanced when dependency analysis is ready
+        log::info!("Dependency update strategy analysis for package: {}", package_name);
+        
+        Ok(Vec::new())
+    }
+
+    /// Validate version compatibility across all packages (placeholder implementation)
+    pub fn validate_version_compatibility(&self) -> Result<Vec<VersionConflict>> {
+        // Placeholder implementation - will be enhanced when dependency analysis is ready
+        log::info!("Version compatibility validation across packages");
+        
+        Ok(Vec::new())
     }
 }

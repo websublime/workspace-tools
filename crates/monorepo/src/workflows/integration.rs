@@ -6,9 +6,8 @@
 use crate::changesets::{types::ChangesetFilter, ChangesetManager};
 use crate::core::MonorepoProject;
 use crate::error::Error;
-use crate::hooks::HookManager;
 use std::sync::Arc;
-use sublime_standard_tools::filesystem::FileSystem;
+// Removed unused import: use sublime_standard_tools::filesystem::FileSystem;
 
 /// Integration workflow that connects changesets with hooks
 ///
@@ -19,7 +18,46 @@ use sublime_standard_tools::filesystem::FileSystem;
 use crate::workflows::types::ChangesetHookIntegration;
 
 impl ChangesetHookIntegration {
-    /// Creates a new changeset-hook integration
+    /// Creates a new changeset-hook integration with injected dependencies
+    ///
+    /// # Arguments
+    ///
+    /// * `changeset_manager` - Changeset manager for changeset operations
+    /// * `hook_manager` - Hook manager for Git hook operations
+    /// * `task_manager` - Task manager for validation tasks
+    /// * `config_provider` - Configuration provider for accessing settings
+    /// * `git_provider` - Git provider for repository operations
+    /// * `file_system_provider` - File system provider for file operations
+    /// * `package_provider` - Package provider for accessing package information
+    ///
+    /// # Returns
+    ///
+    /// A new integration instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any of the required components cannot be initialized.
+    pub fn new(
+        changeset_manager: ChangesetManager,
+        hook_manager: crate::hooks::HookManager,
+        task_manager: crate::tasks::TaskManager,
+        config_provider: Box<dyn crate::core::ConfigProvider>,
+        git_provider: Box<dyn crate::core::GitProvider>,
+        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+        package_provider: Box<dyn crate::core::PackageProvider>,
+    ) -> Result<Self, Error> {
+        Ok(Self { 
+            changeset_manager, 
+            hook_manager, 
+            task_manager,
+            config_provider,
+            git_provider,
+            file_system_provider,
+            package_provider,
+        })
+    }
+
+    /// Creates a new changeset-hook integration from project (convenience method)
     ///
     /// # Arguments
     ///
@@ -32,12 +70,76 @@ impl ChangesetHookIntegration {
     /// # Errors
     ///
     /// Returns an error if any of the required components cannot be initialized.
-    pub fn new(project: Arc<MonorepoProject>) -> Result<Self, Error> {
-        let changeset_manager = ChangesetManager::new(Arc::clone(&project))?;
-        let hook_manager = HookManager::new(Arc::clone(&project))?;
-        let task_manager = crate::tasks::TaskManager::new(Arc::clone(&project))?;
+    pub fn from_project(project: Arc<MonorepoProject>) -> Result<Self, Error> {
+        use crate::core::interfaces::DependencyFactory;
+        
+        // Create task manager for changeset manager
+        let task_manager_for_changeset = crate::tasks::TaskManager::new(
+            DependencyFactory::file_system_provider(Arc::clone(&project)),
+            DependencyFactory::package_provider(Arc::clone(&project)),
+            DependencyFactory::package_provider(Arc::clone(&project)), // executor_package_provider
+            DependencyFactory::config_provider(Arc::clone(&project)), // executor_config_provider
+            DependencyFactory::git_provider(Arc::clone(&project)),
+            DependencyFactory::config_provider(Arc::clone(&project)), // checker_config_provider
+            DependencyFactory::package_provider(Arc::clone(&project)), // checker_package_provider
+            DependencyFactory::file_system_provider(Arc::clone(&project)), // checker_file_system_provider
+        )?;
+        
+        // Create changeset storage directly with providers
+        let changeset_storage = crate::changesets::ChangesetStorage::new(
+            project.config.changesets.clone(),
+            DependencyFactory::file_system_provider(Arc::clone(&project)),
+            DependencyFactory::package_provider(Arc::clone(&project)),
+        );
 
-        Ok(Self { project, changeset_manager, hook_manager, task_manager })
+        // Create changeset manager directly with components and providers
+        let changeset_manager = crate::changesets::ChangesetManager::new(
+            changeset_storage,
+            task_manager_for_changeset,
+            DependencyFactory::config_provider(Arc::clone(&project)),
+            DependencyFactory::file_system_provider(Arc::clone(&project)),
+            DependencyFactory::package_provider(Arc::clone(&project)),
+            DependencyFactory::git_provider(Arc::clone(&project)),
+        );
+
+        // Create hook installer and validator directly with providers
+        let hook_installer = crate::hooks::HookInstaller::new(
+            DependencyFactory::git_provider(Arc::clone(&project)),
+            DependencyFactory::file_system_provider(Arc::clone(&project)),
+        )?;
+
+        let hook_validator = crate::hooks::HookValidator::new(
+            DependencyFactory::git_provider(Arc::clone(&project)),
+            DependencyFactory::package_provider(Arc::clone(&project)),
+            DependencyFactory::config_provider(Arc::clone(&project)),
+        );
+
+        // Create task manager for hook validation
+        let hook_task_manager = crate::tasks::TaskManager::from_project(Arc::clone(&project))?;
+
+        // Create hook manager directly with components and providers
+        let hook_manager = crate::hooks::HookManager::new(
+            hook_installer,
+            hook_validator,
+            hook_task_manager,
+            DependencyFactory::config_provider(Arc::clone(&project)),
+            DependencyFactory::git_provider(Arc::clone(&project)),
+            DependencyFactory::file_system_provider(Arc::clone(&project)),
+            DependencyFactory::package_provider(Arc::clone(&project)),
+        )?;
+
+        // Create task manager for workflow execution
+        let workflow_task_manager = crate::tasks::TaskManager::from_project(Arc::clone(&project))?;
+
+        Self::new(
+            changeset_manager,
+            hook_manager,
+            workflow_task_manager,
+            DependencyFactory::config_provider(Arc::clone(&project)),
+            DependencyFactory::git_provider(Arc::clone(&project)),
+            DependencyFactory::file_system_provider(Arc::clone(&project)),
+            DependencyFactory::package_provider(project),
+        )
     }
 
     /// Validates that required changesets exist for the current changes
@@ -55,26 +157,25 @@ impl ChangesetHookIntegration {
     pub fn validate_changesets_for_commit(&self) -> Result<bool, Error> {
         // Get current branch
         let current_branch = self
-            .project
-            .repository
-            .get_current_branch()
+            .git_provider
+            .current_branch()
             .map_err(|e| Error::workflow(format!("Failed to get current branch: {e}")))?;
 
         // Skip changeset validation for protected branches (main/develop)
-        let branch_config = &self.project.config.git.branches;
+        let branch_config = &self.config_provider.config().git.branches;
         if branch_config.is_protected_branch(&current_branch) {
             return Ok(true);
         }
 
         // Check if changesets are required
-        if !self.project.config.changesets.required {
+        if !self.config_provider.config().changesets.required {
             return Ok(true);
         }
 
         // Get staged files to determine affected packages
         let staged_files = self
-            .project
-            .repository
+            .git_provider
+            .repository()
             .get_staged_files()
             .map_err(|e| Error::workflow(format!("Failed to get staged files: {e}")))?;
 
@@ -161,8 +262,8 @@ impl ChangesetHookIntegration {
 
         // Get affected packages to inform the user
         let staged_files = self
-            .project
-            .repository
+            .git_provider
+            .repository()
             .get_staged_files()
             .map_err(|e| Error::workflow(format!("Failed to get staged files: {e}")))?;
         let affected_packages = self.map_files_to_packages(&staged_files);
@@ -206,13 +307,12 @@ impl ChangesetHookIntegration {
     pub async fn apply_changesets_on_merge(&self, merged_branch: &str) -> Result<bool, Error> {
         // Get current branch (should be main/master after merge)
         let current_branch = self
-            .project
-            .repository
-            .get_current_branch()
+            .git_provider
+            .current_branch()
             .map_err(|e| Error::workflow(format!("Failed to get current branch: {e}")))?;
 
         // Only apply changesets when merging to protected branches
-        let branch_config = &self.project.config.git.branches;
+        let branch_config = &self.config_provider.config().git.branches;
         if !branch_config.is_protected_branch(&current_branch) {
             log::info!(
                 "Skipping changeset application - not on main branch (currently on '{}')",
@@ -317,13 +417,13 @@ impl ChangesetHookIntegration {
         }
 
         // Run tests for affected packages using TaskManager
-        let task_manager = crate::tasks::TaskManager::new(Arc::clone(&self.project))?;
+        // Use the existing task_manager from struct
 
         log::info!("🧪 Running tests for affected packages: {}", affected_packages.join(", "));
 
         // Execute test tasks for affected packages
         let test_results =
-            task_manager.execute_tasks_for_affected_packages(&affected_packages).await?;
+            self.task_manager.execute_tasks_for_affected_packages(&affected_packages).await?;
 
         // Check if all tests passed
         let failed_tests: Vec<_> = test_results
@@ -378,9 +478,9 @@ impl ChangesetHookIntegration {
 
         // Verify changeset directory exists
         let changeset_dir =
-            self.project.root_path().join(&self.project.config.changesets.changeset_dir);
+            self.package_provider.root_path().join(&self.config_provider.config().changesets.changeset_dir);
         if !changeset_dir.exists() {
-            self.project.file_system.create_dir_all(&changeset_dir).map_err(|e| {
+            self.file_system_provider.create_dir_all(&changeset_dir).map_err(|e| {
                 Error::workflow(format!("Failed to create changeset directory: {e}"))
             })?;
             println!("✅ Created changeset directory: {}", changeset_dir.display());
@@ -409,11 +509,11 @@ impl ChangesetHookIntegration {
         }
 
         // Create a temporary TaskManager for validation tasks
-        let task_manager = crate::tasks::TaskManager::new(Arc::clone(&self.project))?;
+        // Use the existing task_manager from struct
 
         // Execute validation tasks for affected packages using TaskManager
         let validation_results =
-            task_manager.execute_tasks_for_affected_packages(&affected_packages).await?;
+            self.task_manager.execute_tasks_for_affected_packages(&affected_packages).await?;
 
         // Check if any validation tasks failed
         let failed_tasks: Vec<_> = validation_results
@@ -482,7 +582,7 @@ impl ChangesetHookIntegration {
 
             // Get the current version of the updated package
             let updated_package_info =
-                self.project.packages.iter().find(|pkg| pkg.name() == updated_package);
+                self.package_provider.packages().iter().find(|pkg| pkg.name() == updated_package);
 
             if let Some(pkg_info) = updated_package_info {
                 let current_version = pkg_info.version();
@@ -546,14 +646,14 @@ impl ChangesetHookIntegration {
         let mut dependents = Vec::new();
 
         // Check all packages in the project
-        for pkg in &self.project.packages {
+        for pkg in self.package_provider.packages() {
             if pkg.name() == package {
                 continue; // Skip self
             }
 
             // Read package.json to check dependencies
             let package_json_path = pkg.path().join("package.json");
-            if let Ok(content) = self.project.file_system.read_file_string(&package_json_path) {
+            if let Ok(content) = self.file_system_provider.read_file_string(&package_json_path) {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                     // Check dependencies, devDependencies, and peerDependencies
                     let dep_sections = ["dependencies", "devDependencies", "peerDependencies"];
@@ -589,14 +689,14 @@ impl ChangesetHookIntegration {
 
         // Get the dependent package info
         let dependent_info =
-            self.project.packages.iter().find(|pkg| pkg.name() == dependent_package).ok_or_else(
+            self.package_provider.packages().iter().find(|pkg| pkg.name() == dependent_package).ok_or_else(
                 || Error::workflow(format!("Dependent package '{dependent_package}' not found")),
             )?;
 
         // Read the dependent package's package.json to check version requirements
         let package_json_path = dependent_info.path().join("package.json");
         let content =
-            self.project.file_system.read_file_string(&package_json_path).map_err(|e| {
+            self.file_system_provider.read_file_string(&package_json_path).map_err(|e| {
                 Error::workflow(format!("Failed to read package.json for {dependent_package}: {e}"))
             })?;
 
@@ -652,7 +752,7 @@ impl ChangesetHookIntegration {
         let mut visited = std::collections::HashSet::new();
 
         // Check each package for cycles
-        for pkg in &self.project.packages {
+        for pkg in self.package_provider.packages() {
             let package_name = pkg.name().to_string();
 
             if !visited.contains(&package_name) {
@@ -726,17 +826,17 @@ impl ChangesetHookIntegration {
         let mut dependencies = Vec::new();
 
         // Find the package info
-        if let Some(pkg_info) = self.project.packages.iter().find(|pkg| pkg.name() == package_name)
+        if let Some(pkg_info) = self.package_provider.packages().iter().find(|pkg| pkg.name() == package_name)
         {
             // Read package.json to get dependencies
             let package_json_path = pkg_info.path().join("package.json");
-            if let Ok(content) = self.project.file_system.read_file_string(&package_json_path) {
+            if let Ok(content) = self.file_system_provider.read_file_string(&package_json_path) {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                     // Only check production dependencies for cycle detection
                     if let Some(deps) = json["dependencies"].as_object() {
                         for (dep_name, _) in deps {
                             // Only include internal monorepo dependencies
-                            if self.project.packages.iter().any(|pkg| pkg.name() == dep_name) {
+                            if self.package_provider.packages().iter().any(|pkg| pkg.name() == dep_name) {
                                 dependencies.push(dep_name.clone());
                             }
                         }
@@ -864,12 +964,17 @@ impl ChangesetHookIntegration {
         let mut affected_packages = Vec::new();
 
         for file_path in files {
-            let full_path = self.project.root_path().join(file_path);
+            let full_path = self.package_provider.root_path().join(file_path);
 
-            if let Some(package) = self.project.descriptor.find_package_for_path(&full_path) {
-                let package_name = package.name.clone();
-                if !affected_packages.contains(&package_name) {
-                    affected_packages.push(package_name);
+            // Find package that contains this file path
+            for package in self.package_provider.packages() {
+                let package_path = package.workspace_package.absolute_path.as_path();
+                if full_path.starts_with(package_path) {
+                    let package_name = package.name().to_string();
+                    if !affected_packages.contains(&package_name) {
+                        affected_packages.push(package_name);
+                        break; // Found the package, no need to continue
+                    }
                 }
             }
         }
@@ -883,7 +988,7 @@ impl ChangesetHookIntegration {
         let mut all_affected_packages = Vec::new();
 
         for commit_hash in commits {
-            match self.project.repository.get_all_files_changed_since_sha(commit_hash) {
+            match self.git_provider.repository().get_all_files_changed_since_sha(commit_hash) {
                 Ok(changed_files) => {
                     let affected_packages = self.map_files_to_packages(&changed_files);
 

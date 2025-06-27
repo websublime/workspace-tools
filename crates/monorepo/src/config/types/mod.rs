@@ -46,7 +46,10 @@ pub use workspace::{
 
 // Git configuration types
 pub mod git;
-pub use git::{GitConfig, BranchConfig, BranchType};
+pub use git::{
+    GitConfig, BranchConfig, BranchType,
+    RepositoryHostConfig, RepositoryProvider, UrlPatterns, SshConversion,
+};
 
 // Validation configuration types
 pub mod validation;

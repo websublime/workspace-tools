@@ -1,4 +1,5 @@
 {
+  "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
       "Bash(mv:*)",
@@ -24,7 +25,14 @@
       "Bash(touch:*)",
       "Bash(git commit:*)",
       "Bash(ls:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(cat:*)",
+      "Bash(RUST_BACKTRACE=1 cargo test test_package_mapping_with_real_changes --lib)",
+      "Bash(RUST_LOG=debug cargo test test_dependency_impact_analysis -- --nocapture 2 >& 1)",
+      "Bash(RUST_LOG=sublime_monorepo_tools=debug cargo test test_dependency_impact_analysis -- --nocapture 2 >& 1)",
+      "Bash(timeout 60 cargo test test_development_workflow_performance -- --nocapture --test-threads=1)",
+      "Bash(cargo run:*)",
+      "Bash(./test_repository_config)"
     ],
     "deny": []
   }

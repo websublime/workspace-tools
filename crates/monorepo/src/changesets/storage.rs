@@ -5,13 +5,9 @@
 //! changeset directory with structured naming for easy querying.
 
 use std::path::PathBuf;
-use std::sync::Arc;
-
 use serde_json;
-use sublime_standard_tools::filesystem::FileSystem;
 
 use super::types::{Changeset, ChangesetFilter, ChangesetStorage};
-use crate::core::MonorepoProject;
 use crate::error::Error;
 
 impl ChangesetStorage {
@@ -31,10 +27,41 @@ impl ChangesetStorage {
     /// let project = Arc::new(MonorepoProject::new(Path::new("/project"))?);
     /// let storage = ChangesetStorage::new(project);
     /// ```
+    /// Creates a new changeset storage instance with injected dependencies
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Changeset configuration
+    /// * `file_system_provider` - File system provider for file operations
+    /// * `package_provider` - Package provider for accessing root path
     #[must_use]
-    pub fn new(project: Arc<MonorepoProject>) -> Self {
+    pub fn new(
+        config: crate::config::types::ChangesetsConfig,
+        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+        package_provider: Box<dyn crate::core::PackageProvider>,
+    ) -> Self {
+        Self { 
+            config, 
+            file_system_provider,
+            package_provider,
+        }
+    }
+
+    /// Creates a new changeset storage from project (convenience method)
+    ///
+    /// # Arguments
+    ///
+    /// * `project` - Reference to the monorepo project
+    #[must_use]
+    pub fn from_project(project: std::sync::Arc<crate::core::MonorepoProject>) -> Self {
+        use crate::core::interfaces::DependencyFactory;
+        
         let config = project.config.changesets.clone();
-        Self { project, config }
+        Self::new(
+            config,
+            DependencyFactory::file_system_provider(std::sync::Arc::clone(&project)),
+            DependencyFactory::package_provider(project),
+        )
     }
 
     /// Saves a changeset to storage
@@ -69,8 +96,7 @@ impl ChangesetStorage {
     pub fn save(&self, changeset: &Changeset) -> Result<(), Error> {
         // Ensure changeset directory exists
         let changeset_dir = self.get_changeset_directory();
-        self.project
-            .file_system
+        self.file_system_provider
             .create_dir_all(&changeset_dir)
             .map_err(|e| Error::changeset(format!("Failed to create changeset directory: {e}")))?;
 
@@ -83,8 +109,7 @@ impl ChangesetStorage {
             .map_err(|e| Error::changeset(format!("Failed to serialize changeset: {e}")))?;
 
         // Write to file
-        self.project
-            .file_system
+        self.file_system_provider
             .write_file_string(&filepath, &content)
             .map_err(|e| Error::changeset(format!("Failed to write changeset file: {e}")))?;
 
@@ -121,14 +146,13 @@ impl ChangesetStorage {
         let changeset_dir = self.get_changeset_directory();
 
         // Find file with this ID
-        if !self.project.file_system.exists(&changeset_dir) {
+        if !self.file_system_provider.path_exists(&changeset_dir) {
             // Directory doesn't exist, so no changesets
             return Ok(None);
         }
 
         let files = self
-            .project
-            .file_system
+            .file_system_provider
             .walk_dir(&changeset_dir)
             .map_err(|e| Error::changeset(format!("Failed to list changeset files: {e}")))?
             .into_iter()
@@ -137,9 +161,11 @@ impl ChangesetStorage {
 
         for file in files {
             if let Some(filename) = file.file_name().and_then(|n| n.to_str()) {
-                if filename.contains(id) {
+                // Try to match either the full ID or the short hash (first 8 characters)
+                let short_id = if id.len() > 8 { &id[..8] } else { id };
+                if filename.contains(id) || filename.contains(short_id) {
                     let content =
-                        self.project.file_system.read_file_string(&file).map_err(|e| {
+                        self.file_system_provider.read_file_string(&file).map_err(|e| {
                             Error::changeset(format!("Failed to read changeset file: {e}"))
                         })?;
 
@@ -190,14 +216,13 @@ impl ChangesetStorage {
         let changeset_dir = self.get_changeset_directory();
 
         // Get all JSON files in the changeset directory
-        if !self.project.file_system.exists(&changeset_dir) {
+        if !self.file_system_provider.path_exists(&changeset_dir) {
             // Directory doesn't exist, so no changesets
             return Ok(Vec::new());
         }
 
         let files = self
-            .project
-            .file_system
+            .file_system_provider
             .walk_dir(&changeset_dir)
             .map_err(|e| Error::changeset(format!("Failed to list changeset files: {e}")))?
             .into_iter()
@@ -208,12 +233,11 @@ impl ChangesetStorage {
 
         for file in files {
             let content = self
-                .project
-                .file_system
-                .read_file(&file)
+                .file_system_provider
+                .read_file_string(&file)
                 .map_err(|e| Error::changeset(format!("Failed to read changeset file: {e}")))?;
 
-            let changeset: Changeset = serde_json::from_slice(&content)
+            let changeset: Changeset = serde_json::from_str(&content)
                 .map_err(|e| Error::changeset(format!("Failed to parse changeset: {e}")))?;
 
             if self.matches_filter(&changeset, filter) {
@@ -258,14 +282,13 @@ impl ChangesetStorage {
         let changeset_dir = self.get_changeset_directory();
 
         // Find file with this ID
-        if !self.project.file_system.exists(&changeset_dir) {
+        if !self.file_system_provider.path_exists(&changeset_dir) {
             // Directory doesn't exist, so changeset doesn't exist
             return Ok(false);
         }
 
         let files = self
-            .project
-            .file_system
+            .file_system_provider
             .walk_dir(&changeset_dir)
             .map_err(|e| Error::changeset(format!("Failed to list changeset files: {e}")))?
             .into_iter()
@@ -274,10 +297,12 @@ impl ChangesetStorage {
 
         for file in files {
             if let Some(filename) = file.file_name().and_then(|n| n.to_str()) {
-                if filename.contains(id) {
+                // Try to match either the full ID or the short hash (first 8 characters)
+                let short_id = if id.len() > 8 { &id[..8] } else { id };
+                if filename.contains(id) || filename.contains(short_id) {
                     // Verify this is the correct changeset
                     let content =
-                        self.project.file_system.read_file_string(&file).map_err(|e| {
+                        self.file_system_provider.read_file_string(&file).map_err(|e| {
                             Error::changeset(format!("Failed to read changeset file: {e}"))
                         })?;
 
@@ -285,7 +310,7 @@ impl ChangesetStorage {
                         .map_err(|e| Error::changeset(format!("Failed to parse changeset: {e}")))?;
 
                     if changeset.id == id {
-                        self.project.file_system.remove(&file).map_err(|e| {
+                        self.file_system_provider.remove_file(&file).map_err(|e| {
                             Error::changeset(format!("Failed to delete changeset file: {e}"))
                         })?;
                         return Ok(true);
@@ -299,7 +324,7 @@ impl ChangesetStorage {
 
     /// Gets the full path to the changeset directory
     fn get_changeset_directory(&self) -> PathBuf {
-        self.project.root_path().join(&self.config.changeset_dir)
+        self.package_provider.root_path().join(&self.config.changeset_dir)
     }
 
     /// Generates a filename for a changeset based on the configured format

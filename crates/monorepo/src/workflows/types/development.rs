@@ -1,8 +1,7 @@
 //! Development workflow type definitions
 
 use crate::analysis::MonorepoAnalyzer;
-use crate::core::MonorepoProject;
-use std::sync::Arc;
+// Removed unused imports - now using dependency injection
 
 /// Implements development workflow for monorepo projects
 ///
@@ -17,7 +16,7 @@ use std::sync::Arc;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let project = Arc::new(MonorepoProject::new("/path/to/monorepo")?);
-/// let workflow = DevelopmentWorkflow::new(project);
+/// let workflow = DevelopmentWorkflow::from_project(project)?;
 ///
 /// // Run development workflow - detects changes and runs affected tasks
 /// let result = workflow.run(None).await?;
@@ -27,9 +26,6 @@ use std::sync::Arc;
 /// # }
 /// ```
 pub struct DevelopmentWorkflow {
-    /// Reference to the monorepo project
-    pub(crate) project: Arc<MonorepoProject>,
-
     /// Analyzer for detecting changes and affected packages
     pub(crate) analyzer: MonorepoAnalyzer,
 
@@ -38,4 +34,13 @@ pub struct DevelopmentWorkflow {
 
     /// Changeset manager for handling development changesets
     pub(crate) changeset_manager: crate::changesets::ChangesetManager,
+
+    /// Configuration provider for accessing configuration settings
+    pub(crate) config_provider: Box<dyn crate::core::ConfigProvider>,
+
+    /// Package provider for accessing package information
+    pub(crate) package_provider: Box<dyn crate::core::PackageProvider>,
+
+    /// Git provider for repository operations
+    pub(crate) git_provider: Box<dyn crate::core::GitProvider>,
 }

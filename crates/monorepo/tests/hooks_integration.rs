@@ -41,7 +41,7 @@ fn create_test_repo() -> (TempDir, Arc<MonorepoProject>) {
 fn test_hook_manager_creation() {
     let (_temp_dir, project) = create_test_repo();
 
-    let hook_manager = HookManager::new(project);
+    let hook_manager = HookManager::from_project(project);
     assert!(hook_manager.is_ok());
 
     let manager = hook_manager.unwrap();
@@ -52,7 +52,7 @@ fn test_hook_manager_creation() {
 #[test]
 fn test_hook_manager_enable_disable() {
     let (_temp_dir, project) = create_test_repo();
-    let mut hook_manager = HookManager::new(project).unwrap();
+    let mut hook_manager = HookManager::from_project(project).unwrap();
 
     assert!(hook_manager.is_enabled());
 
@@ -66,7 +66,7 @@ fn test_hook_manager_enable_disable() {
 #[test]
 fn test_custom_hook_configuration() {
     let (_temp_dir, project) = create_test_repo();
-    let mut hook_manager = HookManager::new(project).unwrap();
+    let mut hook_manager = HookManager::from_project(project).unwrap();
 
     let hook_definition = HookDefinition::new(
         HookScript::tasks(vec!["test".to_string(), "lint".to_string()]),
@@ -85,7 +85,7 @@ fn test_custom_hook_configuration() {
 #[test]
 fn test_hook_installation() {
     let (_temp_dir, project) = create_test_repo();
-    let hook_manager = HookManager::new(project).unwrap();
+    let hook_manager = HookManager::from_project(project).unwrap();
 
     // Note: This test would require proper Git repository setup
     // For now, it tests the interface
@@ -100,7 +100,7 @@ fn test_hook_installation() {
 #[allow(clippy::overly_complex_bool_expr)]
 fn test_pre_commit_validation() {
     let (_temp_dir, project) = create_test_repo();
-    let hook_manager = HookManager::new(project).unwrap();
+    let hook_manager = HookManager::from_project(project).unwrap();
 
     let result = hook_manager.pre_commit_validation();
     assert!(result.is_ok());
@@ -114,7 +114,7 @@ fn test_pre_commit_validation() {
 #[test]
 fn test_pre_push_validation() {
     let (_temp_dir, project) = create_test_repo();
-    let hook_manager = HookManager::new(project).unwrap();
+    let hook_manager = HookManager::from_project(project).unwrap();
 
     let commits = vec!["abc123".to_string(), "def456".to_string()];
     let result = hook_manager.pre_push_validation(&commits);
@@ -129,7 +129,7 @@ fn test_pre_push_validation() {
 #[test]
 fn test_hook_execution_with_package_changes() {
     let (temp_dir, project) = create_test_repo();
-    let hook_manager = HookManager::new(project).unwrap();
+    let hook_manager = HookManager::from_project(project).unwrap();
 
     let packages_dir = temp_dir.path().join("packages");
 
@@ -170,7 +170,7 @@ fn test_hook_execution_with_package_changes() {
 #[ignore] // Requires full Git repository setup
 fn test_hook_execution_integration() {
     let (temp_dir, project) = create_test_repo();
-    let hook_manager = HookManager::new(project).unwrap();
+    let hook_manager = HookManager::from_project(project).unwrap();
 
     // Create a test file and stage it
     let test_file = temp_dir.path().join("test.txt");

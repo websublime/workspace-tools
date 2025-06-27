@@ -54,19 +54,19 @@ mod tests {
         let config_manager = ConfigManager::new();
         
         // Test that manager is created with default config
-        assert_eq!(config_manager.get().expect("Config should be available").versioning.default_bump, VersionBumpType::Patch);
+        assert_eq!(config_manager.get_clone().versioning.default_bump, VersionBumpType::Patch);
     }
 
     #[test]
     fn test_config_update() {
-        let config_manager = ConfigManager::new();
+        let mut config_manager = ConfigManager::new();
         let mut new_config = MonorepoConfig::default();
         new_config.versioning.default_bump = VersionBumpType::Major;
         
         config_manager.update(|config| {
             config.versioning.default_bump = new_config.versioning.default_bump;
         }).expect("Config update should succeed");
-        assert_eq!(config_manager.get().expect("Config should be available").versioning.default_bump, VersionBumpType::Major);
+        assert_eq!(config_manager.get_clone().versioning.default_bump, VersionBumpType::Major);
     }
 
     #[test]
@@ -98,7 +98,7 @@ mod tests {
     #[allow(clippy::unwrap_used)]
     fn test_config_manager_default_config() {
         let manager = ConfigManager::new();
-        let config = manager.get().unwrap();
+        let config = manager.get_clone();
 
         assert_eq!(config.versioning.default_bump, VersionBumpType::Patch);
         assert!(config.versioning.propagate_changes);
@@ -109,7 +109,7 @@ mod tests {
     #[test]
     #[allow(clippy::unwrap_used)]
     fn test_config_manager_update_config() {
-        let manager = ConfigManager::new();
+        let mut manager = ConfigManager::new();
 
         manager
             .update(|config| {
@@ -118,7 +118,7 @@ mod tests {
             })
             .unwrap();
 
-        let config = manager.get().unwrap();
+        let config = manager.get_clone();
         assert_eq!(config.versioning.default_bump, VersionBumpType::Minor);
         assert!(!config.versioning.auto_tag);
     }

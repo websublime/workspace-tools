@@ -7,7 +7,7 @@ use super::{
     HookError, HookErrorCode, HookExecutionResult, HookStatus, HookType, HookValidationResult,
     PostCommitResult, PreCommitResult, PrePushResult, ValidationCheck,
 };
-use crate::Changeset;
+use crate::changesets::Changeset;
 use chrono::Utc;
 use std::collections::HashMap;
 use std::time::Duration;

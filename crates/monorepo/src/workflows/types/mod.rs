@@ -30,7 +30,7 @@ pub use results::{
 };
 
 // Status types
-pub use status::{WorkflowStep, WorkflowProgress, WorkflowStatus};
+pub use status::{WorkflowStep, WorkflowProgress, WorkflowStatus, SubStep};
 
 // Data types
 pub use data::PackageChangeFacts;

@@ -120,3 +120,18 @@ mod types;
 mod tests;
 
 pub use types::{GitChangedFile, GitFileStatus, Repo, RepoCommit, RepoError, RepoTags};
+
+/// Result type alias for git operations.
+///
+/// This is a convenience type alias for Results with `RepoError`.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_git_tools::{Result, Repo};
+///
+/// fn open_repository(path: &str) -> Result<Repo> {
+///     Repo::open(path)
+/// }
+/// ```
+pub type Result<T> = std::result::Result<T, RepoError>;

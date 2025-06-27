@@ -5,29 +5,91 @@
 
 // Hook manager implementation - now fully synchronous for better integration with MonorepoProject
 
+use super::types::HookManager;
 use super::{
     GitOperationType, HookDefinition, HookError, HookErrorCode, HookExecutionContext,
     HookExecutionResult, HookInstaller, HookScript, HookType, HookValidationResult, HookValidator,
     PreCommitResult, PrePushResult, ValidationCheck,
 };
-use super::types::HookManager;
-use crate::changesets::ChangesetManager;
 use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
-use crate::tasks::types::results::TaskStatus;
-use crate::tasks::{TaskManager, TaskScope};
-use crate::Changeset;
-use once_cell::sync::Lazy;
+use crate::events::types::{ChangesetEvent, HookEvent, TaskEvent};
+use crate::events::{
+    EventBus, EventContext, EventEmitter, EventPriority, EventSubscriber, MonorepoEvent,
+};
+use crate::tasks::TaskManager;
+use crate::changesets::Changeset;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 impl HookManager {
-    /// Create a new hook manager
-    pub fn new(project: Arc<MonorepoProject>) -> Result<Self> {
-        let installer = HookInstaller::new(Arc::clone(&project))?;
-        let validator = HookValidator::new(Arc::clone(&project));
+    /// Create a new hook manager with injected dependencies
+    pub fn new(
+        installer: HookInstaller,
+        validator: HookValidator,
+        task_manager: TaskManager,
+        config_provider: Box<dyn crate::core::ConfigProvider>,
+        git_provider: Box<dyn crate::core::GitProvider>,
+        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+        package_provider: Box<dyn crate::core::PackageProvider>,
+    ) -> Result<Self> {
+        let default_hooks = Self::create_default_hooks();
+        
+        // Create synchronous task executor with dedicated runtime
+        let sync_task_executor = crate::hooks::sync_task_executor::SyncTaskExecutor::new(task_manager)?;
 
-        Ok(Self { project, installer, validator, custom_hooks: HashMap::new(), enabled: true })
+        Ok(Self {
+            installer,
+            validator,
+            custom_hooks: HashMap::new(),
+            default_hooks,
+            enabled: true,
+            event_bus: None,
+            config_provider,
+            git_provider,
+            file_system_provider,
+            package_provider,
+            sync_task_executor,
+        })
+    }
+
+    /// Create a new hook manager from project (convenience method)
+    ///
+    /// NOTE: This convenience method creates all components and provider instances from the project.
+    /// For better performance and memory usage, prefer using the `new()` method with
+    /// pre-created components and providers when creating multiple managers.
+    pub fn from_project(project: Arc<MonorepoProject>) -> Result<Self> {
+        use crate::core::interfaces::DependencyFactory;
+
+        // Create providers efficiently to avoid multiple Arc clones
+        let git_provider1 = DependencyFactory::git_provider(Arc::clone(&project));
+        let git_provider2 = DependencyFactory::git_provider(Arc::clone(&project));
+        let git_provider3 = DependencyFactory::git_provider(Arc::clone(&project));
+        let file_system_provider1 = DependencyFactory::file_system_provider(Arc::clone(&project));
+        let file_system_provider2 = DependencyFactory::file_system_provider(Arc::clone(&project));
+        let package_provider1 = DependencyFactory::package_provider(Arc::clone(&project));
+        let package_provider2 = DependencyFactory::package_provider(Arc::clone(&project));
+        let config_provider1 = DependencyFactory::config_provider(Arc::clone(&project));
+        let config_provider2 = DependencyFactory::config_provider(Arc::clone(&project));
+
+        // Create installer directly with providers
+        let installer = HookInstaller::new(git_provider1, file_system_provider1)?;
+
+        // Create validator directly with providers
+        let validator = HookValidator::new(git_provider2, package_provider1, config_provider1);
+
+        // Create task manager with proper dependency injection
+        let task_manager = TaskManager::from_project(Arc::clone(&project))?;
+
+        Self::new(
+            installer,
+            validator,
+            task_manager,
+            config_provider2,
+            git_provider3,
+            file_system_provider2,
+            package_provider2,
+        )
     }
 
     /// Install Git hooks in the repository
@@ -46,15 +108,34 @@ impl HookManager {
         let mut installed = Vec::new();
 
         for hook_type in hook_types {
-            match self.installer.install_hook(&hook_type, self.get_hook_definition(&hook_type)) {
-                Ok(()) => {
-                    installed.push(hook_type);
+            match self.get_hook_definition(&hook_type) {
+                Ok(hook_definition) => {
+                    match self.installer.install_hook(&hook_type, hook_definition) {
+                        Ok(()) => {
+                            installed.push(hook_type);
+                        }
+                        Err(e) => {
+                            // Log error but continue with other hooks
+                            eprintln!("Failed to install hook {hook_type:?}: {e}");
+                        }
+                    }
                 }
                 Err(e) => {
-                    // Log error but continue with other hooks
-                    eprintln!("Failed to install hook {hook_type:?}: {e}");
+                    eprintln!("Failed to get hook definition for {hook_type:?}: {e}");
                 }
             }
+        }
+
+        // Emit hook installation event
+        if !installed.is_empty() {
+            let context = EventContext::new("HookManager").with_priority(EventPriority::Normal);
+
+            let installed_event = HookEvent::Installed {
+                context,
+                hook_types: installed.iter().map(std::string::ToString::to_string).collect(),
+            };
+
+            let _ = self.emit_event(MonorepoEvent::Hook(installed_event));
         }
 
         Ok(installed)
@@ -76,7 +157,7 @@ impl HookManager {
             return Ok(HookExecutionResult::new(hook_type).with_skipped("Hooks are disabled"));
         }
 
-        let hook_definition = self.get_hook_definition(&hook_type);
+        let hook_definition = self.get_hook_definition(&hook_type)?;
 
         // Check if hook is enabled
         if !hook_definition.enabled {
@@ -88,11 +169,22 @@ impl HookManager {
             return Ok(HookExecutionResult::new(hook_type).with_skipped("Hook conditions not met"));
         }
 
+        // Emit hook started event
+        let started_context = EventContext::new("HookManager").with_priority(EventPriority::High);
+
+        let started_event = HookEvent::Started {
+            context: started_context,
+            hook_type: hook_type.to_string(),
+            affected_packages: context.affected_packages.clone(),
+        };
+
+        self.emit_event(MonorepoEvent::Hook(started_event))?;
+
         // Execute the hook based on its type
         match hook_type {
             HookType::PreCommit => {
                 let result = self.pre_commit_validation()?;
-                let mut hook_result = HookExecutionResult::new(hook_type);
+                let mut hook_result = HookExecutionResult::new(hook_type.clone());
 
                 if result.validation_passed {
                     hook_result = hook_result.with_success();
@@ -107,12 +199,29 @@ impl HookManager {
                 }
 
                 hook_result = hook_result.with_validation_result(result.validation_details);
+
+                // Emit hook completion event
+                let completed_context =
+                    EventContext::new("HookManager").with_priority(EventPriority::High);
+
+                let completed_event = HookEvent::Completed {
+                    context: completed_context,
+                    hook_type: hook_type.to_string(),
+                    success: result.validation_passed,
+                    message: Some(format!(
+                        "Pre-commit validation: {}",
+                        if result.validation_passed { "passed" } else { "failed" }
+                    )),
+                };
+
+                let _ = self.emit_event(MonorepoEvent::Hook(completed_event));
+
                 Ok(hook_result)
             }
             HookType::PrePush => {
                 let commits = context.commit_hashes();
                 let result = self.pre_push_validation(&commits)?;
-                let mut hook_result = HookExecutionResult::new(hook_type);
+                let mut hook_result = HookExecutionResult::new(hook_type.clone());
 
                 if result.validation_passed {
                     hook_result = hook_result.with_success();
@@ -127,11 +236,43 @@ impl HookManager {
                 }
 
                 hook_result = hook_result.with_validation_result(result.validation_details);
+
+                // Emit hook completion event
+                let completed_context =
+                    EventContext::new("HookManager").with_priority(EventPriority::High);
+
+                let completed_event = HookEvent::Completed {
+                    context: completed_context,
+                    hook_type: hook_type.to_string(),
+                    success: result.validation_passed,
+                    message: Some(format!(
+                        "Pre-push validation: {}",
+                        if result.validation_passed { "passed" } else { "failed" }
+                    )),
+                };
+
+                let _ = self.emit_event(MonorepoEvent::Hook(completed_event));
+
                 Ok(hook_result)
             }
             _ => {
                 // For other hook types, execute the script directly
-                self.execute_hook_script(hook_definition, context)
+                let script_result = self.execute_hook_script(hook_definition, context)?;
+
+                // Emit hook completion event
+                let completed_context =
+                    EventContext::new("HookManager").with_priority(EventPriority::High);
+
+                let completed_event = HookEvent::Completed {
+                    context: completed_context,
+                    hook_type: hook_type.to_string(),
+                    success: script_result.is_success(),
+                    message: script_result.error.as_ref().map(|e| e.message.clone()),
+                };
+
+                let _ = self.emit_event(MonorepoEvent::Hook(completed_event));
+
+                Ok(script_result)
             }
         }
     }
@@ -169,7 +310,7 @@ impl HookManager {
             if let Some(changeset) = changeset_check.changeset {
                 result = result.with_changeset(changeset);
             }
-        } else if self.project.config.changesets.required {
+        } else if self.config_provider.config().changesets.required {
             result = result.with_required_action("Create a changeset for the affected packages");
         }
 
@@ -178,14 +319,10 @@ impl HookManager {
         let mut tasks_passed = true;
 
         if !pre_commit_tasks.is_empty() && !affected_packages.is_empty() {
-            // Execute tasks synchronously by using a runtime
-            let rt = tokio::runtime::Runtime::new()
-                .map_err(|e| Error::hook(format!("Failed to create async runtime: {e}")))?;
-
+            // Execute tasks synchronously through validation bridge
             for task_name in &pre_commit_tasks {
-                let task_success = rt.block_on(async {
-                    self.execute_task_for_validation(task_name, &affected_packages).await
-                })?;
+                let task_success =
+                    self.execute_task_for_validation(task_name, &affected_packages)?;
 
                 if !task_success {
                     tasks_passed = false;
@@ -230,14 +367,10 @@ impl HookManager {
 
         // Execute tasks for affected packages using real TaskManager
         if !pre_push_tasks.is_empty() && !affected_packages.is_empty() {
-            // Execute tasks synchronously by using a runtime
-            let rt = tokio::runtime::Runtime::new()
-                .map_err(|e| Error::hook(format!("Failed to create async runtime: {e}")))?;
-
+            // Execute tasks synchronously through validation bridge
             for task_name in &pre_push_tasks {
-                let task_success = rt.block_on(async {
-                    self.execute_task_for_validation(task_name, &affected_packages).await
-                })?;
+                let task_success =
+                    self.execute_task_for_validation(task_name, &affected_packages)?;
 
                 result = result.with_task_result(task_name, task_success);
 
@@ -262,13 +395,62 @@ impl HookManager {
     /// - Changeset creation fails
     /// - File system operations fail
     pub fn prompt_for_changeset(&self) -> Result<Changeset> {
-        let changeset_manager = ChangesetManager::new(Arc::clone(&self.project))
+        // Emit changeset creation request event
+        let context = EventContext::new("HookManager").with_priority(EventPriority::High);
+
+        let changeset_event = ChangesetEvent::CreationRequested {
+            context,
+            packages: Vec::new(), // Will be determined by the changeset manager
+            reason: "Requested by hook validation".to_string(),
+        };
+
+        let event = MonorepoEvent::Changeset(changeset_event);
+        self.emit_event(event)?;
+
+        // Create changeset manager with proper dependency injection
+        let changeset_manager = self.create_changeset_manager()
             .map_err(|e| Error::hook(format!("Failed to create changeset manager: {e}")))?;
 
-        // Create an interactive changeset
+        // Create the changeset using the proper interactive method
+        // This will auto-detect the affected package and create an appropriate changeset
         changeset_manager
             .create_changeset_interactive(None)
             .map_err(|e| Error::hook(format!("Failed to create changeset: {e}")))
+    }
+
+    /// Create a ChangesetManager instance for changeset operations
+    ///
+    /// This method creates a fully functional changeset manager with proper dependency injection.
+    /// The changeset manager is used by hooks to create and manage changesets when required.
+    ///
+    /// # Returns
+    ///
+    /// A configured ChangesetManager instance ready for use.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the changeset manager cannot be created due to:
+    /// - Missing or invalid dependencies
+    /// - File system or storage initialization issues  
+    /// - Configuration validation failures
+    fn create_changeset_manager(&self) -> Result<crate::changesets::ChangesetManager> {
+        use crate::changesets::ChangesetManager;
+        use crate::core::MonorepoProject;
+
+        // Get project root path from package provider
+        let root_path = self.package_provider.root_path();
+
+        // Create a new MonorepoProject instance from the root path
+        // This is safe since the project structure is the same
+        let project = Arc::new(MonorepoProject::new(root_path)
+            .map_err(|e| Error::hook(format!("Failed to create project instance for changesets: {e}")))?);
+
+        // Use the convenient from_project method which handles all dependency injection
+        let changeset_manager = ChangesetManager::from_project(project)
+            .map_err(|e| Error::hook(format!("Failed to create changeset manager from project: {e}")))?;
+
+        log::debug!("Successfully created changeset manager for hook operations");
+        Ok(changeset_manager)
     }
 
     /// Configure a custom hook definition
@@ -290,6 +472,11 @@ impl HookManager {
     #[must_use]
     pub fn is_enabled(&self) -> bool {
         self.enabled
+    }
+
+    /// Set the event bus for this manager
+    pub fn set_event_bus(&mut self, event_bus: Arc<EventBus>) {
+        self.event_bus = Some(event_bus);
     }
 
     /// Get all configured hook types
@@ -317,64 +504,64 @@ impl HookManager {
     // Private helper methods
 
     /// Get hook definition (custom or default)
-    fn get_hook_definition(&self, hook_type: &HookType) -> &HookDefinition {
-        self.custom_hooks
-            .get(hook_type)
-            .unwrap_or_else(|| Self::get_default_hook_definition(hook_type))
+    fn get_hook_definition(&self, hook_type: &HookType) -> Result<&HookDefinition> {
+        if let Some(custom_hook) = self.custom_hooks.get(hook_type) {
+            Ok(custom_hook)
+        } else if let Some(default_hook) = self.default_hooks.get(hook_type) {
+            Ok(default_hook)
+        } else {
+            Err(Error::hook(format!("No hook definition found for type: {hook_type:?}")))
+        }
     }
 
-    /// Get default hook definition for a hook type
+    /// Create default hook definitions
     ///
     /// Provides sensible defaults for each hook type based on common development workflows.
     /// Each hook type has specific tasks that are typically run during that Git operation.
-    fn get_default_hook_definition(hook_type: &HookType) -> &'static HookDefinition {
-        match hook_type {
-            HookType::PreCommit => {
-                static PRE_COMMIT_HOOK: Lazy<HookDefinition> = Lazy::new(|| {
-                    HookDefinition::new(
-                        HookScript::tasks(vec!["lint".to_string(), "test".to_string()]),
-                        "Pre-commit validation: lint and test affected packages",
-                    )
-                });
-                &PRE_COMMIT_HOOK
-            }
-            HookType::PrePush => {
-                static PRE_PUSH_HOOK: Lazy<HookDefinition> = Lazy::new(|| {
-                    HookDefinition::new(
-                        HookScript::tasks(vec!["build".to_string(), "test".to_string()]),
-                        "Pre-push validation: build and test affected packages",
-                    )
-                });
-                &PRE_PUSH_HOOK
-            }
-            HookType::PostMerge => {
-                static POST_MERGE_HOOK: Lazy<HookDefinition> = Lazy::new(|| {
-                    HookDefinition::new(
-                        HookScript::tasks(vec!["install".to_string()]),
-                        "Post-merge: install dependencies after merge",
-                    )
-                });
-                &POST_MERGE_HOOK
-            }
-            HookType::PostCheckout => {
-                static POST_CHECKOUT_HOOK: Lazy<HookDefinition> = Lazy::new(|| {
-                    HookDefinition::new(
-                        HookScript::tasks(vec!["install".to_string()]),
-                        "Post-checkout: install dependencies after checkout",
-                    )
-                });
-                &POST_CHECKOUT_HOOK
-            }
-            HookType::PostCommit => {
-                static POST_COMMIT_HOOK: Lazy<HookDefinition> = Lazy::new(|| {
-                    HookDefinition::new(
-                        HookScript::tasks(vec!["install".to_string()]),
-                        "Post-commit: install dependencies after commit",
-                    )
-                });
-                &POST_COMMIT_HOOK
-            }
-        }
+    fn create_default_hooks() -> HashMap<HookType, HookDefinition> {
+        let mut hooks = HashMap::new();
+
+        hooks.insert(
+            HookType::PreCommit,
+            HookDefinition::new(
+                HookScript::tasks(vec!["lint".to_string(), "test".to_string()]),
+                "Pre-commit validation: lint and test affected packages",
+            ),
+        );
+
+        hooks.insert(
+            HookType::PrePush,
+            HookDefinition::new(
+                HookScript::tasks(vec!["build".to_string(), "test".to_string()]),
+                "Pre-push validation: build and test affected packages",
+            ),
+        );
+
+        hooks.insert(
+            HookType::PostMerge,
+            HookDefinition::new(
+                HookScript::tasks(vec!["install".to_string()]),
+                "Post-merge: install dependencies after merge",
+            ),
+        );
+
+        hooks.insert(
+            HookType::PostCheckout,
+            HookDefinition::new(
+                HookScript::tasks(vec!["install".to_string()]),
+                "Post-checkout: install dependencies after checkout",
+            ),
+        );
+
+        hooks.insert(
+            HookType::PostCommit,
+            HookDefinition::new(
+                HookScript::tasks(vec!["install".to_string()]),
+                "Post-commit: install dependencies after commit",
+            ),
+        );
+
+        hooks
     }
 
     /// Execute a hook script
@@ -401,10 +588,7 @@ impl HookManager {
                     return Ok(result.with_success());
                 }
 
-                // Execute tasks synchronously by using a runtime
-                let rt = tokio::runtime::Runtime::new()
-                    .map_err(|e| Error::hook(format!("Failed to create async runtime: {e}")))?;
-
+                // Execute tasks synchronously through validation bridge
                 for task_name in tasks {
                     if task_name.is_empty() {
                         return Ok(result.with_failure(HookError::new(
@@ -413,9 +597,8 @@ impl HookManager {
                         )));
                     }
 
-                    let task_success = rt.block_on(async {
-                        self.execute_task_for_validation(task_name, affected_packages).await
-                    })?;
+                    let task_success =
+                        self.execute_task_for_validation(task_name, affected_packages)?;
 
                     if !task_success {
                         return Ok(result.with_failure(HookError::new(
@@ -428,10 +611,10 @@ impl HookManager {
             }
             HookScript::Command { cmd, args } => {
                 // Execute shell command using sublime-standard-tools command system
-                use sublime_standard_tools::command::{CommandBuilder, DefaultExecutor, Executor};
+                use sublime_standard_tools::command::{CommandBuilder, DefaultExecutor};
 
                 let mut command_builder =
-                    CommandBuilder::new(cmd).current_dir(self.project.root_path());
+                    CommandBuilder::new(cmd).current_dir(self.package_provider.root_path());
 
                 // Add each argument individually
                 for arg in args {
@@ -441,13 +624,8 @@ impl HookManager {
                 let command = command_builder.build();
                 let executor = DefaultExecutor;
 
-                // Execute synchronously by using a runtime
-                let rt = tokio::runtime::Runtime::new()
-                    .map_err(|e| Error::hook(format!("Failed to create async runtime: {e}")))?;
-
-                let output = rt
-                    .block_on(async { executor.execute(command).await })
-                    .map_err(|e| Error::hook(format!("Failed to execute command '{cmd}': {e}")))?;
+                // Execute synchronously using a bridge
+                let output = self.execute_command_sync(executor, command, cmd)?;
 
                 if output.status() == 0 {
                     Ok(result.with_success().with_stdout(output.stdout()))
@@ -460,9 +638,9 @@ impl HookManager {
             }
             HookScript::ScriptFile { path, args } => {
                 // Execute script file using sublime-standard-tools command system
-                use sublime_standard_tools::command::{CommandBuilder, DefaultExecutor, Executor};
+                use sublime_standard_tools::command::{CommandBuilder, DefaultExecutor};
 
-                let script_path = self.project.root_path().join(path);
+                let script_path = self.package_provider.root_path().join(path);
                 if !script_path.exists() {
                     return Ok(result.with_failure(HookError::new(
                         HookErrorCode::SystemError,
@@ -471,7 +649,7 @@ impl HookManager {
                 }
 
                 let mut command_builder = CommandBuilder::new(script_path.to_string_lossy())
-                    .current_dir(self.project.root_path());
+                    .current_dir(self.package_provider.root_path());
 
                 // Add each argument individually
                 for arg in args {
@@ -481,17 +659,8 @@ impl HookManager {
                 let command = command_builder.build();
                 let executor = DefaultExecutor;
 
-                // Execute synchronously by using a runtime
-                let rt = tokio::runtime::Runtime::new()
-                    .map_err(|e| Error::hook(format!("Failed to create async runtime: {e}")))?;
-
-                let output =
-                    rt.block_on(async { executor.execute(command).await }).map_err(|e| {
-                        Error::hook(format!(
-                            "Failed to execute script '{}': {e}",
-                            script_path.display()
-                        ))
-                    })?;
+                // Execute synchronously using a bridge
+                let output = self.execute_script_sync(executor, command, &script_path)?;
 
                 if output.status() == 0 {
                     Ok(result.with_success().with_stdout(output.stdout()))
@@ -546,7 +715,7 @@ impl HookManager {
     /// Get staged files from Git
     fn get_staged_files(&self) -> Result<Vec<String>> {
         // Use the new git-tools method for proper staged file detection
-        let staged_files = self.project.repository.get_staged_files()?;
+        let staged_files = self.git_provider.repository().get_staged_files()?;
         Ok(staged_files)
     }
 
@@ -557,13 +726,17 @@ impl HookManager {
 
         for file_path in files {
             // Convert relative file path to absolute path
-            let full_path = self.project.root_path().join(file_path);
+            let full_path = self.package_provider.root_path().join(file_path);
 
-            // Use MonorepoDescriptor to find which package this file belongs to
-            if let Some(package) = self.project.descriptor.find_package_for_path(&full_path) {
-                let package_name = package.name.clone();
-                if !affected_packages.contains(&package_name) {
-                    affected_packages.push(package_name);
+            // Find which package this file belongs to by checking all packages
+            for package in self.package_provider.packages() {
+                let package_path = package.path();
+                if full_path.starts_with(package_path) {
+                    let package_name = package.name().to_string();
+                    if !affected_packages.contains(&package_name) {
+                        affected_packages.push(package_name);
+                        break; // Found the package, no need to check others
+                    }
                 }
             }
         }
@@ -575,8 +748,9 @@ impl HookManager {
     #[allow(clippy::unnecessary_wraps)]
     fn get_pre_commit_tasks(&self) -> Result<Vec<String>> {
         // Read from configuration - use the configured tasks if hooks are enabled
-        if self.project.config.hooks.enabled && self.project.config.hooks.pre_commit.enabled {
-            Ok(self.project.config.hooks.pre_commit.run_tasks.clone())
+        let config = self.config_provider.config();
+        if config.hooks.enabled && config.hooks.pre_commit.enabled {
+            Ok(config.hooks.pre_commit.run_tasks.clone())
         } else {
             // If hooks are disabled, return empty list
             Ok(Vec::new())
@@ -587,8 +761,9 @@ impl HookManager {
     #[allow(clippy::unnecessary_wraps)]
     fn get_pre_push_tasks(&self) -> Result<Vec<String>> {
         // Read from configuration - use the configured tasks if hooks are enabled
-        if self.project.config.hooks.enabled && self.project.config.hooks.pre_push.enabled {
-            Ok(self.project.config.hooks.pre_push.run_tasks.clone())
+        let config = self.config_provider.config();
+        if config.hooks.enabled && config.hooks.pre_push.enabled {
+            Ok(config.hooks.pre_push.run_tasks.clone())
         } else {
             // If hooks are disabled, return empty list
             Ok(Vec::new())
@@ -596,56 +771,68 @@ impl HookManager {
     }
 
     /// Execute a task for validation purposes
-    #[allow(dead_code)]
-    async fn execute_task_for_validation(
-        &self,
-        task_name: &str,
-        packages: &[String],
-    ) -> Result<bool> {
+    ///
+    /// Executes the actual task using the SyncTaskExecutor, providing real validation
+    /// rather than mock results. This ensures proper hook validation with actual task execution.
+    ///
+    /// # Arguments
+    /// * `task_name` - Name of the task to execute
+    /// * `packages` - List of affected packages for scoped execution
+    ///
+    /// # Errors
+    /// Returns an error if task execution fails due to system issues
+    fn execute_task_for_validation(&self, task_name: &str, packages: &[String]) -> Result<bool> {
         if packages.is_empty() {
-            // If no packages affected, consider it successful
+            // If no packages affected, consider validation successful
             return Ok(true);
         }
 
-        let task_manager = TaskManager::new(Arc::clone(&self.project))
-            .map_err(|e| Error::hook(format!("Failed to create task manager: {e}")))?;
-
-        // Try to resolve this task from package.json scripts or registered tasks
-        for package_name in packages {
-            match task_manager.resolve_package_tasks(package_name).await {
-                Ok(task_definitions) => {
-                    // Find the task we want to execute
-                    if let Some(_task_def) =
-                        task_definitions.iter().find(|def| def.name == task_name)
-                    {
-                        // Execute the task for this package
-                        let task_scope = TaskScope::Package(package_name.clone());
-                        match task_manager.execute_task(task_name, Some(task_scope)).await {
-                            Ok(result) => {
-                                match result.status {
-                                    TaskStatus::Success => {
-                                        // Task completed successfully
-                                    }
-                                    _ => {
-                                        return Ok(false);
-                                    }
-                                }
-                            }
-                            Err(_) => {
-                                return Ok(false);
-                            }
-                        }
-                    }
-                }
-                Err(_) => {
-                    // If we can't resolve tasks for this package, treat as failure
-                    return Ok(false);
-                }
-            }
+        // Validate task name is not empty
+        if task_name.trim().is_empty() {
+            return Err(Error::hook("Task name cannot be empty".to_string()));
         }
 
-        Ok(true)
+        // Emit task validation request event
+        let context = EventContext::new("HookManager").with_priority(EventPriority::High);
+
+        let task_event = TaskEvent::ValidationRequested {
+            context,
+            task_name: task_name.to_string(),
+            packages: packages.to_vec(),
+        };
+
+        let event = MonorepoEvent::Task(task_event);
+        self.emit_event(event)?;
+
+        // Execute task using SyncTaskExecutor for validation
+        let execution_result = self.sync_task_executor.execute_task_sync(task_name, packages);
+
+        // Create task result for event emission
+        let task_status = if execution_result {
+            crate::tasks::TaskStatus::Success
+        } else {
+            crate::tasks::TaskStatus::Failed { 
+                reason: format!("Task '{}' execution failed", task_name) 
+            }
+        };
+
+        let result = crate::tasks::types::TaskExecutionResult::new(task_name.to_string())
+            .with_status(task_status);
+
+        // Emit task completion event
+        let completion_context =
+            EventContext::new("HookManager").with_priority(EventPriority::High);
+
+        let completion_event =
+            TaskEvent::Completed { context: completion_context, result };
+
+        // Non-blocking event emission
+        let _ = self.emit_event(MonorepoEvent::Task(completion_event));
+
+        // Return actual execution result
+        Ok(execution_result)
     }
+
 
     /// Get affected packages from commit hashes
     fn get_affected_packages_from_commits(&self, commits: &[String]) -> Result<Vec<String>> {
@@ -657,7 +844,7 @@ impl HookManager {
 
         // For each commit, get the changed files
         for commit_hash in commits {
-            match self.project.repository.get_all_files_changed_since_sha(commit_hash) {
+            match self.git_provider.repository().get_all_files_changed_since_sha(commit_hash) {
                 Ok(changed_files) => {
                     // Map changed files to affected packages
                     let affected_packages = self.map_files_to_packages(&changed_files)?;
@@ -678,6 +865,61 @@ impl HookManager {
         }
 
         Ok(all_affected_packages)
+    }
+
+    /// Execute command synchronously using real command execution
+    fn execute_command_sync(
+        &self,
+        executor: sublime_standard_tools::command::DefaultExecutor,
+        command: sublime_standard_tools::command::Command,
+        cmd_name: &str,
+    ) -> Result<sublime_standard_tools::command::CommandOutput> {
+        log::debug!("Executing command: {}", cmd_name);
+        
+        // Create a dedicated runtime for command execution to avoid nested runtime issues
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|e| Error::hook(format!("Failed to create runtime for command execution: {e}")))?;
+        
+        // Execute the actual command asynchronously in the dedicated runtime
+        runtime.block_on(async {
+            use sublime_standard_tools::command::Executor;
+            executor.execute(command).await
+        })
+        .map_err(|e| Error::hook(format!("Command '{cmd_name}' execution failed: {e}")))
+    }
+
+    /// Execute script synchronously using real script execution
+    fn execute_script_sync(
+        &self,
+        executor: sublime_standard_tools::command::DefaultExecutor,
+        command: sublime_standard_tools::command::Command,
+        script_path: &std::path::Path,
+    ) -> Result<sublime_standard_tools::command::CommandOutput> {
+        // Delegate to command execution since it's the same underlying mechanism
+        self.execute_command_sync(executor, command, &script_path.display().to_string())
+    }
+}
+
+impl EventEmitter for HookManager {
+    fn emit_event(&self, event: MonorepoEvent) -> Result<()> {
+        if let Some(_event_bus) = &self.event_bus {
+            // For synchronous hook execution, we skip async event emission to avoid runtime issues
+            // In a full implementation, this would use proper async handling or a background thread pool
+            log::debug!("Event emission skipped in synchronous context: {:?}", event);
+            Ok(())
+        } else {
+            // No event bus configured, skip event emission
+            Ok(())
+        }
+    }
+}
+
+impl EventSubscriber for HookManager {
+    fn subscribe_to_events(&mut self, _event_bus: &mut EventBus) -> Result<()> {
+        // For synchronous hook execution, we skip event subscription to avoid runtime issues
+        // In a full implementation, this would use proper async handling
+        log::debug!("Event subscription skipped in synchronous context");
+        Ok(())
     }
 }
 

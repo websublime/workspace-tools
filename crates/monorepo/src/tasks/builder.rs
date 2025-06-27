@@ -283,6 +283,13 @@ impl TaskExecutionResult {
         }
     }
 
+    /// Set the task status
+    #[must_use]
+    pub fn with_status(mut self, status: TaskStatus) -> Self {
+        self.status = status;
+        self
+    }
+
     /// Mark task as started
     pub fn mark_started(&mut self) {
         self.started_at = SystemTime::now();

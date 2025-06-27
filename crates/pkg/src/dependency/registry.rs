@@ -42,11 +42,10 @@
 
 use super::{resolution::ResolutionResult, update::Update as DependencyUpdate};
 use crate::{
-    package::registry::PackageRegistryClone, Dependency, PackageRegistryError, Version,
-    VersionError,
+    package::registry::PackageRegistryClone, Dependency, errors::{PackageRegistryError, VersionError}, Version,
 };
 use semver::{Version as SemverVersion, VersionReq};
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 /// A registry for managing and reusing dependency instances.
 ///
@@ -106,7 +105,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 #[derive(Clone, Debug)]
 pub struct Registry {
     /// Collection of managed dependencies indexed by name
-    dependencies: HashMap<String, Rc<RefCell<Dependency>>>,
+    dependencies: HashMap<String, Dependency>,
     /// Optional package registry for querying external package sources
     package_registry: Option<Box<dyn PackageRegistryClone>>,
 }
@@ -194,11 +193,11 @@ impl Registry {
     /// Gets an existing dependency or creates a new one.
     ///
     /// If the dependency with the given name already exists in the registry,
-    /// the existing instance is returned. Otherwise, a new dependency is created
-    /// and added to the registry.
+    /// a clone of the existing dependency is returned. Otherwise, a new dependency
+    /// is created and added to the registry.
     ///
     /// If the dependency exists but with a different version requirement,
-    /// the higher version will be used.
+    /// the higher version will be used and the registry will be updated.
     ///
     /// # Arguments
     ///
@@ -207,7 +206,7 @@ impl Registry {
     ///
     /// # Returns
     ///
-    /// A reference-counted cell containing the dependency.
+    /// A cloned `Dependency` instance.
     ///
     /// # Errors
     ///
@@ -217,25 +216,23 @@ impl Registry {
     ///
     /// ```
     /// use sublime_package_tools::DependencyRegistry;
-    /// use std::cell::RefCell;
-    /// use std::rc::Rc;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut registry = DependencyRegistry::new();
     ///
     /// // First call creates a new dependency
     /// let dep1 = registry.get_or_create("react", "^17.0.2")?;
-    /// assert_eq!(dep1.borrow().name(), "react");
-    /// assert_eq!(dep1.borrow().version().to_string(), "^17.0.2");
+    /// assert_eq!(dep1.name(), "react");
+    /// assert_eq!(dep1.version().to_string(), "^17.0.2");
     ///
-    /// // Second call returns the same instance
+    /// // Second call returns a dependency with the same values
     /// let dep2 = registry.get_or_create("react", "^17.0.2")?;
-    /// assert!(Rc::ptr_eq(&dep1, &dep2));
+    /// assert_eq!(dep2.name(), "react");
+    /// assert_eq!(dep2.version().to_string(), "^17.0.2");
     ///
-    /// // With a higher version, the dependency is updated
+    /// // With a higher version, the registry is updated
     /// let dep3 = registry.get_or_create("react", "^18.0.0")?;
-    /// assert!(Rc::ptr_eq(&dep1, &dep3));
-    /// assert_eq!(dep1.borrow().version().to_string(), "^18.0.0");
+    /// assert_eq!(dep3.version().to_string(), "^18.0.0");
     /// # Ok(())
     /// # }
     /// ```
@@ -243,11 +240,9 @@ impl Registry {
         &mut self,
         name: &str,
         version: &str,
-    ) -> Result<Rc<RefCell<Dependency>>, VersionError> {
-        if let Some(dep) = self.dependencies.get(name) {
-            // Update the version if needed - this is important for dependency resolution
-            let dep_borrowed = dep.borrow_mut();
-            let current_version = dep_borrowed.version().to_string();
+    ) -> Result<Dependency, VersionError> {
+        if let Some(existing_dep) = self.dependencies.get_mut(name) {
+            let current_version = existing_dep.version().to_string();
 
             // If the new version requirement is different, update it
             // Note: We might want to keep the higher version when there's a conflict
@@ -261,22 +256,19 @@ impl Registry {
                 {
                     // Update to the higher version
                     if new_ver > curr_ver {
-                        dep_borrowed.update_version(version)?;
+                        existing_dep.update_version(version)?;
                     }
                 } else {
                     // If we can't parse, just update to the new version
-                    dep_borrowed.update_version(version)?;
+                    existing_dep.update_version(version)?;
                 }
             }
 
-            // Drop the mutable borrow before returning
-            drop(dep_borrowed);
-
-            return Ok(Rc::clone(dep));
+            return Ok(existing_dep.clone());
         }
 
-        let dep = Rc::new(RefCell::new(Dependency::new(name, version)?));
-        self.dependencies.insert(name.to_string(), Rc::clone(&dep));
+        let dep = Dependency::new(name, version)?;
+        self.dependencies.insert(name.to_string(), dep.clone());
         Ok(dep)
     }
 
@@ -303,7 +295,7 @@ impl Registry {
     ///
     /// // Retrieve the dependency
     /// if let Some(dep) = registry.get("react") {
-    ///     println!("Found: {}", dep.borrow().name());
+    ///     println!("Found: {}", dep.name());
     /// }
     ///
     /// // Non-existent dependency
@@ -312,7 +304,7 @@ impl Registry {
     /// # }
     /// ```
     #[must_use]
-    pub fn get(&self, name: &str) -> Option<Rc<RefCell<Dependency>>> {
+    pub fn get(&self, name: &str) -> Option<Dependency> {
         self.dependencies.get(name).cloned()
     }
 
@@ -373,13 +365,12 @@ impl Registry {
             HashMap::new();
 
         // Collect all version requirements for each dependency
-        for (name, dep_rc) in &self.dependencies {
-            let dep = dep_rc.borrow();
+        for (name, dep) in &self.dependencies {
             let version_req = dep.version();
             dependency_requirements
                 .entry(name.clone())
                 .or_default()
-                .push((dep.fixed_version()?.to_string(), version_req));
+                .push((dep.fixed_version()?.to_string(), version_req.clone()));
         }
 
         // For each dependency, find the highest available version that satisfies all requirements
@@ -587,8 +578,7 @@ impl Registry {
         }
 
         // Fallback: Check existing dependencies in the registry
-        if let Some(dep_rc) = self.dependencies.get(name) {
-            let dep = dep_rc.borrow();
+        if let Some(dep) = self.dependencies.get(name) {
             let version_str = dep.version().to_string();
 
             // Handle ^ or ~ prefix
@@ -656,7 +646,7 @@ impl Registry {
     ///
     /// // Verify updates
     /// let dep = registry.get("react").unwrap();
-    /// assert_eq!(dep.borrow().version().to_string(), "^17.0.0");
+    /// assert_eq!(dep.version().to_string(), "^17.0.0");
     /// # Ok(())
     /// # }
     /// ```
@@ -665,8 +655,8 @@ impl Registry {
         result: &ResolutionResult,
     ) -> Result<(), VersionError> {
         for update in &result.updates_required {
-            if let Some(dep_rc) = self.dependencies.get(&update.dependency_name) {
-                dep_rc.borrow_mut().update_version(&update.new_version)?;
+            if let Some(dep) = self.dependencies.get_mut(&update.dependency_name) {
+                dep.update_version(&update.new_version)?;
             }
         }
         Ok(())

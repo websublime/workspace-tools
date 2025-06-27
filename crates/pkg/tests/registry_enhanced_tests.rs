@@ -25,8 +25,8 @@ fn test_dependency_registry_with_local_registry() {
 
     // Test basic functionality
     let react_dep = registry.get_or_create("react", "^17.0.0").unwrap();
-    assert_eq!(react_dep.borrow().name(), "react");
-    assert_eq!(react_dep.borrow().version().to_string(), "^17.0.0");
+    assert_eq!(react_dep.name(), "react");
+    assert_eq!(react_dep.version().to_string(), "^17.0.0");
 
     // Test package registry capabilities
     assert!(registry.has_package_registry());
@@ -69,7 +69,7 @@ fn test_dependency_registry_without_package_registry() {
 
     // Create a dependency
     let react_dep = registry.get_or_create("react", "^17.0.2").unwrap();
-    assert_eq!(react_dep.borrow().name(), "react");
+    assert_eq!(react_dep.name(), "react");
 
     // Test that get_package_versions returns empty for non-configured registry
     let versions = registry.get_package_versions("react").unwrap();
@@ -143,7 +143,7 @@ fn test_version_conflict_resolution_with_registry() {
 
     // Test that the registry updated to the higher version
     let react_dep = registry.get("react").unwrap();
-    assert_eq!(react_dep.borrow().version().to_string(), "^17.0.2");
+    assert_eq!(react_dep.version().to_string(), "^17.0.2");
 
     // Test resolution using package registry
     let resolution_result = registry.resolve_version_conflicts().unwrap();

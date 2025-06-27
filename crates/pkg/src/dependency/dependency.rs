@@ -3,8 +3,7 @@
 //! This module provides functionality for working with Node.js package dependencies.
 //!
 //! The main structure is `Dependency`, which represents a package dependency with
-//! semantic versioning requirements. Dependencies are often used with `Rc<RefCell<>>` to
-//! allow sharing and mutation across package structures.
+//! semantic versioning requirements.
 //!
 //! ## Key Features
 //!
@@ -29,27 +28,22 @@
 //! let fixed = dep.fixed_version()?;
 //! assert_eq!(fixed.to_string(), "17.0.2");
 //!
-//! // Update version
-//! dep.update_version("^18.0.0")?;
+//! // Create new dependency with updated version
+//! let updated_dep = dep.with_version("^18.0.0")?;
 //! # Ok(())
 //! # }
 //! ```
 
-use crate::VersionError;
+use crate::errors::VersionError;
 use semver::{Version, VersionReq};
-use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::rc::Rc;
 
 /// Represents a package dependency with name and version requirements.
 ///
 /// A dependency consists of:
 /// - A name identifier (e.g., "react", "lodash")
 /// - A version requirement (e.g., "^17.0.2", "~4.17.21")
-///
-/// The version is stored in a `Rc<RefCell<>>` to allow shared references
-/// and updates when resolving dependency conflicts.
 ///
 /// # Examples
 ///
@@ -67,11 +61,15 @@ use std::rc::Rc;
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Dependency {
     pub(crate) name: String,
-    pub(crate) version: Rc<RefCell<VersionReq>>,
+    pub(crate) version: VersionReq,
 }
+
+// Note: Dependency cannot implement Copy because it contains String and VersionReq,
+// which are not Copy types. This is by design to maintain ownership semantics
+// and avoid unnecessary restrictions on the API.
 
 impl Display for Dependency {
     /// Formats a dependency as "name@version"
@@ -88,7 +86,7 @@ impl Display for Dependency {
     /// # }
     /// ```
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "{}@{}", self.name, self.version.borrow())
+        write!(f, "{}@{}", self.name, self.version)
     }
 }
 
@@ -134,8 +132,8 @@ impl Dependency {
             )));
         };
 
-        let version_req = VersionReq::parse(version).map_err(VersionError::from)?;
-        Ok(Self { name: name.to_string(), version: Rc::new(RefCell::new(version_req)) })
+        let version_req = VersionReq::parse(version)?;
+        Ok(Self { name: name.to_string(), version: version_req })
     }
 
     /// Returns the name of the dependency.
@@ -166,14 +164,14 @@ impl Dependency {
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let dep = Dependency::new("react", "^17.0.2")?;
-    /// let req: VersionReq = dep.version();
+    /// let req: &VersionReq = dep.version();
     /// assert_eq!(req.to_string(), "^17.0.2");
     /// # Ok(())
     /// # }
     /// ```
     #[must_use]
-    pub fn version(&self) -> VersionReq {
-        self.version.borrow().clone()
+    pub fn version(&self) -> &VersionReq {
+        &self.version
     }
 
     /// Extracts the fixed version from the version requirement.
@@ -204,11 +202,11 @@ impl Dependency {
     /// # }
     /// ```
     pub fn fixed_version(&self) -> Result<Version, VersionError> {
-        let req_str = self.version.borrow().to_string();
+        let req_str = self.version.to_string();
         // Remove operators and parse
         let clean_version = req_str.trim_start_matches(|c| "^~=".contains(c)).trim();
 
-        Version::parse(clean_version).map_err(VersionError::from)
+        Ok(Version::parse(clean_version)?)
     }
 
     /// Compares the dependency's version with another version string.
@@ -250,7 +248,7 @@ impl Dependency {
         Ok(self_version.cmp(&other_version))
     }
 
-    /// Updates the version requirement to a new value.
+    /// Creates a new dependency with an updated version requirement.
     ///
     /// # Arguments
     ///
@@ -258,7 +256,7 @@ impl Dependency {
     ///
     /// # Returns
     ///
-    /// `Ok(())` if successful, or an error if the new version is invalid.
+    /// A new `Dependency` instance with the updated version, or an error if the new version is invalid.
     ///
     /// # Errors
     ///
@@ -274,22 +272,24 @@ impl Dependency {
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let dep = Dependency::new("react", "^16.0.0")?;
     ///
-    /// // Update to a newer version
-    /// dep.update_version("^17.0.0")?;
-    /// assert_eq!(dep.version().to_string(), "^17.0.0");
+    /// // Create a new dependency with updated version
+    /// let updated_dep = dep.with_version("^17.0.0")?;
+    /// assert_eq!(updated_dep.version().to_string(), "^17.0.0");
     /// # Ok(())
     /// # }
     /// ```
-    pub fn update_version(&self, new_version: &str) -> Result<(), VersionError> {
+    pub fn with_version(&self, new_version: &str) -> Result<Self, VersionError> {
         if new_version.starts_with('*') | new_version.contains("workspace:*") {
             return Err(VersionError::InvalidVersion(format!(
                 "Looks like you are trying to update a internal package: {new_version}"
             )));
         };
 
-        let new_req = VersionReq::parse(new_version).map_err(VersionError::from)?;
-        *self.version.borrow_mut() = new_req;
-        Ok(())
+        let new_req = VersionReq::parse(new_version)?;
+        Ok(Self {
+            name: self.name.clone(),
+            version: new_req,
+        })
     }
 
     /// Checks if a specific version matches this dependency's requirements.
@@ -321,8 +321,39 @@ impl Dependency {
     /// # }
     /// ```
     pub fn matches(&self, version: &str) -> Result<bool, VersionError> {
-        let version = Version::parse(version).map_err(VersionError::from)?;
+        let version = Version::parse(version)?;
 
-        Ok(self.version.borrow().matches(&version))
+        Ok(self.version.matches(&version))
     }
+
+    /// Updates the version requirement in place.
+    ///
+    /// Note: This method mutates the dependency and should be avoided in favor of
+    /// `with_version` for new code. It exists for backward compatibility.
+    ///
+    /// # Arguments
+    ///
+    /// * `new_version` - The new version requirement string
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if the new version is invalid.
+    ///
+    /// # Errors
+    ///
+    /// Returns `VersionError::InvalidVersion` if:
+    /// - The version string contains `*` or `workspace:*` (internal dependency markers)
+    /// - The version string cannot be parsed as a valid semver requirement
+    pub fn update_version(&mut self, new_version: &str) -> Result<(), VersionError> {
+        if new_version.starts_with('*') | new_version.contains("workspace:*") {
+            return Err(VersionError::InvalidVersion(format!(
+                "Looks like you are trying to update a internal package: {new_version}"
+            )));
+        };
+
+        let new_req = VersionReq::parse(new_version)?;
+        self.version = new_req;
+        Ok(())
+    }
+
 }

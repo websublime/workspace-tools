@@ -9,7 +9,7 @@
 //! to read, modify, and write package.json files while preserving formatting
 //! and non-standard fields.
 
-use crate::{DependencyResolutionError, Package, PackageError, ResolutionResult, VersionError};
+use crate::{errors::{DependencyResolutionError, PackageError, VersionError}, Package, ResolutionResult};
 use serde_json::Value;
 use std::{cell::RefCell, rc::Rc};
 
@@ -227,7 +227,7 @@ impl Info {
         // First, modify the package dependency separately from JSON
         {
             let update_result =
-                self.package.borrow().update_dependency_version(dep_name, new_version);
+                self.package.borrow_mut().update_dependency_version(dep_name, new_version);
             if let Err(DependencyResolutionError::DependencyNotFound { .. }) = update_result {
                 // If not found in regular dependencies, that's ok - it might be in devDependencies only
             } else if let Err(e) = update_result {
@@ -259,7 +259,7 @@ impl Info {
 
         // If we didn't update JSON but also didn't find it in package, it's a genuine "not found"
         if !json_updated
-            && self.package.borrow().update_dependency_version(dep_name, new_version).is_err()
+            && self.package.borrow_mut().update_dependency_version(dep_name, new_version).is_err()
         {
             return Err(DependencyResolutionError::DependencyNotFound {
                 name: dep_name.to_string(),
@@ -319,7 +319,7 @@ impl Info {
         resolution: &ResolutionResult,
     ) -> Result<(), VersionError> {
         // First, update the package's dependencies (handles regular dependencies)
-        let _ = { self.package.borrow().update_dependencies_from_resolution(resolution)? }; // Package borrow is dropped here
+        let _ = { self.package.borrow_mut().update_dependencies_from_resolution(resolution)? }; // Package borrow is dropped here
 
         // Now update package.json for both dependencies and devDependencies
         if let Some(pkg_json_obj) = self.pkg_json.borrow_mut().as_object_mut() {

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Type of changes in a package
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PackageChangeType {
     /// Source code changes
     SourceCode,

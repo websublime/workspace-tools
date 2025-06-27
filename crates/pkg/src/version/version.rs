@@ -41,7 +41,7 @@
 //! # }
 //! ```
 
-use crate::VersionError;
+use crate::errors::VersionError;
 use semver::{BuildMetadata, Prerelease, Version as SemVersion};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter, Result as FmtResult};

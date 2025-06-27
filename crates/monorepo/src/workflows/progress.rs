@@ -1,6 +1,6 @@
 //! Implementation of workflow status and progress types
 
-use super::types::{WorkflowProgress, WorkflowStatus, WorkflowStep};
+use super::types::{WorkflowProgress, WorkflowStatus, WorkflowStep, SubStep};
 
 impl WorkflowProgress {
     /// Create a new workflow progress tracker
@@ -46,6 +46,7 @@ impl WorkflowProgress {
             started_at: Some(chrono::Utc::now()),
             finished_at: None,
             error_message: None,
+            substeps: Vec::new(),
         };
         self.steps.push(step);
 
@@ -151,12 +152,105 @@ impl WorkflowProgress {
     }
 
     /// Add a substep to the current step
+    ///
+    /// This method adds a new substep to the currently running workflow step.
+    /// Substeps provide fine-grained progress tracking within major workflow steps.
+    ///
+    /// # Arguments
+    ///
+    /// * `description` - Description of the substep being performed
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_monorepo_tools::workflows::WorkflowProgress;
+    ///
+    /// let mut progress = WorkflowProgress::new(3, "Release workflow".to_string());
+    /// progress.advance_step("Building packages".to_string());
+    /// progress.add_substep("Compiling TypeScript".to_string());
+    /// progress.add_substep("Running tests".to_string());
+    /// progress.add_substep("Creating bundles".to_string());
+    /// ```
     pub fn add_substep(&mut self, description: String) {
-        // For now, just update the current step description
-        // In a more complex implementation, we could track substeps
-        if let Some(step) = self.steps.last_mut() {
-            step.description = format!("{}: {}", step.description, description);
+        if let Some(current_step) = self.steps.last_mut() {
+            // Only add substeps to running steps
+            if matches!(current_step.status, WorkflowStatus::Running) {
+                let substep = SubStep {
+                    description: description.clone(),
+                    timestamp: chrono::Utc::now(),
+                    completed: false,
+                };
+                current_step.substeps.push(substep);
+                
+                log::debug!(
+                    "Added substep '{}' to step '{}' (total substeps: {})",
+                    description,
+                    current_step.name,
+                    current_step.substeps.len()
+                );
+            } else {
+                log::warn!(
+                    "Cannot add substep '{}' to step '{}' - step is not running (status: {:?})",
+                    description,
+                    current_step.name,
+                    current_step.status
+                );
+            }
+        } else {
+            log::warn!("Cannot add substep '{}' - no current step available", description);
         }
-        self.current_step_description = description;
+        
+        // Update the current step description to reflect the latest substep
+        self.current_step_description = format!("{}: {}", self.current_step_description, description);
+    }
+
+    /// Mark the current substep as completed
+    ///
+    /// This method marks the most recently added substep as completed.
+    /// Useful for tracking which substeps within a workflow step are finished.
+    pub fn complete_current_substep(&mut self) {
+        if let Some(current_step) = self.steps.last_mut() {
+            if let Some(last_substep) = current_step.substeps.last_mut() {
+                if !last_substep.completed {
+                    last_substep.completed = true;
+                    log::debug!(
+                        "Marked substep '{}' as completed in step '{}'",
+                        last_substep.description,
+                        current_step.name
+                    );
+                }
+            }
+        }
+    }
+
+    /// Get the number of completed substeps for the current step
+    #[must_use]
+    pub fn current_step_completed_substeps(&self) -> usize {
+        self.steps
+            .last()
+            .map(|step| step.substeps.iter().filter(|substep| substep.completed).count())
+            .unwrap_or(0)
+    }
+
+    /// Get the total number of substeps for the current step
+    #[must_use]
+    pub fn current_step_total_substeps(&self) -> usize {
+        self.steps
+            .last()
+            .map(|step| step.substeps.len())
+            .unwrap_or(0)
+    }
+
+    /// Get substep completion percentage for the current step (0.0 to 100.0)
+    #[allow(clippy::cast_precision_loss)]
+    #[must_use]
+    pub fn current_step_substep_percentage(&self) -> f64 {
+        let total = self.current_step_total_substeps();
+        if total == 0 {
+            return 100.0;
+        }
+        
+        let completed = self.current_step_completed_substeps();
+        (completed as f64 / total as f64) * 100.0
     }
 }

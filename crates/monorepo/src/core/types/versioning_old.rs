@@ -63,4 +63,8 @@ pub enum ConflictType {
     DependencyMismatch,
     /// Circular dependency detected
     CircularDependency,
+    /// Incompatible versions between packages
+    IncompatibleVersions,
+    /// Invalid version format detected
+    InvalidVersionFormat,
 }

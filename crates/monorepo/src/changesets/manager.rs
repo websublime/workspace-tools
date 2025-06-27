@@ -4,10 +4,7 @@
 //! changesets in the monorepo. It integrates with the storage system, Git repository,
 //! and task execution to provide a complete changeset workflow.
 
-use std::sync::Arc;
-
 use chrono::Utc;
-use sublime_standard_tools::filesystem::FileSystem;
 use uuid::Uuid;
 
 use super::types::{
@@ -16,17 +13,48 @@ use super::types::{
     ChangesetManager, ChangesetStorage,
 };
 use crate::config::types::Environment;
-use crate::core::MonorepoProject;
 use crate::error::Error;
 use crate::tasks::TaskManager;
 use crate::VersionBumpType;
 
 
 impl ChangesetManager {
-    /// Creates a new changeset manager
+    /// Creates a new changeset manager with injected dependencies
     ///
     /// This is a synchronous operation as it only initializes local structures
     /// and does not perform any I/O operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `storage` - Changeset storage for persistence
+    /// * `task_manager` - Task manager for executing deployment tasks
+    /// * `config_provider` - Configuration provider for accessing settings
+    /// * `file_system_provider` - File system provider for file operations
+    /// * `package_provider` - Package provider for accessing package information
+    /// * `git_provider` - Git provider for repository operations
+    ///
+    /// # Returns
+    ///
+    /// A new `ChangesetManager` instance.
+    pub fn new(
+        storage: ChangesetStorage,
+        task_manager: TaskManager,
+        config_provider: Box<dyn crate::core::ConfigProvider>,
+        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+        package_provider: Box<dyn crate::core::PackageProvider>,
+        git_provider: Box<dyn crate::core::GitProvider>,
+    ) -> Self {
+        Self { 
+            storage, 
+            task_manager,
+            config_provider,
+            file_system_provider,
+            package_provider,
+            git_provider,
+        }
+    }
+
+    /// Creates a new changeset manager from project (convenience method)
     ///
     /// # Arguments
     ///
@@ -39,22 +67,20 @@ impl ChangesetManager {
     /// # Errors
     ///
     /// Returns an error if the manager cannot be initialized.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use std::sync::Arc;
-    /// use sublime_monorepo_tools::{ChangesetManager, MonorepoProject};
-    ///
-    /// let project = Arc::new(MonorepoProject::new("/path/to/monorepo")?);
-    /// let manager = ChangesetManager::new(project)?;
-    /// ```
-    pub fn new(project: Arc<MonorepoProject>) -> Result<Self, Error> {
-        let storage = ChangesetStorage::new(Arc::clone(&project));
+    pub fn from_project(project: std::sync::Arc<crate::core::MonorepoProject>) -> Result<Self, Error> {
+        use crate::core::interfaces::DependencyFactory;
+        
+        let storage = ChangesetStorage::from_project(std::sync::Arc::clone(&project));
+        let task_manager = TaskManager::from_project(std::sync::Arc::clone(&project))?;
 
-        let task_manager = TaskManager::new(Arc::clone(&project))?;
-
-        Ok(Self { project, storage, task_manager })
+        Ok(Self::new(
+            storage,
+            task_manager,
+            DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
+            DependencyFactory::file_system_provider(std::sync::Arc::clone(&project)),
+            DependencyFactory::package_provider(std::sync::Arc::clone(&project)),
+            DependencyFactory::git_provider(project),
+        ))
     }
 
     /// Creates a new changeset with the specified parameters
@@ -100,9 +126,8 @@ impl ChangesetManager {
 
         // Get current branch
         let branch = self
-            .project
-            .repository
-            .get_current_branch()
+            .git_provider
+            .current_branch()
             .map_err(|e| Error::changeset(format!("Failed to get current branch: {e}")))?;
 
         // Determine author
@@ -185,7 +210,7 @@ impl ChangesetManager {
             package: package_name,
             version_bump: VersionBumpType::Patch, // Default to patch
             description: "Interactive changeset".to_string(),
-            development_environments: self.project.config.changesets.default_environments.clone(),
+            development_environments: self.config_provider.config().changesets.default_environments.clone(),
             production_deployment: false,
             author: None,
         };
@@ -313,7 +338,7 @@ impl ChangesetManager {
             errors.push("Package name cannot be empty".to_string());
         } else {
             // Check if package actually exists in the project
-            if self.project.get_package(&changeset.package).is_none() {
+            if self.package_provider.get_package(&changeset.package).is_none() {
                 errors.push(format!("Package '{}' not found in project", changeset.package));
             } else {
                 // Validate version bump is appropriate
@@ -341,7 +366,7 @@ impl ChangesetManager {
         }
 
         for env in &changeset.development_environments {
-            if !self.project.config.environments.contains(env) {
+            if !self.config_provider.config().environments.contains(env) {
                 warnings
                     .push(format!("Environment {env} is not configured in project environments"));
             }
@@ -351,17 +376,17 @@ impl ChangesetManager {
         if changeset.branch.is_empty() {
             errors.push("Branch name cannot be empty".to_string());
         } else {
-            // Check if branch follows naming conventions
-            let valid_prefixes =
-                ["feature/", "fix/", "feat/", "bugfix/", "hotfix/", "release/", "chore/"];
+            // Check if branch follows naming conventions using configured prefixes
+            let branch_config = &self.config_provider.config().git.branches;
+            let valid_prefixes = branch_config.get_all_valid_prefixes();
             let has_valid_prefix =
                 valid_prefixes.iter().any(|prefix| changeset.branch.starts_with(prefix));
 
-            let branch_config = &self.project.config.git.branches;
             if !has_valid_prefix && !branch_config.is_protected_branch(&changeset.branch) {
                 warnings.push(format!(
-                    "Branch '{}' doesn't follow conventional naming (feature/, fix/, etc.)",
-                    changeset.branch
+                    "Branch '{}' doesn't follow conventional naming ({})",
+                    changeset.branch,
+                    valid_prefixes.join(", ")
                 ));
             }
         }
@@ -567,14 +592,14 @@ impl ChangesetManager {
     fn read_package_version(&self, package: &str) -> Result<String, Error> {
         // Get package information
         let package_info = self
-            .project
+            .package_provider
             .get_package(package)
             .ok_or_else(|| Error::changeset(format!("Package not found: {package}")))?;
 
         // Read package.json
         let package_json_path = package_info.path().join("package.json");
         let content =
-            self.project.file_system.read_file_string(&package_json_path).map_err(|e| {
+            self.file_system_provider.read_file_string(&package_json_path).map_err(|e| {
                 Error::changeset(format!("Failed to read package.json for {package}: {e}"))
             })?;
 
@@ -595,14 +620,14 @@ impl ChangesetManager {
         let mut dependents = Vec::new();
 
         // Check all packages in the project
-        for pkg in &self.project.packages {
+        for pkg in self.package_provider.packages() {
             if pkg.name() == package {
                 continue; // Skip self
             }
 
             // Read package.json to check dependencies
             let package_json_path = pkg.path().join("package.json");
-            if let Ok(content) = self.project.file_system.read_file_string(&package_json_path) {
+            if let Ok(content) = self.file_system_provider.read_file_string(&package_json_path) {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                     // Check dependencies, devDependencies, and peerDependencies
                     let dep_sections = ["dependencies", "devDependencies", "peerDependencies"];
@@ -625,7 +650,7 @@ impl ChangesetManager {
     /// Gets the Git author from configuration
     fn get_author_from_git_config(&self) -> String {
         // Get git configuration from repository
-        match self.project.repository.list_config() {
+        match self.git_provider.repository().list_config() {
             Ok(config) => {
                 let email = config
                     .get("user.email")
@@ -651,8 +676,8 @@ impl ChangesetManager {
     fn detect_affected_package(&self) -> Result<String, Error> {
         // Get staged files to determine affected packages
         let staged_files = self
-            .project
-            .repository
+            .git_provider
+            .repository()
             .get_staged_files()
             .map_err(|e| Error::changeset(format!("Failed to get staged files: {e}")))?;
 
@@ -667,10 +692,16 @@ impl ChangesetManager {
             std::collections::HashMap::new();
 
         for file_path in &staged_files {
-            let full_path = self.project.root_path().join(file_path);
+            let full_path = self.package_provider.root_path().join(file_path);
 
-            if let Some(package) = self.project.descriptor.find_package_for_path(&full_path) {
-                *package_file_counts.entry(package.name.clone()).or_insert(0) += 1;
+            // Find package that contains this file path
+            for package in self.package_provider.packages() {
+                let package_path = package.workspace_package.absolute_path.as_path();
+                if full_path.starts_with(package_path) {
+                    let package_name = package.name().to_string();
+                    *package_file_counts.entry(package_name).or_insert(0) += 1;
+                    break; // Found the package, no need to continue
+                }
             }
         }
 
@@ -767,14 +798,14 @@ impl ChangesetManager {
     fn update_package_version(&self, package: &str, new_version: &str) -> Result<(), Error> {
         // Get package information
         let package_info = self
-            .project
+            .package_provider
             .get_package(package)
             .ok_or_else(|| Error::changeset(format!("Package not found: {package}")))?;
 
         // Read package.json
         let package_json_path = package_info.path().join("package.json");
         let content =
-            self.project.file_system.read_file_string(&package_json_path).map_err(|e| {
+            self.file_system_provider.read_file_string(&package_json_path).map_err(|e| {
                 Error::changeset(format!("Failed to read package.json for {package}: {e}"))
             })?;
 
@@ -790,9 +821,8 @@ impl ChangesetManager {
             Error::changeset(format!("Failed to serialize updated package.json: {e}"))
         })?;
 
-        self.project
-            .file_system
-            .write_file(&package_json_path, updated_content.as_bytes())
+        self.file_system_provider
+            .write_file_string(&package_json_path, &updated_content)
             .map_err(|e| {
                 Error::changeset(format!("Failed to write updated package.json for {package}: {e}"))
             })?;
@@ -808,14 +838,14 @@ impl ChangesetManager {
         new_version: &str,
     ) -> Result<(), Error> {
         // Get package information
-        let package_info = self.project.get_package(dependent_package).ok_or_else(|| {
+        let package_info = self.package_provider.get_package(dependent_package).ok_or_else(|| {
             Error::changeset(format!("Dependent package not found: {dependent_package}"))
         })?;
 
         // Read package.json
         let package_json_path = package_info.path().join("package.json");
         let content =
-            self.project.file_system.read_file_string(&package_json_path).map_err(|e| {
+            self.file_system_provider.read_file_string(&package_json_path).map_err(|e| {
                 Error::changeset(format!(
                     "Failed to read package.json for {dependent_package}: {e}"
                 ))
@@ -845,9 +875,8 @@ impl ChangesetManager {
                 Error::changeset(format!("Failed to serialize updated package.json: {e}"))
             })?;
 
-            self.project
-                .file_system
-                .write_file(&package_json_path, updated_content.as_bytes())
+            self.file_system_provider
+                .write_file_string(&package_json_path, &updated_content)
                 .map_err(|e| {
                     Error::changeset(format!(
                         "Failed to write updated package.json for {dependent_package}: {e}"
@@ -918,7 +947,7 @@ impl ChangesetManager {
         environment: &Environment,
     ) -> Result<Vec<String>, Error> {
         // Check if deployment tasks are configured for this environment in the project config
-        let env_tasks = self.project.config.tasks.deployment_tasks.get(environment);
+        let env_tasks = self.config_provider.config().tasks.deployment_tasks.get(environment);
 
         if let Some(configured_tasks) = env_tasks {
             // Use configured tasks for this environment

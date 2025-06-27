@@ -17,6 +17,7 @@ sublime_node_tools = { version = "0.1.0", path = "./crates/node" }
 sublime_git_tools = { version = "0.1.0", path = "./crates/git" }
 sublime_package_tools = { version = "0.1.0", path = "./crates/pkg" }
 sublime_monorepo_tools = { version = "0.1.0", path = "./crates/monorepo" }
+sublime_monorepo_cli = { version = "0.1.0", path = "./crates/cli" }
 
 # Core dependencies
 async-trait = "0.1.74"

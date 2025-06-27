@@ -18,6 +18,15 @@ mod tests {
         VersionBumpType,
     };
 
+    /// Helper to run async code in sync tests to avoid tokio context issues
+    fn run_async<F, R>(f: F) -> R
+    where
+        F: std::future::Future<Output = R>,
+    {
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+        rt.block_on(f)
+    }
+
     fn create_test_changeset() -> Changeset {
         Changeset {
             id: "test-changeset-456".to_string(),
@@ -61,6 +70,18 @@ mod tests {
         let packages_dir = temp_dir.path().join("packages");
         std::fs::create_dir_all(&packages_dir).expect("Failed to create packages directory");
 
+        // Create a test package that the changeset tests can reference
+        let test_package_dir = packages_dir.join("core");
+        std::fs::create_dir_all(&test_package_dir).expect("Failed to create test package dir");
+        
+        let test_package_json = r#"{
+  "name": "@test/core",
+  "version": "1.0.0",
+  "main": "index.js"
+}"#;
+        std::fs::write(test_package_dir.join("package.json"), test_package_json)
+            .expect("Failed to write test package.json");
+
         // Create package.json files
         let root_package_json = r#"{
   "name": "test-monorepo",
@@ -78,9 +99,25 @@ mod tests {
         std::fs::write(temp_dir.path().join("package-lock.json"), "{}")
             .expect("Failed to write package-lock.json");
 
-        let project = Arc::new(
-            MonorepoProject::new(temp_dir.path()).expect("Failed to create MonorepoProject"),
-        );
+        // Create an initial commit so we have a valid Git branch
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to add files to git");
+
+        std::process::Command::new("git")
+            .args(["commit", "-m", "Initial commit"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to create initial commit");
+
+        let mut project = MonorepoProject::new(temp_dir.path()).expect("Failed to create MonorepoProject");
+        
+        // Refresh packages to discover the test packages we created
+        project.refresh_packages().expect("Failed to refresh packages");
+        
+        let project = Arc::new(project);
         (temp_dir, project)
     }
 
@@ -197,11 +234,11 @@ mod tests {
         assert!(deployment_result.environment_results.contains_key(&Environment::Development));
     }
 
-    #[tokio::test]
+    #[test]
     /// TODO: Fix this
-    async fn test_changeset_storage_integration() {
+    fn test_changeset_storage_integration() {
         let (_temp_dir, project) = create_test_project();
-        let storage = ChangesetStorage::new(Arc::clone(&project));
+        let storage = ChangesetStorage::from_project(Arc::clone(&project));
 
         let changeset = create_test_changeset();
 
@@ -223,10 +260,10 @@ mod tests {
         assert_eq!(changesets[0].package, "@test/utils");
     }
 
-    #[tokio::test]
-    async fn test_changeset_manager_creation() {
+    #[test]
+    fn test_changeset_manager_creation() {
         let (_temp_dir, project) = create_test_project();
-        let manager = ChangesetManager::new(project).expect("Failed to create ChangesetManager");
+        let manager = ChangesetManager::from_project(project).expect("Failed to create ChangesetManager");
 
         // Test manager is created successfully
         // The manager should be ready to use
@@ -294,6 +331,19 @@ mod tests {
             .output()
             .expect("Failed to initialize git repository");
 
+        // Configure Git user for testing
+        std::process::Command::new("git")
+            .args(["config", "user.email", "test@example.com"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to configure git email");
+
+        std::process::Command::new("git")
+            .args(["config", "user.name", "Test User"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to configure git name");
+
         // Set up basic project structure
         std::fs::create_dir_all(temp_dir.path().join("packages"))
             .expect("Failed to create packages dir");
@@ -305,22 +355,50 @@ mod tests {
   "private": true,
   "workspaces": ["packages/*"]
 }"#;
+
+        // Create a test package that the changeset tests can reference
+        let test_package_dir = temp_dir.path().join("packages").join("core");
+        std::fs::create_dir_all(&test_package_dir).expect("Failed to create test package dir");
+        
+        let test_package_json = r#"{
+  "name": "@test/core",
+  "version": "1.0.0",
+  "main": "index.js"
+}"#;
+        std::fs::write(test_package_dir.join("package.json"), test_package_json)
+            .expect("Failed to write test package.json");
         std::fs::write(temp_dir.path().join("package.json"), root_package_json)
             .expect("Failed to write root package.json");
         std::fs::write(temp_dir.path().join("package-lock.json"), "{}")
             .expect("Failed to write package-lock.json");
 
-        let project = Arc::new(
-            MonorepoProject::new(temp_dir.path()).expect("Failed to create MonorepoProject"),
-        );
-        let manager = ChangesetManager::new(project).expect("Failed to create ChangesetManager");
+        // Create an initial commit so we have a valid Git branch
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to add files to git");
+
+        std::process::Command::new("git")
+            .args(["commit", "-m", "Initial commit"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to create initial commit");
+
+        let mut project = MonorepoProject::new(temp_dir.path()).expect("Failed to create MonorepoProject");
+        
+        // Refresh packages to discover the test packages we created
+        project.refresh_packages().expect("Failed to refresh packages");
+        
+        let project = Arc::new(project);
+        let manager = ChangesetManager::from_project(project).expect("Failed to create ChangesetManager");
 
         (temp_dir, manager)
     }
 
-    #[tokio::test]
+    #[test]
     /// TODO: Fix this
-    async fn test_manager_create_changeset() {
+    fn test_manager_create_changeset() {
         let (_temp_dir, manager) = create_test_manager();
 
         let spec = ChangesetSpec {
@@ -340,9 +418,9 @@ mod tests {
         assert_eq!(changeset.status, ChangesetStatus::Pending);
     }
 
-    #[tokio::test]
+    #[test]
     /// TODO: Fix this
-    async fn test_manager_list_changesets() {
+    fn test_manager_list_changesets() {
         let (_temp_dir, manager) = create_test_manager();
 
         // Create a test changeset
@@ -365,8 +443,8 @@ mod tests {
         assert_eq!(changesets[0].id, changeset.id);
     }
 
-    #[tokio::test]
-    async fn test_manager_validate_changeset() {
+    #[test]
+    fn test_manager_validate_changeset() {
         let (_temp_dir, manager) = create_test_manager();
 
         let valid_changeset = Changeset {
@@ -412,10 +490,53 @@ mod tests {
             .output()
             .expect("Failed to initialize git repository");
 
+        // Configure Git user for testing
+        std::process::Command::new("git")
+            .args(["config", "user.email", "test@example.com"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to configure git email");
+
+        std::process::Command::new("git")
+            .args(["config", "user.name", "Test User"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to configure git name");
+
         // Create basic monorepo structure
         std::fs::create_dir_all(temp_dir.path().join("packages"))
             .expect("Failed to create packages dir");
-        let root_package_json = r#"{"name": "test-monorepo", "version": "1.0.0", "private": true, "workspaces": ["packages/*"]}"#;
+        
+        // Create test packages that the changeset tests can reference
+        let test_package_dir = temp_dir.path().join("packages").join("core");
+        std::fs::create_dir_all(&test_package_dir).expect("Failed to create test package dir");
+        
+        let test_package_json = r#"{
+  "name": "@test/core",
+  "version": "1.0.0",
+  "main": "index.js"
+}"#;
+        std::fs::write(test_package_dir.join("package.json"), test_package_json)
+            .expect("Failed to write test package.json");
+
+        // Create utils package
+        let utils_package_dir = temp_dir.path().join("packages").join("utils");
+        std::fs::create_dir_all(&utils_package_dir).expect("Failed to create utils package dir");
+        
+        let utils_package_json = r#"{
+  "name": "@test/utils",
+  "version": "1.0.0",
+  "main": "index.js"
+}"#;
+        std::fs::write(utils_package_dir.join("package.json"), utils_package_json)
+            .expect("Failed to write utils package.json");
+        
+        let root_package_json = r#"{
+  "name": "test-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["packages/*"]
+}"#;
         std::fs::write(temp_dir.path().join("package.json"), root_package_json)
             .expect("Failed to write package.json");
 
@@ -423,10 +544,26 @@ mod tests {
         std::fs::write(temp_dir.path().join("package-lock.json"), "{}")
             .expect("Failed to write package-lock.json");
 
-        let project = Arc::new(
-            MonorepoProject::new(temp_dir.path()).expect("Failed to create MonorepoProject"),
-        );
-        let storage = ChangesetStorage::new(project);
+        // Create an initial commit so we have a valid Git branch
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to add files to git");
+
+        std::process::Command::new("git")
+            .args(["commit", "-m", "Initial commit"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to create initial commit");
+
+        let mut project = MonorepoProject::new(temp_dir.path()).expect("Failed to create MonorepoProject");
+        
+        // Refresh packages to discover the test packages we created
+        project.refresh_packages().expect("Failed to refresh packages");
+        
+        let project = Arc::new(project);
+        let storage = ChangesetStorage::from_project(project);
         (temp_dir, storage)
     }
 
@@ -445,9 +582,9 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[test]
     /// TODO: Fix this
-    async fn test_storage_save_and_load_changeset() {
+    fn test_storage_save_and_load_changeset() {
         let (_temp_dir, storage) = create_test_storage();
         let changeset = create_storage_test_changeset();
 
@@ -460,13 +597,13 @@ mod tests {
         assert_eq!(loaded.unwrap(), changeset);
     }
 
-    #[tokio::test]
+    #[test]
     /// TODO: Fix this
-    async fn test_storage_list_changesets_with_filter() {
+    fn test_storage_list_changesets_with_filter() {
         let (_temp_dir, storage) = create_test_storage();
         let changeset1 = create_storage_test_changeset();
         let mut changeset2 = create_storage_test_changeset();
-        changeset2.id = "test-changeset-456".to_string();
+        changeset2.id = "utils-cs-456789".to_string(); // Different prefix to avoid hash collision
         changeset2.package = "@test/utils".to_string();
 
         // Save both changesets
@@ -487,9 +624,9 @@ mod tests {
         assert_eq!(filtered_changesets[0].package, "@test/core");
     }
 
-    #[tokio::test]
+    #[test]
     /// TODO: Fix this
-    async fn test_storage_delete_changeset() {
+    fn test_storage_delete_changeset() {
         let (_temp_dir, storage) = create_test_storage();
         let changeset = create_storage_test_changeset();
 

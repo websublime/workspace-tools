@@ -1,8 +1,6 @@
 //! Changeset hook integration workflow type definitions
 
 use crate::changesets::ChangesetManager;
-use crate::core::MonorepoProject;
-use std::sync::Arc;
 
 /// Handles integration between changesets and Git hooks
 ///
@@ -21,9 +19,6 @@ use std::sync::Arc;
 /// Git operations and provides seamless integration between the changeset
 /// system and Git hooks.
 pub struct ChangesetHookIntegration {
-    /// Reference to the monorepo project
-    pub(crate) project: Arc<MonorepoProject>,
-
     /// Changeset manager for changeset operations
     pub(crate) changeset_manager: ChangesetManager,
 
@@ -32,4 +27,16 @@ pub struct ChangesetHookIntegration {
 
     /// Task manager for validation tasks
     pub(crate) task_manager: crate::tasks::TaskManager,
+
+    /// Configuration provider for accessing configuration settings
+    pub(crate) config_provider: Box<dyn crate::core::ConfigProvider>,
+
+    /// Git provider for repository operations
+    pub(crate) git_provider: Box<dyn crate::core::GitProvider>,
+
+    /// File system provider for file operations
+    pub(crate) file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+
+    /// Package provider for accessing package information
+    pub(crate) package_provider: Box<dyn crate::core::PackageProvider>,
 }

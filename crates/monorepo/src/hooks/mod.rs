@@ -24,6 +24,7 @@ mod definitions;
 mod manager;
 mod installer;
 mod validator;
+mod sync_task_executor;
 
 #[cfg(test)]
 mod tests;
@@ -37,3 +38,6 @@ pub use types::{
     // Implementation structs
     HookManager, HookInstaller, HookValidator, ChangesetValidationResult,
 };
+
+// Re-export SyncTaskExecutor for testing and integration purposes
+pub use sync_task_executor::SyncTaskExecutor;

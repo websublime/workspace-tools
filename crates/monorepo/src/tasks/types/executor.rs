@@ -1,10 +1,12 @@
 //! Task executor type definitions
 
-use crate::core::MonorepoProject;
-use std::sync::Arc;
+use crate::core::{PackageProvider, ConfigProvider};
 
 /// Executor for running tasks with various scopes and configurations
 pub struct TaskExecutor {
-    /// Reference to the monorepo project
-    pub(crate) project: Arc<MonorepoProject>,
+    /// Package operations provider
+    pub(crate) package_provider: Box<dyn PackageProvider>,
+    
+    /// Configuration provider
+    pub(crate) config_provider: Box<dyn ConfigProvider>,
 }

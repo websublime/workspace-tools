@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
-use sublime_standard_tools::command::{Command, CommandPriority, CommandBuilder};
 
 /// Complete definition of a task
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,12 +112,6 @@ pub enum TaskPriority {
     Custom(u32),
 }
 
-impl Default for TaskPriority {
-    fn default() -> Self {
-        Self::Normal
-    }
-}
-
 impl TaskPriority {
     /// Create a TaskPriority from a configured value
     #[must_use]
@@ -129,18 +122,6 @@ impl TaskPriority {
             100 => Self::High,
             200 => Self::Critical,
             custom => Self::Custom(custom),
-        }
-    }
-
-    /// Get the numeric value of the priority
-    #[must_use]
-    pub fn value(&self) -> u32 {
-        match self {
-            Self::Low => 0,
-            Self::Normal => 50,
-            Self::High => 100,
-            Self::Critical => 200,
-            Self::Custom(value) => *value,
         }
     }
 
@@ -181,81 +162,3 @@ pub struct TaskEnvironment {
     pub unset: Vec<String>,
 }
 
-// DRY IMPLEMENTATION: Convert to standard crate types
-
-impl From<TaskCommandCore> for Command {
-    fn from(task_cmd: TaskCommandCore) -> Self {
-        let mut builder = CommandBuilder::new(task_cmd.program);
-        
-        for arg in task_cmd.args {
-            builder = builder.arg(arg);
-        }
-        
-        for (key, value) in task_cmd.env {
-            builder = builder.env(key, value);
-        }
-        
-        if let Some(dir) = task_cmd.current_dir {
-            builder = builder.current_dir(dir);
-        }
-        
-        if let Some(timeout) = task_cmd.timeout {
-            builder = builder.timeout(timeout);
-        }
-        
-        builder.build()
-    }
-}
-
-impl From<TaskCommand> for Command {
-    fn from(task_cmd: TaskCommand) -> Self {
-        task_cmd.command.into()
-    }
-}
-
-impl From<TaskPriority> for CommandPriority {
-    fn from(task_priority: TaskPriority) -> Self {
-        match task_priority {
-            TaskPriority::Low => CommandPriority::Low,
-            TaskPriority::Normal => CommandPriority::Normal,
-            TaskPriority::High => CommandPriority::High,
-            TaskPriority::Critical => CommandPriority::Critical,
-            TaskPriority::Custom(value) => {
-                // Map custom values to closest standard priority
-                match value {
-                    0..=25 => CommandPriority::Low,
-                    26..=75 => CommandPriority::Normal,
-                    76..=150 => CommandPriority::High,
-                    _ => CommandPriority::Critical,
-                }
-            }
-        }
-    }
-}
-
-impl From<PackageScript> for Command {
-    fn from(script: PackageScript) -> Self {
-        // Determine package manager command
-        let manager = script.package_manager.as_deref().unwrap_or("npm");
-        
-        let mut builder = CommandBuilder::new(manager);
-        
-        // Add run command for script execution
-        builder = builder.arg("run").arg(script.script_name);
-        
-        // Add extra arguments
-        if !script.extra_args.is_empty() {
-            builder = builder.arg("--");
-            for arg in script.extra_args {
-                builder = builder.arg(arg);
-            }
-        }
-        
-        // Set working directory if specified
-        if let Some(dir) = script.working_directory {
-            builder = builder.current_dir(dir);
-        }
-        
-        builder.build()
-    }
-}

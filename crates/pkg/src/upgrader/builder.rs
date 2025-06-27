@@ -4,9 +4,9 @@
 //! across packages in a workspace.
 
 use crate::{
-    AvailableUpgrade, Dependency, DependencyResolutionError, ExecutionMode, Package,
-    PackageRegistryError, RegistryManager, UpgradeConfig, UpgradeStatus, VersionStability,
-    VersionUpdateStrategy,
+    errors::{DependencyResolutionError, PackageRegistryError},
+    AvailableUpgrade, Dependency, ExecutionMode, Package, RegistryManager, UpgradeConfig,
+    UpgradeStatus, VersionStability, VersionUpdateStrategy,
 };
 use semver::{Version, VersionReq};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -451,6 +451,7 @@ impl Upgrader {
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(clippy::needless_borrow)]
     pub fn check_dependency_upgrade(
         &mut self,
         package_name: &str,
@@ -547,6 +548,7 @@ impl Upgrader {
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(clippy::needless_borrow)]
     pub fn check_package_upgrades(
         &mut self,
         package: &Package,
@@ -562,9 +564,7 @@ impl Upgrader {
 
         let mut upgrades = Vec::new();
 
-        for dep_rc in package.dependencies() {
-            let dep = dep_rc.borrow();
-
+        for dep in package.dependencies() {
             // Skip if this dependency is not in our target list (if specified)
             if !self.config.target_dependencies.is_empty()
                 && !self.config.target_dependencies.iter().any(|d| d == dep.name())
@@ -702,7 +702,7 @@ impl Upgrader {
                 if let Some(package_rc) =
                     packages.iter().find(|p| p.borrow().name() == upgrade.package_name)
                 {
-                    let package = package_rc.borrow();
+                    let mut package = package_rc.borrow_mut();
 
                     // Apply the upgrade
                     package.update_dependency_version(&upgrade.dependency_name, new_version)?;

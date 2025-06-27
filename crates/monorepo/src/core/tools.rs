@@ -8,6 +8,8 @@ use crate::hooks::HookManager;
 use crate::tasks::TaskManager;
 use crate::workflows::{DevelopmentResult, DevelopmentWorkflow};
 use crate::workflows::{ChangeAnalysisWorkflowResult, VersioningWorkflowResult};
+use crate::workflows::{ReleaseWorkflow, ReleaseResult, ReleaseOptions};
+use crate::plugins::PluginManager;
 use std::sync::Arc;
 
 impl MonorepoTools {
@@ -57,7 +59,7 @@ impl MonorepoTools {
         let project = Arc::new(MonorepoProject::new(path)?);
 
         // Initialize the analyzer
-        let analyzer = MonorepoAnalyzer::new(Arc::clone(&project));
+        let analyzer = MonorepoAnalyzer::from_project(Arc::clone(&project));
 
         // Validate that this is actually a monorepo
         let packages = &project.packages;
@@ -102,7 +104,7 @@ impl MonorepoTools {
     /// Get a reference to the diff analyzer (Phase 2 functionality)
     #[must_use]
     pub fn diff_analyzer(&self) -> DiffAnalyzer {
-        DiffAnalyzer::new(Arc::clone(&self.project))
+        DiffAnalyzer::from_project(Arc::clone(&self.project))
     }
 
     /// Get a reference to the version manager (Phase 2 functionality)
@@ -122,17 +124,16 @@ impl MonorepoTools {
 
     /// Get a reference to the task manager (Phase 3 functionality)
     pub fn task_manager(&self) -> Result<TaskManager> {
-        TaskManager::new(Arc::clone(&self.project))
+        TaskManager::from_project(Arc::clone(&self.project))
     }
 
     /// Get a reference to the hook manager (Phase 3 functionality)
     pub fn hook_manager(&self) -> Result<HookManager> {
-        HookManager::new(Arc::clone(&self.project))
+        HookManager::from_project(Arc::clone(&self.project))
     }
 
     /// Analyze changes between branches (Phase 2 functionality)
-    #[allow(clippy::unused_async)]
-    pub async fn analyze_changes_workflow(
+    pub fn analyze_changes_workflow(
         &self,
         from_branch: &str,
         to_branch: Option<&str>,
@@ -153,8 +154,7 @@ impl MonorepoTools {
     }
 
     /// Execute a complete versioning workflow (Phase 2 functionality)
-    #[allow(clippy::unused_async)]
-    pub async fn versioning_workflow(
+    pub fn versioning_workflow(
         &self,
         plan: Option<VersioningPlan>,
     ) -> Result<VersioningWorkflowResult> {
@@ -212,7 +212,82 @@ impl MonorepoTools {
     /// println!("Development checks passed: {}", result.checks_passed);
     /// ```
     pub async fn development_workflow(&self, since: Option<&str>) -> Result<DevelopmentResult> {
-        let workflow = DevelopmentWorkflow::new(Arc::clone(&self.project))?;
+        let workflow = DevelopmentWorkflow::from_project(Arc::clone(&self.project))?;
         workflow.execute(since).await
+    }
+
+    /// Execute a complete release workflow
+    ///
+    /// This orchestrates the entire release process including change detection,
+    /// version management, task execution, and deployment across multiple environments.
+    ///
+    /// # Arguments
+    ///
+    /// * `options` - Release configuration options including target environments and version bump preferences
+    ///
+    /// # Returns
+    ///
+    /// A comprehensive result containing information about the release process,
+    /// including success status, affected packages, and any errors or warnings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any critical step of the release workflow fails.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_monorepo_tools::{MonorepoTools, ReleaseOptions};
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let tools = MonorepoTools::initialize("/path/to/monorepo")?;
+    /// let options = ReleaseOptions::default();
+    /// let result = tools.release_workflow(options).await?;
+    /// 
+    /// if result.success {
+    ///     println!("Release completed successfully!");
+    ///     println!("Affected packages: {}", result.affected_packages.len());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn release_workflow(&self, options: ReleaseOptions) -> Result<ReleaseResult> {
+        let workflow = ReleaseWorkflow::from_project(Arc::clone(&self.project))?;
+        workflow.execute(options).await
+    }
+
+    /// Create a plugin manager for this monorepo
+    ///
+    /// Creates a plugin manager instance that can be used to load and execute
+    /// plugins for extending monorepo functionality.
+    ///
+    /// # Returns
+    ///
+    /// A configured plugin manager ready for use
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the plugin manager cannot be created
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_monorepo_tools::MonorepoTools;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let tools = MonorepoTools::initialize("/path/to/monorepo")?;
+    /// let mut plugin_manager = tools.plugin_manager()?;
+    ///
+    /// // Load built-in plugins
+    /// plugin_manager.load_builtin_plugins()?;
+    ///
+    /// // Execute plugin command
+    /// let result = plugin_manager.execute_plugin_command("analyzer", "analyze-dependencies", &[])?;
+    /// println!("Plugin result: {}", result.success);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn plugin_manager(&self) -> Result<PluginManager> {
+        PluginManager::from_project(Arc::clone(&self.project))
     }
 }

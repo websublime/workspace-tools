@@ -3,7 +3,7 @@
 //! This module defines the result types returned by hook executions,
 //! including success/failure status, validation results, and error information.
 
-use crate::Changeset;
+use crate::changesets::Changeset;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

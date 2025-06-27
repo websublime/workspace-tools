@@ -3,28 +3,30 @@
 //! The `TaskExecutor` handles the actual execution of tasks, including command
 //! execution, package script running, and result collection.
 
-// TODO: Remove after Phase 4 - currently simplified implementation, full async integration pending
-#![allow(clippy::unused_async)]
-
 use super::{
     types::{ExecutionContext, TaskCommand, TaskCommandCore, TaskExecutor},
     PackageScript, TaskDefinition, TaskError, TaskErrorCode, TaskExecutionLog, TaskExecutionResult,
     TaskOutput, TaskScope,
 };
-use crate::core::MonorepoProject;
+use crate::core::{ConfigProvider, PackageProvider};
 use crate::error::{Error, Result};
 use glob::Pattern;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::SystemTime;
 use sublime_standard_tools::command::{Command, DefaultCommandExecutor, Executor};
 
 impl TaskExecutor {
     /// Create a new task executor
-    pub fn new(project: Arc<MonorepoProject>) -> Result<Self> {
+    pub fn new(
+        package_provider: Box<dyn PackageProvider>,
+        config_provider: Box<dyn ConfigProvider>,
+    ) -> Result<Self> {
         // DRY: No CommandQueue created here - will be created when needed
-        Ok(Self { project })
+        Ok(Self { 
+            package_provider,
+            config_provider,
+        })
     }
 
     /// Execute a task with specified scope
@@ -140,7 +142,7 @@ impl TaskExecutor {
 
             TaskScope::Package(package_name) => {
                 // Validate package exists
-                if self.project.get_package(package_name).is_some() {
+                if self.package_provider.get_package(package_name).is_some() {
                     Ok(vec![package_name.clone()])
                 } else {
                     Err(Error::task(format!("Package not found: {package_name}")))
@@ -150,13 +152,13 @@ impl TaskExecutor {
             TaskScope::AffectedPackages => Ok(context.affected_packages.clone()),
 
             TaskScope::AllPackages => {
-                Ok(self.project.packages.iter().map(|pkg| pkg.name().to_string()).collect())
+                Ok(self.package_provider.packages().iter().map(|pkg| pkg.name().to_string()).collect())
             }
 
             TaskScope::PackagesMatching { pattern } => {
                 let matching_packages = self
-                    .project
-                    .packages
+                    .package_provider
+                    .packages()
                     .iter()
                     .filter(|pkg| self.matches_pattern(pkg.name(), pattern))
                     .map(|pkg| pkg.name().to_string())
@@ -169,7 +171,7 @@ impl TaskExecutor {
                 // Execute the custom filter function
                 let mut matching_packages = Vec::new();
 
-                for package in &self.project.packages {
+                for package in self.package_provider.packages() {
                     // Parse the filter as a simple expression
                     // For now, support basic property access like "package.name.includes('@myorg/')"
                     if self.evaluate_custom_filter(filter, package.name(), context) {
@@ -277,7 +279,7 @@ impl TaskExecutor {
     ) -> Result<TaskOutput> {
         // Get package info
         let package_info = self
-            .project
+            .package_provider
             .get_package(package_name)
             .ok_or_else(|| Error::task(format!("Package not found: {package_name}")))?;
 
@@ -288,7 +290,7 @@ impl TaskExecutor {
         }
 
         // Use configurable package manager commands instead of hardcoded values
-        let pm_config = &self.project.config.workspace.package_manager_commands;
+        let pm_config = &self.config_provider.config().workspace.package_manager_commands;
         let pm_type = script.package_manager.as_deref()
             .and_then(|pm| match pm {
                 "npm" => Some(crate::config::types::workspace::PackageManagerType::Npm),
@@ -337,18 +339,18 @@ impl TaskExecutor {
                 Ok(working_dir.clone())
             } else {
                 // Relative to project root
-                Ok(self.project.root_path().join(working_dir))
+                Ok(self.package_provider.root_path().join(working_dir))
             }
         } else if let Some(package_name) = package_name {
-            if let Some(package_info) = self.project.get_package(package_name) {
+            if let Some(package_info) = self.package_provider.get_package(package_name) {
                 Ok(package_info.path().clone())
             } else {
-                Ok(self.project.root_path().to_path_buf())
+                Ok(self.package_provider.root_path().to_path_buf())
             }
         } else if let Some(working_dir) = &context.working_directory {
             Ok(working_dir.clone())
         } else {
-            Ok(self.project.root_path().to_path_buf())
+            Ok(self.package_provider.root_path().to_path_buf())
         }
     }
 

@@ -11,6 +11,9 @@ mod diff;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod workflow_tests;
+
 // Explicit re-exports from types module
 pub use types::{
     // Analyzer

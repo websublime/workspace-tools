@@ -3,11 +3,10 @@
 //! This module contains all type definitions related to diff analysis and change detection.
 
 use crate::changes::{ChangeSignificance, PackageChange, PackageChangeType};
-use crate::core::MonorepoProject;
 use chrono;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
+// Removed unused imports - now using dependency injection
 use sublime_git_tools::GitChangedFile;
 
 /// Trait for analyzing specific types of file changes
@@ -32,10 +31,20 @@ pub struct ChangeAnalysisResult {
 
 /// Analyzer for detecting and analyzing differences between branches and commits
 pub struct DiffAnalyzer {
-    /// Reference to the monorepo project
-    pub(crate) project: Arc<MonorepoProject>,
     /// Collection of change analyzers for different file types
     pub(crate) analyzers: Vec<Box<dyn ChangeAnalyzer>>,
+
+    /// Git provider for repository operations
+    pub(crate) git_provider: Box<dyn crate::core::GitProvider>,
+
+    /// Package provider for accessing package information
+    pub(crate) package_provider: Box<dyn crate::core::PackageProvider>,
+
+    /// File system provider for file operations
+    pub(crate) file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+    
+    /// Package discovery provider for complex package queries
+    pub(crate) package_discovery_provider: Box<dyn crate::core::interfaces::PackageDiscoveryProvider>,
 }
 
 /// Result of comparing two branches

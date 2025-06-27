@@ -4,7 +4,7 @@
 //! useful for testing and simulating registry behavior without network calls.
 
 use crate::package::registry::PackageRegistryClone;
-use crate::{PackageRegistry, PackageRegistryError};
+use crate::{PackageRegistry, errors::PackageRegistryError};
 use semver::Version;
 use serde_json::{json, Value};
 use std::{

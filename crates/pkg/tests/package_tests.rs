@@ -2,8 +2,7 @@
 mod package_tests {
     use serde_json::json;
     use std::collections::HashMap;
-    use std::rc::Rc;
-    use std::{cell::RefCell, time::Duration};
+    use std::time::Duration;
     use sublime_package_tools::{
         package_scope_name_version, CacheEntry, ChangeType, Dependency, DependencyChange,
         DependencyRegistry, Package, PackageDiff, PackageInfo, ResolutionResult,
@@ -15,12 +14,14 @@ mod package_tests {
         let pkg = Package::new("my-app", "1.0.0", None);
         assert!(pkg.is_ok());
 
-        // Create package with dependencies
-        let dep1 = Rc::new(RefCell::new(Dependency::new("react", "^17.0.0").unwrap()));
-        let dep2 = Rc::new(RefCell::new(Dependency::new("lodash", "^4.17.21").unwrap()));
-
-        let pkg_with_deps =
-            Package::new("my-app", "1.0.0", Some(vec![Rc::clone(&dep1), Rc::clone(&dep2)]));
+        // Create package with dependencies using registry
+        let mut registry = DependencyRegistry::new();
+        let pkg_with_deps = Package::new_with_registry(
+            "my-app",
+            "1.0.0",
+            Some(vec![("react", "^17.0.0"), ("lodash", "^4.17.21")]),
+            &mut registry,
+        );
         assert!(pkg_with_deps.is_ok());
 
         // Invalid version
@@ -78,7 +79,7 @@ mod package_tests {
         let mut registry = DependencyRegistry::new();
 
         // Create package with registry
-        let pkg = Package::new_with_registry(
+        let mut pkg = Package::new_with_registry(
             "my-app",
             "1.0.0",
             Some(vec![("react", "^17.0.0")]),
@@ -87,7 +88,7 @@ mod package_tests {
         .unwrap();
 
         // Add dependency
-        let new_dep = Rc::new(RefCell::new(Dependency::new("express", "^4.17.1").unwrap()));
+        let new_dep = registry.get_or_create("express", "^4.17.1").unwrap();
         let mut pkg_mut = pkg.clone();
         pkg_mut.add_dependency(new_dep);
 
@@ -97,7 +98,7 @@ mod package_tests {
         assert!(pkg.update_dependency_version("react", "^18.0.0").is_ok());
 
         // Verify update
-        let react_dep = pkg.dependencies()[0].borrow();
+        let react_dep = &pkg.dependencies()[0];
         assert_eq!(react_dep.version().to_string(), "^18.0.0");
 
         // Try updating non-existent dependency
@@ -348,13 +349,15 @@ mod package_tests {
     #[test]
     fn test_package_info_dependency_resolution() {
         // Create package with dependencies
-        let pkg = Package::new(
+        let mut temp_registry = DependencyRegistry::new();
+        let pkg = Package::new_with_registry(
             "test-pkg",
             "1.0.0",
             Some(vec![
-                Rc::new(RefCell::new(Dependency::new("react", "^17.0.0").unwrap())),
-                Rc::new(RefCell::new(Dependency::new("lodash", "^4.17.20").unwrap())),
+                ("react", "^17.0.0"),
+                ("lodash", "^4.17.20"),
             ]),
+            &mut temp_registry,
         )
         .unwrap();
 
@@ -392,11 +395,10 @@ mod package_tests {
 
         // Check both react and lodash were updated in the package
         for dep in pkg_ref.dependencies() {
-            let dep_borrow = dep.borrow();
-            if dep_borrow.name() == "react" {
-                assert_eq!(dep_borrow.version().to_string(), "^18.0.0");
-            } else if dep_borrow.name() == "lodash" {
-                assert_eq!(dep_borrow.version().to_string(), "^4.17.21");
+            if dep.name() == "react" {
+                assert_eq!(dep.version().to_string(), "^18.0.0");
+            } else if dep.name() == "lodash" {
+                assert_eq!(dep.version().to_string(), "^4.17.21");
             }
         }
 

@@ -1,22 +1,25 @@
 //! Configuration manager for monorepo tools
+//!
+//! This is a facade that provides a unified interface over the focused configuration components.
+//! It maintains backward compatibility while internally using the new component architecture.
 
 use crate::config::{
     ChangelogConfig, ChangesetsConfig, HooksConfig, PackageManagerType, PluginsConfig, TasksConfig,
     VersioningConfig, WorkspaceConfig, WorkspacePattern, ConfigManager, PatternMatcher,
+    ConfigPersistence, ConfigReader,
 };
 use crate::error::{Error, Result};
 use crate::{Environment, MonorepoConfig};
 use glob::Pattern;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
-use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
+use std::sync::Arc;
 
 impl ConfigManager {
     /// Create a new configuration manager with default config
     #[must_use]
     pub fn new() -> Self {
         Self {
-            config: Arc::new(RwLock::new(MonorepoConfig::default())),
+            config: MonorepoConfig::default(),
             config_path: None,
             auto_save: false,
         }
@@ -25,53 +28,17 @@ impl ConfigManager {
     /// Create a configuration manager with a specific config
     #[must_use]
     pub fn with_config(config: MonorepoConfig) -> Self {
-        Self { config: Arc::new(RwLock::new(config)), config_path: None, auto_save: false }
+        Self { config, config_path: None, auto_save: false }
     }
 
     /// Load configuration from a file
     pub fn load_from_file(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
-        log::info!("Loading configuration from file: {}", path.display());
-        
-        // DRY: Use FileSystemManager instead of manual std::fs operations
-        let fs = FileSystemManager::new();
-        let content = fs.read_file_string(path)
-            .map_err(|e| {
-                log::error!("Failed to read config file '{}': {}", path.display(), e);
-                Error::config(format!("Failed to read config file: {e}"))
-            })?;
-        
-        log::debug!("Read {} bytes from config file", content.len());
-
-        let format = path.extension().and_then(|s| s.to_str()).unwrap_or("unknown");
-        log::debug!("Parsing configuration file as format: {}", format);
-        
-        let config: MonorepoConfig = match format {
-            "json" => serde_json::from_str(&content)
-                .map_err(|e| {
-                    log::error!("Failed to parse JSON config: {}", e);
-                    Error::config(format!("Failed to parse JSON: {e}"))
-                })?,
-            "toml" => toml::from_str(&content)
-                .map_err(|e| {
-                    log::error!("Failed to parse TOML config: {}", e);
-                    Error::config(format!("Failed to parse TOML: {e}"))
-                })?,
-            "yaml" | "yml" => serde_yaml::from_str(&content)
-                .map_err(|e| {
-                    log::error!("Failed to parse YAML config: {}", e);
-                    Error::config(format!("Failed to parse YAML: {e}"))
-                })?,
-            _ => {
-                log::error!("Unsupported config file format: {}", format);
-                return Err(Error::config("Unsupported config file format"));
-            }
-        };
-        
-        log::info!("Successfully loaded configuration from {}", path.display());
+        let persistence = ConfigPersistence::new();
+        let config = persistence.load_from_file(path)?;
 
         Ok(Self {
-            config: Arc::new(RwLock::new(config)),
+            config,
             config_path: Some(path.to_path_buf()),
             auto_save: false,
         })
@@ -79,93 +46,56 @@ impl ConfigManager {
 
     /// Save configuration to a file
     pub fn save_to_file(&self, path: impl AsRef<Path>) -> Result<()> {
-        let path = path.as_ref();
-        log::info!("Saving configuration to file: {}", path.display());
-        
-        let config = self.config.read().map_err(|_| {
-            log::error!("Failed to acquire read lock on configuration");
-            Error::config("Failed to acquire read lock")
-        })?;
-
-        let format = path.extension().and_then(|s| s.to_str()).unwrap_or("unknown");
-        log::debug!("Serializing configuration as format: {}", format);
-        
-        let content = match format {
-            "json" => serde_json::to_string_pretty(&*config)
-                .map_err(|e| {
-                    log::error!("Failed to serialize config to JSON: {}", e);
-                    Error::config(format!("Failed to serialize to JSON: {e}"))
-                })?,
-            "toml" => toml::to_string_pretty(&*config)
-                .map_err(|e| {
-                    log::error!("Failed to serialize config to TOML: {}", e);
-                    Error::config(format!("Failed to serialize to TOML: {e}"))
-                })?,
-            "yaml" | "yml" => serde_yaml::to_string(&*config)
-                .map_err(|e| {
-                    log::error!("Failed to serialize config to YAML: {}", e);
-                    Error::config(format!("Failed to serialize to YAML: {e}"))
-                })?,
-            _ => {
-                log::error!("Unsupported config file format for saving: {}", format);
-                return Err(Error::config("Unsupported config file format"));
-            }
-        };
-
-        log::debug!("Serialized configuration to {} bytes", content.len());
-
-        // DRY: Use FileSystemManager instead of manual std::fs operations
-        let fs = FileSystemManager::new();
-        fs.write_file_string(path, &content)
-            .map_err(|e| {
-                log::error!("Failed to write config file '{}': {}", path.display(), e);
-                Error::config(format!("Failed to write config file: {e}"))
-            })?;
-        
-        log::info!("Successfully saved configuration to {}", path.display());
-
-        Ok(())
+        let persistence = ConfigPersistence::new();
+        persistence.save_to_file(&self.config, path)
     }
 
     /// Save configuration to the loaded path
     pub fn save(&self) -> Result<()> {
-        log::debug!("Attempting to save configuration to loaded path");
         match &self.config_path {
-            Some(path) => {
-                log::debug!("Using config path: {}", path.display());
-                self.save_to_file(path)
-            }
-            None => {
-                log::error!("Cannot save configuration: no config file path set");
-                Err(Error::config("No config file path set"))
-            }
+            Some(path) => self.save_to_file(path),
+            None => Err(Error::config("No config file path set")),
         }
     }
 
-    /// Get the current configuration
-    pub fn get(&self) -> Result<MonorepoConfig> {
-        self.config
-            .read()
-            .map_err(|_| Error::config("Failed to acquire read lock"))
-            .map(|config| config.clone())
+    /// Get the current configuration (clone)
+    #[must_use]
+    pub fn get_clone(&self) -> MonorepoConfig {
+        let reader = ConfigReader::new(&self.config, self.config_path.as_deref());
+        reader.get_clone()
     }
 
-    /// Update the configuration
-    pub fn update<F>(&self, updater: F) -> Result<()>
+    /// Update the configuration and return a new ConfigManager with the updated config
+    /// 
+    /// This follows Rust ownership principles by returning a new instance instead of mutating.
+    pub fn with_update<F>(mut self, updater: F) -> Result<Self>
     where
         F: FnOnce(&mut MonorepoConfig),
     {
         log::debug!("Updating configuration with provided updater function");
         
-        let mut config = self.config.write().map_err(|_| {
-            log::error!("Failed to acquire write lock for configuration update");
-            Error::config("Failed to acquire write lock")
-        })?;
-
-        updater(&mut config);
+        updater(&mut self.config);
         log::debug!("Configuration updated successfully");
 
-        drop(config); // Explicitly drop the lock
+        if self.auto_save {
+            log::debug!("Auto-save enabled, saving configuration");
+            self.save()?;
+        }
+
+        Ok(self)
+    }
+    
+    /// Update the configuration in place (for compatibility)
+    /// 
+    /// Note: This is a transitional method. New code should prefer `with_update`.
+    pub fn update<F>(&mut self, updater: F) -> Result<()>
+    where
+        F: FnOnce(&mut MonorepoConfig),
+    {
+        log::debug!("Updating configuration with provided updater function");
+        
+        updater(&mut self.config);
+        log::debug!("Configuration updated successfully");
 
         if self.auto_save {
             log::debug!("Auto-save enabled, saving configuration");
@@ -176,67 +106,51 @@ impl ConfigManager {
     }
 
     /// Get a specific configuration section
-    pub fn get_versioning(&self) -> Result<VersioningConfig> {
-        self.config
-            .read()
-            .map_err(|_| Error::config("Failed to acquire read lock"))
-            .map(|config| config.versioning.clone())
+    #[must_use]
+    pub fn get_versioning(&self) -> &VersioningConfig {
+        &self.config.versioning
     }
 
     /// Get tasks configuration
-    pub fn get_tasks(&self) -> Result<TasksConfig> {
-        self.config
-            .read()
-            .map_err(|_| Error::config("Failed to acquire read lock"))
-            .map(|config| config.tasks.clone())
+    #[must_use]
+    pub fn get_tasks(&self) -> &TasksConfig {
+        &self.config.tasks
     }
 
     /// Get changelog configuration
-    pub fn get_changelog(&self) -> Result<ChangelogConfig> {
-        self.config
-            .read()
-            .map_err(|_| Error::config("Failed to acquire read lock"))
-            .map(|config| config.changelog.clone())
+    #[must_use]
+    pub fn get_changelog(&self) -> &ChangelogConfig {
+        &self.config.changelog
     }
 
     /// Get hooks configuration
-    pub fn get_hooks(&self) -> Result<HooksConfig> {
-        self.config
-            .read()
-            .map_err(|_| Error::config("Failed to acquire read lock"))
-            .map(|config| config.hooks.clone())
+    #[must_use]
+    pub fn get_hooks(&self) -> &HooksConfig {
+        &self.config.hooks
     }
 
     /// Get changesets configuration
-    pub fn get_changesets(&self) -> Result<ChangesetsConfig> {
-        self.config
-            .read()
-            .map_err(|_| Error::config("Failed to acquire read lock"))
-            .map(|config| config.changesets.clone())
+    #[must_use]
+    pub fn get_changesets(&self) -> &ChangesetsConfig {
+        &self.config.changesets
     }
 
     /// Get plugins configuration
-    pub fn get_plugins(&self) -> Result<PluginsConfig> {
-        self.config
-            .read()
-            .map_err(|_| Error::config("Failed to acquire read lock"))
-            .map(|config| config.plugins.clone())
+    #[must_use]
+    pub fn get_plugins(&self) -> &PluginsConfig {
+        &self.config.plugins
     }
 
     /// Get environments
-    pub fn get_environments(&self) -> Result<Vec<Environment>> {
-        self.config
-            .read()
-            .map_err(|_| Error::config("Failed to acquire read lock"))
-            .map(|config| config.environments.clone())
+    #[must_use]
+    pub fn get_environments(&self) -> &[Environment] {
+        &self.config.environments
     }
 
     /// Get workspace configuration
-    pub fn get_workspace(&self) -> Result<WorkspaceConfig> {
-        self.config
-            .read()
-            .map_err(|_| Error::config("Failed to acquire read lock"))
-            .map(|config| config.workspace.clone())
+    #[must_use]
+    pub fn get_workspace(&self) -> &WorkspaceConfig {
+        &self.config.workspace
     }
 
     /// Set auto-save behavior
@@ -252,99 +166,14 @@ impl ConfigManager {
 
     /// Create default configuration files in a directory
     pub fn create_default_config_files(dir: impl AsRef<Path>) -> Result<()> {
-        let dir = dir.as_ref();
-        log::info!("Creating default configuration files in: {}", dir.display());
-        
-        let config = MonorepoConfig::default();
-
-        // DRY: Use FileSystemManager instead of manual std::fs operations
-        let fs = FileSystemManager::new();
-        
-        // Create .monorepo directory
-        let config_dir = dir.join(".monorepo");
-        log::debug!("Creating config directory: {}", config_dir.display());
-        
-        fs.create_dir_all(&config_dir)
-            .map_err(|e| {
-                log::error!("Failed to create config directory '{}': {}", config_dir.display(), e);
-                Error::config(format!("Failed to create config directory: {e}"))
-            })?;
-
-        // Save as JSON
-        let json_path = config_dir.join("config.json");
-        log::debug!("Writing JSON config to: {}", json_path.display());
-        let json_content = serde_json::to_string_pretty(&config)
-            .map_err(|e| {
-                log::error!("Failed to serialize default config to JSON: {}", e);
-                Error::config(format!("Failed to serialize to JSON: {e}"))
-            })?;
-        fs.write_file_string(&json_path, &json_content)
-            .map_err(|e| {
-                log::error!("Failed to write JSON config file '{}': {}", json_path.display(), e);
-                Error::config(format!("Failed to write JSON config: {e}"))
-            })?;
-        log::debug!("Successfully wrote JSON config file");
-
-        // Save as TOML (alternative)
-        let toml_path = config_dir.join("config.toml");
-        log::debug!("Writing TOML config to: {}", toml_path.display());
-        let toml_content = toml::to_string_pretty(&config)
-            .map_err(|e| {
-                log::error!("Failed to serialize default config to TOML: {}", e);
-                Error::config(format!("Failed to serialize to TOML: {e}"))
-            })?;
-        fs.write_file_string(&toml_path, &toml_content)
-            .map_err(|e| {
-                log::error!("Failed to write TOML config file '{}': {}", toml_path.display(), e);
-                Error::config(format!("Failed to write TOML config: {e}"))
-            })?;
-        log::debug!("Successfully wrote TOML config file");
-        
-        log::info!("Successfully created default configuration files in {}", config_dir.display());
-
-        Ok(())
+        let persistence = ConfigPersistence::new();
+        persistence.create_default_config_files(dir)
     }
 
     /// Look for configuration file in standard locations
     pub fn find_config_file(start_dir: impl AsRef<Path>) -> Option<PathBuf> {
-        let start_dir = start_dir.as_ref();
-        log::debug!("Searching for configuration file starting from: {}", start_dir.display());
-
-        // Check for config files in order of preference
-        let config_names = [
-            ".monorepo/config.json",
-            ".monorepo/config.toml",
-            ".monorepo/config.yaml",
-            ".monorepo/config.yml",
-            "monorepo.config.json",
-            "monorepo.config.toml",
-            "monorepo.config.yaml",
-            "monorepo.config.yml",
-        ];
-
-        // DRY: Use FileSystemManager for file existence checks
-        let fs = FileSystemManager::new();
-        
-        // Check current directory and parent directories
-        let mut current = start_dir.to_path_buf();
-        loop {
-            log::debug!("Checking directory: {}", current.display());
-            for config_name in &config_names {
-                let config_path = current.join(config_name);
-                log::debug!("Looking for config file: {}", config_path.display());
-                if fs.exists(&config_path) {
-                    log::info!("Found configuration file: {}", config_path.display());
-                    return Some(config_path);
-                }
-            }
-
-            if !current.pop() {
-                break;
-            }
-        }
-
-        log::debug!("No configuration file found in directory tree starting from {}", start_dir.display());
-        None
+        let persistence = ConfigPersistence::new();
+        persistence.find_config_file(start_dir)
     }
 
     /// Get workspace patterns filtered by package manager type and environment
@@ -353,12 +182,13 @@ impl ConfigManager {
         &self,
         package_manager: Option<PackageManagerType>,
         environment: Option<&Environment>,
-    ) -> Result<Vec<WorkspacePattern>> {
-        let workspace = self.get_workspace()?;
+    ) -> Vec<WorkspacePattern> {
+        let workspace = self.get_workspace();
 
         let patterns: Vec<WorkspacePattern> = workspace
             .patterns
-            .into_iter()
+            .iter()
+            .cloned()
             .filter(|pattern| {
                 // Filter by enabled status
                 if !pattern.enabled {
@@ -387,7 +217,7 @@ impl ConfigManager {
             })
             .collect();
 
-        Ok(patterns)
+        patterns
     }
 
     /// Get effective workspace patterns combining config patterns with auto-detected ones
@@ -396,9 +226,9 @@ impl ConfigManager {
         auto_detected: Vec<String>,
         package_manager: Option<PackageManagerType>,
         environment: Option<&Environment>,
-    ) -> Result<Vec<String>> {
-        let workspace = self.get_workspace()?;
-        let config_patterns = self.get_workspace_patterns(package_manager.clone(), environment)?;
+    ) -> Vec<String> {
+        let workspace = self.get_workspace();
+        let config_patterns = self.get_workspace_patterns(package_manager.clone(), environment);
 
         let mut patterns = Vec::new();
 
@@ -423,12 +253,12 @@ impl ConfigManager {
         }
 
         // Sort by priority if we have config patterns
-        let workspace_patterns = self.get_workspace_patterns(package_manager, environment)?;
+        let workspace_patterns = self.get_workspace_patterns(package_manager, environment);
         if !workspace_patterns.is_empty() {
             let mut pattern_priorities: std::collections::HashMap<String, u32> =
                 std::collections::HashMap::new();
             for wp in workspace_patterns {
-                pattern_priorities.insert(wp.pattern.clone(), wp.priority);
+                pattern_priorities.insert(wp.pattern, wp.priority);
             }
 
             patterns.sort_by(|a, b| {
@@ -438,18 +268,33 @@ impl ConfigManager {
             });
         }
 
-        Ok(patterns)
+        patterns
     }
 
-    /// Add a workspace pattern to the configuration
-    pub fn add_workspace_pattern(&self, pattern: WorkspacePattern) -> Result<()> {
+    /// Add a workspace pattern to the configuration and return new ConfigManager
+    #[must_use]
+    pub fn with_workspace_pattern(mut self, pattern: WorkspacePattern) -> Self {
+        self.config.workspace.patterns.push(pattern);
+        self
+    }
+    
+    /// Add a workspace pattern to the configuration in place
+    pub fn add_workspace_pattern(&mut self, pattern: WorkspacePattern) -> Result<()> {
         self.update(|config| {
             config.workspace.patterns.push(pattern);
         })
     }
 
+    /// Remove a workspace pattern and return new ConfigManager and success flag
+    pub fn without_workspace_pattern(mut self, pattern: &str) -> (Self, bool) {
+        let initial_len = self.config.workspace.patterns.len();
+        self.config.workspace.patterns.retain(|p| p.pattern != pattern);
+        let removed = self.config.workspace.patterns.len() < initial_len;
+        (self, removed)
+    }
+    
     /// Remove a workspace pattern by pattern string
-    pub fn remove_workspace_pattern(&self, pattern: &str) -> Result<bool> {
+    pub fn remove_workspace_pattern(&mut self, pattern: &str) -> Result<bool> {
         let mut removed = false;
         self.update(|config| {
             let initial_len = config.workspace.patterns.len();
@@ -459,8 +304,21 @@ impl ConfigManager {
         Ok(removed)
     }
 
+    /// Update a workspace pattern and return new ConfigManager and success flag
+    pub fn with_updated_workspace_pattern<F>(mut self, pattern: &str, updater: F) -> (Self, bool)
+    where
+        F: FnOnce(&mut WorkspacePattern),
+    {
+        let mut found = false;
+        if let Some(wp) = self.config.workspace.patterns.iter_mut().find(|p| p.pattern == pattern) {
+            updater(wp);
+            found = true;
+        }
+        (self, found)
+    }
+    
     /// Update a workspace pattern
-    pub fn update_workspace_pattern<F>(&self, pattern: &str, updater: F) -> Result<bool>
+    pub fn update_workspace_pattern<F>(&mut self, pattern: &str, updater: F) -> Result<bool>
     where
         F: FnOnce(&mut WorkspacePattern),
     {
@@ -478,38 +336,38 @@ impl ConfigManager {
     pub fn get_package_manager_patterns(
         &self,
         package_manager: PackageManagerType,
-    ) -> Result<Vec<String>> {
-        let workspace = self.get_workspace()?;
+    ) -> Vec<String> {
+        let workspace = self.get_workspace();
 
         // Check for package manager specific overrides
         let override_patterns = match package_manager {
             PackageManagerType::Npm => {
-                workspace.package_manager_configs.npm.and_then(|config| config.workspaces_override)
+                workspace.package_manager_configs.npm.as_ref().and_then(|config| config.workspaces_override.clone())
             }
             PackageManagerType::Yarn | PackageManagerType::YarnBerry => {
-                workspace.package_manager_configs.yarn.and_then(|config| config.workspaces_override)
+                workspace.package_manager_configs.yarn.as_ref().and_then(|config| config.workspaces_override.clone())
             }
             PackageManagerType::Pnpm => {
-                workspace.package_manager_configs.pnpm.and_then(|config| config.packages_override)
+                workspace.package_manager_configs.pnpm.as_ref().and_then(|config| config.packages_override.clone())
             }
             PackageManagerType::Bun => {
-                workspace.package_manager_configs.bun.and_then(|config| config.workspaces_override)
+                workspace.package_manager_configs.bun.as_ref().and_then(|config| config.workspaces_override.clone())
             }
             PackageManagerType::Custom(_) => None,
         };
 
         if let Some(patterns) = override_patterns {
-            Ok(patterns)
+            patterns
         } else {
             // Fall back to general workspace patterns
-            let patterns = self.get_workspace_patterns(Some(package_manager), None)?;
-            Ok(patterns.into_iter().map(|p| p.pattern).collect())
+            let patterns = self.get_workspace_patterns(Some(package_manager), None);
+            patterns.into_iter().map(|p| p.pattern).collect()
         }
     }
 
     /// Validate workspace configuration
-    pub fn validate_workspace_config(&self, existing_packages: &[String]) -> Result<Vec<String>> {
-        let workspace = self.get_workspace()?;
+    pub fn validate_workspace_config(&self, existing_packages: &[String]) -> Vec<String> {
+        let workspace = self.get_workspace();
         let mut validation_errors = Vec::new();
 
         // Validate that patterns match existing packages if required
@@ -548,7 +406,7 @@ impl ConfigManager {
             }
         }
 
-        Ok(validation_errors)
+        validation_errors
     }
 
     /// Check if a pattern matches a package path

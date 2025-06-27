@@ -18,8 +18,8 @@ impl MonorepoConfig {
     pub fn large_project() -> Self {
         let mut config = Self::default();
         config.tasks.parallel = true;
-        config.tasks.performance.large_project.max_concurrent = 8;
-        config.tasks.performance.large_project.timeout = 600; // 10 minutes
+        config.tasks.max_concurrent = 8;
+        config.tasks.timeout = 600; // 10 minutes
         config.versioning.propagate_changes = true;
         config.changesets.required = true;
         config

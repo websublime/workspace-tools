@@ -19,7 +19,7 @@
 #![allow(clippy::unnecessary_wraps)]
 
 use std::path::Path;
-use sublime_package_tools::{NpmRegistry, PackageRegistry, PackageRegistryError};
+use sublime_package_tools::{NpmRegistry, PackageRegistry, errors::PackageRegistryError};
 
 /// Downloads and extracts a package to demonstrate the functionality
 ///

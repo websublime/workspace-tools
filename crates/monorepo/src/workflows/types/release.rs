@@ -1,8 +1,6 @@
 //! Release workflow type definitions
 
 use crate::analysis::MonorepoAnalyzer;
-use crate::core::MonorepoProject;
-use std::sync::Arc;
 
 /// Implements release workflow for monorepo projects
 ///
@@ -17,7 +15,7 @@ use std::sync::Arc;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let project = Arc::new(MonorepoProject::new("/path/to/monorepo")?);
-/// let workflow = ReleaseWorkflow::new(project);
+/// let workflow = ReleaseWorkflow::from_project(project)?;
 ///
 /// // Run release workflow - applies changesets and bumps versions
 /// let result = workflow.run().await?;
@@ -26,9 +24,6 @@ use std::sync::Arc;
 /// # }
 /// ```
 pub struct ReleaseWorkflow {
-    /// Reference to the monorepo project
-    pub(crate) project: Arc<MonorepoProject>,
-
     /// Analyzer for detecting changes and affected packages
     pub(crate) analyzer: MonorepoAnalyzer,
 
@@ -40,4 +35,10 @@ pub struct ReleaseWorkflow {
 
     /// Task manager for executing release tasks
     pub(crate) task_manager: crate::tasks::TaskManager,
+
+    /// Configuration provider for accessing configuration settings
+    pub(crate) config_provider: Box<dyn crate::core::ConfigProvider>,
+
+    /// Git provider for repository operations
+    pub(crate) git_provider: Box<dyn crate::core::GitProvider>,
 }

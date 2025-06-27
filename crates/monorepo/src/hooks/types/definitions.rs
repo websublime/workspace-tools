@@ -6,11 +6,12 @@
 use crate::Environment;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
 
 /// Git hook types supported by the system
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum HookType {
     /// Pre-commit hook - runs before commits are created
     PreCommit,
@@ -149,7 +150,7 @@ pub enum HookCondition {
 }
 
 /// Types of dependencies that can trigger hook conditions
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DependencyType {
     /// Production dependencies
     Production,
@@ -161,5 +162,17 @@ pub enum DependencyType {
     Optional,
     /// All dependency types
     All,
+}
+
+impl fmt::Display for HookType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::PreCommit => write!(f, "pre-commit"),
+            Self::PrePush => write!(f, "pre-push"),
+            Self::PostCommit => write!(f, "post-commit"),
+            Self::PostMerge => write!(f, "post-merge"),
+            Self::PostCheckout => write!(f, "post-checkout"),
+        }
+    }
 }
 

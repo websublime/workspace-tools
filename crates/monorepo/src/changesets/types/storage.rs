@@ -1,8 +1,6 @@
 //! Changeset storage type definitions
 
-use std::sync::Arc;
 use crate::config::types::ChangesetsConfig;
-use crate::core::MonorepoProject;
 
 /// Storage interface for changesets
 ///
@@ -10,9 +8,12 @@ use crate::core::MonorepoProject;
 /// Uses the `FileSystemManager` for all file operations to ensure consistency
 /// with the rest of the monorepo tooling.
 pub struct ChangesetStorage {
-    /// Reference to the monorepo project
-    pub(crate) project: Arc<MonorepoProject>,
-
     /// Changeset configuration
     pub(crate) config: ChangesetsConfig,
+
+    /// File system provider for file operations
+    pub(crate) file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+
+    /// Package provider for accessing root path
+    pub(crate) package_provider: Box<dyn crate::core::PackageProvider>,
 }

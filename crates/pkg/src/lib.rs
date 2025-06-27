@@ -171,7 +171,7 @@
 //! ```
 
 mod dependency;
-mod errors;
+pub mod errors;
 mod graph;
 mod package;
 mod registry;
@@ -194,12 +194,7 @@ pub use dependency::{
     update::DependencyUpdate,
 };
 
-pub use errors::{
-    dependency::DependencyResolutionError,
-    package::{PackageError, PackageRegistryError},
-    registry::RegistryError,
-    version::VersionError,
-};
+pub use errors::{Error, Result};
 
 pub use registry::{
     local::LocalRegistry,

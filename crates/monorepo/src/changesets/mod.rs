@@ -34,7 +34,7 @@
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let project = Arc::new(MonorepoProject::new("/path/to/monorepo")?);
-//! let manager = ChangesetManager::new(project).await?;
+//! let manager = ChangesetManager::from_project(project)?;
 //!
 //! let spec = ChangesetSpec {
 //!     package: "@myapp/core".to_string(),

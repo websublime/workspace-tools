@@ -1,15 +1,18 @@
 //! Monorepo analyzer implementation
 
+use crate::analysis::MonorepoAnalysisResult;
 use crate::analysis::{
-    BranchComparisonResult, ChangeAnalysis, DependencyGraphAnalysis, DiffAnalyzer,
-    MonorepoAnalyzer, PackageClassificationResult, PackageInformation, PackageManagerAnalysis,
-    PatternStatistics, RegistryAnalysisResult, RegistryInfo, UpgradeAnalysisResult,
-    WorkspaceConfigAnalysis, WorkspacePatternAnalysis,
+    BranchComparisonResult, ChangeAnalysis, DependencyGraphAnalysis, MonorepoAnalyzer,
+    PackageClassificationResult, PackageInformation, PackageManagerAnalysis, PatternStatistics,
+    RegistryAnalysisResult, RegistryInfo, UpgradeAnalysisResult, WorkspaceConfigAnalysis,
+    WorkspacePatternAnalysis,
 };
 use crate::config::PackageManagerType;
+use crate::core::interfaces::{
+    EnhancedConfigProvider, PackageDiscoveryProvider, WorkspaceProvider,
+};
 use crate::core::MonorepoProject;
 use crate::error::Result;
-use crate::MonorepoAnalysisResult;
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
@@ -19,10 +22,51 @@ use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
 use sublime_standard_tools::monorepo::{MonorepoDetector, PackageManagerKind};
 
 impl MonorepoAnalyzer {
-    /// Create a new analyzer for a monorepo project
+    /// Create a new analyzer with injected dependencies
     #[must_use]
-    pub fn new(project: Arc<MonorepoProject>) -> Self {
-        Self { project }
+    pub fn new(
+        package_provider: Box<dyn crate::core::PackageProvider>,
+        config_provider: Box<dyn crate::core::ConfigProvider>,
+        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+        git_provider: Box<dyn crate::core::GitProvider>,
+        registry_provider: Box<dyn crate::core::RegistryProvider>,
+        workspace_provider: Box<dyn WorkspaceProvider>,
+        package_discovery_provider: Box<dyn PackageDiscoveryProvider>,
+        enhanced_config_provider: Box<dyn EnhancedConfigProvider>,
+    ) -> Self {
+        Self {
+            package_provider,
+            config_provider,
+            file_system_provider,
+            git_provider,
+            registry_provider,
+            workspace_provider,
+            package_discovery_provider,
+            enhanced_config_provider,
+            source_project: None,
+        }
+    }
+
+    /// Create a new analyzer from project (convenience method)
+    #[must_use]
+    pub fn from_project(project: Arc<MonorepoProject>) -> Self {
+        use crate::core::interfaces::DependencyFactory;
+
+        Self {
+            package_provider: DependencyFactory::package_provider(Arc::clone(&project)),
+            config_provider: DependencyFactory::config_provider(Arc::clone(&project)),
+            file_system_provider: DependencyFactory::file_system_provider(Arc::clone(&project)),
+            git_provider: DependencyFactory::git_provider(Arc::clone(&project)),
+            registry_provider: DependencyFactory::registry_provider(Arc::clone(&project)),
+            workspace_provider: DependencyFactory::workspace_provider(Arc::clone(&project)),
+            package_discovery_provider: DependencyFactory::package_discovery_provider(Arc::clone(
+                &project,
+            )),
+            enhanced_config_provider: DependencyFactory::enhanced_config_provider(Arc::clone(
+                &project,
+            )),
+            source_project: Some(project),
+        }
     }
 
     /// Perform complete monorepo detection and analysis
@@ -69,44 +113,72 @@ impl MonorepoAnalyzer {
 
     /// Analyze the package manager configuration
     pub fn analyze_package_manager(&self) -> Result<PackageManagerAnalysis> {
-        let pm = &self.project.package_manager;
-        let kind = pm.kind();
+        // Use standard-tools detector to determine package manager type
+        let root_path = self.package_provider.root_path();
+        let detector = sublime_standard_tools::monorepo::MonorepoDetector::new();
+        let descriptor = detector.detect_monorepo(root_path)?;
+
+        // Convert MonorepoKind to PackageManagerKind
+        let kind = match descriptor.kind() {
+            sublime_standard_tools::monorepo::MonorepoKind::YarnWorkspaces => {
+                &sublime_standard_tools::monorepo::PackageManagerKind::Yarn
+            }
+            sublime_standard_tools::monorepo::MonorepoKind::PnpmWorkspaces => {
+                &sublime_standard_tools::monorepo::PackageManagerKind::Pnpm
+            }
+            sublime_standard_tools::monorepo::MonorepoKind::NpmWorkSpace | _ => {
+                &sublime_standard_tools::monorepo::PackageManagerKind::Npm
+            } // Default fallback
+        };
 
         // Get package manager version by executing the appropriate command
-        let version = self.detect_package_manager_version(kind);
+        let version = self.detect_package_manager_version(*kind);
 
-        // DRY: Use FileSystemManager instead of manual std::fs operations
-        let fs = FileSystemManager::new();
-        let package_json_path = pm.root().join("package.json");
-        let workspaces_config = if fs.exists(&package_json_path) {
-            let content = fs.read_file_string(&package_json_path)?;
+        // Use the package provider to get root path
+        let root_path = self.package_provider.root_path();
+        let package_json_path = root_path.join("package.json");
+
+        let workspaces_config = if self.file_system_provider.path_exists(&package_json_path) {
+            let content = self.file_system_provider.read_file_string(&package_json_path)?;
             let json: serde_json::Value = serde_json::from_str(&content)?;
             json.get("workspaces").cloned().unwrap_or(serde_json::Value::Null)
         } else {
             serde_json::Value::Null
         };
 
-        // Find all config files
-        let mut config_files = vec![pm.lock_file_path()];
+        // Find all config files based on package manager type
+        let lock_file_path = match kind {
+            sublime_standard_tools::monorepo::PackageManagerKind::Yarn => {
+                root_path.join("yarn.lock")
+            }
+            sublime_standard_tools::monorepo::PackageManagerKind::Pnpm => {
+                root_path.join("pnpm-lock.yaml")
+            }
+            sublime_standard_tools::monorepo::PackageManagerKind::Npm | _ => {
+                root_path.join("package-lock.json")
+            } // Default fallback
+        };
+
+        let mut config_files = vec![lock_file_path.clone()];
 
         match kind {
             sublime_standard_tools::monorepo::PackageManagerKind::Pnpm => {
-                let workspace_yaml = pm.root().join("pnpm-workspace.yaml");
-                if fs.exists(&workspace_yaml) {
+                let workspace_yaml = root_path.join("pnpm-workspace.yaml");
+                if self.file_system_provider.path_exists(&workspace_yaml) {
                     config_files.push(workspace_yaml);
                 }
             }
             _ => {
-                if fs.exists(&package_json_path) {
+                if self.file_system_provider.path_exists(&package_json_path) {
                     config_files.push(package_json_path);
                 }
             }
         }
 
         Ok(PackageManagerAnalysis {
-            kind,
+            kind: *kind,
             version,
-            lock_file: pm.lock_file_path(),
+            lock_file: lock_file_path,
             config_files,
             workspaces_config,
         })
@@ -114,7 +186,7 @@ impl MonorepoAnalyzer {
 
     /// Build and analyze the dependency graph
     pub fn build_dependency_graph(&self) -> Result<DependencyGraphAnalysis> {
-        let packages = &self.project.packages;
+        let packages = self.package_provider.packages();
 
         if packages.is_empty() {
             return Ok(DependencyGraphAnalysis {
@@ -264,7 +336,7 @@ impl MonorepoAnalyzer {
         let peer_dependencies = Vec::new();
 
         // Convert MonorepoPackageInfo to PackageInformation
-        for pkg in &self.project.packages {
+        for pkg in self.package_provider.packages() {
             let package_info = PackageInformation {
                 name: pkg.name().to_string(),
                 version: pkg.version().to_string(),
@@ -300,7 +372,7 @@ impl MonorepoAnalyzer {
 
     /// Analyze configured registries
     pub fn analyze_registries(&self) -> Result<RegistryAnalysisResult> {
-        let rm = &self.project.registry_manager;
+        let rm = self.registry_provider.registry_manager();
 
         let default_registry = rm.default_registry().to_string();
         let registry_urls = rm.registry_urls();
@@ -312,8 +384,13 @@ impl MonorepoAnalyzer {
         // Analyze each registry
         for url in registry_urls {
             // Determine registry type using configurable patterns
-            let registry_type =
-                self.project.config.workspace.tool_configs.get_registry_type(url).to_string();
+            let registry_type = self
+                .config_provider
+                .config()
+                .workspace
+                .tool_configs
+                .get_registry_type(url)
+                .to_string();
 
             // Check for authentication (basic heuristic)
             let has_auth = self.check_registry_auth(url);
@@ -323,7 +400,8 @@ impl MonorepoAnalyzer {
 
             // DRY: Use FileSystemManager for .npmrc file reading
             let fs = FileSystemManager::new();
-            if let Ok(npmrc_content) = fs.read_file_string(&self.project.root_path().join(".npmrc"))
+            if let Ok(npmrc_content) =
+                fs.read_file_string(&self.package_provider.root_path().join(".npmrc"))
             {
                 for line in npmrc_content.lines() {
                     if line.contains(url) && line.contains('@') {
@@ -346,7 +424,7 @@ impl MonorepoAnalyzer {
         }
 
         // Check for any packages that use scoped registries
-        for package in &self.project.packages {
+        for package in self.package_provider.packages() {
             let package_json = &package.package_info.pkg_json.borrow();
 
             // Check dependencies for scoped packages
@@ -373,7 +451,7 @@ impl MonorepoAnalyzer {
     pub fn check_registry_auth(&self, registry_url: &str) -> bool {
         // Check .npmrc for auth tokens
         let npmrc_paths = [
-            self.project.root_path().join(".npmrc"),
+            self.package_provider.root_path().join(".npmrc"),
             dirs::home_dir().map(|h| h.join(".npmrc")).unwrap_or_default(),
         ];
 
@@ -410,7 +488,7 @@ impl MonorepoAnalyzer {
         }
 
         // Check environment variables using configurable auth patterns
-        let tool_config = &self.project.config.workspace.tool_configs;
+        let tool_config = &self.config_provider.config().workspace.tool_configs;
         let registry_type = tool_config.get_registry_type(registry_url);
         let auth_env_vars = tool_config.get_auth_env_vars(registry_type);
 
@@ -426,8 +504,8 @@ impl MonorepoAnalyzer {
     /// Get package information
     #[must_use]
     pub fn get_package_information(&self) -> Vec<PackageInformation> {
-        self.project
-            .packages
+        self.package_provider
+            .packages()
             .iter()
             .map(|pkg| PackageInformation {
                 name: pkg.name().to_string(),
@@ -453,7 +531,7 @@ impl MonorepoAnalyzer {
     /// - Upgrader initialization fails
     /// - Upgrade analysis fails
     pub fn analyze_available_upgrades(&self) -> Result<UpgradeAnalysisResult> {
-        let total_packages = self.project.packages.len();
+        let total_packages = self.package_provider.packages().len();
         let mut major_upgrades = Vec::new();
         let mut minor_upgrades = Vec::new();
         let mut patch_upgrades = Vec::new();
@@ -471,12 +549,13 @@ impl MonorepoAnalyzer {
         }
 
         // Create upgrader with the project's registry manager
-        let mut upgrader = Upgrader::with_registry_manager(self.project.registry_manager.clone());
+        let mut upgrader =
+            Upgrader::with_registry_manager(self.registry_provider.registry_manager().clone());
 
         // Extract Package objects for upgrade analysis
         let packages_for_analysis: Result<Vec<_>> = self
-            .project
-            .packages
+            .package_provider
+            .packages()
             .iter()
             .map(|pkg_info| {
                 let pkg_ref = pkg_info.package_info.package.borrow();
@@ -569,7 +648,7 @@ impl MonorepoAnalyzer {
 
     /// Analyze workspace configuration using standard-tools and config
     pub fn analyze_workspace_config(&self) -> Result<WorkspaceConfigAnalysis> {
-        let descriptor = &self.project.descriptor;
+        let descriptor = self.package_discovery_provider.get_package_descriptor();
         let mut patterns = Vec::new();
         let mut has_nohoist = false;
         let mut nohoist_patterns = Vec::new();
@@ -578,12 +657,12 @@ impl MonorepoAnalyzer {
         let fs = FileSystemManager::new();
 
         // Extract workspace patterns from package manager configuration
-        match self.project.package_manager.kind() {
-            sublime_standard_tools::monorepo::PackageManagerKind::Npm
-            | sublime_standard_tools::monorepo::PackageManagerKind::Yarn => {
+        let (pm_kind_str, _metadata) = self.workspace_provider.get_package_manager_info()?;
+        match pm_kind_str.as_str() {
+            "Npm" | "Yarn" => {
                 // DRY: Use FileSystemManager for package.json reading
                 let fs = FileSystemManager::new();
-                let package_json_path = self.project.package_manager.root().join("package.json");
+                let package_json_path = self.workspace_provider.root_path().join("package.json");
                 if let Ok(content) = fs.read_file_string(&package_json_path) {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                         // Handle different workspace configurations
@@ -629,10 +708,10 @@ impl MonorepoAnalyzer {
                     }
                 }
             }
-            sublime_standard_tools::monorepo::PackageManagerKind::Pnpm => {
+            "Pnpm" => {
                 // DRY: Use FileSystemManager for pnpm-workspace.yaml reading
                 let workspace_yaml =
-                    self.project.package_manager.root().join("pnpm-workspace.yaml");
+                    self.workspace_provider.root_path().join("pnpm-workspace.yaml");
                 if let Ok(content) = fs.read_file_string(&workspace_yaml) {
                     if let Ok(config) = serde_yaml::from_str::<serde_yaml::Value>(&content) {
                         if let Some(packages) = config.get("packages").and_then(|p| p.as_sequence())
@@ -697,25 +776,21 @@ impl MonorepoAnalyzer {
     /// This is a robust implementation that leverages the monorepo configuration system
     pub fn get_config_workspace_patterns(&self) -> Result<Vec<String>> {
         // Determine current package manager type
-        let current_pm_type = match self.project.package_manager.kind() {
-            sublime_standard_tools::monorepo::PackageManagerKind::Npm => PackageManagerType::Npm,
-            sublime_standard_tools::monorepo::PackageManagerKind::Yarn => PackageManagerType::Yarn,
-            sublime_standard_tools::monorepo::PackageManagerKind::Pnpm => PackageManagerType::Pnpm,
-            sublime_standard_tools::monorepo::PackageManagerKind::Bun => PackageManagerType::Bun,
-            sublime_standard_tools::monorepo::PackageManagerKind::Jsr => {
-                PackageManagerType::Custom("jsr".to_string())
-            }
+        let (pm_kind_str, _metadata) = self.workspace_provider.get_package_manager_info()?;
+        let _current_pm_type = match pm_kind_str.as_str() {
+            "Npm" => PackageManagerType::Npm,
+            "Yarn" => PackageManagerType::Yarn,
+            "Pnpm" => PackageManagerType::Pnpm,
+            "Bun" => PackageManagerType::Bun,
+            "Jsr" => PackageManagerType::Custom("jsr".to_string()),
+            _ => PackageManagerType::Custom(pm_kind_str),
         };
 
         // Get auto-detected patterns from the current workspace structure
-        let auto_detected_patterns = self.get_auto_detected_patterns()?;
+        let _auto_detected_patterns = self.get_auto_detected_patterns()?;
 
         // Get effective patterns combining config and auto-detected
-        let effective_patterns = self.project.config_manager.get_effective_workspace_patterns(
-            auto_detected_patterns,
-            Some(current_pm_type.clone()),
-            None, // No specific environment
-        )?;
+        let effective_patterns = self.enhanced_config_provider.get_effective_patterns()?;
 
         // If we have effective patterns, return them
         if !effective_patterns.is_empty() {
@@ -723,17 +798,16 @@ impl MonorepoAnalyzer {
         }
 
         // Fallback: Try package manager specific patterns
-        let pm_specific_patterns =
-            self.project.config_manager.get_package_manager_patterns(current_pm_type)?;
+        let pm_specific_patterns = self.workspace_provider.get_package_manager_patterns()?;
 
         if !pm_specific_patterns.is_empty() {
             return Ok(pm_specific_patterns);
         }
 
         // Last fallback: Use discovery patterns from config
-        let workspace_config = self.project.config_manager.get_workspace()?;
+        let workspace_config = self.enhanced_config_provider.get_workspace_section()?;
         if workspace_config.discovery.scan_common_patterns {
-            return Ok(workspace_config.discovery.common_patterns);
+            return Ok(workspace_config.discovery.common_patterns.clone());
         }
 
         // Ultimate fallback: return empty
@@ -743,7 +817,7 @@ impl MonorepoAnalyzer {
     /// Get auto-detected workspace patterns based on current project structure
     pub fn get_auto_detected_patterns(&self) -> Result<Vec<String>> {
         let mut patterns = Vec::new();
-        let workspace_config = self.project.config_manager.get_workspace()?;
+        let workspace_config = self.enhanced_config_provider.get_workspace_section()?;
 
         // Skip auto-detection if disabled
         if !workspace_config.discovery.auto_detect {
@@ -751,9 +825,8 @@ impl MonorepoAnalyzer {
         }
 
         // Get existing package locations
-        let package_locations: Vec<String> = self
-            .project
-            .descriptor
+        let descriptor = self.package_discovery_provider.get_package_descriptor();
+        let package_locations: Vec<String> = descriptor
             .packages()
             .iter()
             .filter_map(|pkg| pkg.location.parent().map(|p| p.to_string_lossy().to_string()))
@@ -779,8 +852,10 @@ impl MonorepoAnalyzer {
         // Add common patterns if configured and they exist
         if workspace_config.discovery.scan_common_patterns {
             for common_pattern in &workspace_config.discovery.common_patterns {
-                if self.pattern_has_matches(common_pattern)? && !patterns.contains(common_pattern) {
-                    patterns.push(common_pattern.clone());
+                if self.pattern_has_matches(common_pattern)?
+                    && !patterns.contains(&common_pattern.to_string())
+                {
+                    patterns.push(common_pattern.to_string());
                 }
             }
         }
@@ -805,10 +880,9 @@ impl MonorepoAnalyzer {
     }
 
     /// Check if a pattern has any matches in the current workspace
-    #[allow(clippy::unnecessary_wraps)]
-    #[allow(clippy::manual_strip)]
     fn pattern_has_matches(&self, pattern: &str) -> Result<bool> {
-        let packages = self.project.descriptor.packages();
+        let descriptor = self.package_discovery_provider.get_package_descriptor();
+        let packages = descriptor.packages();
 
         for package in packages {
             let package_path = package.location.to_string_lossy();
@@ -819,17 +893,15 @@ impl MonorepoAnalyzer {
 
         // Also check if the pattern directory structure exists
         let pattern_path = if pattern.ends_with("/*") {
-            self.project.root_path().join(&pattern[..pattern.len() - 2])
+            self.workspace_provider.root_path().join(&pattern[..pattern.len() - 2])
         } else {
-            self.project.root_path().join(pattern)
+            self.workspace_provider.root_path().join(pattern)
         };
 
         Ok(pattern_path.exists())
     }
 
     /// Calculate pattern specificity for sorting (higher is more specific)
-    #[allow(clippy::cast_possible_truncation)]
-    #[must_use]
     pub fn calculate_pattern_specificity(&self, pattern: &str) -> u32 {
         let mut specificity = 0;
 
@@ -875,16 +947,34 @@ impl MonorepoAnalyzer {
         let auto_detected = self.get_auto_detected_patterns()?;
 
         // Validate patterns against existing packages
-        let existing_packages: Vec<String> = self
-            .project
-            .descriptor
+        let descriptor = self.package_discovery_provider.get_package_descriptor();
+        let existing_packages: Vec<String> = descriptor
             .packages()
             .iter()
             .map(|pkg| pkg.location.to_string_lossy().to_string())
             .collect();
 
-        let validation_errors =
-            self.project.config_manager.validate_workspace_config(&existing_packages)?;
+        let validation_errors = self.enhanced_config_provider.validate_config()?;
+
+        // Handle validation errors properly with detailed reporting
+        if validation_errors.is_empty() {
+            log::debug!("Workspace configuration validation passed successfully");
+        } else {
+            // Log detailed error information with structured context
+            log::error!(
+                "Found {} workspace configuration validation errors:",
+                validation_errors.len()
+            );
+            for (index, error) in validation_errors.iter().enumerate() {
+                log::error!("  Validation Error {}: {}", index + 1, error);
+            }
+
+            // Log summary for easier debugging
+            log::warn!(
+                "Workspace validation failed with {} errors. These may indicate mismatched patterns or invalid package configurations.",
+                validation_errors.len()
+            );
+        }
 
         // Calculate pattern effectiveness
         let mut pattern_stats = Vec::new();
@@ -921,7 +1011,8 @@ impl MonorepoAnalyzer {
     pub fn find_orphaned_packages(&self, patterns: &[String]) -> Vec<String> {
         let mut orphaned = Vec::new();
 
-        for package in self.project.descriptor.packages() {
+        let descriptor = self.package_discovery_provider.get_package_descriptor();
+        for package in descriptor.packages() {
             let package_path = package.location.to_string_lossy();
             let mut matches_pattern = false;
 
@@ -993,8 +1084,16 @@ impl MonorepoAnalyzer {
         since_ref: &str,
         until_ref: Option<&str>,
     ) -> Result<ChangeAnalysis> {
-        let diff_analyzer = DiffAnalyzer::new(Arc::clone(&self.project));
-        diff_analyzer.detect_changes_since(since_ref, until_ref)
+        // If we have a source project, use it to create a DiffAnalyzer
+        if let Some(project) = &self.source_project {
+            let diff_analyzer = crate::analysis::DiffAnalyzer::from_project(Arc::clone(project));
+            diff_analyzer.detect_changes_since(since_ref, until_ref)
+        } else {
+            // Fallback: return an error indicating that diff analysis requires a project reference
+            Err(crate::error::Error::analysis(
+                "Change detection requires a source project reference. Use MonorepoAnalyzer::from_project() for full functionality."
+            ))
+        }
     }
 
     /// Compare two branches using `DiffAnalyzer`
@@ -1006,8 +1105,16 @@ impl MonorepoAnalyzer {
         base_branch: &str,
         target_branch: &str,
     ) -> Result<BranchComparisonResult> {
-        let diff_analyzer = DiffAnalyzer::new(Arc::clone(&self.project));
-        diff_analyzer.compare_branches(base_branch, target_branch)
+        // If we have a source project, use it to create a DiffAnalyzer
+        if let Some(project) = &self.source_project {
+            let diff_analyzer = crate::analysis::DiffAnalyzer::from_project(Arc::clone(project));
+            diff_analyzer.compare_branches(base_branch, target_branch)
+        } else {
+            // Fallback: return an error indicating that diff analysis requires a project reference
+            Err(crate::error::Error::analysis(
+                "Branch comparison requires a source project reference. Use MonorepoAnalyzer::from_project() for full functionality."
+            ))
+        }
     }
 
     /// Detect the actual version of the package manager by executing the appropriate command
@@ -1031,13 +1138,16 @@ impl MonorepoAnalyzer {
     /// ```
     fn detect_package_manager_version(&self, kind: PackageManagerKind) -> String {
         // Use configurable commands and arguments
-        let pm_config = &self.project.config.workspace.package_manager_commands;
+        let Ok(workspace_config) = self.enhanced_config_provider.get_workspace_section() else {
+            return "unknown".to_string();
+        };
+        let pm_config = &workspace_config.package_manager_commands;
 
         // Handle JSR separately due to lifetime issues
         if matches!(kind, PackageManagerKind::Jsr) {
             let output = Command::new("jsr")
                 .args(["--version"])
-                .current_dir(self.project.root_path())
+                .current_dir(self.workspace_provider.root_path())
                 .output();
 
             return match output {
@@ -1073,8 +1183,10 @@ impl MonorepoAnalyzer {
             PackageManagerKind::Jsr => unreachable!(), // Handled above
         };
 
-        let output =
-            Command::new(command).args(args).current_dir(self.project.root_path()).output();
+        let output = Command::new(command)
+            .args(args)
+            .current_dir(self.workspace_provider.root_path())
+            .output();
 
         match output {
             Ok(output) if output.status.success() => {

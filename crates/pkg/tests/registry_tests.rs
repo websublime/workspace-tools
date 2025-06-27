@@ -3,9 +3,8 @@ mod registry_tests {
     use mockito::Server;
     use serde_json::{json, Value};
     use std::any::Any;
-    use std::rc::Rc;
     use sublime_package_tools::{
-        DependencyRegistry, LocalRegistry, NpmRegistry, PackageRegistry, PackageRegistryError,
+        DependencyRegistry, LocalRegistry, NpmRegistry, PackageRegistry, errors::PackageRegistryError,
         RegistryAuth, RegistryManager, RegistryType,
     };
 
@@ -18,18 +17,19 @@ mod registry_tests {
         let _dep2 = registry.get_or_create("lodash", "^4.17.21").unwrap();
 
         // Verify dependencies were created
-        assert_eq!(dep1.borrow().name(), "react");
-        assert_eq!(dep1.borrow().version().to_string(), "^17.0.0");
+        assert_eq!(dep1.name(), "react");
+        assert_eq!(dep1.version().to_string(), "^17.0.0");
 
         // Get existing dependency
         let dep1_again = registry.get_or_create("react", "^17.0.0").unwrap();
 
-        // Should be the same instance (Rc)
-        assert!(Rc::ptr_eq(&dep1, &dep1_again));
+        // Should have the same values
+        assert_eq!(dep1.name(), dep1_again.name());
+        assert_eq!(dep1.version(), dep1_again.version());
 
         // Get by name
         let dep_by_name = registry.get("react").unwrap();
-        assert_eq!(dep_by_name.borrow().name(), "react");
+        assert_eq!(dep_by_name.name(), "react");
     }
 
     #[test]
@@ -484,7 +484,7 @@ mod registry_tests {
     #[allow(clippy::assertions_on_constants)]
     #[test]
     fn test_npm_registry_error_variants() {
-        use sublime_package_tools::PackageRegistryError;
+        use sublime_package_tools::errors::PackageRegistryError;
 
         // Test that new error variants exist and can be created
         // Note: We can't easily create reqwest::Error in tests, so we'll test the structure

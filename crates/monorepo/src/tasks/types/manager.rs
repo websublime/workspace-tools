@@ -1,14 +1,16 @@
 //! Task manager type definitions
 
 use super::{ConditionChecker, TaskExecutor, TaskRegistry};
-use crate::core::MonorepoProject;
+use crate::core::{FileSystemProvider, PackageProvider};
 use std::collections::HashMap;
-use std::sync::Arc;
 
 /// Central manager for task execution and coordination
 pub struct TaskManager {
-    /// Reference to the monorepo project
-    pub(crate) project: Arc<MonorepoProject>,
+    /// File system operations provider
+    pub(crate) file_system: Box<dyn FileSystemProvider>,
+    
+    /// Package operations provider
+    pub(crate) package_provider: Box<dyn PackageProvider>,
 
     /// Task registry for storing and managing task definitions
     pub(crate) registry: TaskRegistry,

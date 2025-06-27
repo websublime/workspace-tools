@@ -5,6 +5,7 @@
 
 mod definitions;
 mod conditions;
+mod conversions;
 pub mod results;
 
 // Implementation structs (moved from main modules)

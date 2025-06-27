@@ -12,17 +12,43 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 impl HookInstaller {
-    /// Create a new hook installer
+    /// Create a new hook installer with injected dependencies
     ///
     /// # Errors
     /// Returns an error if:
     /// - The Git directory cannot be found
     /// - The hooks directory cannot be accessed
-    pub fn new(project: Arc<MonorepoProject>) -> Result<Self> {
-        let hooks_dir = Self::find_git_hooks_directory(&project)?;
+    pub fn new(
+        git_provider: Box<dyn crate::core::GitProvider>,
+        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+    ) -> Result<Self> {
+        let hooks_dir = Self::find_git_hooks_directory(git_provider.as_ref())?;
         let hook_template = Self::get_hook_template();
 
-        Ok(Self { project, hooks_dir, hook_template })
+        Ok(Self { 
+            git_provider,
+            file_system_provider,
+            hooks_dir, 
+            hook_template 
+        })
+    }
+
+    /// Create a new hook installer from project (convenience method)
+    /// 
+    /// NOTE: This convenience method creates provider instances from the project.
+    /// For better performance and memory usage, prefer using the `new()` method with 
+    /// pre-created providers when creating multiple components.
+    pub fn from_project(project: Arc<MonorepoProject>) -> Result<Self> {
+        use crate::core::interfaces::DependencyFactory;
+        
+        // Create providers efficiently
+        let git_provider = DependencyFactory::git_provider(Arc::clone(&project));
+        let file_system_provider = DependencyFactory::file_system_provider(project);
+        
+        Self::new(
+            git_provider,
+            file_system_provider,
+        )
     }
 
     /// Install a specific Git hook
@@ -173,10 +199,9 @@ impl HookInstaller {
     // Private helper methods
 
     /// Find the Git hooks directory for the repository
-    fn find_git_hooks_directory(project: &MonorepoProject) -> Result<PathBuf> {
-        // This would use the repository information from the project
-        // For now, assume standard .git/hooks location
-        let repo_root = project.root_path();
+    fn find_git_hooks_directory(git_provider: &dyn crate::core::GitProvider) -> Result<PathBuf> {
+        // Get repository root from git provider
+        let repo_root = git_provider.repository_root();
         let git_dir = repo_root.join(".git");
 
         if !git_dir.exists() {

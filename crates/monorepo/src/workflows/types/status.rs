@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// let failed_status = WorkflowStatus::Failed;
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum WorkflowStatus {
     /// Workflow is pending start
     Pending,
@@ -48,6 +48,22 @@ pub struct WorkflowStep {
     pub finished_at: Option<chrono::DateTime<chrono::Utc>>,
     /// Error message if failed
     pub error_message: Option<String>,
+    /// Substeps within this main step
+    pub substeps: Vec<SubStep>,
+}
+
+/// A substep within a workflow step
+///
+/// Represents a smaller unit of work within a main workflow step,
+/// useful for providing detailed progress information.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubStep {
+    /// Substep description
+    pub description: String,
+    /// When substep was added/started
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Whether this substep is completed
+    pub completed: bool,
 }
 
 /// Progress information for long-running workflows

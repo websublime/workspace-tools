@@ -23,7 +23,7 @@ fn test_complete_change_detection_workflow() {
 
     // Test 1: Configuration Management
     let config_manager = ConfigManager::new();
-    let config = config_manager.get().expect("Should get default config");
+    let config = config_manager.get_clone();
     assert_eq!(config.versioning.default_bump, VersionBumpType::Patch);
 
     // Test 2: Change Detection Engine
@@ -46,7 +46,7 @@ fn test_complete_change_detection_workflow() {
 /// Test configuration and change detection rule integration
 #[test]
 fn test_config_rules_integration() {
-    let config_manager = ConfigManager::new();
+    let mut config_manager = ConfigManager::new();
 
     // Test configuration update affects change detection
     config_manager
@@ -56,7 +56,7 @@ fn test_config_rules_integration() {
         })
         .expect("Config update should succeed");
 
-    let updated_config = config_manager.get().expect("Should get updated config");
+    let updated_config = config_manager.get_clone();
     assert_eq!(updated_config.versioning.default_bump, VersionBumpType::Minor);
     assert!(!updated_config.versioning.propagate_changes);
 
