@@ -12,45 +12,49 @@ use super::types::{
     DeploymentResult, EnvironmentDeploymentResult, ValidationResult,
     ChangesetManager, ChangesetStorage,
 };
+use sublime_standard_tools::filesystem::FileSystem;
 use crate::config::types::Environment;
 use crate::error::Error;
 use crate::tasks::TaskManager;
 use crate::VersionBumpType;
 
 
-impl ChangesetManager {
-    /// Creates a new changeset manager with injected dependencies
-    ///
-    /// This is a synchronous operation as it only initializes local structures
-    /// and does not perform any I/O operations.
-    ///
+impl<'a> ChangesetManager<'a> {
+    /// Creates a new changeset manager with direct borrowing from project
+    /// 
+    /// Uses borrowing instead of trait objects to eliminate Arc proliferation
+    /// and work with Rust ownership principles.
+    /// 
     /// # Arguments
-    ///
+    /// 
     /// * `storage` - Changeset storage for persistence
     /// * `task_manager` - Task manager for executing deployment tasks
-    /// * `config_provider` - Configuration provider for accessing settings
-    /// * `file_system_provider` - File system provider for file operations
-    /// * `package_provider` - Package provider for accessing package information
-    /// * `git_provider` - Git provider for repository operations
-    ///
+    /// * `config` - Direct reference to configuration
+    /// * `file_system` - Direct reference to file system manager
+    /// * `packages` - Direct reference to packages
+    /// * `repository` - Direct reference to git repository
+    /// * `root_path` - Direct reference to root path
+    /// 
     /// # Returns
-    ///
-    /// A new `ChangesetManager` instance.
+    /// 
+    /// A new changeset manager instance
     pub fn new(
-        storage: ChangesetStorage,
-        task_manager: TaskManager,
-        config_provider: Box<dyn crate::core::ConfigProvider>,
-        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
-        package_provider: Box<dyn crate::core::PackageProvider>,
-        git_provider: Box<dyn crate::core::GitProvider>,
+        storage: ChangesetStorage<'a>,
+        task_manager: TaskManager<'a>,
+        config: &'a crate::config::MonorepoConfig,
+        file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
+        packages: &'a [crate::core::MonorepoPackageInfo],
+        repository: &'a sublime_git_tools::Repo,
+        root_path: &'a std::path::Path,
     ) -> Self {
-        Self { 
-            storage, 
+        Self {
+            storage,
             task_manager,
-            config_provider,
-            file_system_provider,
-            package_provider,
-            git_provider,
+            config,
+            file_system,
+            packages,
+            repository,
+            root_path,
         }
     }
 
@@ -62,24 +66,28 @@ impl ChangesetManager {
     ///
     /// # Returns
     ///
-    /// A new `ChangesetManager` instance.
+    /// A new changeset manager instance.
     ///
     /// # Errors
     ///
-    /// Returns an error if the manager cannot be initialized.
-    pub fn from_project(project: std::sync::Arc<crate::core::MonorepoProject>) -> Result<Self, Error> {
-        use crate::core::interfaces::DependencyFactory;
+    /// Returns an error if any of the required components cannot be initialized.
+    pub fn from_project(project: &'a crate::core::MonorepoProject) -> Result<Self, crate::error::Error> {
+        let task_manager = crate::tasks::TaskManager::new(project)?;
+        let storage = crate::changesets::ChangesetStorage::new(
+            project.config.changesets.clone(),
+            &project.file_system,
+            &project.packages,
+            &project.root_path,
+        );
         
-        let storage = ChangesetStorage::from_project(std::sync::Arc::clone(&project));
-        let task_manager = TaskManager::from_project(std::sync::Arc::clone(&project))?;
-
         Ok(Self::new(
             storage,
             task_manager,
-            DependencyFactory::config_provider(std::sync::Arc::clone(&project)),
-            DependencyFactory::file_system_provider(std::sync::Arc::clone(&project)),
-            DependencyFactory::package_provider(std::sync::Arc::clone(&project)),
-            DependencyFactory::git_provider(project),
+            &project.config,
+            &project.file_system,
+            &project.packages,
+            &project.repository,
+            &project.root_path,
         ))
     }
 
@@ -126,8 +134,8 @@ impl ChangesetManager {
 
         // Get current branch
         let branch = self
-            .git_provider
-            .current_branch()
+            .repository
+            .get_current_branch()
             .map_err(|e| Error::changeset(format!("Failed to get current branch: {e}")))?;
 
         // Determine author
@@ -210,7 +218,7 @@ impl ChangesetManager {
             package: package_name,
             version_bump: VersionBumpType::Patch, // Default to patch
             description: "Interactive changeset".to_string(),
-            development_environments: self.config_provider.config().changesets.default_environments.clone(),
+            development_environments: self.config.changesets.default_environments.clone(),
             production_deployment: false,
             author: None,
         };
@@ -338,8 +346,8 @@ impl ChangesetManager {
             errors.push("Package name cannot be empty".to_string());
         } else {
             // Check if package actually exists in the project
-            if self.package_provider.get_package(&changeset.package).is_none() {
-                errors.push(format!("Package '{}' not found in project", changeset.package));
+            if self.packages.iter().find(|p| p.name() == &changeset.package).is_none() {
+                errors.push(format!("Package '{package}' not found in project", package = changeset.package));
             } else {
                 // Validate version bump is appropriate
                 match self.validate_version_bump(&changeset.package, changeset.version_bump) {
@@ -366,7 +374,7 @@ impl ChangesetManager {
         }
 
         for env in &changeset.development_environments {
-            if !self.config_provider.config().environments.contains(env) {
+            if !self.config.environments.contains(env) {
                 warnings
                     .push(format!("Environment {env} is not configured in project environments"));
             }
@@ -377,7 +385,7 @@ impl ChangesetManager {
             errors.push("Branch name cannot be empty".to_string());
         } else {
             // Check if branch follows naming conventions using configured prefixes
-            let branch_config = &self.config_provider.config().git.branches;
+            let branch_config = &self.config.git.branches;
             let valid_prefixes = branch_config.get_all_valid_prefixes();
             let has_valid_prefix =
                 valid_prefixes.iter().any(|prefix| changeset.branch.starts_with(prefix));
@@ -482,6 +490,7 @@ impl ChangesetManager {
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(clippy::unused_async)]
     pub async fn deploy_to_environments(
         &self,
         changeset_id: &str,
@@ -502,7 +511,7 @@ impl ChangesetManager {
             let env_start = Utc::now();
 
             // Execute deployment for this environment
-            let env_result = self.deploy_to_environment(&changeset, environment).await;
+            let env_result = self.deploy_to_environment(&changeset, environment);
 
             let env_deployment_result = match env_result {
                 Ok(()) => EnvironmentDeploymentResult {
@@ -556,13 +565,13 @@ impl ChangesetManager {
 
         // For now, just validate format - in a real implementation would check semver constraints
         let major: u32 = version_parts[0].parse().map_err(|_| {
-            Error::changeset(format!("Invalid major version in {}: {}", package, version_parts[0]))
+            Error::changeset(format!("Invalid major version in {package}: {version}", version = version_parts[0]))
         })?;
         let minor: u32 = version_parts[1].parse().map_err(|_| {
-            Error::changeset(format!("Invalid minor version in {}: {}", package, version_parts[1]))
+            Error::changeset(format!("Invalid minor version in {package}: {version}", version = version_parts[1]))
         })?;
         let patch: u32 = version_parts[2].parse().map_err(|_| {
-            Error::changeset(format!("Invalid patch version in {}: {}", package, version_parts[2]))
+            Error::changeset(format!("Invalid patch version in {package}: {version}", version = version_parts[2]))
         })?;
 
         // Validate bump type makes sense
@@ -592,14 +601,15 @@ impl ChangesetManager {
     fn read_package_version(&self, package: &str) -> Result<String, Error> {
         // Get package information
         let package_info = self
-            .package_provider
-            .get_package(package)
+            .packages
+            .iter()
+            .find(|p| p.name() == package)
             .ok_or_else(|| Error::changeset(format!("Package not found: {package}")))?;
 
         // Read package.json
         let package_json_path = package_info.path().join("package.json");
         let content =
-            self.file_system_provider.read_file_string(&package_json_path).map_err(|e| {
+            self.file_system.read_file_string(&package_json_path).map_err(|e| {
                 Error::changeset(format!("Failed to read package.json for {package}: {e}"))
             })?;
 
@@ -620,14 +630,14 @@ impl ChangesetManager {
         let mut dependents = Vec::new();
 
         // Check all packages in the project
-        for pkg in self.package_provider.packages() {
+        for pkg in self.packages {
             if pkg.name() == package {
                 continue; // Skip self
             }
 
             // Read package.json to check dependencies
             let package_json_path = pkg.path().join("package.json");
-            if let Ok(content) = self.file_system_provider.read_file_string(&package_json_path) {
+            if let Ok(content) = self.file_system.read_file_string(&package_json_path) {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                     // Check dependencies, devDependencies, and peerDependencies
                     let dep_sections = ["dependencies", "devDependencies", "peerDependencies"];
@@ -650,7 +660,7 @@ impl ChangesetManager {
     /// Gets the Git author from configuration
     fn get_author_from_git_config(&self) -> String {
         // Get git configuration from repository
-        match self.git_provider.repository().list_config() {
+        match self.repository.list_config() {
             Ok(config) => {
                 let email = config
                     .get("user.email")
@@ -676,8 +686,7 @@ impl ChangesetManager {
     fn detect_affected_package(&self) -> Result<String, Error> {
         // Get staged files to determine affected packages
         let staged_files = self
-            .git_provider
-            .repository()
+            .repository
             .get_staged_files()
             .map_err(|e| Error::changeset(format!("Failed to get staged files: {e}")))?;
 
@@ -692,10 +701,10 @@ impl ChangesetManager {
             std::collections::HashMap::new();
 
         for file_path in &staged_files {
-            let full_path = self.package_provider.root_path().join(file_path);
+            let full_path = self.root_path.join(file_path);
 
             // Find package that contains this file path
-            for package in self.package_provider.packages() {
+            for package in self.packages {
                 let package_path = package.workspace_package.absolute_path.as_path();
                 if full_path.starts_with(package_path) {
                     let package_name = package.name().to_string();
@@ -771,13 +780,13 @@ impl ChangesetManager {
         }
 
         let major: u32 = version_parts[0].parse().map_err(|_| {
-            Error::changeset(format!("Invalid major version: {}", version_parts[0]))
+            Error::changeset(format!("Invalid major version: {version}", version = version_parts[0]))
         })?;
         let minor: u32 = version_parts[1].parse().map_err(|_| {
-            Error::changeset(format!("Invalid minor version: {}", version_parts[1]))
+            Error::changeset(format!("Invalid minor version: {version}", version = version_parts[1]))
         })?;
         let patch: u32 = version_parts[2].parse().map_err(|_| {
-            Error::changeset(format!("Invalid patch version: {}", version_parts[2]))
+            Error::changeset(format!("Invalid patch version: {version}", version = version_parts[2]))
         })?;
 
         let (new_major, new_minor, new_patch) = match version_bump {
@@ -798,14 +807,15 @@ impl ChangesetManager {
     fn update_package_version(&self, package: &str, new_version: &str) -> Result<(), Error> {
         // Get package information
         let package_info = self
-            .package_provider
-            .get_package(package)
+            .packages
+            .iter()
+            .find(|p| p.name() == package)
             .ok_or_else(|| Error::changeset(format!("Package not found: {package}")))?;
 
         // Read package.json
         let package_json_path = package_info.path().join("package.json");
         let content =
-            self.file_system_provider.read_file_string(&package_json_path).map_err(|e| {
+            self.file_system.read_file_string(&package_json_path).map_err(|e| {
                 Error::changeset(format!("Failed to read package.json for {package}: {e}"))
             })?;
 
@@ -821,7 +831,7 @@ impl ChangesetManager {
             Error::changeset(format!("Failed to serialize updated package.json: {e}"))
         })?;
 
-        self.file_system_provider
+        self.file_system
             .write_file_string(&package_json_path, &updated_content)
             .map_err(|e| {
                 Error::changeset(format!("Failed to write updated package.json for {package}: {e}"))
@@ -838,14 +848,14 @@ impl ChangesetManager {
         new_version: &str,
     ) -> Result<(), Error> {
         // Get package information
-        let package_info = self.package_provider.get_package(dependent_package).ok_or_else(|| {
+        let package_info = self.packages.iter().find(|p| p.name() == dependent_package).ok_or_else(|| {
             Error::changeset(format!("Dependent package not found: {dependent_package}"))
         })?;
 
         // Read package.json
         let package_json_path = package_info.path().join("package.json");
         let content =
-            self.file_system_provider.read_file_string(&package_json_path).map_err(|e| {
+            self.file_system.read_file_string(&package_json_path).map_err(|e| {
                 Error::changeset(format!(
                     "Failed to read package.json for {dependent_package}: {e}"
                 ))
@@ -875,7 +885,7 @@ impl ChangesetManager {
                 Error::changeset(format!("Failed to serialize updated package.json: {e}"))
             })?;
 
-            self.file_system_provider
+            self.file_system
                 .write_file_string(&package_json_path, &updated_content)
                 .map_err(|e| {
                     Error::changeset(format!(
@@ -888,7 +898,7 @@ impl ChangesetManager {
     }
 
     /// Deploys a changeset to a specific environment
-    async fn deploy_to_environment(
+    fn deploy_to_environment(
         &self,
         changeset: &Changeset,
         environment: &Environment,
@@ -903,7 +913,7 @@ impl ChangesetManager {
         }
 
         // Execute deployment tasks using TaskManager
-        let task_results = self.task_manager.execute_tasks_batch(&tasks).await?;
+        let task_results = self.task_manager.execute_tasks_batch(&tasks)?;
 
         // Check if all tasks succeeded
         let failed_tasks: Vec<_> = task_results
@@ -947,7 +957,7 @@ impl ChangesetManager {
         environment: &Environment,
     ) -> Result<Vec<String>, Error> {
         // Check if deployment tasks are configured for this environment in the project config
-        let env_tasks = self.config_provider.config().tasks.deployment_tasks.get(environment);
+        let env_tasks = self.config.tasks.deployment_tasks.get(environment);
 
         if let Some(configured_tasks) = env_tasks {
             // Use configured tasks for this environment

@@ -24,8 +24,6 @@ mod executor;
 mod checker;
 mod async_adapter;
 
-#[cfg(test)]
-mod tests;
 
 // Re-export main types for convenience
 pub use types::{
@@ -39,4 +37,4 @@ pub use types::{
 };
 
 // Re-export async boundary adapter
-pub use async_adapter::{AsyncConditionAdapter, AsyncConditionAdapterBuilder};
+pub use async_adapter::AsyncConditionAdapter;

@@ -25,22 +25,30 @@ use crate::analysis::MonorepoAnalyzer;
 /// # Ok(())
 /// # }
 /// ```
-pub struct DevelopmentWorkflow {
+/// Uses direct borrowing from MonorepoProject components instead of trait objects.
+/// This follows Rust ownership principles and eliminates Arc proliferation.
+pub struct DevelopmentWorkflow<'a> {
     /// Analyzer for detecting changes and affected packages
-    pub(crate) analyzer: MonorepoAnalyzer,
+    pub(crate) analyzer: MonorepoAnalyzer<'a>,
 
     /// Task manager for executing development tasks
-    pub(crate) task_manager: crate::tasks::TaskManager,
+    pub(crate) task_manager: crate::tasks::TaskManager<'a>,
 
     /// Changeset manager for handling development changesets
-    pub(crate) changeset_manager: crate::changesets::ChangesetManager,
+    pub(crate) changeset_manager: crate::changesets::ChangesetManager<'a>,
 
-    /// Configuration provider for accessing configuration settings
-    pub(crate) config_provider: Box<dyn crate::core::ConfigProvider>,
+    /// Direct reference to configuration
+    pub(crate) config: &'a crate::config::MonorepoConfig,
 
-    /// Package provider for accessing package information
-    pub(crate) package_provider: Box<dyn crate::core::PackageProvider>,
+    /// Direct reference to packages
+    pub(crate) packages: &'a [crate::core::MonorepoPackageInfo],
 
-    /// Git provider for repository operations
-    pub(crate) git_provider: Box<dyn crate::core::GitProvider>,
+    /// Direct reference to git repository
+    pub(crate) repository: &'a sublime_git_tools::Repo,
+
+    /// Direct reference to file system manager
+    pub(crate) file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
+
+    /// Direct reference to root path
+    pub(crate) root_path: &'a std::path::Path,
 }

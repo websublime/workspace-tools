@@ -8,7 +8,6 @@ use crate::error::Result;
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
-use std::sync::Arc;
 use sublime_git_tools::{GitChangedFile, GitFileStatus};
 
 // Import consistent types from changes module
@@ -21,15 +20,21 @@ use super::types::diff::{
 };
 use crate::changes::PackageChange;
 
-impl DiffAnalyzer {
-    /// Create a new diff analyzer with injected dependencies
+impl<'a> DiffAnalyzer<'a> {
+    /// Create a new diff analyzer with direct borrowing from project
+    /// 
+    /// Uses borrowing instead of trait objects to eliminate Arc proliferation
+    /// and work with Rust ownership principles.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `project` - Reference to monorepo project
+    /// 
+    /// # Returns
+    /// 
+    /// A new diff analyzer instance
     #[must_use]
-    pub fn new(
-        git_provider: Box<dyn crate::core::GitProvider>,
-        package_provider: Box<dyn crate::core::PackageProvider>,
-        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
-        package_discovery_provider: Box<dyn crate::core::interfaces::PackageDiscoveryProvider>,
-    ) -> Self {
+    pub fn new(project: &'a MonorepoProject) -> Self {
         // Add built-in analyzers
         let analyzers: Vec<Box<dyn ChangeAnalyzer>> = vec![
             Box::new(PackageJsonAnalyzer),
@@ -41,60 +46,52 @@ impl DiffAnalyzer {
 
         Self {
             analyzers,
-            git_provider,
-            package_provider,
-            file_system_provider,
-            package_discovery_provider,
-        }
-    }
-
-    /// Create a new diff analyzer from project (convenience method)
-    #[must_use]
-    #[allow(clippy::needless_pass_by_value)]
-    pub fn from_project(project: Arc<MonorepoProject>) -> Self {
-        use crate::core::interfaces::DependencyFactory;
-
-        // Create providers but don't store the project
-        let git_provider = DependencyFactory::git_provider(Arc::clone(&project));
-        let package_provider = DependencyFactory::package_provider(Arc::clone(&project));
-        let file_system_provider = DependencyFactory::file_system_provider(Arc::clone(&project));
-        let package_discovery_provider =
-            DependencyFactory::package_discovery_provider(Arc::clone(&project));
-
-        // Add built-in analyzers
-        let analyzers: Vec<Box<dyn ChangeAnalyzer>> = vec![
-            Box::new(PackageJsonAnalyzer),
-            Box::new(SourceCodeAnalyzer),
-            Box::new(ConfigurationAnalyzer),
-            Box::new(DocumentationAnalyzer),
-            Box::new(TestAnalyzer),
-        ];
-
-        Self {
-            analyzers,
-            git_provider,
-            package_provider,
-            file_system_provider,
-            package_discovery_provider,
+            repository: project.repository(),
+            packages: &project.packages,
+            file_system: project.services.file_system_service().manager(),
+            root_path: project.root_path(),
         }
     }
 
     /// Create a new diff analyzer with custom analyzers
     #[must_use]
     pub fn with_analyzers(
-        git_provider: Box<dyn crate::core::GitProvider>,
-        package_provider: Box<dyn crate::core::PackageProvider>,
-        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
-        package_discovery_provider: Box<dyn crate::core::interfaces::PackageDiscoveryProvider>,
+        project: &'a MonorepoProject,
         analyzers: Vec<Box<dyn ChangeAnalyzer>>,
     ) -> Self {
         Self {
             analyzers,
-            git_provider,
-            package_provider,
-            file_system_provider,
-            package_discovery_provider,
+            repository: project.repository(),
+            packages: &project.packages,
+            file_system: project.services.file_system_service().manager(),
+            root_path: project.root_path(),
         }
+    }
+
+    /// Creates a new diff analyzer from an existing MonorepoProject
+    /// 
+    /// Convenience method that wraps the `new` constructor for backward compatibility.
+    /// Uses real direct borrowing following Rust ownership principles.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `project` - Reference to the monorepo project
+    /// 
+    /// # Returns
+    /// 
+    /// A new DiffAnalyzer instance with built-in analyzers and direct borrowing
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust
+    /// use sublime_monorepo_tools::{DiffAnalyzer, MonorepoProject};
+    /// 
+    /// let project = MonorepoProject::new("/path/to/monorepo")?;
+    /// let diff_analyzer = DiffAnalyzer::from_project(&project);
+    /// ```
+    #[must_use]
+    pub fn from_project(project: &'a MonorepoProject) -> Self {
+        Self::new(project)
     }
 
     /// Compare two branches and analyze the differences
@@ -116,7 +113,7 @@ impl DiffAnalyzer {
         }
 
         // Validate branches exist using git commands
-        let repo_root = self.git_provider.repository_root();
+        let repo_root = self.root_path;
 
         // Check if base branch exists
         let base_check = Command::new("git")
@@ -149,11 +146,11 @@ impl DiffAnalyzer {
         }
 
         // First, get the merge base between the branches
-        let merge_base = self.git_provider.get_diverged_commit(base_branch)?;
+        let merge_base = self.repository.get_diverged_commit(base_branch)?;
 
         // Get all changed files between branches
         let changed_files =
-            self.git_provider.get_all_files_changed_since_sha_with_status(base_branch)?;
+            self.repository.get_all_files_changed_since_sha_with_status(base_branch)?;
 
         // Map changes to packages
         let affected_packages_analysis = self.identify_affected_packages(&changed_files)?;
@@ -181,7 +178,7 @@ impl DiffAnalyzer {
 
         // Get changed files
         let changed_files =
-            self.git_provider.get_all_files_changed_since_sha_with_status(since_ref)?;
+            self.repository.get_all_files_changed_since_sha_with_status(since_ref)?;
 
         // Map changes to packages
         let package_changes = self.map_changes_to_packages(&changed_files);
@@ -210,18 +207,8 @@ impl DiffAnalyzer {
             // Find which package this file belongs to
             let file_path = Path::new(&file.path);
 
-            // Get the package discovery provider to access the descriptor
-            let descriptor = self.package_discovery_provider.get_package_descriptor();
-            // Get project root from the first package's parent directory
-            let project_root = if let Some(first_pkg) = descriptor.packages().first() {
-                // Get parent directory, fallback to package path if no parent exists
-                let first_parent =
-                    first_pkg.absolute_path.parent().unwrap_or(&first_pkg.absolute_path);
-                // Get grandparent directory, fallback to first parent if no grandparent exists
-                first_parent.parent().unwrap_or(first_parent)
-            } else {
-                Path::new(".")
-            };
+            // Use direct reference to project root
+            let project_root = self.root_path;
 
             // Resolve the file path relative to the project root if it's relative
             let full_file_path = if file_path.is_absolute() {
@@ -250,16 +237,15 @@ impl DiffAnalyzer {
                 full_file_path.canonicalize().unwrap_or(full_file_path)
             };
 
-            // Find package by manually checking canonicalized paths since find_package_for_path
-            // might not handle symlinks properly
-            let package = descriptor.packages().iter().find(|pkg| {
+            // Find package by checking canonicalized path from direct packages access
+            let package = self.packages.iter().find(|pkg| {
                 let canonical_pkg_path =
-                    pkg.absolute_path.canonicalize().unwrap_or_else(|_| pkg.absolute_path.clone());
+                    pkg.path().canonicalize().unwrap_or_else(|_| pkg.path().clone());
                 canonical_file_path.starts_with(&canonical_pkg_path)
             });
 
             if let Some(package) = package {
-                let package_name = package.name.clone();
+                let package_name = package.name().to_string();
 
                 // Get or create package change builder
                 let change_builder = package_changes
@@ -299,7 +285,7 @@ impl DiffAnalyzer {
             directly_affected.insert(package_change.package_name.clone());
 
             // Find all packages that depend on this changed package
-            let dependents = self.package_provider.get_dependents(&package_change.package_name);
+            let dependents = self.get_dependents(&package_change.package_name);
 
             for dependent_pkg in dependents {
                 let dependent_name = dependent_pkg.name().to_string();
@@ -346,10 +332,10 @@ impl DiffAnalyzer {
                 let mut reasons = Vec::new();
 
                 // Enhance significance based on package role
-                if let Some(package_info) = self.package_provider.get_package(&change.package_name)
-                {
+                if let Some(package_info) = self.get_package(&change.package_name) {
                     // Check if package has many dependents
-                    if package_info.dependents.len() > 5 {
+                    let dependents = self.get_dependents(&change.package_name);
+                    if dependents.len() > 5 {
                         significance = significance.elevate();
                         reasons.push("Package has many dependents".to_string());
                     }
@@ -445,11 +431,10 @@ impl DiffAnalyzer {
             let mut score = 1.0;
 
             // Boost score based on number of dependents
-            if let Some(package_info) = self.package_provider.get_package(package_name) {
-                #[allow(clippy::cast_precision_loss)]
-                {
-                    score += package_info.dependents.len() as f32 * 0.1;
-                }
+            let dependents = self.get_dependents(package_name);
+            #[allow(clippy::cast_precision_loss)]
+            {
+                score += dependents.len() as f32 * 0.1;
             }
 
             scores.insert(package_name.clone(), score);
@@ -473,7 +458,7 @@ impl DiffAnalyzer {
         use std::process::Command;
 
         // Get the repository root for running git commands
-        let repo_root = self.git_provider.repository_root();
+        let repo_root = self.root_path;
 
         // Get merge base between the two branches
         let merge_base_output = Command::new("git")
@@ -530,6 +515,40 @@ impl DiffAnalyzer {
         let conflicts: Vec<String> = base_changes.intersection(&target_changes).cloned().collect();
 
         Ok(conflicts)
+    }
+
+    /// Get package by name from direct package array
+    /// 
+    /// # Arguments
+    /// 
+    /// * `name` - Package name to search for
+    /// 
+    /// # Returns
+    /// 
+    /// Reference to package info if found, None otherwise
+    fn get_package(&self, name: &str) -> Option<&crate::core::MonorepoPackageInfo> {
+        self.packages.iter().find(|pkg| pkg.name() == name)
+    }
+
+    /// Get dependents of a package
+    /// 
+    /// # Arguments
+    /// 
+    /// * `package_name` - Name of the package to find dependents for
+    /// 
+    /// # Returns
+    /// 
+    /// Vector of packages that depend on the given package
+    fn get_dependents(&self, package_name: &str) -> Vec<&crate::core::MonorepoPackageInfo> {
+        if let Some(package) = self.get_package(package_name) {
+            // Use the dependents field from the package info to find dependent packages
+            package.dependents
+                .iter()
+                .filter_map(|dependent_name| self.get_package(dependent_name))
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 }
 

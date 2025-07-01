@@ -1,12 +1,22 @@
 //! Task executor type definitions
+//!
+//! Follows direct borrowing patterns instead of trait objects.
 
-use crate::core::{PackageProvider, ConfigProvider};
+use crate::core::MonorepoPackageInfo;
+use crate::config::MonorepoConfig;
+use std::path::Path;
 
 /// Executor for running tasks with various scopes and configurations
-pub struct TaskExecutor {
-    /// Package operations provider
-    pub(crate) package_provider: Box<dyn PackageProvider>,
+/// 
+/// Uses direct borrowing from MonorepoProject components instead of trait objects.
+/// This follows Rust ownership principles and eliminates Arc proliferation.
+pub struct TaskExecutor<'a> {
+    /// Direct reference to packages
+    pub(crate) packages: &'a [MonorepoPackageInfo],
     
-    /// Configuration provider
-    pub(crate) config_provider: Box<dyn ConfigProvider>,
+    /// Direct reference to configuration
+    pub(crate) config: &'a MonorepoConfig,
+    
+    /// Direct reference to root path
+    pub(crate) root_path: &'a Path,
 }

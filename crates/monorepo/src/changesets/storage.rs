@@ -9,8 +9,9 @@ use serde_json;
 
 use super::types::{Changeset, ChangesetFilter, ChangesetStorage};
 use crate::error::Error;
+use sublime_standard_tools::filesystem::FileSystem;
 
-impl ChangesetStorage {
+impl<'a> ChangesetStorage<'a> {
     /// Creates a new changeset storage instance
     ///
     /// # Arguments
@@ -27,42 +28,36 @@ impl ChangesetStorage {
     /// let project = Arc::new(MonorepoProject::new(Path::new("/project"))?);
     /// let storage = ChangesetStorage::new(project);
     /// ```
-    /// Creates a new changeset storage instance with injected dependencies
-    ///
+    /// Creates a new changeset storage with direct borrowing from project
+    /// 
+    /// Uses borrowing instead of trait objects to eliminate Arc proliferation
+    /// and work with Rust ownership principles.
+    /// 
     /// # Arguments
-    ///
+    /// 
     /// * `config` - Changeset configuration
-    /// * `file_system_provider` - File system provider for file operations
-    /// * `package_provider` - Package provider for accessing root path
+    /// * `file_system` - Direct reference to file system manager
+    /// * `packages` - Direct reference to packages
+    /// * `root_path` - Direct reference to root path
+    /// 
+    /// # Returns
+    /// 
+    /// A new changeset storage instance
     #[must_use]
     pub fn new(
         config: crate::config::types::ChangesetsConfig,
-        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
-        package_provider: Box<dyn crate::core::PackageProvider>,
+        file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
+        packages: &'a [crate::core::MonorepoPackageInfo],
+        root_path: &'a std::path::Path,
     ) -> Self {
-        Self { 
-            config, 
-            file_system_provider,
-            package_provider,
+        Self {
+            config,
+            file_system,
+            packages,
+            root_path,
         }
     }
 
-    /// Creates a new changeset storage from project (convenience method)
-    ///
-    /// # Arguments
-    ///
-    /// * `project` - Reference to the monorepo project
-    #[must_use]
-    pub fn from_project(project: std::sync::Arc<crate::core::MonorepoProject>) -> Self {
-        use crate::core::interfaces::DependencyFactory;
-        
-        let config = project.config.changesets.clone();
-        Self::new(
-            config,
-            DependencyFactory::file_system_provider(std::sync::Arc::clone(&project)),
-            DependencyFactory::package_provider(project),
-        )
-    }
 
     /// Saves a changeset to storage
     ///
@@ -96,7 +91,7 @@ impl ChangesetStorage {
     pub fn save(&self, changeset: &Changeset) -> Result<(), Error> {
         // Ensure changeset directory exists
         let changeset_dir = self.get_changeset_directory();
-        self.file_system_provider
+        self.file_system
             .create_dir_all(&changeset_dir)
             .map_err(|e| Error::changeset(format!("Failed to create changeset directory: {e}")))?;
 
@@ -109,8 +104,8 @@ impl ChangesetStorage {
             .map_err(|e| Error::changeset(format!("Failed to serialize changeset: {e}")))?;
 
         // Write to file
-        self.file_system_provider
-            .write_file_string(&filepath, &content)
+        self.file_system
+            .write_file(&filepath, content.as_bytes())
             .map_err(|e| Error::changeset(format!("Failed to write changeset file: {e}")))?;
 
         Ok(())
@@ -146,13 +141,13 @@ impl ChangesetStorage {
         let changeset_dir = self.get_changeset_directory();
 
         // Find file with this ID
-        if !self.file_system_provider.path_exists(&changeset_dir) {
+        if !self.file_system.exists(&changeset_dir) {
             // Directory doesn't exist, so no changesets
             return Ok(None);
         }
 
         let files = self
-            .file_system_provider
+            .file_system
             .walk_dir(&changeset_dir)
             .map_err(|e| Error::changeset(format!("Failed to list changeset files: {e}")))?
             .into_iter()
@@ -165,9 +160,12 @@ impl ChangesetStorage {
                 let short_id = if id.len() > 8 { &id[..8] } else { id };
                 if filename.contains(id) || filename.contains(short_id) {
                     let content =
-                        self.file_system_provider.read_file_string(&file).map_err(|e| {
+                        self.file_system.read_file(&file).map_err(|e| {
                             Error::changeset(format!("Failed to read changeset file: {e}"))
                         })?;
+                    let content = String::from_utf8(content).map_err(|e| {
+                        Error::changeset(format!("Invalid UTF-8 in changeset file: {e}"))
+                    })?;
 
                     let changeset: Changeset = serde_json::from_str(&content)
                         .map_err(|e| Error::changeset(format!("Failed to parse changeset: {e}")))?;
@@ -216,13 +214,13 @@ impl ChangesetStorage {
         let changeset_dir = self.get_changeset_directory();
 
         // Get all JSON files in the changeset directory
-        if !self.file_system_provider.path_exists(&changeset_dir) {
+        if !self.file_system.exists(&changeset_dir) {
             // Directory doesn't exist, so no changesets
             return Ok(Vec::new());
         }
 
         let files = self
-            .file_system_provider
+            .file_system
             .walk_dir(&changeset_dir)
             .map_err(|e| Error::changeset(format!("Failed to list changeset files: {e}")))?
             .into_iter()
@@ -233,7 +231,7 @@ impl ChangesetStorage {
 
         for file in files {
             let content = self
-                .file_system_provider
+                .file_system
                 .read_file_string(&file)
                 .map_err(|e| Error::changeset(format!("Failed to read changeset file: {e}")))?;
 
@@ -282,13 +280,13 @@ impl ChangesetStorage {
         let changeset_dir = self.get_changeset_directory();
 
         // Find file with this ID
-        if !self.file_system_provider.path_exists(&changeset_dir) {
+        if !self.file_system.exists(&changeset_dir) {
             // Directory doesn't exist, so changeset doesn't exist
             return Ok(false);
         }
 
         let files = self
-            .file_system_provider
+            .file_system
             .walk_dir(&changeset_dir)
             .map_err(|e| Error::changeset(format!("Failed to list changeset files: {e}")))?
             .into_iter()
@@ -302,15 +300,18 @@ impl ChangesetStorage {
                 if filename.contains(id) || filename.contains(short_id) {
                     // Verify this is the correct changeset
                     let content =
-                        self.file_system_provider.read_file_string(&file).map_err(|e| {
+                        self.file_system.read_file(&file).map_err(|e| {
                             Error::changeset(format!("Failed to read changeset file: {e}"))
                         })?;
+                    let content = String::from_utf8(content).map_err(|e| {
+                        Error::changeset(format!("Invalid UTF-8 in changeset file: {e}"))
+                    })?;
 
                     let changeset: Changeset = serde_json::from_str(&content)
                         .map_err(|e| Error::changeset(format!("Failed to parse changeset: {e}")))?;
 
                     if changeset.id == id {
-                        self.file_system_provider.remove_file(&file).map_err(|e| {
+                        self.file_system.remove(&file).map_err(|e| {
                             Error::changeset(format!("Failed to delete changeset file: {e}"))
                         })?;
                         return Ok(true);
@@ -324,7 +325,7 @@ impl ChangesetStorage {
 
     /// Gets the full path to the changeset directory
     fn get_changeset_directory(&self) -> PathBuf {
-        self.package_provider.root_path().join(&self.config.changeset_dir)
+        self.root_path.join(&self.config.changeset_dir)
     }
 
     /// Generates a filename for a changeset based on the configured format

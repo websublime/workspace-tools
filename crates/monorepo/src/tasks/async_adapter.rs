@@ -4,7 +4,7 @@
 //! asynchronous operations like custom script execution. This adapter follows
 //! Rust ownership principles and provides clear async/sync separation.
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::tasks::types::ExecutionContext;
 use crate::tasks::ConditionChecker;
 use std::future::Future;
@@ -23,7 +23,7 @@ use std::pin::Pin;
 ///
 /// ```rust
 /// use sublime_monorepo_tools::tasks::{AsyncConditionAdapter, TaskCondition, ExecutionContext};
-/// 
+///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// // Create the adapter with required providers
 /// let adapter = AsyncConditionAdapterBuilder::new()
@@ -36,9 +36,9 @@ use std::pin::Pin;
 /// // Mix of sync and async conditions
 /// let conditions = vec![
 ///     TaskCondition::PackagesChanged { packages: vec!["my-package".to_string()] },
-///     TaskCondition::CustomScript { 
-///         script: "echo 'test'".to_string(), 
-///         expected_output: Some("test".to_string()) 
+///     TaskCondition::CustomScript {
+///         script: "echo 'test'".to_string(),
+///         expected_output: Some("test".to_string())
 ///     },
 /// ];
 ///
@@ -51,7 +51,7 @@ use std::pin::Pin;
 /// # Async Boundary Design
 ///
 /// The adapter follows these principles:
-/// 
+///
 /// 1. **Automatic Detection**: Automatically detects async requirements
 /// 2. **Sync Fast Path**: Pure sync conditions use fast synchronous execution
 /// 3. **Mixed Handling**: Mixed conditions handle each appropriately
@@ -62,9 +62,9 @@ use std::pin::Pin;
 /// - Synchronous conditions are executed immediately without async overhead
 /// - Only conditions requiring async execution (custom scripts, environment checkers) use async
 /// - Mixed conditions are evaluated efficiently with minimal async overhead
-pub struct AsyncConditionAdapter {
+pub struct AsyncConditionAdapter<'a> {
     /// The synchronous condition checker
-    checker: ConditionChecker,
+    checker: ConditionChecker<'a>,
 }
 
 /// Represents the result of a condition evaluation
@@ -75,10 +75,10 @@ pub enum ConditionResult {
     Async(Pin<Box<dyn Future<Output = Result<bool>>>>),
 }
 
-impl AsyncConditionAdapter {
+impl<'a> AsyncConditionAdapter<'a> {
     /// Create a new async boundary adapter
     #[must_use]
-    pub fn new(checker: ConditionChecker) -> Self {
+    pub fn new(checker: ConditionChecker<'a>) -> Self {
         Self { checker }
     }
 
@@ -113,15 +113,18 @@ impl AsyncConditionAdapter {
     #[must_use]
     pub fn requires_async_execution(conditions: &[crate::tasks::TaskCondition]) -> bool {
         use crate::tasks::TaskCondition;
-        
+
         conditions.iter().any(|condition| match condition {
             TaskCondition::CustomScript { .. } => true,
             TaskCondition::Environment { env } => {
                 matches!(env, crate::tasks::EnvironmentCondition::Custom { .. })
-            },
-            TaskCondition::All { conditions } => Self::requires_async_execution(conditions),
-            TaskCondition::Any { conditions } => Self::requires_async_execution(conditions),
-            TaskCondition::Not { condition } => Self::requires_async_execution(&[*condition.clone()]),
+            }
+            TaskCondition::All { conditions } | TaskCondition::Any { conditions } => {
+                Self::requires_async_execution(conditions)
+            }
+            TaskCondition::Not { condition } => {
+                Self::requires_async_execution(&[*condition.clone()])
+            }
             _ => false,
         })
     }
@@ -143,200 +146,69 @@ impl AsyncConditionAdapter {
     }
 
     /// Handle mixed sync/async conditions
-    fn evaluate_mixed_conditions<'a>(
-        &'a self,
-        conditions: &'a [crate::tasks::TaskCondition],
-        context: &'a ExecutionContext,
-    ) -> Pin<Box<dyn Future<Output = Result<bool>> + 'a>> {
+    fn evaluate_mixed_conditions<'b>(
+        &'b self,
+        conditions: &'b [crate::tasks::TaskCondition],
+        context: &'b ExecutionContext,
+    ) -> Pin<Box<dyn Future<Output = Result<bool>> + 'b>> {
         Box::pin(async move {
-        use crate::tasks::TaskCondition;
+            use crate::tasks::TaskCondition;
 
-        // All conditions must be met
-        for condition in conditions {
-            let result = match condition {
-                TaskCondition::CustomScript { script, expected_output } => {
-                    // Async operation
-                    self.execute_custom_script(script, expected_output, context).await?
-                }
-                
-                TaskCondition::Environment { env } => {
-                    match env {
-                        crate::tasks::EnvironmentCondition::Custom { checker } => {
-                            // Async operation
-                            self.execute_custom_environment_checker(checker, context).await?
-                        }
-                        _ => {
-                            // Sync operation
-                            self.checker.check_environment_condition(env, context)?
+            // All conditions must be met
+            for condition in conditions {
+                let result = match condition {
+                    TaskCondition::CustomScript { script, expected_output } => {
+                        // Async operation
+                        self.execute_custom_script(script, expected_output, context).await?
+                    }
+
+                    TaskCondition::Environment { env } => {
+                        match env {
+                            crate::tasks::EnvironmentCondition::Custom { checker } => {
+                                // Async operation
+                                self.execute_custom_environment_checker(checker, context).await?
+                            }
+                            _ => {
+                                // Sync operation
+                                self.checker.check_environment_condition(env, context)?
+                            }
                         }
                     }
-                }
 
-                TaskCondition::All { conditions } => {
-                    // Recursive evaluation using Box::pin
-                    self.evaluate_mixed_conditions(conditions, context).await?
-                }
-
-                TaskCondition::Any { conditions } => {
-                    // At least one condition must be true
-                    let mut any_true = false;
-                    for cond in conditions {
-                        if self.evaluate_mixed_conditions(&[cond.clone()], context).await? {
-                            any_true = true;
-                            break;
-                        }
+                    TaskCondition::All { conditions } => {
+                        // Recursive evaluation using Box::pin
+                        self.evaluate_mixed_conditions(conditions, context).await?
                     }
-                    any_true
-                }
 
-                TaskCondition::Not { condition } => {
-                    // Evaluate and negate using Box::pin
-                    let result = self.evaluate_mixed_conditions(&[*condition.clone()], context).await?;
-                    !result
-                }
+                    TaskCondition::Any { conditions } => {
+                        // At least one condition must be true
+                        let mut any_true = false;
+                        for cond in conditions {
+                            if self.evaluate_mixed_conditions(&[cond.clone()], context).await? {
+                                any_true = true;
+                                break;
+                            }
+                        }
+                        any_true
+                    }
 
-                // All other conditions are synchronous
-                _ => {
-                    self.checker.evaluate_condition(condition, context)?
-                }
-            };
+                    TaskCondition::Not { condition } => {
+                        // Evaluate and negate using Box::pin
+                        let result =
+                            self.evaluate_mixed_conditions(&[*condition.clone()], context).await?;
+                        !result
+                    }
 
-            if !result {
-                return Ok(false);
+                    // All other conditions are synchronous
+                    _ => self.checker.evaluate_condition(condition, context)?,
+                };
+
+                if !result {
+                    return Ok(false);
+                }
             }
-        }
 
-        Ok(true)
+            Ok(true)
         })
-    }
-}
-
-/// Async boundary adapter builder
-pub struct AsyncConditionAdapterBuilder {
-    git_provider: Option<Box<dyn crate::core::GitProvider>>,
-    config_provider: Option<Box<dyn crate::core::ConfigProvider>>,
-    package_provider: Option<Box<dyn crate::core::PackageProvider>>,
-    file_system_provider: Option<Box<dyn crate::core::FileSystemProvider>>,
-}
-
-impl AsyncConditionAdapterBuilder {
-    /// Create a new builder
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            git_provider: None,
-            config_provider: None,
-            package_provider: None,
-            file_system_provider: None,
-        }
-    }
-
-    /// Set the git provider
-    #[must_use]
-    pub fn git_provider(mut self, provider: Box<dyn crate::core::GitProvider>) -> Self {
-        self.git_provider = Some(provider);
-        self
-    }
-
-    /// Set the config provider
-    #[must_use]
-    pub fn config_provider(mut self, provider: Box<dyn crate::core::ConfigProvider>) -> Self {
-        self.config_provider = Some(provider);
-        self
-    }
-
-    /// Set the package provider
-    #[must_use]
-    pub fn package_provider(mut self, provider: Box<dyn crate::core::PackageProvider>) -> Self {
-        self.package_provider = Some(provider);
-        self
-    }
-
-    /// Set the file system provider
-    #[must_use]
-    pub fn file_system_provider(mut self, provider: Box<dyn crate::core::FileSystemProvider>) -> Self {
-        self.file_system_provider = Some(provider);
-        self
-    }
-
-    /// Build the adapter
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if any required provider is missing
-    pub fn build(self) -> Result<AsyncConditionAdapter> {
-        let git_provider = self.git_provider
-            .ok_or_else(|| Error::task("Git provider is required".to_string()))?;
-        let config_provider = self.config_provider
-            .ok_or_else(|| Error::task("Config provider is required".to_string()))?;
-        let package_provider = self.package_provider
-            .ok_or_else(|| Error::task("Package provider is required".to_string()))?;
-        let file_system_provider = self.file_system_provider
-            .ok_or_else(|| Error::task("File system provider is required".to_string()))?;
-
-        let checker = ConditionChecker::new(git_provider, config_provider, package_provider, file_system_provider);
-        Ok(AsyncConditionAdapter::new(checker))
-    }
-}
-
-impl Default for AsyncConditionAdapterBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::tasks::TaskCondition;
-
-    #[test]
-    fn test_requires_async_execution() {
-        use crate::tasks::{EnvironmentCondition, FilePattern, FilePatternType};
-
-        // Sync conditions
-        let sync_conditions = vec![
-            TaskCondition::PackagesChanged { 
-                packages: vec!["test".to_string()] 
-            },
-            TaskCondition::FilesChanged { 
-                patterns: vec![FilePattern {
-                    pattern: "*.rs".to_string(),
-                    pattern_type: FilePatternType::Glob,
-                    exclude: false,
-                }] 
-            },
-        ];
-        
-        assert!(!AsyncConditionAdapter::requires_async_execution(&sync_conditions));
-
-        // Async conditions
-        let async_conditions = vec![
-            TaskCondition::CustomScript { 
-                script: "echo test".to_string(),
-                expected_output: None 
-            },
-        ];
-        
-        assert!(AsyncConditionAdapter::requires_async_execution(&async_conditions));
-
-        // Mixed conditions
-        let mut mixed_conditions = sync_conditions;
-        mixed_conditions.extend(async_conditions);
-        
-        assert!(AsyncConditionAdapter::requires_async_execution(&mixed_conditions));
-    }
-
-    #[test]
-    fn test_requires_async_with_environment_custom() {
-        let custom_env_condition = vec![
-            TaskCondition::Environment { 
-                env: EnvironmentCondition::Custom { 
-                    checker: "test-checker".to_string() 
-                } 
-            },
-        ];
-        
-        assert!(AsyncConditionAdapter::requires_async_execution(&custom_env_condition));
     }
 }

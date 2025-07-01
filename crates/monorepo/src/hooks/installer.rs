@@ -9,47 +9,39 @@ use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-impl HookInstaller {
-    /// Create a new hook installer with injected dependencies
-    ///
+impl<'a> HookInstaller<'a> {
+    /// Create a new hook installer with direct borrowing from project
+    /// 
+    /// Uses borrowing instead of trait objects to eliminate Arc proliferation
+    /// and work with Rust ownership principles.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `project` - Reference to monorepo project
+    /// 
+    /// # Returns
+    /// 
+    /// A new hook installer instance
+    /// 
     /// # Errors
+    /// 
     /// Returns an error if:
     /// - The Git directory cannot be found
     /// - The hooks directory cannot be accessed
-    pub fn new(
-        git_provider: Box<dyn crate::core::GitProvider>,
-        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
-    ) -> Result<Self> {
-        let hooks_dir = Self::find_git_hooks_directory(git_provider.as_ref())?;
+    pub fn new(project: &'a MonorepoProject) -> Result<Self> {
+        let hooks_dir = Self::find_git_hooks_directory(project)?;
         let hook_template = Self::get_hook_template();
 
         Ok(Self { 
-            git_provider,
-            file_system_provider,
+            repository: &project.repository,
+            file_system: &project.file_system,
+            root_path: &project.root_path,
             hooks_dir, 
             hook_template 
         })
     }
 
-    /// Create a new hook installer from project (convenience method)
-    /// 
-    /// NOTE: This convenience method creates provider instances from the project.
-    /// For better performance and memory usage, prefer using the `new()` method with 
-    /// pre-created providers when creating multiple components.
-    pub fn from_project(project: Arc<MonorepoProject>) -> Result<Self> {
-        use crate::core::interfaces::DependencyFactory;
-        
-        // Create providers efficiently
-        let git_provider = DependencyFactory::git_provider(Arc::clone(&project));
-        let file_system_provider = DependencyFactory::file_system_provider(project);
-        
-        Self::new(
-            git_provider,
-            file_system_provider,
-        )
-    }
 
     /// Install a specific Git hook
     ///
@@ -67,7 +59,7 @@ impl HookInstaller {
         let hook_path = self.hooks_dir.join(hook_filename);
 
         // Generate hook script content
-        let script_content = self.generate_hook_script(hook_type, definition);
+        let script_content = self.generate_hook_script(*hook_type, definition);
 
         // Write the hook file
         self.write_hook_file(&hook_path, &script_content)?;
@@ -166,7 +158,7 @@ impl HookInstaller {
 
             if hook_path.exists() {
                 let backup_name =
-                    format!("{}.backup.{}", hook_filename, chrono::Utc::now().timestamp());
+                    format!("{hook_filename}.backup.{timestamp}", timestamp = chrono::Utc::now().timestamp());
                 let backup_path = backup_dir.join(backup_name);
 
                 self.copy_file(&hook_path, &backup_path)?;
@@ -199,9 +191,9 @@ impl HookInstaller {
     // Private helper methods
 
     /// Find the Git hooks directory for the repository
-    fn find_git_hooks_directory(git_provider: &dyn crate::core::GitProvider) -> Result<PathBuf> {
-        // Get repository root from git provider
-        let repo_root = git_provider.repository_root();
+    fn find_git_hooks_directory(project: &MonorepoProject) -> Result<PathBuf> {
+        // Get repository root from project
+        let repo_root = &project.root_path;
         let git_dir = repo_root.join(".git");
 
         if !git_dir.exists() {
@@ -235,7 +227,7 @@ exec sublime-monorepo-tools hook execute {hook_type} "$@"
     }
 
     /// Generate the hook script content for a specific hook type
-    fn generate_hook_script(&self, hook_type: &HookType, _definition: &HookDefinition) -> String {
+    fn generate_hook_script(&self, hook_type: HookType, _definition: &HookDefinition) -> String {
         self.hook_template.replace("{hook_type}", hook_type.git_hook_filename())
     }
 

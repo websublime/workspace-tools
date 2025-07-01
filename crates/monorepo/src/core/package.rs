@@ -18,17 +18,23 @@ impl MonorepoPackageInfo {
     #[must_use]
     pub fn new(
         package_info: sublime_package_tools::PackageInfo,
-        workspace_package: sublime_standard_tools::monorepo::WorkspacePackage,
+        workspace_package: &sublime_standard_tools::monorepo::WorkspacePackage,
         is_internal: bool,
     ) -> Self {
         Self {
             package_info,
-            workspace_package,
+            workspace_package: workspace_package.clone(),
             is_internal,
             dependents: Vec::new(),
+            dependencies: Vec::new(),
             dependencies_external: Vec::new(),
             version_status: VersionStatus::Stable,
             changesets: Vec::new(),
+            name: workspace_package.name.clone(),
+            version: workspace_package.version.clone(), 
+            path: workspace_package.location.clone(),
+            package_type: super::types::PackageType::Other("unknown".to_string()),
+            metadata: HashMap::new(),
         }
     }
 

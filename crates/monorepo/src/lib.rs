@@ -56,13 +56,12 @@
 #![deny(clippy::expect_used)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 #![deny(clippy::todo)]
-#![allow(clippy::unimplemented)] // Temporarily allow during phased implementation
 #![deny(clippy::panic)]
 
 // Public modules
 pub mod analysis;
-pub mod changes;
 pub mod changelog;
+pub mod changes;
 pub mod changesets;
 pub mod config;
 pub mod core;
@@ -72,35 +71,34 @@ pub mod hooks;
 pub mod logging;
 pub mod plugins;
 pub mod tasks;
-pub mod validation;
 pub mod workflows;
 
 // Essential API surface - core re-exports for common usage
 // Advanced types available through module paths (e.g., crate::changesets::ChangesetApplication)
 
 // Core entry point and project management (2 types)
-pub use crate::core::{MonorepoTools, MonorepoProject};
+pub use crate::core::{MonorepoProject, MonorepoTools};
 
 // Essential result and error types (2 types)
 pub use crate::error::{Error, Result};
 
 // Main workflow types - primary user interfaces (4 types)
-pub use crate::workflows::{DevelopmentWorkflow, ReleaseWorkflow, ReleaseResult, ReleaseOptions};
+pub use crate::workflows::{DevelopmentWorkflow, ReleaseOptions, ReleaseResult, ReleaseWorkflow};
 
 // Core analysis types (3 types)
-pub use crate::analysis::{MonorepoAnalyzer, ChangeAnalysis, AffectedPackagesAnalysis};
+pub use crate::analysis::{AffectedPackagesAnalysis, ChangeAnalysis, MonorepoAnalyzer};
 
 // Essential configuration (3 types)
-pub use crate::config::{MonorepoConfig, Environment, VersionBumpType};
+pub use crate::config::{Environment, MonorepoConfig, VersionBumpType};
 
 // Core change detection (2 types)
-pub use crate::changes::{PackageChange, ChangeDetector};
+pub use crate::changes::{ChangeDetector, PackageChange};
 
 // Core version management (2 types)
 pub use crate::core::{VersionManager, VersioningResult};
 
 // Plugin system - main interface (2 types)
-pub use crate::plugins::{PluginManager, MonorepoPlugin};
+pub use crate::plugins::{MonorepoPlugin, PluginManager};
 
 // Total: 20 essential types - advanced functionality available via module paths
 

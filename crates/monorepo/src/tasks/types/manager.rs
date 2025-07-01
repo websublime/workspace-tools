@@ -1,25 +1,39 @@
 //! Task manager type definitions
+//!
+//! Follows direct borrowing patterns instead of trait objects.
 
 use super::{ConditionChecker, TaskExecutor, TaskRegistry};
-use crate::core::{FileSystemProvider, PackageProvider};
+use crate::core::MonorepoPackageInfo;
+use crate::config::MonorepoConfig;
+use sublime_standard_tools::filesystem::FileSystemManager;
 use std::collections::HashMap;
+use std::path::Path;
 
 /// Central manager for task execution and coordination
-pub struct TaskManager {
-    /// File system operations provider
-    pub(crate) file_system: Box<dyn FileSystemProvider>,
+/// 
+/// Uses direct borrowing from MonorepoProject components instead of trait objects.
+/// This follows Rust ownership principles and eliminates Arc proliferation.
+pub struct TaskManager<'a> {
+    /// Direct reference to file system manager
+    pub(crate) file_system: &'a FileSystemManager,
     
-    /// Package operations provider
-    pub(crate) package_provider: Box<dyn PackageProvider>,
+    /// Direct reference to packages
+    pub(crate) packages: &'a [MonorepoPackageInfo],
+    
+    /// Direct reference to configuration
+    pub(crate) config: &'a MonorepoConfig,
+    
+    /// Direct reference to root path
+    pub(crate) root_path: &'a Path,
 
     /// Task registry for storing and managing task definitions
     pub(crate) registry: TaskRegistry,
 
     /// Task executor for running tasks
-    pub(crate) executor: TaskExecutor,
+    pub(crate) executor: TaskExecutor<'a>,
 
     /// Condition checker for evaluating task conditions
-    pub(crate) condition_checker: ConditionChecker,
+    pub(crate) condition_checker: ConditionChecker<'a>,
 
     /// Current execution context
     pub(crate) execution_context: ExecutionContext,

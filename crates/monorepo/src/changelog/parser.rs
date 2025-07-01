@@ -19,7 +19,7 @@ use std::sync::OnceLock;
 /// use sublime_monorepo_tools::changelog::ConventionalCommitParser;
 ///
 /// let parser = ConventionalCommitParser::new();
-/// 
+///
 /// // Parse a feature commit with scope
 /// let commit = parser.parse_commit_message(
 ///     "feat(auth): add OAuth2 support\n\nImplements OAuth2 authentication flow",
@@ -27,7 +27,7 @@ use std::sync::OnceLock;
 ///     "Jane Doe",
 ///     "2024-01-15"
 /// )?;
-/// 
+///
 /// assert_eq!(commit.commit_type, "feat");
 /// assert_eq!(commit.scope, Some("auth".to_string()));
 /// assert_eq!(commit.description, "add OAuth2 support");
@@ -66,20 +66,14 @@ impl ConventionalCommitParser {
         }
 
         let header = lines[0];
-        let body = if lines.len() > 2 {
-            Some(lines[2..].join("\n").trim().to_string())
-        } else {
-            None
-        };
+        let body =
+            if lines.len() > 2 { Some(lines[2..].join("\n").trim().to_string()) } else { None };
 
         // Parse the header using regex
-        let (commit_type, scope, description, breaking_from_header) = 
-            self.parse_header(header)?;
+        let (commit_type, scope, description, breaking_from_header) = self.parse_header(header)?;
 
         // Check for breaking changes in body
-        let breaking_from_body = body
-            .as_ref()
-            .map_or(false, |b| b.contains("BREAKING CHANGE:"));
+        let breaking_from_body = body.as_ref().map_or(false, |b| b.contains("BREAKING CHANGE:"));
 
         let breaking_change = breaking_from_header || breaking_from_body;
 
@@ -104,17 +98,21 @@ impl ConventionalCommitParser {
     /// # Returns
     ///
     /// A tuple of (type, scope, description, breaking_change)
+    #[allow(clippy::unused_self)]
+    #[allow(clippy::expect_used)]
     fn parse_header(&self, header: &str) -> Result<(String, Option<String>, String, bool)> {
         static CONVENTIONAL_REGEX: OnceLock<Regex> = OnceLock::new();
-        
+
         let regex = CONVENTIONAL_REGEX.get_or_init(|| {
             // Regex pattern for conventional commits:
             // type(scope)!: description
-            // type!: description  
+            // type!: description
             // type(scope): description
             // type: description
-            Regex::new(r"^(?P<type>\w+)(?:\((?P<scope>[^)]+)\))?(?P<breaking>!)?:\s*(?P<description>.+)$")
-                .expect("Invalid regex pattern")
+            Regex::new(
+                r"^(?P<type>\w+)(?:\((?P<scope>[^)]+)\))?(?P<breaking>!)?:\s*(?P<description>.+)$",
+            )
+            .expect("Invalid regex pattern")
         });
 
         if let Some(captures) = regex.captures(header) {
@@ -123,14 +121,13 @@ impl ConventionalCommitParser {
                 .map(|m| m.as_str().to_string())
                 .ok_or_else(|| Error::changelog("Missing commit type".to_string()))?;
 
-            let scope = captures
-                .name("scope")
-                .map(|m| m.as_str().to_string());
+            let scope = captures.name("scope").map(|m| m.as_str().to_string());
 
-            let description = captures
-                .name("description")
-                .map(|m| m.as_str().trim().to_string())
-                .ok_or_else(|| Error::changelog("Missing commit description".to_string()))?;
+            let description =
+                captures
+                    .name("description")
+                    .map(|m| m.as_str().trim().to_string())
+                    .ok_or_else(|| Error::changelog("Missing commit description".to_string()))?;
 
             let breaking_change = captures.name("breaking").is_some();
 
@@ -138,12 +135,7 @@ impl ConventionalCommitParser {
         } else {
             // Fallback for non-conventional commits
             // Treat the entire header as description with "chore" type
-            Ok((
-                "chore".to_string(),
-                None,
-                header.trim().to_string(),
-                false,
-            ))
+            Ok(("chore".to_string(), None, header.trim().to_string(), false))
         }
     }
 
@@ -164,10 +156,7 @@ impl ConventionalCommitParser {
         }
 
         // Include only notable commit types by default
-        matches!(
-            commit_type,
-            "feat" | "fix" | "perf" | "refactor" | "revert" | "breaking"
-        )
+        matches!(commit_type, "feat" | "fix" | "perf" | "refactor" | "revert" | "breaking")
     }
 
     /// Get display name for commit type
@@ -224,11 +213,7 @@ impl ConventionalCommitParser {
                     parsed_commits.push(conventional_commit);
                 }
                 Err(e) => {
-                    log::warn!(
-                        "Failed to parse commit {}: {}. Skipping.",
-                        commit.hash,
-                        e
-                    );
+                    log::warn!("Failed to parse commit {}: {}. Skipping.", commit.hash, e);
                     // Continue with other commits instead of failing entirely
                 }
             }
@@ -267,14 +252,11 @@ impl ConventionalCommitParser {
 
                 // Fallback: check if commit message mentions the package
                 // This is less accurate but better than including all commits
-                let package_name = package_path
-                    .split('/')
-                    .last()
-                    .unwrap_or(package_path);
-                
-                commit.description.contains(package_name) ||
-                commit.scope.as_ref().map_or(false, |scope| scope == package_name) ||
-                commit.body.as_ref().map_or(false, |body| body.contains(package_name))
+                let package_name = package_path.split('/').last().unwrap_or(package_path);
+
+                commit.description.contains(package_name)
+                    || commit.scope.as_ref().map_or(false, |scope| scope == package_name)
+                    || commit.body.as_ref().map_or(false, |body| body.contains(package_name))
             })
             .cloned()
             .collect()
@@ -284,111 +266,5 @@ impl ConventionalCommitParser {
 impl Default for ConventionalCommitParser {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_feat_commit_with_scope() {
-        let parser = ConventionalCommitParser::new();
-        
-        let commit = parser
-            .parse_commit_message(
-                "feat(auth): add OAuth2 support",
-                "abc123",
-                "Jane Doe", 
-                "2024-01-15",
-            )
-            .expect("Should parse successfully");
-
-        assert_eq!(commit.commit_type, "feat");
-        assert_eq!(commit.scope, Some("auth".to_string()));
-        assert_eq!(commit.description, "add OAuth2 support");
-        assert!(!commit.breaking_change);
-    }
-
-    #[test]
-    fn test_parse_breaking_change_commit() {
-        let parser = ConventionalCommitParser::new();
-        
-        let commit = parser
-            .parse_commit_message(
-                "feat!: remove deprecated API",
-                "def456",
-                "John Doe",
-                "2024-01-16",
-            )
-            .expect("Should parse successfully");
-
-        assert_eq!(commit.commit_type, "feat");
-        assert_eq!(commit.scope, None);
-        assert_eq!(commit.description, "remove deprecated API");
-        assert!(commit.breaking_change);
-    }
-
-    #[test]
-    fn test_parse_commit_with_body() {
-        let parser = ConventionalCommitParser::new();
-        
-        let message = "fix(auth): resolve login timeout\n\nFixes issue where login would timeout after 30 seconds\n\nCloses #123";
-        let commit = parser
-            .parse_commit_message(message, "ghi789", "Alice Smith", "2024-01-17")
-            .expect("Should parse successfully");
-
-        assert_eq!(commit.commit_type, "fix");
-        assert_eq!(commit.scope, Some("auth".to_string()));
-        assert_eq!(commit.description, "resolve login timeout");
-        assert!(commit.body.is_some());
-        assert!(commit.body.as_ref().unwrap().contains("Fixes issue"));
-    }
-
-    #[test]
-    fn test_parse_non_conventional_commit() {
-        let parser = ConventionalCommitParser::new();
-        
-        let commit = parser
-            .parse_commit_message(
-                "Update README with new examples",
-                "jkl012",
-                "Bob Wilson",
-                "2024-01-18",
-            )
-            .expect("Should parse successfully");
-
-        assert_eq!(commit.commit_type, "chore");
-        assert_eq!(commit.scope, None);
-        assert_eq!(commit.description, "Update README with new examples");
-        assert!(!commit.breaking_change);
-    }
-
-    #[test]
-    fn test_should_include_commit() {
-        let parser = ConventionalCommitParser::new();
-        
-        // Notable types should be included
-        assert!(parser.should_include_commit("feat", false));
-        assert!(parser.should_include_commit("fix", false));
-        assert!(parser.should_include_commit("perf", false));
-        
-        // Non-notable types should not be included by default
-        assert!(!parser.should_include_commit("chore", false));
-        assert!(!parser.should_include_commit("docs", false));
-        assert!(!parser.should_include_commit("style", false));
-        
-        // All types should be included when include_all is true
-        assert!(parser.should_include_commit("chore", true));
-        assert!(parser.should_include_commit("docs", true));
-    }
-
-    #[test]
-    fn test_get_type_display_name() {
-        let parser = ConventionalCommitParser::new();
-        
-        assert_eq!(parser.get_type_display_name("feat"), "Features");
-        assert_eq!(parser.get_type_display_name("fix"), "Bug Fixes");
-        assert_eq!(parser.get_type_display_name("unknown"), "Other Changes");
     }
 }

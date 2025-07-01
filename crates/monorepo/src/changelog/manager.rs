@@ -6,11 +6,13 @@
 use super::generator::ChangelogGenerator;
 use super::parser::ConventionalCommitParser;
 use super::types::{ChangelogRequest, ChangelogResult, GroupedCommits, TemplateVariables};
-use crate::core::{ConfigProvider, FileSystemProvider, GitProvider, PackageProvider};
+use crate::config::MonorepoConfig;
+use crate::core::{MonorepoPackageInfo, MonorepoProject};
 use crate::error::{Error, Result};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
+use sublime_git_tools::Repo;
+use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
 
 /// Changelog manager
 ///
@@ -41,68 +43,72 @@ use std::sync::Arc;
 /// # Ok(())
 /// # }
 /// ```
-pub struct ChangelogManager {
-    /// Git operations provider
-    git_provider: Box<dyn GitProvider>,
-    /// Package information provider
-    package_provider: Box<dyn PackageProvider>,
-    /// File system operations provider
-    file_system_provider: Box<dyn FileSystemProvider>,
-    /// Configuration provider
-    config_provider: Box<dyn ConfigProvider>,
+pub struct ChangelogManager<'a> {
+    /// Direct reference to git repository
+    repository: &'a Repo,
+    /// Direct reference to packages
+    packages: &'a [MonorepoPackageInfo],
+    /// Direct reference to file system manager
+    file_system: &'a FileSystemManager,
+    /// Direct reference to configuration
+    config: &'a MonorepoConfig,
+    /// Direct reference to root path
+    root_path: &'a Path,
     /// Conventional commit parser
     parser: ConventionalCommitParser,
     /// Changelog generator
     generator: ChangelogGenerator,
 }
 
-impl ChangelogManager {
-    /// Create a new changelog manager
+impl<'a> ChangelogManager<'a> {
+    /// Create a new changelog manager with direct borrowing from project
+    ///
+    /// Uses borrowing instead of trait objects to eliminate Arc proliferation
+    /// and work with Rust ownership principles.
     ///
     /// # Arguments
     ///
-    /// * `git_provider` - Git operations provider
-    /// * `package_provider` - Package information provider
-    /// * `file_system_provider` - File system operations provider
-    /// * `config_provider` - Configuration provider
+    /// * `project` - Reference to monorepo project
     ///
     /// # Returns
     ///
     /// A new changelog manager instance
-    pub fn new(
-        git_provider: Box<dyn GitProvider>,
-        package_provider: Box<dyn PackageProvider>,
-        file_system_provider: Box<dyn FileSystemProvider>,
-        config_provider: Box<dyn ConfigProvider>,
-    ) -> Self {
+    pub fn new(project: &'a MonorepoProject) -> Self {
         Self {
-            git_provider,
-            package_provider,
-            file_system_provider,
-            config_provider,
+            repository: project.repository(),
+            packages: &project.packages,
+            file_system: project.services.file_system_service().manager(),
+            config: project.services.config_service().get_configuration(),
+            root_path: project.root_path(),
             parser: ConventionalCommitParser::new(),
             generator: ChangelogGenerator::new(),
         }
     }
 
-    /// Create changelog manager from project
-    ///
+    /// Creates a new changelog manager from an existing MonorepoProject
+    /// 
+    /// Convenience method that wraps the `new` constructor for backward compatibility.
+    /// Uses real direct borrowing following Rust ownership principles.
+    /// 
     /// # Arguments
-    ///
-    /// * `project` - Monorepo project reference
-    ///
+    /// 
+    /// * `project` - Reference to the monorepo project
+    /// 
     /// # Returns
-    ///
-    /// A new changelog manager instance
-    pub fn from_project(project: Arc<crate::core::MonorepoProject>) -> Result<Self> {
-        use crate::core::interfaces::DependencyFactory;
-
-        Ok(Self::new(
-            DependencyFactory::git_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)),
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-            DependencyFactory::config_provider(project),
-        ))
+    /// 
+    /// A new ChangelogManager instance with direct borrowing
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust
+    /// use sublime_monorepo_tools::{ChangelogManager, MonorepoProject};
+    /// 
+    /// let project = MonorepoProject::new("/path/to/monorepo")?;
+    /// let changelog_manager = ChangelogManager::from_project(&project);
+    /// ```
+    #[must_use]
+    pub fn from_project(project: &'a MonorepoProject) -> Self {
+        Self::new(project)
     }
 
     /// Generate changelog based on request
@@ -114,8 +120,10 @@ impl ChangelogManager {
     /// # Returns
     ///
     /// Generated changelog result
-    #[allow(clippy::unused_async)]
-    pub async fn generate_changelog(&self, request: ChangelogRequest) -> Result<ChangelogResult> {
+    /// FASE 2 ASYNC ELIMINATION: Synchronous changelog generation  
+    /// 
+    /// Removed artificial async behavior - this is a purely synchronous operation.
+    pub fn generate_changelog_sync(&self, request: ChangelogRequest) -> Result<ChangelogResult> {
         log::info!(
             "Generating changelog for package: {:?}, version: {}",
             request.package_name,
@@ -163,8 +171,7 @@ impl ChangelogManager {
 
         // Create template variables
         let package_name = request.package_name.clone().unwrap_or_else(|| {
-            self.package_provider
-                .root_path()
+            self.root_path
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("monorepo")
@@ -174,7 +181,7 @@ impl ChangelogManager {
         let variables = self.create_template_variables(&package_name, &request.version)?;
 
         // Get changelog configuration
-        let config = &self.config_provider.config().changelog;
+        let config = &self.config.changelog;
 
         // Generate changelog content
         let content = self.generator.generate_changelog(config, &grouped_commits, &variables)?;
@@ -197,6 +204,11 @@ impl ChangelogManager {
         })
     }
 
+    /// Generate changelog
+    pub fn generate_changelog(&self, request: ChangelogRequest) -> Result<ChangelogResult> {
+        self.generate_changelog_sync(request)
+    }
+
     /// Parse conventional commits from commit range
     ///
     /// # Arguments
@@ -207,15 +219,16 @@ impl ChangelogManager {
     /// # Returns
     ///
     /// Vector of parsed conventional commits
-    #[allow(clippy::unused_async)]
-    pub async fn parse_conventional_commits(
+    /// FASE 2 ASYNC ELIMINATION: Synchronous conventional commit parsing
+    ///
+    /// Removed artificial async behavior - this is a purely synchronous operation.
+    pub fn parse_conventional_commits_sync(
         &self,
         package_path: Option<&str>,
         since: &str,
     ) -> Result<Vec<super::types::ConventionalCommit>> {
         let commits = self
-            .git_provider
-            .repository()
+            .repository
             .get_commits_since(Some(since.to_string()), &None)
             .map_err(|e| Error::changelog(format!("Failed to get commits since {since}: {e}")))?;
 
@@ -243,8 +256,10 @@ impl ChangelogManager {
     /// # Returns
     ///
     /// Updated changelog content
-    #[allow(clippy::unused_async)]
-    pub async fn update_existing_changelog(
+    /// FASE 2 ASYNC ELIMINATION: Synchronous changelog updating
+    ///
+    /// Removed artificial async behavior - this is a purely synchronous operation.
+    pub fn update_existing_changelog_sync(
         &self,
         package_name: Option<&str>,
         new_content: &str,
@@ -252,7 +267,7 @@ impl ChangelogManager {
         let changelog_path = self.get_changelog_path(package_name)?;
 
         let existing_content = if changelog_path.exists() {
-            self.file_system_provider.read_file_string(&changelog_path).unwrap_or_default()
+            self.file_system.read_file_string(&changelog_path).unwrap_or_default()
         } else {
             String::new()
         };
@@ -268,7 +283,6 @@ impl ChangelogManager {
                 break;
             }
             if i > 10 {
-                // Safety: don't search too far
                 break;
             }
         }
@@ -291,13 +305,22 @@ impl ChangelogManager {
         Ok(updated_lines.join("\n"))
     }
 
+    /// Update existing changelog with new version
+    pub fn update_existing_changelog(
+        &self,
+        package_name: Option<&str>,
+        new_content: &str,
+    ) -> Result<String> {
+        self.update_existing_changelog_sync(package_name, new_content)
+    }
+
     /// Get commits since a reference
     fn get_commits_since_reference(
         &self,
         since: &Option<String>,
         until: &Option<String>,
     ) -> Result<Vec<sublime_git_tools::RepoCommit>> {
-        let repository = self.git_provider.repository();
+        let repository = self.repository;
 
         match (since, until) {
             (Some(since_ref), Some(_until_ref)) => {
@@ -342,21 +365,20 @@ impl ChangelogManager {
 
     /// Get the last Git tag
     fn get_last_tag(&self) -> Result<String> {
-        self.git_provider
-            .repository()
+        self.repository
             .get_last_tag()
             .map_err(|e| Error::changelog(format!("Failed to get last tag: {e}")))
     }
 
     /// Get package path relative to repository root
     fn get_package_path(&self, package_name: &str) -> Result<String> {
-        let packages = self.package_provider.packages();
+        let packages = self.packages;
         let package = packages
             .iter()
             .find(|p| p.name() == package_name)
             .ok_or_else(|| Error::changelog(format!("Package '{package_name}' not found")))?;
 
-        let repo_root = self.package_provider.root_path();
+        let repo_root = self.root_path;
         let relative_path = package
             .workspace_package
             .location
@@ -367,6 +389,7 @@ impl ChangelogManager {
     }
 
     /// Get changed files for each commit
+    #[allow(clippy::unnecessary_wraps)]
     fn get_changed_files_by_commit(
         &self,
         commits: &[sublime_git_tools::RepoCommit],
@@ -374,7 +397,7 @@ impl ChangelogManager {
         let mut changed_files = HashMap::new();
 
         for commit in commits {
-            match self.git_provider.repository().get_all_files_changed_since_sha(&commit.hash) {
+            match self.repository.get_all_files_changed_since_sha(&commit.hash) {
                 Ok(files) => {
                     changed_files.insert(commit.hash.clone(), files);
                 }
@@ -389,6 +412,7 @@ impl ChangelogManager {
     }
 
     /// Group commits according to configuration
+    #[allow(clippy::unused_self)]
     fn group_commits(&self, commits: Vec<super::types::ConventionalCommit>) -> GroupedCommits {
         let mut grouped = GroupedCommits::new();
 
@@ -421,6 +445,8 @@ impl ChangelogManager {
     /// - GitHub: `git@github.com:owner/repo.git` → `https://github.com/owner/repo`
     /// - GitLab: `git@gitlab.com:owner/repo.git` → `https://gitlab.com/owner/repo`
     /// - Enterprise: `git@github.company.com:owner/repo.git` → `https://github.company.com/owner/repo`
+    #[allow(clippy::unnecessary_wraps)]
+    #[allow(clippy::case_sensitive_file_extension_comparisons)]
     fn create_template_variables(
         &self,
         package_name: &str,
@@ -429,13 +455,13 @@ impl ChangelogManager {
         let mut variables = TemplateVariables::new(package_name.to_string(), version.to_string());
 
         // Get repository configuration from project config
-        let repo_config = &self.config_provider.config().git.repository;
+        let repo_config = &self.config.git.repository;
 
         // Try to detect repository URL from git remote
-        if let Ok(repository) = self.git_provider.repository().list_config() {
-            let remote_name = &self.config_provider.config().git.default_remote;
+        if let Ok(repository) = self.repository.list_config() {
+            let remote_name = &self.config.git.default_remote;
             let remote_key = format!("remote.{remote_name}.url");
-            
+
             if let Some(remote_url) = repository.get(&remote_key) {
                 log::debug!("Found git remote URL: {}", remote_url);
 
@@ -446,16 +472,19 @@ impl ChangelogManager {
                 } else {
                     log::warn!(
                         "Failed to convert repository URL '{}' using provider: {:?}",
-                        remote_url, repo_config.provider
+                        remote_url,
+                        repo_config.provider
                     );
-                    
+
                     // Fallback: attempt basic cleanup without provider-specific logic
                     let fallback_url = if remote_url.ends_with(".git") {
-                        remote_url.strip_suffix(".git").map_or_else(|| remote_url.clone(), |s| s.to_string())
+                        remote_url
+                            .strip_suffix(".git")
+                            .map_or_else(|| remote_url.clone(), std::string::ToString::to_string)
                     } else {
                         remote_url.clone()
                     };
-                    
+
                     if fallback_url.starts_with("http://") || fallback_url.starts_with("https://") {
                         variables = variables.with_repository_url(fallback_url);
                     }
@@ -481,7 +510,7 @@ impl ChangelogManager {
             self.get_default_changelog_path(&request.package_name)?
         };
 
-        self.file_system_provider.write_file_string(&Path::new(&output_path), content).map_err(
+        self.file_system.write_file_string(&Path::new(&output_path), content).map_err(
             |e| Error::changelog(format!("Failed to write changelog to {output_path}: {e}")),
         )?;
 
@@ -493,11 +522,11 @@ impl ChangelogManager {
     fn get_default_changelog_path(&self, package_name: &Option<String>) -> Result<String> {
         if let Some(name) = package_name {
             let package_path = self.get_package_path(name)?;
-            let full_path = self.package_provider.root_path().join(package_path);
+            let full_path = self.root_path.join(package_path);
             Ok(full_path.join("CHANGELOG.md").to_string_lossy().to_string())
         } else {
             // Root changelog
-            Ok(self.package_provider.root_path().join("CHANGELOG.md").to_string_lossy().to_string())
+            Ok(self.root_path.join("CHANGELOG.md").to_string_lossy().to_string())
         }
     }
 
@@ -505,31 +534,10 @@ impl ChangelogManager {
     fn get_changelog_path(&self, package_name: Option<&str>) -> Result<std::path::PathBuf> {
         if let Some(name) = package_name {
             let package_path = self.get_package_path(name)?;
-            let full_path = self.package_provider.root_path().join(package_path);
+            let full_path = self.root_path.join(package_path);
             Ok(full_path.join("CHANGELOG.md"))
         } else {
-            Ok(self.package_provider.root_path().join("CHANGELOG.md"))
+            Ok(self.root_path.join("CHANGELOG.md"))
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::core::MonorepoProject;
-    use std::sync::Arc;
-
-    #[test]
-    fn test_changelog_manager_creation() {
-        // This test would require mock implementations
-        // For now, just test that the basic structure works
-        assert!(true);
-    }
-
-    #[test]
-    fn test_get_default_changelog_path() {
-        // This test would require a proper test setup
-        // For now, just test that the basic structure works
-        assert!(true);
     }
 }

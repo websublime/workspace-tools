@@ -171,12 +171,12 @@ impl WorkflowProgress {
     /// progress.add_substep("Running tests".to_string());
     /// progress.add_substep("Creating bundles".to_string());
     /// ```
-    pub fn add_substep(&mut self, description: String) {
+    pub fn add_substep(&mut self, description: &str) {
         if let Some(current_step) = self.steps.last_mut() {
             // Only add substeps to running steps
             if matches!(current_step.status, WorkflowStatus::Running) {
                 let substep = SubStep {
-                    description: description.clone(),
+                    description: description.to_string(),
                     timestamp: chrono::Utc::now(),
                     completed: false,
                 };
@@ -201,7 +201,7 @@ impl WorkflowProgress {
         }
         
         // Update the current step description to reflect the latest substep
-        self.current_step_description = format!("{}: {}", self.current_step_description, description);
+        self.current_step_description = format!("{current}: {description}", current = self.current_step_description);
     }
 
     /// Mark the current substep as completed
@@ -228,8 +228,7 @@ impl WorkflowProgress {
     pub fn current_step_completed_substeps(&self) -> usize {
         self.steps
             .last()
-            .map(|step| step.substeps.iter().filter(|substep| substep.completed).count())
-            .unwrap_or(0)
+            .map_or(0, |step| step.substeps.iter().filter(|substep| substep.completed).count())
     }
 
     /// Get the total number of substeps for the current step
@@ -237,8 +236,7 @@ impl WorkflowProgress {
     pub fn current_step_total_substeps(&self) -> usize {
         self.steps
             .last()
-            .map(|step| step.substeps.len())
-            .unwrap_or(0)
+            .map_or(0, |step| step.substeps.len())
     }
 
     /// Get substep completion percentage for the current step (0.0 to 100.0)

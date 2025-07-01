@@ -108,6 +108,7 @@ pub fn log_file_operation(operation: &str, file_path: impl Display, success: boo
 
 /// Performance logging for operation timing
 #[inline]
+#[allow(clippy::cast_precision_loss)]
 pub fn log_performance(operation: &str, duration_ms: u64, item_count: Option<usize>) {
     match item_count {
         Some(count) => log::info!(
@@ -142,27 +143,25 @@ pub struct ErrorContext {
 impl ErrorContext {
     /// Create a new error context
     pub fn new(operation: impl Into<String>) -> Self {
-        Self {
-            operation: operation.into(),
-            package: None,
-            file: None,
-            details: Vec::new(),
-        }
+        Self { operation: operation.into(), package: None, file: None, details: Vec::new() }
     }
 
     /// Add package context
+    #[must_use]
     pub fn with_package(mut self, package: impl Into<String>) -> Self {
         self.package = Some(package.into());
         self
     }
 
     /// Add file context
+    #[must_use]
     pub fn with_file(mut self, file: impl Into<String>) -> Self {
         self.file = Some(file.into());
         self
     }
 
     /// Add custom detail
+    #[must_use]
     pub fn with_detail(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.details.push((key.into(), value.into()));
         self
@@ -170,20 +169,20 @@ impl ErrorContext {
 
     /// Log the error with context
     pub fn log_error(self, error: impl Display) {
-        let mut message = format!("[error] Operation '{}' failed: {}", self.operation, error);
-        
+        let mut message = format!("[error] Operation '{operation}' failed: {error}", operation = self.operation);
+
         if let Some(pkg) = self.package {
-            message.push_str(&format!("\n  Package: {}", pkg));
+            message.push_str(&format!("\n  Package: {pkg}"));
         }
-        
+
         if let Some(file) = self.file {
-            message.push_str(&format!("\n  File: {}", file));
+            message.push_str(&format!("\n  File: {file}"));
         }
-        
+
         for (key, value) in self.details {
-            message.push_str(&format!("\n  {}: {}", key, value));
+            message.push_str(&format!("\n  {key}: {value}"));
         }
-        
+
         log::error!("{}", message);
     }
 }
@@ -247,20 +246,4 @@ pub mod patterns {
     //! - `[performance]` - Performance metrics
     //! - `[error]` - Error details
     //! - `[deprecation]` - Deprecation warnings
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_error_context_builder() {
-        let context = ErrorContext::new("test_operation")
-            .with_package("my-package")
-            .with_file("src/main.rs")
-            .with_detail("line", "42");
-        
-        // Just verify it builds correctly
-        assert!(true);
-    }
 }

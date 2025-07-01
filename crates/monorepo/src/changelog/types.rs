@@ -143,10 +143,7 @@ impl GroupedCommits {
 
         // Add to scope group if scope exists
         if let Some(scope) = &commit.scope {
-            self.by_scope
-                .entry(scope.clone())
-                .or_insert_with(Vec::new)
-                .push(commit.clone());
+            self.by_scope.entry(scope.clone()).or_insert_with(Vec::new).push(commit.clone());
         }
 
         // Add to all commits
@@ -220,20 +217,23 @@ impl TemplateVariables {
     }
 
     /// Set repository URL for generating links
+    #[must_use]
     pub fn with_repository_url(mut self, url: String) -> Self {
         self.repository_url = Some(url);
         self
     }
 
     /// Set previous version for comparison links
+    #[allow(clippy::needless_pass_by_value)]
+    #[must_use]
     pub fn with_previous_version(mut self, version: String) -> Self {
         self.previous_version = Some(version.clone());
-        
+
         // Generate compare URL if repository URL is available
         if let Some(repo_url) = &self.repository_url {
-            self.compare_url = Some(format!("{repo_url}/compare/{version}...{}", self.version));
+            self.compare_url = Some(format!("{repo_url}/compare/{version}...{current_version}", current_version = self.version));
         }
-        
+
         self
     }
 }

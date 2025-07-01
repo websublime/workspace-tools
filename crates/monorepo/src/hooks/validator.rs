@@ -13,42 +13,28 @@ use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
 use crate::{Environment};
 use crate::changesets::Changeset;
-use std::sync::Arc;
 
-impl HookValidator {
-    /// Create a new hook validator with injected dependencies
-    #[must_use]
-    pub fn new(
-        git_provider: Box<dyn crate::core::GitProvider>,
-        package_provider: Box<dyn crate::core::PackageProvider>,
-        config_provider: Box<dyn crate::core::ConfigProvider>,
-    ) -> Self {
-        Self { 
-            git_provider,
-            package_provider,
-            config_provider,
-        }
-    }
-
-    /// Create a new hook validator from project (convenience method)
+impl<'a> HookValidator<'a> {
+    /// Create a new hook validator with direct borrowing from project
     /// 
-    /// NOTE: This convenience method creates provider instances from the project.
-    /// For better performance and memory usage, prefer using the `new()` method with 
-    /// pre-created providers when creating multiple components.
+    /// Uses borrowing instead of trait objects to eliminate Arc proliferation
+    /// and work with Rust ownership principles.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `project` - Reference to monorepo project
+    /// 
+    /// # Returns
+    /// 
+    /// A new hook validator instance
     #[must_use]
-    pub fn from_project(project: Arc<MonorepoProject>) -> Self {
-        use crate::core::interfaces::DependencyFactory;
-        
-        // Create providers efficiently
-        let git_provider = DependencyFactory::git_provider(Arc::clone(&project));
-        let package_provider = DependencyFactory::package_provider(Arc::clone(&project));
-        let config_provider = DependencyFactory::config_provider(project);
-        
-        Self::new(
-            git_provider,
-            package_provider,
-            config_provider,
-        )
+    pub fn new(project: &'a MonorepoProject) -> Self {
+        Self { 
+            repository: &project.repository,
+            packages: &project.packages,
+            config: &project.config,
+            root_path: &project.root_path,
+        }
     }
 
     /// Check if all conditions are met for hook execution
@@ -180,7 +166,7 @@ impl HookValidator {
         if matched_files.is_empty() {
             Ok(ValidationCheck::failed("No changed files match the required patterns"))
         } else {
-            Ok(ValidationCheck::passed(format!("{} files match the patterns", matched_files.len())))
+            Ok(ValidationCheck::passed(format!("{count} files match the patterns", count = matched_files.len())))
         }
     }
 
@@ -312,7 +298,7 @@ impl HookValidator {
         }
 
         // Check configuration to see if changesets are required
-        let config = self.config_provider.config();
+        let config = self.config;
         if !config.changesets.required {
             log::debug!("Changesets not required by configuration");
             return Ok(true);
@@ -347,7 +333,7 @@ impl HookValidator {
 
     /// Get branch naming patterns from configuration
     fn get_branch_naming_patterns(&self) -> Result<Vec<String>> {
-        let config = self.config_provider.config();
+        let config = self.config;
         let branch_config = &config.git.branches;
         
         let mut patterns = Vec::new();
@@ -355,27 +341,27 @@ impl HookValidator {
         // Add feature branch patterns
         patterns.extend(branch_config.feature_prefixes.iter().map(|prefix| {
             if prefix.ends_with('/') {
-                format!("{}*", prefix)
+                format!("{prefix}*")
             } else {
-                format!("{}/*", prefix)
+                format!("{prefix}/*")
             }
         }));
         
         // Add hotfix branch patterns  
         patterns.extend(branch_config.hotfix_prefixes.iter().map(|prefix| {
             if prefix.ends_with('/') {
-                format!("{}*", prefix)
+                format!("{prefix}*")
             } else {
-                format!("{}/*", prefix)
+                format!("{prefix}/*")
             }
         }));
         
         // Add release branch patterns
         patterns.extend(branch_config.release_prefixes.iter().map(|prefix| {
             if prefix.ends_with('/') {
-                format!("{}*", prefix)
+                format!("{prefix}*")
             } else {
-                format!("{}/*", prefix)
+                format!("{prefix}/*")
             }
         }));
         
@@ -449,7 +435,7 @@ impl HookValidator {
 
     /// Check if a Git reference exists
     fn check_git_ref_exists(&self, ref_pattern: &str) -> Result<bool> {
-        let repository = self.git_provider.repository();
+        let repository = self.repository;
         
         // Handle glob patterns in references
         if ref_pattern.contains('*') || ref_pattern.contains('?') {
@@ -494,41 +480,8 @@ impl HookValidator {
         }
     }
 
-    /// Create a ChangesetManager instance for changeset operations
-    ///
-    /// This method creates a fully functional changeset manager with proper dependency injection.
-    /// The changeset manager enables creation, management, and deployment of changesets
-    /// within the hook validation context.
-    ///
-    /// # Returns
-    ///
-    /// A configured ChangesetManager instance ready for use.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the changeset manager cannot be created due to:
-    /// - Missing or invalid dependencies
-    /// - File system or storage initialization issues
-    /// - Configuration validation failures
-    fn create_changeset_manager(&self) -> Result<crate::changesets::ChangesetManager> {
-        use crate::changesets::ChangesetManager;
-        use crate::core::MonorepoProject;
-        use std::sync::Arc;
-
-        // Get project root path from package provider
-        let root_path = self.package_provider.root_path();
-        
-        // Create a new MonorepoProject instance from the root path
-        // This is safe since the project structure is the same
-        let project = Arc::new(MonorepoProject::new(root_path)
-            .map_err(|e| Error::hook(format!("Failed to create project instance for changesets: {e}")))?);
-
-        // Use the convenient from_project method which handles all dependency injection
-        let changeset_manager = ChangesetManager::from_project(project)
-            .map_err(|e| Error::hook(format!("Failed to create changeset manager from project: {e}")))?;
-
-        log::debug!("Successfully created changeset manager for hook validation operations");
-        Ok(changeset_manager)
-    }
+    // Note: create_changeset_manager method removed due to lifetime issues in FASE 1
+    // This functionality can be re-implemented in FASE 2 with proper async patterns
+    // if changeset operations are needed in hook validation context
 }
 

@@ -516,6 +516,101 @@ impl ConfigManager {
             glob_pattern.matches(&normalized_path)
         }))
     }
+
+    /// Load configuration from a root path
+    ///
+    /// Loads configuration from the standard monorepo.toml file in the given path.
+    /// If no configuration file exists, returns default configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `root_path` - Root path of the monorepo
+    ///
+    /// # Returns
+    ///
+    /// Loaded configuration or default if file doesn't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration file exists but is malformed.
+    pub fn load_config(&self, root_path: &Path) -> Result<MonorepoConfig> {
+        let config_path = root_path.join("monorepo.toml");
+        
+        if config_path.exists() {
+            let persistence = ConfigPersistence::new();
+            persistence.load_from_file(&config_path)
+        } else {
+            // Return default configuration if no file exists
+            Ok(MonorepoConfig::default())
+        }
+    }
+
+    /// Validate a configuration
+    ///
+    /// Performs comprehensive validation of a configuration object to ensure
+    /// all settings are valid and consistent.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Configuration to validate
+    ///
+    /// # Returns
+    ///
+    /// Success if configuration is valid.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error with validation details if configuration is invalid.
+    pub fn validate_config(&self, config: &MonorepoConfig) -> Result<()> {
+        // Validate workspace patterns
+        for pattern in &config.workspace.patterns {
+            if pattern.pattern.is_empty() {
+                return Err(Error::config_validation("Workspace pattern cannot be empty"));
+            }
+            
+            // Validate that pattern is a valid glob
+            if let Err(e) = Pattern::new(&pattern.pattern) {
+                return Err(Error::config_validation(format!(
+                    "Invalid workspace pattern '{}': {}", 
+                    pattern.pattern, e
+                )));
+            }
+        }
+
+        // Validate version constraints if any are specified
+        if let Some(ref constraint) = config.versioning.version_constraint {
+            if constraint.is_empty() {
+                return Err(Error::config_validation("Version constraint cannot be empty"));
+            }
+        }
+
+        // Validate hook configuration
+        if config.hooks.enabled {
+            // Validate pre-commit hook
+            if config.hooks.pre_commit.enabled && config.hooks.pre_commit.run_tasks.is_empty() && config.hooks.pre_commit.custom_script.is_none() {
+                return Err(Error::config_validation("Pre-commit hook must have either tasks or custom script"));
+            }
+            
+            // Validate pre-push hook
+            if config.hooks.pre_push.enabled && config.hooks.pre_push.run_tasks.is_empty() && config.hooks.pre_push.custom_script.is_none() {
+                return Err(Error::config_validation("Pre-push hook must have either tasks or custom script"));
+            }
+            
+            // Validate post-merge hook if present
+            if let Some(ref post_merge) = config.hooks.post_merge {
+                if post_merge.enabled && post_merge.run_tasks.is_empty() && post_merge.custom_script.is_none() {
+                    return Err(Error::config_validation("Post-merge hook must have either tasks or custom script"));
+                }
+            }
+        }
+
+        // Validate changeset directory exists or can be created
+        if config.changesets.changeset_dir.as_os_str().is_empty() {
+            return Err(Error::config_validation("Changeset directory cannot be empty"));
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for ConfigManager {

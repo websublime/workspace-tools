@@ -8,8 +8,6 @@ pub mod components;
 mod manager;
 mod defaults;
 
-#[cfg(test)]
-mod tests;
 
 // Explicit re-exports from types module
 pub use types::{

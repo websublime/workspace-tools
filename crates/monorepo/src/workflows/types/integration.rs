@@ -18,25 +18,30 @@ use crate::changesets::ChangesetManager;
 /// This workflow ensures that changesets are properly validated during
 /// Git operations and provides seamless integration between the changeset
 /// system and Git hooks.
-pub struct ChangesetHookIntegration {
+/// Uses direct borrowing from MonorepoProject components instead of trait objects.
+/// This follows Rust ownership principles and eliminates Arc proliferation.
+pub struct ChangesetHookIntegration<'a> {
     /// Changeset manager for changeset operations
-    pub(crate) changeset_manager: ChangesetManager,
+    pub(crate) changeset_manager: ChangesetManager<'a>,
 
     /// Hook manager for Git hook operations
-    pub(crate) hook_manager: crate::hooks::HookManager,
+    pub(crate) hook_manager: crate::hooks::HookManager<'a>,
 
     /// Task manager for validation tasks
-    pub(crate) task_manager: crate::tasks::TaskManager,
+    pub(crate) task_manager: crate::tasks::TaskManager<'a>,
 
-    /// Configuration provider for accessing configuration settings
-    pub(crate) config_provider: Box<dyn crate::core::ConfigProvider>,
+    /// Direct reference to configuration
+    pub(crate) config: &'a crate::config::MonorepoConfig,
 
-    /// Git provider for repository operations
-    pub(crate) git_provider: Box<dyn crate::core::GitProvider>,
+    /// Direct reference to packages
+    pub(crate) packages: &'a [crate::core::MonorepoPackageInfo],
 
-    /// File system provider for file operations
-    pub(crate) file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+    /// Direct reference to git repository
+    pub(crate) repository: &'a sublime_git_tools::Repo,
 
-    /// Package provider for accessing package information
-    pub(crate) package_provider: Box<dyn crate::core::PackageProvider>,
+    /// Direct reference to file system manager
+    pub(crate) file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
+
+    /// Direct reference to root path
+    pub(crate) root_path: &'a std::path::Path,
 }

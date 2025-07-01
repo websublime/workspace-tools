@@ -1,29 +1,42 @@
 //! Changeset manager type definitions
+//!
+//! Follows direct borrowing patterns instead of trait objects.
 
 use super::ChangesetStorage;
 use crate::tasks::TaskManager;
+use crate::core::MonorepoPackageInfo;
+use crate::config::MonorepoConfig;
+use sublime_git_tools::Repo;
+use sublime_standard_tools::filesystem::FileSystemManager;
+use std::path::Path;
 
 /// Manager for changeset operations
 ///
 /// The `ChangesetManager` provides the main interface for working with changesets.
 /// It handles creation, validation, storage, and deployment of changesets across
 /// different environments during the development workflow.
-pub struct ChangesetManager {
+/// 
+/// Uses direct borrowing from MonorepoProject components instead of trait objects.
+/// This follows Rust ownership principles and eliminates Arc proliferation.
+pub struct ChangesetManager<'a> {
     /// Storage for changeset persistence
-    pub(crate) storage: ChangesetStorage,
+    pub(crate) storage: ChangesetStorage<'a>,
 
     /// Task manager for executing deployment tasks
-    pub(crate) task_manager: TaskManager,
+    pub(crate) task_manager: TaskManager<'a>,
 
-    /// Configuration provider for accessing configuration settings
-    pub(crate) config_provider: Box<dyn crate::core::ConfigProvider>,
+    /// Direct reference to configuration
+    pub(crate) config: &'a MonorepoConfig,
 
-    /// File system provider for file operations
-    pub(crate) file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+    /// Direct reference to file system manager
+    pub(crate) file_system: &'a FileSystemManager,
 
-    /// Package provider for accessing package information
-    pub(crate) package_provider: Box<dyn crate::core::PackageProvider>,
+    /// Direct reference to packages
+    pub(crate) packages: &'a [MonorepoPackageInfo],
 
-    /// Git provider for repository operations
-    pub(crate) git_provider: Box<dyn crate::core::GitProvider>,
+    /// Direct reference to git repository
+    pub(crate) repository: &'a Repo,
+    
+    /// Direct reference to root path
+    pub(crate) root_path: &'a Path,
 }

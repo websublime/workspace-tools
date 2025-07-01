@@ -6,7 +6,6 @@
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
 
 /// Main trait that all monorepo plugins must implement
 ///
@@ -120,30 +119,47 @@ pub struct PluginInfo {
 ///
 /// Contains references to the monorepo project and configuration
 /// that plugins can use during execution.
-pub struct PluginContext {
-    /// Reference to the monorepo project
-    pub project: Arc<crate::core::MonorepoProject>,
+/// 
+/// Uses direct borrowing from MonorepoProject components instead of Arc.
+pub struct PluginContext<'a> {
+    /// Direct reference to configuration
+    pub config_ref: &'a crate::config::MonorepoConfig,
+    /// Direct reference to packages
+    pub packages: &'a [crate::core::MonorepoPackageInfo],
+    /// Direct reference to repository
+    pub repository: &'a sublime_git_tools::Repo,
+    /// Direct reference to file system manager
+    pub file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
+    /// Direct reference to root path
+    pub root_path: &'a std::path::Path,
     /// Plugin-specific configuration
     pub config: HashMap<String, serde_json::Value>,
     /// Working directory for plugin operations
     pub working_directory: std::path::PathBuf,
 }
 
-impl PluginContext {
-    /// Create a new plugin context
-    ///
+impl<'a> PluginContext<'a> {
+    /// Create a new plugin context with direct borrowing from project
+    /// 
+    /// Uses borrowing instead of Arc to eliminate Arc proliferation
+    /// and work with Rust ownership principles.
+    /// 
     /// # Arguments
-    ///
-    /// * `project` - Monorepo project reference
+    /// 
+    /// * `project` - Reference to monorepo project
     /// * `config` - Plugin configuration
     /// * `working_directory` - Working directory for plugin operations
     pub fn new(
-        project: Arc<crate::core::MonorepoProject>,
+        project: &'a crate::core::MonorepoProject,
         config: HashMap<String, serde_json::Value>,
         working_directory: std::path::PathBuf,
     ) -> Self {
         Self {
-            project,
+            config_ref: &project.config,
+            packages: &project.packages,
+            repository: &project.repository,
+            file_system: &project.file_system,
+            root_path: &project.root_path,
             config,
             working_directory,
         }
@@ -254,6 +270,7 @@ impl PluginResult {
     ///
     /// * `key` - Metadata key
     /// * `value` - Metadata value
+    #[must_use]
     pub fn with_metadata(mut self, key: impl Into<String>, value: impl Serialize) -> Self {
         if let Ok(json_value) = serde_json::to_value(value) {
             self.metadata.insert(key.into(), json_value);
@@ -304,9 +321,9 @@ impl PluginError {
 
 impl std::fmt::Display for PluginError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Plugin error: {}", self.message)?;
+        write!(f, "Plugin error: {message}", message = self.message)?;
         if let Some(code) = &self.code {
-            write!(f, " (code: {})", code)?;
+            write!(f, " (code: {code})")?;
         }
         Ok(())
     }

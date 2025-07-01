@@ -47,7 +47,7 @@ impl PackagePersistence {
         // This would require copying the file from current location to new path
         let current_path = self.package_json_path();
         std::fs::copy(&current_path, path)
-            .map_err(|e| Error::package(format!("Failed to copy package.json to {}: {e}", path.display())))?;
+            .map_err(|e| Error::package(format!("Failed to copy package.json to {path}: {e}", path = path.display())))?;
         Ok(())
     }
 
@@ -236,7 +236,7 @@ impl PackagePersistence {
         // Check for required directories
         let package_path = &self.package.workspace_package.absolute_path;
         if !package_path.exists() {
-            errors.push(format!("Package directory not found: {}", package_path.display()));
+            errors.push(format!("Package directory not found: {package_path}", package_path = package_path.display()));
         }
 
         errors

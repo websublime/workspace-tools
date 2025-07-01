@@ -2,6 +2,7 @@
 //!
 //! The `ConditionChecker` evaluates task conditions to determine if tasks should
 //! be executed based on changes, environment, and other contextual factors.
+//! Uses direct borrowing patterns instead of trait objects.
 
 // Phase 1 Async Clarity: Converted condition checking to synchronous operations
 // Only command execution remains async for legitimate I/O operations
@@ -11,34 +12,86 @@
 
 use super::types::{ConditionChecker, DependencyFilter, ExecutionContext, VersionChangeThreshold};
 use super::{
-    BranchCondition, EnvironmentCondition, FilePattern, FilePatternType,
-    TaskCondition, TaskDefinition,
+    BranchCondition, EnvironmentCondition, FilePattern, FilePatternType, TaskCondition,
+    TaskDefinition,
 };
 use crate::analysis::ChangeAnalysis;
 use crate::config::Environment;
-use crate::core::{GitProvider, ConfigProvider, PackageProvider};
+use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
 use crate::logging::{log_operation, log_operation_error, ErrorContext};
 use glob::Pattern;
 use regex::Regex;
 use std::collections::HashSet;
+use sublime_standard_tools::filesystem::FileSystem;
 use VersionChangeThreshold::{Any, Major, MinorOrMajor, PatchOrHigher};
 
-impl ConditionChecker {
-    /// Create a new condition checker
+impl<'a> ConditionChecker<'a> {
+    /// Create a new condition checker with direct borrowing from project
+    ///
+    /// Uses borrowing instead of trait objects to eliminate Arc proliferation
+    /// and work with Rust ownership principles.
+    ///
+    /// # Arguments
+    ///
+    /// * `project` - Reference to monorepo project
+    ///
+    /// # Returns
+    ///
+    /// A new condition checker instance
     #[must_use]
-    pub fn new(
-        git_provider: Box<dyn GitProvider>,
-        config_provider: Box<dyn ConfigProvider>,
-        package_provider: Box<dyn PackageProvider>,
-        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
-    ) -> Self {
-        Self { 
-            git_provider,
-            config_provider,
-            package_provider,
-            file_system_provider,
+    pub fn new(project: &'a MonorepoProject) -> Self {
+        Self {
+            repository: project.repository(),
+            config: project.services.config_service().get_configuration(),
+            packages: &project.packages,
+            file_system: &project.file_system,
+            root_path: &project.root_path,
         }
+    }
+
+    /// Create a new condition checker with direct component references
+    ///
+    /// Uses direct borrowing of individual components instead of requiring
+    /// a full MonorepoProject.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Reference to monorepo configuration
+    /// * `file_system` - Reference to file system manager
+    /// * `packages` - Reference to package list
+    /// * `root_path` - Reference to root path
+    ///
+    /// # Returns
+    ///
+    /// A new condition checker instance
+    ///
+    /// # Note
+    ///
+    /// Repository is set to a placeholder since some condition checking
+    /// operations may not require Git operations
+    #[must_use]
+    pub fn with_components(
+        config: &'a crate::config::MonorepoConfig,
+        file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
+        packages: &'a [crate::core::MonorepoPackageInfo],
+        root_path: &'a std::path::Path,
+    ) -> Self {
+        // Create a placeholder repository that won't be used
+        // This is safe since we're only using this for non-Git condition checking
+        let repo_path = root_path.to_str().unwrap_or(".");
+
+        // Allow unwrap here because:
+        // 1. This is a placeholder repository that won't actually be used
+        // 2. We have a fallback to current directory if the primary path fails
+        // 3. This condition checker doesn't perform actual Git operations
+        #[allow(clippy::unwrap_used)]
+        let dummy_repo = Box::leak(Box::new(
+            sublime_git_tools::Repo::open(repo_path)
+                .unwrap_or_else(|_| sublime_git_tools::Repo::open(".").unwrap()),
+        ));
+
+        Self { repository: dummy_repo, config, packages, file_system, root_path }
     }
 
     /// Check if all conditions are met for task execution
@@ -105,21 +158,15 @@ impl ConditionChecker {
                 self.check_packages_changed(packages, context)
             }
 
-            TaskCondition::FilesChanged { patterns } => {
-                self.check_files_changed(patterns, context)
-            }
+            TaskCondition::FilesChanged { patterns } => self.check_files_changed(patterns, context),
 
             TaskCondition::DependenciesChanged { filter } => {
                 self.check_dependencies_changed(filter.as_ref(), context)
             }
 
-            TaskCondition::OnBranch { pattern } => {
-                self.check_branch_condition(pattern, context)
-            }
+            TaskCondition::OnBranch { pattern } => self.check_branch_condition(pattern, context),
 
-            TaskCondition::Environment { env } => {
-                self.check_environment_condition(env, context)
-            }
+            TaskCondition::Environment { env } => self.check_environment_condition(env, context),
 
             TaskCondition::All { conditions } => {
                 // All conditions must be true
@@ -149,7 +196,7 @@ impl ConditionChecker {
             TaskCondition::CustomScript { script, expected_output: _ } => {
                 // Custom scripts require async execution - provide comprehensive guidance
                 let error_message = format!(
-                    "Custom script '{}' requires async execution context.\n\n\
+                    "Custom script '{script}' requires async execution context.\n\n\
                     To execute custom scripts properly, use one of these approaches:\n\
                     1. AsyncConditionAdapter::evaluate_conditions_adaptive() for mixed sync/async conditions\n\
                     2. AsyncConditionAdapter::execute_custom_script() for direct script execution\n\
@@ -159,24 +206,26 @@ impl ConditionChecker {
                     let adapter = AsyncConditionAdapter::new(condition_checker);\n\
                     let result = adapter.evaluate_conditions_adaptive(&conditions, &context).await?;\n\
                     ```\n\n\
-                    For more information, see the AsyncConditionAdapter documentation.",
-                    script
+                    For more information, see the AsyncConditionAdapter documentation."
                 );
-                
+
                 log::warn!(
                     "Custom script '{}' attempted in synchronous context. \
                     Scripts require async execution due to process spawning and I/O operations. \
                     Use AsyncConditionAdapter::evaluate_conditions_adaptive() or execute_custom_script() instead.",
                     script
                 );
-                
+
                 // Add structured error context for better debugging
                 ErrorContext::new("custom_script_async_boundary")
                     .with_detail("script", script)
                     .with_detail("solution", "Use AsyncConditionAdapter for async execution")
-                    .with_detail("method", "evaluate_conditions_adaptive() or execute_custom_script()")
+                    .with_detail(
+                        "method",
+                        "evaluate_conditions_adaptive() or execute_custom_script()",
+                    )
                     .log_error(&Error::task("Async execution required".to_string()));
-                
+
                 Err(Error::task(error_message))
             }
         }
@@ -297,7 +346,7 @@ impl ConditionChecker {
         let current_branch = if let Some(branch) = &context.current_branch {
             branch.clone()
         } else {
-            self.git_provider.current_branch()?
+            self.repository.get_current_branch()?
         };
 
         match condition {
@@ -313,28 +362,28 @@ impl ConditionChecker {
 
             BranchCondition::IsMain => {
                 // Use configured main branches
-                let branch_config = &self.config_provider.config().git.branches;
+                let branch_config = &self.config.git.branches;
                 Ok(branch_config.is_main_branch(&current_branch))
             }
 
             BranchCondition::IsFeature => {
-                let branch_config = &self.config_provider.config().git.branches;
+                let branch_config = &self.config.git.branches;
                 Ok(branch_config.is_feature_branch(&current_branch))
             }
 
             BranchCondition::IsRelease => {
-                let branch_config = &self.config_provider.config().git.branches;
+                let branch_config = &self.config.git.branches;
                 Ok(branch_config.is_release_branch(&current_branch))
             }
 
             BranchCondition::IsHotfix => {
-                let branch_config = &self.config_provider.config().git.branches;
+                let branch_config = &self.config.git.branches;
                 Ok(branch_config.is_hotfix_branch(&current_branch))
             }
         }
     }
 
-    /// Check environment condition  
+    /// Check environment condition
     pub fn check_environment_condition(
         &self,
         condition: &EnvironmentCondition,
@@ -448,75 +497,74 @@ impl ConditionChecker {
         expected_output: &Option<String>,
         context: &ExecutionContext,
     ) -> Result<bool> {
-        use sublime_standard_tools::command::{CommandBuilder, Executor, DefaultExecutor};
+        use sublime_standard_tools::command::{CommandBuilder, DefaultExecutor, Executor};
 
         // Determine working directory
-        let working_dir = context.working_directory.as_deref().unwrap_or(self.package_provider.root_path());
+        let working_dir = context.working_directory.as_deref().unwrap_or(self.root_path);
 
         // Create command using standard tools
         let command = if cfg!(windows) {
-            CommandBuilder::new("cmd")
-                .arg("/C")
-                .arg(script)
-                .current_dir(working_dir)
-                .build()
+            CommandBuilder::new("cmd").arg("/C").arg(script).current_dir(working_dir).build()
         } else {
-            CommandBuilder::new("sh")
-                .arg("-c")
-                .arg(script)
-                .current_dir(working_dir)
-                .build()
+            CommandBuilder::new("sh").arg("-c").arg(script).current_dir(working_dir).build()
         };
 
         // Execute using the standard executor
         let executor = DefaultExecutor::new();
-        
+
         match executor.execute(command).await {
             Ok(result) => {
                 log::debug!(
-                    "[custom_script] Executed with exit code: {} (success: {})", 
-                    result.status(), 
+                    "[custom_script] Executed with exit code: {} (success: {})",
+                    result.status(),
                     result.success()
                 );
-                
+
                 if let Some(expected) = expected_output {
                     // Check if output matches expected value
                     let stdout = result.stdout().trim();
                     let matches = stdout == expected.trim();
                     log::debug!(
-                        "[custom_script] Output validation - Expected: '{}', Got: '{}', Matches: {}", 
-                        expected.trim(), 
-                        stdout, 
+                        "[custom_script] Output validation - Expected: '{}', Got: '{}', Matches: {}",
+                        expected.trim(),
+                        stdout,
                         matches
                     );
-                    
+
                     if matches {
-                        log_operation("custom_script", "Output matched expected value", Some(script));
+                        log_operation(
+                            "custom_script",
+                            "Output matched expected value",
+                            Some(script),
+                        );
                     } else {
-                        log_operation("custom_script", "Output did not match expected value", Some(script));
+                        log_operation(
+                            "custom_script",
+                            "Output did not match expected value",
+                            Some(script),
+                        );
                     }
-                    
+
                     Ok(matches)
                 } else {
                     // Check exit code only (0 = success)
                     let success = result.success();
-                    
+
                     if success {
                         log_operation("custom_script", "Completed successfully", Some(script));
                     } else {
-                        log_operation("custom_script", 
-                            format!("Failed with exit code: {}", result.status()), 
-                            Some(script)
+                        log_operation(
+                            "custom_script",
+                            format!("Failed with exit code: {status}", status = result.status()),
+                            Some(script),
                         );
                     }
-                    
+
                     Ok(success)
                 }
             }
             Err(e) => {
-                ErrorContext::new("custom_script")
-                    .with_detail("script", script)
-                    .log_error(&e);
+                ErrorContext::new("custom_script").with_detail("script", script).log_error(&e);
                 Ok(false)
             }
         }
@@ -563,7 +611,7 @@ impl ConditionChecker {
         // Check version change threshold (converted to sync)
         self.check_version_change_threshold(
             &packages_with_dep_changes,
-            &filter.version_change,
+            filter.version_change,
             context,
         )
     }
@@ -576,7 +624,7 @@ impl ConditionChecker {
         let mut packages_with_dep_changes = Vec::new();
 
         // Get packages from the project
-        let packages = self.package_provider.packages();
+        let packages = self.packages;
 
         // Analyze each affected package for dependency changes
         for package_name in &context.affected_packages {
@@ -599,7 +647,7 @@ impl ConditionChecker {
         }
 
         // Also check for workspace-level dependency changes that could affect packages
-        let root_package_json = self.package_provider.root_path().join("package.json");
+        let root_package_json = self.root_path.join("package.json");
         let root_package_json_str = root_package_json.to_string_lossy().to_string();
 
         if context.changed_files.iter().any(|file| file.path == root_package_json_str)
@@ -638,59 +686,70 @@ impl ConditionChecker {
         package_json_path: &std::path::Path,
         context: &ExecutionContext,
     ) -> Result<bool> {
-        let repository = self.git_provider.repository();
-        let since_ref = &self.config_provider.config().git.default_since_ref;
+        let repository = self.repository;
+        let since_ref = &self.config.git.default_since_ref;
 
         // Convert package_json_path to relative path from repository root
-        let repo_root = self.package_provider.root_path();
-        let relative_path = match package_json_path.strip_prefix(repo_root) {
-            Ok(rel_path) => rel_path,
-            Err(_) => {
-                log_operation_error(
-                    "dependency_analysis", 
-                    format!("Package.json path {} is not within repository root {}", 
-                           package_json_path.display(), repo_root.display()),
-                    None
-                );
-                return Ok(false);
-            }
+        let repo_root = self.root_path;
+        let Ok(relative_path) = package_json_path.strip_prefix(repo_root) else {
+            log_operation_error(
+                "dependency_analysis",
+                format!("Package.json path {package_json_path} is not within repository root {repo_root}",
+                       package_json_path = package_json_path.display(), repo_root = repo_root.display()),
+                None
+            );
+            return Ok(false);
         };
 
         // Get files changed since the reference
         match repository.get_all_files_changed_since_sha(since_ref) {
             Ok(changed_files) => {
                 let relative_path_str = relative_path.to_string_lossy();
-                
+
                 // Check if our package.json is in the changed files
-                let is_changed = changed_files.iter()
+                let is_changed = changed_files
+                    .iter()
                     .any(|file| file == &*relative_path_str || file.ends_with(&*relative_path_str));
 
                 if !is_changed {
-                    log::debug!("[dependency] Package.json {} not in changed files list", relative_path.display());
+                    log::debug!(
+                        "[dependency] Package.json {} not in changed files list",
+                        relative_path.display()
+                    );
                     return Ok(false);
                 }
 
-                log_operation("dependency_analysis", 
-                    format!("Found changed package.json: {}", relative_path.display()), 
-                    None
+                log_operation(
+                    "dependency_analysis",
+                    format!(
+                        "Found changed package.json: {relative_path}",
+                        relative_path = relative_path.display()
+                    ),
+                    None,
                 );
 
                 // Since we don't have direct diff access, we'll check if the file is in context changed files
                 // and read the current file to see if it has dependency sections that likely changed
-                if self.file_system_provider.path_exists(package_json_path) {
-                    match self.file_system_provider.read_file_string(package_json_path) {
+                if self.file_system.exists(package_json_path) {
+                    match self.file_system.read_file_string(package_json_path) {
                         Ok(content) => {
                             // Check if the file contains dependency sections
                             let has_dependencies = content.contains("\"dependencies\"")
                                 || content.contains("\"devDependencies\"")
                                 || content.contains("\"peerDependencies\"")
                                 || content.contains("\"optionalDependencies\"");
-                            
+
                             if has_dependencies {
-                                log::debug!("Package.json {} contains dependency sections and was changed", relative_path.display());
+                                log::debug!(
+                                    "Package.json {} contains dependency sections and was changed",
+                                    relative_path.display()
+                                );
                                 Ok(true)
                             } else {
-                                log::debug!("Package.json {} changed but has no dependency sections", relative_path.display());
+                                log::debug!(
+                                    "Package.json {} changed but has no dependency sections",
+                                    relative_path.display()
+                                );
                                 Ok(false)
                             }
                         }
@@ -703,20 +762,27 @@ impl ConditionChecker {
                         }
                     }
                 } else {
-                    log::debug!("Package.json {} does not exist, assuming no dependency changes", relative_path.display());
+                    log::debug!(
+                        "Package.json {} does not exist, assuming no dependency changes",
+                        relative_path.display()
+                    );
                     Ok(false)
                 }
             }
             Err(e) => {
                 log::debug!("Could not get changed files from git: {}. Using context fallback.", e);
-                
+
                 // Fallback: check if this file is in the context's changed files
                 let file_path_str = relative_path.to_string_lossy();
-                let is_changed = context.changed_files.iter()
-                    .any(|file| file.path == *file_path_str || file.path.ends_with(&*file_path_str));
-                
+                let is_changed = context.changed_files.iter().any(|file| {
+                    file.path == *file_path_str || file.path.ends_with(&*file_path_str)
+                });
+
                 if is_changed {
-                    log::debug!("File {} found in context changed files list, assuming dependency changes", relative_path.display());
+                    log::debug!(
+                        "File {} found in context changed files list, assuming dependency changes",
+                        relative_path.display()
+                    );
                     Ok(true) // Assume dependency changes if package.json changed
                 } else {
                     log::debug!("No changes detected for {}", relative_path.display());
@@ -746,7 +812,7 @@ impl ConditionChecker {
     fn check_version_change_threshold(
         &self,
         affected_packages: &[String],
-        threshold: &VersionChangeThreshold,
+        threshold: VersionChangeThreshold,
         context: &ExecutionContext,
     ) -> Result<bool> {
         if affected_packages.is_empty() {
@@ -771,7 +837,7 @@ impl ConditionChecker {
         }
 
         // Check if the highest change level meets the threshold
-        Ok(self.meets_threshold(highest_change_level, *threshold))
+        Ok(self.meets_threshold(highest_change_level, threshold))
     }
 
     /// Analyze the level of change for a specific package using git crate
@@ -790,27 +856,31 @@ impl ConditionChecker {
     /// # Returns
     ///
     /// The version change threshold level for this package.
+    #[allow(clippy::too_many_lines)]
     fn analyze_package_change_level(
         &self,
         package_name: &str,
         context: &ExecutionContext,
     ) -> Result<VersionChangeThreshold> {
         // Find the package location from the project
-        let packages = self.package_provider.packages();
+        let packages = self.packages;
         let package = packages.iter().find(|p| p.name() == package_name).ok_or_else(|| {
             crate::error::Error::task(format!("Package {package_name} not found"))
         })?;
 
         let package_path = &package.workspace_package.location;
-        let repository = self.git_provider.repository();
+        let repository = self.repository;
 
         // Convert package path to relative path from repository root
-        let repo_root = self.package_provider.root_path();
+        let repo_root = self.root_path;
         let relative_package_path = match package_path.strip_prefix(repo_root) {
             Ok(rel_path) => rel_path.to_string_lossy().to_string(),
             Err(_) => {
-                log::warn!("Package path {} is not within repository root {}", 
-                          package_path.display(), repo_root.display());
+                log::warn!(
+                    "Package path {} is not within repository root {}",
+                    package_path.display(),
+                    repo_root.display()
+                );
                 return Ok(VersionChangeThreshold::Any);
             }
         };
@@ -825,12 +895,13 @@ impl ConditionChecker {
 
                 for commit in commits {
                     // Check if this commit touches the package
-                    let touches_package = match repository.get_all_files_changed_since_sha(&commit.hash) {
-                        Ok(changed_files) => {
-                            changed_files.iter().any(|file| file.starts_with(&relative_package_path))
-                        }
-                        Err(_) => false, // If we can't get changed files, skip this commit
-                    };
+                    let touches_package =
+                        match repository.get_all_files_changed_since_sha(&commit.hash) {
+                            Ok(changed_files) => changed_files
+                                .iter()
+                                .any(|file| file.starts_with(&relative_package_path)),
+                            Err(_) => false, // If we can't get changed files, skip this commit
+                        };
 
                     if !touches_package {
                         continue;
@@ -850,9 +921,10 @@ impl ConditionChecker {
                     }
 
                     // Check for feature additions
-                    if message.contains("feat:") ||
-                       message.contains("feature:") ||
-                       (message.to_lowercase().contains("add") && message.to_lowercase().contains("new"))
+                    if message.contains("feat:")
+                        || message.contains("feature:")
+                        || (message.to_lowercase().contains("add")
+                            && message.to_lowercase().contains("new"))
                     {
                         log::debug!("Feature addition detected in commit: {}", commit.hash);
                         has_new_features = true;
@@ -874,7 +946,11 @@ impl ConditionChecker {
             })
             .collect();
 
-        log::debug!("Found {} changed files in package {}", changed_files_in_package.len(), package_name);
+        log::debug!(
+            "Found {} changed files in package {}",
+            changed_files_in_package.len(),
+            package_name
+        );
 
         // Check for API changes that might indicate breaking changes
         for file in &changed_files_in_package {
@@ -886,7 +962,8 @@ impl ConditionChecker {
                file_path.contains("src/index") ||   // Source entry points
                file_path.contains("types.") ||      // Type definitions
                file_path.contains(".d.ts") ||       // TypeScript declarations
-               file_path.ends_with("package.json")  // Package metadata
+               file_path.ends_with("package.json")
+            // Package metadata
             {
                 log::debug!("API-related file changed: {}", file_path);
                 // If we see changes to main API files, assume potential breaking changes
@@ -908,9 +985,14 @@ impl ConditionChecker {
             VersionChangeThreshold::Any
         };
 
-        log::debug!("Package {} analysis result: {:?} (breaking: {}, features: {}, files: {})",
-                   package_name, change_level, has_breaking_changes, has_new_features, 
-                   changed_files_in_package.len());
+        log::debug!(
+            "Package {} analysis result: {:?} (breaking: {}, features: {}, files: {})",
+            package_name,
+            change_level,
+            has_breaking_changes,
+            has_new_features,
+            changed_files_in_package.len()
+        );
 
         Ok(change_level)
     }
@@ -967,22 +1049,25 @@ impl ConditionChecker {
         checker_name: &str,
         context: &ExecutionContext,
     ) -> Result<bool> {
-        use sublime_standard_tools::command::{CommandBuilder, Executor, DefaultExecutor};
+        use sublime_standard_tools::command::{CommandBuilder, DefaultExecutor, Executor};
 
         // Look for checker script in project scripts directory
-        let scripts_dir = self.package_provider.root_path().join("scripts").join("checkers");
+        let scripts_dir = self.root_path.join("scripts").join("checkers");
         let checker_path = scripts_dir.join(format!("{checker_name}.sh"));
 
         // Check if checker script exists
-        if !self.file_system_provider.path_exists(&checker_path) {
-            log::debug!("Checker script '{}' not found at {}, trying as direct command", 
-                       checker_name, checker_path.display());
+        if !self.file_system.exists(&checker_path) {
+            log::debug!(
+                "Checker script '{}' not found at {}, trying as direct command",
+                checker_name,
+                checker_path.display()
+            );
             // Try as direct command if script file doesn't exist
             return self.execute_custom_script(checker_name, &None, context).await;
         }
 
         // Determine working directory
-        let working_dir = context.working_directory.as_deref().unwrap_or(self.package_provider.root_path());
+        let working_dir = context.working_directory.as_deref().unwrap_or(self.root_path);
 
         // Create command using standard tools
         let command = if cfg!(windows) {
@@ -1000,16 +1085,19 @@ impl ConditionChecker {
 
         // Execute using the standard executor
         let executor = DefaultExecutor::new();
-        
+
         match executor.execute(command).await {
             Ok(result) => {
-                log::debug!("Environment checker '{}' executed with exit code: {}", 
-                          checker_name, result.status());
+                log::debug!(
+                    "Environment checker '{}' executed with exit code: {}",
+                    checker_name,
+                    result.status()
+                );
                 log::trace!("Checker stdout: {}", result.stdout());
                 if !result.stderr().is_empty() {
                     log::debug!("Checker stderr: {}", result.stderr());
                 }
-                
+
                 // Check exit code (0 = condition met, non-zero = not met)
                 let success = result.success();
                 Ok(success)
@@ -1086,14 +1174,15 @@ impl ConditionChecker {
     #[must_use]
     pub fn has_async_conditions(&self, conditions: &[TaskCondition]) -> bool {
         use TaskCondition;
-        
+
         conditions.iter().any(|condition| match condition {
             TaskCondition::CustomScript { .. } => true,
             TaskCondition::Environment { env } => {
                 matches!(env, crate::tasks::EnvironmentCondition::Custom { .. })
-            },
-            TaskCondition::All { conditions } => self.has_async_conditions(conditions),
-            TaskCondition::Any { conditions } => self.has_async_conditions(conditions),
+            }
+            TaskCondition::All { conditions } | TaskCondition::Any { conditions } => {
+                self.has_async_conditions(conditions)
+            }
             TaskCondition::Not { condition } => self.has_async_conditions(&[*condition.clone()]),
             _ => false,
         })
@@ -1103,39 +1192,37 @@ impl ConditionChecker {
     ///
     /// This method provides a human-readable description of async conditions
     /// to help developers understand why async execution is required.
+    #[allow(clippy::items_after_statements)]
     #[must_use]
     pub fn describe_async_conditions(&self, conditions: &[TaskCondition]) -> String {
         use TaskCondition;
-        
+
         let mut async_conditions = Vec::new();
-        
+
         fn collect_async_conditions(conditions: &[TaskCondition], acc: &mut Vec<String>) {
             for condition in conditions {
                 match condition {
                     TaskCondition::CustomScript { script, .. } => {
-                        acc.push(format!("CustomScript('{}')", script));
-                    },
+                        acc.push(format!("CustomScript('{script})"));
+                    }
                     TaskCondition::Environment { env } => {
                         if let crate::tasks::EnvironmentCondition::Custom { checker } = env {
-                            acc.push(format!("CustomEnvironment('{}')", checker));
+                            acc.push(format!("CustomEnvironment('{checker})"));
                         }
-                    },
-                    TaskCondition::All { conditions } => {
+                    }
+                    TaskCondition::All { conditions } | TaskCondition::Any { conditions } => {
                         collect_async_conditions(conditions, acc);
-                    },
-                    TaskCondition::Any { conditions } => {
-                        collect_async_conditions(conditions, acc);
-                    },
+                    }
                     TaskCondition::Not { condition } => {
                         collect_async_conditions(&[*condition.clone()], acc);
-                    },
+                    }
                     _ => {}
                 }
             }
         }
-        
+
         collect_async_conditions(conditions, &mut async_conditions);
-        
+
         if async_conditions.is_empty() {
             "No async conditions found".to_string()
         } else {
@@ -1147,15 +1234,18 @@ impl ConditionChecker {
     #[must_use]
     pub fn requires_async_execution(conditions: &[crate::tasks::TaskCondition]) -> bool {
         use crate::tasks::TaskCondition;
-        
+
         conditions.iter().any(|condition| match condition {
             TaskCondition::CustomScript { .. } => true,
             TaskCondition::Environment { env } => {
                 matches!(env, crate::tasks::EnvironmentCondition::Custom { .. })
-            },
-            TaskCondition::All { conditions } => Self::requires_async_execution(conditions),
-            TaskCondition::Any { conditions } => Self::requires_async_execution(conditions),
-            TaskCondition::Not { condition } => Self::requires_async_execution(&[*condition.clone()]),
+            }
+            TaskCondition::All { conditions } | TaskCondition::Any { conditions } => {
+                Self::requires_async_execution(conditions)
+            }
+            TaskCondition::Not { condition } => {
+                Self::requires_async_execution(&[*condition.clone()])
+            }
             _ => false,
         })
     }
@@ -1169,7 +1259,7 @@ impl ConditionChecker {
     ///
     /// An AsyncConditionAdapter that can handle both sync and async conditions
     #[must_use]
-    pub fn into_async_adapter(self) -> crate::tasks::AsyncConditionAdapter {
+    pub fn into_async_adapter(self) -> crate::tasks::AsyncConditionAdapter<'a> {
         crate::tasks::AsyncConditionAdapter::new(self)
     }
 }

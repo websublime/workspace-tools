@@ -1,19 +1,30 @@
 //! Hook validator type definitions
+//!
+//! Follows direct borrowing patterns instead of trait objects.
 
 use super::HookValidationResult;
-use crate::core::{GitProvider, PackageProvider, ConfigProvider};
 use crate::changesets::Changeset;
+use crate::core::MonorepoPackageInfo;
+use crate::config::MonorepoConfig;
+use sublime_git_tools::Repo;
+use std::path::Path;
 
 /// Validator for hook conditions and requirements
-pub struct HookValidator {
-    /// Git operations provider
-    pub(crate) git_provider: Box<dyn GitProvider>,
+/// 
+/// Uses direct borrowing from MonorepoProject components instead of trait objects.
+/// This follows Rust ownership principles and eliminates Arc proliferation.
+pub struct HookValidator<'a> {
+    /// Direct reference to git repository
+    pub(crate) repository: &'a Repo,
     
-    /// Package operations provider
-    pub(crate) package_provider: Box<dyn PackageProvider>,
+    /// Direct reference to packages
+    pub(crate) packages: &'a [MonorepoPackageInfo],
     
-    /// Configuration provider
-    pub(crate) config_provider: Box<dyn ConfigProvider>,
+    /// Direct reference to configuration
+    pub(crate) config: &'a MonorepoConfig,
+
+    /// Direct reference to root path
+    pub(crate) root_path: &'a Path,
 }
 
 /// Result of changeset validation

@@ -4,15 +4,12 @@
 //! change detection, version management, task execution, and deployment
 //! across multiple environments.
 
-use std::sync::Arc;
 use std::time::Instant;
 
 use super::types::{ReleaseOptions, ReleaseResult};
 use crate::analysis::MonorepoAnalyzer;
-use crate::changesets::{ChangesetManager, ChangesetStorage};
 use crate::core::MonorepoProject;
 use crate::error::Error;
-use crate::tasks::TaskManager;
 use crate::analysis::ChangeAnalysis;
 
 /// Release workflow orchestrator
@@ -44,7 +41,7 @@ use crate::analysis::ChangeAnalysis;
 // Import struct definition from types module
 use crate::workflows::types::ReleaseWorkflow;
 
-impl ReleaseWorkflow {
+impl<'a> ReleaseWorkflow<'a> {
     /// Creates a new release workflow with injected dependencies
     ///
     /// # Arguments
@@ -64,21 +61,27 @@ impl ReleaseWorkflow {
     ///
     /// Returns an error if any of the required components cannot be initialized.
     pub fn new(
-        analyzer: MonorepoAnalyzer,
-        version_manager: crate::core::VersionManager,
-        changeset_manager: crate::changesets::ChangesetManager,
-        task_manager: crate::tasks::TaskManager,
-        config_provider: Box<dyn crate::core::ConfigProvider>,
-        git_provider: Box<dyn crate::core::GitProvider>,
-    ) -> Result<Self, Error> {
-        Ok(Self { 
-            analyzer, 
-            version_manager, 
-            changeset_manager, 
+        analyzer: MonorepoAnalyzer<'a>,
+        version_manager: crate::core::VersionManager<'a>,
+        changeset_manager: crate::changesets::ChangesetManager<'a>,
+        task_manager: crate::tasks::TaskManager<'a>,
+        config: &'a crate::config::MonorepoConfig,
+        packages: &'a [crate::core::MonorepoPackageInfo],
+        repository: &'a sublime_git_tools::Repo,
+        file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
+        root_path: &'a std::path::Path,
+    ) -> Self {
+        Self {
+            analyzer,
+            version_manager,
+            changeset_manager,
             task_manager,
-            config_provider,
-            git_provider,
-        })
+            config,
+            packages,
+            repository,
+            file_system,
+            root_path,
+        }
     }
 
     /// Creates a new release workflow from project (convenience method)
@@ -103,81 +106,59 @@ impl ReleaseWorkflow {
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let project = Arc::new(MonorepoProject::new("/path/to/monorepo")?);
-    /// let workflow = ReleaseWorkflow::from_project(project)?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn from_project(project: Arc<MonorepoProject>) -> Result<Self, Error> {
-        use crate::core::interfaces::DependencyFactory;
-        
-        // Create analyzer directly with providers
-        let analyzer = MonorepoAnalyzer::new(
-            DependencyFactory::package_provider(Arc::clone(&project)),
-            DependencyFactory::config_provider(Arc::clone(&project)),
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-            DependencyFactory::git_provider(Arc::clone(&project)),
-            DependencyFactory::registry_provider(Arc::clone(&project)),
-            DependencyFactory::workspace_provider(Arc::clone(&project)),
-            DependencyFactory::package_discovery_provider(Arc::clone(&project)),
-            DependencyFactory::enhanced_config_provider(Arc::clone(&project)),
-        );
+    pub fn from_project(project: &'a MonorepoProject) -> Result<Self, Error> {
+        use crate::analysis::MonorepoAnalyzer;
+        use crate::changesets::{ChangesetManager, ChangesetStorage};
+        use crate::core::VersionManager;
+        use crate::tasks::TaskManager;
 
-        // Create task manager for changeset manager
-        let task_manager_for_changeset = TaskManager::new(
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)), // executor_package_provider
-            DependencyFactory::config_provider(Arc::clone(&project)), // executor_config_provider
-            DependencyFactory::git_provider(Arc::clone(&project)),
-            DependencyFactory::config_provider(Arc::clone(&project)), // checker_config_provider
-            DependencyFactory::package_provider(Arc::clone(&project)), // checker_package_provider
-            DependencyFactory::file_system_provider(Arc::clone(&project)), // checker_file_system_provider
-        )?;
-        
-        // Create task manager for workflow
-        let task_manager = TaskManager::new(
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)), // executor_package_provider
-            DependencyFactory::config_provider(Arc::clone(&project)), // executor_config_provider
-            DependencyFactory::git_provider(Arc::clone(&project)),
-            DependencyFactory::config_provider(Arc::clone(&project)), // checker_config_provider
-            DependencyFactory::package_provider(Arc::clone(&project)), // checker_package_provider
-            DependencyFactory::file_system_provider(Arc::clone(&project)), // checker_file_system_provider
-        )?;
+        // Create analyzer with direct borrowing
+        let analyzer = MonorepoAnalyzer::new(project);
 
-        // Create changeset storage directly with providers
-        let changeset_storage = ChangesetStorage::new(
+        // Create version manager with direct borrowing
+        let version_manager = VersionManager::new(project);
+        // Version manager already created above
+
+        // Create task manager with direct borrowing
+        let task_manager = TaskManager::new(project)?;
+
+        // Create changeset storage with direct borrowing
+        let storage = ChangesetStorage::new(
             project.config.changesets.clone(),
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)),
+            &project.file_system,
+            &project.packages,
+            &project.root_path,
         );
 
-        // Create changeset manager directly with components and providers
+        // Create changeset manager with direct borrowing
+        // Note: We need to create a separate task manager instance for changeset manager
+        let changeset_task_manager = TaskManager::new(project)?;
         let changeset_manager = ChangesetManager::new(
-            changeset_storage,
-            task_manager_for_changeset,
-            DependencyFactory::config_provider(Arc::clone(&project)),
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)),
-            DependencyFactory::git_provider(Arc::clone(&project)),
+            storage,
+            changeset_task_manager,
+            &project.config,
+            &project.file_system,
+            &project.packages,
+            &project.repository,
+            &project.root_path,
         );
 
-        // Create version manager with project reference (needs refactoring later)
-        let version_manager = crate::core::VersionManager::new(Arc::clone(&project));
-
-        Self::new(
+        Ok(Self::new(
             analyzer,
             version_manager,
             changeset_manager,
             task_manager,
-            DependencyFactory::config_provider(Arc::clone(&project)),
-            DependencyFactory::git_provider(project),
-        )
+            &project.config,
+            &project.packages,
+            &project.repository,
+            &project.file_system,
+            &project.root_path,
+        ))
     }
 
-    /// Executes the complete release workflow
+    /// Executes the complete release workflow synchronously
     ///
+    /// FASE 2 ASYNC ELIMINATION: Synchronous execution eliminates async infection.
     /// This method orchestrates the entire release process:
     /// 1. Detects changes since the last release
     /// 2. Applies pending changesets
@@ -202,7 +183,7 @@ impl ReleaseWorkflow {
     /// ```rust
     /// use sublime_monorepo_tools::ReleaseOptions;
     ///
-    /// # async fn example(workflow: &ReleaseWorkflow) -> Result<(), Box<dyn std::error::Error>> {
+    /// # fn example(workflow: &ReleaseWorkflow) -> Result<(), Box<dyn std::error::Error>> {
     /// let options = ReleaseOptions {
     ///     dry_run: false,
     ///     skip_tests: false,
@@ -210,14 +191,14 @@ impl ReleaseWorkflow {
     ///     ..Default::default()
     /// };
     ///
-    /// let result = workflow.execute(options).await?;
+    /// let result = workflow.execute_sync(options)?;
     /// println!("Release success: {}", result.success);
     /// # Ok(())
     /// # }
     /// ```
     // TODO: Consider breaking this method into smaller parts for better readability and maintainability
     #[allow(clippy::too_many_lines)]
-    pub async fn execute(&self, options: ReleaseOptions) -> Result<ReleaseResult, Error> {
+    pub fn execute_sync(&self, options: &ReleaseOptions) -> Result<ReleaseResult, Error> {
         let start_time = Instant::now();
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
@@ -271,7 +252,7 @@ impl ReleaseWorkflow {
             warnings.push("Skipping tests as requested".to_string());
             Vec::new()
         } else {
-            match self.execute_release_tasks(&changes, &options).await {
+            match self.execute_release_tasks_sync(&changes, &options) {
                 Ok(task_results) => {
                     // Check if any tasks failed
                     let failed_tasks: Vec<_> = task_results
@@ -285,7 +266,7 @@ impl ReleaseWorkflow {
                         .collect();
 
                     if !failed_tasks.is_empty() && !options.force {
-                        errors.push(format!("Release tasks failed: {} tasks", failed_tasks.len()));
+                        errors.push(format!("Release tasks failed: {count} tasks", count = failed_tasks.len()));
                         success = false;
                     }
 
@@ -301,7 +282,7 @@ impl ReleaseWorkflow {
 
         // Step 4: Deploy to target environments
         if !options.dry_run && success {
-            match self.deploy_to_environments(&options.target_environments).await {
+            match self.deploy_to_environments_sync(&options.target_environments) {
                 Ok(()) => {
                     // Deployment successful
                 }
@@ -338,12 +319,16 @@ impl ReleaseWorkflow {
         })
     }
 
+    /// Executes the complete release workflow
+    pub fn execute(&self, options: &ReleaseOptions) -> Result<ReleaseResult, Error> {
+        self.execute_sync(options)
+    }
+
     /// Detects changes since the last release
     fn detect_changes_since_last_release(&self) -> Result<ChangeAnalysis, Error> {
         // Get the last release tag
         let last_tag = self
-            .git_provider
-            .repository()
+            .repository
             .get_last_tag()
             .map_err(|e| Error::workflow(format!("Failed to get last tag: {e}")))?;
 
@@ -357,16 +342,18 @@ impl ReleaseWorkflow {
     ) -> Result<Vec<crate::changesets::types::ChangesetApplication>, Error> {
         // Get current branch
         let current_branch = self
-            .git_provider
-            .current_branch()
+            .repository
+            .get_current_branch()
             .map_err(|e| Error::workflow(format!("Failed to get current branch: {e}")))?;
 
         // Apply changesets for this branch
         self.changeset_manager.apply_changesets_on_merge(&current_branch)
     }
 
-    /// Executes all release-related tasks
-    async fn execute_release_tasks(
+    /// Executes all release-related tasks synchronously
+    ///
+    /// FASE 2 ASYNC ELIMINATION: Synchronous task execution eliminates async infection.
+    fn execute_release_tasks_sync(
         &self,
         changes: &ChangeAnalysis,
         _options: &ReleaseOptions,
@@ -379,12 +366,15 @@ impl ReleaseWorkflow {
             return Ok(Vec::new());
         }
 
-        // Execute tasks for affected packages
-        self.task_manager.execute_tasks_for_affected_packages(&affected_packages).await
+        // Execute tasks for affected packages using sync version
+        self.task_manager.execute_tasks_for_affected_packages(&affected_packages)
     }
 
-    /// Deploys to the specified environments
-    async fn deploy_to_environments(&self, environments: &[String]) -> Result<(), Error> {
+
+    /// Deploys to the specified environments synchronously
+    ///
+    /// FASE 2 ASYNC ELIMINATION: Synchronous deployment eliminates async infection.
+    fn deploy_to_environments_sync(&self, environments: &[String]) -> Result<(), Error> {
         // Execute deployment tasks for each environment using TaskManager
         for env in environments {
             // Get deployment tasks for this environment
@@ -395,8 +385,8 @@ impl ReleaseWorkflow {
                 continue;
             }
 
-            // Execute deployment tasks using TaskManager
-            let task_results = self.task_manager.execute_tasks_batch(&deployment_tasks).await?;
+            // Execute deployment tasks using sync TaskManager
+            let task_results = self.task_manager.execute_tasks_batch(&deployment_tasks)?;
 
             // Check if all tasks succeeded
             let failed_tasks: Vec<_> = task_results
@@ -428,6 +418,7 @@ impl ReleaseWorkflow {
         Ok(())
     }
 
+
     /// Gets deployment tasks for a specific environment
     ///
     /// Uses real project configuration and validates that tasks actually exist.
@@ -440,7 +431,7 @@ impl ReleaseWorkflow {
         let environment_enum = self.parse_environment_string(environment);
 
         // Try to get deployment tasks from project configuration first
-        let configured_tasks = self.config_provider.config().tasks.deployment_tasks.get(&environment_enum);
+        let configured_tasks = self.config.tasks.deployment_tasks.get(&environment_enum);
 
         let candidate_tasks = if let Some(tasks) = configured_tasks {
             // Use configured tasks for this environment
@@ -535,15 +526,15 @@ impl ReleaseWorkflow {
         log::info!("Starting changelog generation for {} packages", changes.package_changes.len());
 
         // Create changelog manager with proper dependency injection
-        let changelog_manager = ChangelogManager::from_project(self.create_project_reference()?)
-            .map_err(|e| Error::workflow(format!("Failed to create changelog manager: {e}")))?;
+        let project_ref = self.create_project_reference()?;
+        let changelog_manager = ChangelogManager::from_project(&*project_ref);
 
         // Generate changelog for each affected package
         for package_change in &changes.package_changes {
             log::info!("Generating changelog for package: {}", package_change.package_name);
 
             // Determine version based on suggested version bump
-            let next_version = self.calculate_next_version(&package_change.package_name, &package_change.suggested_version_bump)?;
+            let next_version = self.calculate_next_version(&package_change.package_name, package_change.suggested_version_bump)?;
 
             // Create changelog request for this package
             let request = ChangelogRequest {
@@ -556,63 +547,30 @@ impl ReleaseWorkflow {
                 output_path: None, // Use default path
             };
 
-            // Generate the changelog
-            match tokio::runtime::Handle::try_current() {
-                Ok(_) => {
-                    // We're already in an async context - use spawn_blocking
-                    let result = tokio::task::block_in_place(|| {
-                        tokio::runtime::Handle::current().block_on(changelog_manager.generate_changelog(request))
-                    });
+            // Generate the changelog using sync version - eliminates runtime creation anti-pattern
+            match changelog_manager.generate_changelog_sync(request) {
+                Ok(changelog_result) => {
+                    log::info!(
+                        "Successfully generated changelog for {}: {} commits, {} breaking changes",
+                        package_change.package_name,
+                        changelog_result.commit_count,
+                        if changelog_result.has_breaking_changes { "has" } else { "no" }
+                    );
                     
-                    match result {
-                        Ok(changelog_result) => {
-                            log::info!(
-                                "Successfully generated changelog for {}: {} commits, {} breaking changes",
-                                package_change.package_name,
-                                changelog_result.commit_count,
-                                if changelog_result.has_breaking_changes { "has" } else { "no" }
-                            );
-                            
-                            if let Some(output_path) = &changelog_result.output_path {
-                                log::debug!("Changelog written to: {}", output_path);
-                            }
-                        }
-                        Err(e) => {
-                            log::error!(
-                                "Failed to generate changelog for package {}: {}",
-                                package_change.package_name,
-                                e
-                            );
-                            return Err(Error::workflow(format!(
-                                "Changelog generation failed for package {}: {e}",
-                                package_change.package_name
-                            )));
-                        }
+                    if let Some(output_path) = &changelog_result.output_path {
+                        log::debug!("Changelog written to: {}", output_path);
                     }
                 }
-                Err(_) => {
-                    // No async runtime available - create one
-                    let runtime = tokio::runtime::Runtime::new()
-                        .map_err(|e| Error::workflow(format!("Failed to create async runtime: {e}")))?;
-                    
-                    let result = runtime.block_on(changelog_manager.generate_changelog(request));
-                    
-                    match result {
-                        Ok(changelog_result) => {
-                            log::info!(
-                                "Successfully generated changelog for {}: {} commits, {} breaking changes",
-                                package_change.package_name,
-                                changelog_result.commit_count,
-                                if changelog_result.has_breaking_changes { "has" } else { "no" }
-                            );
-                        }
-                        Err(e) => {
-                            return Err(Error::workflow(format!(
-                                "Changelog generation failed for package {}: {e}",
-                                package_change.package_name
-                            )));
-                        }
-                    }
+                Err(e) => {
+                    log::error!(
+                        "Failed to generate changelog for package {}: {}",
+                        package_change.package_name,
+                        e
+                    );
+                    return Err(Error::workflow(format!(
+                        "Changelog generation failed for package {}: {e}",
+                        package_change.package_name
+                    )));
                 }
             }
         }
@@ -631,18 +589,8 @@ impl ReleaseWorkflow {
                 output_path: None,
             };
 
-            match tokio::runtime::Handle::try_current() {
-                Ok(_) => {
-                    let _result = tokio::task::block_in_place(|| {
-                        tokio::runtime::Handle::current().block_on(changelog_manager.generate_changelog(root_request))
-                    })?;
-                }
-                Err(_) => {
-                    let runtime = tokio::runtime::Runtime::new()
-                        .map_err(|e| Error::workflow(format!("Failed to create async runtime: {e}")))?;
-                    let _result = runtime.block_on(changelog_manager.generate_changelog(root_request))?;
-                }
-            }
+            // Generate root changelog using sync version - eliminates runtime creation anti-pattern
+            let _result = changelog_manager.generate_changelog_sync(root_request)?;
         }
 
         log::info!("Changelog generation completed for all packages");
@@ -653,9 +601,9 @@ impl ReleaseWorkflow {
     ///
     /// This method determines the next semantic version based on the suggested
     /// version bump type from the change analysis.
-    fn calculate_next_version(&self, package_name: &str, version_bump: &crate::VersionBumpType) -> Result<String, Error> {
+    fn calculate_next_version(&self, package_name: &str, version_bump: crate::VersionBumpType) -> Result<String, Error> {
         // Get current version of the package
-        let packages = self.task_manager.package_provider.packages();
+        let packages = self.packages;
         let package = packages
             .iter()
             .find(|p| p.name() == package_name)
@@ -667,23 +615,22 @@ impl ReleaseWorkflow {
         let version_parts: Vec<&str> = current_version.split('.').collect();
         if version_parts.len() != 3 {
             return Err(Error::workflow(format!(
-                "Invalid version format for package {}: {}",
-                package_name, current_version
+                "Invalid version format for package {package_name}: {current_version}"
             )));
         }
 
         let major: u32 = version_parts[0].parse()
-            .map_err(|_| Error::workflow(format!("Invalid major version: {}", version_parts[0])))?;
+            .map_err(|_| Error::workflow(format!("Invalid major version: {version}", version = version_parts[0])))?;
         let minor: u32 = version_parts[1].parse()
-            .map_err(|_| Error::workflow(format!("Invalid minor version: {}", version_parts[1])))?;
+            .map_err(|_| Error::workflow(format!("Invalid minor version: {version}", version = version_parts[1])))?;
         let patch: u32 = version_parts[2].parse()
-            .map_err(|_| Error::workflow(format!("Invalid patch version: {}", version_parts[2])))?;
+            .map_err(|_| Error::workflow(format!("Invalid patch version: {version}", version = version_parts[2])))?;
 
         let next_version = match version_bump {
-            crate::VersionBumpType::Major => format!("{}.0.0", major + 1),
-            crate::VersionBumpType::Minor => format!("{}.{}.0", major, minor + 1),
-            crate::VersionBumpType::Patch => format!("{}.{}.{}", major, minor, patch + 1),
-            crate::VersionBumpType::Snapshot => format!("{}.{}.{}-SNAPSHOT", major, minor, patch + 1),
+            crate::VersionBumpType::Major => format!("{major_new}.0.0", major_new = major + 1),
+            crate::VersionBumpType::Minor => format!("{major}.{minor_new}.0", minor_new = minor + 1),
+            crate::VersionBumpType::Patch => format!("{major}.{minor}.{patch_new}", patch_new = patch + 1),
+            crate::VersionBumpType::Snapshot => format!("{major}.{minor}.{patch_new}-SNAPSHOT", patch_new = patch + 1),
         };
 
         log::debug!(
@@ -705,7 +652,7 @@ impl ReleaseWorkflow {
     /// Creates a new MonorepoProject instance from the current context
     /// for use with the changelog manager.
     fn create_project_reference(&self) -> Result<std::sync::Arc<crate::core::MonorepoProject>, Error> {
-        let root_path = self.task_manager.package_provider.root_path();
+        let root_path = self.root_path;
         let project = std::sync::Arc::new(
             crate::core::MonorepoProject::new(root_path)
                 .map_err(|e| Error::workflow(format!("Failed to create project reference: {e}")))?

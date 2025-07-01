@@ -153,7 +153,7 @@ impl PluginRegistry {
         location: String,
     ) -> Result<()> {
         if self.plugins.contains_key(&info.name) {
-            return Err(Error::plugin(format!("Plugin {} is already registered", info.name)));
+            return Err(Error::plugin(format!("Plugin {plugin_name} is already registered", plugin_name = info.name)));
         }
 
         let entry = PluginRegistryEntry {
@@ -191,7 +191,7 @@ impl PluginRegistry {
 
         // Discover external plugins
         for path in &self.discovery_paths.clone() {
-            match self.discover_plugins_in_path(path) {
+            match Self::discover_plugins_in_path(path) {
                 Ok(plugins) => {
                     available_plugins.extend(plugins);
                 }
@@ -199,7 +199,7 @@ impl PluginRegistry {
                     log::warn!("Failed to discover plugins in {}: {}", path.display(), e);
                     unavailable_plugins.push((
                         path.display().to_string(),
-                        format!("Discovery failed: {}", e),
+                        format!("Discovery failed: {e}"),
                     ));
                 }
             }
@@ -295,7 +295,7 @@ impl PluginRegistry {
     }
 
     /// Discover plugins in a specific directory path
-    fn discover_plugins_in_path(&self, path: &PathBuf) -> Result<Vec<PluginInfo>> {
+    fn discover_plugins_in_path(path: &PathBuf) -> Result<Vec<PluginInfo>> {
         let mut plugins = Vec::new();
 
         if !path.exists() {
@@ -303,16 +303,16 @@ impl PluginRegistry {
         }
 
         if !path.is_dir() {
-            return Err(Error::plugin(format!("Path is not a directory: {}", path.display())));
+            return Err(Error::plugin(format!("Path is not a directory: {path}", path = path.display())));
         }
 
         // Read directory entries
         let entries = std::fs::read_dir(path)
-            .map_err(|e| Error::plugin(format!("Cannot read directory {}: {}", path.display(), e)))?;
+            .map_err(|e| Error::plugin(format!("Cannot read directory {path}: {e}", path = path.display())))?;
 
         for entry in entries {
             let entry = entry
-                .map_err(|e| Error::plugin(format!("Cannot read directory entry: {}", e)))?;
+                .map_err(|e| Error::plugin(format!("Cannot read directory entry: {e}")))?;
             
             let entry_path = entry.path();
             
@@ -320,7 +320,7 @@ impl PluginRegistry {
             if entry_path.is_file() && entry_path.extension().and_then(|s| s.to_str()) == Some("json") {
                 if let Some(file_name) = entry_path.file_stem().and_then(|s| s.to_str()) {
                     if file_name.ends_with(".plugin") {
-                        match self.load_plugin_manifest(&entry_path) {
+                        match Self::load_plugin_manifest(&entry_path) {
                             Ok(info) => {
                                 plugins.push(info);
                                 log::debug!("Discovered external plugin: {} at {}", file_name, entry_path.display());
@@ -338,12 +338,12 @@ impl PluginRegistry {
     }
 
     /// Load plugin information from a manifest file
-    fn load_plugin_manifest(&self, manifest_path: &PathBuf) -> Result<PluginInfo> {
+    fn load_plugin_manifest(manifest_path: &PathBuf) -> Result<PluginInfo> {
         let content = std::fs::read_to_string(manifest_path)
-            .map_err(|e| Error::plugin(format!("Cannot read manifest file: {}", e)))?;
+            .map_err(|e| Error::plugin(format!("Cannot read manifest file: {e}")))?;
 
         let info: PluginInfo = serde_json::from_str(&content)
-            .map_err(|e| Error::plugin(format!("Invalid plugin manifest format: {}", e)))?;
+            .map_err(|e| Error::plugin(format!("Invalid plugin manifest format: {e}")))?;
 
         Ok(info)
     }
@@ -372,7 +372,7 @@ impl PluginRegistry {
                             entry.available = false;
                             unavailable.push((
                                 name.clone(),
-                                format!("Plugin file not found: {}", entry.location),
+                                format!("Plugin file not found: {location}", location = entry.location),
                             ));
                         }
                     }

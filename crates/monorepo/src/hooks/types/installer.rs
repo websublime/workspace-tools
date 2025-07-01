@@ -1,15 +1,24 @@
 //! Hook installer type definitions
+//!
+//! Follows direct borrowing patterns instead of trait objects.
 
-use crate::core::{GitProvider, FileSystemProvider};
-use std::path::PathBuf;
+use sublime_git_tools::Repo;
+use sublime_standard_tools::filesystem::FileSystemManager;
+use std::path::{Path, PathBuf};
 
 /// Installer for Git hooks that manages hook files and permissions
-pub struct HookInstaller {
-    /// Git operations provider
-    pub(crate) git_provider: Box<dyn GitProvider>,
+/// 
+/// Uses direct borrowing from MonorepoProject components instead of trait objects.
+/// This follows Rust ownership principles and eliminates Arc proliferation.
+pub struct HookInstaller<'a> {
+    /// Direct reference to git repository
+    pub(crate) repository: &'a Repo,
 
-    /// File system operations provider
-    pub(crate) file_system_provider: Box<dyn FileSystemProvider>,
+    /// Direct reference to file system manager
+    pub(crate) file_system: &'a FileSystemManager,
+
+    /// Direct reference to root path
+    pub(crate) root_path: &'a Path,
 
     /// Path to the Git hooks directory
     pub(crate) hooks_dir: PathBuf,

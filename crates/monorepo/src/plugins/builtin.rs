@@ -90,24 +90,24 @@ impl MonorepoPlugin for AnalyzerPlugin {
     fn execute_command(&self, command: &str, args: &[String]) -> Result<PluginResult> {
         match command {
             "analyze-dependencies" => {
-                let package_filter = args.get(0).map(|s| s.as_str());
-                self.analyze_dependencies(package_filter)
+                let package_filter = args.first().map(std::string::String::as_str);
+                Ok(Self::analyze_dependencies(package_filter))
             }
             "detect-cycles" => {
-                self.detect_cycles()
+                Ok(Self::detect_cycles())
             }
             "impact-analysis" => {
-                let since = args.get(0).map(|s| s.as_str()).unwrap_or("HEAD~1");
-                self.impact_analysis(since)
+                let since = args.first().map_or("HEAD~1", |s| s.as_str());
+                Ok(Self::impact_analysis(since))
             }
-            _ => Ok(PluginResult::error(format!("Unknown command: {}", command))),
+            _ => Ok(PluginResult::error(format!("Unknown command: {command}"))),
         }
     }
 }
 
 impl AnalyzerPlugin {
     /// Analyze package dependencies
-    fn analyze_dependencies(&self, package_filter: Option<&str>) -> Result<PluginResult> {
+    fn analyze_dependencies(package_filter: Option<&str>) -> PluginResult {
         let mut analysis = serde_json::Map::new();
         
         analysis.insert("total_packages".to_string(), serde_json::Value::Number(serde_json::Number::from(0)));
@@ -120,13 +120,13 @@ impl AnalyzerPlugin {
 
         log::info!("Analyzed dependencies for package filter: {:?}", package_filter);
         
-        Ok(PluginResult::success(analysis)
+        PluginResult::success(analysis)
             .with_metadata("command", "analyze-dependencies")
-            .with_metadata("analyzer", "builtin"))
+            .with_metadata("analyzer", "builtin")
     }
 
     /// Detect circular dependencies
-    fn detect_cycles(&self) -> Result<PluginResult> {
+    fn detect_cycles() -> PluginResult {
         let cycles = serde_json::json!({
             "cycles_found": 0,
             "cycles": []
@@ -134,13 +134,13 @@ impl AnalyzerPlugin {
 
         log::info!("Checked for circular dependencies");
         
-        Ok(PluginResult::success(cycles)
+        PluginResult::success(cycles)
             .with_metadata("command", "detect-cycles")
-            .with_metadata("analyzer", "builtin"))
+            .with_metadata("analyzer", "builtin")
     }
 
     /// Perform impact analysis
-    fn impact_analysis(&self, since: &str) -> Result<PluginResult> {
+    fn impact_analysis(since: &str) -> PluginResult {
         let impact = serde_json::json!({
             "since": since,
             "affected_packages": [],
@@ -149,9 +149,9 @@ impl AnalyzerPlugin {
 
         log::info!("Performed impact analysis since: {}", since);
         
-        Ok(PluginResult::success(impact)
+        PluginResult::success(impact)
             .with_metadata("command", "impact-analysis")
-            .with_metadata("analyzer", "builtin"))
+            .with_metadata("analyzer", "builtin")
     }
 }
 
@@ -237,22 +237,22 @@ impl MonorepoPlugin for GeneratorPlugin {
     fn execute_command(&self, command: &str, args: &[String]) -> Result<PluginResult> {
         match command {
             "generate-package" => {
-                let name = args.get(0).ok_or_else(|| crate::error::Error::plugin("Package name required"))?;
-                let template = args.get(1).map(|s| s.as_str()).unwrap_or("default");
-                self.generate_package(name, template)
+                let name = args.first().ok_or_else(|| crate::error::Error::plugin("Package name required"))?;
+                let template = args.get(1).map_or("default", |s| s.as_str());
+                Ok(Self::generate_package(name, template))
             }
             "generate-config" => {
-                let config_type = args.get(0).ok_or_else(|| crate::error::Error::plugin("Config type required"))?;
-                self.generate_config(config_type)
+                let config_type = args.first().ok_or_else(|| crate::error::Error::plugin("Config type required"))?;
+                Ok(Self::generate_config(config_type))
             }
-            _ => Ok(PluginResult::error(format!("Unknown command: {}", command))),
+            _ => Ok(PluginResult::error(format!("Unknown command: {command}"))),
         }
     }
 }
 
 impl GeneratorPlugin {
     /// Generate a new package
-    fn generate_package(&self, name: &str, template: &str) -> Result<PluginResult> {
+    fn generate_package(name: &str, template: &str) -> PluginResult {
         let result = serde_json::json!({
             "package_name": name,
             "template_used": template,
@@ -262,24 +262,24 @@ impl GeneratorPlugin {
 
         log::info!("Generated package '{}' using template '{}'", name, template);
         
-        Ok(PluginResult::success(result)
+        PluginResult::success(result)
             .with_metadata("command", "generate-package")
-            .with_metadata("generator", "builtin"))
+            .with_metadata("generator", "builtin")
     }
 
     /// Generate configuration files
-    fn generate_config(&self, config_type: &str) -> Result<PluginResult> {
+    fn generate_config(config_type: &str) -> PluginResult {
         let result = serde_json::json!({
             "config_type": config_type,
-            "generated_files": [format!(".{}.json", config_type)],
+            "generated_files": [format!(".{config_type}.json")],
             "status": "generated"
         });
 
         log::info!("Generated config for type: {}", config_type);
         
-        Ok(PluginResult::success(result)
+        PluginResult::success(result)
             .with_metadata("command", "generate-config")
-            .with_metadata("generator", "builtin"))
+            .with_metadata("generator", "builtin")
     }
 }
 
@@ -364,28 +364,28 @@ impl MonorepoPlugin for ValidatorPlugin {
     fn execute_command(&self, command: &str, args: &[String]) -> Result<PluginResult> {
         match command {
             "validate-structure" => {
-                self.validate_structure()
+                Ok(Self::validate_structure())
             }
             "validate-dependencies" => {
-                let strict = args.get(0)
+                let strict = args.first()
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(false);
-                self.validate_dependencies(strict)
+                Ok(Self::validate_dependencies(strict))
             }
             "validate-commits" => {
-                let count = args.get(0)
+                let count = args.first()
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(10);
-                self.validate_commits(count)
+                Ok(Self::validate_commits(count))
             }
-            _ => Ok(PluginResult::error(format!("Unknown command: {}", command))),
+            _ => Ok(PluginResult::error(format!("Unknown command: {command}"))),
         }
     }
 }
 
 impl ValidatorPlugin {
     /// Validate monorepo structure
-    fn validate_structure(&self) -> Result<PluginResult> {
+    fn validate_structure() -> PluginResult {
         let result = serde_json::json!({
             "structure_valid": true,
             "issues": [],
@@ -394,13 +394,13 @@ impl ValidatorPlugin {
 
         log::info!("Validated monorepo structure");
         
-        Ok(PluginResult::success(result)
+        PluginResult::success(result)
             .with_metadata("command", "validate-structure")
-            .with_metadata("validator", "builtin"))
+            .with_metadata("validator", "builtin")
     }
 
     /// Validate dependencies
-    fn validate_dependencies(&self, strict: bool) -> Result<PluginResult> {
+    fn validate_dependencies(strict: bool) -> PluginResult {
         let result = serde_json::json!({
             "dependencies_valid": true,
             "strict_mode": strict,
@@ -410,13 +410,13 @@ impl ValidatorPlugin {
 
         log::info!("Validated dependencies (strict: {})", strict);
         
-        Ok(PluginResult::success(result)
+        PluginResult::success(result)
             .with_metadata("command", "validate-dependencies")
-            .with_metadata("validator", "builtin"))
+            .with_metadata("validator", "builtin")
     }
 
     /// Validate commit messages
-    fn validate_commits(&self, count: i32) -> Result<PluginResult> {
+    fn validate_commits(count: i32) -> PluginResult {
         let result = serde_json::json!({
             "commits_checked": count,
             "valid_commits": count,
@@ -425,9 +425,9 @@ impl ValidatorPlugin {
 
         log::info!("Validated {} recent commits", count);
         
-        Ok(PluginResult::success(result)
+        PluginResult::success(result)
             .with_metadata("command", "validate-commits")
-            .with_metadata("validator", "builtin"))
+            .with_metadata("validator", "builtin")
     }
 }
 

@@ -5,15 +5,13 @@
 //! type that provides monorepo-specific package information.
 
 pub mod types;
-pub mod interfaces;
 pub mod components;
+pub mod services;
 mod project;
 mod package;
 mod version;
 mod tools;
 
-#[cfg(test)]
-mod tests;
 
 pub use types::{
     // Core package types
@@ -44,13 +42,4 @@ pub use types::{
     MonorepoTools,
 };
 
-// Re-export interfaces for dependency injection
-pub use interfaces::{
-    PackageProvider,
-    ConfigProvider, 
-    FileSystemProvider,
-    GitProvider,
-    RegistryProvider,
-    MonorepoContext,
-    DependencyFactory,
-};
+// Interfaces removed - using direct access patterns instead

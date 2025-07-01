@@ -5,7 +5,10 @@
 
 use super::types::{MonorepoPlugin, PluginContext, PluginInfo, PluginLifecycle, PluginResult};
 use crate::error::{Error, Result};
-use crate::logging::{log_operation, log_operation_start, log_operation_complete, log_operation_error, log_performance, ErrorContext};
+use crate::logging::{
+    log_operation, log_operation_complete, log_operation_error, log_operation_start,
+    log_performance, ErrorContext,
+};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
@@ -44,15 +47,27 @@ use std::time::Instant;
 /// # Ok(())
 /// # }
 /// ```
-pub struct PluginManager {
-    /// Reference to the monorepo project
-    project: Arc<crate::core::MonorepoProject>,
+/// Central plugin management system
+///
+/// Uses direct borrowing from MonorepoProject components instead of Arc.
+/// This follows Rust ownership principles and eliminates Arc proliferation.
+pub struct PluginManager<'a> {
+    /// Direct reference to configuration
+    config: &'a crate::config::MonorepoConfig,
+    /// Direct reference to packages
+    packages: &'a [crate::core::MonorepoPackageInfo],
+    /// Direct reference to repository
+    repository: &'a sublime_git_tools::Repo,
+    /// Direct reference to file system manager
+    file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
+    /// Direct reference to root path
+    root_path: &'a std::path::Path,
     /// Loaded plugins indexed by name
-    plugins: HashMap<String, Box<dyn MonorepoPlugin>>,
+    plugins: HashMap<String, Box<dyn MonorepoPlugin + 'a>>,
     /// Plugin states indexed by name
     plugin_states: HashMap<String, PluginLifecycle>,
     /// Plugin execution context
-    context: PluginContext,
+    context: PluginContext<'a>,
     /// Plugin execution metrics
     metrics: Arc<RwLock<PluginMetrics>>,
 }
@@ -68,29 +83,32 @@ struct PluginMetrics {
     error_counts: HashMap<String, u64>,
 }
 
-impl PluginManager {
-    /// Create a new plugin manager
+impl<'a> PluginManager<'a> {
+    /// Create a new plugin manager with direct borrowing from project
+    ///
+    /// Uses borrowing instead of Arc to eliminate Arc proliferation
+    /// and work with Rust ownership principles.
     ///
     /// # Arguments
     ///
-    /// * `project` - Monorepo project reference
+    /// * `project` - Reference to monorepo project
     /// * `working_directory` - Working directory for plugin operations
     ///
     /// # Returns
     ///
     /// A new plugin manager instance
     pub fn new(
-        project: Arc<crate::core::MonorepoProject>,
+        project: &'a crate::core::MonorepoProject,
         working_directory: std::path::PathBuf,
     ) -> Self {
-        let context = PluginContext::new(
-            Arc::clone(&project),
-            HashMap::new(),
-            working_directory,
-        );
+        let context = PluginContext::new(project, HashMap::new(), working_directory);
 
         Self {
-            project,
+            config: &project.config,
+            packages: &project.packages,
+            repository: &project.repository,
+            file_system: &project.file_system,
+            root_path: &project.root_path,
             plugins: HashMap::new(),
             plugin_states: HashMap::new(),
             context,
@@ -102,7 +120,7 @@ impl PluginManager {
     ///
     /// # Arguments
     ///
-    /// * `project` - Monorepo project reference
+    /// * `project` - Reference to monorepo project
     ///
     /// # Returns
     ///
@@ -111,8 +129,8 @@ impl PluginManager {
     /// # Errors
     ///
     /// Returns an error if the project cannot be accessed
-    pub fn from_project(project: Arc<crate::core::MonorepoProject>) -> Result<Self> {
-        let working_directory = project.root_path().to_path_buf();
+    pub fn from_project(project: &'a crate::core::MonorepoProject) -> Result<Self> {
+        let working_directory = project.root_path.clone();
         Ok(Self::new(project, working_directory))
     }
 
@@ -135,7 +153,7 @@ impl PluginManager {
 
         // Check if plugin is already loaded
         if self.plugins.contains_key(&plugin_name) {
-            return Err(Error::plugin(format!("Plugin {} is already loaded", plugin_name)));
+            return Err(Error::plugin(format!("Plugin {plugin_name} is already loaded")));
         }
 
         // Set plugin state to loading
@@ -147,20 +165,23 @@ impl PluginManager {
                 // Plugin initialized successfully
                 self.plugin_states.insert(plugin_name.clone(), PluginLifecycle::Active);
                 self.plugins.insert(plugin_name, plugin);
-                
-                log_operation_complete("plugin_load", Some(&format!("{} v{}", info.name, info.version)));
+
+                log_operation_complete(
+                    "plugin_load",
+                    Some(&format!("{name} v{version}", name = info.name, version = info.version)),
+                );
                 Ok(info)
             }
             Err(e) => {
                 // Plugin initialization failed
                 self.plugin_states.insert(plugin_name.clone(), PluginLifecycle::Errored);
-                
+
                 ErrorContext::new("plugin_initialize")
                     .with_detail("plugin", &plugin_name)
                     .with_detail("version", &info.version)
                     .log_error(&e);
-                
-                Err(Error::plugin(format!("Failed to initialize plugin {}: {}", plugin_name, e)))
+
+                Err(Error::plugin(format!("Failed to initialize plugin {plugin_name}: {e}")))
             }
         }
     }
@@ -177,7 +198,7 @@ impl PluginManager {
     pub fn unload_plugin(&mut self, plugin_name: &str) -> Result<()> {
         if let Some(mut plugin) = self.plugins.remove(plugin_name) {
             self.plugin_states.insert(plugin_name.to_string(), PluginLifecycle::Unloading);
-            
+
             // Clean up plugin resources
             if let Err(e) = plugin.cleanup() {
                 log_operation_error("plugin_cleanup", &e, Some(plugin_name));
@@ -187,7 +208,7 @@ impl PluginManager {
             log_operation_complete("plugin_unload", Some(plugin_name));
             Ok(())
         } else {
-            Err(Error::plugin(format!("Plugin {} is not loaded", plugin_name)))
+            Err(Error::plugin(format!("Plugin {plugin_name} is not loaded")))
         }
     }
 
@@ -201,8 +222,8 @@ impl PluginManager {
     ///
     /// True if the plugin is loaded and active
     pub fn has_plugin(&self, plugin_name: &str) -> bool {
-        self.plugins.contains_key(plugin_name) &&
-        matches!(self.plugin_states.get(plugin_name), Some(PluginLifecycle::Active))
+        self.plugins.contains_key(plugin_name)
+            && matches!(self.plugin_states.get(plugin_name), Some(PluginLifecycle::Active))
     }
 
     /// Get information about a loaded plugin
@@ -242,61 +263,62 @@ impl PluginManager {
     /// # Errors
     ///
     /// Returns an error if the plugin is not found or command execution fails
+    #[allow(clippy::cast_possible_truncation)]
     pub fn execute_plugin_command(
         &self,
         plugin_name: &str,
         command: &str,
         args: &[String],
     ) -> Result<PluginResult> {
-        let plugin = self.plugins.get(plugin_name)
-            .ok_or_else(|| Error::plugin(format!("Plugin {} not found", plugin_name)))?;
+        let plugin = self
+            .plugins
+            .get(plugin_name)
+            .ok_or_else(|| Error::plugin(format!("Plugin {plugin_name} not found")))?;
 
         // Check plugin state
         match self.plugin_states.get(plugin_name) {
-            Some(PluginLifecycle::Active) => {},
+            Some(PluginLifecycle::Active) => {}
             Some(state) => {
                 return Err(Error::plugin(format!(
-                    "Plugin {} is not active (state: {})", 
-                    plugin_name, 
-                    state
+                    "Plugin {plugin_name} is not active (state: {state})"
                 )));
             }
             None => {
-                return Err(Error::plugin(format!("Plugin {} state unknown", plugin_name)));
+                return Err(Error::plugin(format!("Plugin {plugin_name} state unknown")));
             }
         }
 
         let start_time = Instant::now();
-        
+
         // Execute the command
         let result = match plugin.execute_command(command, args) {
             Ok(mut result) => {
                 result.execution_time_ms = start_time.elapsed().as_millis() as u64;
-                
+
                 // Update metrics
                 self.update_metrics(plugin_name, result.execution_time_ms, false);
-                
+
                 log_performance(
-                    &format!("plugin_command:{}", command), 
-                    result.execution_time_ms, 
-                    None
+                    &format!("plugin_command:{command}"),
+                    result.execution_time_ms,
+                    None,
                 );
-                
+
                 result
             }
             Err(e) => {
                 let execution_time = start_time.elapsed().as_millis() as u64;
-                
+
                 // Update error metrics
                 self.update_metrics(plugin_name, execution_time, true);
-                
+
                 ErrorContext::new("plugin_command")
                     .with_detail("plugin", plugin_name)
                     .with_detail("command", command)
                     .with_detail("execution_time_ms", &execution_time.to_string())
                     .log_error(&e);
-                
-                PluginResult::error(format!("Command execution failed: {}", e))
+
+                PluginResult::error(format!("Command execution failed: {e}"))
                     .with_metadata("execution_time_ms", execution_time)
                     .with_metadata("plugin_name", plugin_name)
                     .with_metadata("command", command)
@@ -317,7 +339,7 @@ impl PluginManager {
         let mut loaded_plugins = Vec::new();
 
         log_operation_start("load_builtin_plugins", None);
-        
+
         // Load analyzer plugin
         let analyzer_plugin = super::builtin::AnalyzerPlugin::new();
         match self.load_plugin(Box::new(analyzer_plugin)) {
@@ -360,7 +382,10 @@ impl PluginManager {
             }
         }
 
-        log_operation_complete("load_builtin_plugins", Some(&format!("{} plugins", loaded_plugins.len())));
+        log_operation_complete(
+            "load_builtin_plugins",
+            Some(&format!("{count} plugins", count = loaded_plugins.len())),
+        );
         Ok(loaded_plugins)
     }
 
@@ -370,15 +395,24 @@ impl PluginManager {
     ///
     /// Snapshot of current plugin metrics
     pub fn get_metrics(&self) -> HashMap<String, serde_json::Value> {
-        let metrics = self.metrics.read().unwrap();
+        let Ok(metrics) = self.metrics.read() else {
+            log::error!("Failed to acquire metrics read lock");
+            return HashMap::new();
+        };
         let mut result = HashMap::new();
 
-        result.insert("command_counts".to_string(), 
-                     serde_json::to_value(&metrics.command_counts).unwrap_or_default());
-        result.insert("execution_times".to_string(), 
-                     serde_json::to_value(&metrics.execution_times).unwrap_or_default());
-        result.insert("error_counts".to_string(), 
-                     serde_json::to_value(&metrics.error_counts).unwrap_or_default());
+        result.insert(
+            "command_counts".to_string(),
+            serde_json::to_value(&metrics.command_counts).unwrap_or_default(),
+        );
+        result.insert(
+            "execution_times".to_string(),
+            serde_json::to_value(&metrics.execution_times).unwrap_or_default(),
+        );
+        result.insert(
+            "error_counts".to_string(),
+            serde_json::to_value(&metrics.error_counts).unwrap_or_default(),
+        );
 
         result
     }
@@ -388,10 +422,10 @@ impl PluginManager {
         if let Ok(mut metrics) = self.metrics.write() {
             // Update command count
             *metrics.command_counts.entry(plugin_name.to_string()).or_insert(0) += 1;
-            
+
             // Update execution time
             *metrics.execution_times.entry(plugin_name.to_string()).or_insert(0) += execution_time;
-            
+
             // Update error count if applicable
             if is_error {
                 *metrics.error_counts.entry(plugin_name.to_string()).or_insert(0) += 1;
@@ -414,7 +448,7 @@ impl PluginManager {
             log_operation("plugin_suspend", "Plugin suspended", Some(plugin_name));
             Ok(())
         } else {
-            Err(Error::plugin(format!("Plugin {} not found", plugin_name)))
+            Err(Error::plugin(format!("Plugin {plugin_name} not found")))
         }
     }
 
@@ -434,16 +468,10 @@ impl PluginManager {
                 log_operation("plugin_resume", "Plugin resumed", Some(plugin_name));
                 Ok(())
             }
-            Some(state) => {
-                Err(Error::plugin(format!(
-                    "Plugin {} cannot be resumed (current state: {})", 
-                    plugin_name, 
-                    state
-                )))
-            }
-            None => {
-                Err(Error::plugin(format!("Plugin {} not found", plugin_name)))
-            }
+            Some(state) => Err(Error::plugin(format!(
+                "Plugin {plugin_name} cannot be resumed (current state: {state})"
+            ))),
+            None => Err(Error::plugin(format!("Plugin {plugin_name} not found"))),
         }
     }
 

@@ -30,21 +30,24 @@ pub struct ChangeAnalysisResult {
 }
 
 /// Analyzer for detecting and analyzing differences between branches and commits
-pub struct DiffAnalyzer {
+/// 
+/// Uses direct borrowing from MonorepoProject components instead of trait objects.
+/// This follows Rust ownership principles and eliminates Arc proliferation.
+pub struct DiffAnalyzer<'a> {
     /// Collection of change analyzers for different file types
     pub(crate) analyzers: Vec<Box<dyn ChangeAnalyzer>>,
 
-    /// Git provider for repository operations
-    pub(crate) git_provider: Box<dyn crate::core::GitProvider>,
+    /// Direct reference to git repository
+    pub(crate) repository: &'a sublime_git_tools::Repo,
 
-    /// Package provider for accessing package information
-    pub(crate) package_provider: Box<dyn crate::core::PackageProvider>,
+    /// Direct reference to packages
+    pub(crate) packages: &'a [crate::core::MonorepoPackageInfo],
 
-    /// File system provider for file operations
-    pub(crate) file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+    /// Direct reference to file system manager
+    pub(crate) file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
     
-    /// Package discovery provider for complex package queries
-    pub(crate) package_discovery_provider: Box<dyn crate::core::interfaces::PackageDiscoveryProvider>,
+    /// Direct reference to root path
+    pub(crate) root_path: &'a std::path::Path,
 }
 
 /// Result of comparing two branches

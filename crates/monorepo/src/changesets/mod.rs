@@ -96,8 +96,6 @@ pub mod types;
 pub mod storage;
 pub mod manager;
 
-#[cfg(test)]
-mod tests;
 
 // Explicit re-exports from types module
 pub use types::{

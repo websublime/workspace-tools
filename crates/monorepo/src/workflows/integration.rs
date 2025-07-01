@@ -4,10 +4,8 @@
 //! with Git hooks for seamless development experience.
 
 use crate::changesets::{types::ChangesetFilter, ChangesetManager};
-use crate::core::MonorepoProject;
 use crate::error::Error;
-use std::sync::Arc;
-// Removed unused import: use sublime_standard_tools::filesystem::FileSystem;
+use sublime_standard_tools::filesystem::FileSystem;
 
 /// Integration workflow that connects changesets with hooks
 ///
@@ -17,7 +15,7 @@ use std::sync::Arc;
 // Import struct definition from types module
 use crate::workflows::types::ChangesetHookIntegration;
 
-impl ChangesetHookIntegration {
+impl<'a> ChangesetHookIntegration<'a> {
     /// Creates a new changeset-hook integration with injected dependencies
     ///
     /// # Arguments
@@ -38,23 +36,25 @@ impl ChangesetHookIntegration {
     ///
     /// Returns an error if any of the required components cannot be initialized.
     pub fn new(
-        changeset_manager: ChangesetManager,
-        hook_manager: crate::hooks::HookManager,
-        task_manager: crate::tasks::TaskManager,
-        config_provider: Box<dyn crate::core::ConfigProvider>,
-        git_provider: Box<dyn crate::core::GitProvider>,
-        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
-        package_provider: Box<dyn crate::core::PackageProvider>,
-    ) -> Result<Self, Error> {
-        Ok(Self { 
-            changeset_manager, 
-            hook_manager, 
+        changeset_manager: ChangesetManager<'a>,
+        hook_manager: crate::hooks::HookManager<'a>,
+        task_manager: crate::tasks::TaskManager<'a>,
+        config: &'a crate::config::MonorepoConfig,
+        packages: &'a [crate::core::MonorepoPackageInfo],
+        repository: &'a sublime_git_tools::Repo,
+        file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
+        root_path: &'a std::path::Path,
+    ) -> Self {
+        Self {
+            changeset_manager,
+            hook_manager,
             task_manager,
-            config_provider,
-            git_provider,
-            file_system_provider,
-            package_provider,
-        })
+            config,
+            packages,
+            repository,
+            file_system,
+            root_path,
+        }
     }
 
     /// Creates a new changeset-hook integration from project (convenience method)
@@ -70,77 +70,6 @@ impl ChangesetHookIntegration {
     /// # Errors
     ///
     /// Returns an error if any of the required components cannot be initialized.
-    pub fn from_project(project: Arc<MonorepoProject>) -> Result<Self, Error> {
-        use crate::core::interfaces::DependencyFactory;
-        
-        // Create task manager for changeset manager
-        let task_manager_for_changeset = crate::tasks::TaskManager::new(
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)), // executor_package_provider
-            DependencyFactory::config_provider(Arc::clone(&project)), // executor_config_provider
-            DependencyFactory::git_provider(Arc::clone(&project)),
-            DependencyFactory::config_provider(Arc::clone(&project)), // checker_config_provider
-            DependencyFactory::package_provider(Arc::clone(&project)), // checker_package_provider
-            DependencyFactory::file_system_provider(Arc::clone(&project)), // checker_file_system_provider
-        )?;
-        
-        // Create changeset storage directly with providers
-        let changeset_storage = crate::changesets::ChangesetStorage::new(
-            project.config.changesets.clone(),
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)),
-        );
-
-        // Create changeset manager directly with components and providers
-        let changeset_manager = crate::changesets::ChangesetManager::new(
-            changeset_storage,
-            task_manager_for_changeset,
-            DependencyFactory::config_provider(Arc::clone(&project)),
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)),
-            DependencyFactory::git_provider(Arc::clone(&project)),
-        );
-
-        // Create hook installer and validator directly with providers
-        let hook_installer = crate::hooks::HookInstaller::new(
-            DependencyFactory::git_provider(Arc::clone(&project)),
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-        )?;
-
-        let hook_validator = crate::hooks::HookValidator::new(
-            DependencyFactory::git_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)),
-            DependencyFactory::config_provider(Arc::clone(&project)),
-        );
-
-        // Create task manager for hook validation
-        let hook_task_manager = crate::tasks::TaskManager::from_project(Arc::clone(&project))?;
-
-        // Create hook manager directly with components and providers
-        let hook_manager = crate::hooks::HookManager::new(
-            hook_installer,
-            hook_validator,
-            hook_task_manager,
-            DependencyFactory::config_provider(Arc::clone(&project)),
-            DependencyFactory::git_provider(Arc::clone(&project)),
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)),
-        )?;
-
-        // Create task manager for workflow execution
-        let workflow_task_manager = crate::tasks::TaskManager::from_project(Arc::clone(&project))?;
-
-        Self::new(
-            changeset_manager,
-            hook_manager,
-            workflow_task_manager,
-            DependencyFactory::config_provider(Arc::clone(&project)),
-            DependencyFactory::git_provider(Arc::clone(&project)),
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(project),
-        )
-    }
 
     /// Validates that required changesets exist for the current changes
     ///
@@ -157,25 +86,24 @@ impl ChangesetHookIntegration {
     pub fn validate_changesets_for_commit(&self) -> Result<bool, Error> {
         // Get current branch
         let current_branch = self
-            .git_provider
-            .current_branch()
+            .repository
+            .get_current_branch()
             .map_err(|e| Error::workflow(format!("Failed to get current branch: {e}")))?;
 
         // Skip changeset validation for protected branches (main/develop)
-        let branch_config = &self.config_provider.config().git.branches;
+        let branch_config = &self.config.git.branches;
         if branch_config.is_protected_branch(&current_branch) {
             return Ok(true);
         }
 
         // Check if changesets are required
-        if !self.config_provider.config().changesets.required {
+        if !self.config.changesets.required {
             return Ok(true);
         }
 
         // Get staged files to determine affected packages
         let staged_files = self
-            .git_provider
-            .repository()
+            .repository
             .get_staged_files()
             .map_err(|e| Error::workflow(format!("Failed to get staged files: {e}")))?;
 
@@ -262,8 +190,7 @@ impl ChangesetHookIntegration {
 
         // Get affected packages to inform the user
         let staged_files = self
-            .git_provider
-            .repository()
+            .repository
             .get_staged_files()
             .map_err(|e| Error::workflow(format!("Failed to get staged files: {e}")))?;
         let affected_packages = self.map_files_to_packages(&staged_files);
@@ -287,8 +214,9 @@ impl ChangesetHookIntegration {
         }
     }
 
-    /// Applies changesets when merging to main branches
+    /// Applies changesets when merging to main branches synchronously
     ///
+    /// FASE 2 ASYNC ELIMINATION: Synchronous execution eliminates async infection.
     /// This method is called by post-merge hooks to automatically apply
     /// changesets when feature branches are merged to main branches.
     /// It also validates changesets before applying and handles dependency updates.
@@ -304,15 +232,15 @@ impl ChangesetHookIntegration {
     /// # Errors
     ///
     /// Returns an error if changeset application fails.
-    pub async fn apply_changesets_on_merge(&self, merged_branch: &str) -> Result<bool, Error> {
+    pub fn apply_changesets_on_merge_sync(&self, merged_branch: &str) -> Result<bool, Error> {
         // Get current branch (should be main/master after merge)
         let current_branch = self
-            .git_provider
-            .current_branch()
+            .repository
+            .get_current_branch()
             .map_err(|e| Error::workflow(format!("Failed to get current branch: {e}")))?;
 
         // Only apply changesets when merging to protected branches
-        let branch_config = &self.config_provider.config().git.branches;
+        let branch_config = &self.config.git.branches;
         if !branch_config.is_protected_branch(&current_branch) {
             log::info!(
                 "Skipping changeset application - not on main branch (currently on '{}')",
@@ -382,14 +310,20 @@ impl ChangesetHookIntegration {
             }
 
             // Run post-merge validation tasks if configured
-            self.run_post_merge_validation(&applications).await?;
+            self.run_post_merge_validation_sync(&applications)?;
         }
 
         Ok(true)
     }
 
-    /// Validates that all tests pass for affected packages before push
+    /// Applies changesets when merging to main branches
+    pub fn apply_changesets_on_merge(&self, merged_branch: &str) -> Result<bool, Error> {
+        self.apply_changesets_on_merge_sync(merged_branch)
+    }
+
+    /// Validates that all tests pass for affected packages before push synchronously
     ///
+    /// FASE 2 ASYNC ELIMINATION: Synchronous execution eliminates async infection.
     /// This method is called by pre-push hooks to ensure that all
     /// affected packages have passing tests before pushing to remote.
     ///
@@ -404,7 +338,7 @@ impl ChangesetHookIntegration {
     /// # Errors
     ///
     /// Returns an error if test execution fails.
-    pub async fn validate_tests_for_push(&self, commits: &[String]) -> Result<bool, Error> {
+    pub fn validate_tests_for_push_sync(&self, commits: &[String]) -> Result<bool, Error> {
         if commits.is_empty() {
             return Ok(true);
         }
@@ -421,9 +355,9 @@ impl ChangesetHookIntegration {
 
         log::info!("🧪 Running tests for affected packages: {}", affected_packages.join(", "));
 
-        // Execute test tasks for affected packages
+        // Execute test tasks for affected packages using sync version
         let test_results =
-            self.task_manager.execute_tasks_for_affected_packages(&affected_packages).await?;
+            self.task_manager.execute_tasks_for_affected_packages(&affected_packages)?;
 
         // Check if all tests passed
         let failed_tests: Vec<_> = test_results
@@ -449,6 +383,11 @@ impl ChangesetHookIntegration {
         Ok(true)
     }
 
+    /// Validates that all tests pass for affected packages before push
+    pub fn validate_tests_for_push(&self, commits: &[String]) -> Result<bool, Error> {
+        self.validate_tests_for_push_sync(commits)
+    }
+
     /// Sets up the complete integration between changesets and hooks
     ///
     /// This method installs all necessary Git hooks and configures them
@@ -471,30 +410,31 @@ impl ChangesetHookIntegration {
             return Ok(false);
         }
 
-        println!("✅ Installed {} Git hook(s)", installed_hooks.len());
+        println!("✅ Installed {count} Git hook(s)", count = installed_hooks.len());
         for hook_type in &installed_hooks {
             println!("  - {hook_type:?}");
         }
 
         // Verify changeset directory exists
         let changeset_dir =
-            self.package_provider.root_path().join(&self.config_provider.config().changesets.changeset_dir);
+            self.root_path.join(&self.config.changesets.changeset_dir);
         if !changeset_dir.exists() {
-            self.file_system_provider.create_dir_all(&changeset_dir).map_err(|e| {
+            self.file_system.create_dir_all(&changeset_dir).map_err(|e| {
                 Error::workflow(format!("Failed to create changeset directory: {e}"))
             })?;
-            println!("✅ Created changeset directory: {}", changeset_dir.display());
+            println!("✅ Created changeset directory: {changeset_dir}", changeset_dir = changeset_dir.display());
         }
 
         println!("🔗 Changeset-hook integration setup complete!");
         Ok(true)
     }
 
-    /// Runs post-merge validation tasks after changesets are applied
+    /// Runs post-merge validation tasks after changesets are applied synchronously
     ///
+    /// FASE 2 ASYNC ELIMINATION: Synchronous execution eliminates async infection.
     /// This ensures that applied changesets didn't break anything and that
     /// all packages are in a consistent state.
-    async fn run_post_merge_validation(
+    fn run_post_merge_validation_sync(
         &self,
         applications: &[crate::changesets::types::ChangesetApplication],
     ) -> Result<(), Error> {
@@ -511,9 +451,9 @@ impl ChangesetHookIntegration {
         // Create a temporary TaskManager for validation tasks
         // Use the existing task_manager from struct
 
-        // Execute validation tasks for affected packages using TaskManager
+        // Execute validation tasks for affected packages using sync TaskManager
         let validation_results =
-            self.task_manager.execute_tasks_for_affected_packages(&affected_packages).await?;
+            self.task_manager.execute_tasks_for_affected_packages(&affected_packages)?;
 
         // Check if any validation tasks failed
         let failed_tasks: Vec<_> = validation_results
@@ -544,6 +484,14 @@ impl ChangesetHookIntegration {
 
         log::info!("✅ Post-merge validation completed successfully");
         Ok(())
+    }
+
+    /// Runs post-merge validation tasks after changesets are applied
+    fn run_post_merge_validation(
+        &self,
+        applications: &[crate::changesets::types::ChangesetApplication],
+    ) -> Result<(), Error> {
+        self.run_post_merge_validation_sync(applications)
     }
 
     /// Validates that dependency versions are consistent across the monorepo
@@ -582,7 +530,7 @@ impl ChangesetHookIntegration {
 
             // Get the current version of the updated package
             let updated_package_info =
-                self.package_provider.packages().iter().find(|pkg| pkg.name() == updated_package);
+                self.packages.iter().find(|pkg| pkg.name() == updated_package);
 
             if let Some(pkg_info) = updated_package_info {
                 let current_version = pkg_info.version();
@@ -646,14 +594,15 @@ impl ChangesetHookIntegration {
         let mut dependents = Vec::new();
 
         // Check all packages in the project
-        for pkg in self.package_provider.packages() {
+        for pkg in self.packages {
             if pkg.name() == package {
                 continue; // Skip self
             }
 
             // Read package.json to check dependencies
             let package_json_path = pkg.path().join("package.json");
-            if let Ok(content) = self.file_system_provider.read_file_string(&package_json_path) {
+            if let Ok(bytes) = self.file_system.read_file(&package_json_path) {
+                if let Ok(content) = String::from_utf8(bytes) {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                     // Check dependencies, devDependencies, and peerDependencies
                     let dep_sections = ["dependencies", "devDependencies", "peerDependencies"];
@@ -667,6 +616,7 @@ impl ChangesetHookIntegration {
                         }
                     }
                 }
+            }
             }
         }
 
@@ -689,14 +639,14 @@ impl ChangesetHookIntegration {
 
         // Get the dependent package info
         let dependent_info =
-            self.package_provider.packages().iter().find(|pkg| pkg.name() == dependent_package).ok_or_else(
+            self.packages.iter().find(|pkg| pkg.name() == dependent_package).ok_or_else(
                 || Error::workflow(format!("Dependent package '{dependent_package}' not found")),
             )?;
 
         // Read the dependent package's package.json to check version requirements
         let package_json_path = dependent_info.path().join("package.json");
         let content =
-            self.file_system_provider.read_file_string(&package_json_path).map_err(|e| {
+            self.file_system.read_file_string(&package_json_path).map_err(|e| {
                 Error::workflow(format!("Failed to read package.json for {dependent_package}: {e}"))
             })?;
 
@@ -752,7 +702,7 @@ impl ChangesetHookIntegration {
         let mut visited = std::collections::HashSet::new();
 
         // Check each package for cycles
-        for pkg in self.package_provider.packages() {
+        for pkg in self.packages {
             let package_name = pkg.name().to_string();
 
             if !visited.contains(&package_name) {
@@ -788,7 +738,8 @@ impl ChangesetHookIntegration {
             let mut cycle: Vec<String> = current_path[cycle_start..].to_vec();
             cycle.push(package_name.to_string()); // Complete the cycle
 
-            return Err(vec![format!("❌ Circular dependency detected: {}", cycle.join(" -> "))]);
+            let cycle_str = cycle.join(" -> ");
+            return Err(vec![format!("❌ Circular dependency detected: {cycle_str}")]);
         }
 
         if visited.contains(package_name) {
@@ -826,22 +777,24 @@ impl ChangesetHookIntegration {
         let mut dependencies = Vec::new();
 
         // Find the package info
-        if let Some(pkg_info) = self.package_provider.packages().iter().find(|pkg| pkg.name() == package_name)
+        if let Some(pkg_info) = self.packages.iter().find(|pkg| pkg.name() == package_name)
         {
             // Read package.json to get dependencies
             let package_json_path = pkg_info.path().join("package.json");
-            if let Ok(content) = self.file_system_provider.read_file_string(&package_json_path) {
+            if let Ok(bytes) = self.file_system.read_file(&package_json_path) {
+                if let Ok(content) = String::from_utf8(bytes) {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                     // Only check production dependencies for cycle detection
                     if let Some(deps) = json["dependencies"].as_object() {
                         for (dep_name, _) in deps {
                             // Only include internal monorepo dependencies
-                            if self.package_provider.packages().iter().any(|pkg| pkg.name() == dep_name) {
+                            if self.packages.iter().any(|pkg| pkg.name() == dep_name) {
                                 dependencies.push(dep_name.clone());
                             }
                         }
                     }
                 }
+            }
             }
         }
 
@@ -964,10 +917,10 @@ impl ChangesetHookIntegration {
         let mut affected_packages = Vec::new();
 
         for file_path in files {
-            let full_path = self.package_provider.root_path().join(file_path);
+            let full_path = self.root_path.join(file_path);
 
             // Find package that contains this file path
-            for package in self.package_provider.packages() {
+            for package in self.packages {
                 let package_path = package.workspace_package.absolute_path.as_path();
                 if full_path.starts_with(package_path) {
                     let package_name = package.name().to_string();
@@ -988,7 +941,7 @@ impl ChangesetHookIntegration {
         let mut all_affected_packages = Vec::new();
 
         for commit_hash in commits {
-            match self.git_provider.repository().get_all_files_changed_since_sha(commit_hash) {
+            match self.repository.get_all_files_changed_since_sha(commit_hash) {
                 Ok(changed_files) => {
                     let affected_packages = self.map_files_to_packages(&changed_files);
 

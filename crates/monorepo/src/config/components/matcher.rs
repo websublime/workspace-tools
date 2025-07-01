@@ -62,7 +62,7 @@ impl PatternMatcher {
         }
         
         // Try with trailing slash for directories
-        let path_with_slash = format!("{}/", path.trim_end_matches('/'));
+        let path_with_slash = format!("{path}/", path = path.trim_end_matches('/'));
         if self.pattern.matches(&path_with_slash) {
             return true;
         }

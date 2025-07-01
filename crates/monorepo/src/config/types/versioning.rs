@@ -19,6 +19,9 @@ pub struct VersioningConfig {
 
     /// Whether to create tags automatically
     pub auto_tag: bool,
+
+    /// Optional version constraint for validating version formats
+    pub version_constraint: Option<String>,
 }
 
 impl Default for VersioningConfig {
@@ -29,6 +32,7 @@ impl Default for VersioningConfig {
             snapshot_format: "{version}-snapshot.{sha}".to_string(),
             tag_prefix: "v".to_string(),
             auto_tag: true,
+            version_constraint: None,
         }
     }
 }

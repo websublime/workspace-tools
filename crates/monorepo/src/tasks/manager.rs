@@ -2,6 +2,7 @@
 //!
 //! The `TaskManager` orchestrates task execution, manages dependencies,
 //! and coordinates with other monorepo systems for comprehensive workflow management.
+//! Uses direct borrowing patterns instead of trait objects.
 
 use super::{
     types::{ConditionChecker, ExecutionContext, TaskExecutor, TaskManager, TaskRegistry},
@@ -11,37 +12,33 @@ use crate::analysis::ChangeAnalysis;
 use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
 use std::collections::HashSet;
-use std::sync::Arc;
+use sublime_standard_tools::filesystem::FileSystem;
 
-impl TaskManager {
-    /// Create a new task manager with injected dependencies
-    pub fn new(
-        file_system_provider: Box<dyn crate::core::FileSystemProvider>,
-        package_provider: Box<dyn crate::core::PackageProvider>,
-        executor_package_provider: Box<dyn crate::core::PackageProvider>,
-        executor_config_provider: Box<dyn crate::core::ConfigProvider>,
-        git_provider: Box<dyn crate::core::GitProvider>,
-        checker_config_provider: Box<dyn crate::core::ConfigProvider>,
-        checker_package_provider: Box<dyn crate::core::PackageProvider>,
-        checker_file_system_provider: Box<dyn crate::core::FileSystemProvider>,
-    ) -> Result<Self> {
+impl<'a> TaskManager<'a> {
+    /// Create a new task manager with direct borrowing from project
+    /// 
+    /// Uses borrowing instead of trait objects to eliminate Arc proliferation
+    /// and work with Rust ownership principles.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `project` - Reference to monorepo project
+    /// 
+    /// # Returns
+    /// 
+    /// A new task manager instance
+    pub fn new(project: &'a MonorepoProject) -> Result<Self> {
         let registry = TaskRegistry::new();
         
-        let executor = TaskExecutor::new(
-            executor_package_provider,
-            executor_config_provider,
-        )?;
-        
-        let condition_checker = ConditionChecker::new(
-            git_provider,
-            checker_config_provider,
-            checker_package_provider,
-            checker_file_system_provider,
-        );
+        // Create sub-components with direct borrowing
+        let executor = TaskExecutor::new(project)?;
+        let condition_checker = ConditionChecker::new(project);
 
         Ok(Self {
-            file_system: file_system_provider,
-            package_provider,
+            file_system: project.services.file_system_service().manager(),
+            packages: &project.packages,
+            config: project.services.config_service().get_configuration(),
+            root_path: project.root_path(),
             registry,
             executor,
             condition_checker,
@@ -49,37 +46,73 @@ impl TaskManager {
         })
     }
 
-    /// Create a new task manager from project (convenience method)
+    /// Create a new task manager with direct field references
     /// 
-    /// NOTE: This convenience method creates multiple provider instances from the same project.
-    /// For better performance and memory usage, prefer using the `new()` method with 
-    /// pre-created providers when creating multiple components.
-    pub fn from_project(project: Arc<MonorepoProject>) -> Result<Self> {
-        use crate::core::interfaces::DependencyFactory;
+    /// Uses direct borrowing of individual components instead of requiring
+    /// a full MonorepoProject. This is useful for scenarios where components
+    /// need TaskManager but don't have access to a complete project.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `config` - Reference to monorepo configuration
+    /// * `file_system` - Reference to file system manager
+    /// * `packages` - Reference to package list
+    /// * `root_path` - Reference to root path
+    /// 
+    /// # Returns
+    /// 
+    /// A new task manager instance
+    pub fn with_components(
+        config: &'a crate::config::MonorepoConfig,
+        file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
+        packages: &'a [crate::core::MonorepoPackageInfo],
+        root_path: &'a std::path::Path,
+    ) -> Result<Self> {
+        let registry = TaskRegistry::new();
         
-        // Create providers once and reuse them to avoid multiple Arc clones
-        let file_system_provider = DependencyFactory::file_system_provider(Arc::clone(&project));
-        let package_provider1 = DependencyFactory::package_provider(Arc::clone(&project));
-        let package_provider2 = DependencyFactory::package_provider(Arc::clone(&project));
-        let package_provider3 = DependencyFactory::package_provider(Arc::clone(&project));
-        let config_provider1 = DependencyFactory::config_provider(Arc::clone(&project));
-        let config_provider2 = DependencyFactory::config_provider(Arc::clone(&project));
-        let git_provider = DependencyFactory::git_provider(Arc::clone(&project));
-        
-        Self::new(
-            file_system_provider,
-            package_provider1,
-            package_provider2, // for executor
-            config_provider1,  // for executor
-            git_provider,
-            config_provider2,  // for checker
-            package_provider3, // for checker
-            DependencyFactory::file_system_provider(project), // for checker
-        )
+        // Create sub-components with direct borrowing
+        let executor = TaskExecutor::with_components(config, file_system, packages, root_path)?;
+        let condition_checker = ConditionChecker::with_components(config, file_system, packages, root_path);
+
+        Ok(Self {
+            file_system,
+            packages,
+            config,
+            root_path,
+            registry,
+            executor,
+            condition_checker,
+            execution_context: ExecutionContext::default(),
+        })
+    }
+
+    /// Creates a new task manager from an existing MonorepoProject
+    /// 
+    /// Convenience method that wraps the `new` constructor for backward compatibility.
+    /// Uses real direct borrowing following Rust ownership principles.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `project` - Reference to the monorepo project
+    /// 
+    /// # Returns
+    /// 
+    /// A new TaskManager instance with direct borrowing
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust
+    /// use sublime_monorepo_tools::{TaskManager, MonorepoProject};
+    /// 
+    /// let project = MonorepoProject::new("/path/to/monorepo")?;
+    /// let task_manager = TaskManager::from_project(&project)?;
+    /// ```
+    pub fn from_project(project: &'a MonorepoProject) -> Result<Self> {
+        Self::new(project)
     }
 
     /// Execute a single task by name
-    pub async fn execute_task(
+    pub fn execute_task(
         &self,
         task_name: &str,
         scope: Option<TaskScope>,
@@ -99,11 +132,12 @@ impl TaskManager {
         }
 
         // Execute task with the specified scope
-        self.executor.execute_task(task_definition, &effective_scope).await
+        self.executor.execute_task(task_definition, &effective_scope)
     }
 
+
     /// Execute tasks for affected packages based on change analysis
-    pub async fn execute_tasks_for_affected_packages(
+    pub fn execute_tasks_for_affected_packages(
         &self,
         affected_packages: &[String],
     ) -> Result<Vec<TaskExecutionResult>> {
@@ -118,15 +152,16 @@ impl TaskManager {
             context.affected_packages = affected_packages.to_vec();
 
             // Execute task
-            let result = self.execute_task_with_context(task, &context).await?;
+            let result = self.execute_task_with_context(task, &context)?;
             results.push(result);
         }
 
         Ok(results)
     }
 
+
     /// Execute tasks based on change analysis
-    pub async fn execute_tasks_for_changes(
+    pub fn execute_tasks_for_changes(
         &self,
         changes: &ChangeAnalysis,
     ) -> Result<Vec<TaskExecutionResult>> {
@@ -145,7 +180,7 @@ impl TaskManager {
         let applicable_tasks = self.get_tasks_for_changes(changes)?;
 
         for task in applicable_tasks {
-            let result = self.execute_task_with_context(&task, &context).await?;
+            let result = self.execute_task_with_context(&task, &context)?;
             results.push(result);
         }
 
@@ -153,7 +188,7 @@ impl TaskManager {
     }
 
     /// Execute multiple tasks in batch with dependency resolution
-    pub async fn execute_tasks_batch(
+    pub fn execute_tasks_batch(
         &self,
         task_names: &[String],
     ) -> Result<Vec<TaskExecutionResult>> {
@@ -162,7 +197,7 @@ impl TaskManager {
         let mut results = Vec::new();
 
         for task_name in execution_order {
-            let result = self.execute_task(&task_name, None).await?;
+            let result = self.execute_task(&task_name, None)?;
 
             // If task failed and it's not configured to continue on error, stop
             if result.is_failure() {
@@ -182,11 +217,13 @@ impl TaskManager {
         Ok(results)
     }
 
+
     /// Resolve package tasks from package.json scripts
     pub fn resolve_package_tasks(&self, package_name: &str) -> Result<Vec<TaskDefinition>> {
         let package_info = self
-            .package_provider
-            .get_package(package_name)
+            .packages
+            .iter()
+            .find(|pkg| pkg.name() == package_name)
             .ok_or_else(|| Error::task(format!("Package not found: {package_name}")))?;
 
         // Read package.json to extract scripts using FileSystem trait
@@ -255,7 +292,7 @@ impl TaskManager {
     // Private helper methods
 
     /// Execute task with specific context
-    async fn execute_task_with_context(
+    fn execute_task_with_context(
         &self,
         task: &TaskDefinition,
         context: &ExecutionContext,
@@ -268,8 +305,9 @@ impl TaskManager {
         }
 
         // Execute with context
-        self.executor.execute_task_with_context(task, &task.scope, context).await
+        self.executor.execute_task_with_context(task, &task.scope, context)
     }
+
 
     /// Get tasks that should run for given changes
     fn get_tasks_for_changes(&self, changes: &ChangeAnalysis) -> Result<Vec<TaskDefinition>> {

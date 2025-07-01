@@ -6,32 +6,65 @@
 use crate::config::VersionBumpType;
 use crate::core::{
     BreakingChangeAnalysis, ConflictType, DefaultVersioningStrategy, DependencyChainImpact,
-    MonorepoProject, PackageImpactAnalysis, PackageVersionUpdate, PropagationResult,
+    MonorepoProject, MonorepoPackageInfo, PackageImpactAnalysis, PackageVersionUpdate, PropagationResult,
     VersionConflict, VersionImpactAnalysis, VersionManager, VersioningPlan, VersioningPlanStep,
     VersioningResult, VersioningStrategy,
 };
 use crate::error::Result;
 use std::collections::HashMap;
-use std::sync::Arc;
 use sublime_package_tools::{DependencyRegistry, Version};
 // Import the diff_analyzer types for consistency
 use crate::analysis::ChangeAnalysis;
 use crate::changes::PackageChange;
 
-impl VersionManager {
-    /// Create a new version manager with the default strategy
-    #[must_use]
-    pub fn new(project: Arc<MonorepoProject>) -> Self {
-        Self { project, strategy: Box::new(DefaultVersioningStrategy) }
+impl<'a> VersionManager<'a> {
+    /// Create a new version manager with direct borrowing from project
+    /// 
+    /// Uses borrowing instead of Arc to eliminate Arc proliferation
+    /// and work with Rust ownership principles.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `project` - Reference to monorepo project
+    /// 
+    /// # Returns
+    /// 
+    /// A new version manager instance with default strategy
+    pub fn new(project: &'a MonorepoProject) -> Self {
+        Self {
+            config: &project.config,
+            packages: &project.packages,
+            repository: &project.repository,
+            file_system: &project.file_system,
+            root_path: &project.root_path,
+            strategy: Box::new(DefaultVersioningStrategy),
+        }
     }
 
     /// Create a version manager with a custom strategy
-    #[must_use]
+    /// 
+    /// Uses direct borrowing with custom versioning strategy.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `project` - Reference to monorepo project
+    /// * `strategy` - Custom versioning strategy implementation
+    /// 
+    /// # Returns
+    /// 
+    /// A new version manager instance with custom strategy
     pub fn with_strategy(
-        project: Arc<MonorepoProject>,
-        strategy: Box<dyn VersioningStrategy>,
+        project: &'a MonorepoProject,
+        strategy: Box<dyn VersioningStrategy + 'a>,
     ) -> Self {
-        Self { project, strategy }
+        Self {
+            config: &project.config,
+            packages: &project.packages,
+            repository: &project.repository,
+            file_system: &project.file_system,
+            root_path: &project.root_path,
+            strategy,
+        }
     }
 
     /// Bump a package version with optional commit SHA for snapshots
@@ -41,10 +74,10 @@ impl VersionManager {
         bump_type: VersionBumpType,
         commit_sha: Option<&str>,
     ) -> Result<VersioningResult> {
-        let package_info = self
-            .project
-            .get_package(package_name)
-            .ok_or_else(|| crate::error::Error::package_not_found(package_name))?;
+        let package_info = self.packages
+            .iter()
+            .find(|pkg| pkg.name() == package_name)
+            .ok_or_else(|| crate::error::Error::versioning(format!("Package '{package_name}' not found")))?;
 
         let current_version = package_info.version();
 
@@ -90,7 +123,13 @@ impl VersionManager {
         let mut updates = Vec::new();
         let mut conflicts = Vec::new();
 
-        let dependents = self.project.get_dependents(updated_package);
+        // Find dependent packages by checking dependencies from dependencies_external field
+        let dependents: Vec<&MonorepoPackageInfo> = self.packages
+            .iter()
+            .filter(|pkg| {
+                pkg.dependencies_external.iter().any(|dep| dep == updated_package)
+            })
+            .collect();
 
         for dependent_pkg in dependents {
             let dependent_name = dependent_pkg.name();
@@ -128,19 +167,30 @@ impl VersionManager {
         Ok(PropagationResult { updates, conflicts })
     }
 
-    /// Propagate version changes asynchronously with enhanced dependency analysis
+    /// Propagate version changes with enhanced dependency analysis
+    ///
+    /// FASE 2 ASYNC ELIMINATION: Removed artificial async behavior and delays.
+    /// This function performs the same work as the previous async version but
+    /// without unnecessary async infection or artificial delays.
+    pub fn propagate_version_changes_enhanced(
+        &self,
+        updated_package: &str,
+    ) -> Result<PropagationResult> {
+        // Use the robust synchronous implementation without artificial delays
+        self.propagate_version_changes(updated_package)
+    }
+
+    /// Propagate version changes asynchronously (compatibility wrapper)
+    ///
+    /// FASE 2 ASYNC ELIMINATION: This async function now delegates to the sync version
+    /// to eliminate async infection while maintaining backward compatibility.
+    #[allow(clippy::unused_async)]
     pub async fn propagate_version_changes_async(
         &self,
         updated_package: &str,
     ) -> Result<PropagationResult> {
-        // For now, use synchronous implementation with async wrapper
-        // Future enhancement: implement proper async dependency analysis
-        let result = self.propagate_version_changes(updated_package)?;
-        
-        // Add small delay to simulate async behavior
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        
-        Ok(result)
+        // Delegate to sync version - no actual async work needed, no artificial delays
+        self.propagate_version_changes_enhanced(updated_package)
     }
 
     /// Analyze the impact of proposed version changes
@@ -163,10 +213,11 @@ impl VersionManager {
                 breaking_changes.push(BreakingChangeAnalysis {
                     package_name: change.package_name.clone(),
                     reason: "Major version bump suggested".to_string(),
-                    affected_dependents: self
-                        .project
-                        .get_dependents(&change.package_name)
-                        .into_iter()
+                    affected_dependents: self.packages
+                        .iter()
+                        .filter(|pkg| {
+                            pkg.dependencies_external.iter().any(|dep| dep == &change.package_name)
+                        })
                         .map(|p| p.name().to_string())
                         .collect(),
                 });
@@ -189,7 +240,13 @@ impl VersionManager {
     /// Analyze impact for a single package
     fn analyze_single_package_impact(&self, change: &PackageChange) -> PackageImpactAnalysis {
         let package_name = &change.package_name;
-        let dependents = self.project.get_dependents(package_name);
+        // Find dependent packages by checking dependencies
+        let dependents: Vec<&MonorepoPackageInfo> = self.packages
+            .iter()
+            .filter(|pkg| {
+                pkg.dependencies_external.iter().any(|dep| dep == package_name)
+            })
+            .collect();
 
         let direct_dependents = dependents.len();
         let transitive_dependents = self.count_transitive_dependents(package_name);
@@ -233,7 +290,13 @@ impl VersionManager {
         }
         visited.insert(package_name.to_string());
 
-        let dependents = self.project.get_dependents(package_name);
+        // Find dependent packages by checking dependencies
+        let dependents: Vec<&MonorepoPackageInfo> = self.packages
+            .iter()
+            .filter(|pkg| {
+                pkg.dependencies_external.iter().any(|dep| dep == package_name)
+            })
+            .collect();
         for dependent in dependents {
             *count += 1;
             self.count_transitive_recursive(dependent.name(), visited, count);
@@ -269,7 +332,7 @@ impl VersionManager {
         let mut chain = Vec::new();
         let mut visited = std::collections::HashSet::new();
 
-        let max_depth = self.project.config.validation.dependency_analysis.max_chain_depth;
+        let max_depth = self.config.validation.dependency_analysis.max_chain_depth;
         self.build_dependency_chain(package_name, &mut chain, &mut visited, 0, max_depth);
 
         DependencyChainImpact {
@@ -296,7 +359,13 @@ impl VersionManager {
         visited.insert(package_name.to_string());
         chain.push(package_name.to_string());
 
-        let dependents = self.project.get_dependents(package_name);
+        // Find dependent packages by checking dependencies
+        let dependents: Vec<&MonorepoPackageInfo> = self.packages
+            .iter()
+            .filter(|pkg| {
+                pkg.dependencies_external.iter().any(|dep| dep == package_name)
+            })
+            .collect();
         for dependent in dependents {
             self.build_dependency_chain(
                 dependent.name(),
@@ -319,7 +388,13 @@ impl VersionManager {
             return current_depth;
         }
 
-        let dependents = self.project.get_dependents(package_name);
+        // Find dependent packages by checking dependencies
+        let dependents: Vec<&MonorepoPackageInfo> = self.packages
+            .iter()
+            .filter(|pkg| {
+                pkg.dependencies_external.iter().any(|dep| dep == package_name)
+            })
+            .collect();
         if dependents.is_empty() {
             return current_depth;
         }
@@ -339,7 +414,7 @@ impl VersionManager {
         let mut max_depth = 0;
 
         let max_analysis_depth =
-            self.project.config.validation.dependency_analysis.max_analysis_depth;
+            self.config.validation.dependency_analysis.max_analysis_depth;
         for change in changes {
             let depth = self.calculate_chain_depth(&change.package_name, 0, max_analysis_depth);
             max_depth = max_depth.max(depth);
@@ -369,9 +444,9 @@ impl VersionManager {
             // Create plan step
             let step = VersioningPlanStep {
                 package_name: package_change.package_name.clone(),
-                current_version: self
-                    .project
-                    .get_package(&package_change.package_name)
+                current_version: self.packages
+                    .iter()
+                    .find(|pkg| pkg.name() == &package_change.package_name)
                     .map(|p| p.version().to_string())
                     .unwrap_or_default(),
                 planned_version_bump: bump_type,
@@ -387,7 +462,7 @@ impl VersionManager {
         Self::calculate_execution_order(&mut plan_steps);
 
         // Estimate execution time using configurable per-package duration
-        let per_package_duration = self.project.config.tasks.get_version_planning_per_package();
+        let per_package_duration = self.config.tasks.get_version_planning_per_package();
         let estimated_duration = per_package_duration * plan_steps.len() as u32;
 
         Ok(VersioningPlan {
@@ -408,7 +483,7 @@ impl VersionManager {
         let mut conflicts = Vec::new();
 
         // Check if package has pending changesets
-        if let Some(package_info) = self.project.get_package(package_name) {
+        if let Some(package_info) = self.packages.iter().find(|pkg| pkg.name() == package_name) {
             if package_info.has_pending_changesets() {
                 conflicts.push(VersionConflict {
                     package_name: package_name.to_string(),
@@ -497,8 +572,12 @@ impl VersionManager {
             for dep_package in &step.dependencies_to_update {
                 if let Some(&dep_index) = package_to_index.get(dep_package) {
                     // dep_package should be versioned before step.package_name
-                    adjacency_list.get_mut(&dep_index).unwrap().push(i);
-                    *in_degree.get_mut(&i).unwrap() += 1;
+                    if let Some(deps) = adjacency_list.get_mut(&dep_index) {
+                        deps.push(i);
+                    }
+                    if let Some(degree) = in_degree.get_mut(&i) {
+                        *degree += 1;
+                    }
                 }
             }
         }
@@ -580,8 +659,12 @@ impl VersionManager {
         })
     }
 
-    /// Execute a versioning plan asynchronously with progress tracking
-    pub async fn execute_versioning_plan_async(
+    /// Execute a versioning plan with enhanced progress tracking
+    ///
+    /// FASE 2 ASYNC ELIMINATION: Removed artificial async behavior and delays.
+    /// This function performs the same work as the previous async version but
+    /// without unnecessary async infection or artificial delays.
+    pub fn execute_versioning_plan_enhanced(
         &self,
         plan: &VersioningPlan,
     ) -> Result<VersioningResult> {
@@ -600,7 +683,7 @@ impl VersionManager {
                 step.planned_version_bump
             );
 
-            // Execute the version bump synchronously (for now)
+            // Execute the version bump synchronously - no artificial delays needed
             let result = self.bump_package_version(&step.package_name, step.planned_version_bump, None)?;
 
             // Collect results
@@ -608,8 +691,7 @@ impl VersionManager {
             propagated_updates.extend(result.propagated_updates);
             all_conflicts.extend(result.conflicts);
 
-            // Small delay to prevent overwhelming the system
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            // No artificial delay - let the system manage resources naturally
         }
 
         // Resolve final dependency conflicts using DependencyRegistry
@@ -632,9 +714,22 @@ impl VersionManager {
         })
     }
 
+    /// Execute a versioning plan asynchronously (compatibility wrapper)
+    ///
+    /// FASE 2 ASYNC ELIMINATION: This async function now delegates to the sync version
+    /// to eliminate async infection while maintaining backward compatibility.
+    #[allow(clippy::unused_async)]
+    pub async fn execute_versioning_plan_async(
+        &self,
+        plan: &VersioningPlan,
+    ) -> Result<VersioningResult> {
+        // Delegate to sync version - no actual async work needed, no artificial delays
+        self.execute_versioning_plan_enhanced(plan)
+    }
+
     /// Get dependency update strategy for a package (placeholder implementation)
     pub fn get_dependency_update_strategy(&self, package_name: &str) -> Result<Vec<PackageVersionUpdate>> {
-        let _package = self.project.get_package(package_name)
+        let _package = self.packages.iter().find(|pkg| pkg.name() == package_name)
             .ok_or_else(|| crate::error::Error::package_not_found(package_name))?;
 
         // Placeholder implementation - will be enhanced when dependency analysis is ready

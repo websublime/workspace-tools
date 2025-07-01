@@ -277,7 +277,7 @@ impl PackageChangesetManager {
         for changeset in &self.package.changesets {
             // Check for empty descriptions
             if changeset.description.trim().is_empty() {
-                errors.push(format!("Changeset {} has empty description", changeset.id));
+                errors.push(format!("Changeset {id} has empty description", id = changeset.id));
             }
 
             // Check for invalid environments
@@ -292,7 +292,7 @@ impl PackageChangesetManager {
 
             // Check for valid version bump
             if matches!(changeset.version_bump, VersionBumpType::Snapshot) {
-                errors.push(format!("Changeset {} uses snapshot version bump", changeset.id));
+                errors.push(format!("Changeset {id} uses snapshot version bump", id = changeset.id));
             }
         }
 

@@ -396,31 +396,31 @@ impl LoggingHandler {
             },
             MonorepoEvent::Task(task_event) => match task_event {
                 super::types::TaskEvent::Started { task_name, .. } => format!("Task started: {task_name}"),
-                super::types::TaskEvent::Completed { result, .. } => format!("Task completed: {}", result.task_name),
+                super::types::TaskEvent::Completed { result, .. } => format!("Task completed: {task_name}", task_name = result.task_name),
                 super::types::TaskEvent::Failed { task_name, .. } => format!("Task failed: {task_name}"),
                 super::types::TaskEvent::ValidationRequested { task_name, .. } => format!("Task validation requested: {task_name}"),
             },
             MonorepoEvent::Changeset(changeset_event) => match changeset_event {
-                super::types::ChangesetEvent::Created { changeset, .. } => format!("Changeset created: {}", changeset.id),
+                super::types::ChangesetEvent::Created { changeset, .. } => format!("Changeset created: {id}", id = changeset.id),
                 super::types::ChangesetEvent::CreationRequested { .. } => "Changeset creation requested".to_string(),
                 super::types::ChangesetEvent::Validated { changeset_id, .. } => format!("Changeset validated: {changeset_id}"),
-                super::types::ChangesetEvent::Applied { changesets, .. } => format!("Changesets applied: {}", changesets.len()),
+                super::types::ChangesetEvent::Applied { changesets, .. } => format!("Changesets applied: {count}", count = changesets.len()),
             },
             MonorepoEvent::Hook(hook_event) => match hook_event {
                 super::types::HookEvent::Started { hook_type, .. } => format!("Hook started: {hook_type}"),
                 super::types::HookEvent::Completed { hook_type, success, .. } => format!("Hook completed: {hook_type} ({})", if *success { "success" } else { "failed" }),
-                super::types::HookEvent::Installed { hook_types, .. } => format!("Hooks installed: {}", hook_types.len()),
+                super::types::HookEvent::Installed { hook_types, .. } => format!("Hooks installed: {count}", count = hook_types.len()),
                 super::types::HookEvent::ValidationFailed { hook_type, .. } => format!("Hook validation failed: {hook_type}"),
             },
             MonorepoEvent::Package(package_event) => match package_event {
                 super::types::PackageEvent::Updated { package_name, new_version, .. } => format!("Package updated: {package_name}@{new_version}"),
                 super::types::PackageEvent::DependenciesChanged { package_name, .. } => format!("Dependencies changed: {package_name}"),
                 super::types::PackageEvent::Published { package_name, version, .. } => format!("Package published: {package_name}@{version}"),
-                super::types::PackageEvent::DiscoveryCompleted { packages, .. } => format!("Package discovery completed: {} packages", packages.len()),
+                super::types::PackageEvent::DiscoveryCompleted { packages, .. } => format!("Package discovery completed: {count} packages", count = packages.len()),
             },
             MonorepoEvent::FileSystem(fs_event) => match fs_event {
-                super::types::FileSystemEvent::FilesChanged { changed_files, .. } => format!("Files changed: {} files", changed_files.len()),
-                super::types::FileSystemEvent::WorkspaceChanged { added_packages, removed_packages, .. } => format!("Workspace changed: +{} -{} packages", added_packages.len(), removed_packages.len()),
+                super::types::FileSystemEvent::FilesChanged { changed_files, .. } => format!("Files changed: {count} files", count = changed_files.len()),
+                super::types::FileSystemEvent::WorkspaceChanged { added_packages, removed_packages, .. } => format!("Workspace changed: +{added} -{removed} packages", added = added_packages.len(), removed = removed_packages.len()),
                 super::types::FileSystemEvent::ConfigFileChanged { .. } => "Config file changed".to_string(),
             },
             MonorepoEvent::Workflow(workflow_event) => match workflow_event {

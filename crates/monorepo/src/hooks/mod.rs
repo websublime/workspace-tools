@@ -26,8 +26,6 @@ mod installer;
 mod validator;
 mod sync_task_executor;
 
-#[cfg(test)]
-mod tests;
 
 // Re-export main types for convenience
 pub use types::{

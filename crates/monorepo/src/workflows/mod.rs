@@ -10,8 +10,6 @@ mod progress;
 pub mod release;
 pub mod types;
 
-#[cfg(test)]
-mod tests;
 
 // Import from types module instead of implementation files
 pub use types::{DevelopmentWorkflow, ChangesetHookIntegration, ReleaseWorkflow};

@@ -2,45 +2,83 @@
 //!
 //! The `TaskExecutor` handles the actual execution of tasks, including command
 //! execution, package script running, and result collection.
+//! Uses direct borrowing patterns instead of trait objects.
 
 use super::{
     types::{ExecutionContext, TaskCommand, TaskCommandCore, TaskExecutor},
     PackageScript, TaskDefinition, TaskError, TaskErrorCode, TaskExecutionLog, TaskExecutionResult,
     TaskOutput, TaskScope,
 };
-use crate::core::{ConfigProvider, PackageProvider};
+use crate::core::{MonorepoPackageInfo, MonorepoProject};
 use crate::error::{Error, Result};
 use glob::Pattern;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::SystemTime;
-use sublime_standard_tools::command::{Command, DefaultCommandExecutor, Executor};
+use sublime_standard_tools::command::{Command, SharedSyncExecutor};
 
-impl TaskExecutor {
-    /// Create a new task executor
-    pub fn new(
-        package_provider: Box<dyn PackageProvider>,
-        config_provider: Box<dyn ConfigProvider>,
-    ) -> Result<Self> {
-        // DRY: No CommandQueue created here - will be created when needed
-        Ok(Self { 
-            package_provider,
-            config_provider,
+impl<'a> TaskExecutor<'a> {
+    /// Create a new task executor with direct borrowing from project
+    ///
+    /// Uses borrowing instead of trait objects to eliminate Arc proliferation
+    /// and work with Rust ownership principles.
+    ///
+    /// # Arguments
+    ///
+    /// * `project` - Reference to monorepo project
+    ///
+    /// # Returns
+    ///
+    /// A new task executor instance
+    pub fn new(project: &'a MonorepoProject) -> Result<Self> {
+        Ok(Self {
+            packages: &project.packages,
+            config: project.services.config_service().get_configuration(),
+            root_path: project.root_path(),
         })
     }
 
+    /// Create a new task executor with direct component references
+    ///
+    /// Uses direct borrowing of individual components instead of requiring
+    /// a full MonorepoProject.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Reference to monorepo configuration
+    /// * `file_system` - Reference to file system manager
+    /// * `packages` - Reference to package list
+    /// * `root_path` - Reference to root path
+    ///
+    /// # Returns
+    ///
+    /// A new task executor instance
+    pub fn with_components(
+        config: &'a crate::config::MonorepoConfig,
+        _file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
+        packages: &'a [crate::core::MonorepoPackageInfo],
+        root_path: &'a std::path::Path,
+    ) -> Result<Self> {
+        Ok(Self { packages, config, root_path })
+    }
+
+
     /// Execute a task with specified scope
-    pub async fn execute_task(
+    ///
+    /// Executes the task synchronously without async infection.
+    pub fn execute_task(
         &self,
         task: &TaskDefinition,
         scope: &TaskScope,
     ) -> Result<TaskExecutionResult> {
         let context = ExecutionContext::default();
-        self.execute_task_with_context(task, scope, &context).await
+        self.execute_task_with_context(task, scope, &context)
     }
 
     /// Execute a task with specific context
-    pub async fn execute_task_with_context(
+    ///
+    /// Uses SyncCommandExecutor from standard crate for actual command execution.
+    pub fn execute_task_with_context(
         &self,
         task: &TaskDefinition,
         scope: &TaskScope,
@@ -65,7 +103,7 @@ impl TaskExecutor {
 
         // Execute regular commands
         for command in &task.commands {
-            match self.execute_command_for_packages(command, &target_packages, context).await {
+            match self.execute_command_for_packages_sync(command, &target_packages, context) {
                 Ok(mut outputs) => {
                     result.outputs.append(&mut outputs);
                 }
@@ -88,7 +126,7 @@ impl TaskExecutor {
 
         // Execute package scripts
         for script in &task.package_scripts {
-            match self.execute_package_script(script, &target_packages, context).await {
+            match self.execute_package_script(script, &target_packages, context) {
                 Ok(mut outputs) => {
                     result.outputs.append(&mut outputs);
                 }
@@ -129,6 +167,7 @@ impl TaskExecutor {
         Ok(result)
     }
 
+
     // Private helper methods
 
     /// Resolve target packages based on scope and context
@@ -142,7 +181,7 @@ impl TaskExecutor {
 
             TaskScope::Package(package_name) => {
                 // Validate package exists
-                if self.package_provider.get_package(package_name).is_some() {
+                if self.get_package(package_name).is_some() {
                     Ok(vec![package_name.clone()])
                 } else {
                     Err(Error::task(format!("Package not found: {package_name}")))
@@ -152,13 +191,12 @@ impl TaskExecutor {
             TaskScope::AffectedPackages => Ok(context.affected_packages.clone()),
 
             TaskScope::AllPackages => {
-                Ok(self.package_provider.packages().iter().map(|pkg| pkg.name().to_string()).collect())
+                Ok(self.packages.iter().map(|pkg| pkg.name().to_string()).collect())
             }
 
             TaskScope::PackagesMatching { pattern } => {
                 let matching_packages = self
-                    .package_provider
-                    .packages()
+                    .packages
                     .iter()
                     .filter(|pkg| self.matches_pattern(pkg.name(), pattern))
                     .map(|pkg| pkg.name().to_string())
@@ -171,7 +209,7 @@ impl TaskExecutor {
                 // Execute the custom filter function
                 let mut matching_packages = Vec::new();
 
-                for package in self.package_provider.packages() {
+                for package in self.packages {
                     // Parse the filter as a simple expression
                     // For now, support basic property access like "package.name.includes('@myorg/')"
                     if self.evaluate_custom_filter(filter, package.name(), context) {
@@ -184,8 +222,10 @@ impl TaskExecutor {
         }
     }
 
-    /// Execute a command for target packages
-    async fn execute_command_for_packages(
+    /// Execute a command for target packages synchronously
+    ///
+    /// Eliminates async infection by using synchronous command execution.
+    fn execute_command_for_packages_sync(
         &self,
         command: &TaskCommand,
         target_packages: &[String],
@@ -195,12 +235,12 @@ impl TaskExecutor {
 
         // For global scope, execute once
         if target_packages.contains(&"__global__".to_string()) {
-            let output = self.execute_command(command, None, context).await?;
+            let output = self.execute_command_sync(command, None, context)?;
             outputs.push(output);
         } else {
             // Execute for each package
             for package_name in target_packages {
-                let output = self.execute_command(command, Some(package_name), context).await?;
+                let output = self.execute_command_sync(command, Some(package_name), context)?;
                 outputs.push(output);
             }
         }
@@ -208,14 +248,18 @@ impl TaskExecutor {
         Ok(outputs)
     }
 
-    /// Execute a command instance
-    async fn execute_command(
+    /// Execute a command instance synchronously
+    ///
+    /// Eliminates async infection by using SyncCommandExecutor from standard crate.
+    /// This provides the same functionality as the async version but without
+    /// spreading async throughout the monorepo system unnecessarily.
+    fn execute_command_sync(
         &self,
         command: &TaskCommand,
         package_name: Option<&str>,
         context: &ExecutionContext,
     ) -> Result<TaskOutput> {
-        // DRY: Convert TaskCommand to standard Command and use CommandQueue
+        // DRY: Convert TaskCommand to standard Command
         let working_dir = self.resolve_working_directory(command, package_name, context)?;
 
         // Create standard command from task command with resolved working directory
@@ -225,16 +269,18 @@ impl TaskExecutor {
 
         let start_time = SystemTime::now();
 
-        // Use DefaultCommandExecutor from standard crate instead of manual CommandQueue
-        let executor = DefaultCommandExecutor::new();
-        let output = executor.execute(std_command).await
+        // Use SharedSyncExecutor to eliminate async infection
+        let executor = SharedSyncExecutor::try_instance()
+            .map_err(|e| Error::task(format!("Failed to create shared sync executor: {e}")))?;
+        let output = executor
+            .execute(std_command)
             .map_err(|e| Error::task(format!("Command execution failed: {e}")))?;
 
         let duration = start_time.elapsed().unwrap_or_default();
 
-        // Convert CommandOutput to TaskOutput  
+        // Convert CommandOutput to TaskOutput
         let task_output = TaskOutput {
-            command: format!("{} {}", command.command.program, command.command.args.join(" ")),
+            command: format!("{program} {args}", program = command.command.program, args = command.command.args.join(" ")),
             working_dir,
             exit_code: Some(output.status()),
             stdout: output.stdout().to_string(),
@@ -247,7 +293,7 @@ impl TaskExecutor {
     }
 
     /// Execute a package script
-    async fn execute_package_script(
+    fn execute_package_script(
         &self,
         script: &PackageScript,
         target_packages: &[String],
@@ -263,7 +309,7 @@ impl TaskExecutor {
         };
 
         for package_name in script_packages {
-            let output = self.execute_single_package_script(script, &package_name, context).await?;
+            let output = self.execute_single_package_script(script, &package_name, context)?;
             outputs.push(output);
         }
 
@@ -271,7 +317,7 @@ impl TaskExecutor {
     }
 
     /// Execute a single package script
-    async fn execute_single_package_script(
+    fn execute_single_package_script(
         &self,
         script: &PackageScript,
         package_name: &str,
@@ -279,7 +325,6 @@ impl TaskExecutor {
     ) -> Result<TaskOutput> {
         // Get package info
         let package_info = self
-            .package_provider
             .get_package(package_name)
             .ok_or_else(|| Error::task(format!("Package not found: {package_name}")))?;
 
@@ -290,8 +335,10 @@ impl TaskExecutor {
         }
 
         // Use configurable package manager commands instead of hardcoded values
-        let pm_config = &self.config_provider.config().workspace.package_manager_commands;
-        let pm_type = script.package_manager.as_deref()
+        let pm_config = &self.config.workspace.package_manager_commands;
+        let pm_type = script
+            .package_manager
+            .as_deref()
             .and_then(|pm| match pm {
                 "npm" => Some(crate::config::types::workspace::PackageManagerType::Npm),
                 "yarn" => Some(crate::config::types::workspace::PackageManagerType::Yarn),
@@ -300,11 +347,11 @@ impl TaskExecutor {
                 _ => None,
             })
             .unwrap_or(pm_config.default_manager.clone());
-        
+
         let manager = pm_config.get_command(&pm_type);
         let mut args = pm_config.get_script_run_args(&pm_type).to_vec();
         args.push(script.script_name.clone());
-        
+
         if !script.extra_args.is_empty() {
             args.push(pm_config.extra_args_separator.clone());
             args.extend(script.extra_args.clone());
@@ -322,7 +369,7 @@ impl TaskExecutor {
             expected_exit_codes: vec![0],
         };
 
-        self.execute_command(&task_command, Some(package_name), context).await
+        self.execute_command_sync(&task_command, Some(package_name), context)
     }
 
     /// Resolve working directory for command execution
@@ -339,18 +386,18 @@ impl TaskExecutor {
                 Ok(working_dir.clone())
             } else {
                 // Relative to project root
-                Ok(self.package_provider.root_path().join(working_dir))
+                Ok(self.root_path.join(working_dir))
             }
         } else if let Some(package_name) = package_name {
-            if let Some(package_info) = self.package_provider.get_package(package_name) {
+            if let Some(package_info) = self.get_package(package_name) {
                 Ok(package_info.path().clone())
             } else {
-                Ok(self.package_provider.root_path().to_path_buf())
+                Ok(self.root_path.to_path_buf())
             }
         } else if let Some(working_dir) = &context.working_directory {
             Ok(working_dir.clone())
         } else {
-            Ok(self.package_provider.root_path().to_path_buf())
+            Ok(self.root_path.to_path_buf())
         }
     }
 
@@ -435,6 +482,19 @@ impl TaskExecutor {
 
         // Default to false for unsupported expressions
         false
+    }
+
+    /// Get package by name from direct package array
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Package name to search for
+    ///
+    /// # Returns
+    ///
+    /// Reference to package info if found, None otherwise
+    fn get_package(&self, name: &str) -> Option<&MonorepoPackageInfo> {
+        self.packages.iter().find(|pkg| pkg.name() == name)
     }
 }
 

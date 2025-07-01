@@ -1,17 +1,27 @@
 //! Hook manager type definitions
+//!
+//! Follows direct borrowing patterns instead of trait objects.
 
 use super::{HookDefinition, HookInstaller, HookType, HookValidator};
 use crate::events::EventBus;
+use crate::core::MonorepoPackageInfo;
+use crate::config::MonorepoConfig;
+use sublime_git_tools::Repo;
+use sublime_standard_tools::filesystem::FileSystemManager;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::path::Path;
 
 /// Central manager for Git hook installation, execution, and validation
-pub struct HookManager {
+/// 
+/// Uses direct borrowing from MonorepoProject components instead of trait objects.
+/// This follows Rust ownership principles and eliminates Arc proliferation.
+pub struct HookManager<'a> {
     /// Hook installer for setting up Git hooks
-    pub(crate) installer: HookInstaller,
+    pub(crate) installer: HookInstaller<'a>,
 
     /// Hook validator for checking conditions and requirements
-    pub(crate) validator: HookValidator,
+    pub(crate) validator: HookValidator<'a>,
 
     /// Registry of custom hook definitions
     pub(crate) custom_hooks: HashMap<HookType, HookDefinition>,
@@ -25,18 +35,21 @@ pub struct HookManager {
     /// Event bus for communicating with other components
     pub(crate) event_bus: Option<Arc<EventBus>>,
 
-    /// Configuration provider for accessing configuration settings
-    pub(crate) config_provider: Box<dyn crate::core::ConfigProvider>,
+    /// Direct reference to configuration
+    pub(crate) config: &'a MonorepoConfig,
 
-    /// Git provider for repository operations
-    pub(crate) git_provider: Box<dyn crate::core::GitProvider>,
+    /// Direct reference to git repository
+    pub(crate) repository: &'a Repo,
 
-    /// File system provider for file operations
-    pub(crate) file_system_provider: Box<dyn crate::core::FileSystemProvider>,
+    /// Direct reference to file system manager
+    pub(crate) file_system: &'a FileSystemManager,
 
-    /// Package provider for package discovery and management
-    pub(crate) package_provider: Box<dyn crate::core::PackageProvider>,
+    /// Direct reference to packages
+    pub(crate) packages: &'a [MonorepoPackageInfo],
+
+    /// Direct reference to root path
+    pub(crate) root_path: &'a Path,
 
     /// Synchronous task executor for hook validation
-    pub(crate) sync_task_executor: crate::hooks::sync_task_executor::SyncTaskExecutor,
+    pub(crate) sync_task_executor: crate::hooks::sync_task_executor::SyncTaskExecutor<'a>,
 }

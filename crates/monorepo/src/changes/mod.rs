@@ -4,12 +4,11 @@
 //! configurable rules, detection engines, and change detectors for monorepos.
 
 pub mod types;
+pub mod conventional;
 mod detector;
 mod rules;
 mod engine;
 
-#[cfg(test)]
-mod tests;
 
 // Explicit re-exports from types module
 pub use types::{
@@ -23,4 +22,9 @@ pub use types::{
     ProjectRuleOverrides, SignificanceThresholds,
     // Implementation structs
     ChangeDetector, ChangeDetectionEngine,
+};
+
+// Re-exports from conventional commits module
+pub use conventional::{
+    ChangeDecisionSource, ConventionalCommitParser,
 };

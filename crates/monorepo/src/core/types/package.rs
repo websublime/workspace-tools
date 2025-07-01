@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use sublime_package_tools::PackageInfo;
 use sublime_standard_tools::monorepo::WorkspacePackage;
+use std::collections::HashMap;
 
 /// Status of a package version
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,6 +39,9 @@ pub struct MonorepoPackageInfo {
     /// List of packages that depend on this package
     pub dependents: Vec<String>,
 
+    /// All dependencies of this package
+    pub dependencies: Vec<PackageDependency>,
+
     /// External dependencies (not in the monorepo)
     pub dependencies_external: Vec<String>,
 
@@ -46,6 +50,70 @@ pub struct MonorepoPackageInfo {
 
     /// Changesets associated with this package
     pub changesets: Vec<super::Changeset>,
+
+    /// Direct access fields for common operations (pub(crate) pattern)
+    pub(crate) name: String,
+    pub(crate) version: String,
+    pub(crate) path: std::path::PathBuf,
+    pub(crate) package_type: PackageType,
+    pub(crate) metadata: HashMap<String, String>,
+}
+
+/// Type of package based on the package manager and ecosystem
+///
+/// Used by the PackageDiscoveryService to categorize packages found
+/// in the monorepo for proper handling and parsing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PackageType {
+    /// JavaScript/Node.js package (package.json)
+    JavaScript,
+    /// Rust package (Cargo.toml)
+    Rust,
+    /// Python package (pyproject.toml, setup.py)
+    Python,
+    /// Java package (pom.xml)
+    Java,
+    /// Go package (go.mod)
+    Go,
+    /// .NET package (*.csproj, *.fsproj)
+    DotNet,
+    /// Other/unknown package type
+    Other(String),
+}
+
+/// Represents a dependency of a package
+///
+/// Used by the DependencyAnalysisService to track package dependencies
+/// and their version requirements.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PackageDependency {
+    /// Name of the dependency
+    pub name: String,
+    /// Version requirement (e.g., "^1.0.0", ">=2.1.0")
+    pub version_requirement: String,
+    /// Type of dependency (runtime, dev, peer, etc.)
+    pub dependency_type: DependencyType,
+    /// Whether this is an optional dependency
+    pub optional: bool,
+    /// Additional metadata about the dependency
+    pub metadata: HashMap<String, String>,
+}
+
+/// Type of dependency relationship
+///
+/// Categorizes dependencies by their usage and importance for the package.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DependencyType {
+    /// Runtime dependency required for normal operation
+    Runtime,
+    /// Development dependency only needed during development
+    Development,
+    /// Peer dependency that should be provided by the consuming project
+    Peer,
+    /// Optional dependency that provides additional features
+    Optional,
+    /// Build-time dependency needed for compilation/bundling
+    Build,
 }
 
 // Implementation moved to ../package.rs for better separation of concerns

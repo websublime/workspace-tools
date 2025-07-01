@@ -2,10 +2,12 @@
 
 use crate::analysis::MonorepoAnalyzer;
 use super::MonorepoProject;
-use std::sync::Arc;
 
 /// The main orchestrator for monorepo tools functionality
-pub struct MonorepoTools {
-    pub(crate) project: Arc<MonorepoProject>,
-    pub(crate) analyzer: MonorepoAnalyzer,
+/// 
+/// Uses direct borrowing from MonorepoProject components instead of trait objects.
+/// This follows Rust ownership principles and eliminates Arc proliferation.
+pub struct MonorepoTools<'a> {
+    pub(crate) project: &'a MonorepoProject,
+    pub(crate) analyzer: MonorepoAnalyzer<'a>,
 }

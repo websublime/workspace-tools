@@ -36,7 +36,7 @@ impl ChangeDetectionEngine {
         for rule in &self.rules.change_type_rules {
             for pattern in &rule.patterns {
                 if let Err(e) = Self::validate_pattern(pattern) {
-                    errors.push(format!("Rule '{}': {}", rule.name, e));
+                    errors.push(format!("Rule '{rule_name}': {e}", rule_name = rule.name));
                 }
             }
         }
@@ -45,7 +45,7 @@ impl ChangeDetectionEngine {
         for rule in &self.rules.significance_rules {
             for pattern in &rule.patterns {
                 if let Err(e) = Self::validate_pattern(pattern) {
-                    errors.push(format!("Rule '{}': {}", rule.name, e));
+                    errors.push(format!("Rule '{rule_name}': {e}", rule_name = rule.name));
                 }
             }
         }
@@ -58,10 +58,10 @@ impl ChangeDetectionEngine {
         match &pattern.pattern_type {
             PatternType::Glob => Pattern::new(&pattern.pattern)
                 .map(|_| ())
-                .map_err(|e| format!("Invalid glob pattern '{}': {}", pattern.pattern, e)),
+                .map_err(|e| format!("Invalid glob pattern '{pattern}': {e}", pattern = pattern.pattern)),
             PatternType::Regex => Regex::new(&pattern.pattern)
                 .map(|_| ())
-                .map_err(|e| format!("Invalid regex pattern '{}': {}", pattern.pattern, e)),
+                .map_err(|e| format!("Invalid regex pattern '{pattern}': {e}", pattern = pattern.pattern)),
             _ => Ok(()), // Other pattern types don't need validation
         }
     }

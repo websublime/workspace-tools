@@ -32,7 +32,7 @@ mod tools;
 pub use changeset::{Changeset, ChangesetStatus};
 
 // Package types
-pub use package::{MonorepoPackageInfo, VersionStatus};
+pub use package::{MonorepoPackageInfo, VersionStatus, PackageType, PackageDependency, DependencyType};
 
 // Versioning types
 pub use versioning_old::{

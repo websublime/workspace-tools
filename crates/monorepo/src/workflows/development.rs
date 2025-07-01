@@ -4,15 +4,13 @@
 //! development operations like running tests on affected packages,
 //! validating changesets, and providing developer feedback.
 
-use std::sync::Arc;
 use std::time::Instant;
 
 use crate::analysis::{AffectedPackagesAnalysis, ChangeAnalysis, MonorepoAnalyzer};
-use crate::changes::{ChangeSignificance, PackageChange, PackageChangeType};
-use crate::changesets::{types::ChangesetFilter, ChangesetManager, ChangesetStorage};
+use crate::changes::{ChangeSignificance, PackageChange, PackageChangeType, ChangeDecisionSource, ConventionalCommitParser, VersionBumpType};
+use crate::changesets::types::ChangesetFilter;
 use crate::core::MonorepoProject;
 use crate::error::Error;
-use crate::tasks::TaskManager;
 use crate::workflows::{
     AffectedPackageInfo, ChangeAnalysisResult, ImpactLevel, PackageChangeFacts,
 };
@@ -22,41 +20,46 @@ use sublime_git_tools::GitChangedFile;
 // Import struct definition from types module
 use crate::workflows::types::DevelopmentWorkflow;
 
-impl DevelopmentWorkflow {
-    /// Creates a new development workflow with injected dependencies
+impl<'a> DevelopmentWorkflow<'a> {
+    /// Creates a new development workflow with direct borrowing from project
+    ///
+    /// Uses borrowing instead of trait objects to eliminate Arc proliferation
+    /// and work with Rust ownership principles.
     ///
     /// # Arguments
     ///
     /// * `analyzer` - Analyzer for detecting changes and affected packages
-    /// * `task_manager` - Task manager for executing development tasks  
+    /// * `task_manager` - Task manager for executing development tasks
     /// * `changeset_manager` - Changeset manager for handling development changesets
-    /// * `config_provider` - Configuration provider for accessing settings
-    /// * `package_provider` - Package provider for accessing package information
-    /// * `git_provider` - Git provider for repository operations
+    /// * `config` - Direct reference to configuration
+    /// * `packages` - Direct reference to packages
+    /// * `repository` - Direct reference to git repository
+    /// * `file_system` - Direct reference to file system manager
+    /// * `root_path` - Direct reference to root path
     ///
     /// # Returns
     ///
-    /// A new `DevelopmentWorkflow` instance ready to execute development operations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if any of the required components cannot be initialized.
+    /// A new development workflow instance
     pub fn new(
-        analyzer: MonorepoAnalyzer,
-        task_manager: crate::tasks::TaskManager,
-        changeset_manager: crate::changesets::ChangesetManager,
-        config_provider: Box<dyn crate::core::ConfigProvider>,
-        package_provider: Box<dyn crate::core::PackageProvider>,
-        git_provider: Box<dyn crate::core::GitProvider>,
-    ) -> Result<Self, Error> {
-        Ok(Self { 
-            analyzer, 
-            task_manager, 
+        analyzer: MonorepoAnalyzer<'a>,
+        task_manager: crate::tasks::TaskManager<'a>,
+        changeset_manager: crate::changesets::ChangesetManager<'a>,
+        config: &'a crate::config::MonorepoConfig,
+        packages: &'a [crate::core::MonorepoPackageInfo],
+        repository: &'a sublime_git_tools::Repo,
+        file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
+        root_path: &'a std::path::Path,
+    ) -> Self {
+        Self {
+            analyzer,
+            task_manager,
             changeset_manager,
-            config_provider,
-            package_provider,
-            git_provider,
-        })
+            config,
+            packages,
+            repository,
+            file_system,
+            root_path,
+        }
     }
 
     /// Creates a new development workflow from project (convenience method)
@@ -72,78 +75,53 @@ impl DevelopmentWorkflow {
     /// # Errors
     ///
     /// Returns an error if any of the required components cannot be initialized.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use std::sync::Arc;
-    /// use sublime_monorepo_tools::{DevelopmentWorkflow, MonorepoProject};
-    ///
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let project = Arc::new(MonorepoProject::new("/path/to/monorepo")?);
-    /// let workflow = DevelopmentWorkflow::from_project(project)?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn from_project(project: Arc<MonorepoProject>) -> Result<Self, Error> {
-        use crate::core::interfaces::DependencyFactory;
-        
-        // Create analyzer from project to enable change detection functionality
-        let analyzer = MonorepoAnalyzer::from_project(Arc::clone(&project));
+    pub fn from_project(project: &'a MonorepoProject) -> Result<Self, Error> {
+        use crate::analysis::MonorepoAnalyzer;
+        use crate::changesets::{ChangesetManager, ChangesetStorage};
+        use crate::tasks::TaskManager;
 
-        // Create task manager for changeset manager
-        let task_manager_for_changeset = TaskManager::new(
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)), // executor_package_provider
-            DependencyFactory::config_provider(Arc::clone(&project)), // executor_config_provider
-            DependencyFactory::git_provider(Arc::clone(&project)),
-            DependencyFactory::config_provider(Arc::clone(&project)), // checker_config_provider
-            DependencyFactory::package_provider(Arc::clone(&project)), // checker_package_provider
-            DependencyFactory::file_system_provider(Arc::clone(&project)), // checker_file_system_provider
-        )?;
-        
-        // Create task manager for workflow
-        let task_manager = TaskManager::new(
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)), // executor_package_provider
-            DependencyFactory::config_provider(Arc::clone(&project)), // executor_config_provider
-            DependencyFactory::git_provider(Arc::clone(&project)),
-            DependencyFactory::config_provider(Arc::clone(&project)), // checker_config_provider
-            DependencyFactory::package_provider(Arc::clone(&project)), // checker_package_provider
-            DependencyFactory::file_system_provider(Arc::clone(&project)), // checker_file_system_provider
-        )?;
+        // Create analyzer with direct borrowing
+        let analyzer = MonorepoAnalyzer::new(project);
 
-        // Create changeset storage directly with providers
-        let changeset_storage = ChangesetStorage::new(
+        // Create task manager with direct borrowing
+        let task_manager = TaskManager::new(project)?;
+
+        // Create changeset storage with direct borrowing
+        let storage = ChangesetStorage::new(
             project.config.changesets.clone(),
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)),
+            &project.file_system,
+            &project.packages,
+            &project.root_path,
         );
 
-        // Create changeset manager directly with components and providers
+        // Create changeset manager with direct borrowing
+        // Note: We need to create a separate task manager instance for changeset manager
+        let changeset_task_manager = TaskManager::new(project)?;
         let changeset_manager = ChangesetManager::new(
-            changeset_storage,
-            task_manager_for_changeset,
-            DependencyFactory::config_provider(Arc::clone(&project)),
-            DependencyFactory::file_system_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)),
-            DependencyFactory::git_provider(Arc::clone(&project)),
+            storage,
+            changeset_task_manager,
+            &project.config,
+            &project.file_system,
+            &project.packages,
+            &project.repository,
+            &project.root_path,
         );
 
-        Self::new(
+        Ok(Self::new(
             analyzer,
             task_manager,
             changeset_manager,
-            DependencyFactory::config_provider(Arc::clone(&project)),
-            DependencyFactory::package_provider(Arc::clone(&project)),
-            DependencyFactory::git_provider(project),
-        )
+            &project.config,
+            &project.packages,
+            &project.repository,
+            &project.file_system,
+            &project.root_path,
+        ))
     }
 
-    /// Executes the development workflow
+    /// Executes the development workflow synchronously
     ///
+    /// FASE 2 ASYNC ELIMINATION: Synchronous execution eliminates async infection.
     /// This method performs development-time checks:
     /// 1. Detects changes since the specified reference
     /// 2. Identifies affected packages
@@ -166,9 +144,9 @@ impl DevelopmentWorkflow {
     /// # Examples
     ///
     /// ```rust
-    /// # async fn example(workflow: &DevelopmentWorkflow) -> Result<(), Box<dyn std::error::Error>> {
+    /// # fn example(workflow: &DevelopmentWorkflow) -> Result<(), Box<dyn std::error::Error>> {
     /// // Check changes since last commit
-    /// let result = workflow.execute(Some("HEAD~1")).await?;
+    /// let result = workflow.execute_sync(Some("HEAD~1"))?;
     ///
     /// for recommendation in &result.recommendations {
     ///     println!("Recommendation: {}", recommendation);
@@ -176,11 +154,11 @@ impl DevelopmentWorkflow {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn execute(&self, since: Option<&str>) -> Result<super::DevelopmentResult, Error> {
+    pub fn execute_sync(&self, since: Option<&str>) -> Result<super::DevelopmentResult, Error> {
         let start_time = Instant::now();
 
         // Default to comparing against configured git reference if no reference provided
-        let git_config = &self.config_provider.config().git;
+        let git_config = &self.config.git;
         let since_ref = since.unwrap_or(&git_config.default_since_ref);
 
         // Step 1: Detect changes
@@ -193,7 +171,7 @@ impl DevelopmentWorkflow {
         let affected_tasks = if affected_packages.is_empty() {
             Vec::new()
         } else {
-            self.task_manager.execute_tasks_for_affected_packages(&affected_packages).await?
+            self.task_manager.execute_tasks_for_affected_packages(&affected_packages)?
         };
 
         // Step 3: Check if tasks passed
@@ -211,6 +189,11 @@ impl DevelopmentWorkflow {
             checks_passed: tasks_passed,
             duration: start_time.elapsed(),
         })
+    }
+
+    /// Executes the development workflow
+    pub fn execute(&self, since: Option<&str>) -> Result<super::DevelopmentResult, Error> {
+        self.execute_sync(since)
     }
 
     /// Analyzes changes and provides detailed analysis
@@ -254,8 +237,8 @@ impl DevelopmentWorkflow {
         let target_branch = match to_branch {
             Some(branch) => branch.to_string(),
             None => self
-                .git_provider
-                .current_branch()
+                .repository
+                .get_current_branch()
                 .map_err(|e| Error::workflow(format!("Failed to get current branch: {e}")))?,
         };
 
@@ -345,8 +328,8 @@ impl DevelopmentWorkflow {
 
         // Check changeset requirements
         let current_branch = self
-            .git_provider
-            .current_branch()
+            .repository
+            .get_current_branch()
             .map_err(|e| Error::workflow(format!("Failed to get current branch: {e}")))?;
 
         let changeset_filter =
@@ -407,7 +390,7 @@ impl DevelopmentWorkflow {
         let total_files = package_change.changed_files.len();
 
         // Get thresholds from configuration
-        let thresholds = &self.config_provider.config().tasks.performance.impact_thresholds;
+        let thresholds = &self.config.tasks.performance.impact_thresholds;
 
         // Use configurable thresholds for impact level determination
         match total_files {
@@ -465,7 +448,7 @@ impl DevelopmentWorkflow {
     /// Checks if changesets are required for the affected packages
     fn check_changesets_required(&self, affected_packages: &[AffectedPackageInfo]) -> bool {
         // Check configuration to see if changesets are required
-        let changesets_required = self.config_provider.config().changesets.required;
+        let changesets_required = self.config.changesets.required;
 
         if !changesets_required {
             return false;
@@ -494,13 +477,16 @@ impl DevelopmentWorkflow {
 
         for file in changed_files {
             // Find which package this file belongs to
-            let file_path = self.package_provider.root_path().join(&file.path);
+            let file_path = self.root_path.join(&file.path);
 
             // Find which package this file belongs to by checking all packages
-            for package in self.package_provider.packages() {
+            for package in self.packages {
                 let package_path = package.path();
                 if file_path.starts_with(package_path) {
-                    package_file_groups.entry(package.name().to_string()).or_default().push(file.clone());
+                    package_file_groups
+                        .entry(package.name().to_string())
+                        .or_default()
+                        .push(file.clone());
                     break; // Found the package, no need to check others
                 }
             }
@@ -571,6 +557,7 @@ impl DevelopmentWorkflow {
     ///
     /// Returns an error if the conversion process fails due to invalid data or
     /// configuration issues.
+    #[allow(clippy::unnecessary_wraps)]
     fn convert_facts_to_package_changes(
         &self,
         package_changes: &[PackageChange],
@@ -578,33 +565,36 @@ impl DevelopmentWorkflow {
         let mut converted_changes = Vec::new();
 
         for package_change in package_changes {
-            // Analyze change type based on file patterns
-            let change_type = self.analyze_change_type(&package_change.changed_files);
+            // Determine version bump using changeset-first, conventional-commits-fallback approach
+            let version_decision = self.determine_version_bump(&package_change.package_name, &package_change.changed_files)?;
+            let suggested_version_bump = version_decision.version_bump();
             
-            // Determine significance based on change type and file count
-            let significance = self.analyze_change_significance(&package_change.changed_files, &change_type);
-            
-            // Suggest version bump based on significance and change type
-            let suggested_version_bump = self.suggest_version_bump(&significance, &change_type);
-            
+            // Infer change type from version bump and files (simplified approach)
+            let change_type = Self::infer_change_type(&package_change.changed_files, suggested_version_bump);
+
+            // Determine significance based on version bump and change type
+            let significance = Self::infer_significance_from_version_bump(suggested_version_bump);
+
             // Create metadata with additional information
             let mut metadata = std::collections::HashMap::new();
-            metadata.insert("total_files".to_string(), package_change.changed_files.len().to_string());
+            metadata
+                .insert("total_files".to_string(), package_change.changed_files.len().to_string());
             metadata.insert("change_analysis_version".to_string(), "1.0".to_string());
-            
+
             // Add file pattern analysis to metadata
-            let file_extensions: Vec<String> = package_change.changed_files
+            let file_extensions: Vec<String> = package_change
+                .changed_files
                 .iter()
                 .filter_map(|f| {
                     std::path::Path::new(&f.path)
                         .extension()
                         .and_then(|ext| ext.to_str())
-                        .map(|ext| ext.to_string())
+                        .map(std::string::ToString::to_string)
                 })
                 .collect::<std::collections::HashSet<_>>()
                 .into_iter()
                 .collect();
-            
+
             if !file_extensions.is_empty() {
                 metadata.insert("file_extensions".to_string(), file_extensions.join(","));
             }
@@ -622,70 +612,6 @@ impl DevelopmentWorkflow {
         Ok(converted_changes)
     }
 
-    /// Analyzes the type of changes based on file patterns
-    ///
-    /// Examines file paths and extensions to determine the primary type of change
-    /// affecting the package (source code, dependencies, configuration, etc.).
-    fn analyze_change_type(&self, changed_files: &[GitChangedFile]) -> PackageChangeType {
-        let mut has_source = false;
-        let mut has_deps = false;
-        let mut has_config = false;
-        let mut has_docs = false;
-        let mut has_tests = false;
-
-        for file in changed_files {
-            let path = &file.path;
-            let path_lower = path.to_lowercase();
-            
-            // Check for dependency files
-            if path_lower.contains("cargo.toml") || path_lower.contains("package.json") 
-                || path_lower.contains("requirements.txt") || path_lower.contains("go.mod")
-                || path_lower.contains("yarn.lock") || path_lower.contains("cargo.lock") {
-                has_deps = true;
-            }
-            // Check for configuration files
-            else if path_lower.contains("config") || path_lower.ends_with(".config.js")
-                || path_lower.ends_with(".yml") || path_lower.ends_with(".yaml")
-                || path_lower.ends_with(".toml") || path_lower.ends_with(".json")
-                || path_lower.contains(".env") {
-                has_config = true;
-            }
-            // Check for documentation files
-            else if path_lower.contains("readme") || path_lower.contains("doc")
-                || path_lower.ends_with(".md") || path_lower.contains("changelog") {
-                has_docs = true;
-            }
-            // Check for test files
-            else if path_lower.contains("test") || path_lower.contains("spec")
-                || path_lower.contains("__tests__") || path_lower.ends_with("_test.rs")
-                || path_lower.ends_with(".test.js") || path_lower.ends_with(".spec.js") {
-                has_tests = true;
-            }
-            // Check for source code files
-            else if path_lower.ends_with(".rs") || path_lower.ends_with(".js")
-                || path_lower.ends_with(".ts") || path_lower.ends_with(".go")
-                || path_lower.ends_with(".py") || path_lower.ends_with(".java")
-                || path_lower.ends_with(".cpp") || path_lower.ends_with(".c") {
-                has_source = true;
-            }
-        }
-
-        // Priority order: Dependencies > Source > Configuration > Tests > Documentation
-        if has_deps {
-            PackageChangeType::Dependencies
-        } else if has_source {
-            PackageChangeType::SourceCode
-        } else if has_config {
-            PackageChangeType::Configuration
-        } else if has_tests {
-            PackageChangeType::Tests
-        } else if has_docs {
-            PackageChangeType::Documentation
-        } else {
-            // Default to source code if we can't determine
-            PackageChangeType::SourceCode
-        }
-    }
 
     /// Analyzes the significance of changes based on files and change type
     ///
@@ -694,20 +620,20 @@ impl DevelopmentWorkflow {
     fn analyze_change_significance(
         &self,
         changed_files: &[GitChangedFile],
-        change_type: &PackageChangeType,
+        change_type: PackageChangeType,
     ) -> ChangeSignificance {
         let file_count = changed_files.len();
-        
+
         // Get thresholds from configuration
-        let thresholds = &self.config_provider.config().tasks.performance.impact_thresholds;
-        
+        let thresholds = &self.config.tasks.performance.impact_thresholds;
+
         // Base significance on file count
         let base_significance = match file_count {
             files if files > thresholds.high_impact_files => ChangeSignificance::High,
             files if files > thresholds.medium_impact_files => ChangeSignificance::Medium,
             _ => ChangeSignificance::Low,
         };
-        
+
         // Elevate significance based on change type
         match change_type {
             PackageChangeType::Dependencies => {
@@ -735,36 +661,191 @@ impl DevelopmentWorkflow {
         }
     }
 
-    /// Suggests appropriate version bump based on change significance and type
+
+    /// Determines version bump using changeset-first, conventional-commits-fallback approach
     ///
-    /// Provides semantic versioning recommendations based on the analyzed
-    /// significance and type of changes made to the package.
-    fn suggest_version_bump(
+    /// This method implements the intelligent version bump determination logic:
+    /// 1. First priority: Check for explicit changesets for this package
+    /// 2. Second priority: Analyze conventional commits in the changed files
+    /// 3. Final fallback: Conservative patch bump
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to determine version bump for
+    /// * `changed_files` - List of files that changed in this package
+    ///
+    /// # Returns
+    ///
+    /// `ChangeDecisionSource` containing the version bump and its source
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if git operations fail or changeset analysis encounters issues
+    fn determine_version_bump(
         &self,
-        significance: &ChangeSignificance,
-        change_type: &PackageChangeType,
-    ) -> crate::config::VersionBumpType {
-        match (significance, change_type) {
-            // High significance changes suggest minor bumps
-            (ChangeSignificance::High, _) => crate::config::VersionBumpType::Minor,
-            
-            // Dependencies changes suggest at least patch bumps
-            (_, PackageChangeType::Dependencies) => match significance {
-                ChangeSignificance::Medium | ChangeSignificance::High => crate::config::VersionBumpType::Minor,
-                ChangeSignificance::Low => crate::config::VersionBumpType::Patch,
-            },
-            
-            // Source code changes follow standard significance mapping
-            (ChangeSignificance::Medium, PackageChangeType::SourceCode) => crate::config::VersionBumpType::Patch,
-            (ChangeSignificance::Low, PackageChangeType::SourceCode) => crate::config::VersionBumpType::Patch,
-            
-            // Configuration changes can be significant
-            (ChangeSignificance::Medium, PackageChangeType::Configuration) => crate::config::VersionBumpType::Patch,
-            (ChangeSignificance::Low, PackageChangeType::Configuration) => crate::config::VersionBumpType::Patch,
-            
-            // Tests and documentation typically get patch bumps
-            (_, PackageChangeType::Tests) => crate::config::VersionBumpType::Patch,
-            (_, PackageChangeType::Documentation) => crate::config::VersionBumpType::Patch,
+        package_name: &str,
+        changed_files: &[GitChangedFile],
+    ) -> Result<ChangeDecisionSource, Error> {
+        // Step 1: Check for explicit changesets (highest priority)
+        if let Some(changeset_bump) = self.find_changeset_for_package(package_name)? {
+            log::info!(
+                "Found explicit changeset for package '{}': {:?}",
+                package_name,
+                changeset_bump
+            );
+            return Ok(ChangeDecisionSource::Changeset(changeset_bump));
+        }
+
+        // Step 2: Analyze conventional commits (intelligent fallback)
+        if let Some(conventional_bump) = self.analyze_conventional_commits_for_files(changed_files)? {
+            log::debug!(
+                "Determined version bump from conventional commits for package '{}': {:?}",
+                package_name,
+                conventional_bump
+            );
+            return Ok(ChangeDecisionSource::ConventionalCommit(conventional_bump));
+        }
+
+        // Step 3: Conservative fallback
+        log::debug!(
+            "Using conservative patch fallback for package '{}' (no changesets or conventional commits found)",
+            package_name
+        );
+        Ok(ChangeDecisionSource::Fallback(VersionBumpType::Patch))
+    }
+
+    /// Finds explicit changeset for a specific package
+    ///
+    /// Searches through existing changesets to find explicit version bump decisions
+    /// made by developers for this package.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to search changesets for
+    ///
+    /// # Returns
+    ///
+    /// `Some(VersionBumpType)` if an explicit changeset exists, `None` otherwise
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if changeset retrieval fails
+    fn find_changeset_for_package(&self, package_name: &str) -> Result<Option<VersionBumpType>, Error> {
+        // Get pending changesets for this package
+        let filter = ChangesetFilter {
+            package: Some(package_name.to_string()),
+            status: Some(crate::changesets::types::ChangesetStatus::Pending),
+            environment: None,
+            branch: None,
+            author: None,
+        };
+
+        let changesets = self.changeset_manager.list_changesets(&filter)?;
+
+        // Return the version bump from the most recent changeset
+        if let Some(changeset) = changesets.first() {
+            Ok(Some(changeset.version_bump))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Analyzes conventional commits for changed files to suggest version bump
+    ///
+    /// Gets the commit history that affected these files and parses conventional
+    /// commit messages to determine appropriate version bump.
+    ///
+    /// # Arguments
+    ///
+    /// * `changed_files` - Files that changed, used to filter relevant commits
+    ///
+    /// # Returns
+    ///
+    /// `Some(VersionBumpType)` if conventional commits suggest a bump, `None` otherwise
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if git operations fail
+    fn analyze_conventional_commits_for_files(
+        &self,
+        _changed_files: &[GitChangedFile],
+    ) -> Result<Option<VersionBumpType>, Error> {
+        // For simplicity, get all commits since last tag (the git crate has a simpler API)
+        let commits = if let Ok(last_tag) = self.repository.get_last_tag() {
+            // Get commits since last tag
+            self.repository.get_commits_since(Some(last_tag), &None)
+        } else {
+            // Fallback: get all recent commits (no relative filter)
+            self.repository.get_commits_since(None, &None)
+        }.map_err(|e| Error::workflow(format!("Failed to get commits: {e}")))?;
+
+        // Filter commits to only those that are relevant (this is a simplified approach)
+        // In a more sophisticated implementation, we could check if commits touch the specific files
+        // For now, we'll analyze all commits in the range which is reasonable for conventional commits
+        
+        // Parse conventional commits
+        let parser = ConventionalCommitParser::new();
+        Ok(parser.analyze_commits(commits))
+    }
+
+    /// Infers change type from files and version bump
+    ///
+    /// Since we're moving away from hardcoded file pattern analysis, this method
+    /// provides a simplified inference based on version bump type and basic file analysis.
+    ///
+    /// # Arguments
+    ///
+    /// * `changed_files` - List of changed files
+    /// * `version_bump` - The determined version bump type
+    ///
+    /// # Returns
+    ///
+    /// Inferred `PackageChangeType` based on available information
+    fn infer_change_type(
+        changed_files: &[GitChangedFile],
+        version_bump: VersionBumpType,
+    ) -> PackageChangeType {
+        // For major version bumps, assume source code changes (breaking changes)
+        if matches!(version_bump, VersionBumpType::Major) {
+            return PackageChangeType::SourceCode;
+        }
+
+        // Simple heuristic: check for specific well-known dependency files
+        for file in changed_files {
+            let path_lower = file.path.to_lowercase();
+            if path_lower.ends_with("cargo.toml") 
+                || path_lower.ends_with("package.json")
+                || path_lower.ends_with("go.mod") {
+                return PackageChangeType::Dependencies;
+            }
+        }
+
+        // For minor bumps, likely new features (source code)
+        if matches!(version_bump, VersionBumpType::Minor) {
+            return PackageChangeType::SourceCode;
+        }
+
+        // Default to source code for patch bumps
+        PackageChangeType::SourceCode
+    }
+
+    /// Infers change significance from version bump type
+    ///
+    /// Maps version bump types to change significance levels using semantic versioning logic.
+    ///
+    /// # Arguments
+    ///
+    /// * `version_bump` - The version bump type to map
+    ///
+    /// # Returns
+    ///
+    /// Appropriate `ChangeSignificance` level for the version bump
+    #[must_use]
+    fn infer_significance_from_version_bump(version_bump: VersionBumpType) -> ChangeSignificance {
+        match version_bump {
+            VersionBumpType::Major => ChangeSignificance::High,
+            VersionBumpType::Minor => ChangeSignificance::Medium,
+            VersionBumpType::Patch | VersionBumpType::Snapshot => ChangeSignificance::Low,
         }
     }
 }

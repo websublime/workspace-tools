@@ -70,7 +70,7 @@ impl WorkspacePatternManager {
 
         // Test if pattern is valid glob
         Pattern::new(&pattern.pattern)
-            .map_err(|e| Error::config(format!("Invalid glob pattern '{}': {}", pattern.pattern, e)))?;
+            .map_err(|e| Error::config(format!("Invalid glob pattern '{pattern}': {e}", pattern = pattern.pattern)))?;
 
         self.workspace_config.patterns.push(pattern);
         Ok(())
@@ -257,7 +257,7 @@ impl WorkspacePatternManager {
                 }
                 
                 // Try with trailing slash for directories
-                let package_path_with_slash = format!("{}/", package_path.trim_end_matches('/'));
+                let package_path_with_slash = format!("{package_path}/", package_path = package_path.trim_end_matches('/'));
                 if glob_pattern.matches(&package_path_with_slash) {
                     return true;
                 }

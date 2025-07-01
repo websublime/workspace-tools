@@ -3,80 +3,46 @@
 use crate::analysis::{DiffAnalyzer, MonorepoAnalyzer};
 use crate::core::{MonorepoProject, VersionManager, VersioningPlan, VersioningStrategy};
 use crate::core::types::MonorepoTools;
-use crate::error::{Error, Result};
-use crate::hooks::HookManager;
+use crate::error::Result;
 use crate::tasks::TaskManager;
 use crate::workflows::{DevelopmentResult, DevelopmentWorkflow};
 use crate::workflows::{ChangeAnalysisWorkflowResult, VersioningWorkflowResult};
 use crate::workflows::{ReleaseWorkflow, ReleaseResult, ReleaseOptions};
 use crate::plugins::PluginManager;
-use std::sync::Arc;
 
-impl MonorepoTools {
-    /// Initialize `MonorepoTools` by detecting and opening a monorepo at the given path
-    ///
-    /// This function detects the type of monorepo at the given path, loads its configuration,
-    /// and initializes all necessary components for monorepo management.
-    ///
+impl<'a> MonorepoTools<'a> {
+    /// Creates monorepo tools from an existing MonorepoProject
+    /// 
+    /// Uses direct borrowing from the project to eliminate Arc proliferation
+    /// and work with Rust ownership principles.
+    /// 
     /// # Arguments
-    ///
-    /// * `path` - Path to the monorepo root directory
-    ///
+    /// 
+    /// * `project` - Reference to the monorepo project
+    /// 
     /// # Returns
-    ///
-    /// A configured `MonorepoTools` instance ready for use.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The path does not exist or is not accessible
-    /// - No valid monorepo configuration is found
-    /// - Git repository is not found or invalid
-    /// - Required dependencies are missing
-    ///
+    /// 
+    /// A configured MonorepoTools instance ready for operations
+    /// 
     /// # Examples
-    ///
+    /// 
     /// ```rust
-    /// use sublime_monorepo_tools::MonorepoTools;
-    ///
-    /// let tools = MonorepoTools::initialize("/path/to/monorepo")?;
-    /// let analyzer = tools.analyzer()?;
+    /// use sublime_monorepo_tools::{MonorepoTools, MonorepoProject};
+    /// 
+    /// let project = MonorepoProject::new("/path/to/monorepo")?;
+    /// let tools = MonorepoTools::new(&project);
     /// ```
-    #[allow(clippy::arc_with_non_send_sync)]
-    pub fn initialize(path: impl AsRef<std::path::Path>) -> Result<Self> {
-        let path = path.as_ref();
-
-        // Validate path exists and is a directory
-        if !path.exists() {
-            return Err(Error::workflow(format!("Path does not exist: {}", path.display())));
-        }
-
-        if !path.is_dir() {
-            return Err(Error::workflow(format!("Path is not a directory: {}", path.display())));
-        }
-
-        // Initialize the monorepo project
-        let project = Arc::new(MonorepoProject::new(path)?);
-
-        // Initialize the analyzer
-        let analyzer = MonorepoAnalyzer::from_project(Arc::clone(&project));
-
-        // Validate that this is actually a monorepo
-        let packages = &project.packages;
-        if packages.is_empty() {
-            return Err(Error::workflow(format!(
-                "No packages found in monorepo at {}. Please ensure this is a valid monorepo with packages.",
-                path.display()
-            )));
-        }
+    pub fn new(project: &'a MonorepoProject) -> Self {
+        // Initialize the analyzer with direct borrowing
+        let analyzer = MonorepoAnalyzer::new(project);
 
         log::info!(
             "Initialized monorepo tools for {} with {} packages",
-            path.display(),
-            packages.len()
+            project.root_path.display(),
+            project.packages.len()
         );
 
-        Ok(Self { project, analyzer })
+        Self { project, analyzer }
     }
 
     /// Get a reference to the monorepo analyzer
@@ -104,33 +70,38 @@ impl MonorepoTools {
     /// Get a reference to the diff analyzer (Phase 2 functionality)
     #[must_use]
     pub fn diff_analyzer(&self) -> DiffAnalyzer {
-        DiffAnalyzer::from_project(Arc::clone(&self.project))
+        DiffAnalyzer::from_project(self.project)
     }
 
     /// Get a reference to the version manager (Phase 2 functionality)
     #[must_use]
-    pub fn version_manager(&self) -> VersionManager {
-        VersionManager::new(Arc::clone(&self.project))
+    pub fn version_manager(&self) -> VersionManager<'a> {
+        VersionManager::new(self.project)
     }
 
     /// Get a version manager with custom strategy (Phase 2 functionality)
     #[must_use]
     pub fn version_manager_with_strategy(
         &self,
-        strategy: Box<dyn VersioningStrategy>,
-    ) -> VersionManager {
-        VersionManager::with_strategy(Arc::clone(&self.project), strategy)
+        strategy: Box<dyn VersioningStrategy + 'a>,
+    ) -> VersionManager<'a> {
+        VersionManager::with_strategy(self.project, strategy)
     }
 
     /// Get a reference to the task manager (Phase 3 functionality)
     pub fn task_manager(&self) -> Result<TaskManager> {
-        TaskManager::from_project(Arc::clone(&self.project))
+        TaskManager::from_project(self.project)
     }
 
-    /// Get a reference to the hook manager (Phase 3 functionality)
-    pub fn hook_manager(&self) -> Result<HookManager> {
-        HookManager::from_project(Arc::clone(&self.project))
-    }
+    /// Get a hook manager (Phase 3 functionality)
+    /// 
+    /// TODO: This method has lifetime issues that need to be resolved in FASE 2
+    /// when we eliminate async infection and restructure component dependencies.
+    /// For now, create HookManager directly where needed.
+    // pub fn hook_manager(&self) -> Result<HookManager> {
+    //     let task_manager = self.task_manager()?;
+    //     HookManager::from_project(self.project, &task_manager)
+    // }
 
     /// Analyze changes between branches (Phase 2 functionality)
     pub fn analyze_changes_workflow(
@@ -211,9 +182,9 @@ impl MonorepoTools {
     /// let result = tools.development_workflow(Some("main")).await?;
     /// println!("Development checks passed: {}", result.checks_passed);
     /// ```
-    pub async fn development_workflow(&self, since: Option<&str>) -> Result<DevelopmentResult> {
-        let workflow = DevelopmentWorkflow::from_project(Arc::clone(&self.project))?;
-        workflow.execute(since).await
+    pub fn development_workflow(&self, since: Option<&str>) -> Result<DevelopmentResult> {
+        let workflow = DevelopmentWorkflow::from_project(self.project)?;
+        workflow.execute(since)
     }
 
     /// Execute a complete release workflow
@@ -251,9 +222,9 @@ impl MonorepoTools {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn release_workflow(&self, options: ReleaseOptions) -> Result<ReleaseResult> {
-        let workflow = ReleaseWorkflow::from_project(Arc::clone(&self.project))?;
-        workflow.execute(options).await
+    pub fn release_workflow(&self, options: &ReleaseOptions) -> Result<ReleaseResult> {
+        let workflow = ReleaseWorkflow::from_project(self.project)?;
+        workflow.execute(options)
     }
 
     /// Create a plugin manager for this monorepo
@@ -287,7 +258,7 @@ impl MonorepoTools {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn plugin_manager(&self) -> Result<PluginManager> {
-        PluginManager::from_project(Arc::clone(&self.project))
+    pub fn plugin_manager(&self) -> Result<PluginManager<'a>> {
+        PluginManager::from_project(self.project)
     }
 }

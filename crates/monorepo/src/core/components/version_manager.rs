@@ -77,7 +77,7 @@ impl PackageVersionManager {
             return Err(Error::package("SHA must be at least 7 characters long"));
         }
 
-        let snapshot_version = format!("{}-snapshot.{}", base_version, &sha[..7]);
+        let snapshot_version = format!("{base_version}-snapshot.{sha_short}", sha_short = &sha[..7]);
         self.update_version(&snapshot_version)?;
         self.package.version_status = VersionStatus::Snapshot { sha: sha.to_string() };
         Ok(())

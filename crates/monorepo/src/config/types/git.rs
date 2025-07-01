@@ -508,7 +508,7 @@ impl RepositoryHostConfig {
         }
 
         // Remove .git suffix if present
-        if converted_url.ends_with(".git") {
+        if converted_url.to_lowercase().ends_with(".git") {
             converted_url = converted_url.strip_suffix(".git")?.to_string();
         }
 
@@ -531,7 +531,7 @@ impl RepositoryHostConfig {
     ///
     /// The URL to view the commit in the web interface
     pub fn generate_commit_url(&self, repository_url: &str, commit_hash: &str) -> Option<String> {
-        let (owner, repo) = self.parse_repository_parts(repository_url)?;
+        let (owner, repo) = Self::parse_repository_parts(repository_url)?;
         
         let url = self.url_patterns.commit_url
             .replace("{base_url}", &self.base_url)
@@ -554,7 +554,7 @@ impl RepositoryHostConfig {
     ///
     /// The URL to view the comparison in the web interface
     pub fn generate_compare_url(&self, repository_url: &str, from_ref: &str, to_ref: &str) -> Option<String> {
-        let (owner, repo) = self.parse_repository_parts(repository_url)?;
+        let (owner, repo) = Self::parse_repository_parts(repository_url)?;
         
         let url = self.url_patterns.compare_url
             .replace("{base_url}", &self.base_url)
@@ -575,7 +575,7 @@ impl RepositoryHostConfig {
     /// # Returns
     ///
     /// A tuple of (owner, repo) or None if parsing fails
-    fn parse_repository_parts(&self, repository_url: &str) -> Option<(String, String)> {
+    fn parse_repository_parts(repository_url: &str) -> Option<(String, String)> {
         // Handle different URL formats
         let url = if repository_url.starts_with("http://") || repository_url.starts_with("https://") {
             repository_url.strip_prefix("http://")

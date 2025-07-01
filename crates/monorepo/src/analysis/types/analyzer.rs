@@ -1,37 +1,39 @@
 //! Analyzer types for monorepo analysis
 //!
 //! This module contains type definitions for the monorepo analyzer.
+//! Follows direct borrowing patterns instead of trait objects.
 
-use crate::core::interfaces::{WorkspaceProvider, PackageDiscoveryProvider, EnhancedConfigProvider};
-use crate::core::MonorepoProject;
-use std::sync::Arc;
+use crate::core::MonorepoPackageInfo;
+use crate::config::MonorepoConfig;
+use sublime_git_tools::Repo;
+use sublime_standard_tools::filesystem::FileSystemManager;
+use sublime_package_tools::RegistryManager;
+use sublime_standard_tools::monorepo::MonorepoDescriptor;
+use std::path::Path;
 
 /// Analyzer for comprehensive monorepo analysis
-pub struct MonorepoAnalyzer {
-    /// Package provider for accessing package information
-    pub(crate) package_provider: Box<dyn crate::core::PackageProvider>,
-
-    /// Configuration provider for accessing configuration settings
-    pub(crate) config_provider: Box<dyn crate::core::ConfigProvider>,
-
-    /// File system provider for file operations
-    pub(crate) file_system_provider: Box<dyn crate::core::FileSystemProvider>,
-
-    /// Git provider for repository operations
-    pub(crate) git_provider: Box<dyn crate::core::GitProvider>,
-
-    /// Registry provider for package registry operations
-    pub(crate) registry_provider: Box<dyn crate::core::RegistryProvider>,
+/// 
+/// Uses direct borrowing from MonorepoProject components instead of trait objects.
+/// This follows Rust ownership principles and eliminates Arc proliferation.
+pub struct MonorepoAnalyzer<'a> {
+    /// Direct reference to packages for analysis
+    pub(crate) packages: &'a [MonorepoPackageInfo],
     
-    /// Workspace provider for workspace patterns and configuration
-    pub(crate) workspace_provider: Box<dyn WorkspaceProvider>,
+    /// Direct reference to configuration
+    pub(crate) config: &'a MonorepoConfig,
     
-    /// Package discovery provider for comprehensive package metadata
-    pub(crate) package_discovery_provider: Box<dyn PackageDiscoveryProvider>,
+    /// Direct reference to file system manager
+    pub(crate) file_system: &'a FileSystemManager,
     
-    /// Enhanced configuration provider for workspace management
-    pub(crate) enhanced_config_provider: Box<dyn EnhancedConfigProvider>,
+    /// Direct reference to git repository
+    pub(crate) repository: &'a Repo,
     
-    /// Optional reference to the source project for creating derived analyzers
-    pub(crate) source_project: Option<Arc<MonorepoProject>>,
+    /// Direct reference to registry manager
+    pub(crate) registry_manager: &'a RegistryManager,
+    
+    /// Direct reference to monorepo descriptor
+    pub(crate) descriptor: &'a MonorepoDescriptor,
+    
+    /// Direct reference to root path
+    pub(crate) root_path: &'a Path,
 }

@@ -177,4 +177,27 @@ impl Error {
     pub fn package_not_found(package_name: &str) -> Self {
         Error::Package(format!("Package not found: {package_name}"))
     }
+
+    /// Create a filesystem error
+    pub fn filesystem(msg: impl Into<String>) -> Self {
+        Error::Standard(sublime_standard_tools::error::Error::operation(msg.into()))
+    }
+
+    /// Create a git error
+    pub fn git(msg: impl Into<String>) -> Self {
+        let message = msg.into();
+        Error::Generic(format!("Git error: {message}"))
+    }
+
+    /// Create a dependency error
+    pub fn dependency(msg: impl Into<String>) -> Self {
+        let message = msg.into();
+        Error::Package(format!("Dependency error: {message}"))
+    }
+
+    /// Create a config validation error
+    pub fn config_validation(msg: impl Into<String>) -> Self {
+        let message = msg.into();
+        Error::Config(format!("Config validation error: {message}"))
+    }
 }

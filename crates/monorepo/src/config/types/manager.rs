@@ -10,6 +10,7 @@ pub type PatternMatcher = Box<dyn Fn(&str) -> bool + Send + Sync>;
 /// 
 /// Uses direct ownership instead of Arc<RwLock<>> for better Rust ownership semantics.
 /// Methods that need to modify config return new ConfigManager instances.
+#[derive(Debug)]
 pub struct ConfigManager {
     /// The current configuration
     pub(crate) config: MonorepoConfig,
