@@ -33,6 +33,7 @@ use tokio::{
 
 use super::types::{
     Command as CmdConfig, CommandOutput, CommandStream, DefaultCommandExecutor, StreamConfig,
+    SyncCommandExecutor, SharedSyncExecutor, GlobalExecutorState,
 };
 
 /// Trait for executing commands with various options.
@@ -218,7 +219,7 @@ impl Executor for DefaultCommandExecutor {
 
         let timeout_duration = command.timeout.unwrap_or(Duration::from_secs(30));
         let child = cmd.spawn().map_err(|e| {
-            Error::Command(CommandError::SpawnFailed { cmd: cmd_str.clone(), source: e })
+            Error::Command(CommandError::SpawnFailed { cmd: cmd_str.clone(), message: e.to_string() })
         })?;
 
         // Get PID before potentially consuming child with wait_with_output
@@ -232,7 +233,7 @@ impl Executor for DefaultCommandExecutor {
             Ok(Err(e)) => {
                 return Err(Error::Command(CommandError::ExecutionFailed {
                     cmd: cmd_str,
-                    source: Some(e),
+                    message: e.to_string(),
                 }));
             }
             Err(_) => {
@@ -327,7 +328,7 @@ impl Executor for DefaultCommandExecutor {
 
         let mut child = cmd
             .spawn()
-            .map_err(|e| Error::Command(CommandError::SpawnFailed { cmd: cmd_str, source: e }))?;
+            .map_err(|e| Error::Command(CommandError::SpawnFailed { cmd: cmd_str, message: e.to_string() }))?;
 
         let stdout = child
             .stdout
@@ -341,5 +342,236 @@ impl Executor for DefaultCommandExecutor {
         let stream = CommandStream::new(stdout, stderr, &stream_config);
 
         Ok((stream, child)) // Return the child process handle along with the stream
+    }
+}
+
+/// Implementation for synchronous command executor
+impl SyncCommandExecutor {
+    /// Create a new synchronous command executor
+    ///
+    /// Creates a dedicated Tokio runtime for async operations.
+    /// This runtime is isolated and doesn't interfere with other
+    /// async contexts in the application.
+    ///
+    /// # Returns
+    ///
+    /// A new synchronous command executor.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Tokio runtime cannot be created.
+    pub fn new() -> Result<Self> {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| Error::Command(CommandError::Generic(format!("Failed to create runtime for sync executor: {e}"))))?;
+        
+        Ok(Self {
+            runtime,
+            executor: DefaultCommandExecutor::new(),
+        })
+    }
+
+    /// Execute a command synchronously
+    ///
+    /// Executes the command using the underlying async executor
+    /// but blocks until completion, providing a synchronous interface.
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - Command to execute
+    ///
+    /// # Returns
+    ///
+    /// Command output with stdout, stderr, and exit status.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if command execution fails.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::command::{SyncCommandExecutor, CommandBuilder};
+    /// use sublime_standard_tools::error::Result;
+    ///
+    /// # fn example() -> Result<()> {
+    /// let executor = SyncCommandExecutor::new()?;
+    /// let command = CommandBuilder::new("git").args(&["status", "--porcelain"]).build();
+    /// let output = executor.execute_sync(command)?;
+    /// 
+    /// if output.status() == 0 {
+    ///     println!("Git status: {}", output.stdout());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn execute_sync(&self, command: CmdConfig) -> Result<CommandOutput> {
+        self.runtime.block_on(self.executor.execute(command))
+    }
+
+    /// Execute a command synchronously with timeout
+    ///
+    /// Similar to `execute_sync` but with an explicit timeout.
+    /// The command will be terminated if it exceeds the timeout.
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - Command to execute
+    /// * `timeout` - Maximum execution time
+    ///
+    /// # Returns
+    ///
+    /// Command output or timeout error.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if command execution fails or times out.
+    pub fn execute_sync_with_timeout(
+        &self, 
+        command: CmdConfig, 
+        timeout: std::time::Duration
+    ) -> Result<CommandOutput> {
+        self.runtime.block_on(async {
+            tokio::time::timeout(timeout, self.executor.execute(command))
+                .await
+                .map_err(|_| Error::Command(CommandError::Timeout { duration: timeout }))?
+        })
+    }
+
+    /// Get runtime handle for advanced usage
+    ///
+    /// Provides access to the underlying runtime handle for cases
+    /// where manual async/sync bridging is needed.
+    ///
+    /// # Returns
+    ///
+    /// Handle to the underlying Tokio runtime.
+    pub fn runtime_handle(&self) -> tokio::runtime::Handle {
+        self.runtime.handle().clone()
+    }
+}
+
+/// We cannot implement Default for SyncCommandExecutor following NUNCA rules
+/// because runtime creation can fail and Default trait cannot return errors.
+/// Use SyncCommandExecutor::new() instead for proper error handling.
+/// 
+/// This implementation has been removed to enforce proper error handling patterns.
+
+/// We cannot implement Clone for SyncCommandExecutor following NUNCA rules
+/// because runtime creation can fail and Clone trait cannot return errors.
+/// Use SyncCommandExecutor::new() instead for proper error handling.
+/// 
+/// This implementation has been removed to enforce proper error handling patterns.
+
+/// Implementation for shared synchronous executor
+impl SharedSyncExecutor {
+    /// Get the shared synchronous executor instance with proper error handling
+    ///
+    /// Creates the shared instance on first access. This method properly handles
+    /// creation errors and returns them instead of panicking. This follows the
+    /// NUNCA rules - errors are handled, never ignored with panics or unsafe code.
+    ///
+    /// # Returns
+    ///
+    /// Shared synchronous command executor or creation error.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying SyncCommandExecutor cannot be created.
+    pub fn try_instance() -> Result<&'static SharedSyncExecutor> {
+        use std::sync::{Arc, Mutex, OnceLock};
+        
+        // Use a global state that stores either success or error
+        static GLOBAL_STATE: OnceLock<Mutex<GlobalExecutorState>> = OnceLock::new();
+        
+        let state_lock = GLOBAL_STATE.get_or_init(|| Mutex::new(GlobalExecutorState::Uninitialized));
+        
+        let mut guard = state_lock.lock().map_err(|_| {
+            Error::Command(crate::error::CommandError::Generic(
+                "Failed to acquire lock for shared sync executor".to_string()
+            ))
+        })?;
+        
+        match &*guard {
+            GlobalExecutorState::Success(executor) => Ok(executor),
+            GlobalExecutorState::Error(error) => Err(error.clone()),
+            GlobalExecutorState::Uninitialized => {
+                // First access - try to create the instance
+                match SyncCommandExecutor::new() {
+                    Ok(sync_executor) => {
+                        let shared_executor = SharedSyncExecutor {
+                            executor: Arc::new(sync_executor),
+                        };
+                        
+                        // Store the success state
+                        *guard = GlobalExecutorState::Success(Box::leak(Box::new(shared_executor)));
+                        
+                        // Return the reference
+                        if let GlobalExecutorState::Success(executor) = &*guard {
+                            Ok(executor)
+                        } else {
+                            // This should never happen, but handle it gracefully
+                            Err(Error::Command(crate::error::CommandError::Generic(
+                                "Internal state corruption in shared sync executor".to_string()
+                            )))
+                        }
+                    }
+                    Err(e) => {
+                        // Store the error for future calls
+                        *guard = GlobalExecutorState::Error(e.clone());
+                        Err(e)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Get the shared synchronous executor instance (DEPRECATED)
+    ///
+    /// This method has been removed following NUNCA rules - no panics allowed.
+    /// Use `try_instance()` instead for proper error handling.
+    /// 
+    /// This method has been removed to enforce proper error handling patterns.
+
+    /// Execute a command using the shared executor
+    ///
+    /// Convenience method for executing commands with the shared instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - Command to execute
+    ///
+    /// # Returns
+    ///
+    /// Command output.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if command execution fails.
+    pub fn execute(&self, command: CmdConfig) -> Result<CommandOutput> {
+        self.executor.execute_sync(command)
+    }
+
+    /// Execute a command with timeout using the shared executor
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - Command to execute
+    /// * `timeout` - Maximum execution time
+    ///
+    /// # Returns
+    ///
+    /// Command output or timeout error.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if command execution fails or times out.
+    pub fn execute_with_timeout(
+        &self, 
+        command: CmdConfig, 
+        timeout: std::time::Duration
+    ) -> Result<CommandOutput> {
+        self.executor.execute_sync_with_timeout(command, timeout)
     }
 }

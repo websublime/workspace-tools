@@ -27,6 +27,7 @@ This rules are mandatory to apply to any answer given by AI.
 - Detail information, file location and no methods with no implementation or saying in a real case we would use this or that or even doing this or that.
 - When clippy rules clash with implementation, always prefer to follow clippy rules, if you can't let' signed with a comment explaining why the rule was not followed and allow the exception.
 - Whenever there's a doubt about what decision to make, instead of making the decision, ask the user for clarification. This ensures that the solution aligns with their expectations and requirements.
+- Internal modules must use pub(crate) visibility, so they are only accessible within the crate, not outside of it.
 
 # Additional instructions
 

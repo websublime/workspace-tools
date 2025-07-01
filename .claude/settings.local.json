@@ -32,7 +32,9 @@
       "Bash(RUST_LOG=sublime_monorepo_tools=debug cargo test test_dependency_impact_analysis -- --nocapture 2 >& 1)",
       "Bash(timeout 60 cargo test test_development_workflow_performance -- --nocapture --test-threads=1)",
       "Bash(cargo run:*)",
-      "Bash(./test_repository_config)"
+      "Bash(./test_repository_config)",
+      "Bash(diff:*)",
+      "Bash(/dev/null)"
     ],
     "deny": []
   }

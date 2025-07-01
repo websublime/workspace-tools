@@ -840,10 +840,7 @@ impl Repo {
     pub fn get_last_tag(&self) -> Result<String, RepoError> {
         let tags = self.repo.tag_names(None).map_err(RepoError::LastTagError)?;
 
-        let last_tag = tags
-            .iter()
-            .flatten()
-            .max_by(|&a, &b| self.compare_version_tags(a, b));
+        let last_tag = tags.iter().flatten().max_by(|&a, &b| self.compare_version_tags(a, b));
 
         last_tag
             .map(std::string::ToString::to_string)
@@ -925,6 +922,7 @@ impl Repo {
     /// let version = repo.parse_semantic_version("v1.2.3-alpha");
     /// assert_eq!(version, Some((1, 2, 3, Some("alpha".to_string()))));
     /// ```
+    #[allow(clippy::unused_self)]
     fn parse_semantic_version(&self, tag: &str) -> Option<(u32, u32, u32, Option<String>)> {
         // Remove 'v' prefix if present
         let version_str = tag.strip_prefix('v').unwrap_or(tag);
@@ -932,11 +930,11 @@ impl Repo {
         // Split on '-' to separate version from pre-release
         let parts: Vec<&str> = version_str.splitn(2, '-').collect();
         let version_part = parts[0];
-        let pre_release = parts.get(1).map(|s| s.to_string());
+        let pre_release = parts.get(1).map(|s| ToString::to_string(&s));
 
         // Parse semantic version components
         let version_components: Vec<&str> = version_part.split('.').collect();
-        
+
         if version_components.len() < 3 {
             return None; // Not a valid semantic version
         }
@@ -961,6 +959,7 @@ impl Repo {
     /// # Returns
     ///
     /// * `std::cmp::Ordering` - The comparison result
+    #[allow(clippy::unused_self)]
     fn compare_semantic_versions(
         &self,
         version_a: &(u32, u32, u32, Option<String>),
@@ -1282,25 +1281,29 @@ impl Repo {
         for entry in statuses.iter() {
             let path = entry.path().unwrap_or("").to_string();
             let git2_status = entry.status();
-            
+
             // Determine primary status and staging information
-            let (status, staged, workdir) = if git2_status.is_index_new() || git2_status.is_wt_new() {
+            let (status, staged, workdir) = if git2_status.is_index_new() || git2_status.is_wt_new()
+            {
                 (GitFileStatus::Added, git2_status.is_index_new(), git2_status.is_wt_new())
             } else if git2_status.is_index_modified() || git2_status.is_wt_modified() {
-                (GitFileStatus::Modified, git2_status.is_index_modified(), git2_status.is_wt_modified())
+                (
+                    GitFileStatus::Modified,
+                    git2_status.is_index_modified(),
+                    git2_status.is_wt_modified(),
+                )
             } else if git2_status.is_index_deleted() || git2_status.is_wt_deleted() {
-                (GitFileStatus::Deleted, git2_status.is_index_deleted(), git2_status.is_wt_deleted())
+                (
+                    GitFileStatus::Deleted,
+                    git2_status.is_index_deleted(),
+                    git2_status.is_wt_deleted(),
+                )
             } else {
                 // For untracked files and other cases
                 (GitFileStatus::Untracked, false, true)
             };
 
-            result.push(GitChangedFile {
-                path,
-                status,
-                staged,
-                workdir,
-            });
+            result.push(GitChangedFile { path, status, staged, workdir });
         }
 
         Ok(result)
@@ -1327,13 +1330,10 @@ impl Repo {
     /// ```
     pub fn get_staged_files(&self) -> Result<Vec<String>, RepoError> {
         let detailed_status = self.get_status_detailed()?;
-        
-        let staged_files: Vec<String> = detailed_status
-            .into_iter()
-            .filter(|file| file.staged)
-            .map(|file| file.path)
-            .collect();
-            
+
+        let staged_files: Vec<String> =
+            detailed_status.into_iter().filter(|file| file.staged).map(|file| file.path).collect();
+
         Ok(staged_files)
     }
 
@@ -2218,13 +2218,12 @@ impl Repo {
 
                         // Only add if we haven't seen it yet
                         if !file_exists {
-                            changed_files
-                                .push(GitChangedFile { 
-                                    path: path_str.to_string(), 
-                                    status,
-                                    staged: false,    // Historical changes are not staged
-                                    workdir: false,   // Historical changes are already committed
-                                });
+                            changed_files.push(GitChangedFile {
+                                path: path_str.to_string(),
+                                status,
+                                staged: false,  // Historical changes are not staged
+                                workdir: false, // Historical changes are already committed
+                            });
                         }
                     }
                 }
@@ -2275,8 +2274,8 @@ impl Repo {
                         changed_files.push(GitChangedFile {
                             path: path_str.to_string(),
                             status: GitFileStatus::Deleted,
-                            staged: false,    // Historical changes are not staged
-                            workdir: false,   // Historical changes are already committed
+                            staged: false,  // Historical changes are not staged
+                            workdir: false, // Historical changes are already committed
                         });
                     }
                 }
@@ -2833,16 +2832,15 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_parse_semantic_version() {
         // Create a temporary directory for testing
         let temp_dir = std::env::temp_dir().join("test_git_repo");
         let _ = std::fs::remove_dir_all(&temp_dir); // Clean up if exists
         std::fs::create_dir_all(&temp_dir).unwrap();
-        
-        let repo = Repo {
-            repo: git2::Repository::init_bare(&temp_dir).unwrap(),
-            local_path: temp_dir,
-        };
+
+        let repo =
+            Repo { repo: git2::Repository::init_bare(&temp_dir).unwrap(), local_path: temp_dir };
 
         // Test standard semantic versions
         assert_eq!(repo.parse_semantic_version("1.2.3"), Some((1, 2, 3, None)));
@@ -2866,18 +2864,17 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_compare_version_tags() {
         use std::cmp::Ordering;
-        
+
         // Create a temporary directory for testing
         let temp_dir = std::env::temp_dir().join("test_git_repo_compare");
         let _ = std::fs::remove_dir_all(&temp_dir); // Clean up if exists
         std::fs::create_dir_all(&temp_dir).unwrap();
-        
-        let repo = Repo {
-            repo: git2::Repository::init_bare(&temp_dir).unwrap(),
-            local_path: temp_dir,
-        };
+
+        let repo =
+            Repo { repo: git2::Repository::init_bare(&temp_dir).unwrap(), local_path: temp_dir };
 
         // Test semantic version comparison
         assert_eq!(repo.compare_version_tags("v1.2.3", "v2.0.0"), Ordering::Less);

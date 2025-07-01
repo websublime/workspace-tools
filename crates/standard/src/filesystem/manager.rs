@@ -102,7 +102,7 @@ impl FileSystem for FileSystemManager {
     fn read_file_string(&self, path: &Path) -> Result<String> {
         let bytes = self.read_file(path)?;
         String::from_utf8(bytes).map_err(|e| {
-            Error::FileSystem(FileSystemError::Utf8Decode { path: path.to_path_buf(), source: e })
+            Error::FileSystem(FileSystemError::Utf8Decode { path: path.to_path_buf(), message: e.to_string() })
         })
     }
 

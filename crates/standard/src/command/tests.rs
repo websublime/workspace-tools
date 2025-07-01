@@ -240,7 +240,7 @@ mod tests {
         assert!(result.is_err());
 
         match result {
-            Err(Error::Command(CommandError::SpawnFailed { cmd: _, source: _ })) => {
+            Err(Error::Command(CommandError::SpawnFailed { cmd: _, message: _ })) => {
                 // This is the expected error
             }
             _ => panic!("Unexpected error type"),

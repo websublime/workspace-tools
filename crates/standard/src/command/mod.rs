@@ -36,7 +36,7 @@ mod tests;
 pub use types::{
     Command, CommandBuilder, CommandOutput, CommandPriority, CommandQueue, CommandQueueConfig,
     CommandQueueResult, CommandStatus, CommandStream, DefaultCommandExecutor,
-    StreamConfig, StreamOutput,
+    SharedSyncExecutor, StreamConfig, StreamOutput, SyncCommandExecutor,
 };
 
 // Short aliases to avoid module name repetitions in user code

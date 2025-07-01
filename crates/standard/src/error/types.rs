@@ -14,7 +14,6 @@
 //! possible error conditions and ensures consistency in error handling.
 
 use core::result::Result as CoreResult;
-use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 use thiserror::Error as ThisError;
@@ -35,7 +34,7 @@ use thiserror::Error as ThisError;
 /// let error = FileSystemError::NotFound { path: PathBuf::from("/missing/file.txt") };
 /// assert!(error.to_string().contains("not found"));
 /// ```
-#[derive(ThisError, Debug)]
+#[derive(ThisError, Debug, Clone)]
 pub enum FileSystemError {
     /// Path not found.
     #[error("Path not found: {path}")]
@@ -52,13 +51,12 @@ pub enum FileSystemError {
     },
 
     /// Generic I/O error during filesystem operation.
-    #[error("I/O error accessing path '{path}': {source}")]
+    #[error("I/O error accessing path '{path}': {message}")]
     Io {
         /// The path where the I/O error occurred
         path: PathBuf,
-        /// The underlying I/O error
-        #[source]
-        source: io::Error,
+        /// The I/O error message
+        message: String,
     },
 
     /// Attempted an operation requiring a directory on a file.
@@ -76,13 +74,12 @@ pub enum FileSystemError {
     },
 
     /// Failed to decode UTF-8 content from a file.
-    #[error("Failed to decode UTF-8 content in file: {path}")]
+    #[error("Failed to decode UTF-8 content in file: {path} - {message}")]
     Utf8Decode {
         /// The path to the file with invalid UTF-8 content
         path: PathBuf,
-        /// The underlying UTF-8 decoding error
-        #[source]
-        source: std::string::FromUtf8Error,
+        /// The UTF-8 decoding error message
+        message: String,
     },
 
     /// Path validation failed (e.g., contains '..', absolute path, symlink).
@@ -134,7 +131,7 @@ pub type FileSystemResult<T> = CoreResult<T, FileSystemError>;
 /// let error = MonorepoError::Detection { source: fs_error };
 /// assert!(error.to_string().contains("Failed to detect monorepo type"));
 /// ```
-#[derive(ThisError, Debug)]
+#[derive(ThisError, Debug, Clone)]
 pub enum MonorepoError {
     /// Failed to detect the monorepo type.
     #[error("Failed to detect monorepo type: {source}")]
@@ -204,7 +201,7 @@ pub type MonorepoResult<T> = CoreResult<T, MonorepoError>;
 /// let error = WorkspaceError::PackageNotFound("ui-components".to_string());
 /// assert!(error.to_string().contains("Package not found"));
 /// ```
-#[derive(ThisError, Debug)]
+#[derive(ThisError, Debug, Clone)]
 pub enum WorkspaceError {
     /// Error parsing package.json format.
     #[error("Invalid package json format: {0}")]
@@ -265,26 +262,24 @@ pub type WorkspaceResult<T> = CoreResult<T, WorkspaceError>;
 /// // Converting to the general Error type
 /// let general_error: Error = error.into();
 /// ```
-#[derive(ThisError, Debug)]
+#[derive(ThisError, Debug, Clone)]
 pub enum CommandError {
     /// The command failed to start (e.g., not found).
-    #[error("Failed to spawn command '{cmd}': {source}")]
+    #[error("Failed to spawn command '{cmd}': {message}")]
     SpawnFailed {
         /// The command that failed to start
         cmd: String,
-        /// The underlying IO error that caused the spawn failure
-        #[source]
-        source: io::Error,
+        /// The spawn failure error message
+        message: String,
     },
 
     /// The command execution process itself failed (e.g., internal I/O error).
-    #[error("Command execution failed for '{cmd}': {source:?}")]
+    #[error("Command execution failed for '{cmd}': {message}")]
     ExecutionFailed {
         /// The command that failed during execution
         cmd: String,
-        /// The optional IO error that caused the execution failure
-        #[source]
-        source: Option<io::Error>,
+        /// The execution failure error message
+        message: String,
     },
 
     /// The command executed but returned a non-zero exit code.
@@ -327,13 +322,12 @@ pub enum CommandError {
     },
 
     /// Error occurred while reading stdout or stderr stream.
-    #[error("Error reading {stream} stream: {source}")]
+    #[error("Error reading {stream} stream: {message}")]
     StreamReadError {
         /// Name of the stream that encountered a read error
         stream: String,
-        /// The underlying IO error that caused the read failure
-        #[source]
-        source: io::Error,
+        /// The stream read error message
+        message: String,
     },
 
     /// Generic error during command processing.
@@ -389,7 +383,7 @@ pub type CommandResult<T> = CoreResult<T, CommandError>;
 ///     Ok(())
 /// }
 /// ```
-#[derive(ThisError, Debug)]
+#[derive(ThisError, Debug, Clone)]
 pub enum Error {
     /// Monorepo-related error.
     #[error("Monorepo execution error")]

@@ -82,7 +82,7 @@ mod tests {
 
         let io_error = FileSystemError::Io {
             path: "/test".into(),
-            source: io::Error::new(io::ErrorKind::Other, "test error"),
+            message: "test error".to_string(),
         };
         assert_eq!(io_error.as_ref(), "FileSystemError::Io");
 
@@ -95,7 +95,7 @@ mod tests {
         // Create a valid FromUtf8Error by trying to convert invalid UTF-8 bytes to a String
         let invalid_utf8 = vec![0xFF, 0xFF]; // Invalid UTF-8 bytes
         let utf8_error = String::from_utf8(invalid_utf8).unwrap_err();
-        let utf8_decode = FileSystemError::Utf8Decode { path: "/test".into(), source: utf8_error };
+        let utf8_decode = FileSystemError::Utf8Decode { path: "/test".into(), message: utf8_error.to_string() };
         assert_eq!(utf8_decode.as_ref(), "FileSystemError::Utf8Decode");
 
         let validation =
@@ -116,10 +116,9 @@ mod tests {
         let invalid_utf8 = vec![0xFF, 0xFF]; // Invalid UTF-8
         let utf8_error = String::from_utf8(invalid_utf8).unwrap_err();
         let utf8_decode =
-            FileSystemError::Utf8Decode { path: "/test/file.txt".into(), source: utf8_error };
-        assert_eq!(
-            utf8_decode.to_string(),
-            "Failed to decode UTF-8 content in file: /test/file.txt"
+            FileSystemError::Utf8Decode { path: "/test/file.txt".into(), message: utf8_error.to_string() };
+        assert!(
+            utf8_decode.to_string().starts_with("Failed to decode UTF-8 content in file: /test/file.txt - invalid utf-8")
         );
 
         let permission_denied =
@@ -137,7 +136,7 @@ mod tests {
         // Test Parsing error
         let fs_error = FileSystemError::Utf8Decode {
             path: PathBuf::from("/project/workspace.yaml"),
-            source: String::from_utf8(vec![0xFF, 0xFF]).unwrap_err(),
+            message: String::from_utf8(vec![0xFF, 0xFF]).unwrap_err().to_string(),
         };
         let parsing_error = MonorepoError::Parsing { source: fs_error };
         assert!(parsing_error.to_string().contains("Failed to parse monorepo descriptor"));
@@ -151,7 +150,7 @@ mod tests {
         // Test Writing error
         let fs_error = FileSystemError::Io {
             path: PathBuf::from("/full/disk/workspace.yaml"),
-            source: io::Error::new(io::ErrorKind::Other, "disk full"),
+            message: "disk full".to_string(),
         };
         let writing_error = MonorepoError::Writing { source: fs_error };
         assert!(writing_error.to_string().contains("Failed to write monorepo descriptor"));
