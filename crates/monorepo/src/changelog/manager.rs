@@ -111,6 +111,42 @@ impl<'a> ChangelogManager<'a> {
         Self::new(project)
     }
 
+    /// Create a new changelog manager with direct field references
+    ///
+    /// Uses direct borrowing of individual components instead of requiring
+    /// a full MonorepoProject. This is useful for scenarios where components
+    /// need ChangelogManager but don't have access to a complete project.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Reference to monorepo configuration
+    /// * `packages` - Reference to package list
+    /// * `repository` - Reference to git repository
+    /// * `file_system` - Reference to file system manager
+    /// * `root_path` - Reference to root path
+    ///
+    /// # Returns
+    ///
+    /// A new changelog manager instance
+    #[must_use]
+    pub fn with_components(
+        config: &'a MonorepoConfig,
+        packages: &'a [MonorepoPackageInfo],
+        repository: &'a Repo,
+        file_system: &'a FileSystemManager,
+        root_path: &'a Path,
+    ) -> Self {
+        Self {
+            repository,
+            packages,
+            file_system,
+            config,
+            root_path,
+            parser: ConventionalCommitParser::new(),
+            generator: ChangelogGenerator::new(),
+        }
+    }
+
     /// Generate changelog based on request
     ///
     /// # Arguments
