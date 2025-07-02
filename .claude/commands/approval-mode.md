@@ -59,15 +59,15 @@ Should I proceed? (yes/no)
 
 When creating a compact or summary for a new session, **ALWAYS include this approval mode configuration** in the summary so that the new session continues with the same controlled workflow.
 
-## ⚠️ REGRAS MANDATÓRIAS
+## ⚠️ MANDATORY RULES
 
-1. **ZERO PROGRESSÃO**: NÃO avançar para próxima tarefa até atual estar 100% completa
-2. **COMPILAÇÃO OBRIGATÓRIA**: Cada checkbox deve resultar em `cargo build` + `cargo clippy -- -D warnings` = 0 erros
-3. **BREAKING CHANGES OK**: Produto em desenvolvimento, zero compatibilidade necessária
-4. **IMPLEMENTAÇÕES COMPLETAS**: Sem logs placeholder, sem TODOs, sem "futuras implementações"
-5. **CRATES BASE PRIMEIRO**: Usar sublime-standard-tools, sublime-package-tools, sublime-git-tools
-6. **VISIBILIDADE CORRETA**: APIs públicas explícitas, resto com `pub(crate)`
-7. **SEM NOVOS FICHEIROS**: Refactor in-place, eliminar complexidade
-8. **TESTS**: Testes podem ter excepções das regras clippy e tem de ser executados com `cargo test -- --nocapture` sem erros
+1. **ZERO PROGRESSION**: DO NOT advance to next task until current one is 100% complete
+2. **MANDATORY COMPILATION**: Each checkbox must result in `cargo build` + `cargo clippy -- -D warnings` = 0 errors
+3. **BREAKING CHANGES OK**: Product in development, zero compatibility required
+4. **FULL IMPLEMENTATIONS**: No placeholder logs, no TODOs, no "future implementations"
+5. **BASE CRATES FIRST**: Use sublime-standard-tools, sublime-package-tools, sublime-git-tools
+6. **PROPER VISIBILITY**: Explicit public APIs, rest with `pub(crate)`
+7. **NO NEW FILES**: Refactor in place, eliminate complexity
+8. **TESTS**: Tests may have exceptions to the clippy rules and must be run with `cargo test -- --nocapture` without errors
 
 **Please confirm that you understand and have activated this mode.**
