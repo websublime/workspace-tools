@@ -31,9 +31,7 @@ impl<'a> HookValidator<'a> {
     pub fn new(project: &'a MonorepoProject) -> Self {
         Self { 
             repository: &project.repository,
-            packages: &project.packages,
             config: &project.config,
-            root_path: &project.root_path,
         }
     }
 
@@ -320,15 +318,75 @@ impl<'a> HookValidator<'a> {
             return Err(Error::hook("No packages specified for changeset search"));
         }
 
-        // This is a placeholder implementation for Phase 1
-        // Full changeset integration will be implemented in Phase 2
-        log::debug!("Changeset search requested for packages: {}", packages.join(", "));
-        log::debug!("Full changeset integration pending - returning placeholder error");
+        // Create changeset storage with current directory as root
+        // The repository working directory is assumed to be the project root
+        let current_dir = std::env::current_dir()
+            .map_err(|e| Error::hook(format!("Failed to get current directory: {e}")))?;
+        
+        let file_system_service = crate::core::services::FileSystemService::new(&current_dir)
+            .map_err(|e| Error::hook(format!("Failed to create file system service: {e}")))?;
+        
+        let changeset_storage = crate::changesets::ChangesetStorage::new(
+            self.config.changesets.clone(),
+            file_system_service.manager(),
+            &current_dir,
+        );
 
-        Err(Error::hook(format!(
-            "Changeset search not yet fully implemented for packages: {}",
-            packages.join(", ")
-        )))
+        // Search for changesets that affect any of the specified packages
+        for package_name in packages {
+            let filter = crate::changesets::ChangesetFilter {
+                package: Some(package_name.clone()),
+                status: Some(crate::changesets::ChangesetStatus::Pending),
+                ..Default::default()
+            };
+
+            match changeset_storage.list(&filter) {
+                Ok(changesets) => {
+                    if let Some(changeset) = changesets.into_iter().find(|cs| {
+                        // Additional validation that the changeset is relevant
+                        cs.status == crate::changesets::ChangesetStatus::Pending
+                            && !cs.package.is_empty()
+                    }) {
+                        return Ok(changeset);
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to search changesets for package '{}': {}", package_name, e);
+                    continue;
+                }
+            }
+        }
+
+        // If no specific package changeset found, look for any pending changeset
+        let general_filter = crate::changesets::ChangesetFilter {
+            status: Some(crate::changesets::ChangesetStatus::Pending),
+            ..Default::default()
+        };
+
+        match changeset_storage.list(&general_filter) {
+            Ok(changesets) => {
+                // Find changeset that affects any of the specified packages
+                for changeset in changesets {
+                    if packages.iter().any(|pkg| {
+                        changeset.package == *pkg
+                            || changeset.description.contains(pkg)
+                            || changeset.branch.contains(pkg)
+                    }) {
+                        return Ok(changeset);
+                    }
+                }
+
+                Err(Error::hook(format!(
+                    "No pending changeset found for packages: {}",
+                    packages.join(", ")
+                )))
+            }
+            Err(e) => Err(Error::hook(format!(
+                "Failed to search changesets for packages '{}': {}",
+                packages.join(", "),
+                e
+            ))),
+        }
     }
 
     /// Get branch naming patterns from configuration

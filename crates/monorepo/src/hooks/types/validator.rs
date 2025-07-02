@@ -4,10 +4,8 @@
 
 use super::HookValidationResult;
 use crate::changesets::Changeset;
-use crate::core::MonorepoPackageInfo;
 use crate::config::MonorepoConfig;
 use sublime_git_tools::Repo;
-use std::path::Path;
 
 /// Validator for hook conditions and requirements
 /// 
@@ -17,14 +15,8 @@ pub struct HookValidator<'a> {
     /// Direct reference to git repository
     pub(crate) repository: &'a Repo,
     
-    /// Direct reference to packages
-    pub(crate) packages: &'a [MonorepoPackageInfo],
-    
     /// Direct reference to configuration
     pub(crate) config: &'a MonorepoConfig,
-
-    /// Direct reference to root path
-    pub(crate) root_path: &'a Path,
 }
 
 /// Result of changeset validation

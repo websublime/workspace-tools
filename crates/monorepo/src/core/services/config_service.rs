@@ -29,8 +29,9 @@ use super::FileSystemService;
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct ConfigurationService {
+pub(crate) struct ConfigurationService {
     /// Configuration manager for loading and validation
+    #[allow(dead_code)]
     config_manager: ConfigManager,
     
     /// Current loaded configuration
@@ -40,6 +41,7 @@ pub struct ConfigurationService {
     root_path: std::path::PathBuf,
 }
 
+#[allow(dead_code)]
 impl ConfigurationService {
     /// Create a new configuration service
     ///

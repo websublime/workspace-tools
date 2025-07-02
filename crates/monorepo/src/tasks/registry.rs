@@ -7,6 +7,7 @@ use super::{types::TaskRegistry, TaskDefinition, TaskScope};
 use crate::error::{Error, Result};
 use std::collections::HashMap;
 
+#[allow(dead_code)]
 impl TaskRegistry {
     /// Create a new empty task registry
     #[must_use]

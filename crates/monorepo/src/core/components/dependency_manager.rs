@@ -7,10 +7,12 @@ use super::super::types::MonorepoPackageInfo;
 use std::collections::HashSet;
 
 /// Component for managing package dependencies
-pub struct PackageDependencyManager {
+#[allow(dead_code)]
+pub(crate) struct PackageDependencyManager {
     package: MonorepoPackageInfo,
 }
 
+#[allow(dead_code)]
 impl PackageDependencyManager {
     /// Create a new package dependency manager
     #[must_use]

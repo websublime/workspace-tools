@@ -272,7 +272,7 @@ impl EventBus {
         let subscriptions = self.subscriptions.read().await;
 
         for subscription in subscriptions.values() {
-            if self.event_matches_filter(event, &subscription.filter) {
+            if Self::event_matches_filter(event, &subscription.filter) {
                 if let Err(e) = subscription.handler.handle_event(event.clone()).await {
                     // Log error but continue processing other handlers
                     log::error!("Event handler failed for subscription {}: {}", subscription.id, e);
@@ -284,7 +284,7 @@ impl EventBus {
     }
 
     /// Check if an event matches a filter
-    fn event_matches_filter(&self, event: &MonorepoEvent, filter: &EventFilter) -> bool {
+    fn event_matches_filter(event: &MonorepoEvent, filter: &EventFilter) -> bool {
         match filter {
             EventFilter::All => true,
 
@@ -304,10 +304,10 @@ impl EventBus {
             EventFilter::ByPriority(priority) => event.priority() >= *priority,
 
             EventFilter::And(filters) => {
-                filters.iter().all(|f| self.event_matches_filter(event, f))
+                filters.iter().all(|f| Self::event_matches_filter(event, f))
             }
 
-            EventFilter::Or(filters) => filters.iter().any(|f| self.event_matches_filter(event, f)),
+            EventFilter::Or(filters) => filters.iter().any(|f| Self::event_matches_filter(event, f)),
 
             EventFilter::Custom(predicate) => predicate(event),
         }

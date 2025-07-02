@@ -10,7 +10,7 @@ use std::path::Path;
 /// 
 /// Uses direct borrowing from MonorepoProject components instead of trait objects.
 /// This follows Rust ownership principles and eliminates Arc proliferation.
-pub struct TaskExecutor<'a> {
+pub(crate) struct TaskExecutor<'a> {
     /// Direct reference to packages
     pub(crate) packages: &'a [MonorepoPackageInfo],
     

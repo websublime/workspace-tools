@@ -3,9 +3,6 @@
 use super::VersioningStrategy;
 use crate::config::MonorepoConfig;
 use crate::core::MonorepoPackageInfo;
-use sublime_git_tools::Repo;
-use sublime_standard_tools::filesystem::FileSystemManager;
-use std::path::Path;
 
 /// Manager for package versioning with dependency propagation
 /// 
@@ -16,12 +13,8 @@ pub struct VersionManager<'a> {
     pub(crate) config: &'a MonorepoConfig,
     /// Direct reference to packages
     pub(crate) packages: &'a [MonorepoPackageInfo],
-    /// Direct reference to repository
-    pub(crate) repository: &'a Repo,
-    /// Direct reference to file system manager
-    pub(crate) file_system: &'a FileSystemManager,
     /// Direct reference to root path
-    pub(crate) root_path: &'a Path,
+    pub(crate) root_path: &'a std::path::Path,
     /// Versioning strategy to use
     pub(crate) strategy: Box<dyn VersioningStrategy + 'a>,
 }

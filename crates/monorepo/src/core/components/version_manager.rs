@@ -9,10 +9,12 @@ use crate::error::{Error, Result};
 use sublime_package_tools::Version;
 
 /// Component for managing package version operations
-pub struct PackageVersionManager {
+#[allow(dead_code)]
+pub(crate) struct PackageVersionManager {
     package: MonorepoPackageInfo,
 }
 
+#[allow(dead_code)]
 impl PackageVersionManager {
     /// Create a new package version manager
     #[must_use]

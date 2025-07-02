@@ -30,11 +30,6 @@ impl MonorepoPackageInfo {
             dependencies_external: Vec::new(),
             version_status: VersionStatus::Stable,
             changesets: Vec::new(),
-            name: workspace_package.name.clone(),
-            version: workspace_package.version.clone(), 
-            path: workspace_package.location.clone(),
-            package_type: super::types::PackageType::Other("unknown".to_string()),
-            metadata: HashMap::new(),
         }
     }
 

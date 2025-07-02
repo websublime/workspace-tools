@@ -5,7 +5,6 @@
 
 use crate::core::MonorepoPackageInfo;
 use crate::config::MonorepoConfig;
-use sublime_git_tools::Repo;
 use sublime_standard_tools::filesystem::FileSystemManager;
 use sublime_package_tools::RegistryManager;
 use sublime_standard_tools::monorepo::MonorepoDescriptor;
@@ -24,9 +23,6 @@ pub struct MonorepoAnalyzer<'a> {
     
     /// Direct reference to file system manager
     pub(crate) file_system: &'a FileSystemManager,
-    
-    /// Direct reference to git repository
-    pub(crate) repository: &'a Repo,
     
     /// Direct reference to registry manager
     pub(crate) registry_manager: &'a RegistryManager,

@@ -29,9 +29,6 @@ pub struct ReleaseWorkflow<'a> {
     /// Analyzer for detecting changes and affected packages
     pub(crate) analyzer: MonorepoAnalyzer<'a>,
 
-    /// Version manager for handling version bumps
-    pub(crate) version_manager: crate::core::VersionManager<'a>,
-
     /// Changeset manager for applying production changesets
     pub(crate) changeset_manager: crate::changesets::ChangesetManager<'a>,
 
@@ -46,9 +43,6 @@ pub struct ReleaseWorkflow<'a> {
 
     /// Direct reference to git repository
     pub(crate) repository: &'a sublime_git_tools::Repo,
-
-    /// Direct reference to file system manager
-    pub(crate) file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
 
     /// Direct reference to root path
     pub(crate) root_path: &'a std::path::Path,

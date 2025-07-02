@@ -3,7 +3,6 @@
 //! Follows direct borrowing patterns instead of trait objects.
 
 use crate::config::types::ChangesetsConfig;
-use crate::core::MonorepoPackageInfo;
 use sublime_standard_tools::filesystem::FileSystemManager;
 use std::path::Path;
 
@@ -21,9 +20,6 @@ pub struct ChangesetStorage<'a> {
 
     /// Direct reference to file system manager
     pub(crate) file_system: &'a FileSystemManager,
-
-    /// Direct reference to packages for root path access
-    pub(crate) packages: &'a [MonorepoPackageInfo],
     
     /// Direct reference to root path
     pub(crate) root_path: &'a Path,

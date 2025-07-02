@@ -210,7 +210,6 @@ macro_rules! time_operation {
     }};
 }
 
-/// Standard logging patterns documentation
 pub mod patterns {
     //! # Logging Patterns and Standards
     //!

@@ -351,7 +351,7 @@ impl PluginRegistry {
     /// Validate all registered plugins
     fn validate_registered_plugins(
         &mut self,
-        _available: &mut Vec<PluginInfo>,
+        _available: &mut [PluginInfo],
         unavailable: &mut Vec<(String, String)>,
     ) {
         let plugin_names: Vec<String> = self.plugins.keys().cloned().collect();

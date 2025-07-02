@@ -32,9 +32,9 @@ pub use types::{
     EnvironmentCondition, BranchCondition,
     TaskExecutionResult, TaskStatus, TaskOutput, TaskError,
     TaskErrorCode, TaskExecutionStats, TaskExecutionLog, TaskLogLevel,
-    // Implementation structs
-    TaskManager, TaskRegistry, TaskExecutor, ConditionChecker, ExecutionContext,
+    TaskManager, ExecutionContext,
 };
 
 // Re-export async boundary adapter
 pub use async_adapter::AsyncConditionAdapter;
+

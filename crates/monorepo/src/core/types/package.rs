@@ -50,13 +50,6 @@ pub struct MonorepoPackageInfo {
 
     /// Changesets associated with this package
     pub changesets: Vec<super::Changeset>,
-
-    /// Direct access fields for common operations (pub(crate) pattern)
-    pub(crate) name: String,
-    pub(crate) version: String,
-    pub(crate) path: std::path::PathBuf,
-    pub(crate) package_type: PackageType,
-    pub(crate) metadata: HashMap<String, String>,
 }
 
 /// Type of package based on the package manager and ecosystem

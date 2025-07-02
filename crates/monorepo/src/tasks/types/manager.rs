@@ -4,10 +4,8 @@
 
 use super::{ConditionChecker, TaskExecutor, TaskRegistry};
 use crate::core::MonorepoPackageInfo;
-use crate::config::MonorepoConfig;
 use sublime_standard_tools::filesystem::FileSystemManager;
 use std::collections::HashMap;
-use std::path::Path;
 
 /// Central manager for task execution and coordination
 /// 
@@ -19,12 +17,6 @@ pub struct TaskManager<'a> {
     
     /// Direct reference to packages
     pub(crate) packages: &'a [MonorepoPackageInfo],
-    
-    /// Direct reference to configuration
-    pub(crate) config: &'a MonorepoConfig,
-    
-    /// Direct reference to root path
-    pub(crate) root_path: &'a Path,
 
     /// Task registry for storing and managing task definitions
     pub(crate) registry: TaskRegistry,

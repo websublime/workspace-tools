@@ -188,7 +188,6 @@ impl ConfigManager {
         let patterns: Vec<WorkspacePattern> = workspace
             .patterns
             .iter()
-            .cloned()
             .filter(|pattern| {
                 // Filter by enabled status
                 if !pattern.enabled {
@@ -215,6 +214,7 @@ impl ConfigManager {
 
                 true
             })
+            .cloned()
             .collect();
 
         patterns

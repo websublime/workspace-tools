@@ -112,12 +112,12 @@ impl<'a> ConditionChecker<'a> {
         }
 
         // Check if any conditions require async execution
-        if self.has_async_conditions(conditions) {
+        if Self::has_async_conditions(conditions) {
             return Err(Error::task(format!(
                 "Conditions contain async operations (custom scripts or environment checkers). \
                 Use AsyncConditionAdapter::evaluate_conditions_adaptive() instead. \
                 Async conditions found: {}",
-                self.describe_async_conditions(conditions)
+                Self::describe_async_conditions(conditions)
             )));
         }
 
@@ -155,7 +155,7 @@ impl<'a> ConditionChecker<'a> {
     ) -> Result<bool> {
         match condition {
             TaskCondition::PackagesChanged { packages } => {
-                self.check_packages_changed(packages, context)
+                Self::check_packages_changed(packages, context)
             }
 
             TaskCondition::FilesChanged { patterns } => self.check_files_changed(patterns, context),
@@ -224,7 +224,7 @@ impl<'a> ConditionChecker<'a> {
                         "method",
                         "evaluate_conditions_adaptive() or execute_custom_script()",
                     )
-                    .log_error(&Error::task("Async execution required".to_string()));
+                    .log_error(Error::task("Async execution required".to_string()));
 
                 Err(Error::task(error_message))
             }
@@ -233,7 +233,6 @@ impl<'a> ConditionChecker<'a> {
 
     /// Check if specified packages have changed
     pub fn check_packages_changed(
-        &self,
         packages: &[String],
         context: &ExecutionContext,
     ) -> Result<bool> {
@@ -755,7 +754,7 @@ impl<'a> ConditionChecker<'a> {
                         }
                         Err(e) => {
                             ErrorContext::new("dependency_analysis")
-                                .with_file(&package_json_path.display().to_string())
+                                .with_file(package_json_path.display().to_string())
                                 .log_error(&e);
                             // If file exists in changed list but we can't read it, assume dependencies changed
                             Ok(true)
@@ -1172,7 +1171,7 @@ impl<'a> ConditionChecker<'a> {
     /// This method helps identify when the AsyncConditionAdapter should be used
     /// instead of synchronous condition checking.
     #[must_use]
-    pub fn has_async_conditions(&self, conditions: &[TaskCondition]) -> bool {
+    pub fn has_async_conditions(conditions: &[TaskCondition]) -> bool {
         use TaskCondition;
 
         conditions.iter().any(|condition| match condition {
@@ -1181,9 +1180,9 @@ impl<'a> ConditionChecker<'a> {
                 matches!(env, crate::tasks::EnvironmentCondition::Custom { .. })
             }
             TaskCondition::All { conditions } | TaskCondition::Any { conditions } => {
-                self.has_async_conditions(conditions)
+                Self::has_async_conditions(conditions)
             }
-            TaskCondition::Not { condition } => self.has_async_conditions(&[*condition.clone()]),
+            TaskCondition::Not { condition } => Self::has_async_conditions(&[*condition.clone()]),
             _ => false,
         })
     }
@@ -1194,7 +1193,7 @@ impl<'a> ConditionChecker<'a> {
     /// to help developers understand why async execution is required.
     #[allow(clippy::items_after_statements)]
     #[must_use]
-    pub fn describe_async_conditions(&self, conditions: &[TaskCondition]) -> String {
+    pub fn describe_async_conditions(conditions: &[TaskCondition]) -> String {
         use TaskCondition;
 
         let mut async_conditions = Vec::new();
@@ -1205,10 +1204,8 @@ impl<'a> ConditionChecker<'a> {
                     TaskCondition::CustomScript { script, .. } => {
                         acc.push(format!("CustomScript('{script})"));
                     }
-                    TaskCondition::Environment { env } => {
-                        if let crate::tasks::EnvironmentCondition::Custom { checker } = env {
-                            acc.push(format!("CustomEnvironment('{checker})"));
-                        }
+                    TaskCondition::Environment { env: crate::tasks::EnvironmentCondition::Custom { checker } } => {
+                        acc.push(format!("CustomEnvironment('{checker})"));
                     }
                     TaskCondition::All { conditions } | TaskCondition::Any { conditions } => {
                         collect_async_conditions(conditions, acc);

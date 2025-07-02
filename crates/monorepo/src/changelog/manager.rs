@@ -120,10 +120,7 @@ impl<'a> ChangelogManager<'a> {
     /// # Returns
     ///
     /// Generated changelog result
-    /// FASE 2 ASYNC ELIMINATION: Synchronous changelog generation  
-    /// 
-    /// Removed artificial async behavior - this is a purely synchronous operation.
-    pub fn generate_changelog_sync(&self, request: ChangelogRequest) -> Result<ChangelogResult> {
+    pub fn generate_changelog(&self, request: ChangelogRequest) -> Result<ChangelogResult> {
         log::info!(
             "Generating changelog for package: {:?}, version: {}",
             request.package_name,
@@ -205,9 +202,6 @@ impl<'a> ChangelogManager<'a> {
     }
 
     /// Generate changelog
-    pub fn generate_changelog(&self, request: ChangelogRequest) -> Result<ChangelogResult> {
-        self.generate_changelog_sync(request)
-    }
 
     /// Parse conventional commits from commit range
     ///
@@ -219,10 +213,7 @@ impl<'a> ChangelogManager<'a> {
     /// # Returns
     ///
     /// Vector of parsed conventional commits
-    /// FASE 2 ASYNC ELIMINATION: Synchronous conventional commit parsing
-    ///
-    /// Removed artificial async behavior - this is a purely synchronous operation.
-    pub fn parse_conventional_commits_sync(
+    pub fn parse_conventional_commits(
         &self,
         package_path: Option<&str>,
         since: &str,
@@ -256,10 +247,7 @@ impl<'a> ChangelogManager<'a> {
     /// # Returns
     ///
     /// Updated changelog content
-    /// FASE 2 ASYNC ELIMINATION: Synchronous changelog updating
-    ///
-    /// Removed artificial async behavior - this is a purely synchronous operation.
-    pub fn update_existing_changelog_sync(
+    pub fn update_existing_changelog(
         &self,
         package_name: Option<&str>,
         new_content: &str,
@@ -306,13 +294,6 @@ impl<'a> ChangelogManager<'a> {
     }
 
     /// Update existing changelog with new version
-    pub fn update_existing_changelog(
-        &self,
-        package_name: Option<&str>,
-        new_content: &str,
-    ) -> Result<String> {
-        self.update_existing_changelog_sync(package_name, new_content)
-    }
 
     /// Get commits since a reference
     fn get_commits_since_reference(
@@ -510,7 +491,7 @@ impl<'a> ChangelogManager<'a> {
             self.get_default_changelog_path(&request.package_name)?
         };
 
-        self.file_system.write_file_string(&Path::new(&output_path), content).map_err(
+        self.file_system.write_file_string(Path::new(&output_path), content).map_err(
             |e| Error::changelog(format!("Failed to write changelog to {output_path}: {e}")),
         )?;
 

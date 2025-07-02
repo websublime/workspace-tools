@@ -77,7 +77,7 @@ impl ConfigComponents {
     /// # Errors
     /// Returns an error if the pattern is invalid
     pub fn pattern_matcher(pattern: &str) -> crate::error::Result<PatternMatcher> {
-        PatternMatcher::from_str(pattern)
+        PatternMatcher::from_pattern(pattern)
     }
 
     /// Create a multi-pattern matcher from pattern strings

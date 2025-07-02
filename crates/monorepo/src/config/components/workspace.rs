@@ -318,7 +318,7 @@ impl WorkspacePatternManager {
     /// # Errors
     /// Returns an error if the pattern is invalid
     pub fn create_pattern_matcher(&self, pattern: &str) -> Result<crate::config::components::PatternMatcher> {
-        crate::config::components::PatternMatcher::from_str(pattern)
+        crate::config::components::PatternMatcher::from_pattern(pattern)
     }
 
     /// Get workspace configuration

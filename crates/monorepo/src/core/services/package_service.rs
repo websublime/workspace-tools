@@ -1,7 +1,7 @@
-//! Package discovery service implementation
+//! Package discovery service implementation for Node.js monorepos
 //!
 //! Handles package discovery, metadata parsing, and package relationship analysis
-//! within the monorepo. Provides centralized package management operations.
+//! within Node.js monorepos. Provides centralized package management operations.
 
 use crate::config::MonorepoConfig;
 use crate::core::types::MonorepoPackageInfo;
@@ -10,11 +10,10 @@ use std::path::Path;
 use sublime_standard_tools::monorepo::{MonorepoDescriptor, PackageManager};
 use super::FileSystemService;
 
-/// Package discovery and management service
+/// Package discovery and management service for Node.js monorepos
 ///
 /// Provides comprehensive package discovery, metadata parsing, and package
-/// relationship analysis for the monorepo. Handles different package types
-/// and manages package discovery configuration.
+/// relationship analysis for Node.js monorepos. Handles NPM/Yarn/PNPM workspaces.
 ///
 /// # Examples
 ///
@@ -27,7 +26,7 @@ use super::FileSystemService;
 /// let config = MonorepoConfig::default();
 /// let package_service = PackageDiscoveryService::new("/path/to/monorepo", &fs_service, &config)?;
 /// 
-/// // Discover all packages in the monorepo
+/// // Discover all packages in the Node.js monorepo
 /// let packages = package_service.discover_packages()?;
 /// println!("Found {} packages", packages.len());
 /// 
@@ -37,32 +36,30 @@ use super::FileSystemService;
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct PackageDiscoveryService {
+pub(crate) struct PackageDiscoveryService {
     /// Monorepo descriptor from standard-tools
     descriptor: MonorepoDescriptor,
     
-    /// Package manager information
+    /// Package manager information (NPM/Yarn/PNPM/Bun)
     package_manager: PackageManager,
     
     /// Discovered packages cache
     packages: Vec<MonorepoPackageInfo>,
     
-    /// Root path of the monorepo
-    root_path: std::path::PathBuf,
-    
     /// Configuration for package discovery
     config: MonorepoConfig,
 }
 
+#[allow(dead_code)]
 impl PackageDiscoveryService {
-    /// Create a new package discovery service
+    /// Create a new package discovery service for Node.js monorepos
     ///
     /// Initializes the package discovery service with the specified root path,
     /// file system service, and configuration. Performs initial package discovery.
     ///
     /// # Arguments
     ///
-    /// * `root_path` - Root path of the monorepo
+    /// * `root_path` - Root path of the Node.js monorepo
     /// * `file_system_service` - File system service for package discovery
     /// * `config` - Configuration for package discovery rules
     ///
@@ -77,6 +74,7 @@ impl PackageDiscoveryService {
     /// - Package discovery fails
     /// - Package metadata cannot be parsed
     /// - Configuration is invalid for package discovery
+    /// - No Node.js package manager is detected
     pub fn new<P: AsRef<Path>>(
         root_path: P,
         file_system_service: &FileSystemService,
@@ -84,24 +82,26 @@ impl PackageDiscoveryService {
     ) -> Result<Self> {
         let root_path = root_path.as_ref().to_path_buf();
         
-        // Determine package manager first
+        // Determine Node.js package manager first
         let package_manager = PackageManager::detect(&root_path)
             .map_err(|e| crate::error::Error::package(format!(
-                "Failed to detect package manager for {}: {}", 
+                "Failed to detect Node.js package manager for {}: {}", 
                 root_path.display(), 
                 e
             )))?;
         
-        // Determine monorepo kind based on package manager
+        // Determine monorepo kind based on Node.js package manager
         let kind = match package_manager.kind() {
             sublime_standard_tools::monorepo::PackageManagerKind::Npm => sublime_standard_tools::monorepo::MonorepoKind::NpmWorkSpace,
             sublime_standard_tools::monorepo::PackageManagerKind::Yarn => sublime_standard_tools::monorepo::MonorepoKind::YarnWorkspaces, 
             sublime_standard_tools::monorepo::PackageManagerKind::Pnpm => sublime_standard_tools::monorepo::MonorepoKind::PnpmWorkspaces,
             sublime_standard_tools::monorepo::PackageManagerKind::Bun => sublime_standard_tools::monorepo::MonorepoKind::BunWorkspaces,
-            sublime_standard_tools::monorepo::PackageManagerKind::Jsr => sublime_standard_tools::monorepo::MonorepoKind::Custom { 
-                name: "Unknown".to_string(),
-                config_file: "unknown.json".to_string()
-            },
+            sublime_standard_tools::monorepo::PackageManagerKind::Jsr => {
+                return Err(crate::error::Error::package(format!(
+                    "Unsupported package manager kind for Node.js monorepo: {:?}",
+                    package_manager.kind()
+                )));
+            }
         };
         
         // Initialize with empty packages - will be populated later
@@ -115,7 +115,6 @@ impl PackageDiscoveryService {
             descriptor,
             package_manager,
             packages: Vec::new(),
-            root_path,
             config: config.clone(),
         };
         
@@ -139,7 +138,7 @@ impl PackageDiscoveryService {
     
     /// Get the package manager
     ///
-    /// Returns information about the detected package manager including
+    /// Returns information about the detected Node.js package manager including
     /// type, version, and capabilities.
     ///
     /// # Returns
@@ -149,7 +148,7 @@ impl PackageDiscoveryService {
         &self.package_manager
     }
     
-    /// Discover all packages in the monorepo
+    /// Discover all packages in the Node.js monorepo
     ///
     /// Returns the cached list of discovered packages. Use refresh_packages()
     /// to update the cache with current file system state.
@@ -157,6 +156,7 @@ impl PackageDiscoveryService {
     /// # Returns
     ///
     /// Vector of discovered packages with their metadata.
+    #[allow(clippy::unnecessary_wraps)]
     pub fn discover_packages(&self) -> Result<Vec<MonorepoPackageInfo>> {
         Ok(self.packages.clone())
     }
@@ -178,12 +178,12 @@ impl PackageDiscoveryService {
             // Simple wildcard matching
             let pattern = pattern.replace('*', "");
             self.packages.iter()
-                .filter(|pkg| pkg.name.contains(&pattern))
+                .filter(|pkg| pkg.name().contains(&pattern))
                 .collect()
         } else {
             // Exact match
             self.packages.iter()
-                .filter(|pkg| pkg.name == pattern)
+                .filter(|pkg| pkg.name() == pattern)
                 .collect()
         }
     }
@@ -201,7 +201,7 @@ impl PackageDiscoveryService {
     /// Reference to the package if found, None otherwise.
     pub fn get_package_by_name(&self, name: &str) -> Option<&MonorepoPackageInfo> {
         self.packages.iter()
-            .find(|pkg| pkg.name == name)
+            .find(|pkg| pkg.name() == name)
     }
     
     /// Get all package names
@@ -213,7 +213,7 @@ impl PackageDiscoveryService {
     /// Vector of package names.
     pub fn get_package_names(&self) -> Vec<String> {
         self.packages.iter()
-            .map(|pkg| pkg.name.clone())
+            .map(|pkg| pkg.name().to_string())
             .collect()
     }
     
@@ -231,7 +231,7 @@ impl PackageDiscoveryService {
     pub fn get_packages_in_directory(&self, directory: &str) -> Vec<&MonorepoPackageInfo> {
         self.packages.iter()
             .filter(|pkg| {
-                pkg.path.to_string_lossy().starts_with(directory)
+                pkg.path().to_string_lossy().starts_with(directory)
             })
             .collect()
     }
@@ -255,6 +255,7 @@ impl PackageDiscoveryService {
     /// - File system cannot be scanned
     /// - Package metadata cannot be parsed
     /// - Discovery configuration is invalid
+    #[allow(clippy::unnecessary_wraps)]
     pub fn refresh_packages(&mut self, file_system_service: &FileSystemService) -> Result<()> {
         // Clear existing packages
         self.packages.clear();
@@ -270,8 +271,8 @@ impl PackageDiscoveryService {
         }
         
         // Remove duplicates by name (keep first occurrence)
-        self.packages.sort_by(|a, b| a.name.cmp(&b.name));
-        self.packages.dedup_by(|a, b| a.name == b.name);
+        self.packages.sort_by(|a, b| a.name().cmp(b.name()));
+        self.packages.dedup_by(|a, b| a.name() == b.name());
         
         Ok(())
     }
@@ -316,10 +317,10 @@ impl PackageDiscoveryService {
         packages
     }
     
-    /// Scan directory for package files
+    /// Scan directory for Node.js package files
     ///
     /// Internal method to scan a directory and its subdirectories for
-    /// package definition files (package.json, Cargo.toml, etc.).
+    /// package.json files.
     ///
     /// # Arguments
     ///
@@ -336,8 +337,8 @@ impl PackageDiscoveryService {
     ) -> Vec<MonorepoPackageInfo> {
         let mut packages = Vec::new();
         
-        // Check for package definition files
-        let package_files = ["package.json", "Cargo.toml", "pyproject.toml", "pom.xml"];
+        // Check for Node.js package definition files
+        let package_files = ["package.json"];
         
         for &package_file in &package_files {
             let package_path = if directory.is_empty() {
@@ -368,7 +369,7 @@ impl PackageDiscoveryService {
                     for entry in entries {
                         if let Some(dir_name) = entry.file_name() {
                             if let Some(dir_str) = dir_name.to_str() {
-                                if file_system_service.is_dir(&format!("{directory}/{dir_str}")) {
+                                if file_system_service.is_dir(format!("{directory}/{dir_str}")) {
                                     let subdir = if directory.is_empty() {
                                         dir_str.to_string()
                                     } else {
@@ -391,14 +392,13 @@ impl PackageDiscoveryService {
         packages
     }
     
-    /// Parse package information from package file
+    /// Parse package information from package.json file
     ///
-    /// Internal method to parse package metadata from various package
-    /// definition file formats.
+    /// Internal method to parse package metadata from package.json files.
     ///
     /// # Arguments
     ///
-    /// * `package_file_path` - Path to package definition file
+    /// * `package_file_path` - Path to package.json file
     /// * `file_system_service` - File system service for file reading
     ///
     /// # Returns
@@ -418,18 +418,12 @@ impl PackageDiscoveryService {
             .unwrap_or(std::path::Path::new("."))
             .to_path_buf();
         
-        // Parse based on file type
+        // Parse package.json only (Node.js monorepo)
         if package_file_path.ends_with("package.json") {
-            Self::parse_npm_package(&content, package_dir)
-        } else if package_file_path.ends_with("Cargo.toml") {
-            Self::parse_cargo_package(&content, package_dir)
-        } else if package_file_path.ends_with("pyproject.toml") {
-            Self::parse_python_package(&content, package_dir)
-        } else if package_file_path.ends_with("pom.xml") {
-            Self::parse_maven_package(&content, package_dir)
+            Self::parse_npm_package(&content, &package_dir)
         } else {
             Err(crate::error::Error::package(format!(
-                "Unsupported package file format: {package_file_path}"
+                "Unsupported package file format: {package_file_path}. Only package.json is supported for Node.js monorepos."
             )))
         }
     }
@@ -452,375 +446,159 @@ impl PackageDiscoveryService {
     /// Returns an error if JSON parsing fails or required fields are missing.
     fn parse_npm_package(
         content: &str,
-        package_dir: std::path::PathBuf,
+        package_dir: &std::path::Path,
     ) -> Result<MonorepoPackageInfo> {
-        // For now, implement basic JSON parsing
-        // In a real implementation, this would use serde_json
-        let name = Self::extract_json_field(content, "name")
-            .unwrap_or_else(|| "unknown".to_string());
-        let version = Self::extract_json_field(content, "version")
-            .unwrap_or_else(|| "0.0.0".to_string());
+        // Parse JSON using serde_json
+        let package_json: serde_json::Value = serde_json::from_str(content)
+            .map_err(|e| crate::error::Error::package(format!("Failed to parse package.json: {e}")))?;
+        
+        let name = package_json.get("name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| crate::error::Error::package("Missing 'name' field in package.json".to_string()))?
+            .to_string();
+            
+        let version = package_json.get("version")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| crate::error::Error::package("Missing 'version' field in package.json".to_string()))?
+            .to_string();
+            
+        // Parse dependencies
+        let dependencies = Self::parse_package_json_dependencies(&package_json);
+        let dependencies_external = Self::extract_external_dependencies(&dependencies);
+        
+        // Create proper package using sublime-package-tools
+        let package = sublime_package_tools::Package::new(&name, &version, None)
+            .map_err(|e| crate::error::Error::package(format!("Failed to create package {name}: {e}")))?;
+        
+        let package_info = sublime_package_tools::PackageInfo {
+            package: std::rc::Rc::new(std::cell::RefCell::new(package)),
+            package_json_path: package_dir.join("package.json").to_string_lossy().to_string(),
+            package_path: package_dir.to_string_lossy().to_string(),
+            package_relative_path: package_dir.file_name()
+                .and_then(|n| n.to_str())
+                .ok_or_else(|| crate::error::Error::package("Invalid package directory name".to_string()))?
+                .to_string(),
+            pkg_json: std::rc::Rc::new(std::cell::RefCell::new(package_json.clone())),
+        };
+        
+        // Parse workspace dependencies from package.json
+        let (workspace_dependencies, workspace_dev_dependencies) = 
+            Self::parse_workspace_dependencies(&package_json);
+            
+        let workspace_package = sublime_standard_tools::monorepo::WorkspacePackage {
+            name: name.clone(),
+            version: version.clone(),
+            location: package_dir.to_path_buf(),
+            absolute_path: package_dir.to_path_buf(),
+            workspace_dependencies,
+            workspace_dev_dependencies,
+        };
         
         Ok(MonorepoPackageInfo {
-            // For now, create placeholder structs - proper parsing will be implemented
-            package_info: sublime_package_tools::PackageInfo {
-                package: std::rc::Rc::new(std::cell::RefCell::new(
-                    sublime_package_tools::Package::new(
-                        &name,
-                        &version,
-                        None
-                    ).or_else(|_| sublime_package_tools::Package::new(
-                        &name,
-                        "0.0.0",
-                        None
-                    )).map_err(|e| crate::error::Error::package(format!(
-                        "Failed to create package {name}: {e}"
-                    )))?
-                )),
-                package_json_path: package_dir.join("package.json").to_string_lossy().to_string(),
-                package_path: package_dir.to_string_lossy().to_string(),
-                package_relative_path: package_dir.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("unknown")
-                    .to_string(),
-                pkg_json: std::rc::Rc::new(std::cell::RefCell::new(
-                    serde_json::json!({
-                        "name": name.clone(),
-                        "version": version.clone()
-                    })
-                )),
-            },
-            // Create basic workspace package
-            workspace_package: sublime_standard_tools::monorepo::WorkspacePackage {
-                name: name.clone(),
-                version: version.clone(),
-                location: package_dir.clone(),
-                absolute_path: package_dir.clone(),
-                workspace_dependencies: Vec::new(),
-                workspace_dev_dependencies: Vec::new(),
-            },
+            package_info,
+            workspace_package,
             is_internal: true,
             dependents: Vec::new(),
-            dependencies: Vec::new(), // Would be parsed from dependencies field
-            dependencies_external: Vec::new(),
+            dependencies,
+            dependencies_external,
             version_status: crate::core::types::VersionStatus::Stable,
             changesets: Vec::new(),
-            name,
-            version,
-            path: package_dir,
-            package_type: crate::core::types::PackageType::JavaScript,
-            metadata: std::collections::HashMap::new(),
         })
     }
     
-    /// Parse Cargo.toml file
-    ///
-    /// Internal method to parse Rust package metadata from Cargo.toml.
-    ///
-    /// # Arguments
-    ///
-    /// * `content` - Content of the Cargo.toml file
-    /// * `package_dir` - Directory containing the package
-    ///
-    /// # Returns
-    ///
-    /// Parsed package information.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if TOML parsing fails or required fields are missing.
-    fn parse_cargo_package(
-        content: &str,
-        package_dir: std::path::PathBuf,
-    ) -> Result<MonorepoPackageInfo> {
-        // For now, implement basic TOML parsing
-        // In a real implementation, this would use toml crate
-        let name = Self::extract_toml_field(content, "name")
-            .unwrap_or_else(|| "unknown".to_string());
-        let version = Self::extract_toml_field(content, "version")
-            .unwrap_or_else(|| "0.0.0".to_string());
+    /// Parse dependencies from package.json
+    fn parse_package_json_dependencies(package_json: &serde_json::Value) -> Vec<crate::core::types::PackageDependency> {
+        let mut dependencies = Vec::new();
         
-        Ok(MonorepoPackageInfo {
-            // For now, create placeholder structs - proper parsing will be implemented
-            package_info: sublime_package_tools::PackageInfo {
-                package: std::rc::Rc::new(std::cell::RefCell::new(
-                    sublime_package_tools::Package::new(
-                        &name,
-                        &version,
-                        None
-                    ).or_else(|_| sublime_package_tools::Package::new(
-                        &name,
-                        "0.0.0",
-                        None
-                    )).map_err(|e| crate::error::Error::package(format!(
-                        "Failed to create package {name}: {e}"
-                    )))?
-                )),
-                package_json_path: package_dir.join("package.json").to_string_lossy().to_string(),
-                package_path: package_dir.to_string_lossy().to_string(),
-                package_relative_path: package_dir.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("unknown")
-                    .to_string(),
-                pkg_json: std::rc::Rc::new(std::cell::RefCell::new(
-                    serde_json::json!({
-                        "name": name.clone(),
-                        "version": version.clone()
-                    })
-                )),
-            },
-            // Create basic workspace package
-            workspace_package: sublime_standard_tools::monorepo::WorkspacePackage {
-                name: name.clone(),
-                version: version.clone(),
-                location: package_dir.clone(),
-                absolute_path: package_dir.clone(),
-                workspace_dependencies: Vec::new(),
-                workspace_dev_dependencies: Vec::new(),
-            },
-            is_internal: true,
-            dependents: Vec::new(),
-            dependencies: Vec::new(), // Would be parsed from dependencies section
-            dependencies_external: Vec::new(),
-            version_status: crate::core::types::VersionStatus::Stable,
-            changesets: Vec::new(),
-            name,
-            version,
-            path: package_dir,
-            package_type: crate::core::types::PackageType::Rust,
-            metadata: std::collections::HashMap::new(),
-        })
+        // Parse regular dependencies
+        if let Some(deps) = package_json.get("dependencies").and_then(|v| v.as_object()) {
+            for (name, version) in deps {
+                dependencies.push(crate::core::types::PackageDependency {
+                    name: name.clone(),
+                    version_requirement: version.as_str().unwrap_or("*").to_string(),
+                    dependency_type: crate::core::types::DependencyType::Runtime,
+                    optional: false,
+                    metadata: std::collections::HashMap::new(),
+                });
+            }
+        }
+        
+        // Parse dev dependencies
+        if let Some(deps) = package_json.get("devDependencies").and_then(|v| v.as_object()) {
+            for (name, version) in deps {
+                dependencies.push(crate::core::types::PackageDependency {
+                    name: name.clone(),
+                    version_requirement: version.as_str().unwrap_or("*").to_string(),
+                    dependency_type: crate::core::types::DependencyType::Development,
+                    optional: false,
+                    metadata: std::collections::HashMap::new(),
+                });
+            }
+        }
+        
+        // Parse peer dependencies
+        if let Some(deps) = package_json.get("peerDependencies").and_then(|v| v.as_object()) {
+            for (name, version) in deps {
+                dependencies.push(crate::core::types::PackageDependency {
+                    name: name.clone(),
+                    version_requirement: version.as_str().unwrap_or("*").to_string(),
+                    dependency_type: crate::core::types::DependencyType::Peer,
+                    optional: false,
+                    metadata: std::collections::HashMap::new(),
+                });
+            }
+        }
+        
+        // Parse optional dependencies
+        if let Some(deps) = package_json.get("optionalDependencies").and_then(|v| v.as_object()) {
+            for (name, version) in deps {
+                dependencies.push(crate::core::types::PackageDependency {
+                    name: name.clone(),
+                    version_requirement: version.as_str().unwrap_or("*").to_string(),
+                    dependency_type: crate::core::types::DependencyType::Optional,
+                    optional: true,
+                    metadata: std::collections::HashMap::new(),
+                });
+            }
+        }
+        
+        dependencies
     }
     
-    /// Parse Python pyproject.toml file
-    ///
-    /// Internal method to parse Python package metadata from pyproject.toml.
-    ///
-    /// # Arguments
-    ///
-    /// * `content` - Content of the pyproject.toml file
-    /// * `package_dir` - Directory containing the package
-    ///
-    /// # Returns
-    ///
-    /// Parsed package information.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if TOML parsing fails or required fields are missing.
-    fn parse_python_package(
-        content: &str,
-        package_dir: std::path::PathBuf,
-    ) -> Result<MonorepoPackageInfo> {
-        // Basic parsing for Python packages
-        let name = Self::extract_toml_field(content, "name")
-            .unwrap_or_else(|| "unknown".to_string());
-        let version = Self::extract_toml_field(content, "version")
-            .unwrap_or_else(|| "0.0.0".to_string());
-        
-        Ok(MonorepoPackageInfo {
-            // For now, create placeholder structs - proper parsing will be implemented
-            package_info: sublime_package_tools::PackageInfo {
-                package: std::rc::Rc::new(std::cell::RefCell::new(
-                    sublime_package_tools::Package::new(
-                        &name,
-                        &version,
-                        None
-                    ).or_else(|_| sublime_package_tools::Package::new(
-                        &name,
-                        "0.0.0",
-                        None
-                    )).map_err(|e| crate::error::Error::package(format!(
-                        "Failed to create package {name}: {e}"
-                    )))?
-                )),
-                package_json_path: package_dir.join("package.json").to_string_lossy().to_string(),
-                package_path: package_dir.to_string_lossy().to_string(),
-                package_relative_path: package_dir.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("unknown")
-                    .to_string(),
-                pkg_json: std::rc::Rc::new(std::cell::RefCell::new(
-                    serde_json::json!({
-                        "name": name.clone(),
-                        "version": version.clone()
-                    })
-                )),
-            },
-            // Create basic workspace package
-            workspace_package: sublime_standard_tools::monorepo::WorkspacePackage {
-                name: name.clone(),
-                version: version.clone(),
-                location: package_dir.clone(),
-                absolute_path: package_dir.clone(),
-                workspace_dependencies: Vec::new(),
-                workspace_dev_dependencies: Vec::new(),
-            },
-            is_internal: true,
-            dependents: Vec::new(),
-            dependencies: Vec::new(),
-            dependencies_external: Vec::new(),
-            version_status: crate::core::types::VersionStatus::Stable,
-            changesets: Vec::new(),
-            name,
-            version,
-            path: package_dir,
-            package_type: crate::core::types::PackageType::Python,
-            metadata: std::collections::HashMap::new(),
-        })
+    /// Extract external dependencies (not part of the monorepo)
+    fn extract_external_dependencies(dependencies: &[crate::core::types::PackageDependency]) -> Vec<String> {
+        // This would typically check against the list of internal packages
+        // For now, assume all are external - this should be improved with workspace detection
+        dependencies.iter().map(|dep| dep.name.clone()).collect()
     }
     
-    /// Parse Maven pom.xml file
-    ///
-    /// Internal method to parse Java package metadata from pom.xml.
-    ///
-    /// # Arguments
-    ///
-    /// * `content` - Content of the pom.xml file
-    /// * `package_dir` - Directory containing the package
-    ///
-    /// # Returns
-    ///
-    /// Parsed package information.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if XML parsing fails or required fields are missing.
-    fn parse_maven_package(
-        content: &str,
-        package_dir: std::path::PathBuf,
-    ) -> Result<MonorepoPackageInfo> {
-        // Basic XML parsing for Maven packages
-        let name = Self::extract_xml_field(content, "artifactId")
-            .unwrap_or_else(|| "unknown".to_string());
-        let version = Self::extract_xml_field(content, "version")
-            .unwrap_or_else(|| "0.0.0".to_string());
+    /// Parse workspace dependencies from package.json
+    fn parse_workspace_dependencies(package_json: &serde_json::Value) -> (Vec<String>, Vec<String>) {
+        let mut workspace_deps = Vec::new();
+        let mut workspace_dev_deps = Vec::new();
         
-        Ok(MonorepoPackageInfo {
-            // For now, create placeholder structs - proper parsing will be implemented
-            package_info: sublime_package_tools::PackageInfo {
-                package: std::rc::Rc::new(std::cell::RefCell::new(
-                    sublime_package_tools::Package::new(
-                        &name,
-                        &version,
-                        None
-                    ).or_else(|_| sublime_package_tools::Package::new(
-                        &name,
-                        "0.0.0",
-                        None
-                    )).map_err(|e| crate::error::Error::package(format!(
-                        "Failed to create package {name}: {e}"
-                    )))?
-                )),
-                package_json_path: package_dir.join("package.json").to_string_lossy().to_string(),
-                package_path: package_dir.to_string_lossy().to_string(),
-                package_relative_path: package_dir.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("unknown")
-                    .to_string(),
-                pkg_json: std::rc::Rc::new(std::cell::RefCell::new(
-                    serde_json::json!({
-                        "name": name.clone(),
-                        "version": version.clone()
-                    })
-                )),
-            },
-            // Create basic workspace package
-            workspace_package: sublime_standard_tools::monorepo::WorkspacePackage {
-                name: name.clone(),
-                version: version.clone(),
-                location: package_dir.clone(),
-                absolute_path: package_dir.clone(),
-                workspace_dependencies: Vec::new(),
-                workspace_dev_dependencies: Vec::new(),
-            },
-            is_internal: true,
-            dependents: Vec::new(),
-            dependencies: Vec::new(),
-            dependencies_external: Vec::new(),
-            version_status: crate::core::types::VersionStatus::Stable,
-            changesets: Vec::new(),
-            name,
-            version,
-            path: package_dir,
-            package_type: crate::core::types::PackageType::Java,
-            metadata: std::collections::HashMap::new(),
-        })
-    }
-    
-    /// Extract field from JSON content
-    ///
-    /// Simple JSON field extraction utility. In production, would use serde_json.
-    ///
-    /// # Arguments
-    ///
-    /// * `content` - JSON content
-    /// * `field` - Field name to extract
-    ///
-    /// # Returns
-    ///
-    /// Field value if found, None otherwise.
-    fn extract_json_field(content: &str, field: &str) -> Option<String> {
-        let pattern = format!("\"{field}\":");
-        if let Some(start) = content.find(&pattern) {
-            let after_colon = &content[start + pattern.len()..];
-            if let Some(quote_start) = after_colon.find('"') {
-                let value_start = quote_start + 1;
-                if let Some(quote_end) = after_colon[value_start..].find('"') {
-                    return Some(after_colon[value_start..value_start + quote_end].to_string());
+        // Check for workspace: protocol in dependencies
+        if let Some(deps) = package_json.get("dependencies").and_then(|v| v.as_object()) {
+            for (name, version) in deps {
+                if let Some(version_str) = version.as_str() {
+                    if version_str.starts_with("workspace:") {
+                        workspace_deps.push(name.clone());
+                    }
                 }
             }
         }
-        None
-    }
-    
-    /// Extract field from TOML content
-    ///
-    /// Simple TOML field extraction utility. In production, would use toml crate.
-    ///
-    /// # Arguments
-    ///
-    /// * `content` - TOML content
-    /// * `field` - Field name to extract
-    ///
-    /// # Returns
-    ///
-    /// Field value if found, None otherwise.
-    fn extract_toml_field(content: &str, field: &str) -> Option<String> {
-        for line in content.lines() {
-            let line = line.trim();
-            if line.starts_with(&format!("{field} =")) {
-                if let Some(equals_pos) = line.find('=') {
-                    let value = line[equals_pos + 1..].trim();
-                    return Some(value.trim_matches('"').to_string());
+        
+        // Check for workspace: protocol in devDependencies
+        if let Some(deps) = package_json.get("devDependencies").and_then(|v| v.as_object()) {
+            for (name, version) in deps {
+                if let Some(version_str) = version.as_str() {
+                    if version_str.starts_with("workspace:") {
+                        workspace_dev_deps.push(name.clone());
+                    }
                 }
             }
         }
-        None
-    }
-    
-    /// Extract field from XML content
-    ///
-    /// Simple XML field extraction utility. In production, would use proper XML parser.
-    ///
-    /// # Arguments
-    ///
-    /// * `content` - XML content
-    /// * `field` - Field name to extract
-    ///
-    /// # Returns
-    ///
-    /// Field value if found, None otherwise.
-    fn extract_xml_field(content: &str, field: &str) -> Option<String> {
-        let start_tag = format!("<{field}>");
-        let end_tag = format!("</{field}>");
         
-        if let Some(start) = content.find(&start_tag) {
-            let value_start = start + start_tag.len();
-            if let Some(end) = content[value_start..].find(&end_tag) {
-                return Some(content[value_start..value_start + end].trim().to_string());
-            }
-        }
-        None
+        (workspace_deps, workspace_dev_deps)
     }
 }

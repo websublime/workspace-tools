@@ -76,7 +76,6 @@ impl<'a> ChangesetManager<'a> {
         let storage = crate::changesets::ChangesetStorage::new(
             project.config.changesets.clone(),
             &project.file_system,
-            &project.packages,
             &project.root_path,
         );
         
@@ -346,9 +345,7 @@ impl<'a> ChangesetManager<'a> {
             errors.push("Package name cannot be empty".to_string());
         } else {
             // Check if package actually exists in the project
-            if self.packages.iter().find(|p| p.name() == &changeset.package).is_none() {
-                errors.push(format!("Package '{package}' not found in project", package = changeset.package));
-            } else {
+            if self.packages.iter().any(|p| p.name() == changeset.package) {
                 // Validate version bump is appropriate
                 match self.validate_version_bump(&changeset.package, changeset.version_bump) {
                     Ok(current_version) => {
@@ -358,6 +355,8 @@ impl<'a> ChangesetManager<'a> {
                         errors.push(format!("Version bump validation failed: {e}"));
                     }
                 }
+            } else {
+                errors.push(format!("Package '{package}' not found in project", package = changeset.package));
             }
         }
 
@@ -483,15 +482,14 @@ impl<'a> ChangesetManager<'a> {
     /// ```rust
     /// use sublime_monorepo_tools::Environment;
     ///
-    /// # async fn example(manager: &ChangesetManager) -> Result<(), Box<dyn std::error::Error>> {
+    /// # fn example(manager: &ChangesetManager) -> Result<(), Box<dyn std::error::Error>> {
     /// let environments = vec![Environment::Development, Environment::Staging];
-    /// let result = manager.deploy_to_environments("changeset-123", &environments).await?;
+    /// let result = manager.deploy_to_environments("changeset-123", &environments)?;
     /// println!("Deployment success: {}", result.success);
     /// # Ok(())
     /// # }
     /// ```
-    #[allow(clippy::unused_async)]
-    pub async fn deploy_to_environments(
+    pub fn deploy_to_environments(
         &self,
         changeset_id: &str,
         environments: &[Environment],

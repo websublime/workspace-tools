@@ -40,7 +40,7 @@ use super::PackageDiscoveryService;
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct DependencyAnalysisService {
+pub(crate) struct DependencyAnalysisService {
     /// Dependency registry for package management
     dependency_registry: DependencyRegistry,
     
@@ -52,9 +52,6 @@ pub struct DependencyAnalysisService {
     
     /// Reference to package discovery service
     packages: Vec<MonorepoPackageInfo>,
-    
-    /// Configuration for dependency analysis
-    config: MonorepoConfig,
 }
 
 /// Represents a dependency graph for the monorepo
@@ -98,6 +95,7 @@ pub struct ConflictingPackage {
     pub version_requirement: String,
 }
 
+#[allow(dead_code)]
 impl DependencyAnalysisService {
     /// Create a new dependency analysis service
     ///
@@ -121,7 +119,7 @@ impl DependencyAnalysisService {
     /// - Configuration is invalid for dependency analysis
     pub fn new(
         package_service: &PackageDiscoveryService,
-        config: &MonorepoConfig,
+        _config: &MonorepoConfig,
     ) -> Result<Self> {
         // Initialize dependency registry and registry manager
         let dependency_registry = DependencyRegistry::new();
@@ -136,7 +134,6 @@ impl DependencyAnalysisService {
             registry_manager,
             dependency_graph: None,
             packages,
-            config: config.clone(),
         })
     }
     
@@ -186,7 +183,7 @@ impl DependencyAnalysisService {
         
         // Get all package names for internal dependency detection
         let package_names: HashSet<String> = self.packages.iter()
-            .map(|pkg| pkg.name.clone())
+            .map(|pkg| pkg.name().to_string())
             .collect();
         
         // Build dependency relationships
@@ -201,18 +198,18 @@ impl DependencyAnalysisService {
                     // Internal dependency - update dependents map
                     dependents.entry(dependency.name.clone())
                         .or_insert_with(Vec::new)
-                        .push(package.name.clone());
+                        .push(package.name().to_string());
                 } else {
                     // External dependency
                     external_dependencies.insert(dependency.name.clone());
                 }
             }
             
-            dependencies.insert(package.name.clone(), pkg_dependencies);
+            dependencies.insert(package.name().to_string(), pkg_dependencies);
         }
         
         // Detect circular dependencies
-        let circular_dependencies = self.detect_cycles_in_graph(&dependencies)?;
+        let circular_dependencies = Self::detect_cycles_in_graph(&dependencies)?;
         
         let graph = DependencyGraph {
             dependencies,
@@ -369,7 +366,7 @@ impl DependencyAnalysisService {
     /// # Errors
     ///
     /// Returns an error if dependency analysis fails.
-    pub fn detect_dependency_conflicts(&self) -> Result<Vec<DependencyConflict>> {
+    pub fn detect_dependency_conflicts(&self) -> Vec<DependencyConflict> {
         let mut dependency_versions: HashMap<String, Vec<ConflictingPackage>> = HashMap::new();
         
         // Collect all dependency versions across packages
@@ -377,9 +374,9 @@ impl DependencyAnalysisService {
             for dependency in &package.dependencies {
                 dependency_versions
                     .entry(dependency.name.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(ConflictingPackage {
-                        package_name: package.name.clone(),
+                        package_name: package.name().to_string(),
                         version_requirement: dependency.version_requirement.clone(),
                     });
             }
@@ -404,7 +401,7 @@ impl DependencyAnalysisService {
             }
         }
         
-        Ok(conflicts)
+        conflicts
     }
     
     /// Get external dependencies
@@ -445,20 +442,20 @@ impl DependencyAnalysisService {
         &self,
         dependency_name: &str,
         _new_version: &str,
-    ) -> Result<Vec<String>> {
+    ) -> Vec<String> {
         let mut affected_packages = Vec::new();
         
         // Find all packages that use this dependency
         for package in &self.packages {
             for dependency in &package.dependencies {
                 if dependency.name == dependency_name {
-                    affected_packages.push(package.name.clone());
+                    affected_packages.push(package.name().to_string());
                     break;
                 }
             }
         }
         
-        Ok(affected_packages)
+        affected_packages
     }
     
     /// Validate dependency constraints
@@ -487,7 +484,7 @@ impl DependencyAnalysisService {
         }
         
         // Check for dependency conflicts
-        let conflicts = self.detect_dependency_conflicts()?;
+        let conflicts = self.detect_dependency_conflicts();
         if !conflicts.is_empty() {
             return Err(crate::error::Error::dependency(format!(
                 "Dependency conflicts detected: {} conflicts found",
@@ -514,7 +511,6 @@ impl DependencyAnalysisService {
     ///
     /// Returns an error if graph traversal fails.
     fn detect_cycles_in_graph(
-        &self,
         dependencies: &HashMap<String, Vec<String>>,
     ) -> Result<Vec<Vec<String>>> {
         let mut visited = HashSet::new();
@@ -524,7 +520,7 @@ impl DependencyAnalysisService {
         for package in dependencies.keys() {
             if !visited.contains(package) {
                 let mut path = Vec::new();
-                self.dfs_detect_cycle(
+                Self::dfs_detect_cycle(
                     package,
                     dependencies,
                     &mut visited,
@@ -559,7 +555,6 @@ impl DependencyAnalysisService {
     ///
     /// Returns an error if DFS encounters an issue.
     fn dfs_detect_cycle(
-        &self,
         package: &str,
         dependencies: &HashMap<String, Vec<String>>,
         visited: &mut HashSet<String>,
@@ -574,7 +569,7 @@ impl DependencyAnalysisService {
         if let Some(deps) = dependencies.get(package) {
             for dep in deps {
                 if !visited.contains(dep) {
-                    self.dfs_detect_cycle(dep, dependencies, visited, rec_stack, path, cycles)?;
+                    Self::dfs_detect_cycle(dep, dependencies, visited, rec_stack, path, cycles)?;
                 } else if rec_stack.contains(dep) {
                     // Found a cycle - extract the cycle from the path
                     if let Some(cycle_start) = path.iter().position(|p| p == dep) {

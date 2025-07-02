@@ -32,11 +32,12 @@ use sublime_git_tools::{Repo, RepoCommit, GitChangedFile};
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct GitOperationsService {
+pub(crate) struct GitOperationsService {
     /// Git repository instance
     repository: Repo,
 }
 
+#[allow(dead_code)]
 impl GitOperationsService {
     /// Create a new Git operations service
     ///
@@ -147,6 +148,7 @@ impl GitOperationsService {
     /// # Errors
     ///
     /// Returns an error if Git status cannot be determined.
+    #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
     pub fn get_unstaged_files(&self) -> Result<Vec<String>> {
         // Note: This method might need to be implemented in sublime_git_tools
         // For now, we'll return an empty list as a placeholder
@@ -278,6 +280,7 @@ impl GitOperationsService {
     /// # Errors
     ///
     /// Returns an error if Git operation fails.
+    #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
     pub fn is_path_ignored(&self, path: &str) -> Result<bool> {
         // Note: This method might need to be implemented in sublime_git_tools
         // For now, we'll return false as a placeholder
@@ -296,6 +299,7 @@ impl GitOperationsService {
     /// # Errors
     ///
     /// Returns an error if repository path cannot be determined.
+    #[allow(clippy::unused_self)]
     pub fn get_repository_root(&self) -> Result<std::path::PathBuf> {
         // Note: This method might need to be implemented in sublime_git_tools
         // For now, we'll return the current directory as a placeholder

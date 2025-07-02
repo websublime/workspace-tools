@@ -348,8 +348,7 @@ impl ChangelogGenerator {
             .replace("## ", "")
             .replace("### ", "")
             .replace("**", "")
-            .replace('*', "")
-            .replace('`', "")
+            .replace(['*', '`'], "")
     }
 }
 

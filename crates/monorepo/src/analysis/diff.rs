@@ -48,7 +48,6 @@ impl<'a> DiffAnalyzer<'a> {
             analyzers,
             repository: project.repository(),
             packages: &project.packages,
-            file_system: project.services.file_system_service().manager(),
             root_path: project.root_path(),
         }
     }
@@ -63,7 +62,6 @@ impl<'a> DiffAnalyzer<'a> {
             analyzers,
             repository: project.repository(),
             packages: &project.packages,
-            file_system: project.services.file_system_service().manager(),
             root_path: project.root_path(),
         }
     }
@@ -332,7 +330,7 @@ impl<'a> DiffAnalyzer<'a> {
                 let mut reasons = Vec::new();
 
                 // Enhance significance based on package role
-                if let Some(package_info) = self.get_package(&change.package_name) {
+                if let Some(package_info) = self.packages.iter().find(|pkg| pkg.name() == change.package_name) {
                     // Check if package has many dependents
                     let dependents = self.get_dependents(&change.package_name);
                     if dependents.len() > 5 {
@@ -517,18 +515,6 @@ impl<'a> DiffAnalyzer<'a> {
         Ok(conflicts)
     }
 
-    /// Get package by name from direct package array
-    /// 
-    /// # Arguments
-    /// 
-    /// * `name` - Package name to search for
-    /// 
-    /// # Returns
-    /// 
-    /// Reference to package info if found, None otherwise
-    fn get_package(&self, name: &str) -> Option<&crate::core::MonorepoPackageInfo> {
-        self.packages.iter().find(|pkg| pkg.name() == name)
-    }
 
     /// Get dependents of a package
     /// 
@@ -540,11 +526,11 @@ impl<'a> DiffAnalyzer<'a> {
     /// 
     /// Vector of packages that depend on the given package
     fn get_dependents(&self, package_name: &str) -> Vec<&crate::core::MonorepoPackageInfo> {
-        if let Some(package) = self.get_package(package_name) {
+        if let Some(package) = self.packages.iter().find(|pkg| pkg.name() == package_name) {
             // Use the dependents field from the package info to find dependent packages
             package.dependents
                 .iter()
-                .filter_map(|dependent_name| self.get_package(dependent_name))
+                .filter_map(|dependent_name| self.packages.iter().find(|pkg| pkg.name() == dependent_name))
                 .collect()
         } else {
             Vec::new()

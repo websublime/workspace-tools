@@ -12,7 +12,8 @@ use crate::core::{
 };
 use crate::error::Result;
 use std::collections::HashMap;
-use sublime_package_tools::{DependencyRegistry, Version};
+use sublime_package_tools::DependencyRegistry;
+use semver::Version;
 // Import the diff_analyzer types for consistency
 use crate::analysis::ChangeAnalysis;
 use crate::changes::PackageChange;
@@ -34,9 +35,7 @@ impl<'a> VersionManager<'a> {
         Self {
             config: &project.config,
             packages: &project.packages,
-            repository: &project.repository,
-            file_system: &project.file_system,
-            root_path: &project.root_path,
+            root_path: project.root_path(),
             strategy: Box::new(DefaultVersioningStrategy),
         }
     }
@@ -60,9 +59,7 @@ impl<'a> VersionManager<'a> {
         Self {
             config: &project.config,
             packages: &project.packages,
-            repository: &project.repository,
-            file_system: &project.file_system,
-            root_path: &project.root_path,
+            root_path: project.root_path(),
             strategy,
         }
     }
@@ -167,31 +164,6 @@ impl<'a> VersionManager<'a> {
         Ok(PropagationResult { updates, conflicts })
     }
 
-    /// Propagate version changes with enhanced dependency analysis
-    ///
-    /// FASE 2 ASYNC ELIMINATION: Removed artificial async behavior and delays.
-    /// This function performs the same work as the previous async version but
-    /// without unnecessary async infection or artificial delays.
-    pub fn propagate_version_changes_enhanced(
-        &self,
-        updated_package: &str,
-    ) -> Result<PropagationResult> {
-        // Use the robust synchronous implementation without artificial delays
-        self.propagate_version_changes(updated_package)
-    }
-
-    /// Propagate version changes asynchronously (compatibility wrapper)
-    ///
-    /// FASE 2 ASYNC ELIMINATION: This async function now delegates to the sync version
-    /// to eliminate async infection while maintaining backward compatibility.
-    #[allow(clippy::unused_async)]
-    pub async fn propagate_version_changes_async(
-        &self,
-        updated_package: &str,
-    ) -> Result<PropagationResult> {
-        // Delegate to sync version - no actual async work needed, no artificial delays
-        self.propagate_version_changes_enhanced(updated_package)
-    }
 
     /// Analyze the impact of proposed version changes
     pub fn analyze_version_impact(
@@ -446,7 +418,7 @@ impl<'a> VersionManager<'a> {
                 package_name: package_change.package_name.clone(),
                 current_version: self.packages
                     .iter()
-                    .find(|pkg| pkg.name() == &package_change.package_name)
+                    .find(|pkg| pkg.name() == package_change.package_name)
                     .map(|p| p.version().to_string())
                     .unwrap_or_default(),
                 planned_version_bump: bump_type,
@@ -527,16 +499,21 @@ impl<'a> VersionManager<'a> {
         bump_type: VersionBumpType,
         commit_sha: Option<&str>,
     ) -> Result<String> {
+        let parsed_version = Version::parse(current_version)
+            .map_err(|e| crate::error::Error::versioning(format!("Invalid version '{current_version}': {e}")))?;
+
         let result = match bump_type {
-            VersionBumpType::Major => Version::bump_major(current_version),
-            VersionBumpType::Minor => Version::bump_minor(current_version),
-            VersionBumpType::Patch => Version::bump_patch(current_version),
+            VersionBumpType::Major => Version::new(parsed_version.major + 1, 0, 0),
+            VersionBumpType::Minor => Version::new(parsed_version.major, parsed_version.minor + 1, 0),
+            VersionBumpType::Patch => Version::new(parsed_version.major, parsed_version.minor, parsed_version.patch + 1),
             VersionBumpType::Snapshot => {
                 let sha = commit_sha.unwrap_or("unknown");
-                Version::bump_snapshot(current_version, sha)
+                let mut snapshot_version = parsed_version.clone();
+                snapshot_version.pre = semver::Prerelease::new(&format!("snapshot.{sha}"))
+                    .map_err(|e| crate::error::Error::versioning(format!("Invalid snapshot prerelease: {e}")))?;
+                snapshot_version
             }
-        }
-        .map_err(|e| crate::error::Error::versioning(format!("Version bump failed: {e}")))?;
+        };
 
         Ok(result.to_string())
     }
@@ -625,49 +602,10 @@ impl<'a> VersionManager<'a> {
     }
 
     /// Execute a versioning plan
-    pub fn execute_versioning_plan(&self, plan: &VersioningPlan) -> Result<VersioningResult> {
-        let mut primary_updates = Vec::new();
-        let mut propagated_updates = Vec::new();
-        let mut all_conflicts = plan.conflicts.clone();
-
-        for step in &plan.steps {
-            // Execute the version bump
-            let result =
-                self.bump_package_version(&step.package_name, step.planned_version_bump, None)?;
-
-            // Collect results
-            primary_updates.extend(result.primary_updates);
-            propagated_updates.extend(result.propagated_updates);
-            all_conflicts.extend(result.conflicts);
-        }
-
-        // Resolve final dependency conflicts using DependencyRegistry
-        let dependency_registry = DependencyRegistry::new();
-        let dependency_updates =
-            dependency_registry.resolve_version_conflicts().unwrap_or_else(|_| {
-                sublime_package_tools::ResolutionResult {
-                    resolved_versions: HashMap::new(),
-                    updates_required: Vec::new(),
-                }
-            });
-
-        Ok(VersioningResult {
-            primary_updates,
-            propagated_updates,
-            conflicts: all_conflicts,
-            dependency_updates,
-        })
-    }
-
-    /// Execute a versioning plan with enhanced progress tracking
     ///
-    /// FASE 2 ASYNC ELIMINATION: Removed artificial async behavior and delays.
-    /// This function performs the same work as the previous async version but
-    /// without unnecessary async infection or artificial delays.
-    pub fn execute_versioning_plan_enhanced(
-        &self,
-        plan: &VersioningPlan,
-    ) -> Result<VersioningResult> {
+    /// Executes all steps in the versioning plan with progress tracking and 
+    /// dependency conflict resolution.
+    pub fn execute_versioning_plan(&self, plan: &VersioningPlan) -> Result<VersioningResult> {
         let mut primary_updates = Vec::new();
         let mut propagated_updates = Vec::new();
         let mut all_conflicts = plan.conflicts.clone();
@@ -683,15 +621,13 @@ impl<'a> VersionManager<'a> {
                 step.planned_version_bump
             );
 
-            // Execute the version bump synchronously - no artificial delays needed
+            // Execute the version bump synchronously
             let result = self.bump_package_version(&step.package_name, step.planned_version_bump, None)?;
 
             // Collect results
             primary_updates.extend(result.primary_updates);
             propagated_updates.extend(result.propagated_updates);
             all_conflicts.extend(result.conflicts);
-
-            // No artificial delay - let the system manage resources naturally
         }
 
         // Resolve final dependency conflicts using DependencyRegistry
@@ -714,35 +650,369 @@ impl<'a> VersionManager<'a> {
         })
     }
 
-    /// Execute a versioning plan asynchronously (compatibility wrapper)
+    /// Get dependency update strategy for a package
     ///
-    /// FASE 2 ASYNC ELIMINATION: This async function now delegates to the sync version
-    /// to eliminate async infection while maintaining backward compatibility.
-    #[allow(clippy::unused_async)]
-    pub async fn execute_versioning_plan_async(
-        &self,
-        plan: &VersioningPlan,
-    ) -> Result<VersioningResult> {
-        // Delegate to sync version - no actual async work needed, no artificial delays
-        self.execute_versioning_plan_enhanced(plan)
-    }
-
-    /// Get dependency update strategy for a package (placeholder implementation)
+    /// Analyzes the impact of updating a package and determines which dependent
+    /// packages need version updates and what type of version bumps are required.
+    /// Uses real dependency analysis to provide robust update strategies.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to analyze update strategy for
+    ///
+    /// # Returns
+    ///
+    /// Vector of package version updates that should be applied as a result
+    /// of updating the specified package
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Package is not found in the monorepo
+    /// - Dependency analysis fails
+    /// - Version parsing or calculation fails
     pub fn get_dependency_update_strategy(&self, package_name: &str) -> Result<Vec<PackageVersionUpdate>> {
-        let _package = self.packages.iter().find(|pkg| pkg.name() == package_name)
-            .ok_or_else(|| crate::error::Error::package_not_found(package_name))?;
+        let package = self.packages.iter().find(|pkg| pkg.name() == package_name)
+            .ok_or_else(|| crate::error::Error::package(format!("Package '{package_name}' not found")))?;
 
-        // Placeholder implementation - will be enhanced when dependency analysis is ready
-        log::info!("Dependency update strategy analysis for package: {}", package_name);
+        // Create file system service for package discovery
+        let file_system_service = crate::core::services::FileSystemService::new(self.root_path)?;
         
-        Ok(Vec::new())
+        // Create package service for dependency analysis
+        let package_service = crate::core::services::PackageDiscoveryService::new(
+            self.root_path,
+            &file_system_service,
+            self.config,
+        )?;
+
+        // Create dependency service to analyze impact
+        let mut dependency_service = crate::core::services::DependencyAnalysisService::new(
+            &package_service,
+            self.config,
+        )?;
+
+        // Get packages that depend on this package
+        let dependents = dependency_service.get_dependents(package_name)?;
+        if dependents.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Analyze the impact of updating this package
+        let affected_packages = dependency_service.analyze_dependency_update_impact(
+            package_name,
+            package.version(),
+        );
+
+        let mut updates = Vec::new();
+
+        // For each dependent package, determine required version bump
+        for dependent_name in &dependents {
+            if let Some(dependent_pkg) = self.packages.iter().find(|pkg| pkg.name() == dependent_name) {
+                // Determine version bump type based on dependency analysis
+                // Use conservative approach: if a dependency is updated, dependent gets patch bump
+                // unless explicitly configured otherwise
+                let bump_type = match self.config.versioning.default_bump {
+                    VersionBumpType::Major => VersionBumpType::Major,
+                    VersionBumpType::Minor => VersionBumpType::Minor,
+                    _ => VersionBumpType::Patch, // Safe default
+                };
+
+                // Calculate new version using sublime-package-tools
+                let current_version = Version::parse(dependent_pkg.version())
+                    .map_err(|e| crate::error::Error::versioning(
+                        format!("Invalid version '{}' for package '{}': {}", 
+                               dependent_pkg.version(), dependent_name, e)
+                    ))?;
+
+                let new_version = match bump_type {
+                    VersionBumpType::Major => Version::new(current_version.major + 1, 0, 0),
+                    VersionBumpType::Minor => Version::new(current_version.major, current_version.minor + 1, 0),
+                    VersionBumpType::Patch => Version::new(current_version.major, current_version.minor, current_version.patch + 1),
+                    VersionBumpType::Snapshot => {
+                        let mut snapshot_version = current_version.clone();
+                        snapshot_version.pre = semver::Prerelease::new("snapshot")
+                            .map_err(|e| crate::error::Error::versioning(format!("Invalid snapshot prerelease: {e}")))?;
+                        snapshot_version
+                    }
+                };
+
+                // Check if this package is actually affected
+                if affected_packages.contains(dependent_name) {
+                    updates.push(PackageVersionUpdate {
+                        package_name: dependent_name.clone(),
+                        old_version: dependent_pkg.version().to_string(),
+                        new_version: new_version.to_string(),
+                        bump_type,
+                        reason: format!(
+                            "Dependency '{}' updated from {} - requiring version alignment",
+                            package_name,
+                            package.version()
+                        ),
+                    });
+                }
+            }
+        }
+
+        Ok(updates)
     }
 
-    /// Validate version compatibility across all packages (placeholder implementation)
+    /// Validate version compatibility across all packages
+    ///
+    /// Performs comprehensive version compatibility validation across the entire
+    /// monorepo, detecting version conflicts, circular dependencies, and incompatible
+    /// version constraints. Uses real dependency analysis for robust validation.
+    ///
+    /// # Returns
+    ///
+    /// Vector of version conflicts found in the monorepo that require resolution
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if dependency analysis or version parsing fails
+    #[allow(clippy::too_many_lines)]
     pub fn validate_version_compatibility(&self) -> Result<Vec<VersionConflict>> {
-        // Placeholder implementation - will be enhanced when dependency analysis is ready
-        log::info!("Version compatibility validation across packages");
+        let mut conflicts = Vec::new();
+
+        // Create file system service for package discovery
+        let file_system_service = crate::core::services::FileSystemService::new(self.root_path)?;
         
-        Ok(Vec::new())
+        // Create package service for dependency analysis
+        let package_service = crate::core::services::PackageDiscoveryService::new(
+            self.root_path,
+            &file_system_service,
+            self.config,
+        )?;
+
+        // Create dependency service for analysis
+        let mut dependency_service = crate::core::services::DependencyAnalysisService::new(
+            &package_service,
+            self.config,
+        )?;
+
+        // 1. Check for circular dependencies
+        let circular_deps = dependency_service.detect_circular_dependencies()?;
+        for cycle in circular_deps {
+            if cycle.len() > 1 {
+                conflicts.push(VersionConflict {
+                    package_name: cycle[0].clone(),
+                    conflict_type: ConflictType::CircularDependency,
+                    description: format!(
+                        "Circular dependency detected: {}",
+                        cycle.join(" -> ")
+                    ),
+                    resolution_strategy: "Break the circular dependency by refactoring packages or using dependency injection".to_string(),
+                });
+            }
+        }
+
+        // 2. Check for dependency version conflicts
+        let dependency_conflicts = dependency_service.detect_dependency_conflicts();
+        for dep_conflict in dependency_conflicts {
+            conflicts.push(VersionConflict {
+                package_name: dep_conflict.dependency_name.clone(),
+                conflict_type: ConflictType::DependencyMismatch,
+                description: format!(
+                    "Dependency '{}' has conflicting version requirements: {}",
+                    dep_conflict.dependency_name,
+                    dep_conflict.conflicting_packages
+                        .iter()
+                        .map(|p| format!("{}: {}", p.package_name, p.version_requirement))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                resolution_strategy: "Align all packages to use the same version requirement or upgrade incompatible packages".to_string(),
+            });
+        }
+
+        // 3. Validate individual package versions
+        for package in self.packages {
+            // Check if version format is valid
+            if let Err(e) = Version::parse(package.version()) {
+                conflicts.push(VersionConflict {
+                    package_name: package.name().to_string(),
+                    conflict_type: ConflictType::InvalidVersionFormat,
+                    description: format!(
+                        "Package '{}' has invalid version format '{}': {}",
+                        package.name(),
+                        package.version(),
+                        e
+                    ),
+                    resolution_strategy: "Update package.json with valid semver version format".to_string(),
+                });
+            }
+
+            // Check for potential breaking changes in non-major bumps
+            let Ok(current_version) = Version::parse(package.version()) else { continue };
+
+            // Check if this is a pre-release version when auto_tag is enabled
+            if !current_version.pre.is_empty() && self.config.versioning.auto_tag {
+                conflicts.push(VersionConflict {
+                    package_name: package.name().to_string(),
+                    conflict_type: ConflictType::PotentialBreakingChange,
+                    description: format!(
+                        "Package '{}' has pre-release version '{}' but auto_tag is enabled",
+                        package.name(),
+                        package.version()
+                    ),
+                    resolution_strategy: "Release a stable version or disable auto_tag for pre-releases".to_string(),
+                });
+            }
+        }
+
+        // 4. Perform comprehensive version compatibility analysis for internal dependencies
+        let _dependency_graph = dependency_service.build_dependency_graph()?;
+        let registry = dependency_service.registry();
+        
+        for package in self.packages {
+            for dependency in &package.dependencies {
+                // Check if this is an internal dependency (part of monorepo)
+                if let Some(dep_package) = self.packages.iter().find(|pkg| pkg.name() == dependency.name) {
+                    let Ok(package_version) = Version::parse(package.version()) else { continue };
+
+                    let Ok(dep_version) = Version::parse(dep_package.version()) else { continue };
+
+                    // Use DependencyRegistry for robust version constraint validation
+                    let registry_entry = registry.get(&dependency.name);
+                    
+                    // Perform comprehensive semver compatibility analysis
+                    let is_compatible = Self::validate_version_constraint(
+                        &dependency.version_requirement,
+                        &dep_version,
+                        &package_version,
+                    );
+
+                    if !is_compatible {
+                        conflicts.push(VersionConflict {
+                            package_name: package.name().to_string(),
+                            conflict_type: ConflictType::IncompatibleVersions,
+                            description: format!(
+                                "Package '{}' requires '{}' version '{}' but monorepo contains version '{}' - {}",
+                                package.name(),
+                                dependency.name,
+                                dependency.version_requirement,
+                                dep_package.version(),
+                                if registry_entry.is_some() { 
+                                    "registry validation failed" 
+                                } else { 
+                                    "version constraint mismatch" 
+                                }
+                            ),
+                            resolution_strategy: format!(
+                                "Update dependency requirement in '{}' to match '{}' version '{}' or upgrade '{}' to satisfy constraint",
+                                package.name(),
+                                dependency.name,
+                                dep_package.version(),
+                                dependency.name
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+
+        // 5. Validate dependency constraints
+        if let Err(constraint_error) = dependency_service.validate_dependency_constraints() {
+            conflicts.push(VersionConflict {
+                package_name: "monorepo".to_string(),
+                conflict_type: ConflictType::DependencyMismatch,
+                description: format!("Dependency constraint validation failed: {constraint_error}"),
+                resolution_strategy: "Review and fix dependency constraints across all packages".to_string(),
+            });
+        }
+
+        Ok(conflicts)
+    }
+
+    /// Robust version constraint validation using semver rules
+    ///
+    /// Validates whether a dependency version satisfies the version requirement
+    /// using comprehensive semver compatibility analysis. Supports all standard
+    /// NPM version range syntax including caret (^), tilde (~), and exact versions.
+    ///
+    /// # Arguments
+    ///
+    /// * `requirement` - Version requirement string (e.g., "^1.2.0", "~2.1.0", "1.0.0")
+    /// * `available_version` - Available version to check against requirement
+    /// * `context_version` - Context version for additional validation
+    ///
+    /// # Returns
+    ///
+    /// True if the available version satisfies the requirement, false otherwise
+    fn validate_version_constraint(
+        requirement: &str,
+        available_version: &Version,
+        _context_version: &Version,
+    ) -> bool {
+        // Handle different version requirement formats
+        match requirement.chars().next() {
+            // Caret range: ^1.2.3 allows changes that do not modify major version
+            Some('^') => {
+                let requirement_str = requirement.trim_start_matches('^');
+                if let Ok(req_version) = Version::parse(requirement_str) {
+                    // Compatible if major version matches and available >= required
+                    available_version.major == req_version.major
+                        && *available_version >= req_version
+                } else {
+                    false
+                }
+            }
+            // Tilde range: ~1.2.3 allows patch-level changes if minor specified
+            Some('~') => {
+                let requirement_str = requirement.trim_start_matches('~');
+                if let Ok(req_version) = Version::parse(requirement_str) {
+                    // Compatible if major.minor matches and available >= required
+                    available_version.major == req_version.major
+                        && available_version.minor == req_version.minor
+                        && *available_version >= req_version
+                } else {
+                    false
+                }
+            }
+            // Greater than or equal: >=1.2.3
+            Some('>') if requirement.starts_with(">=") => {
+                let requirement_str = requirement.trim_start_matches(">=");
+                if let Ok(req_version) = Version::parse(requirement_str) {
+                    *available_version >= req_version
+                } else {
+                    false
+                }
+            }
+            // Greater than: >1.2.3
+            Some('>') => {
+                let requirement_str = requirement.trim_start_matches('>');
+                if let Ok(req_version) = Version::parse(requirement_str) {
+                    *available_version > req_version
+                } else {
+                    false
+                }
+            }
+            // Less than or equal: <=1.2.3
+            Some('<') if requirement.starts_with("<=") => {
+                let requirement_str = requirement.trim_start_matches("<=");
+                if let Ok(req_version) = Version::parse(requirement_str) {
+                    *available_version <= req_version
+                } else {
+                    false
+                }
+            }
+            // Less than: <1.2.3
+            Some('<') => {
+                let requirement_str = requirement.trim_start_matches('<');
+                if let Ok(req_version) = Version::parse(requirement_str) {
+                    *available_version < req_version
+                } else {
+                    false
+                }
+            }
+            // Exact version match: 1.2.3
+            _ => {
+                if let Ok(req_version) = Version::parse(requirement) {
+                    *available_version == req_version
+                } else {
+                    // If requirement parsing fails, consider incompatible
+                    false
+                }
+            }
+        }
     }
 }

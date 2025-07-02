@@ -37,7 +37,6 @@ impl<'a> ChangesetStorage<'a> {
     /// 
     /// * `config` - Changeset configuration
     /// * `file_system` - Direct reference to file system manager
-    /// * `packages` - Direct reference to packages
     /// * `root_path` - Direct reference to root path
     /// 
     /// # Returns
@@ -47,13 +46,11 @@ impl<'a> ChangesetStorage<'a> {
     pub fn new(
         config: crate::config::types::ChangesetsConfig,
         file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
-        packages: &'a [crate::core::MonorepoPackageInfo],
         root_path: &'a std::path::Path,
     ) -> Self {
         Self {
             config,
             file_system,
-            packages,
             root_path,
         }
     }

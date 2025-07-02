@@ -32,7 +32,7 @@ use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct FileSystemService {
+pub(crate) struct FileSystemService {
     /// Underlying file system manager
     file_system: FileSystemManager,
     
@@ -40,6 +40,7 @@ pub struct FileSystemService {
     root_path: PathBuf,
 }
 
+#[allow(dead_code)]
 impl FileSystemService {
     /// Create a new file system service
     ///

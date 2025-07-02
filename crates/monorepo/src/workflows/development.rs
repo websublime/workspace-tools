@@ -47,7 +47,6 @@ impl<'a> DevelopmentWorkflow<'a> {
         config: &'a crate::config::MonorepoConfig,
         packages: &'a [crate::core::MonorepoPackageInfo],
         repository: &'a sublime_git_tools::Repo,
-        file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
         root_path: &'a std::path::Path,
     ) -> Self {
         Self {
@@ -57,7 +56,6 @@ impl<'a> DevelopmentWorkflow<'a> {
             config,
             packages,
             repository,
-            file_system,
             root_path,
         }
     }
@@ -90,7 +88,6 @@ impl<'a> DevelopmentWorkflow<'a> {
         let storage = ChangesetStorage::new(
             project.config.changesets.clone(),
             &project.file_system,
-            &project.packages,
             &project.root_path,
         );
 
@@ -114,14 +111,12 @@ impl<'a> DevelopmentWorkflow<'a> {
             &project.config,
             &project.packages,
             &project.repository,
-            &project.file_system,
             &project.root_path,
         ))
     }
 
     /// Executes the development workflow synchronously
     ///
-    /// FASE 2 ASYNC ELIMINATION: Synchronous execution eliminates async infection.
     /// This method performs development-time checks:
     /// 1. Detects changes since the specified reference
     /// 2. Identifies affected packages
@@ -146,7 +141,7 @@ impl<'a> DevelopmentWorkflow<'a> {
     /// ```rust
     /// # fn example(workflow: &DevelopmentWorkflow) -> Result<(), Box<dyn std::error::Error>> {
     /// // Check changes since last commit
-    /// let result = workflow.execute_sync(Some("HEAD~1"))?;
+    /// let result = workflow.execute(Some("HEAD~1"))?;
     ///
     /// for recommendation in &result.recommendations {
     ///     println!("Recommendation: {}", recommendation);
@@ -154,7 +149,7 @@ impl<'a> DevelopmentWorkflow<'a> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn execute_sync(&self, since: Option<&str>) -> Result<super::DevelopmentResult, Error> {
+    pub fn execute(&self, since: Option<&str>) -> Result<super::DevelopmentResult, Error> {
         let start_time = Instant::now();
 
         // Default to comparing against configured git reference if no reference provided
@@ -191,10 +186,6 @@ impl<'a> DevelopmentWorkflow<'a> {
         })
     }
 
-    /// Executes the development workflow
-    pub fn execute(&self, since: Option<&str>) -> Result<super::DevelopmentResult, Error> {
-        self.execute_sync(since)
-    }
 
     /// Analyzes changes and provides detailed analysis
     ///
@@ -615,51 +606,6 @@ impl<'a> DevelopmentWorkflow<'a> {
 
     /// Analyzes the significance of changes based on files and change type
     ///
-    /// Determines the impact level of changes by considering both the number
-    /// of files changed and the type of changes made.
-    fn analyze_change_significance(
-        &self,
-        changed_files: &[GitChangedFile],
-        change_type: PackageChangeType,
-    ) -> ChangeSignificance {
-        let file_count = changed_files.len();
-
-        // Get thresholds from configuration
-        let thresholds = &self.config.tasks.performance.impact_thresholds;
-
-        // Base significance on file count
-        let base_significance = match file_count {
-            files if files > thresholds.high_impact_files => ChangeSignificance::High,
-            files if files > thresholds.medium_impact_files => ChangeSignificance::Medium,
-            _ => ChangeSignificance::Low,
-        };
-
-        // Elevate significance based on change type
-        match change_type {
-            PackageChangeType::Dependencies => {
-                // Dependencies changes are always at least medium significance
-                match base_significance {
-                    ChangeSignificance::Low => ChangeSignificance::Medium,
-                    other => other,
-                }
-            }
-            PackageChangeType::SourceCode => base_significance,
-            PackageChangeType::Configuration => {
-                // Configuration changes can be significant
-                match base_significance {
-                    ChangeSignificance::Low => ChangeSignificance::Medium,
-                    other => other,
-                }
-            }
-            PackageChangeType::Tests | PackageChangeType::Documentation => {
-                // Tests and docs are typically low impact unless there are many files
-                match base_significance {
-                    ChangeSignificance::High => ChangeSignificance::Medium,
-                    other => other,
-                }
-            }
-        }
-    }
 
 
     /// Determines version bump using changeset-first, conventional-commits-fallback approach

@@ -52,16 +52,6 @@ use std::time::Instant;
 /// Uses direct borrowing from MonorepoProject components instead of Arc.
 /// This follows Rust ownership principles and eliminates Arc proliferation.
 pub struct PluginManager<'a> {
-    /// Direct reference to configuration
-    config: &'a crate::config::MonorepoConfig,
-    /// Direct reference to packages
-    packages: &'a [crate::core::MonorepoPackageInfo],
-    /// Direct reference to repository
-    repository: &'a sublime_git_tools::Repo,
-    /// Direct reference to file system manager
-    file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
-    /// Direct reference to root path
-    root_path: &'a std::path::Path,
     /// Loaded plugins indexed by name
     plugins: HashMap<String, Box<dyn MonorepoPlugin + 'a>>,
     /// Plugin states indexed by name
@@ -104,11 +94,6 @@ impl<'a> PluginManager<'a> {
         let context = PluginContext::new(project, HashMap::new(), working_directory);
 
         Self {
-            config: &project.config,
-            packages: &project.packages,
-            repository: &project.repository,
-            file_system: &project.file_system,
-            root_path: &project.root_path,
             plugins: HashMap::new(),
             plugin_states: HashMap::new(),
             context,
@@ -290,8 +275,8 @@ impl<'a> PluginManager<'a> {
 
         let start_time = Instant::now();
 
-        // Execute the command
-        let result = match plugin.execute_command(command, args) {
+        // Execute the command with context
+        let result = match plugin.execute_command(command, args, &self.context) {
             Ok(mut result) => {
                 result.execution_time_ms = start_time.elapsed().as_millis() as u64;
 
@@ -315,7 +300,7 @@ impl<'a> PluginManager<'a> {
                 ErrorContext::new("plugin_command")
                     .with_detail("plugin", plugin_name)
                     .with_detail("command", command)
-                    .with_detail("execution_time_ms", &execution_time.to_string())
+                    .with_detail("execution_time_ms", execution_time.to_string())
                     .log_error(&e);
 
                 PluginResult::error(format!("Command execution failed: {e}"))

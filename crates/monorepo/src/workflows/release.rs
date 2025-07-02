@@ -62,24 +62,20 @@ impl<'a> ReleaseWorkflow<'a> {
     /// Returns an error if any of the required components cannot be initialized.
     pub fn new(
         analyzer: MonorepoAnalyzer<'a>,
-        version_manager: crate::core::VersionManager<'a>,
         changeset_manager: crate::changesets::ChangesetManager<'a>,
         task_manager: crate::tasks::TaskManager<'a>,
         config: &'a crate::config::MonorepoConfig,
         packages: &'a [crate::core::MonorepoPackageInfo],
         repository: &'a sublime_git_tools::Repo,
-        file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
         root_path: &'a std::path::Path,
     ) -> Self {
         Self {
             analyzer,
-            version_manager,
             changeset_manager,
             task_manager,
             config,
             packages,
             repository,
-            file_system,
             root_path,
         }
     }
@@ -116,7 +112,7 @@ impl<'a> ReleaseWorkflow<'a> {
         let analyzer = MonorepoAnalyzer::new(project);
 
         // Create version manager with direct borrowing
-        let version_manager = VersionManager::new(project);
+        let _version_manager = VersionManager::new(project);
         // Version manager already created above
 
         // Create task manager with direct borrowing
@@ -126,7 +122,6 @@ impl<'a> ReleaseWorkflow<'a> {
         let storage = ChangesetStorage::new(
             project.config.changesets.clone(),
             &project.file_system,
-            &project.packages,
             &project.root_path,
         );
 
@@ -145,20 +140,17 @@ impl<'a> ReleaseWorkflow<'a> {
 
         Ok(Self::new(
             analyzer,
-            version_manager,
             changeset_manager,
             task_manager,
             &project.config,
             &project.packages,
             &project.repository,
-            &project.file_system,
             &project.root_path,
         ))
     }
 
     /// Executes the complete release workflow synchronously
     ///
-    /// FASE 2 ASYNC ELIMINATION: Synchronous execution eliminates async infection.
     /// This method orchestrates the entire release process:
     /// 1. Detects changes since the last release
     /// 2. Applies pending changesets
@@ -191,14 +183,14 @@ impl<'a> ReleaseWorkflow<'a> {
     ///     ..Default::default()
     /// };
     ///
-    /// let result = workflow.execute_sync(options)?;
+    /// let result = workflow.execute(options)?;
     /// println!("Release success: {}", result.success);
     /// # Ok(())
     /// # }
     /// ```
     // TODO: Consider breaking this method into smaller parts for better readability and maintainability
     #[allow(clippy::too_many_lines)]
-    pub fn execute_sync(&self, options: &ReleaseOptions) -> Result<ReleaseResult, Error> {
+    pub fn execute(&self, options: &ReleaseOptions) -> Result<ReleaseResult, Error> {
         let start_time = Instant::now();
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
@@ -252,7 +244,7 @@ impl<'a> ReleaseWorkflow<'a> {
             warnings.push("Skipping tests as requested".to_string());
             Vec::new()
         } else {
-            match self.execute_release_tasks_sync(&changes, &options) {
+            match self.execute_release_tasks_sync(&changes, options) {
                 Ok(task_results) => {
                     // Check if any tasks failed
                     let failed_tasks: Vec<_> = task_results
@@ -320,9 +312,6 @@ impl<'a> ReleaseWorkflow<'a> {
     }
 
     /// Executes the complete release workflow
-    pub fn execute(&self, options: &ReleaseOptions) -> Result<ReleaseResult, Error> {
-        self.execute_sync(options)
-    }
 
     /// Detects changes since the last release
     fn detect_changes_since_last_release(&self) -> Result<ChangeAnalysis, Error> {
@@ -351,8 +340,6 @@ impl<'a> ReleaseWorkflow<'a> {
     }
 
     /// Executes all release-related tasks synchronously
-    ///
-    /// FASE 2 ASYNC ELIMINATION: Synchronous task execution eliminates async infection.
     fn execute_release_tasks_sync(
         &self,
         changes: &ChangeAnalysis,
@@ -372,8 +359,6 @@ impl<'a> ReleaseWorkflow<'a> {
 
 
     /// Deploys to the specified environments synchronously
-    ///
-    /// FASE 2 ASYNC ELIMINATION: Synchronous deployment eliminates async infection.
     fn deploy_to_environments_sync(&self, environments: &[String]) -> Result<(), Error> {
         // Execute deployment tasks for each environment using TaskManager
         for env in environments {
@@ -527,7 +512,7 @@ impl<'a> ReleaseWorkflow<'a> {
 
         // Create changelog manager with proper dependency injection
         let project_ref = self.create_project_reference()?;
-        let changelog_manager = ChangelogManager::from_project(&*project_ref);
+        let changelog_manager = ChangelogManager::from_project(&project_ref);
 
         // Generate changelog for each affected package
         for package_change in &changes.package_changes {
@@ -548,7 +533,7 @@ impl<'a> ReleaseWorkflow<'a> {
             };
 
             // Generate the changelog using sync version - eliminates runtime creation anti-pattern
-            match changelog_manager.generate_changelog_sync(request) {
+            match changelog_manager.generate_changelog(request) {
                 Ok(changelog_result) => {
                     log::info!(
                         "Successfully generated changelog for {}: {} commits, {} breaking changes",
@@ -590,7 +575,7 @@ impl<'a> ReleaseWorkflow<'a> {
             };
 
             // Generate root changelog using sync version - eliminates runtime creation anti-pattern
-            let _result = changelog_manager.generate_changelog_sync(root_request)?;
+            let _result = changelog_manager.generate_changelog(root_request)?;
         }
 
         log::info!("Changelog generation completed for all packages");
@@ -651,9 +636,9 @@ impl<'a> ReleaseWorkflow<'a> {
     ///
     /// Creates a new MonorepoProject instance from the current context
     /// for use with the changelog manager.
-    fn create_project_reference(&self) -> Result<std::sync::Arc<crate::core::MonorepoProject>, Error> {
+    fn create_project_reference(&self) -> Result<std::rc::Rc<crate::core::MonorepoProject>, Error> {
         let root_path = self.root_path;
-        let project = std::sync::Arc::new(
+        let project = std::rc::Rc::new(
             crate::core::MonorepoProject::new(root_path)
                 .map_err(|e| Error::workflow(format!("Failed to create project reference: {e}")))?
         );

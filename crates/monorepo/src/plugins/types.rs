@@ -37,9 +37,12 @@ use std::collections::HashMap;
 ///         Ok(())
 ///     }
 ///
-///     fn execute_command(&self, command: &str, args: &[String]) -> Result<PluginResult> {
+///     fn execute_command(&self, command: &str, args: &[String], context: &PluginContext) -> Result<PluginResult> {
 ///         match command {
-///             "analyze" => Ok(PluginResult::success("Analysis completed")),
+///             "analyze" => {
+///                 // Use context.packages, context.repository, etc. for real analysis
+///                 Ok(PluginResult::success("Analysis completed"))
+///             },
 ///             _ => Err(Error::plugin("Unknown command")),
 ///         }
 ///     }
@@ -66,20 +69,22 @@ pub trait MonorepoPlugin: Send + Sync {
     /// Returns an error if initialization fails
     fn initialize(&mut self, context: &PluginContext) -> Result<()>;
 
-    /// Execute a plugin command with the given arguments
+    /// Execute a plugin command with the given arguments and context
     ///
     /// This is the main entry point for plugin functionality. Commands
     /// are plugin-specific and defined by each plugin implementation.
+    /// Context provides access to monorepo services for real functionality.
     ///
     /// # Arguments
     ///
     /// * `command` - Command name to execute
     /// * `args` - Command arguments
+    /// * `context` - Plugin execution context with access to monorepo services
     ///
     /// # Returns
     ///
     /// Plugin execution result containing data or error information
-    fn execute_command(&self, command: &str, args: &[String]) -> Result<PluginResult>;
+    fn execute_command(&self, command: &str, args: &[String], context: &PluginContext) -> Result<PluginResult>;
 
     /// Get the lifecycle state of the plugin
     ///
@@ -123,19 +128,19 @@ pub struct PluginInfo {
 /// Uses direct borrowing from MonorepoProject components instead of Arc.
 pub struct PluginContext<'a> {
     /// Direct reference to configuration
-    pub config_ref: &'a crate::config::MonorepoConfig,
+    pub(crate) config_ref: &'a crate::config::MonorepoConfig,
     /// Direct reference to packages
-    pub packages: &'a [crate::core::MonorepoPackageInfo],
+    pub(crate) packages: &'a [crate::core::MonorepoPackageInfo],
     /// Direct reference to repository
-    pub repository: &'a sublime_git_tools::Repo,
+    pub(crate) repository: &'a sublime_git_tools::Repo,
     /// Direct reference to file system manager
-    pub file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
+    pub(crate) file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
     /// Direct reference to root path
-    pub root_path: &'a std::path::Path,
+    pub(crate) root_path: &'a std::path::Path,
     /// Plugin-specific configuration
-    pub config: HashMap<String, serde_json::Value>,
+    pub(crate) config: HashMap<String, serde_json::Value>,
     /// Working directory for plugin operations
-    pub working_directory: std::path::PathBuf,
+    pub(crate) working_directory: std::path::PathBuf,
 }
 
 impl<'a> PluginContext<'a> {
@@ -199,6 +204,36 @@ impl<'a> PluginContext<'a> {
             }
             None => Ok(None),
         }
+    }
+
+    /// Get reference to configuration
+    pub fn config(&self) -> &crate::config::MonorepoConfig {
+        self.config_ref
+    }
+
+    /// Get reference to packages
+    pub fn packages(&self) -> &[crate::core::MonorepoPackageInfo] {
+        self.packages
+    }
+
+    /// Get reference to repository
+    pub fn repository(&self) -> &sublime_git_tools::Repo {
+        self.repository
+    }
+
+    /// Get reference to file system manager
+    pub fn file_system(&self) -> &sublime_standard_tools::filesystem::FileSystemManager {
+        self.file_system
+    }
+
+    /// Get reference to root path
+    pub fn root_path(&self) -> &std::path::Path {
+        self.root_path
+    }
+
+    /// Get reference to working directory
+    pub fn working_directory(&self) -> &std::path::Path {
+        &self.working_directory
     }
 }
 

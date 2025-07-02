@@ -46,9 +46,6 @@ pub struct DevelopmentWorkflow<'a> {
     /// Direct reference to git repository
     pub(crate) repository: &'a sublime_git_tools::Repo,
 
-    /// Direct reference to file system manager
-    pub(crate) file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
-
     /// Direct reference to root path
     pub(crate) root_path: &'a std::path::Path,
 }

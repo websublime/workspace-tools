@@ -40,7 +40,7 @@ impl PatternMatcher {
     ///
     /// # Errors
     /// Returns an error if the pattern is invalid
-    pub fn from_str(pattern_str: &str) -> Result<Self> {
+    pub fn from_pattern(pattern_str: &str) -> Result<Self> {
         let pattern = Pattern::new(pattern_str)
             .map_err(|e| Error::config(format!("Invalid glob pattern '{pattern_str}': {e}")))?;
         
@@ -170,7 +170,7 @@ impl MultiPatternMatcher {
         let mut matchers = Vec::new();
         
         for pattern_str in patterns {
-            let matcher = PatternMatcher::from_str(pattern_str)?;
+            let matcher = PatternMatcher::from_pattern(pattern_str)?;
             matchers.push(matcher);
         }
         
@@ -185,7 +185,7 @@ impl MultiPatternMatcher {
     /// # Errors
     /// Returns an error if the pattern is invalid
     pub fn add_pattern(&mut self, pattern: &str) -> Result<()> {
-        let matcher = PatternMatcher::from_str(pattern)?;
+        let matcher = PatternMatcher::from_pattern(pattern)?;
         self.matchers.push(matcher);
         Ok(())
     }

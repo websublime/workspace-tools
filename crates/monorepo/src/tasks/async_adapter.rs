@@ -6,7 +6,7 @@
 
 use crate::error::Result;
 use crate::tasks::types::ExecutionContext;
-use crate::tasks::ConditionChecker;
+use crate::tasks::types::ConditionChecker;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -67,13 +67,6 @@ pub struct AsyncConditionAdapter<'a> {
     checker: ConditionChecker<'a>,
 }
 
-/// Represents the result of a condition evaluation
-pub enum ConditionResult {
-    /// Synchronous result (immediate)
-    Sync(Result<bool>),
-    /// Asynchronous operation required
-    Async(Pin<Box<dyn Future<Output = Result<bool>>>>),
-}
 
 impl<'a> AsyncConditionAdapter<'a> {
     /// Create a new async boundary adapter

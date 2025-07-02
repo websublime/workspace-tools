@@ -26,7 +26,7 @@ pub use results::{
     TaskExecutionResult, TaskStatus, TaskOutput, TaskError,
     TaskErrorCode, TaskExecutionStats, TaskExecutionLog, TaskLogLevel,
 };
-pub use checker::ConditionChecker;
-pub use executor::TaskExecutor;
+pub(crate) use checker::ConditionChecker;
+pub(crate) use executor::TaskExecutor;
 pub use manager::{TaskManager, ExecutionContext};
-pub use registry::TaskRegistry;
+pub(crate) use registry::TaskRegistry;

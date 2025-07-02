@@ -30,12 +30,12 @@ impl<'a> TaskExecutor<'a> {
     /// # Returns
     ///
     /// A new task executor instance
-    pub fn new(project: &'a MonorepoProject) -> Result<Self> {
-        Ok(Self {
+    pub fn new(project: &'a MonorepoProject) -> Self {
+        Self {
             packages: &project.packages,
             config: project.services.config_service().get_configuration(),
             root_path: project.root_path(),
-        })
+        }
     }
 
     /// Create a new task executor with direct component references
@@ -58,8 +58,8 @@ impl<'a> TaskExecutor<'a> {
         _file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
         packages: &'a [crate::core::MonorepoPackageInfo],
         root_path: &'a std::path::Path,
-    ) -> Result<Self> {
-        Ok(Self { packages, config, root_path })
+    ) -> Self {
+        Self { packages, config, root_path }
     }
 
 

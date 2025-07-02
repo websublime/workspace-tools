@@ -142,7 +142,7 @@ pub enum TaskEvent {
         /// Event execution context with metadata and timing
         context: EventContext,
         /// Result of the task execution
-        result: TaskExecutionResult,
+        result: Box<TaskExecutionResult>,
     },
     
     /// Task execution failed

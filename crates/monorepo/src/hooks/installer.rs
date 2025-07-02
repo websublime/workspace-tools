@@ -10,7 +10,7 @@ use crate::error::{Error, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-impl<'a> HookInstaller<'a> {
+impl HookInstaller {
     /// Create a new hook installer with direct borrowing from project
     /// 
     /// Uses borrowing instead of trait objects to eliminate Arc proliferation
@@ -29,14 +29,11 @@ impl<'a> HookInstaller<'a> {
     /// Returns an error if:
     /// - The Git directory cannot be found
     /// - The hooks directory cannot be accessed
-    pub fn new(project: &'a MonorepoProject) -> Result<Self> {
+    pub fn new(project: &MonorepoProject) -> Result<Self> {
         let hooks_dir = Self::find_git_hooks_directory(project)?;
         let hook_template = Self::get_hook_template();
 
         Ok(Self { 
-            repository: &project.repository,
-            file_system: &project.file_system,
-            root_path: &project.root_path,
             hooks_dir, 
             hook_template 
         })

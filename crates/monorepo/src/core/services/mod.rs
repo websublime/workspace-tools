@@ -10,11 +10,11 @@ pub mod git_service;
 pub mod package_service;
 pub mod dependency_service;
 
-pub use config_service::ConfigurationService;
-pub use file_system_service::FileSystemService;
-pub use git_service::GitOperationsService;
-pub use package_service::PackageDiscoveryService;
-pub use dependency_service::DependencyAnalysisService;
+pub(crate) use config_service::ConfigurationService;
+pub(crate) use file_system_service::FileSystemService;
+pub(crate) use git_service::GitOperationsService;
+pub(crate) use package_service::PackageDiscoveryService;
+pub(crate) use dependency_service::DependencyAnalysisService;
 
 use crate::error::Result;
 use std::path::Path;
@@ -42,7 +42,8 @@ use std::path::Path;
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct MonorepoServices {
+#[allow(clippy::struct_field_names)]
+pub(crate) struct MonorepoServices {
     /// Configuration management service
     config_service: ConfigurationService,
     
@@ -174,6 +175,7 @@ impl MonorepoServices {
     /// # Returns
     ///
     /// Mutable reference to the dependency analysis service.
+    #[allow(dead_code)]
     pub fn dependency_service_mut(&mut self) -> &mut DependencyAnalysisService {
         &mut self.dependency_service
     }
@@ -186,6 +188,7 @@ impl MonorepoServices {
     /// # Returns
     ///
     /// Mutable reference to the package discovery service.
+    #[allow(dead_code)]
     pub fn package_service_mut(&mut self) -> &mut PackageDiscoveryService {
         &mut self.package_service
     }

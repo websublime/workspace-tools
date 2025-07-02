@@ -35,6 +35,7 @@ impl<'a> ChangesetHookIntegration<'a> {
     /// # Errors
     ///
     /// Returns an error if any of the required components cannot be initialized.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         changeset_manager: ChangesetManager<'a>,
         hook_manager: crate::hooks::HookManager<'a>,
@@ -216,7 +217,6 @@ impl<'a> ChangesetHookIntegration<'a> {
 
     /// Applies changesets when merging to main branches synchronously
     ///
-    /// FASE 2 ASYNC ELIMINATION: Synchronous execution eliminates async infection.
     /// This method is called by post-merge hooks to automatically apply
     /// changesets when feature branches are merged to main branches.
     /// It also validates changesets before applying and handles dependency updates.
@@ -232,7 +232,7 @@ impl<'a> ChangesetHookIntegration<'a> {
     /// # Errors
     ///
     /// Returns an error if changeset application fails.
-    pub fn apply_changesets_on_merge_sync(&self, merged_branch: &str) -> Result<bool, Error> {
+    pub fn apply_changesets_on_merge(&self, merged_branch: &str) -> Result<bool, Error> {
         // Get current branch (should be main/master after merge)
         let current_branch = self
             .repository
@@ -310,20 +310,16 @@ impl<'a> ChangesetHookIntegration<'a> {
             }
 
             // Run post-merge validation tasks if configured
-            self.run_post_merge_validation_sync(&applications)?;
+            self.run_post_merge_validation(&applications)?;
         }
 
         Ok(true)
     }
 
     /// Applies changesets when merging to main branches
-    pub fn apply_changesets_on_merge(&self, merged_branch: &str) -> Result<bool, Error> {
-        self.apply_changesets_on_merge_sync(merged_branch)
-    }
 
     /// Validates that all tests pass for affected packages before push synchronously
     ///
-    /// FASE 2 ASYNC ELIMINATION: Synchronous execution eliminates async infection.
     /// This method is called by pre-push hooks to ensure that all
     /// affected packages have passing tests before pushing to remote.
     ///
@@ -338,7 +334,7 @@ impl<'a> ChangesetHookIntegration<'a> {
     /// # Errors
     ///
     /// Returns an error if test execution fails.
-    pub fn validate_tests_for_push_sync(&self, commits: &[String]) -> Result<bool, Error> {
+    pub fn validate_tests_for_push(&self, commits: &[String]) -> Result<bool, Error> {
         if commits.is_empty() {
             return Ok(true);
         }
@@ -384,9 +380,6 @@ impl<'a> ChangesetHookIntegration<'a> {
     }
 
     /// Validates that all tests pass for affected packages before push
-    pub fn validate_tests_for_push(&self, commits: &[String]) -> Result<bool, Error> {
-        self.validate_tests_for_push_sync(commits)
-    }
 
     /// Sets up the complete integration between changesets and hooks
     ///
@@ -431,10 +424,9 @@ impl<'a> ChangesetHookIntegration<'a> {
 
     /// Runs post-merge validation tasks after changesets are applied synchronously
     ///
-    /// FASE 2 ASYNC ELIMINATION: Synchronous execution eliminates async infection.
     /// This ensures that applied changesets didn't break anything and that
     /// all packages are in a consistent state.
-    fn run_post_merge_validation_sync(
+    fn run_post_merge_validation(
         &self,
         applications: &[crate::changesets::types::ChangesetApplication],
     ) -> Result<(), Error> {
@@ -486,13 +478,6 @@ impl<'a> ChangesetHookIntegration<'a> {
         Ok(())
     }
 
-    /// Runs post-merge validation tasks after changesets are applied
-    fn run_post_merge_validation(
-        &self,
-        applications: &[crate::changesets::types::ChangesetApplication],
-    ) -> Result<(), Error> {
-        self.run_post_merge_validation_sync(applications)
-    }
 
     /// Validates that dependency versions are consistent across the monorepo
     ///

@@ -31,14 +31,12 @@ impl<'a> TaskManager<'a> {
         let registry = TaskRegistry::new();
         
         // Create sub-components with direct borrowing
-        let executor = TaskExecutor::new(project)?;
+        let executor = TaskExecutor::new(project);
         let condition_checker = ConditionChecker::new(project);
 
         Ok(Self {
             file_system: project.services.file_system_service().manager(),
             packages: &project.packages,
-            config: project.services.config_service().get_configuration(),
-            root_path: project.root_path(),
             registry,
             executor,
             condition_checker,
@@ -71,14 +69,12 @@ impl<'a> TaskManager<'a> {
         let registry = TaskRegistry::new();
         
         // Create sub-components with direct borrowing
-        let executor = TaskExecutor::with_components(config, file_system, packages, root_path)?;
+        let executor = TaskExecutor::with_components(config, file_system, packages, root_path);
         let condition_checker = ConditionChecker::with_components(config, file_system, packages, root_path);
 
         Ok(Self {
             file_system,
             packages,
-            config,
-            root_path,
             registry,
             executor,
             condition_checker,

@@ -42,9 +42,6 @@ pub struct DiffAnalyzer<'a> {
 
     /// Direct reference to packages
     pub(crate) packages: &'a [crate::core::MonorepoPackageInfo],
-
-    /// Direct reference to file system manager
-    pub(crate) file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
     
     /// Direct reference to root path
     pub(crate) root_path: &'a std::path::Path,

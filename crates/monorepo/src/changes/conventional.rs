@@ -329,8 +329,8 @@ impl ConventionalCommitParser {
         let _description = parts.next()?.trim();
 
         // Check for breaking change indicator (!)
-        let (type_scope, is_breaking) = if type_scope.ends_with('!') {
-            (&type_scope[..type_scope.len() - 1], true)
+        let (type_scope, is_breaking) = if let Some(stripped) = type_scope.strip_suffix('!') {
+            (stripped, true)
         } else {
             (type_scope, false)
         };

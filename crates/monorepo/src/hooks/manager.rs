@@ -48,7 +48,7 @@ impl<'a> HookManager<'a> {
 
         // Create synchronous task executor with direct borrowing
         let sync_task_executor =
-            crate::hooks::sync_task_executor::SyncTaskExecutor::new(&task_manager)?;
+            crate::hooks::sync_task_executor::SyncTaskExecutor::new(task_manager)?;
 
         Ok(Self {
             installer,
@@ -188,7 +188,7 @@ impl<'a> HookManager<'a> {
         match hook_type {
             HookType::PreCommit => {
                 let result = self.pre_commit_validation()?;
-                let mut hook_result = HookExecutionResult::new(hook_type.clone());
+                let mut hook_result = HookExecutionResult::new(hook_type);
 
                 if result.validation_passed {
                     hook_result = hook_result.with_success();
@@ -225,7 +225,7 @@ impl<'a> HookManager<'a> {
             HookType::PrePush => {
                 let commits = context.commit_hashes();
                 let result = self.pre_push_validation(&commits)?;
-                let mut hook_result = HookExecutionResult::new(hook_type.clone());
+                let mut hook_result = HookExecutionResult::new(hook_type);
 
                 if result.validation_passed {
                     hook_result = hook_result.with_success();
@@ -446,7 +446,6 @@ impl<'a> HookManager<'a> {
         let storage = ChangesetStorage::new(
             self.config.changesets.clone(),
             self.file_system,
-            self.packages,
             self.root_path,
         );
 
@@ -847,7 +846,7 @@ impl<'a> HookManager<'a> {
         let completion_context =
             EventContext::new("HookManager").with_priority(EventPriority::High);
 
-        let completion_event = TaskEvent::Completed { context: completion_context, result };
+        let completion_event = TaskEvent::Completed { context: completion_context, result: Box::new(result) };
 
         // Non-blocking event emission
         let _ = self.emit_event(MonorepoEvent::Task(completion_event));
@@ -897,7 +896,6 @@ impl<'a> HookManager<'a> {
     ) -> Result<sublime_standard_tools::command::CommandOutput> {
         log::debug!("Executing command: {}", cmd_name);
 
-        // FASE 2 ASYNC ELIMINATION: Use SharedSyncExecutor to eliminate runtime creation anti-pattern
         let sync_executor = SharedSyncExecutor::try_instance().map_err(|e| {
             crate::error::Error::hook(format!("Failed to create shared sync executor: {e}"))
         })?;
@@ -914,15 +912,14 @@ impl<'a> HookManager<'a> {
         script_path: &std::path::Path,
     ) -> Result<sublime_standard_tools::command::CommandOutput> {
         // Delegate to command execution since it's the same underlying mechanism
-        Self::execute_command_sync(&executor, command, &script_path.display().to_string())
+        Self::execute_command_sync(executor, command, &script_path.display().to_string())
     }
 }
 
 impl<'a> EventEmitter for HookManager<'a> {
     fn emit_event(&self, event: MonorepoEvent) -> Result<()> {
         if let Some(_event_bus) = &self.event_bus {
-            // FASE 2 ASYNC ELIMINATION: Convert to synchronous event emission
-            // For now, just log the event synchronously to eliminate runtime creation anti-pattern
+            // Log the event synchronously
             log::info!("Event emitted by hook manager: {:?}", event);
             log::debug!("Event successfully emitted by hook manager");
             Ok(())
@@ -987,8 +984,7 @@ impl<'a> EventSubscriber for HookManager<'a> {
                 },
             )));
 
-        // FASE 2 ASYNC ELIMINATION: Convert to synchronous event subscription
-        // For now, just log the subscription to eliminate runtime creation anti-pattern
+        // Log the subscription
         log::info!("Hook manager subscribing to task and changeset events");
         log::debug!("Event subscription handlers configured for hook manager");
 

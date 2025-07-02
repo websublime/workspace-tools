@@ -18,7 +18,7 @@ use std::path::Path;
 /// This follows Rust ownership principles and eliminates Arc proliferation.
 pub struct HookManager<'a> {
     /// Hook installer for setting up Git hooks
-    pub(crate) installer: HookInstaller<'a>,
+    pub(crate) installer: HookInstaller,
 
     /// Hook validator for checking conditions and requirements
     pub(crate) validator: HookValidator<'a>,

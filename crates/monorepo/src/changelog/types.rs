@@ -138,12 +138,12 @@ impl GroupedCommits {
         // Add to type group
         self.by_type
             .entry(commit.commit_type.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(commit.clone());
 
         // Add to scope group if scope exists
         if let Some(scope) = &commit.scope {
-            self.by_scope.entry(scope.clone()).or_insert_with(Vec::new).push(commit.clone());
+            self.by_scope.entry(scope.clone()).or_default().push(commit.clone());
         }
 
         // Add to all commits
