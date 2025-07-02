@@ -59,4 +59,15 @@ Should I proceed? (yes/no)
 
 When creating a compact or summary for a new session, **ALWAYS include this approval mode configuration** in the summary so that the new session continues with the same controlled workflow.
 
+## ⚠️ REGRAS MANDATÓRIAS
+
+1. **ZERO PROGRESSÃO**: NÃO avançar para próxima tarefa até atual estar 100% completa
+2. **COMPILAÇÃO OBRIGATÓRIA**: Cada checkbox deve resultar em `cargo build` + `cargo clippy -- -D warnings` = 0 erros
+3. **BREAKING CHANGES OK**: Produto em desenvolvimento, zero compatibilidade necessária
+4. **IMPLEMENTAÇÕES COMPLETAS**: Sem logs placeholder, sem TODOs, sem "futuras implementações"
+5. **CRATES BASE PRIMEIRO**: Usar sublime-standard-tools, sublime-package-tools, sublime-git-tools
+6. **VISIBILIDADE CORRETA**: APIs públicas explícitas, resto com `pub(crate)`
+7. **SEM NOVOS FICHEIROS**: Refactor in-place, eliminar complexidade
+8. **TESTS**: Testes podem ter excepções das regras clippy e tem de ser executados com `cargo test -- --nocapture` sem erros
+
 **Please confirm that you understand and have activated this mode.**
