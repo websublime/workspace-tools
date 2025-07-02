@@ -34,6 +34,8 @@ pub struct DevelopmentWorkflowConfig<'a> {
     pub task_manager: crate::tasks::TaskManager<'a>,
     /// Changeset manager for handling development changesets
     pub changeset_manager: crate::changesets::ChangesetManager<'a>,
+    /// Plugin manager for extensible development functionality
+    pub plugin_manager: crate::plugins::PluginManager<'a>,
     /// Direct reference to configuration
     pub config: &'a crate::config::MonorepoConfig,
     /// Direct reference to packages
@@ -84,6 +86,7 @@ impl<'a> DevelopmentWorkflow<'a> {
             analyzer: config.analyzer,
             task_manager: config.task_manager,
             changeset_manager: config.changeset_manager,
+            plugin_manager: config.plugin_manager,
             config: config.config,
             packages: config.packages,
             repository: config.repository,
@@ -136,10 +139,14 @@ impl<'a> DevelopmentWorkflow<'a> {
             &project.root_path,
         );
 
+        // Create plugin manager with direct borrowing
+        let plugin_manager = crate::plugins::PluginManager::from_project(project)?;
+
         let config = DevelopmentWorkflowConfig {
             analyzer,
             task_manager,
             changeset_manager,
+            plugin_manager,
             config: &project.config,
             packages: &project.packages,
             repository: &project.repository,
@@ -193,7 +200,10 @@ impl<'a> DevelopmentWorkflow<'a> {
         // Step 1: Detect changes
         let changes = self.analyzer.detect_changes_since(since_ref, None)?;
 
-        // Step 2: Execute tasks for affected packages
+        // Step 2: Execute plugin analysis hooks (pre-task execution)
+        self.execute_plugin_hooks("pre-task-analysis", &changes);
+
+        // Step 3: Execute tasks for affected packages
         let affected_packages: Vec<String> =
             changes.package_changes.iter().map(|pc| pc.package_name.clone()).collect();
 
@@ -203,13 +213,16 @@ impl<'a> DevelopmentWorkflow<'a> {
             self.task_manager.execute_tasks_for_affected_packages(&affected_packages)?
         };
 
-        // Step 3: Check if tasks passed
+        // Step 4: Execute plugin validation hooks (post-task execution)
+        self.execute_plugin_hooks("post-task-validation", &changes);
+
+        // Step 5: Check if tasks passed
         let tasks_passed = affected_tasks
             .iter()
             .all(|task| matches!(task.status, crate::tasks::types::results::TaskStatus::Success));
 
-        // Step 4: Generate recommendations
-        let recommendations = self.generate_recommendations(&changes, &affected_tasks)?;
+        // Step 6: Generate recommendations (enhanced with plugin input)
+        let recommendations = self.generate_plugin_enhanced_recommendations(&changes, &affected_tasks)?;
 
         Ok(super::DevelopmentResult {
             changes,
@@ -1092,5 +1105,126 @@ impl<'a> DevelopmentWorkflow<'a> {
             VersionBumpType::Minor => ChangeSignificance::Medium,
             VersionBumpType::Patch | VersionBumpType::Snapshot => ChangeSignificance::Low,
         }
+    }
+
+    /// Execute plugin hooks for development workflow extension points
+    ///
+    /// Provides extensible hook points where plugins can add custom analysis,
+    /// validation, and recommendations to the development workflow.
+    ///
+    /// # Arguments
+    ///
+    /// * `hook_name` - Name of the hook to execute (e.g., "pre-task-analysis")
+    /// * `changes` - Change analysis context for plugins
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any plugin hook execution fails critically
+    fn execute_plugin_hooks(&self, hook_name: &str, changes: &ChangeAnalysis) {
+        // Convert changes to plugin arguments
+        let args = vec![
+            format!("--changed-files={}", changes.changed_files.len()),
+            format!("--packages={}", changes.package_changes.len()),
+            format!("--from-ref={}", changes.from_ref),
+            format!("--to-ref={}", changes.to_ref),
+        ];
+
+        // Get all loaded plugins and execute the hook
+        let plugin_names: Vec<String> = self.plugin_manager.list_plugins()
+            .iter()
+            .map(|info| info.name.clone())
+            .collect();
+
+        for plugin_name in plugin_names {
+            // Execute plugin command with hook name and change context
+            match self.plugin_manager.execute_plugin_command(&plugin_name, hook_name, &args) {
+                Ok(result) => {
+                    if result.success {
+                        log::debug!(
+                            "Plugin '{}' hook '{}' executed successfully",
+                            plugin_name,
+                            hook_name
+                        );
+                    } else {
+                        log::warn!(
+                            "Plugin '{}' hook '{}' reported failure: {}",
+                            plugin_name,
+                            hook_name,
+                            result.error.unwrap_or_else(|| "No error message".to_string())
+                        );
+                    }
+                }
+                Err(e) => {
+                    // Log plugin errors but don't fail the entire workflow
+                    log::warn!(
+                        "Plugin '{}' failed to execute hook '{}': {}",
+                        plugin_name,
+                        hook_name,
+                        e
+                    );
+                }
+            }
+        }
+    }
+
+    /// Generate recommendations enhanced with plugin input
+    ///
+    /// Extends the base recommendation generation with plugin-contributed
+    /// recommendations and insights.
+    ///
+    /// # Arguments
+    ///
+    /// * `changes` - Change analysis context
+    /// * `affected_tasks` - Task execution results
+    ///
+    /// # Returns
+    ///
+    /// Enhanced recommendations including plugin contributions
+    fn generate_plugin_enhanced_recommendations(
+        &self,
+        changes: &ChangeAnalysis,
+        affected_tasks: &[crate::tasks::TaskExecutionResult],
+    ) -> Result<Vec<String>, Error> {
+        // Start with base recommendations
+        let mut recommendations = self.generate_recommendations(changes, affected_tasks)?;
+
+        // Request recommendations from plugins
+        let args = vec![
+            format!("--changed-files={}", changes.changed_files.len()),
+            format!("--failed-tasks={}", 
+                affected_tasks.iter()
+                    .filter(|task| !matches!(task.status, crate::tasks::types::results::TaskStatus::Success))
+                    .count()
+            ),
+        ];
+
+        let plugin_names: Vec<String> = self.plugin_manager.list_plugins()
+            .iter()
+            .map(|info| info.name.clone())
+            .collect();
+
+        for plugin_name in plugin_names {
+            match self.plugin_manager.execute_plugin_command(&plugin_name, "generate-recommendations", &args) {
+                Ok(result) => {
+                    if result.success {
+                        if let Some(plugin_recommendations) = result.data.get("recommendations") {
+                            if let Ok(plugin_recs) = serde_json::from_value::<Vec<String>>(plugin_recommendations.clone()) {
+                                for rec in plugin_recs {
+                                    if !recommendations.contains(&rec) {
+                                        recommendations.push(format!("[{plugin_name}] {rec}"));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(_) => {
+                    // Plugins might not implement recommendation generation - that's OK
+                    continue;
+                }
+            }
+        }
+
+        Ok(recommendations)
     }
 }

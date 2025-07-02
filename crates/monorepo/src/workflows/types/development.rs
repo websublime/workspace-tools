@@ -37,6 +37,9 @@ pub struct DevelopmentWorkflow<'a> {
     /// Changeset manager for handling development changesets
     pub(crate) changeset_manager: crate::changesets::ChangesetManager<'a>,
 
+    /// Plugin manager for extensible development functionality
+    pub(crate) plugin_manager: crate::plugins::PluginManager<'a>,
+
     /// Direct reference to configuration
     pub(crate) config: &'a crate::config::MonorepoConfig,
 
