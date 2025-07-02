@@ -46,6 +46,9 @@ mod manager;
 mod registry;
 mod types;
 
+#[cfg(test)]
+mod tests;
+
 // Re-export main types for public API
 pub use types::{
     MonorepoPlugin, PluginCapabilities, PluginCommand, PluginContext, PluginError, PluginInfo,

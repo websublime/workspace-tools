@@ -164,23 +164,109 @@ async fn execute_config(
 
 /// Execute plugin command
 async fn execute_plugin(
-    _tools: MonorepoTools,
+    tools: MonorepoTools<'_>,
     _config: CliConfig,
     mut output: OutputManager,
     list: bool,
     load: Option<String>,
     command: Option<String>,
-    _args: Vec<String>,
+    args: Vec<String>,
 ) -> Result<()> {
     if list {
         output.info("Available plugins:")?;
-        // TODO: Implement plugin listing
+        
+        // Create plugin manager and load plugins
+        let mut plugin_manager = tools.plugin_manager()
+            .map_err(|e| anyhow::anyhow!("Failed to create plugin manager: {}", e))?;
+        
+        // Load built-in plugins
+        plugin_manager.load_builtin_plugins()
+            .map_err(|e| anyhow::anyhow!("Failed to load built-in plugins: {}", e))?;
+        
+        // List all available plugins
+        let plugins = plugin_manager.list_plugins();
+        
+        if plugins.is_empty() {
+            output.warning("No plugins found.")?;
+        } else {
+            for plugin_info in plugins {
+                output.success(&format!(
+                    "  {} v{} - {}",
+                    plugin_info.name,
+                    plugin_info.version,
+                    plugin_info.description
+                ))?;
+                
+                // Show available commands
+                for cmd in &plugin_info.capabilities.commands {
+                    output.info(&format!("    - {}: {}", cmd.name, cmd.description))?;
+                }
+            }
+        }
     } else if let Some(plugin_name) = load {
         output.info(&format!("Loading plugin: {}", plugin_name))?;
-        // TODO: Implement plugin loading
+        
+        let mut plugin_manager = tools.plugin_manager()
+            .map_err(|e| anyhow::anyhow!("Failed to create plugin manager: {}", e))?;
+        
+        // Load built-in plugins
+        plugin_manager.load_builtin_plugins()
+            .map_err(|e| anyhow::anyhow!("Failed to load built-in plugins: {}", e))?;
+        
+        // Check if plugin exists
+        if plugin_manager.is_plugin_loaded(&plugin_name) {
+            output.success(&format!("Plugin '{}' is already loaded", plugin_name))?;
+        } else {
+            output.error(&format!("Plugin '{}' not found", plugin_name))?;
+        }
     } else if let Some(cmd) = command {
-        output.info(&format!("Executing plugin command: {}", cmd))?;
-        // TODO: Implement plugin command execution
+        // Parse command format: plugin_name:command_name
+        let parts: Vec<&str> = cmd.split(':').collect();
+        if parts.len() != 2 {
+            output.error("Command format should be 'plugin_name:command_name'")?;
+            return Ok(());
+        }
+        
+        let plugin_name = parts[0];
+        let command_name = parts[1];
+        
+        output.info(&format!("Executing plugin command: {}:{}", plugin_name, command_name))?;
+        
+        let mut plugin_manager = tools.plugin_manager()
+            .map_err(|e| anyhow::anyhow!("Failed to create plugin manager: {}", e))?;
+        
+        // Load built-in plugins
+        plugin_manager.load_builtin_plugins()
+            .map_err(|e| anyhow::anyhow!("Failed to load built-in plugins: {}", e))?;
+        
+        // Execute the plugin command
+        match plugin_manager.execute_plugin_command(plugin_name, command_name, &args) {
+            Ok(result) => {
+                if result.success {
+                    output.success("Plugin command executed successfully")?;
+                    
+                    // Display result data if available
+                    if !result.data.is_null() {
+                        let formatted_output = serde_json::to_string_pretty(&result.data)
+                            .unwrap_or_else(|_| result.data.to_string());
+                        output.info(&format!("Result:\n{}", formatted_output))?;
+                    }
+                    
+                    // Show execution time if available
+                    if let Some(execution_time) = result.execution_time {
+                        output.info(&format!("Execution time: {}ms", execution_time))?;
+                    }
+                } else {
+                    output.error("Plugin command failed")?;
+                    if let Some(error) = result.error {
+                        output.error(&format!("Error: {}", error))?;
+                    }
+                }
+            }
+            Err(e) => {
+                output.error(&format!("Failed to execute plugin command: {}", e))?;
+            }
+        }
     } else {
         output.error("No plugin action specified. Use --help for options.")?;
     }
