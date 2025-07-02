@@ -162,18 +162,12 @@ impl CliError {
 
     /// Check if this error suggests using debug mode
     pub fn suggests_debug(&self) -> bool {
-        matches!(
-            self,
-            CliError::CommandFailed(_) | CliError::MonorepoError(_) | CliError::Other(_)
-        )
+        matches!(self, CliError::CommandFailed(_) | CliError::MonorepoError(_) | CliError::Other(_))
     }
 
     /// Check if this error suggests using verbose mode
     pub fn suggests_verbose(&self) -> bool {
-        matches!(
-            self,
-            CliError::CommandFailed(_) | CliError::MonorepoError(_)
-        )
+        matches!(self, CliError::CommandFailed(_) | CliError::MonorepoError(_))
     }
 }
 
@@ -223,7 +217,7 @@ mod tests {
     fn test_cli_context() {
         let result: Result<(), &str> = Err("original error");
         let cli_result = result.cli_context("test context");
-        
+
         assert!(cli_result.is_err());
         let error_msg = cli_result.unwrap_err().to_string();
         assert!(error_msg.contains("test context"));

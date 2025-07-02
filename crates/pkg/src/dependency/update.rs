@@ -54,9 +54,9 @@ pub struct Update {
 }
 
 /// Type alias for backward compatibility
-/// 
+///
 /// # Deprecation
-/// 
+///
 /// This alias maintains compatibility with existing code.
 /// Prefer using `Update` directly in new code.
 pub type DependencyUpdate = Update;

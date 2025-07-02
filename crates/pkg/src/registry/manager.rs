@@ -3,7 +3,10 @@
 //! This module provides a manager for coordinating access to multiple package registries,
 //! handling scopes, authentication, and default registry selection.
 
-use crate::{NpmRegistry, PackageRegistry, errors::{PackageRegistryError, RegistryError}};
+use crate::{
+    errors::{PackageRegistryError, RegistryError},
+    NpmRegistry, PackageRegistry,
+};
 use core::fmt;
 use std::{collections::HashMap, sync::Arc};
 

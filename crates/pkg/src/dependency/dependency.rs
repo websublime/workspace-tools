@@ -286,10 +286,7 @@ impl Dependency {
         };
 
         let new_req = VersionReq::parse(new_version)?;
-        Ok(Self {
-            name: self.name.clone(),
-            version: new_req,
-        })
+        Ok(Self { name: self.name.clone(), version: new_req })
     }
 
     /// Checks if a specific version matches this dependency's requirements.
@@ -355,5 +352,4 @@ impl Dependency {
         self.version = new_req;
         Ok(())
     }
-
 }

@@ -60,8 +60,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    Dependency, errors::{DependencyResolutionError, PackageError}, Node, Step, ValidationIssue,
-    ValidationOptions, ValidationReport,
+    errors::{DependencyResolutionError, PackageError},
+    Dependency, Node, Step, ValidationIssue, ValidationOptions, ValidationReport,
 };
 use petgraph::algo::tarjan_scc;
 use petgraph::stable_graph::NodeIndex;

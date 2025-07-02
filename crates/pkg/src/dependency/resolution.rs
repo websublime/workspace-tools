@@ -7,7 +7,7 @@
 //! and the specific updates that need to be applied.
 use std::collections::HashMap;
 
-use super::update::{Update as DependencyUpdate};
+use super::update::Update as DependencyUpdate;
 
 /// Result of a dependency resolution operation.
 ///

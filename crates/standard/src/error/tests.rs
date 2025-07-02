@@ -80,10 +80,8 @@ mod tests {
         let permission_denied = FileSystemError::PermissionDenied { path: "/test".into() };
         assert_eq!(permission_denied.as_ref(), "FileSystemError::PermissionDenied");
 
-        let io_error = FileSystemError::Io {
-            path: "/test".into(),
-            message: "test error".to_string(),
-        };
+        let io_error =
+            FileSystemError::Io { path: "/test".into(), message: "test error".to_string() };
         assert_eq!(io_error.as_ref(), "FileSystemError::Io");
 
         let not_a_directory = FileSystemError::NotADirectory { path: "/test".into() };
@@ -95,7 +93,8 @@ mod tests {
         // Create a valid FromUtf8Error by trying to convert invalid UTF-8 bytes to a String
         let invalid_utf8 = vec![0xFF, 0xFF]; // Invalid UTF-8 bytes
         let utf8_error = String::from_utf8(invalid_utf8).unwrap_err();
-        let utf8_decode = FileSystemError::Utf8Decode { path: "/test".into(), message: utf8_error.to_string() };
+        let utf8_decode =
+            FileSystemError::Utf8Decode { path: "/test".into(), message: utf8_error.to_string() };
         assert_eq!(utf8_decode.as_ref(), "FileSystemError::Utf8Decode");
 
         let validation =
@@ -115,11 +114,13 @@ mod tests {
         // Create a UTF-8 decode error properly
         let invalid_utf8 = vec![0xFF, 0xFF]; // Invalid UTF-8
         let utf8_error = String::from_utf8(invalid_utf8).unwrap_err();
-        let utf8_decode =
-            FileSystemError::Utf8Decode { path: "/test/file.txt".into(), message: utf8_error.to_string() };
-        assert!(
-            utf8_decode.to_string().starts_with("Failed to decode UTF-8 content in file: /test/file.txt - invalid utf-8")
-        );
+        let utf8_decode = FileSystemError::Utf8Decode {
+            path: "/test/file.txt".into(),
+            message: utf8_error.to_string(),
+        };
+        assert!(utf8_decode
+            .to_string()
+            .starts_with("Failed to decode UTF-8 content in file: /test/file.txt - invalid utf-8"));
 
         let permission_denied =
             FileSystemError::PermissionDenied { path: "/test/protected".into() };

@@ -14,15 +14,15 @@ pub enum VersionCommands {
         /// Type of version bump
         #[arg(value_enum)]
         bump_type: BumpType,
-        
+
         /// Specific packages to bump (default: affected packages)
         #[arg(short, long)]
         packages: Vec<String>,
-        
+
         /// Dry run - show what would be changed
         #[arg(long)]
         dry_run: bool,
-        
+
         /// Skip confirmation prompts
         #[arg(short, long)]
         yes: bool,
@@ -33,7 +33,7 @@ pub enum VersionCommands {
         /// Show detailed version information
         #[arg(short, long)]
         detailed: bool,
-        
+
         /// Filter by specific packages
         #[arg(short, long)]
         packages: Vec<String>,
@@ -44,11 +44,11 @@ pub enum VersionCommands {
         /// Target environment for release
         #[arg(short, long, default_value = "production")]
         environment: String,
-        
+
         /// Dry run - show what would be released
         #[arg(long)]
         dry_run: bool,
-        
+
         /// Skip pre-release checks
         #[arg(long)]
         skip_checks: bool,
@@ -84,7 +84,8 @@ impl VersionCommands {
                 execute_version_show(tools, config, output, detailed, packages).await
             }
             VersionCommands::Release { environment, dry_run, skip_checks } => {
-                execute_version_release(tools, config, output, environment, dry_run, skip_checks).await
+                execute_version_release(tools, config, output, environment, dry_run, skip_checks)
+                    .await
             }
         }
     }
@@ -115,7 +116,7 @@ async fn execute_version_bump(
     // 5. Apply changes if not --dry-run
 
     output.section("Version Bump Plan")?;
-    
+
     if packages.is_empty() {
         output.info("Detecting affected packages...")?;
         // Would detect based on git changes
@@ -134,7 +135,7 @@ async fn execute_version_bump(
             output.info("Do you want to proceed? (y/N)")?;
             // Would wait for user confirmation
         }
-        
+
         output.progress("Applying version changes...")?;
         output.success("✅ Version bump completed successfully")?;
     } else {
@@ -177,7 +178,7 @@ async fn execute_version_show(
         output.info("package-a dependencies:")?;
         output.item("package-b: ^2.0.0")?;
         output.item("lodash: ^4.17.21")?;
-        
+
         output.info("package-b dependencies:")?;
         output.item("package-c: ^0.5.0")?;
         output.item("react: ^18.0.0")?;
@@ -222,13 +223,13 @@ async fn execute_version_release(
 
     if !dry_run {
         output.progress("Creating release...")?;
-        
+
         // TODO: Implement actual release process
         // - Create git tags
         // - Build packages
         // - Publish to registries
         // - Deploy if configured
-        
+
         output.success("🎉 Release completed successfully!")?;
         output.info("Release notes and artifacts are available in the release section")?;
     } else {

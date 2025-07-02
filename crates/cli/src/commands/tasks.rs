@@ -17,7 +17,7 @@ pub enum TasksCommands {
         /// Show detailed task information
         #[arg(short, long)]
         detailed: bool,
-        
+
         /// Filter tasks by package
         #[arg(short, long)]
         package: Option<String>,
@@ -27,23 +27,23 @@ pub enum TasksCommands {
     Run {
         /// Task names to run
         tasks: Vec<String>,
-        
+
         /// Run only for affected packages
         #[arg(short, long)]
         affected: bool,
-        
+
         /// Run for specific packages
         #[arg(short, long)]
         packages: Vec<String>,
-        
+
         /// Run tasks in parallel
         #[arg(short = 'j', long)]
         parallel: bool,
-        
+
         /// Maximum number of concurrent tasks
         #[arg(long, default_value = "4")]
         max_concurrent: usize,
-        
+
         /// Fail fast on first error
         #[arg(long)]
         fail_fast: bool,
@@ -87,7 +87,8 @@ impl TasksCommands {
                     parallel,
                     max_concurrent,
                     fail_fast,
-                ).await
+                )
+                .await
             }
             TasksCommands::Validate { detailed } => {
                 execute_validate_tasks(tools, config, output, detailed).await
@@ -114,7 +115,7 @@ async fn execute_list_tasks(
     // 4. Display tasks with their descriptions
 
     output.section("Available Tasks")?;
-    
+
     if let Some(package) = package_filter {
         output.info(&format!("Filtering by package: {}", package))?;
     }
@@ -183,13 +184,13 @@ async fn execute_run_tasks(
     // 5. Report results and handle failures
 
     output.section("Task Execution Results")?;
-    
+
     for task in &tasks {
         output.progress(&format!("Running {}", task))?;
-        
+
         // Simulate task execution
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        
+
         output.success(&format!("✅ {} completed successfully", task))?;
     }
 
@@ -215,7 +216,7 @@ async fn execute_validate_tasks(
     // 5. Check for circular dependencies
 
     output.section("Task Validation Results")?;
-    
+
     let mut valid_tasks = 0;
     let mut warnings = 0;
     let mut errors = 0;
@@ -223,13 +224,13 @@ async fn execute_validate_tasks(
     // Placeholder validation results
     output.success("✅ Task 'build' is valid")?;
     valid_tasks += 1;
-    
+
     output.success("✅ Task 'test' is valid")?;
     valid_tasks += 1;
-    
+
     output.warning("⚠️  Task 'lint' has condition that may never match")?;
     warnings += 1;
-    
+
     output.success("✅ Task 'deploy' is valid")?;
     valid_tasks += 1;
 
@@ -244,11 +245,11 @@ async fn execute_validate_tasks(
 
     output.section("Summary")?;
     output.success(&format!("✅ {} tasks validated successfully", valid_tasks))?;
-    
+
     if warnings > 0 {
         output.warning(&format!("⚠️  {} warnings found", warnings))?;
     }
-    
+
     if errors > 0 {
         output.error(&format!("❌ {} errors found", errors))?;
     } else {

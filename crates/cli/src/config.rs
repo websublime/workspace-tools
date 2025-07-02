@@ -15,19 +15,19 @@ use std::path::{Path, PathBuf};
 pub struct CliConfig {
     /// Verbosity level (0 = normal, 1+ = increasingly verbose)
     pub verbosity: u8,
-    
+
     /// Quiet mode (suppress all output except errors)
     pub quiet: bool,
-    
+
     /// Use colored output
     pub use_color: bool,
-    
+
     /// Debug mode enabled
     pub debug: bool,
-    
+
     /// Path to configuration file (if any)
     pub config_file: Option<PathBuf>,
-    
+
     /// User preferences loaded from config file
     pub preferences: UserPreferences,
 }
@@ -37,19 +37,19 @@ pub struct CliConfig {
 pub struct UserPreferences {
     /// Default output format
     pub default_output_format: String,
-    
+
     /// Default working directory
     pub default_directory: Option<PathBuf>,
-    
+
     /// Whether to use colors by default
     pub use_colors: bool,
-    
+
     /// Default verbosity level
     pub default_verbosity: u8,
-    
+
     /// Preferred editor for interactive commands
     pub editor: Option<String>,
-    
+
     /// Custom aliases for commands
     pub aliases: std::collections::HashMap<String, String>,
 }
@@ -101,13 +101,13 @@ impl CliConfig {
 
         // Command line arguments override config file settings
         let final_use_color = if !use_color {
-            false  // Command line --no-color overrides everything
+            false // Command line --no-color overrides everything
         } else {
             preferences.use_colors
         };
 
         let final_verbosity = if verbosity > 0 {
-            verbosity  // Command line verbosity overrides config
+            verbosity // Command line verbosity overrides config
         } else {
             preferences.default_verbosity
         };
@@ -167,8 +167,9 @@ impl CliConfig {
     pub fn save_preferences(&self, path: &Path) -> CliResult<()> {
         // Create parent directories if they don't exist
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| CliError::ConfigError(format!("Failed to create config directory: {}", e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                CliError::ConfigError(format!("Failed to create config directory: {}", e))
+            })?;
         }
 
         let content = toml::to_string_pretty(&self.preferences)
@@ -192,7 +193,8 @@ impl CliConfig {
 
     /// Get the effective editor command
     pub fn get_editor(&self) -> String {
-        self.preferences.editor
+        self.preferences
+            .editor
             .clone()
             .or_else(|| std::env::var("EDITOR").ok())
             .unwrap_or_else(|| "vi".to_string())
@@ -207,8 +209,8 @@ impl CliConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn test_default_config() {
@@ -238,17 +240,21 @@ mod tests {
     #[test]
     fn test_config_file_loading() {
         let mut temp_file = NamedTempFile::new().unwrap();
-        writeln!(temp_file, r#"
+        writeln!(
+            temp_file,
+            r#"
 default_output_format = "json"
 use_colors = false
 default_verbosity = 1
 
 [aliases]
 analyze = "analyze --detailed"
-        "#).unwrap();
+        "#
+        )
+        .unwrap();
 
         let config = CliConfig::new(Some(temp_file.path()), 0, false, true, false).unwrap();
-        
+
         assert_eq!(config.preferences.default_output_format, "json");
         assert!(!config.use_color); // Config file setting should be applied
         assert_eq!(config.verbosity, 1); // Config file default should be used
@@ -258,13 +264,17 @@ analyze = "analyze --detailed"
     #[test]
     fn test_command_line_overrides() {
         let mut temp_file = NamedTempFile::new().unwrap();
-        writeln!(temp_file, r#"
+        writeln!(
+            temp_file,
+            r#"
 use_colors = true
 default_verbosity = 1
-        "#).unwrap();
+        "#
+        )
+        .unwrap();
 
         let config = CliConfig::new(Some(temp_file.path()), 2, false, false, false).unwrap();
-        
+
         assert!(!config.use_color); // Command line --no-color should override
         assert_eq!(config.verbosity, 2); // Command line verbosity should override
     }

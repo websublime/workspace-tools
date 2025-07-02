@@ -34,7 +34,9 @@
       "Bash(cargo run:*)",
       "Bash(./test_repository_config)",
       "Bash(diff:*)",
-      "Bash(/dev/null)"
+      "Bash(/dev/null)",
+      "Bash(echo:*)",
+      "Bash(cargo fmt:*)"
     ],
     "deny": []
   }

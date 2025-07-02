@@ -40,7 +40,7 @@ use super::{
     executor::Executor,
     types::{
         CommandOutput, CommandPriority, CommandQueue, CommandQueueConfig, CommandQueueResult,
-        CommandStatus, QueueMessage, QueueProcessor, QueuedCommand, DefaultCommandExecutor,
+        CommandStatus, DefaultCommandExecutor, QueueMessage, QueueProcessor, QueuedCommand,
     },
     Command,
 };

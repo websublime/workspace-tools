@@ -60,11 +60,11 @@ pub enum Commands {
         /// Show current configuration
         #[arg(short, long)]
         show: bool,
-        
+
         /// Validate configuration file
         #[arg(short, long)]
         validate: bool,
-        
+
         /// Initialize default configuration
         #[arg(short, long)]
         init: bool,
@@ -75,15 +75,15 @@ pub enum Commands {
         /// List available plugins
         #[arg(short, long)]
         list: bool,
-        
+
         /// Load a specific plugin
         #[arg(short = 'L', long)]
         load: Option<String>,
-        
+
         /// Plugin command to execute
         #[arg(short, long)]
         command: Option<String>,
-        
+
         /// Arguments for plugin command
         args: Vec<String>,
     },
@@ -118,15 +118,9 @@ impl Commands {
             Commands::Analyze { detailed } => {
                 execute_analyze(tools, config, output, detailed).await
             }
-            Commands::Tasks(cmd) => {
-                cmd.execute(tools, config, output).await
-            }
-            Commands::Version(cmd) => {
-                cmd.execute(tools, config, output).await
-            }
-            Commands::Workflows(cmd) => {
-                cmd.execute(tools, config, output).await
-            }
+            Commands::Tasks(cmd) => cmd.execute(tools, config, output).await,
+            Commands::Version(cmd) => cmd.execute(tools, config, output).await,
+            Commands::Workflows(cmd) => cmd.execute(tools, config, output).await,
             Commands::Config { show, validate, init } => {
                 execute_config(tools, config, output, show, validate, init).await
             }
@@ -164,7 +158,7 @@ async fn execute_config(
     } else {
         output.error("No config action specified. Use --help for options.")?;
     }
-    
+
     Ok(())
 }
 
@@ -190,7 +184,7 @@ async fn execute_plugin(
     } else {
         output.error("No plugin action specified. Use --help for options.")?;
     }
-    
+
     Ok(())
 }
 
@@ -199,11 +193,11 @@ fn execute_completions(shell: clap_complete::Shell) {
     use clap::CommandFactory;
     use clap_complete::{generate, Generator};
     use std::io;
-    
+
     fn print_completions<G: Generator>(gen: G, cmd: &mut clap::Command) {
         generate(gen, cmd, cmd.get_name().to_string(), &mut io::stdout());
     }
-    
+
     let mut cmd = crate::app::MonorepoCliApp::command();
     print_completions(shell, &mut cmd);
 }

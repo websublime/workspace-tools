@@ -17,7 +17,7 @@ use std::{
     fmt,
 };
 
-use crate::{ChangeType, DependencyChange, Package, errors::PackageError};
+use crate::{errors::PackageError, ChangeType, DependencyChange, Package};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 

@@ -3,9 +3,9 @@ mod dependency_tests {
     use std::{cmp::Ordering, collections::HashMap};
 
     use sublime_package_tools::{
-        build_dependency_graph_from_packages, ChangeType, Dependency, DependencyChange,
-        DependencyFilter, DependencyRegistry, errors::DependencyResolutionError, DependencyUpdate, Package,
-        ResolutionResult, ValidationOptions,
+        build_dependency_graph_from_packages, errors::DependencyResolutionError, ChangeType,
+        Dependency, DependencyChange, DependencyFilter, DependencyRegistry, DependencyUpdate,
+        Package, ResolutionResult, ValidationOptions,
     };
 
     #[test]

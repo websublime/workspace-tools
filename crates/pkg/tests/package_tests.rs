@@ -353,10 +353,7 @@ mod package_tests {
         let pkg = Package::new_with_registry(
             "test-pkg",
             "1.0.0",
-            Some(vec![
-                ("react", "^17.0.0"),
-                ("lodash", "^4.17.20"),
-            ]),
+            Some(vec![("react", "^17.0.0"), ("lodash", "^4.17.20")]),
             &mut temp_registry,
         )
         .unwrap();

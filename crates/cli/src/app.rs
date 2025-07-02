@@ -83,7 +83,7 @@ impl MonorepoCliApp {
     pub async fn run(self) -> Result<()> {
         // Set up working directory
         let working_dir = self.get_working_directory()?;
-        
+
         // Initialize CLI configuration
         let config = CliConfig::new(
             self.config.as_deref(),
@@ -134,7 +134,7 @@ mod tests {
     fn test_working_directory_validation() {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_path_buf();
-        
+
         let app = MonorepoCliApp {
             directory: Some(temp_path),
             output: OutputFormat::Human,
@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn test_invalid_directory() {
         let invalid_path = PathBuf::from("/nonexistent/directory");
-        
+
         let app = MonorepoCliApp {
             directory: Some(invalid_path.clone()),
             output: OutputFormat::Human,
@@ -167,7 +167,7 @@ mod tests {
 
         let result = app.get_working_directory();
         assert!(result.is_err());
-        
+
         if let Err(crate::error::CliError::InvalidDirectory(path)) = result {
             assert_eq!(path, invalid_path);
         } else {

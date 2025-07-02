@@ -3,15 +3,14 @@
 //! This module provides implementations for accessing package registries like npm,
 //! retrieving package metadata, and managing version information.
 
-use crate::{CacheEntry, errors::PackageRegistryError};
+use crate::{errors::PackageRegistryError, CacheEntry};
 use flate2::read::GzDecoder;
 use reqwest::blocking::{Client, RequestBuilder};
 use serde_json::Value;
 use std::{
     any::Any,
     collections::HashMap,
-    fs,
-    io,
+    fs, io,
     path::Path,
     sync::{Arc, Mutex},
     time::Duration,
@@ -311,14 +310,13 @@ impl PackageRegistry for NpmRegistry {
     ) -> Result<Vec<u8>, PackageRegistryError> {
         let download_url = self.get_download_url(package_name, version);
 
-        let response = self
-            .build_request(&download_url)
-            .send()
-            .map_err(|e| PackageRegistryError::DownloadFailure {
+        let response = self.build_request(&download_url).send().map_err(|e| {
+            PackageRegistryError::DownloadFailure {
                 package_name: package_name.to_string(),
                 version: version.to_string(),
                 source: e,
-            })?;
+            }
+        })?;
 
         if response.status() == reqwest::StatusCode::NOT_FOUND {
             return Err(PackageRegistryError::NotFound {

@@ -110,11 +110,7 @@ pub enum PackageRegistryError {
         source: std::io::Error,
     },
     #[error("Invalid package tarball format for {package_name}@{version}: {reason}")]
-    InvalidTarball {
-        package_name: String,
-        version: String,
-        reason: String,
-    },
+    InvalidTarball { package_name: String, version: String, reason: String },
     #[error("Failed to create destination directory {path}: {source}")]
     DirectoryCreationFailure {
         path: String,
@@ -130,10 +126,21 @@ impl AsRef<str> for PackageRegistryError {
             PackageRegistryError::JsonParseFailure(_) => "JsonParseFailure",
             PackageRegistryError::NotFound { package_name: _, version: _ } => "NotFound",
             PackageRegistryError::LockFailure => "LockFailure",
-            PackageRegistryError::DownloadFailure { package_name: _, version: _, source: _ } => "DownloadFailure",
-            PackageRegistryError::ExtractionFailure { package_name: _, version: _, destination: _, source: _ } => "ExtractionFailure",
-            PackageRegistryError::InvalidTarball { package_name: _, version: _, reason: _ } => "InvalidTarball",
-            PackageRegistryError::DirectoryCreationFailure { path: _, source: _ } => "DirectoryCreationFailure",
+            PackageRegistryError::DownloadFailure { package_name: _, version: _, source: _ } => {
+                "DownloadFailure"
+            }
+            PackageRegistryError::ExtractionFailure {
+                package_name: _,
+                version: _,
+                destination: _,
+                source: _,
+            } => "ExtractionFailure",
+            PackageRegistryError::InvalidTarball { package_name: _, version: _, reason: _ } => {
+                "InvalidTarball"
+            }
+            PackageRegistryError::DirectoryCreationFailure { path: _, source: _ } => {
+                "DirectoryCreationFailure"
+            }
         }
     }
 }

@@ -24,9 +24,9 @@ pub fn confirm(message: &str, default: bool) -> CliResult<bool> {
 
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
-    
+
     let input = input.trim().to_lowercase();
-    
+
     match input.as_str() {
         "y" | "yes" => Ok(true),
         "n" | "no" => Ok(false),
@@ -72,30 +72,30 @@ pub fn is_safe_path(path: &Path) -> bool {
     if path.is_absolute() {
         return false;
     }
-    
+
     // Check for path traversal attempts
     for component in path.components() {
         if let std::path::Component::ParentDir = component {
             return false;
         }
     }
-    
+
     true
 }
 
 /// Format file size in human-readable format
 pub fn format_file_size(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
-    
+
     if bytes == 0 {
         return "0 B".to_string();
     }
-    
+
     let unit_index = (bytes as f64).log10() as usize / 3;
     let unit_index = unit_index.min(UNITS.len() - 1);
-    
+
     let size = bytes as f64 / 1000_f64.powi(unit_index as i32);
-    
+
     if unit_index == 0 {
         format!("{} {}", bytes, UNITS[unit_index])
     } else {
@@ -106,7 +106,7 @@ pub fn format_file_size(bytes: u64) -> String {
 /// Format duration in human-readable format
 pub fn format_duration(duration: std::time::Duration) -> String {
     let total_seconds = duration.as_secs();
-    
+
     if total_seconds < 60 {
         format!("{}s", total_seconds)
     } else if total_seconds < 3600 {
@@ -154,10 +154,10 @@ pub fn progress_bar(current: usize, total: usize, width: usize) -> String {
     if total == 0 {
         return "░".repeat(width);
     }
-    
+
     let filled = (current * width) / total;
     let empty = width - filled;
-    
+
     format!("{}{}", "█".repeat(filled), "░".repeat(empty))
 }
 
@@ -166,15 +166,18 @@ pub fn validate_package_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
         return Err("Package name cannot be empty".to_string());
     }
-    
+
     if name.starts_with('.') || name.starts_with('_') {
         return Err("Package name cannot start with '.' or '_'".to_string());
     }
-    
+
     if !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
-        return Err("Package name can only contain alphanumeric characters, hyphens, underscores, and dots".to_string());
+        return Err(
+            "Package name can only contain alphanumeric characters, hyphens, underscores, and dots"
+                .to_string(),
+        );
     }
-    
+
     Ok(())
 }
 
@@ -182,17 +185,17 @@ pub fn validate_package_name(name: &str) -> Result<(), String> {
 pub fn validate_version(version: &str) -> Result<(), String> {
     // Basic semver validation
     let parts: Vec<&str> = version.split('.').collect();
-    
+
     if parts.len() != 3 {
         return Err("Version must be in format MAJOR.MINOR.PATCH".to_string());
     }
-    
+
     for part in parts {
         if part.parse::<u32>().is_err() {
             return Err("Version parts must be numbers".to_string());
         }
     }
-    
+
     Ok(())
 }
 

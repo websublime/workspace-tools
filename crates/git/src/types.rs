@@ -75,7 +75,7 @@ pub enum GitFileStatus {
 ///         GitFileStatus::Untracked => "untracked",
 ///     }
 /// );
-/// 
+///
 /// if file.staged {
 ///     println!("File is staged for commit");
 /// }

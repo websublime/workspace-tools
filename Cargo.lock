@@ -2148,6 +2148,7 @@ dependencies = [
  "log",
  "regex",
  "rstest",
+ "semver",
  "serde",
  "serde_json",
  "serde_yaml",

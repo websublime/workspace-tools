@@ -33,17 +33,17 @@ pub async fn execute_analyze(
 
     // TODO: Implement full analysis functionality
     // This is a placeholder implementation for CLI demonstration
-    
+
     output.section("📊 Monorepo Analysis Results")?;
-    
+
     let project_path = std::env::current_dir()?;
     output.info(&format!("Root Path: {}", project_path.display()))?;
     output.info("Monorepo Type: Node.js")?;
-    
+
     // Mock package information for demonstration
     let package_count = 3;
     output.info(&format!("Internal Packages: {}", package_count))?;
-    
+
     if package_count > 0 {
         output.subsection("📦 Package Details")?;
         output.item("package-a (1.0.0) - packages/package-a")?;
@@ -56,7 +56,7 @@ pub async fn execute_analyze(
         output.item("react: ^18.0.0")?;
         output.item("lodash: ^4.17.21")?;
         output.item("typescript: ^5.0.0")?;
-        
+
         output.subsection("🛠 Development Dependencies")?;
         output.item("jest: ^29.0.0")?;
         output.item("eslint: ^8.0.0")?;
@@ -67,7 +67,7 @@ pub async fn execute_analyze(
     output.subsection("⚙️ Package Manager Configuration")?;
     output.info("Package Manager: npm")?;
     output.info("Workspace Patterns: 2")?;
-    
+
     if detailed {
         output.item("  packages/*")?;
         output.item("  apps/*")?;

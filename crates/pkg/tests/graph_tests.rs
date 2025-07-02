@@ -14,10 +14,7 @@ mod graph_tests {
         let pkg_a = Package::new_with_registry(
             "pkg-a",
             "1.0.0",
-            Some(vec![
-                ("pkg-b", "^1.0.0"),
-                ("pkg-c", "^1.0.0"),
-            ]),
+            Some(vec![("pkg-b", "^1.0.0"), ("pkg-c", "^1.0.0")]),
             &mut registry,
         )
         .unwrap();

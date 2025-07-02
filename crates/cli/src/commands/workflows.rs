@@ -14,7 +14,7 @@ pub enum WorkflowCommands {
         /// Skip dependency checks
         #[arg(long)]
         skip_deps: bool,
-        
+
         /// Run in watch mode
         #[arg(short, long)]
         watch: bool,
@@ -25,7 +25,7 @@ pub enum WorkflowCommands {
         /// Target branch for integration
         #[arg(short, long, default_value = "main")]
         target: String,
-        
+
         /// Skip validation steps
         #[arg(long)]
         skip_validation: bool,
@@ -36,11 +36,11 @@ pub enum WorkflowCommands {
         /// Target environment
         #[arg(short, long, default_value = "production")]
         environment: String,
-        
+
         /// Release version override
         #[arg(short, long)]
         version: Option<String>,
-        
+
         /// Skip confirmation prompts
         #[arg(short, long)]
         yes: bool,
@@ -102,7 +102,7 @@ async fn execute_dev_workflow(
     // 5. Set up file watching if requested
 
     output.section("Development Workflow Execution")?;
-    
+
     if !skip_deps {
         output.progress("Checking dependencies...")?;
         output.success("✅ Dependencies are up to date")?;
@@ -112,20 +112,20 @@ async fn execute_dev_workflow(
 
     output.progress("Analyzing changes...")?;
     output.info("Detected changes in 3 packages")?;
-    
+
     output.subsection("Affected Packages")?;
     output.item("package-a (src/lib.ts changed)")?;
     output.item("package-b (tests/unit.test.ts changed)")?;
     output.item("package-c (package.json changed)")?;
 
     output.progress("Running tasks for affected packages...")?;
-    
+
     output.info("Running build for package-a...")?;
     output.success("✅ package-a build completed")?;
-    
+
     output.info("Running tests for package-b...")?;
     output.success("✅ package-b tests passed")?;
-    
+
     output.info("Running lint for package-c...")?;
     output.success("✅ package-c lint passed")?;
 
@@ -160,11 +160,11 @@ async fn execute_integration_workflow(
     // 6. Generate integration report
 
     output.section("Integration Workflow Execution")?;
-    
+
     if !skip_validation {
         output.progress("Validating branch state...")?;
         output.success("✅ Branch is clean and up to date")?;
-        
+
         output.progress("Checking for conflicts...")?;
         output.success("✅ No conflicts with target branch")?;
     } else {
@@ -189,7 +189,7 @@ async fn execute_integration_workflow(
 
     output.success("🎉 Integration workflow completed successfully!")?;
     output.info(&format!("Ready to merge into {}", target))?;
-    
+
     Ok(())
 }
 
@@ -219,7 +219,7 @@ async fn execute_release_workflow(
     // 7. Update changelogs
 
     output.section("Release Workflow Execution")?;
-    
+
     output.progress("Validating release prerequisites...")?;
     output.success("✅ All prerequisites met")?;
 
@@ -229,7 +229,7 @@ async fn execute_release_workflow(
     } else {
         output.info("Auto-calculating versions based on changes")?;
     }
-    
+
     output.subsection("Release Plan")?;
     output.item("package-a: 1.0.0 -> 1.1.0")?;
     output.item("package-b: 2.1.0 -> 2.2.0")?;
@@ -284,7 +284,7 @@ async fn execute_workflow_status(
     // 4. Display environment status
 
     output.section("Workflow Status")?;
-    
+
     output.subsection("Current State")?;
     output.info("Branch: feature/new-feature")?;
     output.info("Status: Clean working directory")?;
@@ -297,7 +297,7 @@ async fn execute_workflow_status(
 
     if detailed {
         output.subsection("Detailed Information")?;
-        
+
         output.info("Development Workflow:")?;
         output.item("Last run: 1 hour ago")?;
         output.item("Duration: 3m 45s")?;

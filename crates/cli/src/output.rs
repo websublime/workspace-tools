@@ -13,10 +13,10 @@ use std::io::{self, Write};
 pub struct OutputManager {
     /// Output format to use
     format: OutputFormat,
-    
+
     /// Whether to use colors
     use_color: bool,
-    
+
     /// Writer for output (usually stdout)
     writer: Box<dyn Write + Send>,
 }
@@ -33,20 +33,16 @@ impl OutputManager {
     ///
     /// A new OutputManager instance
     pub fn new(format: OutputFormat, use_color: bool) -> Self {
-        Self {
-            format,
-            use_color,
-            writer: Box::new(io::stdout()),
-        }
+        Self { format, use_color, writer: Box::new(io::stdout()) }
     }
 
     /// Create an output manager with a custom writer (for testing)
-    pub fn with_writer(format: OutputFormat, use_color: bool, writer: Box<dyn Write + Send>) -> Self {
-        Self {
-            format,
-            use_color,
-            writer,
-        }
+    pub fn with_writer(
+        format: OutputFormat,
+        use_color: bool,
+        writer: Box<dyn Write + Send>,
+    ) -> Self {
+        Self { format, use_color, writer }
     }
 
     /// Display a section header
@@ -97,11 +93,7 @@ impl OutputManager {
     pub fn info(&mut self, message: &str) -> CliResult<()> {
         match self.format {
             OutputFormat::Human => {
-                let formatted = if self.use_color {
-                    message.normal()
-                } else {
-                    message.normal()
-                };
+                let formatted = if self.use_color { message.normal() } else { message.normal() };
                 writeln!(self.writer, "{}", formatted)?;
             }
             OutputFormat::Plain => {
@@ -118,11 +110,7 @@ impl OutputManager {
     pub fn success(&mut self, message: &str) -> CliResult<()> {
         match self.format {
             OutputFormat::Human => {
-                let formatted = if self.use_color {
-                    message.green()
-                } else {
-                    message.normal()
-                };
+                let formatted = if self.use_color { message.green() } else { message.normal() };
                 writeln!(self.writer, "{}", formatted)?;
             }
             OutputFormat::Plain => {
@@ -223,19 +211,22 @@ impl OutputManager {
     pub fn output_data<T: serde::Serialize>(&mut self, data: &T) -> CliResult<()> {
         match self.format {
             OutputFormat::Json => {
-                let json = serde_json::to_string_pretty(data)
-                    .map_err(|e| CliError::OutputError(format!("JSON serialization failed: {}", e)))?;
+                let json = serde_json::to_string_pretty(data).map_err(|e| {
+                    CliError::OutputError(format!("JSON serialization failed: {}", e))
+                })?;
                 writeln!(self.writer, "{}", json)?;
             }
             OutputFormat::Yaml => {
-                let yaml = serde_yaml::to_string(data)
-                    .map_err(|e| CliError::OutputError(format!("YAML serialization failed: {}", e)))?;
+                let yaml = serde_yaml::to_string(data).map_err(|e| {
+                    CliError::OutputError(format!("YAML serialization failed: {}", e))
+                })?;
                 writeln!(self.writer, "{}", yaml)?;
             }
             OutputFormat::Human | OutputFormat::Plain => {
                 // For human/plain formats, convert to JSON first then display
-                let json_value: Value = serde_json::to_value(data)
-                    .map_err(|e| CliError::OutputError(format!("Data serialization failed: {}", e)))?;
+                let json_value: Value = serde_json::to_value(data).map_err(|e| {
+                    CliError::OutputError(format!("Data serialization failed: {}", e))
+                })?;
                 self.display_json_value(&json_value, 0)?;
             }
         }
@@ -245,7 +236,7 @@ impl OutputManager {
     /// Display a JSON value in human-readable format
     fn display_json_value(&mut self, value: &Value, indent: usize) -> CliResult<()> {
         let indent_str = "  ".repeat(indent);
-        
+
         match value {
             Value::Object(obj) => {
                 for (key, val) in obj {
@@ -255,7 +246,13 @@ impl OutputManager {
                             self.display_json_value(val, indent + 1)?;
                         }
                         _ => {
-                            writeln!(self.writer, "{}{}: {}", indent_str, key, self.format_value(val))?;
+                            writeln!(
+                                self.writer,
+                                "{}{}: {}",
+                                indent_str,
+                                key,
+                                self.format_value(val)
+                            )?;
                         }
                     }
                 }
@@ -270,7 +267,7 @@ impl OutputManager {
                 writeln!(self.writer, "{}{}", indent_str, self.format_value(value))?;
             }
         }
-        
+
         Ok(())
     }
 
@@ -320,7 +317,8 @@ mod tests {
     fn create_test_output_manager() -> (OutputManager, Vec<u8>) {
         let buffer = Vec::new();
         let writer = Box::new(std::io::Cursor::new(buffer));
-        let manager = OutputManager::with_writer(OutputFormat::Plain, false, writer as Box<dyn Write + Send>);
+        let manager =
+            OutputManager::with_writer(OutputFormat::Plain, false, writer as Box<dyn Write + Send>);
         // We need to extract the buffer for testing, but this is complex with the current design
         // For now, we'll just test the creation
         (manager, Vec::new())
@@ -336,7 +334,7 @@ mod tests {
     #[test]
     fn test_format_value() {
         let manager = OutputManager::new(OutputFormat::Json, false);
-        
+
         assert_eq!(manager.format_value(&Value::String("test".to_string())), "test");
         assert_eq!(manager.format_value(&Value::Number(42.into())), "42");
         assert_eq!(manager.format_value(&Value::Bool(true)), "true");

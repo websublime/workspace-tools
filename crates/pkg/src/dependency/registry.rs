@@ -42,7 +42,9 @@
 
 use super::{resolution::ResolutionResult, update::Update as DependencyUpdate};
 use crate::{
-    package::registry::PackageRegistryClone, Dependency, errors::{PackageRegistryError, VersionError}, Version,
+    errors::{PackageRegistryError, VersionError},
+    package::registry::PackageRegistryClone,
+    Dependency, Version,
 };
 use semver::{Version as SemverVersion, VersionReq};
 use std::collections::HashMap;
@@ -236,11 +238,7 @@ impl Registry {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_or_create(
-        &mut self,
-        name: &str,
-        version: &str,
-    ) -> Result<Dependency, VersionError> {
+    pub fn get_or_create(&mut self, name: &str, version: &str) -> Result<Dependency, VersionError> {
         if let Some(existing_dep) = self.dependencies.get_mut(name) {
             let current_version = existing_dep.version().to_string();
 

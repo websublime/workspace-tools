@@ -424,7 +424,7 @@ fn create_package_infos(
             };
 
             first_info.update_dependency_version(&dep_name, "^99.0.0")?;
-            
+
             let new_version = {
                 let package = first_info.package.borrow();
                 let first_dep = &package.dependencies()[0];

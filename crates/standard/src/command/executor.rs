@@ -32,8 +32,8 @@ use tokio::{
 };
 
 use super::types::{
-    Command as CmdConfig, CommandOutput, CommandStream, DefaultCommandExecutor, StreamConfig,
-    SyncCommandExecutor, SharedSyncExecutor, GlobalExecutorState,
+    Command as CmdConfig, CommandOutput, CommandStream, DefaultCommandExecutor,
+    GlobalExecutorState, SharedSyncExecutor, StreamConfig, SyncCommandExecutor,
 };
 
 /// Trait for executing commands with various options.
@@ -219,7 +219,10 @@ impl Executor for DefaultCommandExecutor {
 
         let timeout_duration = command.timeout.unwrap_or(Duration::from_secs(30));
         let child = cmd.spawn().map_err(|e| {
-            Error::Command(CommandError::SpawnFailed { cmd: cmd_str.clone(), message: e.to_string() })
+            Error::Command(CommandError::SpawnFailed {
+                cmd: cmd_str.clone(),
+                message: e.to_string(),
+            })
         })?;
 
         // Get PID before potentially consuming child with wait_with_output
@@ -326,9 +329,9 @@ impl Executor for DefaultCommandExecutor {
         let mut cmd = Self::build_command(&command);
         let cmd_str = command.program.clone(); // For error reporting
 
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| Error::Command(CommandError::SpawnFailed { cmd: cmd_str, message: e.to_string() }))?;
+        let mut child = cmd.spawn().map_err(|e| {
+            Error::Command(CommandError::SpawnFailed { cmd: cmd_str, message: e.to_string() })
+        })?;
 
         let stdout = child
             .stdout
@@ -361,15 +364,14 @@ impl SyncCommandExecutor {
     ///
     /// Returns an error if the Tokio runtime cannot be created.
     pub fn new() -> Result<Self> {
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| Error::Command(CommandError::Generic(format!("Failed to create runtime for sync executor: {e}"))))?;
-        
-        Ok(Self {
-            runtime,
-            executor: DefaultCommandExecutor::new(),
-        })
+        let runtime =
+            tokio::runtime::Builder::new_multi_thread().enable_all().build().map_err(|e| {
+                Error::Command(CommandError::Generic(format!(
+                    "Failed to create runtime for sync executor: {e}"
+                )))
+            })?;
+
+        Ok(Self { runtime, executor: DefaultCommandExecutor::new() })
     }
 
     /// Execute a command synchronously
@@ -399,7 +401,7 @@ impl SyncCommandExecutor {
     /// let executor = SyncCommandExecutor::new()?;
     /// let command = CommandBuilder::new("git").args(&["status", "--porcelain"]).build();
     /// let output = executor.execute_sync(command)?;
-    /// 
+    ///
     /// if output.status() == 0 {
     ///     println!("Git status: {}", output.stdout());
     /// }
@@ -428,9 +430,9 @@ impl SyncCommandExecutor {
     ///
     /// Returns an error if command execution fails or times out.
     pub fn execute_sync_with_timeout(
-        &self, 
-        command: CmdConfig, 
-        timeout: std::time::Duration
+        &self,
+        command: CmdConfig,
+        timeout: std::time::Duration,
     ) -> Result<CommandOutput> {
         self.runtime.block_on(async {
             tokio::time::timeout(timeout, self.executor.execute(command))
@@ -455,13 +457,13 @@ impl SyncCommandExecutor {
 /// We cannot implement Default for SyncCommandExecutor following NUNCA rules
 /// because runtime creation can fail and Default trait cannot return errors.
 /// Use SyncCommandExecutor::new() instead for proper error handling.
-/// 
+///
 /// This implementation has been removed to enforce proper error handling patterns.
 
 /// We cannot implement Clone for SyncCommandExecutor following NUNCA rules
 /// because runtime creation can fail and Clone trait cannot return errors.
 /// Use SyncCommandExecutor::new() instead for proper error handling.
-/// 
+///
 /// This implementation has been removed to enforce proper error handling patterns.
 
 /// Implementation for shared synchronous executor
@@ -481,18 +483,19 @@ impl SharedSyncExecutor {
     /// Returns an error if the underlying SyncCommandExecutor cannot be created.
     pub fn try_instance() -> Result<&'static SharedSyncExecutor> {
         use std::sync::{Arc, Mutex, OnceLock};
-        
+
         // Use a global state that stores either success or error
         static GLOBAL_STATE: OnceLock<Mutex<GlobalExecutorState>> = OnceLock::new();
-        
-        let state_lock = GLOBAL_STATE.get_or_init(|| Mutex::new(GlobalExecutorState::Uninitialized));
-        
+
+        let state_lock =
+            GLOBAL_STATE.get_or_init(|| Mutex::new(GlobalExecutorState::Uninitialized));
+
         let mut guard = state_lock.lock().map_err(|_| {
             Error::Command(crate::error::CommandError::Generic(
-                "Failed to acquire lock for shared sync executor".to_string()
+                "Failed to acquire lock for shared sync executor".to_string(),
             ))
         })?;
-        
+
         match &*guard {
             GlobalExecutorState::Success(executor) => Ok(executor),
             GlobalExecutorState::Error(error) => Err(error.clone()),
@@ -500,20 +503,19 @@ impl SharedSyncExecutor {
                 // First access - try to create the instance
                 match SyncCommandExecutor::new() {
                     Ok(sync_executor) => {
-                        let shared_executor = SharedSyncExecutor {
-                            executor: Arc::new(sync_executor),
-                        };
-                        
+                        let shared_executor =
+                            SharedSyncExecutor { executor: Arc::new(sync_executor) };
+
                         // Store the success state
                         *guard = GlobalExecutorState::Success(Box::leak(Box::new(shared_executor)));
-                        
+
                         // Return the reference
                         if let GlobalExecutorState::Success(executor) = &*guard {
                             Ok(executor)
                         } else {
                             // This should never happen, but handle it gracefully
                             Err(Error::Command(crate::error::CommandError::Generic(
-                                "Internal state corruption in shared sync executor".to_string()
+                                "Internal state corruption in shared sync executor".to_string(),
                             )))
                         }
                     }
@@ -531,7 +533,7 @@ impl SharedSyncExecutor {
     ///
     /// This method has been removed following NUNCA rules - no panics allowed.
     /// Use `try_instance()` instead for proper error handling.
-    /// 
+    ///
     /// This method has been removed to enforce proper error handling patterns.
 
     /// Execute a command using the shared executor
@@ -568,9 +570,9 @@ impl SharedSyncExecutor {
     ///
     /// Returns an error if command execution fails or times out.
     pub fn execute_with_timeout(
-        &self, 
-        command: CmdConfig, 
-        timeout: std::time::Duration
+        &self,
+        command: CmdConfig,
+        timeout: std::time::Duration,
     ) -> Result<CommandOutput> {
         self.executor.execute_sync_with_timeout(command, timeout)
     }

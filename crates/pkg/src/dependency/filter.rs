@@ -57,9 +57,9 @@ impl Default for Filter {
 }
 
 /// Type alias for backward compatibility
-/// 
+///
 /// # Deprecation
-/// 
+///
 /// This alias maintains compatibility with existing code.
 /// Prefer using `Filter` directly in new code.
 #[allow(clippy::module_name_repetitions)]

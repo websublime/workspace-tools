@@ -4,8 +4,8 @@ mod registry_tests {
     use serde_json::{json, Value};
     use std::any::Any;
     use sublime_package_tools::{
-        DependencyRegistry, LocalRegistry, NpmRegistry, PackageRegistry, errors::PackageRegistryError,
-        RegistryAuth, RegistryManager, RegistryType,
+        errors::PackageRegistryError, DependencyRegistry, LocalRegistry, NpmRegistry,
+        PackageRegistry, RegistryAuth, RegistryManager, RegistryType,
     };
 
     #[test]

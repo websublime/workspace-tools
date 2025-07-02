@@ -42,7 +42,7 @@ walkdir = "2.4.0"
 # Guidelines
 dbg_macro = "deny"
 print_stdout = "deny"
-allow-dbg-in-tests = "allow"
+#allow-dbg-in-tests = "allow"
 clone_on_ref_ptr = "deny"
 empty_drop = "deny"
 exit = "deny"

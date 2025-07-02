@@ -159,9 +159,9 @@ impl Change {
 }
 
 /// Type alias for backward compatibility
-/// 
+///
 /// # Deprecation
-/// 
+///
 /// This alias maintains compatibility with existing code.
 /// Prefer using `Change` directly in new code.
 #[allow(clippy::module_name_repetitions)]

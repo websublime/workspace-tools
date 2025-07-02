@@ -9,7 +9,10 @@
 //! to read, modify, and write package.json files while preserving formatting
 //! and non-standard fields.
 
-use crate::{errors::{DependencyResolutionError, PackageError, VersionError}, Package, ResolutionResult};
+use crate::{
+    errors::{DependencyResolutionError, PackageError, VersionError},
+    Package, ResolutionResult,
+};
 use serde_json::Value;
 use std::{cell::RefCell, rc::Rc};
 
@@ -398,9 +401,9 @@ impl Info {
 }
 
 /// Type alias for backward compatibility
-/// 
+///
 /// # Deprecation
-/// 
+///
 /// This alias maintains compatibility with existing code.
 /// Prefer using `Info` directly in new code.
 pub type PackageInfo = Info;
