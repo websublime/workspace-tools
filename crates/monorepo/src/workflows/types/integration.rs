@@ -27,6 +27,9 @@ pub struct ChangesetHookIntegration<'a> {
     /// Task manager for validation tasks
     pub(crate) task_manager: crate::tasks::TaskManager<'a>,
 
+    /// Plugin manager for extensible integration functionality
+    pub(crate) plugin_manager: crate::plugins::PluginManager<'a>,
+
     /// Direct reference to configuration
     pub(crate) config: &'a crate::config::MonorepoConfig,
 

@@ -21,6 +21,8 @@ pub struct ChangesetHookIntegrationConfig<'a> {
     pub changeset_manager: ChangesetManager<'a>,
     /// Task manager for validation tasks
     pub task_manager: crate::tasks::TaskManager<'a>,
+    /// Plugin manager for extensible integration functionality
+    pub plugin_manager: crate::plugins::PluginManager<'a>,
     /// Direct reference to configuration
     pub config: &'a crate::config::MonorepoConfig,
     /// Direct reference to packages
@@ -75,6 +77,7 @@ impl<'a> ChangesetHookIntegration<'a> {
         Self {
             changeset_manager: config.changeset_manager,
             task_manager: config.task_manager,
+            plugin_manager: config.plugin_manager,
             config: config.config,
             packages: config.packages,
             repository: config.repository,
@@ -123,9 +126,13 @@ impl<'a> ChangesetHookIntegration<'a> {
             &project.root_path,
         );
 
+        // Create plugin manager with direct borrowing
+        let plugin_manager = crate::plugins::PluginManager::from_project(project)?;
+
         let config = ChangesetHookIntegrationConfig {
             changeset_manager,
             task_manager,
+            plugin_manager,
             config: &project.config,
             packages: &project.packages,
             repository: &project.repository,
@@ -206,7 +213,7 @@ impl<'a> ChangesetHookIntegration<'a> {
             changesets.iter().map(|cs| cs.package.clone()).collect();
 
         let affected_packages_set: std::collections::HashSet<String> =
-            affected_packages.into_iter().collect();
+            affected_packages.clone().into_iter().collect();
 
         let uncovered_packages: Vec<String> =
             affected_packages_set.difference(&changeset_packages).cloned().collect();
@@ -227,6 +234,9 @@ impl<'a> ChangesetHookIntegration<'a> {
                 return Ok(false);
             }
         }
+
+        // Execute pre-commit validation plugin hooks
+        self.execute_plugin_hooks("pre-commit-validation", &current_branch, &affected_packages);
 
         log::info!("All changesets validated successfully for branch '{}'", current_branch);
         Ok(true)
@@ -459,6 +469,9 @@ impl<'a> ChangesetHookIntegration<'a> {
     /// Returns an error if hook installation fails.
     #[allow(clippy::print_stdout)]
     pub fn setup_integration(&self) -> Result<bool, Error> {
+        // Execute pre-setup plugin hooks
+        self.execute_plugin_hooks("pre-integration-setup", "", &Vec::new());
+
         // Hook installation requires complex lifecycle management
         // Current architecture prioritizes changeset validation over hook installation
         log::info!("Integration focuses on changeset validation, hook installation requires separate setup");
@@ -485,6 +498,9 @@ impl<'a> ChangesetHookIntegration<'a> {
                 changeset_dir = changeset_dir.display()
             );
         }
+
+        // Execute post-setup plugin hooks
+        self.execute_plugin_hooks("post-integration-setup", "", &Vec::new());
 
         println!("🔗 Changeset-hook integration setup complete!");
         Ok(true)
@@ -1009,5 +1025,87 @@ impl<'a> ChangesetHookIntegration<'a> {
         }
 
         Ok(all_affected_packages)
+    }
+
+    /// Execute plugin hooks for integration workflow extension points
+    ///
+    /// Provides extensible hook points where plugins can customize changeset validation,
+    /// Git hook integration, and provide additional workflow integrations.
+    ///
+    /// # Arguments
+    ///
+    /// * `hook_name` - Name of the hook to execute (e.g., "pre-commit-validation")
+    /// * `branch` - Current branch context for plugins
+    /// * `affected_packages` - List of affected packages for plugin context
+    fn execute_plugin_hooks(&self, hook_name: &str, branch: &str, affected_packages: &[String]) {
+        // Convert integration context to plugin arguments
+        let args = vec![
+            format!("--branch={branch}"),
+            format!("--affected-packages={}", affected_packages.join(",")),
+            format!("--changeset-required={}", self.config.changesets.required),
+            format!("--changeset-dir={}", self.config.changesets.changeset_dir.display()),
+        ];
+
+        // Get all loaded plugins and execute the hook
+        let plugin_names: Vec<String> = self.plugin_manager.list_plugins()
+            .iter()
+            .map(|info| info.name.clone())
+            .collect();
+
+        for plugin_name in plugin_names {
+            // Execute plugin command with hook name and integration context
+            match self.plugin_manager.execute_plugin_command(&plugin_name, hook_name, &args) {
+                Ok(result) => {
+                    if result.success {
+                        log::info!(
+                            "Plugin '{}' integration hook '{}' executed successfully",
+                            plugin_name,
+                            hook_name
+                        );
+                        
+                        // Process plugin results for specific hooks
+                        match hook_name {
+                            "pre-commit-validation" => {
+                                if let Some(validations) = result.data.get("validations") {
+                                    log::info!("Plugin '{}' changeset validation results: {}", plugin_name, validations);
+                                }
+                            }
+                            "pre-integration-setup" => {
+                                if let Some(setup_config) = result.data.get("setup_config") {
+                                    log::info!("Plugin '{}' integration setup config: {}", plugin_name, setup_config);
+                                }
+                            }
+                            "post-integration-setup" => {
+                                if let Some(notifications) = result.data.get("notifications") {
+                                    log::info!("Plugin '{}' post-setup notifications: {}", plugin_name, notifications);
+                                }
+                            }
+                            _ => {
+                                // Generic processing for other hooks
+                                if !result.data.is_null() {
+                                    log::debug!("Plugin '{}' hook '{}' data: {}", plugin_name, hook_name, result.data);
+                                }
+                            }
+                        }
+                    } else {
+                        log::warn!(
+                            "Plugin '{}' integration hook '{}' reported failure: {}",
+                            plugin_name,
+                            hook_name,
+                            result.error.unwrap_or_else(|| "No error message".to_string())
+                        );
+                    }
+                }
+                Err(e) => {
+                    // Log plugin errors but don't fail the integration workflow
+                    log::warn!(
+                        "Plugin '{}' failed to execute integration hook '{}': {}",
+                        plugin_name,
+                        hook_name,
+                        e
+                    );
+                }
+            }
+        }
     }
 }
