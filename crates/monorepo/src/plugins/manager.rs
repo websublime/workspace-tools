@@ -367,6 +367,20 @@ impl<'a> PluginManager<'a> {
             }
         }
 
+        // Load configurator plugin
+        let configurator_plugin = super::builtin::ConfiguratorPlugin::new();
+        match self.load_plugin(Box::new(configurator_plugin)) {
+            Ok(info) => {
+                log_operation("load_builtin_plugin", "Loaded configurator plugin", Some(&info.name));
+                loaded_plugins.push(info);
+            }
+            Err(e) => {
+                ErrorContext::new("load_builtin_plugin")
+                    .with_detail("plugin_type", "configurator")
+                    .log_error(&e);
+            }
+        }
+
         log_operation_complete(
             "load_builtin_plugins",
             Some(&format!("{count} plugins", count = loaded_plugins.len())),

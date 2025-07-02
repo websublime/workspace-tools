@@ -3,7 +3,7 @@
 //! Provides a centralized registry for discovering, registering, and managing
 //! plugin metadata. Supports both built-in and external plugin discovery.
 
-use super::types::{PluginCapabilities, PluginInfo};
+use super::types::{MonorepoPlugin, PluginCapabilities, PluginInfo};
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -402,24 +402,32 @@ impl Default for PluginRegistry {
     fn default() -> Self {
         let mut registry = Self::new();
 
-        // Register built-in plugins
-        registry.register_builtin(
-            "analyzer",
-            "1.0.0",
-            "Built-in code analysis and dependency tracking plugin",
-        );
+        // Register built-in plugins with their actual capabilities
+        let analyzer_plugin = super::builtin::AnalyzerPlugin::new();
+        let analyzer_info = analyzer_plugin.info();
+        registry.register_plugin(analyzer_info, PluginSource::Builtin, "builtin".to_string())
+            .expect("Failed to register analyzer plugin");
 
-        registry.register_builtin(
-            "generator",
-            "1.0.0",
-            "Built-in code generation and templating plugin",
-        );
+        let generator_plugin = super::builtin::GeneratorPlugin::new();
+        let generator_info = generator_plugin.info();
+        registry.register_plugin(generator_info, PluginSource::Builtin, "builtin".to_string())
+            .expect("Failed to register generator plugin");
 
-        registry.register_builtin(
-            "validator",
-            "1.0.0",
-            "Built-in validation and quality assurance plugin",
-        );
+        let validator_plugin = super::builtin::ValidatorPlugin::new();
+        let validator_info = validator_plugin.info();
+        registry.register_plugin(validator_info, PluginSource::Builtin, "builtin".to_string())
+            .expect("Failed to register validator plugin");
+
+        let configurator_plugin = super::builtin::ConfiguratorPlugin::new();
+        let configurator_info = configurator_plugin.info();
+        registry.register_plugin(configurator_info, PluginSource::Builtin, "builtin".to_string())
+            .expect("Failed to register configurator plugin");
+
+        // Also add to builtin_plugins map for discovery
+        registry.builtin_plugins.insert("analyzer".to_string(), analyzer_plugin.info());
+        registry.builtin_plugins.insert("generator".to_string(), generator_plugin.info());
+        registry.builtin_plugins.insert("validator".to_string(), validator_plugin.info());
+        registry.builtin_plugins.insert("configurator".to_string(), configurator_plugin.info());
 
         registry
     }

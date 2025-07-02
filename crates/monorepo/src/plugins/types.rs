@@ -407,7 +407,7 @@ pub enum PluginArgumentType {
 }
 
 /// Plugin capabilities and features
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginCapabilities {
     /// Supported commands
     pub commands: Vec<PluginCommand>,
@@ -434,6 +434,18 @@ pub enum PluginLifecycle {
     Unloading,
     /// Plugin has errored
     Errored,
+}
+
+impl Default for PluginCapabilities {
+    fn default() -> Self {
+        Self {
+            commands: Vec::new(),
+            async_support: false,
+            parallel_support: false,
+            categories: Vec::new(),
+            file_patterns: Vec::new(),
+        }
+    }
 }
 
 impl std::fmt::Display for PluginLifecycle {

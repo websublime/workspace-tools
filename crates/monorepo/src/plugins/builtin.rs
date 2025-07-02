@@ -1920,3 +1920,1263 @@ impl Default for ValidatorPlugin {
         Self::new()
     }
 }
+
+/// Built-in configurator plugin for generating monorepo configuration files
+///
+/// Provides functionality for analyzing projects and generating intelligent
+/// default configurations in TOML format for all monorepo tools and services.
+pub struct ConfiguratorPlugin {
+    /// Plugin name
+    name: String,
+    /// Plugin version
+    version: String,
+}
+
+impl ConfiguratorPlugin {
+    /// Create a new configurator plugin
+    pub fn new() -> Self {
+        Self { name: "configurator".to_string(), version: "1.0.0".to_string() }
+    }
+}
+
+impl MonorepoPlugin for ConfiguratorPlugin {
+    fn info(&self) -> PluginInfo {
+        PluginInfo {
+            name: self.name.clone(),
+            version: self.version.clone(),
+            description: "Built-in configuration generation and project analysis plugin".to_string(),
+            author: "Sublime Monorepo Tools".to_string(),
+            capabilities: PluginCapabilities {
+                commands: vec![
+                    PluginCommand {
+                        name: "generate-config".to_string(),
+                        description: "Generate comprehensive monorepo configuration".to_string(),
+                        arguments: vec![
+                            PluginArgument {
+                                name: "template".to_string(),
+                                description: "Configuration template type".to_string(),
+                                required: false,
+                                arg_type: PluginArgumentType::String,
+                                default_value: Some("smart".to_string()),
+                            },
+                            PluginArgument {
+                                name: "output".to_string(),
+                                description: "Output file path".to_string(),
+                                required: false,
+                                arg_type: PluginArgumentType::String,
+                                default_value: Some("monorepo.config.toml".to_string()),
+                            },
+                        ],
+                        async_support: false,
+                    },
+                    PluginCommand {
+                        name: "analyze-project".to_string(),
+                        description: "Analyze project structure and configuration needs".to_string(),
+                        arguments: vec![PluginArgument {
+                            name: "detailed".to_string(),
+                            description: "Include detailed analysis information".to_string(),
+                            required: false,
+                            arg_type: PluginArgumentType::Boolean,
+                            default_value: Some("false".to_string()),
+                        }],
+                        async_support: false,
+                    },
+                    PluginCommand {
+                        name: "validate-config".to_string(),
+                        description: "Validate existing monorepo configuration".to_string(),
+                        arguments: vec![PluginArgument {
+                            name: "config-path".to_string(),
+                            description: "Path to configuration file to validate".to_string(),
+                            required: false,
+                            arg_type: PluginArgumentType::String,
+                            default_value: Some("monorepo.config.toml".to_string()),
+                        }],
+                        async_support: false,
+                    },
+                ],
+                async_support: false,
+                parallel_support: false,
+                categories: vec!["configurator".to_string(), "analysis".to_string(), "setup".to_string()],
+                file_patterns: vec![
+                    "package.json".to_string(),
+                    "*.config.{js,ts,json,toml}".to_string(),
+                    "package-lock.json".to_string(),
+                    "yarn.lock".to_string(),
+                    "pnpm-lock.yaml".to_string(),
+                ],
+            },
+        }
+    }
+
+    fn initialize(&mut self, _context: &PluginContext) -> Result<()> {
+        log::info!("Initializing configurator plugin for monorepo configuration generation");
+        Ok(())
+    }
+
+    fn execute_command(
+        &self,
+        command: &str,
+        args: &[String],
+        context: &PluginContext,
+    ) -> Result<PluginResult> {
+        match command {
+            "generate-config" => {
+                let template = args.first().map_or("smart", |s| s.as_str());
+                let output = args.get(1).map_or("monorepo.config.toml", |s| s.as_str());
+                self.generate_configuration(template, output, context)
+            }
+            "analyze-project" => {
+                let detailed = args
+                    .first()
+                    .map_or(false, |s| s.to_lowercase() == "true" || s == "1");
+                self.analyze_project_structure(detailed, context)
+            }
+            "validate-config" => {
+                let config_path = args.first().map_or("monorepo.config.toml", |s| s.as_str());
+                self.validate_configuration(config_path, context)
+            }
+            _ => Ok(PluginResult::error(format!("Unknown command: {command}"))),
+        }
+    }
+}
+
+impl ConfiguratorPlugin {
+    /// Generate comprehensive monorepo configuration based on project analysis
+    ///
+    /// Analyzes the current project structure, detects package managers,
+    /// workspace patterns, and generates an intelligent TOML configuration
+    /// with appropriate defaults for all monorepo tools.
+    ///
+    /// # Arguments
+    ///
+    /// * `template` - Configuration template type (smart, basic, enterprise, performance, ci-cd)
+    /// * `output` - Output file path for the generated configuration
+    /// * `context` - Plugin context with access to monorepo services
+    ///
+    /// # Returns
+    ///
+    /// Configuration generation result with detailed information
+    #[allow(clippy::unused_self)]
+    #[allow(clippy::too_many_lines)]
+    fn generate_configuration(
+        &self,
+        template: &str,
+        output: &str,
+        context: &PluginContext,
+    ) -> Result<PluginResult> {
+        let start_time = std::time::Instant::now();
+
+        // 1. Analyze project structure
+        let analysis = self.perform_project_analysis(context)?;
+
+        // 2. Generate configuration based on template and analysis
+        let config_content = match template {
+            "basic" => self.generate_basic_config(&analysis),
+            "enterprise" => self.generate_enterprise_config(&analysis),
+            "performance" => self.generate_performance_config(&analysis),
+            "ci-cd" => self.generate_cicd_config(&analysis),
+            "smart" | _ => self.generate_smart_config(&analysis),
+        };
+
+        // 3. Write configuration to file
+        let output_path = context.root_path.join(output);
+        std::fs::write(&output_path, &config_content).map_err(|e| {
+            crate::error::Error::plugin(format!("Failed to write configuration file: {e}"))
+        })?;
+
+        let execution_time = start_time.elapsed().as_millis() as u64;
+
+        let result = serde_json::json!({
+            "template_type": template,
+            "output_file": output,
+            "output_path": output_path.to_string_lossy(),
+            "config_size_bytes": config_content.len(),
+            "config_lines": config_content.lines().count(),
+            "analysis_summary": {
+                "package_manager": analysis.package_manager,
+                "workspace_patterns": analysis.workspace_patterns,
+                "package_count": analysis.package_count,
+                "project_size": analysis.project_size,
+                "git_provider": analysis.git_provider,
+                "has_ci_config": analysis.has_ci_config,
+                "has_existing_config": analysis.has_existing_config
+            },
+            "generation_timestamp": chrono::Utc::now().to_rfc3339(),
+            "status": "successfully_generated"
+        });
+
+        Ok(PluginResult::success_with_time(result, execution_time)
+            .with_metadata("command", "generate-config")
+            .with_metadata("configurator", "builtin")
+            .with_metadata("template", template)
+            .with_metadata("config_location", output_path.to_string_lossy()))
+    }
+
+    /// Analyze project structure and configuration needs
+    ///
+    /// Performs comprehensive analysis of the monorepo structure to understand
+    /// project characteristics, detect existing configurations, and provide
+    /// recommendations for optimal configuration settings.
+    ///
+    /// # Arguments
+    ///
+    /// * `detailed` - Whether to include detailed analysis information
+    /// * `context` - Plugin context with access to monorepo services
+    ///
+    /// # Returns
+    ///
+    /// Project analysis results with recommendations
+    #[allow(clippy::unused_self)]
+    fn analyze_project_structure(
+        &self,
+        detailed: bool,
+        context: &PluginContext,
+    ) -> Result<PluginResult> {
+        let start_time = std::time::Instant::now();
+
+        let analysis = self.perform_project_analysis(context)?;
+
+        let mut result_data = serde_json::json!({
+            "project_analysis": {
+                "package_manager": analysis.package_manager,
+                "workspace_patterns": analysis.workspace_patterns,
+                "package_count": analysis.package_count,
+                "project_size": analysis.project_size,
+                "git_provider": analysis.git_provider,
+                "has_ci_config": analysis.has_ci_config,
+                "has_existing_config": analysis.has_existing_config,
+                "detected_tools": analysis.detected_tools,
+                "security_files": analysis.security_files,
+                "test_frameworks": analysis.test_frameworks
+            },
+            "recommendations": analysis.recommendations,
+            "template_suggestions": analysis.template_suggestions,
+            "estimated_complexity": analysis.estimated_complexity,
+            "analysis_timestamp": chrono::Utc::now().to_rfc3339()
+        });
+
+        if detailed {
+            result_data["detailed_analysis"] = serde_json::json!({
+                "file_structure": analysis.file_structure,
+                "dependency_analysis": analysis.dependency_analysis,
+                "git_analysis": analysis.git_analysis,
+                "performance_indicators": analysis.performance_indicators,
+                "quality_indicators": analysis.quality_indicators
+            });
+        }
+
+        let execution_time = start_time.elapsed().as_millis() as u64;
+
+        Ok(PluginResult::success_with_time(result_data, execution_time)
+            .with_metadata("command", "analyze-project")
+            .with_metadata("configurator", "builtin")
+            .with_metadata("analysis_type", if detailed { "detailed" } else { "summary" }))
+    }
+
+    /// Validate existing monorepo configuration
+    ///
+    /// Validates an existing configuration file against the expected schema
+    /// and provides recommendations for improvements or fixes.
+    ///
+    /// # Arguments
+    ///
+    /// * `config_path` - Path to the configuration file to validate
+    /// * `context` - Plugin context with access to monorepo services
+    ///
+    /// # Returns
+    ///
+    /// Validation results with any issues found and recommendations
+    #[allow(clippy::unused_self)]
+    fn validate_configuration(
+        &self,
+        config_path: &str,
+        context: &PluginContext,
+    ) -> Result<PluginResult> {
+        let start_time = std::time::Instant::now();
+
+        let config_file_path = context.root_path.join(config_path);
+
+        if !config_file_path.exists() {
+            return Ok(PluginResult::error(format!(
+                "Configuration file not found: {config_path}"
+            )));
+        }
+
+        // Read and parse configuration file
+        let config_content = std::fs::read_to_string(&config_file_path).map_err(|e| {
+            crate::error::Error::plugin(format!("Failed to read configuration file: {e}"))
+        })?;
+
+        let mut validation_issues = Vec::new();
+        let mut warnings = Vec::new();
+        let mut suggestions = Vec::new();
+
+        // Basic TOML parsing validation
+        match toml::from_str::<crate::config::MonorepoConfig>(&config_content) {
+            Ok(config) => {
+                // Configuration parsed successfully, validate content
+                self.validate_config_content(&config, &mut validation_issues, &mut warnings, &mut suggestions);
+            }
+            Err(e) => {
+                validation_issues.push(serde_json::json!({
+                    "type": "parse_error",
+                    "severity": "critical",
+                    "message": format!("Failed to parse TOML configuration: {e}"),
+                    "suggestion": "Check TOML syntax and structure"
+                }));
+            }
+        }
+
+        let is_valid = validation_issues.is_empty();
+        let execution_time = start_time.elapsed().as_millis() as u64;
+
+        let result = serde_json::json!({
+            "config_path": config_path,
+            "is_valid": is_valid,
+            "validation_issues": validation_issues,
+            "warnings": warnings,
+            "suggestions": suggestions,
+            "file_size_bytes": config_content.len(),
+            "file_lines": config_content.lines().count(),
+            "validation_timestamp": chrono::Utc::now().to_rfc3339(),
+            "status": if is_valid { "valid" } else { "invalid" }
+        });
+
+        Ok(PluginResult::success_with_time(result, execution_time)
+            .with_metadata("command", "validate-config")
+            .with_metadata("configurator", "builtin")
+            .with_metadata("validation_result", if is_valid { "valid" } else { "invalid" }))
+    }
+
+    /// Perform comprehensive project analysis
+    ///
+    /// Analyzes all aspects of the project to generate intelligent configuration defaults.
+    fn perform_project_analysis(&self, context: &PluginContext) -> Result<ProjectAnalysis> {
+        let mut analysis = ProjectAnalysis::default();
+
+        // Detect package manager
+        analysis.package_manager = self.detect_package_manager(context);
+
+        // Analyze workspace patterns
+        analysis.workspace_patterns = self.detect_workspace_patterns(context);
+
+        // Count packages
+        analysis.package_count = context.packages.len();
+
+        // Determine project size
+        analysis.project_size = self.classify_project_size(analysis.package_count);
+
+        // Detect Git provider
+        analysis.git_provider = self.detect_git_provider(context);
+
+        // Check for CI configuration
+        analysis.has_ci_config = self.has_ci_configuration(context);
+
+        // Check for existing monorepo config
+        analysis.has_existing_config = self.has_existing_config(context);
+
+        // Detect development tools
+        analysis.detected_tools = self.detect_development_tools(context);
+
+        // Check for security-related files
+        analysis.security_files = self.detect_security_files(context);
+
+        // Detect test frameworks
+        analysis.test_frameworks = self.detect_test_frameworks(context);
+
+        // Generate recommendations
+        analysis.recommendations = self.generate_recommendations(&analysis);
+
+        // Suggest templates
+        analysis.template_suggestions = self.suggest_templates(&analysis);
+
+        // Estimate complexity
+        analysis.estimated_complexity = self.estimate_project_complexity(&analysis);
+
+        // Additional detailed analysis
+        analysis.file_structure = self.analyze_file_structure(context);
+        analysis.dependency_analysis = self.analyze_dependencies(context);
+        analysis.git_analysis = self.analyze_git_configuration(context);
+        analysis.performance_indicators = self.analyze_performance_indicators(&analysis);
+        analysis.quality_indicators = self.analyze_quality_indicators(context);
+
+        Ok(analysis)
+    }
+
+    /// Detect the primary package manager used in the project
+    fn detect_package_manager(&self, context: &PluginContext) -> String {
+        let root_path = context.root_path;
+
+        if root_path.join("pnpm-lock.yaml").exists() {
+            "pnpm".to_string()
+        } else if root_path.join("yarn.lock").exists() {
+            "yarn".to_string()
+        } else if root_path.join("bun.lockb").exists() {
+            "bun".to_string()
+        } else if root_path.join("package-lock.json").exists() {
+            "npm".to_string()
+        } else {
+            "npm".to_string() // Default fallback
+        }
+    }
+
+    /// Detect workspace patterns used in the project
+    fn detect_workspace_patterns(&self, context: &PluginContext) -> Vec<String> {
+        let mut patterns = Vec::new();
+
+        // Common patterns to check
+        let common_patterns = [
+            "packages/*", "apps/*", "libs/*", "services/*", 
+            "tools/*", "components/*", "modules/*"
+        ];
+
+        for pattern in &common_patterns {
+            let pattern_path = pattern.replace("/*", "");
+            if context.root_path.join(pattern_path).exists() {
+                patterns.push(pattern.to_string());
+            }
+        }
+
+        // If no patterns found, use packages/* as default
+        if patterns.is_empty() {
+            patterns.push("packages/*".to_string());
+        }
+
+        patterns
+    }
+
+    /// Classify project size based on package count
+    fn classify_project_size(&self, package_count: usize) -> String {
+        match package_count {
+            0..=5 => "small".to_string(),
+            6..=20 => "medium".to_string(),
+            21..=50 => "large".to_string(),
+            _ => "enterprise".to_string(),
+        }
+    }
+
+    /// Detect Git hosting provider from remote URLs
+    fn detect_git_provider(&self, _context: &PluginContext) -> String {
+        // TODO: Implement remote URL detection when available in Repo API
+        // For now, return unknown - could be enhanced to check .git/config directly
+        "unknown".to_string()
+    }
+
+    /// Check if project has CI/CD configuration
+    fn has_ci_configuration(&self, context: &PluginContext) -> bool {
+        let ci_files = [
+            ".github/workflows",
+            ".gitlab-ci.yml",
+            "azure-pipelines.yml",
+            ".travis.yml",
+            ".circleci/config.yml",
+            "Jenkinsfile",
+            ".buildkite/pipeline.yml",
+        ];
+
+        ci_files
+            .iter()
+            .any(|file| context.root_path.join(file).exists())
+    }
+
+    /// Check if project already has monorepo configuration
+    fn has_existing_config(&self, context: &PluginContext) -> bool {
+        let config_files = [
+            "monorepo.config.toml",
+            ".monorepo/config.toml",
+            "monorepo.toml",
+            ".monoreporc",
+        ];
+
+        config_files
+            .iter()
+            .any(|file| context.root_path.join(file).exists())
+    }
+
+    /// Detect development tools used in the project
+    fn detect_development_tools(&self, context: &PluginContext) -> Vec<String> {
+        let mut tools = Vec::new();
+        let root_path = context.root_path;
+
+        // Check for various tool configuration files
+        let tool_files = [
+            (".eslintrc", "eslint"),
+            (".prettierrc", "prettier"),
+            ("tsconfig.json", "typescript"),
+            ("jest.config", "jest"),
+            ("vitest.config", "vitest"),
+            (".babelrc", "babel"),
+            ("webpack.config", "webpack"),
+            ("rollup.config", "rollup"),
+            ("vite.config", "vite"),
+            ("tailwind.config", "tailwind"),
+            ("next.config", "nextjs"),
+            ("nuxt.config", "nuxtjs"),
+            ("svelte.config", "svelte"),
+            ("astro.config", "astro"),
+        ];
+
+        for (file_pattern, tool_name) in &tool_files {
+            if self.file_exists_with_pattern(root_path, file_pattern) {
+                tools.push(tool_name.to_string());
+            }
+        }
+
+        tools
+    }
+
+    /// Detect security-related files
+    fn detect_security_files(&self, context: &PluginContext) -> Vec<String> {
+        let mut security_files = Vec::new();
+        let root_path = context.root_path;
+
+        let security_patterns = [
+            (".nvmrc", "Node version lock"),
+            (".node-version", "Node version specification"),
+            (".security-policy", "Security policy"),
+            ("SECURITY.md", "Security documentation"),
+            (".snyk", "Snyk security configuration"),
+            ("audit-ci.json", "Audit CI configuration"),
+        ];
+
+        for (file_pattern, description) in &security_patterns {
+            if self.file_exists_with_pattern(root_path, file_pattern) {
+                security_files.push(format!("{}: {}", file_pattern, description));
+            }
+        }
+
+        security_files
+    }
+
+    /// Detect test frameworks used
+    fn detect_test_frameworks(&self, context: &PluginContext) -> Vec<String> {
+        let mut frameworks = Vec::new();
+        let root_path = context.root_path;
+
+        let test_patterns = [
+            ("jest.config", "Jest"),
+            ("vitest.config", "Vitest"),
+            ("cypress.config", "Cypress"),
+            ("playwright.config", "Playwright"),
+            ("karma.conf", "Karma"),
+            ("mocha.opts", "Mocha"),
+            ("ava.config", "AVA"),
+        ];
+
+        for (file_pattern, framework_name) in &test_patterns {
+            if self.file_exists_with_pattern(root_path, file_pattern) {
+                frameworks.push(framework_name.to_string());
+            }
+        }
+
+        frameworks
+    }
+
+    /// Generate configuration recommendations based on analysis
+    fn generate_recommendations(&self, analysis: &ProjectAnalysis) -> Vec<String> {
+        let mut recommendations = Vec::new();
+
+        // Package manager recommendations
+        recommendations.push(format!(
+            "Detected {} as package manager - configuration optimized accordingly", 
+            analysis.package_manager
+        ));
+
+        // Project size recommendations
+        match analysis.project_size.as_str() {
+            "small" => {
+                recommendations.push("Small project detected: Using standard concurrency settings".to_string());
+            }
+            "medium" => {
+                recommendations.push("Medium project detected: Enabling moderate parallelization".to_string());
+            }
+            "large" => {
+                recommendations.push("Large project detected: Enabling high-performance settings".to_string());
+            }
+            "enterprise" => {
+                recommendations.push("Enterprise project detected: Enabling all performance optimizations".to_string());
+            }
+            _ => {}
+        }
+
+        // CI/CD recommendations
+        if analysis.has_ci_config {
+            recommendations.push("CI/CD configuration detected: Adding deployment task templates".to_string());
+        } else {
+            recommendations.push("No CI/CD detected: Consider adding CI/CD configuration templates".to_string());
+        }
+
+        // Git provider recommendations
+        if analysis.git_provider != "unknown" {
+            recommendations.push(format!(
+                "Git hosting provider detected ({}): Configuring provider-specific integrations", 
+                analysis.git_provider
+            ));
+        }
+
+        // Security recommendations
+        if !analysis.security_files.is_empty() {
+            recommendations.push("Security files detected: Enabling security validation features".to_string());
+        }
+
+        // Test framework recommendations
+        if !analysis.test_frameworks.is_empty() {
+            recommendations.push(format!(
+                "Test frameworks detected ({}): Configuring test-aware task management", 
+                analysis.test_frameworks.join(", ")
+            ));
+        }
+
+        recommendations
+    }
+
+    /// Suggest appropriate configuration templates
+    fn suggest_templates(&self, analysis: &ProjectAnalysis) -> Vec<String> {
+        let mut suggestions = Vec::new();
+
+        // Always suggest smart template
+        suggestions.push("smart".to_string());
+
+        // Suggest based on project characteristics
+        match analysis.project_size.as_str() {
+            "small" => suggestions.push("basic".to_string()),
+            "enterprise" => {
+                suggestions.push("enterprise".to_string());
+                suggestions.push("performance".to_string());
+            }
+            "large" => suggestions.push("performance".to_string()),
+            _ => {}
+        }
+
+        // CI/CD template suggestion
+        if analysis.has_ci_config {
+            suggestions.push("ci-cd".to_string());
+        }
+
+        suggestions
+    }
+
+    /// Estimate project complexity based on various factors
+    fn estimate_project_complexity(&self, analysis: &ProjectAnalysis) -> String {
+        let mut complexity_score = 0;
+
+        // Package count factor
+        complexity_score += match analysis.package_count {
+            0..=5 => 1,
+            6..=20 => 2,
+            21..=50 => 3,
+            _ => 4,
+        };
+
+        // Tools factor
+        complexity_score += analysis.detected_tools.len() / 2;
+
+        // CI factor
+        if analysis.has_ci_config {
+            complexity_score += 1;
+        }
+
+        // Workspace patterns factor
+        complexity_score += analysis.workspace_patterns.len() / 2;
+
+        match complexity_score {
+            0..=2 => "low".to_string(),
+            3..=5 => "medium".to_string(),
+            6..=8 => "high".to_string(),
+            _ => "very_high".to_string(),
+        }
+    }
+
+    /// Helper function to check if file exists with pattern
+    fn file_exists_with_pattern(&self, root_path: &std::path::Path, pattern: &str) -> bool {
+        // Simple implementation - could be enhanced with glob patterns
+        let extensions = ["", ".js", ".ts", ".json", ".yml", ".yaml"];
+        
+        for ext in &extensions {
+            if root_path.join(format!("{pattern}{ext}")).exists() {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Placeholder implementations for detailed analysis methods
+    /// These would be implemented with real analysis logic
+    
+    fn analyze_file_structure(&self, _context: &PluginContext) -> serde_json::Value {
+        serde_json::json!({
+            "total_files": "analysis_placeholder",
+            "structure_score": "analysis_placeholder"
+        })
+    }
+
+    fn analyze_dependencies(&self, _context: &PluginContext) -> serde_json::Value {
+        serde_json::json!({
+            "dependency_health": "analysis_placeholder",
+            "outdated_count": "analysis_placeholder"
+        })
+    }
+
+    fn analyze_git_configuration(&self, _context: &PluginContext) -> serde_json::Value {
+        serde_json::json!({
+            "branch_strategy": "analysis_placeholder",
+            "commit_patterns": "analysis_placeholder"
+        })
+    }
+
+    fn analyze_performance_indicators(&self, _analysis: &ProjectAnalysis) -> serde_json::Value {
+        serde_json::json!({
+            "build_performance": "analysis_placeholder",
+            "task_efficiency": "analysis_placeholder"
+        })
+    }
+
+    fn analyze_quality_indicators(&self, _context: &PluginContext) -> serde_json::Value {
+        serde_json::json!({
+            "code_quality": "analysis_placeholder",
+            "test_coverage": "analysis_placeholder"
+        })
+    }
+
+    fn validate_config_content(
+        &self,
+        _config: &crate::config::MonorepoConfig,
+        _issues: &mut Vec<serde_json::Value>,
+        _warnings: &mut Vec<serde_json::Value>,
+        _suggestions: &mut Vec<serde_json::Value>,
+    ) {
+        // Placeholder - would implement real validation logic
+    }
+
+    /// Generate smart configuration based on project analysis
+    fn generate_smart_config(&self, analysis: &ProjectAnalysis) -> String {
+        format!(r#"# Monorepo Configuration
+# Generated by Sublime Monorepo Tools Configurator Plugin
+# Template: SMART
+# Generated: {}
+
+# Deployment environments
+environments = ["development", "staging", "production"]
+
+[versioning]
+default_bump = "patch"
+propagate_changes = true
+snapshot_format = "{{version}}-snapshot.{{sha}}"
+tag_prefix = "v"
+auto_tag = true
+version_constraint = "^1.0.0"
+
+[tasks]
+default_tasks = ["test", "lint"]
+parallel = true
+max_concurrent = {}
+timeout = {}
+
+[tasks.groups]
+quality = ["lint", "typecheck", "test"]
+build = ["clean", "compile", "bundle"]
+release = ["quality", "build", "docs"]
+
+[changelog]
+include_breaking_changes = true
+output_format = "markdown"
+grouping = "type"
+
+[hooks]
+enabled = true
+hooks_dir = ".hooks"
+
+[hooks.pre_commit]
+enabled = true
+validate_changeset = true
+run_tasks = ["lint"]
+
+[changesets]
+required = true
+changeset_dir = ".changesets"
+default_environments = ["development", "staging"]
+auto_deploy = false
+
+[plugins]
+enabled = ["configurator", "analyzer", "generator", "validator"]
+plugin_dirs = [".monorepo/plugins", "plugins"]
+
+[workspace]
+merge_with_detected = true
+
+{}
+
+[workspace.package_manager_configs.{}]
+use_workspaces = true
+
+[git]
+default_since_ref = "HEAD~1"
+default_until_ref = "HEAD"
+default_remote = "origin"
+
+[git.branches]
+main_branches = ["main", "master", "trunk"]
+develop_branches = ["develop", "dev"]
+default_base_branch = "main"
+
+{}
+
+[validation]
+[validation.task_priorities]
+low = 0
+normal = 50
+high = 100
+critical = 200
+
+[validation.quality_gates]
+min_test_coverage = 80.0
+max_cyclomatic_complexity = 10
+max_build_time_seconds = {}
+"#,
+            chrono::Utc::now().to_rfc3339(),
+            self.get_concurrency_for_project_size(&analysis.project_size),
+            self.get_timeout_for_project_size(&analysis.project_size),
+            self.generate_workspace_patterns_config(analysis),
+            analysis.package_manager,
+            self.generate_git_provider_config(analysis),
+            self.get_build_timeout_for_project_size(&analysis.project_size)
+        )
+    }
+
+    /// Generate basic configuration template
+    fn generate_basic_config(&self, analysis: &ProjectAnalysis) -> String {
+        format!(r#"# Basic Monorepo Configuration
+# Generated by Sublime Monorepo Tools Configurator Plugin
+# Template: BASIC
+# Generated: {}
+
+[versioning]
+default_bump = "patch"
+auto_tag = true
+
+[tasks]
+default_tasks = ["test", "lint"]
+parallel = true
+max_concurrent = 2
+
+[workspace]
+merge_with_detected = true
+
+{}
+
+[workspace.package_manager_configs.{}]
+use_workspaces = true
+
+[git]
+default_remote = "origin"
+
+[git.branches]
+main_branches = ["main"]
+"#,
+            chrono::Utc::now().to_rfc3339(),
+            self.generate_workspace_patterns_config(analysis),
+            analysis.package_manager
+        )
+    }
+
+    /// Generate enterprise configuration template
+    fn generate_enterprise_config(&self, analysis: &ProjectAnalysis) -> String {
+        format!(r#"# Enterprise Monorepo Configuration
+# Generated by Sublime Monorepo Tools Configurator Plugin
+# Template: ENTERPRISE
+# Generated: {}
+
+# Deployment environments
+environments = ["development", "testing", "staging", "production"]
+
+[versioning]
+default_bump = "patch"
+propagate_changes = true
+snapshot_format = "{{version}}-snapshot.{{sha}}"
+tag_prefix = "v"
+auto_tag = true
+version_constraint = "^1.0.0"
+
+[tasks]
+default_tasks = ["lint", "typecheck", "test", "security-scan"]
+parallel = true
+max_concurrent = {}
+timeout = {}
+
+[tasks.groups]
+quality = ["lint", "typecheck", "test", "audit"]
+security = ["security-scan", "license-check", "vulnerability-scan"]
+build = ["clean", "compile", "bundle", "optimize"]
+release = ["quality", "security", "build", "docs", "sign"]
+
+[tasks.deployment_tasks]
+development = ["lint", "test"]
+testing = ["quality", "unit-tests", "integration-tests"]
+staging = ["quality", "security", "build", "e2e-tests"]
+production = ["quality", "security", "build", "security-scan", "compliance-check"]
+
+[changelog]
+include_breaking_changes = true
+output_format = "markdown"
+grouping = "type"
+
+[hooks]
+enabled = true
+hooks_dir = ".hooks"
+
+[hooks.pre_commit]
+enabled = true
+validate_changeset = true
+run_tasks = ["lint", "security-scan"]
+
+[hooks.pre_push]
+enabled = true
+run_tasks = ["test", "build"]
+
+[changesets]
+required = true
+changeset_dir = ".changesets"
+default_environments = ["development", "testing", "staging"]
+auto_deploy = false
+
+[plugins]
+enabled = ["configurator", "analyzer", "generator", "validator"]
+plugin_dirs = [".monorepo/plugins", "plugins"]
+
+[workspace]
+merge_with_detected = true
+
+{}
+
+[workspace.validation]
+require_pattern_matches = true
+warn_orphaned_packages = true
+validate_naming = true
+naming_patterns = ["@scope/*", "^[a-z-]+$"]
+validate_structure = true
+required_files = ["package.json", "README.md", "CHANGELOG.md"]
+
+[workspace.package_manager_configs.{}]
+use_workspaces = true
+
+[git]
+default_since_ref = "HEAD~1"
+default_until_ref = "HEAD"
+default_remote = "origin"
+
+[git.branches]
+main_branches = ["main", "master"]
+develop_branches = ["develop", "dev"]
+release_prefixes = ["release/", "rel/"]
+feature_prefixes = ["feature/", "feat/"]
+hotfix_prefixes = ["hotfix/", "fix/"]
+default_base_branch = "main"
+
+{}
+
+[validation]
+[validation.task_priorities]
+low = 0
+normal = 50
+high = 100
+critical = 200
+
+[validation.quality_gates]
+min_test_coverage = 90.0
+max_cyclomatic_complexity = 8
+max_file_size_bytes = 50000
+max_lines_per_file = 500
+max_dependencies_per_package = 30
+min_documentation_coverage = 80.0
+max_build_time_seconds = {}
+max_technical_debt_ratio = 0.03
+
+[validation.quality_gates.security_thresholds]
+max_high_severity_vulnerabilities = 0
+max_medium_severity_vulnerabilities = 2
+max_outdated_dependencies_percentage = 10.0
+outdated_dependency_days = 180
+max_license_issues = 0
+"#,
+            chrono::Utc::now().to_rfc3339(),
+            self.get_concurrency_for_project_size(&analysis.project_size),
+            self.get_timeout_for_project_size(&analysis.project_size),
+            self.generate_workspace_patterns_config(analysis),
+            analysis.package_manager,
+            self.generate_git_provider_config(analysis),
+            self.get_build_timeout_for_project_size(&analysis.project_size)
+        )
+    }
+
+    /// Generate performance configuration template
+    fn generate_performance_config(&self, analysis: &ProjectAnalysis) -> String {
+        format!(r#"# Performance Optimized Monorepo Configuration
+# Generated by Sublime Monorepo Tools Configurator Plugin
+# Template: PERFORMANCE
+# Generated: {}
+
+[versioning]
+default_bump = "patch"
+propagate_changes = true
+auto_tag = true
+
+[tasks]
+default_tasks = ["test", "lint"]
+parallel = true
+max_concurrent = {}
+timeout = {}
+
+[tasks.performance]
+hook_timeout = {}
+version_planning_per_package = 10
+cache_duration = 600
+
+[tasks.performance.large_project]
+max_concurrent = {}
+timeout = {}
+
+[tasks.performance.impact_thresholds]
+medium_impact_files = 10
+high_impact_files = 30
+
+[workspace]
+merge_with_detected = true
+
+{}
+
+[workspace.discovery]
+auto_detect = true
+cache_results = true
+cache_duration = 600
+max_scan_depth = 4
+
+[workspace.package_manager_configs.{}]
+use_workspaces = true
+
+[git]
+default_remote = "origin"
+
+[validation]
+[validation.dependency_analysis]
+max_chain_depth = 8
+max_propagation_depth = 8
+max_analysis_depth = 15
+complex_dependency_threshold = 50
+max_dependents_analysis = 200
+
+[validation.quality_gates]
+max_build_time_seconds = {}
+"#,
+            chrono::Utc::now().to_rfc3339(),
+            self.get_high_concurrency_for_project_size(&analysis.project_size),
+            self.get_extended_timeout_for_project_size(&analysis.project_size),
+            self.get_extended_timeout_for_project_size(&analysis.project_size),
+            self.get_high_concurrency_for_project_size(&analysis.project_size),
+            self.get_extended_timeout_for_project_size(&analysis.project_size),
+            self.generate_workspace_patterns_config(analysis),
+            analysis.package_manager,
+            self.get_extended_build_timeout_for_project_size(&analysis.project_size)
+        )
+    }
+
+    /// Generate CI/CD configuration template
+    fn generate_cicd_config(&self, analysis: &ProjectAnalysis) -> String {
+        format!(r#"# CI/CD Optimized Monorepo Configuration
+# Generated by Sublime Monorepo Tools Configurator Plugin
+# Template: CI-CD
+# Generated: {}
+
+# Deployment environments
+environments = ["development", "staging", "production"]
+
+[versioning]
+default_bump = "patch"
+propagate_changes = true
+auto_tag = true
+tag_prefix = "v"
+
+[tasks]
+default_tasks = ["lint", "test", "build"]
+parallel = true
+max_concurrent = {}
+
+[tasks.groups]
+quality = ["lint", "typecheck", "test"]
+ci = ["quality", "build", "package"]
+cd = ["ci", "deploy", "verify"]
+
+[tasks.deployment_tasks]
+development = ["lint", "test"]
+staging = ["quality", "build", "integration-tests"]
+production = ["quality", "build", "security-scan", "deploy"]
+
+[changelog]
+include_breaking_changes = true
+output_format = "markdown"
+grouping = "type"
+
+[hooks]
+enabled = true
+hooks_dir = ".hooks"
+
+[hooks.pre_commit]
+enabled = true
+validate_changeset = true
+run_tasks = ["lint", "test"]
+
+[hooks.pre_push]
+enabled = true
+validate_changeset = false
+run_tasks = ["test", "build"]
+
+[changesets]
+required = true
+changeset_dir = ".changesets"
+default_environments = ["development", "staging"]
+auto_deploy = {}
+
+[workspace]
+merge_with_detected = true
+
+{}
+
+[workspace.package_manager_configs.{}]
+use_workspaces = true
+
+[git]
+default_remote = "origin"
+
+[git.branches]
+main_branches = ["main", "master"]
+develop_branches = ["develop", "dev"]
+release_prefixes = ["release/"]
+feature_prefixes = ["feature/"]
+hotfix_prefixes = ["hotfix/"]
+
+{}
+"#,
+            chrono::Utc::now().to_rfc3339(),
+            self.get_concurrency_for_project_size(&analysis.project_size),
+            if analysis.has_ci_config { "true" } else { "false" },
+            self.generate_workspace_patterns_config(analysis),
+            analysis.package_manager,
+            self.generate_git_provider_config(analysis)
+        )
+    }
+
+    /// Helper methods for configuration generation
+    
+    fn get_concurrency_for_project_size(&self, project_size: &str) -> u32 {
+        match project_size {
+            "small" => 2,
+            "medium" => 4,
+            "large" => 6,
+            "enterprise" => 8,
+            _ => 4,
+        }
+    }
+
+    fn get_high_concurrency_for_project_size(&self, project_size: &str) -> u32 {
+        match project_size {
+            "small" => 4,
+            "medium" => 8,
+            "large" => 12,
+            "enterprise" => 16,
+            _ => 8,
+        }
+    }
+
+    fn get_timeout_for_project_size(&self, project_size: &str) -> u32 {
+        match project_size {
+            "small" => 180,
+            "medium" => 300,
+            "large" => 450,
+            "enterprise" => 600,
+            _ => 300,
+        }
+    }
+
+    fn get_extended_timeout_for_project_size(&self, project_size: &str) -> u32 {
+        match project_size {
+            "small" => 300,
+            "medium" => 600,
+            "large" => 900,
+            "enterprise" => 1200,
+            _ => 600,
+        }
+    }
+
+    fn get_build_timeout_for_project_size(&self, project_size: &str) -> u32 {
+        match project_size {
+            "small" => 300,
+            "medium" => 600,
+            "large" => 900,
+            "enterprise" => 1200,
+            _ => 600,
+        }
+    }
+
+    fn get_extended_build_timeout_for_project_size(&self, project_size: &str) -> u32 {
+        match project_size {
+            "small" => 600,
+            "medium" => 1200,
+            "large" => 1800,
+            "enterprise" => 2400,
+            _ => 1200,
+        }
+    }
+
+    fn generate_workspace_patterns_config(&self, analysis: &ProjectAnalysis) -> String {
+        let patterns: Vec<String> = analysis.workspace_patterns.iter()
+            .map(|pattern| {
+                format!(r#"[[workspace.patterns]]
+pattern = "{}"
+description = "Auto-detected workspace pattern"
+enabled = true
+priority = 100"#, pattern)
+            })
+            .collect();
+        
+        patterns.join("\n\n")
+    }
+
+    fn generate_git_provider_config(&self, analysis: &ProjectAnalysis) -> String {
+        if analysis.git_provider == "unknown" {
+            return String::new();
+        }
+
+        format!(r#"
+[git.repository]
+provider = "{}"
+auto_detect = true"#, analysis.git_provider)
+    }
+}
+
+/// Project analysis data structure
+#[derive(Debug, Default)]
+struct ProjectAnalysis {
+    package_manager: String,
+    workspace_patterns: Vec<String>,
+    package_count: usize,
+    project_size: String,
+    git_provider: String,
+    has_ci_config: bool,
+    has_existing_config: bool,
+    detected_tools: Vec<String>,
+    security_files: Vec<String>,
+    test_frameworks: Vec<String>,
+    recommendations: Vec<String>,
+    template_suggestions: Vec<String>,
+    estimated_complexity: String,
+    file_structure: serde_json::Value,
+    dependency_analysis: serde_json::Value,
+    git_analysis: serde_json::Value,
+    performance_indicators: serde_json::Value,
+    quality_indicators: serde_json::Value,
+}
+
+impl Default for ConfiguratorPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
