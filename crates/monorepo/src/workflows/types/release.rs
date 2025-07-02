@@ -35,6 +35,9 @@ pub struct ReleaseWorkflow<'a> {
     /// Task manager for executing release tasks
     pub(crate) task_manager: crate::tasks::TaskManager<'a>,
 
+    /// Plugin manager for extensible release functionality
+    pub(crate) plugin_manager: crate::plugins::PluginManager<'a>,
+
     /// Direct reference to configuration
     pub(crate) config: &'a crate::config::MonorepoConfig,
 

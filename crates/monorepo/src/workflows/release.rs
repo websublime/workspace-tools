@@ -51,6 +51,8 @@ pub struct ReleaseWorkflowConfig<'a> {
     pub changeset_manager: crate::changesets::ChangesetManager<'a>,
     /// Task manager for executing release tasks
     pub task_manager: crate::tasks::TaskManager<'a>,
+    /// Plugin manager for extensible release functionality
+    pub plugin_manager: crate::plugins::PluginManager<'a>,
     /// Direct reference to configuration
     pub config: &'a crate::config::MonorepoConfig,
     /// Direct reference to packages
@@ -103,6 +105,7 @@ impl<'a> ReleaseWorkflow<'a> {
             analyzer: config.analyzer,
             changeset_manager: config.changeset_manager,
             task_manager: config.task_manager,
+            plugin_manager: config.plugin_manager,
             config: config.config,
             packages: config.packages,
             repository: config.repository,
@@ -173,10 +176,14 @@ impl<'a> ReleaseWorkflow<'a> {
             &project.root_path,
         );
 
+        // Create plugin manager with direct borrowing
+        let plugin_manager = crate::plugins::PluginManager::from_project(project)?;
+
         let config = ReleaseWorkflowConfig {
             analyzer,
             changeset_manager,
             task_manager,
+            plugin_manager,
             config: &project.config,
             packages: &project.packages,
             repository: &project.repository,
@@ -262,6 +269,9 @@ impl<'a> ReleaseWorkflow<'a> {
             }
         };
 
+        // Step 1.5: Execute pre-release plugin hooks
+        self.execute_plugin_hooks("pre-release-validation", &changes, options);
+
         // Step 2: Apply pending changesets
         let changesets_applied = if options.dry_run {
             warnings.push("Dry run: Skipping changeset application".to_string());
@@ -281,6 +291,9 @@ impl<'a> ReleaseWorkflow<'a> {
                 }
             }
         };
+
+        // Step 2.5: Execute post-changeset plugin hooks
+        self.execute_plugin_hooks("post-changeset-application", &changes, options);
 
         // Step 3: Execute release tasks
         let tasks = if options.skip_tests {
@@ -345,6 +358,9 @@ impl<'a> ReleaseWorkflow<'a> {
                 }
             }
         }
+
+        // Final step: Execute post-release plugin hooks
+        self.execute_plugin_hooks("post-release-completion", &changes, options);
 
         Ok(ReleaseResult {
             changes,
@@ -697,5 +713,83 @@ impl<'a> ReleaseWorkflow<'a> {
         );
 
         Ok(next_version)
+    }
+
+    /// Execute plugin hooks for release workflow extension points
+    ///
+    /// Provides extensible hook points where plugins can customize release process,
+    /// add validation, deployment integration, and post-release actions.
+    ///
+    /// # Arguments
+    ///
+    /// * `hook_name` - Name of the hook to execute (e.g., "pre-release-validation")
+    /// * `changes` - Change analysis context for plugins
+    /// * `options` - Release options for plugin context
+    fn execute_plugin_hooks(&self, hook_name: &str, changes: &ChangeAnalysis, options: &ReleaseOptions) {
+        // Convert release context to plugin arguments
+        let args = vec![
+            format!("--changed-files={}", changes.changed_files.len()),
+            format!("--packages={}", changes.package_changes.len()),
+            format!("--dry-run={}", options.dry_run),
+            format!("--skip-tests={}", options.skip_tests),
+            format!("--environments={}", options.target_environments.join(",")),
+        ];
+
+        // Get all loaded plugins and execute the hook
+        let plugin_names: Vec<String> = self.plugin_manager.list_plugins()
+            .iter()
+            .map(|info| info.name.clone())
+            .collect();
+
+        for plugin_name in plugin_names {
+            // Execute plugin command with hook name and release context
+            match self.plugin_manager.execute_plugin_command(&plugin_name, hook_name, &args) {
+                Ok(result) => {
+                    if result.success {
+                        log::info!(
+                            "Plugin '{}' release hook '{}' executed successfully",
+                            plugin_name,
+                            hook_name
+                        );
+                        
+                        // Process plugin results for specific hooks
+                        match hook_name {
+                            "pre-release-validation" => {
+                                if let Some(validations) = result.data.get("validations") {
+                                    log::info!("Plugin '{}' validation results: {}", plugin_name, validations);
+                                }
+                            }
+                            "post-release-completion" => {
+                                if let Some(notifications) = result.data.get("notifications") {
+                                    log::info!("Plugin '{}' post-release notifications: {}", plugin_name, notifications);
+                                }
+                            }
+                            _ => {
+                                // Generic processing for other hooks
+                                if !result.data.is_null() {
+                                    log::debug!("Plugin '{}' hook '{}' data: {}", plugin_name, hook_name, result.data);
+                                }
+                            }
+                        }
+                    } else {
+                        log::warn!(
+                            "Plugin '{}' release hook '{}' reported failure: {}",
+                            plugin_name,
+                            hook_name,
+                            result.error.unwrap_or_else(|| "No error message".to_string())
+                        );
+                    }
+                }
+                Err(e) => {
+                    // Log plugin errors but don't fail the entire release
+                    log::warn!(
+                        "Plugin '{}' failed to execute release hook '{}': {}",
+                        plugin_name,
+                        hook_name,
+                        e
+                    );
+                }
+            }
+        }
     }
 }
