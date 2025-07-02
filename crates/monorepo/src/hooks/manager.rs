@@ -448,6 +448,7 @@ impl<'a> HookManager<'a> {
 
         // Create task manager with direct component borrowing
         let task_manager = TaskManager::with_components(
+            self.repository,
             self.config,
             self.file_system,
             self.packages,

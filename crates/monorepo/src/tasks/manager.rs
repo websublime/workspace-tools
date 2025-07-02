@@ -52,6 +52,7 @@ impl<'a> TaskManager<'a> {
     ///
     /// # Arguments
     ///
+    /// * `repository` - Reference to git repository
     /// * `config` - Reference to monorepo configuration
     /// * `file_system` - Reference to file system manager
     /// * `packages` - Reference to package list
@@ -61,6 +62,7 @@ impl<'a> TaskManager<'a> {
     ///
     /// A new task manager instance
     pub fn with_components(
+        repository: &'a sublime_git_tools::Repo,
         config: &'a crate::config::MonorepoConfig,
         file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
         packages: &'a [crate::core::MonorepoPackageInfo],
@@ -71,7 +73,7 @@ impl<'a> TaskManager<'a> {
         // Create sub-components with direct borrowing
         let executor = TaskExecutor::with_components(config, file_system, packages, root_path);
         let condition_checker =
-            ConditionChecker::with_components(config, file_system, packages, root_path);
+            ConditionChecker::with_components(repository, config, file_system, packages, root_path);
 
         Ok(Self {
             file_system,

@@ -50,13 +50,15 @@ impl<'a> ConditionChecker<'a> {
         }
     }
 
-    /// Create a new condition checker with direct component references
+    /// Create a new condition checker with direct component references and repository
     ///
     /// Uses direct borrowing of individual components instead of requiring
-    /// a full MonorepoProject.
+    /// a full MonorepoProject. Requires an actual repository reference for
+    /// Git-based condition checking.
     ///
     /// # Arguments
     ///
+    /// * `repository` - Reference to git repository
     /// * `config` - Reference to monorepo configuration
     /// * `file_system` - Reference to file system manager
     /// * `packages` - Reference to package list
@@ -65,33 +67,15 @@ impl<'a> ConditionChecker<'a> {
     /// # Returns
     ///
     /// A new condition checker instance
-    ///
-    /// # Note
-    ///
-    /// Repository is set to a placeholder since some condition checking
-    /// operations may not require Git operations
     #[must_use]
     pub fn with_components(
+        repository: &'a sublime_git_tools::Repo,
         config: &'a crate::config::MonorepoConfig,
         file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
         packages: &'a [crate::core::MonorepoPackageInfo],
         root_path: &'a std::path::Path,
     ) -> Self {
-        // Create a placeholder repository that won't be used
-        // This is safe since we're only using this for non-Git condition checking
-        let repo_path = root_path.to_str().unwrap_or(".");
-
-        // Allow unwrap here because:
-        // 1. This is a placeholder repository that won't actually be used
-        // 2. We have a fallback to current directory if the primary path fails
-        // 3. This condition checker doesn't perform actual Git operations
-        #[allow(clippy::unwrap_used)]
-        let dummy_repo = Box::leak(Box::new(
-            sublime_git_tools::Repo::open(repo_path)
-                .unwrap_or_else(|_| sublime_git_tools::Repo::open(".").unwrap()),
-        ));
-
-        Self { repository: dummy_repo, config, packages, file_system, root_path }
+        Self { repository, config, packages, file_system, root_path }
     }
 
     /// Check if all conditions are met for task execution
