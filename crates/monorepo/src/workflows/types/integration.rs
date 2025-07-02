@@ -24,9 +24,6 @@ pub struct ChangesetHookIntegration<'a> {
     /// Changeset manager for changeset operations
     pub(crate) changeset_manager: ChangesetManager<'a>,
 
-    /// Hook manager for Git hook operations
-    pub(crate) hook_manager: crate::hooks::HookManager<'a>,
-
     /// Task manager for validation tasks
     pub(crate) task_manager: crate::tasks::TaskManager<'a>,
 

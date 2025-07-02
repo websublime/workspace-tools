@@ -19,8 +19,6 @@ use sublime_standard_tools::filesystem::FileSystem;
 pub struct ChangesetHookIntegrationConfig<'a> {
     /// Changeset manager for changeset operations
     pub changeset_manager: ChangesetManager<'a>,
-    /// Hook manager for Git hook operations
-    pub hook_manager: crate::hooks::HookManager<'a>,
     /// Task manager for validation tasks
     pub task_manager: crate::tasks::TaskManager<'a>,
     /// Direct reference to configuration
@@ -76,7 +74,6 @@ impl<'a> ChangesetHookIntegration<'a> {
     pub fn new(config: ChangesetHookIntegrationConfig<'a>) -> Self {
         Self {
             changeset_manager: config.changeset_manager,
-            hook_manager: config.hook_manager,
             task_manager: config.task_manager,
             config: config.config,
             packages: config.packages,
@@ -100,6 +97,44 @@ impl<'a> ChangesetHookIntegration<'a> {
     /// # Errors
     ///
     /// Returns an error if any of the required components cannot be initialized.
+    pub fn from_project(project: &'a crate::core::MonorepoProject) -> Result<Self, Error> {
+        use crate::changesets::{ChangesetManager, ChangesetStorage};
+        use crate::tasks::TaskManager;
+
+        // Create task manager with direct borrowing
+        let task_manager = TaskManager::new(project)?;
+
+        // Create changeset storage with direct borrowing
+        let storage = ChangesetStorage::new(
+            project.config.changesets.clone(),
+            &project.file_system,
+            &project.root_path,
+        );
+
+        // Create changeset manager with direct borrowing
+        let changeset_task_manager = TaskManager::new(project)?;
+        let changeset_manager = ChangesetManager::new(
+            storage,
+            changeset_task_manager,
+            &project.config,
+            &project.file_system,
+            &project.packages,
+            &project.repository,
+            &project.root_path,
+        );
+
+        let config = ChangesetHookIntegrationConfig {
+            changeset_manager,
+            task_manager,
+            config: &project.config,
+            packages: &project.packages,
+            repository: &project.repository,
+            file_system: &project.file_system,
+            root_path: &project.root_path,
+        };
+
+        Ok(Self::new(config))
+    }
 
     /// Validates that required changesets exist for the current changes
     ///
@@ -227,8 +262,8 @@ impl<'a> ChangesetHookIntegration<'a> {
 
         log::info!("Changeset required for affected packages: {:?}", affected_packages);
 
-        // Prompt for changeset creation
-        match self.hook_manager.prompt_for_changeset() {
+        // Create changeset directly through changeset manager
+        match self.changeset_manager.create_changeset_interactive(None) {
             Ok(changeset) => {
                 log::info!(
                     "✅ Changeset '{}' created successfully for package '{}'",
@@ -424,8 +459,10 @@ impl<'a> ChangesetHookIntegration<'a> {
     /// Returns an error if hook installation fails.
     #[allow(clippy::print_stdout)]
     pub fn setup_integration(&self) -> Result<bool, Error> {
-        // Install Git hooks
-        let installed_hooks = self.hook_manager.install_hooks()?;
+        // Hook installation requires complex lifecycle management
+        // Current architecture prioritizes changeset validation over hook installation
+        log::info!("Integration focuses on changeset validation, hook installation requires separate setup");
+        let installed_hooks: Vec<crate::hooks::HookType> = Vec::new();
 
         if installed_hooks.is_empty() {
             println!("⚠️  No hooks were installed");

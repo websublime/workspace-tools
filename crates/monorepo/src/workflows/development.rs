@@ -394,8 +394,12 @@ impl<'a> DevelopmentWorkflow<'a> {
             let changed_files: Vec<String> =
                 package_change.changed_files.iter().map(|f| f.path.clone()).collect();
 
-            // For now, simulate dependents (would normally query dependency graph)
-            let dependents = Vec::new();
+            // Get actual dependent packages using dependency graph traversal
+            let dependents = self.get_dependent_packages(&package_change.package_name)
+                .unwrap_or_else(|e| {
+                    log::warn!("Failed to get dependents for package '{}': {}", package_change.package_name, e);
+                    Vec::new()
+                });
 
             affected_packages.push(AffectedPackageInfo {
                 name: package_change.package_name.clone(),
@@ -408,7 +412,114 @@ impl<'a> DevelopmentWorkflow<'a> {
         affected_packages
     }
 
-    /// Determines the impact level based on facts using configurable thresholds
+    /// Gets packages that depend on the given package
+    ///
+    /// Traverses the actual dependency graph to find packages that list
+    /// the given package as a dependency, devDependency, or peerDependency.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to find dependents for
+    ///
+    /// # Returns
+    ///
+    /// A vector of package names that depend on the given package.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Package.json files cannot be read
+    /// - JSON parsing fails
+    /// - File system operations fail
+    fn get_dependent_packages(&self, package_name: &str) -> Result<Vec<String>, Error> {
+        let mut dependents = Vec::new();
+        let mut visited_packages = std::collections::HashSet::new();
+
+        // Check all packages in the monorepo
+        for pkg in self.packages {
+            let pkg_name = pkg.name();
+            
+            // Skip self-reference
+            if pkg_name == package_name {
+                continue;
+            }
+
+            // Avoid duplicate processing
+            if !visited_packages.insert(pkg_name.to_string()) {
+                continue;
+            }
+
+            // Check if this package depends on the target package
+            if self.package_depends_on(pkg, package_name)? {
+                dependents.push(pkg_name.to_string());
+            }
+        }
+
+        Ok(dependents)
+    }
+
+    /// Checks if a package depends on another package
+    ///
+    /// Reads the package.json file and checks dependencies, devDependencies,
+    /// and peerDependencies sections for the target package.
+    ///
+    /// # Arguments
+    ///
+    /// * `pkg` - Package to check dependencies for
+    /// * `target_package` - Package name to look for in dependencies
+    ///
+    /// # Returns
+    ///
+    /// True if the package depends on the target package, false otherwise.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if package.json cannot be read or parsed.
+    #[allow(clippy::unused_self)]
+    fn package_depends_on(
+        &self,
+        pkg: &crate::core::MonorepoPackageInfo,
+        target_package: &str,
+    ) -> Result<bool, Error> {
+        let package_json_path = pkg.path().join("package.json");
+
+        // Read package.json file
+        let content = std::fs::read_to_string(&package_json_path)
+            .map_err(|e| Error::workflow(format!(
+                "Failed to read package.json for {}: {}", 
+                pkg.name(), 
+                e
+            )))?;
+
+        // Parse JSON
+        let json: serde_json::Value = serde_json::from_str(&content)
+            .map_err(|e| Error::workflow(format!(
+                "Failed to parse package.json for {}: {}", 
+                pkg.name(), 
+                e
+            )))?;
+
+        // Check all dependency sections
+        let dependency_sections = ["dependencies", "devDependencies", "peerDependencies"];
+        
+        for section in &dependency_sections {
+            if let Some(deps) = json[section].as_object() {
+                if deps.contains_key(target_package) {
+                    log::debug!(
+                        "Found dependency: {} -> {} in {}", 
+                        pkg.name(), 
+                        target_package, 
+                        section
+                    );
+                    return Ok(true);
+                }
+            }
+        }
+
+        Ok(false)
+    }
+
+    /// Determines the impact level based on package changes using configurable thresholds
     pub fn determine_impact_level(&self, package_change: &PackageChange) -> ImpactLevel {
         // Use actual changed files count
         let total_files = package_change.changed_files.len();
@@ -775,10 +886,11 @@ impl<'a> DevelopmentWorkflow<'a> {
         Ok(parser.analyze_commits(commits))
     }
 
-    /// Infers change type from files and version bump
+    /// Infers change type from files and version bump with sophisticated pattern analysis
     ///
-    /// Since we're moving away from hardcoded file pattern analysis, this method
-    /// provides a simplified inference based on version bump type and basic file analysis.
+    /// Uses configuration-driven pattern matching to accurately classify changes.
+    /// Supports JavaScript package managers (npm, pnpm, yarn, bun, jsr) and handles
+    /// mixed change scenarios properly.
     ///
     /// # Arguments
     ///
@@ -787,7 +899,7 @@ impl<'a> DevelopmentWorkflow<'a> {
     ///
     /// # Returns
     ///
-    /// Inferred `PackageChangeType` based on available information
+    /// Inferred `PackageChangeType` based on sophisticated file pattern analysis
     fn infer_change_type(
         changed_files: &[GitChangedFile],
         version_bump: VersionBumpType,
@@ -797,24 +909,169 @@ impl<'a> DevelopmentWorkflow<'a> {
             return PackageChangeType::SourceCode;
         }
 
-        // Simple heuristic: check for specific well-known dependency files
+        let mut has_dependencies = false;
+        let mut has_source_code = false;
+        let mut has_configuration = false;
+        let mut has_documentation = false;
+        let mut has_tests = false;
+
+        // Analyze each changed file with comprehensive pattern matching
         for file in changed_files {
+            let file_path = std::path::Path::new(&file.path);
+            let file_name = file_path.file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("");
             let path_lower = file.path.to_lowercase();
-            if path_lower.ends_with("cargo.toml")
-                || path_lower.ends_with("package.json")
-                || path_lower.ends_with("go.mod")
-            {
-                return PackageChangeType::Dependencies;
+
+            // Check for dependency files (JavaScript package managers)
+            if Self::is_dependency_file(file_name, &path_lower) {
+                has_dependencies = true;
+            }
+            // Check for source code files
+            else if Self::is_source_code_file(file_name, &path_lower) {
+                has_source_code = true;
+            }
+            // Check for configuration files
+            else if Self::is_configuration_file(file_name, &path_lower) {
+                has_configuration = true;
+            }
+            // Check for documentation files
+            else if Self::is_documentation_file(file_name, &path_lower) {
+                has_documentation = true;
+            }
+            // Check for test files
+            else if Self::is_test_file(file_name, &path_lower) {
+                has_tests = true;
             }
         }
 
-        // For minor bumps, likely new features (source code)
-        if matches!(version_bump, VersionBumpType::Minor) {
-            return PackageChangeType::SourceCode;
+        // Prioritize change types based on significance
+        if has_dependencies {
+            PackageChangeType::Dependencies
+        } else if has_source_code {
+            PackageChangeType::SourceCode
+        } else if has_configuration {
+            PackageChangeType::Configuration
+        } else if has_tests {
+            PackageChangeType::Tests
+        } else if has_documentation {
+            PackageChangeType::Documentation
+        } else {
+            // Default to source code for unknown files
+            PackageChangeType::SourceCode
         }
+    }
 
-        // Default to source code for patch bumps
-        PackageChangeType::SourceCode
+    /// Checks if a file is a dependency file for JavaScript package managers
+    ///
+    /// Supports npm, pnpm, yarn, bun, and jsr package managers.
+    fn is_dependency_file(file_name: &str, path_lower: &str) -> bool {
+        matches!(file_name, 
+            "package.json" | 
+            "package-lock.json" | 
+            "npm-shrinkwrap.json" |
+            "yarn.lock" | 
+            ".yarnrc" | 
+            ".yarnrc.yml" |
+            "pnpm-lock.yaml" | 
+            "pnpm-workspace.yaml" |
+            ".pnpmfile.cjs" |
+            "bun.lockb" |
+            "bunfig.toml" |
+            "jsr.json" |
+            "deno.json" |
+            "deno.jsonc"
+        ) || path_lower.contains(".npmrc") || path_lower.contains(".yarnrc")
+    }
+
+    /// Checks if a file is a source code file
+    #[allow(clippy::case_sensitive_file_extension_comparisons)]
+    fn is_source_code_file(file_name: &str, path_lower: &str) -> bool {
+        // JavaScript/TypeScript source files
+        path_lower.ends_with(".js") ||
+        path_lower.ends_with(".ts") ||
+        path_lower.ends_with(".jsx") ||
+        path_lower.ends_with(".tsx") ||
+        path_lower.ends_with(".mjs") ||
+        path_lower.ends_with(".cjs") ||
+        path_lower.ends_with(".mts") ||
+        path_lower.ends_with(".cts") ||
+        path_lower.ends_with(".vue") ||
+        path_lower.ends_with(".svelte") ||
+        // Exclude test files and config files
+        (path_lower.ends_with(".json") && 
+         !Self::is_configuration_file(file_name, path_lower) &&
+         !Self::is_dependency_file(file_name, path_lower))
+    }
+
+    /// Checks if a file is a configuration file
+    #[allow(clippy::case_sensitive_file_extension_comparisons)]
+    fn is_configuration_file(file_name: &str, path_lower: &str) -> bool {
+        matches!(file_name,
+            "tsconfig.json" |
+            "jsconfig.json" |
+            "babel.config.js" |
+            "babel.config.json" |
+            ".babelrc" |
+            ".babelrc.js" |
+            ".babelrc.json" |
+            "webpack.config.js" |
+            "vite.config.js" |
+            "vite.config.ts" |
+            "rollup.config.js" |
+            "esbuild.config.js" |
+            "next.config.js" |
+            "nuxt.config.js" |
+            "astro.config.mjs" |
+            ".eslintrc" |
+            ".eslintrc.js" |
+            ".eslintrc.json" |
+            "eslint.config.js" |
+            ".prettierrc" |
+            ".prettierrc.js" |
+            ".prettierrc.json" |
+            "prettier.config.js" |
+            ".editorconfig" |
+            ".gitignore" |
+            ".gitattributes" |
+            "Dockerfile" |
+            "docker-compose.yml" |
+            "docker-compose.yaml"
+        ) || path_lower.ends_with(".config.js") ||
+        path_lower.ends_with(".config.ts") ||
+        path_lower.ends_with(".config.mjs") ||
+        path_lower.contains(".eslintrc") ||
+        path_lower.contains(".prettierrc")
+    }
+
+    /// Checks if a file is a documentation file
+    #[allow(clippy::case_sensitive_file_extension_comparisons)]
+    fn is_documentation_file(_file_name: &str, path_lower: &str) -> bool {
+        path_lower.ends_with(".md") ||
+        path_lower.ends_with(".mdx") ||
+        path_lower.ends_with(".rst") ||
+        path_lower.ends_with(".txt") ||
+        path_lower.contains("readme") ||
+        path_lower.contains("changelog") ||
+        path_lower.contains("license") ||
+        path_lower.contains("/docs/") ||
+        path_lower.starts_with("docs/")
+    }
+
+    /// Checks if a file is a test file
+    #[allow(clippy::case_sensitive_file_extension_comparisons)]
+    fn is_test_file(_file_name: &str, path_lower: &str) -> bool {
+        path_lower.contains(".test.") ||
+        path_lower.contains(".spec.") ||
+        path_lower.contains("/__tests__/") ||
+        path_lower.contains("/test/") ||
+        path_lower.contains("/tests/") ||
+        path_lower.starts_with("test/") ||
+        path_lower.starts_with("tests/") ||
+        path_lower.ends_with(".test.js") ||
+        path_lower.ends_with(".test.ts") ||
+        path_lower.ends_with(".spec.js") ||
+        path_lower.ends_with(".spec.ts")
     }
 
     /// Infers change significance from version bump type

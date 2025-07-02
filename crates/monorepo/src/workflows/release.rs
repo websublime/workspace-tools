@@ -57,6 +57,8 @@ pub struct ReleaseWorkflowConfig<'a> {
     pub packages: &'a [crate::core::MonorepoPackageInfo],
     /// Direct reference to git repository
     pub repository: &'a sublime_git_tools::Repo,
+    /// Direct reference to file system manager
+    pub file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
     /// Direct reference to root path
     pub root_path: &'a std::path::Path,
 }
@@ -104,6 +106,7 @@ impl<'a> ReleaseWorkflow<'a> {
             config: config.config,
             packages: config.packages,
             repository: config.repository,
+            file_system: config.file_system,
             root_path: config.root_path,
         }
     }
@@ -177,6 +180,7 @@ impl<'a> ReleaseWorkflow<'a> {
             config: &project.config,
             packages: &project.packages,
             repository: &project.repository,
+            file_system: &project.file_system,
             root_path: &project.root_path,
         };
 
@@ -222,7 +226,12 @@ impl<'a> ReleaseWorkflow<'a> {
     /// # Ok(())
     /// # }
     /// ```
-    // TODO: Consider breaking this method into smaller parts for better readability and maintainability
+    ///
+    /// # Implementation Notes
+    ///
+    /// This method orchestrates multiple complex operations in sequence. The current
+    /// implementation prioritizes clear step-by-step execution flow over method decomposition
+    /// to maintain workflow clarity and reduce callback complexity.
     #[allow(clippy::too_many_lines)]
     pub fn execute(&self, options: &ReleaseOptions) -> Result<ReleaseResult, Error> {
         let start_time = Instant::now();
@@ -545,9 +554,14 @@ impl<'a> ReleaseWorkflow<'a> {
 
         log::info!("Starting changelog generation for {} packages", changes.package_changes.len());
 
-        // Create changelog manager with proper dependency injection
-        let project_ref = self.create_project_reference()?;
-        let changelog_manager = ChangelogManager::from_project(&project_ref);
+        // Create changelog manager with direct component borrowing (no Arc/Rc needed)
+        let changelog_manager = ChangelogManager::with_components(
+            self.config,
+            self.packages,
+            self.repository,
+            self.file_system,
+            self.root_path,
+        );
 
         // Generate changelog for each affected package
         for package_change in &changes.package_changes {
@@ -683,18 +697,5 @@ impl<'a> ReleaseWorkflow<'a> {
         );
 
         Ok(next_version)
-    }
-
-    /// Create a project reference for changelog manager
-    ///
-    /// Creates a new MonorepoProject instance from the current context
-    /// for use with the changelog manager.
-    fn create_project_reference(&self) -> Result<std::rc::Rc<crate::core::MonorepoProject>, Error> {
-        let root_path = self.root_path;
-        let project =
-            std::rc::Rc::new(crate::core::MonorepoProject::new(root_path).map_err(|e| {
-                Error::workflow(format!("Failed to create project reference: {e}"))
-            })?);
-        Ok(project)
     }
 }
