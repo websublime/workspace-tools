@@ -4,9 +4,9 @@
 //! It maintains backward compatibility while internally using the new component architecture.
 
 use crate::config::{
-    ChangelogConfig, ChangesetsConfig, HooksConfig, PackageManagerType, PluginsConfig, TasksConfig,
-    VersioningConfig, WorkspaceConfig, WorkspacePattern, ConfigManager, PatternMatcher,
-    ConfigPersistence, ConfigReader,
+    ChangelogConfig, ChangesetsConfig, ConfigManager, ConfigPersistence, ConfigReader, HooksConfig,
+    PackageManagerType, PatternMatcher, PluginsConfig, TasksConfig, VersioningConfig,
+    WorkspaceConfig, WorkspacePattern,
 };
 use crate::error::{Error, Result};
 use crate::{Environment, MonorepoConfig};
@@ -18,11 +18,7 @@ impl ConfigManager {
     /// Create a new configuration manager with default config
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            config: MonorepoConfig::default(),
-            config_path: None,
-            auto_save: false,
-        }
+        Self { config: MonorepoConfig::default(), config_path: None, auto_save: false }
     }
 
     /// Create a configuration manager with a specific config
@@ -37,11 +33,7 @@ impl ConfigManager {
         let persistence = ConfigPersistence::new();
         let config = persistence.load_from_file(path)?;
 
-        Ok(Self {
-            config,
-            config_path: Some(path.to_path_buf()),
-            auto_save: false,
-        })
+        Ok(Self { config, config_path: Some(path.to_path_buf()), auto_save: false })
     }
 
     /// Save configuration to a file
@@ -66,14 +58,14 @@ impl ConfigManager {
     }
 
     /// Update the configuration and return a new ConfigManager with the updated config
-    /// 
+    ///
     /// This follows Rust ownership principles by returning a new instance instead of mutating.
     pub fn with_update<F>(mut self, updater: F) -> Result<Self>
     where
         F: FnOnce(&mut MonorepoConfig),
     {
         log::debug!("Updating configuration with provided updater function");
-        
+
         updater(&mut self.config);
         log::debug!("Configuration updated successfully");
 
@@ -84,16 +76,16 @@ impl ConfigManager {
 
         Ok(self)
     }
-    
+
     /// Update the configuration in place (for compatibility)
-    /// 
+    ///
     /// Note: This is a transitional method. New code should prefer `with_update`.
     pub fn update<F>(&mut self, updater: F) -> Result<()>
     where
         F: FnOnce(&mut MonorepoConfig),
     {
         log::debug!("Updating configuration with provided updater function");
-        
+
         updater(&mut self.config);
         log::debug!("Configuration updated successfully");
 
@@ -277,7 +269,7 @@ impl ConfigManager {
         self.config.workspace.patterns.push(pattern);
         self
     }
-    
+
     /// Add a workspace pattern to the configuration in place
     pub fn add_workspace_pattern(&mut self, pattern: WorkspacePattern) -> Result<()> {
         self.update(|config| {
@@ -292,7 +284,7 @@ impl ConfigManager {
         let removed = self.config.workspace.patterns.len() < initial_len;
         (self, removed)
     }
-    
+
     /// Remove a workspace pattern by pattern string
     pub fn remove_workspace_pattern(&mut self, pattern: &str) -> Result<bool> {
         let mut removed = false;
@@ -316,7 +308,7 @@ impl ConfigManager {
         }
         (self, found)
     }
-    
+
     /// Update a workspace pattern
     pub fn update_workspace_pattern<F>(&mut self, pattern: &str, updater: F) -> Result<bool>
     where
@@ -333,26 +325,31 @@ impl ConfigManager {
     }
 
     /// Get workspace patterns for a specific package manager
-    pub fn get_package_manager_patterns(
-        &self,
-        package_manager: PackageManagerType,
-    ) -> Vec<String> {
+    pub fn get_package_manager_patterns(&self, package_manager: PackageManagerType) -> Vec<String> {
         let workspace = self.get_workspace();
 
         // Check for package manager specific overrides
         let override_patterns = match package_manager {
-            PackageManagerType::Npm => {
-                workspace.package_manager_configs.npm.as_ref().and_then(|config| config.workspaces_override.clone())
-            }
-            PackageManagerType::Yarn | PackageManagerType::YarnBerry => {
-                workspace.package_manager_configs.yarn.as_ref().and_then(|config| config.workspaces_override.clone())
-            }
-            PackageManagerType::Pnpm => {
-                workspace.package_manager_configs.pnpm.as_ref().and_then(|config| config.packages_override.clone())
-            }
-            PackageManagerType::Bun => {
-                workspace.package_manager_configs.bun.as_ref().and_then(|config| config.workspaces_override.clone())
-            }
+            PackageManagerType::Npm => workspace
+                .package_manager_configs
+                .npm
+                .as_ref()
+                .and_then(|config| config.workspaces_override.clone()),
+            PackageManagerType::Yarn | PackageManagerType::YarnBerry => workspace
+                .package_manager_configs
+                .yarn
+                .as_ref()
+                .and_then(|config| config.workspaces_override.clone()),
+            PackageManagerType::Pnpm => workspace
+                .package_manager_configs
+                .pnpm
+                .as_ref()
+                .and_then(|config| config.packages_override.clone()),
+            PackageManagerType::Bun => workspace
+                .package_manager_configs
+                .bun
+                .as_ref()
+                .and_then(|config| config.workspaces_override.clone()),
             PackageManagerType::Custom(_) => None,
         };
 
@@ -438,17 +435,17 @@ impl ConfigManager {
                 if !glob_pattern.matches(&normalized_path) {
                     return false;
                 }
-                
+
                 // Maintain backward compatibility: single * should not match across path segments
                 if normalized_pattern.contains('*') && !normalized_pattern.contains("**") {
                     let pattern_segments = normalized_pattern.split('/').count();
                     let path_segments = normalized_path.split('/').count();
-                    
+
                     if pattern_segments != path_segments {
                         return false;
                     }
                 }
-                
+
                 true
             }
             Err(_) => {
@@ -508,9 +505,9 @@ impl ConfigManager {
         // DRY: Simplified pattern compilation using standard functionality
         let glob_pattern = Pattern::new(&normalized_pattern)
             .map_err(|e| Error::config(format!("Invalid glob pattern '{pattern}': {e}")))?;
-        
+
         let glob_pattern = Arc::new(glob_pattern);
-        
+
         Ok(Box::new(move |package_path: &str| {
             let normalized_path = package_path.replace('\\', "/");
             glob_pattern.matches(&normalized_path)
@@ -535,7 +532,7 @@ impl ConfigManager {
     /// Returns an error if the configuration file exists but is malformed.
     pub fn load_config(&self, root_path: &Path) -> Result<MonorepoConfig> {
         let config_path = root_path.join("monorepo.toml");
-        
+
         if config_path.exists() {
             let persistence = ConfigPersistence::new();
             persistence.load_from_file(&config_path)
@@ -567,11 +564,11 @@ impl ConfigManager {
             if pattern.pattern.is_empty() {
                 return Err(Error::config_validation("Workspace pattern cannot be empty"));
             }
-            
+
             // Validate that pattern is a valid glob
             if let Err(e) = Pattern::new(&pattern.pattern) {
                 return Err(Error::config_validation(format!(
-                    "Invalid workspace pattern '{}': {}", 
+                    "Invalid workspace pattern '{}': {}",
                     pattern.pattern, e
                 )));
             }
@@ -587,19 +584,34 @@ impl ConfigManager {
         // Validate hook configuration
         if config.hooks.enabled {
             // Validate pre-commit hook
-            if config.hooks.pre_commit.enabled && config.hooks.pre_commit.run_tasks.is_empty() && config.hooks.pre_commit.custom_script.is_none() {
-                return Err(Error::config_validation("Pre-commit hook must have either tasks or custom script"));
+            if config.hooks.pre_commit.enabled
+                && config.hooks.pre_commit.run_tasks.is_empty()
+                && config.hooks.pre_commit.custom_script.is_none()
+            {
+                return Err(Error::config_validation(
+                    "Pre-commit hook must have either tasks or custom script",
+                ));
             }
-            
+
             // Validate pre-push hook
-            if config.hooks.pre_push.enabled && config.hooks.pre_push.run_tasks.is_empty() && config.hooks.pre_push.custom_script.is_none() {
-                return Err(Error::config_validation("Pre-push hook must have either tasks or custom script"));
+            if config.hooks.pre_push.enabled
+                && config.hooks.pre_push.run_tasks.is_empty()
+                && config.hooks.pre_push.custom_script.is_none()
+            {
+                return Err(Error::config_validation(
+                    "Pre-push hook must have either tasks or custom script",
+                ));
             }
-            
+
             // Validate post-merge hook if present
             if let Some(ref post_merge) = config.hooks.post_merge {
-                if post_merge.enabled && post_merge.run_tasks.is_empty() && post_merge.custom_script.is_none() {
-                    return Err(Error::config_validation("Post-merge hook must have either tasks or custom script"));
+                if post_merge.enabled
+                    && post_merge.run_tasks.is_empty()
+                    && post_merge.custom_script.is_none()
+                {
+                    return Err(Error::config_validation(
+                        "Post-merge hook must have either tasks or custom script",
+                    ));
                 }
             }
         }

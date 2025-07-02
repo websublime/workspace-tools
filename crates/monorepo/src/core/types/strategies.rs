@@ -1,8 +1,8 @@
 //! Versioning strategy implementations
 
-use crate::config::VersionBumpType;
-use crate::changes::PackageChange;
 use crate::changes::ChangeSignificance;
+use crate::changes::PackageChange;
+use crate::config::VersionBumpType;
 
 /// Strategy for determining version bumps and propagation
 pub trait VersioningStrategy: Send + Sync {

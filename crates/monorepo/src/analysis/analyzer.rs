@@ -10,18 +10,18 @@ use crate::analysis::{
 use crate::config::PackageManagerType;
 use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
+use glob;
+use serde_yaml;
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 use sublime_package_tools::Upgrader;
 use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
 use sublime_standard_tools::monorepo::{MonorepoDetector, PackageManagerKind};
-use glob;
-use serde_yaml;
 
 impl<'a> MonorepoAnalyzer<'a> {
     /// Create a new analyzer with direct borrowing from project
-    /// 
+    ///
     /// Uses borrowing instead of trait objects to eliminate Arc proliferation
     /// and work with Rust ownership principles.
     #[must_use]
@@ -37,23 +37,23 @@ impl<'a> MonorepoAnalyzer<'a> {
     }
 
     /// Creates a new analyzer from an existing MonorepoProject
-    /// 
+    ///
     /// Convenience method that wraps the `new` constructor for backward compatibility.
     /// Uses real direct borrowing following Rust ownership principles.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `project` - Reference to the monorepo project
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A new MonorepoAnalyzer instance with direct borrowing
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust
     /// use sublime_monorepo_tools::{MonorepoAnalyzer, MonorepoProject};
-    /// 
+    ///
     /// let project = MonorepoProject::new("/path/to/monorepo")?;
     /// let analyzer = MonorepoAnalyzer::from_project(&project);
     /// ```
@@ -377,16 +377,20 @@ impl<'a> MonorepoAnalyzer<'a> {
         for url in registry_urls {
             // Determine registry type using configurable patterns
             // Determine registry type from URL using configuration patterns
-            let registry_type = self.config.workspace.tool_configs.registry_patterns
-                .iter()
-                .find_map(|(pattern, registry_type)| {
-                    if url.contains(pattern) {
-                        Some(registry_type.clone())
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or_else(|| "custom".to_string());
+            let registry_type =
+                self.config
+                    .workspace
+                    .tool_configs
+                    .registry_patterns
+                    .iter()
+                    .find_map(|(pattern, registry_type)| {
+                        if url.contains(pattern) {
+                            Some(registry_type.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_else(|| "custom".to_string());
 
             // Check for authentication (basic heuristic)
             let has_auth = self.check_registry_auth(url);
@@ -396,9 +400,7 @@ impl<'a> MonorepoAnalyzer<'a> {
 
             // DRY: Use FileSystemManager for .npmrc file reading
             let fs = FileSystemManager::new();
-            if let Ok(npmrc_content) =
-                fs.read_file_string(&self.root_path.join(".npmrc"))
-            {
+            if let Ok(npmrc_content) = fs.read_file_string(&self.root_path.join(".npmrc")) {
                 for line in npmrc_content.lines() {
                     if line.contains(url) && line.contains('@') {
                         // Extract scope from lines like "@scope:registry=url"
@@ -484,7 +486,11 @@ impl<'a> MonorepoAnalyzer<'a> {
         }
 
         // Check environment variables for registry authentication using configuration
-        let registry_type = self.config.workspace.tool_configs.registry_patterns
+        let registry_type = self
+            .config
+            .workspace
+            .tool_configs
+            .registry_patterns
             .iter()
             .find_map(|(pattern, registry_type)| {
                 if registry_url.contains(pattern) {
@@ -494,10 +500,12 @@ impl<'a> MonorepoAnalyzer<'a> {
                 }
             })
             .unwrap_or_else(|| "custom".to_string());
-            
-        let auth_env_vars = self.config.workspace.tool_configs.auth_env_vars
-            .get(&registry_type)
-            .map_or_else(|| vec!["REGISTRY_TOKEN", "AUTH_TOKEN"], |vars| vars.iter().map(std::string::String::as_str).collect::<Vec<_>>());
+
+        let auth_env_vars =
+            self.config.workspace.tool_configs.auth_env_vars.get(&registry_type).map_or_else(
+                || vec!["REGISTRY_TOKEN", "AUTH_TOKEN"],
+                |vars| vars.iter().map(std::string::String::as_str).collect::<Vec<_>>(),
+            );
 
         for env_var in auth_env_vars {
             if std::env::var(env_var).is_ok() {
@@ -556,24 +564,25 @@ impl<'a> MonorepoAnalyzer<'a> {
         }
 
         // Create upgrader with the project's registry manager
-        let mut upgrader =
-            Upgrader::with_registry_manager(self.registry_manager.clone());
+        let mut upgrader = Upgrader::with_registry_manager(self.registry_manager.clone());
 
         // Extract Package objects for upgrade analysis
-        let packages_for_analysis: Result<Vec<_>> = self.packages
+        let packages_for_analysis: Result<Vec<_>> = self
+            .packages
             .iter()
             .map(|pkg_info| {
                 // Convert external dependencies from strings to Dependency objects
-                let dependencies: Vec<sublime_package_tools::Dependency> = pkg_info.dependencies_external
+                let dependencies: Vec<sublime_package_tools::Dependency> = pkg_info
+                    .dependencies_external
                     .iter()
                     .filter_map(|dep_name| {
                         sublime_package_tools::Dependency::new(
-                            dep_name,
-                            "*", // Use wildcard version for now
-                        ).ok() // Ignore dependencies that fail to parse
+                            dep_name, "*", // Use wildcard version for now
+                        )
+                        .ok() // Ignore dependencies that fail to parse
                     })
                     .collect();
-                
+
                 sublime_package_tools::Package::new(
                     pkg_info.name(),
                     pkg_info.version(),
@@ -673,8 +682,9 @@ impl<'a> MonorepoAnalyzer<'a> {
 
         // Extract workspace patterns from package manager configuration
         // Detect package manager using standard-tools PackageManager::detect
-        let package_manager = sublime_standard_tools::monorepo::PackageManager::detect(self.root_path)
-            .map_err(|e| Error::Analysis(format!("Failed to detect package manager: {e}")))?;
+        let package_manager =
+            sublime_standard_tools::monorepo::PackageManager::detect(self.root_path)
+                .map_err(|e| Error::Analysis(format!("Failed to detect package manager: {e}")))?;
         let pm_kind_str = format!("{:?}", package_manager.kind());
         match pm_kind_str.as_str() {
             "Npm" | "Yarn" => {
@@ -728,8 +738,7 @@ impl<'a> MonorepoAnalyzer<'a> {
             }
             "Pnpm" => {
                 // DRY: Use FileSystemManager for pnpm-workspace.yaml reading
-                let workspace_yaml =
-                    self.root_path.join("pnpm-workspace.yaml");
+                let workspace_yaml = self.root_path.join("pnpm-workspace.yaml");
                 if let Ok(content) = fs.read_file_string(&workspace_yaml) {
                     if let Ok(config) = serde_yaml::from_str::<serde_yaml::Value>(&content) {
                         if let Some(packages) = config.get("packages").and_then(|p| p.as_sequence())
@@ -796,8 +805,9 @@ impl<'a> MonorepoAnalyzer<'a> {
     pub fn get_config_workspace_patterns(&self) -> Result<Vec<String>> {
         // Determine current package manager type
         // Detect package manager using standard-tools PackageManager::detect
-        let package_manager = sublime_standard_tools::monorepo::PackageManager::detect(self.root_path)
-            .map_err(|e| Error::Analysis(format!("Failed to detect package manager: {e}")))?;
+        let package_manager =
+            sublime_standard_tools::monorepo::PackageManager::detect(self.root_path)
+                .map_err(|e| Error::Analysis(format!("Failed to detect package manager: {e}")))?;
         let pm_kind_str = format!("{:?}", package_manager.kind());
         let _current_pm_type = match pm_kind_str.as_str() {
             "Npm" => PackageManagerType::Npm,
@@ -833,13 +843,13 @@ impl<'a> MonorepoAnalyzer<'a> {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                         if let Some(workspaces) = json.get("workspaces") {
                             match workspaces {
-                                serde_json::Value::Array(arr) => {
-                                    arr.iter()
-                                        .filter_map(|v| v.as_str().map(String::from))
-                                        .collect()
-                                }
+                                serde_json::Value::Array(arr) => arr
+                                    .iter()
+                                    .filter_map(|v| v.as_str().map(String::from))
+                                    .collect(),
                                 serde_json::Value::Object(obj) => {
-                                    if let Some(serde_json::Value::Array(arr)) = obj.get("packages") {
+                                    if let Some(serde_json::Value::Array(arr)) = obj.get("packages")
+                                    {
                                         arr.iter()
                                             .filter_map(|v| v.as_str().map(String::from))
                                             .collect()
@@ -867,13 +877,13 @@ impl<'a> MonorepoAnalyzer<'a> {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                         if let Some(workspaces) = json.get("workspaces") {
                             match workspaces {
-                                serde_json::Value::Array(arr) => {
-                                    arr.iter()
-                                        .filter_map(|v| v.as_str().map(String::from))
-                                        .collect()
-                                }
+                                serde_json::Value::Array(arr) => arr
+                                    .iter()
+                                    .filter_map(|v| v.as_str().map(String::from))
+                                    .collect(),
                                 serde_json::Value::Object(obj) => {
-                                    if let Some(serde_json::Value::Array(arr)) = obj.get("packages") {
+                                    if let Some(serde_json::Value::Array(arr)) = obj.get("packages")
+                                    {
                                         arr.iter()
                                             .filter_map(|v| v.as_str().map(String::from))
                                             .collect()
@@ -900,9 +910,7 @@ impl<'a> MonorepoAnalyzer<'a> {
                 if let Ok(content) = fs.read_file_string(&workspace_path) {
                     if let Ok(yaml) = serde_yaml::from_str::<serde_json::Value>(&content) {
                         if let Some(serde_json::Value::Array(arr)) = yaml.get("packages") {
-                            arr.iter()
-                                .filter_map(|v| v.as_str().map(String::from))
-                                .collect()
+                            arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
                         } else {
                             Vec::new()
                         }
@@ -1155,7 +1163,7 @@ impl<'a> MonorepoAnalyzer<'a> {
     ///
     /// Provides proper glob pattern matching capabilities including:
     /// - Wildcard patterns (*, **)
-    /// - Character classes ([abc], [a-z])
+    /// - Character classes (\[abc\], \[a-z\])
     /// - Escape sequences
     /// - Case sensitivity handling
     ///
@@ -1222,19 +1230,26 @@ impl<'a> MonorepoAnalyzer<'a> {
         until_ref: Option<&str>,
     ) -> Result<ChangeAnalysis> {
         // Open Git repository using sublime-git-tools
-        let repo = sublime_git_tools::Repo::open(self.root_path.to_str()
-            .ok_or_else(|| crate::error::Error::analysis("Invalid root path encoding"))?
-        ).map_err(|e| crate::error::Error::analysis(format!("Failed to open Git repository: {e}")))?;
+        let repo = sublime_git_tools::Repo::open(
+            self.root_path
+                .to_str()
+                .ok_or_else(|| crate::error::Error::analysis("Invalid root path encoding"))?,
+        )
+        .map_err(|e| {
+            crate::error::Error::analysis(format!("Failed to open Git repository: {e}"))
+        })?;
 
         // Get changed files since the reference
         let changed_files = if let Some(_until) = until_ref {
             // If until_ref is specified, we need to compare between two specific refs
             // For now, use the since_ref approach and note the limitation
-            repo.get_all_files_changed_since_sha_with_status(since_ref)
-                .map_err(|e| crate::error::Error::analysis(format!("Failed to get changed files: {e}")))?  
+            repo.get_all_files_changed_since_sha_with_status(since_ref).map_err(|e| {
+                crate::error::Error::analysis(format!("Failed to get changed files: {e}"))
+            })?
         } else {
-            repo.get_all_files_changed_since_sha_with_status(since_ref)
-                .map_err(|e| crate::error::Error::analysis(format!("Failed to get changed files: {e}")))?  
+            repo.get_all_files_changed_since_sha_with_status(since_ref).map_err(|e| {
+                crate::error::Error::analysis(format!("Failed to get changed files: {e}"))
+            })?
         };
 
         // Analyze which packages are affected by the changes
@@ -1249,11 +1264,11 @@ impl<'a> MonorepoAnalyzer<'a> {
                     if !directly_affected.contains(&package.name().to_string()) {
                         directly_affected.push(package.name().to_string());
                     }
-                    
+
                     // Convert GitFileStatus to PackageChangeType
                     // All file changes are considered source code changes for now
                     let change_type = crate::changes::PackageChangeType::SourceCode;
-                    
+
                     // Create package change using the correct structure
                     package_changes.push(crate::changes::PackageChange {
                         package_name: package.name().to_string(),
@@ -1263,7 +1278,7 @@ impl<'a> MonorepoAnalyzer<'a> {
                         suggested_version_bump: crate::config::VersionBumpType::Patch,
                         metadata: std::collections::HashMap::new(),
                     });
-                    
+
                     break;
                 }
             }
@@ -1317,17 +1332,25 @@ impl<'a> MonorepoAnalyzer<'a> {
         target_branch: &str,
     ) -> Result<BranchComparisonResult> {
         // Open Git repository using sublime-git-tools
-        let repo = sublime_git_tools::Repo::open(self.root_path.to_str()
-            .ok_or_else(|| crate::error::Error::analysis("Invalid root path encoding"))?
-        ).map_err(|e| crate::error::Error::analysis(format!("Failed to open Git repository: {e}")))?;
+        let repo = sublime_git_tools::Repo::open(
+            self.root_path
+                .to_str()
+                .ok_or_else(|| crate::error::Error::analysis("Invalid root path encoding"))?,
+        )
+        .map_err(|e| {
+            crate::error::Error::analysis(format!("Failed to open Git repository: {e}"))
+        })?;
 
         // Find the common ancestor (divergence point)
-        let divergence_point = repo.get_diverged_commit(base_branch)
-            .map_err(|e| crate::error::Error::analysis(format!("Failed to find divergence point: {e}")))?;
+        let divergence_point = repo.get_diverged_commit(base_branch).map_err(|e| {
+            crate::error::Error::analysis(format!("Failed to find divergence point: {e}"))
+        })?;
 
         // Get changes in target branch since divergence point
-        let target_changes = repo.get_all_files_changed_since_sha_with_status(&divergence_point)
-            .map_err(|e| crate::error::Error::analysis(format!("Failed to get target branch changes: {e}")))?;
+        let target_changes =
+            repo.get_all_files_changed_since_sha_with_status(&divergence_point).map_err(|e| {
+                crate::error::Error::analysis(format!("Failed to get target branch changes: {e}"))
+            })?;
 
         // Analyze affected packages in target branch
         let mut target_affected_packages = Vec::new();
@@ -1345,12 +1368,14 @@ impl<'a> MonorepoAnalyzer<'a> {
         }
 
         // Get commit history for both branches since divergence
-        let _target_commits = repo.get_commits_since(Some(divergence_point.clone()), &None)
-            .map_err(|e| crate::error::Error::analysis(format!("Failed to get target commits: {e}")))?;
+        let _target_commits =
+            repo.get_commits_since(Some(divergence_point.clone()), &None).map_err(|e| {
+                crate::error::Error::analysis(format!("Failed to get target commits: {e}"))
+            })?;
 
         // Analyze potential conflicts (simplified - checking if same files are modified)
         let mut potential_conflicts = Vec::new();
-        
+
         // For a more thorough conflict analysis, we'd need to checkout base_branch and compare
         // For now, we'll identify files that have been modified in target as potential conflicts
         for change in &target_changes {
@@ -1398,10 +1423,8 @@ impl<'a> MonorepoAnalyzer<'a> {
 
         // Handle JSR separately due to lifetime issues
         if matches!(kind, PackageManagerKind::Jsr) {
-            let output = Command::new("jsr")
-                .args(["--version"])
-                .current_dir(self.root_path)
-                .output();
+            let output =
+                Command::new("jsr").args(["--version"]).current_dir(self.root_path).output();
 
             return match output {
                 Ok(output) if output.status.success() => {
@@ -1436,10 +1459,7 @@ impl<'a> MonorepoAnalyzer<'a> {
             PackageManagerKind::Jsr => unreachable!(), // Handled above
         };
 
-        let output = Command::new(command)
-            .args(args)
-            .current_dir(self.root_path)
-            .output();
+        let output = Command::new(command).args(args).current_dir(self.root_path).output();
 
         match output {
             Ok(output) if output.status.success() => {
@@ -1467,55 +1487,56 @@ impl<'a> MonorepoAnalyzer<'a> {
     }
 
     /// Validate workspace configuration for monorepo consistency
-    /// 
+    ///
     /// Performs comprehensive validation of workspace configuration including:
     /// - Package discovery patterns validation
     /// - Workspace structure consistency
     /// - Package manager configuration coherence
     /// - Tool configuration validation
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A vector of validation error messages. Empty if validation passes.
     fn validate_workspace_configuration(&self) -> Vec<String> {
         let mut errors = Vec::new();
-        
+
         // Validate workspace discovery patterns
         let workspace_config = &self.config.workspace;
-        
+
         // Check if discovery patterns are valid glob patterns
         for pattern in &workspace_config.discovery.common_patterns {
             if pattern.trim().is_empty() {
                 errors.push("Empty discovery pattern found in workspace configuration".to_string());
                 continue;
             }
-            
+
             // Validate glob pattern syntax
             if let Err(e) = glob::Pattern::new(pattern) {
                 errors.push(format!("Invalid glob pattern '{pattern}': {e}"));
             }
         }
-        
+
         // Validate that at least one discovery method is enabled
-        if !workspace_config.discovery.scan_common_patterns 
-            && workspace_config.discovery.common_patterns.is_empty() {
+        if !workspace_config.discovery.scan_common_patterns
+            && workspace_config.discovery.common_patterns.is_empty()
+        {
             errors.push("No package discovery method enabled. Enable scan_common_patterns or provide common_patterns.".to_string());
         }
-        
+
         // Validate package manager consistency
         let fs = sublime_standard_tools::filesystem::FileSystemManager::new();
         let mut detected_package_managers = Vec::new();
-        
+
         // Check for npm
         if fs.exists(&self.root_path.join("package.json")) {
             detected_package_managers.push("npm/yarn");
         }
-        
+
         // Check for pnpm
         if fs.exists(&self.root_path.join("pnpm-workspace.yaml")) {
             detected_package_managers.push("pnpm");
         }
-        
+
         // Check for multiple package managers
         if detected_package_managers.len() > 1 {
             errors.push(format!(
@@ -1523,7 +1544,7 @@ impl<'a> MonorepoAnalyzer<'a> {
                 detected_package_managers.join(", ")
             ));
         }
-        
+
         // Validate workspace tool configurations
         // Validate workspace tool configurations (real implementation)
         for config_pattern in &workspace_config.tool_configs.config_file_patterns {
@@ -1531,17 +1552,14 @@ impl<'a> MonorepoAnalyzer<'a> {
                 errors.push("Empty config pattern in workspace tool configurations".to_string());
                 continue;
             }
-            
+
             // Validate tool-specific configuration paths exist
             let full_path = self.root_path.join(config_pattern);
             if !fs.exists(&full_path) {
-                errors.push(format!(
-                    "Tool configuration file not found: {}",
-                    full_path.display()
-                ));
+                errors.push(format!("Tool configuration file not found: {}", full_path.display()));
             }
         }
-        
+
         // Validate package structure consistency
         let mut package_names = std::collections::HashSet::new();
         for package in self.packages {
@@ -1550,7 +1568,7 @@ impl<'a> MonorepoAnalyzer<'a> {
                 let package_name = package.name();
                 errors.push(format!("Duplicate package name found: '{package_name}'"));
             }
-            
+
             // Validate package path exists
             if !fs.exists(package.path()) {
                 errors.push(format!(
@@ -1559,7 +1577,7 @@ impl<'a> MonorepoAnalyzer<'a> {
                     package.path().display()
                 ));
             }
-            
+
             // Validate package.json exists for each package
             let package_json_path = package.path().join("package.json");
             if !fs.exists(&package_json_path) {
@@ -1570,13 +1588,16 @@ impl<'a> MonorepoAnalyzer<'a> {
                 ));
             }
         }
-        
+
         // Validate root workspace structure
         let root_package_json = self.root_path.join("package.json");
         if !fs.exists(&root_package_json) {
-            errors.push("Root package.json not found. This is required for workspace configuration.".to_string());
+            errors.push(
+                "Root package.json not found. This is required for workspace configuration."
+                    .to_string(),
+            );
         }
-        
+
         errors
     }
 }

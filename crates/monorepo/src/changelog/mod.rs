@@ -43,7 +43,7 @@
 //!
 //! // Parse conventional commits for analysis
 //! let commits = manager.parse_conventional_commits(
-//!     Some("packages/my-package"), 
+//!     Some("packages/my-package"),
 //!     "v1.0.0"
 //! ).await?;
 //!
@@ -56,16 +56,16 @@
 //! # }
 //! ```
 
-mod types;
-mod parser;
 mod generator;
 mod manager;
+mod parser;
+mod types;
 
 // Re-export main types for public API
 pub use types::{
-    ConventionalCommit, ChangelogResult, ChangelogRequest, GroupedCommits, TemplateVariables,
+    ChangelogRequest, ChangelogResult, ConventionalCommit, GroupedCommits, TemplateVariables,
 };
 
-pub use parser::ConventionalCommitParser;
 pub use generator::ChangelogGenerator;
 pub use manager::ChangelogManager;
+pub use parser::ConventionalCommitParser;

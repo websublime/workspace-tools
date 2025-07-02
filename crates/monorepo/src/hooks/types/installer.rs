@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 /// Installer for Git hooks that manages hook files and permissions
-/// 
+///
 /// Uses direct borrowing from MonorepoProject components instead of trait objects.
 /// This follows Rust ownership principles and eliminates Arc proliferation.
 pub struct HookInstaller {

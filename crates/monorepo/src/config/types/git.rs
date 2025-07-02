@@ -10,16 +10,16 @@ use serde::{Deserialize, Serialize};
 pub struct GitConfig {
     /// Default reference for change detection (e.g., "HEAD~1", "main")
     pub default_since_ref: String,
-    
+
     /// Default target for comparisons (e.g., "HEAD")
     pub default_until_ref: String,
-    
+
     /// Remote name for push operations (e.g., "origin")
     pub default_remote: String,
-    
+
     /// Branch configuration
     pub branches: BranchConfig,
-    
+
     /// Repository hosting configuration for URL generation
     pub repository: RepositoryHostConfig,
 }
@@ -29,19 +29,19 @@ pub struct GitConfig {
 pub struct BranchConfig {
     /// List of main/production branches
     pub main_branches: Vec<String>,
-    
+
     /// List of development branches
     pub develop_branches: Vec<String>,
-    
+
     /// List of release branch prefixes
     pub release_prefixes: Vec<String>,
-    
+
     /// List of feature branch prefixes
     pub feature_prefixes: Vec<String>,
-    
+
     /// List of hotfix branch prefixes
     pub hotfix_prefixes: Vec<String>,
-    
+
     /// Default branch for new features
     pub default_base_branch: String,
 }
@@ -66,16 +66,16 @@ pub struct BranchConfig {
 pub struct RepositoryHostConfig {
     /// Repository hosting provider type
     pub provider: RepositoryProvider,
-    
+
     /// Base URL for the repository host (e.g., "github.com", "gitlab.example.com")
     pub base_url: String,
-    
+
     /// URL patterns for different operations
     pub url_patterns: UrlPatterns,
-    
+
     /// Auto-detect provider from git remote URL
     pub auto_detect: bool,
-    
+
     /// Override repository URL (useful for testing or custom setups)
     pub url_override: Option<String>,
 }
@@ -119,12 +119,12 @@ pub struct UrlPatterns {
     ///
     /// Default: `https://{base_url}/{owner}/{repo}/commit/{hash}`
     pub commit_url: String,
-    
+
     /// Pattern for compare URLs  
     ///
     /// Default: `https://{base_url}/{owner}/{repo}/compare/{from}...{to}`
     pub compare_url: String,
-    
+
     /// SSH to HTTPS conversion patterns
     pub ssh_conversions: Vec<SshConversion>,
 }
@@ -149,8 +149,8 @@ pub struct UrlPatterns {
 pub struct SshConversion {
     /// SSH pattern to match (e.g., "git@github.com:")
     pub ssh_pattern: String,
-    
-    /// HTTPS replacement (e.g., "https://github.com/")
+
+    /// HTTPS replacement (e.g., "<https://github.com/>")
     pub https_replacement: String,
 }
 
@@ -190,11 +190,7 @@ impl Default for BranchConfig {
                 "feat/".to_string(),
                 "features/".to_string(),
             ],
-            hotfix_prefixes: vec![
-                "hotfix/".to_string(),
-                "fix/".to_string(),
-                "bugfix/".to_string(),
-            ],
+            hotfix_prefixes: vec!["hotfix/".to_string(), "fix/".to_string(), "bugfix/".to_string()],
             default_base_branch: "main".to_string(),
         }
     }
@@ -206,14 +202,14 @@ impl GitConfig {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Create a GitConfig with custom default reference
     #[must_use]
     pub fn with_default_since_ref(mut self, since_ref: impl Into<String>) -> Self {
         self.default_since_ref = since_ref.into();
         self
     }
-    
+
     /// Create a GitConfig with custom branch configuration
     #[must_use]
     pub fn with_branches(mut self, branches: BranchConfig) -> Self {
@@ -228,37 +224,37 @@ impl BranchConfig {
     pub fn is_main_branch(&self, branch: &str) -> bool {
         self.main_branches.iter().any(|main_branch| branch == main_branch)
     }
-    
+
     /// Check if a branch is considered a development branch
     #[must_use]
     pub fn is_develop_branch(&self, branch: &str) -> bool {
         self.develop_branches.iter().any(|dev_branch| branch == dev_branch)
     }
-    
+
     /// Check if a branch is a release branch
     #[must_use]
     pub fn is_release_branch(&self, branch: &str) -> bool {
         self.release_prefixes.iter().any(|prefix| branch.starts_with(prefix))
     }
-    
+
     /// Check if a branch is a feature branch
     #[must_use]
     pub fn is_feature_branch(&self, branch: &str) -> bool {
         self.feature_prefixes.iter().any(|prefix| branch.starts_with(prefix))
     }
-    
+
     /// Check if a branch is a hotfix branch
     #[must_use]
     pub fn is_hotfix_branch(&self, branch: &str) -> bool {
         self.hotfix_prefixes.iter().any(|prefix| branch.starts_with(prefix))
     }
-    
+
     /// Check if a branch is protected (main or develop)
     #[must_use]
     pub fn is_protected_branch(&self, branch: &str) -> bool {
         self.is_main_branch(branch) || self.is_develop_branch(branch)
     }
-    
+
     /// Get the appropriate base branch for a new branch
     #[must_use]
     pub fn get_base_branch(&self, branch_type: BranchType) -> &str {
@@ -279,7 +275,7 @@ pub enum BranchType {
     /// Main/production branch
     Main,
     /// Development branch
-    Develop, 
+    Develop,
     /// Feature branch
     Feature,
     /// Release branch
@@ -296,7 +292,7 @@ impl BranchType {
             Self::Main => "main",
             Self::Develop => "develop",
             Self::Feature => "feature",
-            Self::Release => "release", 
+            Self::Release => "release",
             Self::Hotfix => "hotfix",
         }
     }
@@ -318,7 +314,7 @@ impl BranchConfig {
             BranchType::Feature // Default to feature branch
         }
     }
-    
+
     /// Get all valid branch prefixes for validation
     #[must_use]
     pub fn get_all_valid_prefixes(&self) -> Vec<String> {
@@ -502,7 +498,8 @@ impl RepositoryHostConfig {
         // Apply SSH to HTTPS conversions
         for conversion in &self.url_patterns.ssh_conversions {
             if converted_url.starts_with(&conversion.ssh_pattern) {
-                converted_url = converted_url.replace(&conversion.ssh_pattern, &conversion.https_replacement);
+                converted_url =
+                    converted_url.replace(&conversion.ssh_pattern, &conversion.https_replacement);
                 break;
             }
         }
@@ -532,13 +529,15 @@ impl RepositoryHostConfig {
     /// The URL to view the commit in the web interface
     pub fn generate_commit_url(&self, repository_url: &str, commit_hash: &str) -> Option<String> {
         let (owner, repo) = Self::parse_repository_parts(repository_url)?;
-        
-        let url = self.url_patterns.commit_url
+
+        let url = self
+            .url_patterns
+            .commit_url
             .replace("{base_url}", &self.base_url)
             .replace("{owner}", &owner)
             .replace("{repo}", &repo)
             .replace("{hash}", commit_hash);
-            
+
         Some(url)
     }
 
@@ -553,16 +552,23 @@ impl RepositoryHostConfig {
     /// # Returns
     ///
     /// The URL to view the comparison in the web interface
-    pub fn generate_compare_url(&self, repository_url: &str, from_ref: &str, to_ref: &str) -> Option<String> {
+    pub fn generate_compare_url(
+        &self,
+        repository_url: &str,
+        from_ref: &str,
+        to_ref: &str,
+    ) -> Option<String> {
         let (owner, repo) = Self::parse_repository_parts(repository_url)?;
-        
-        let url = self.url_patterns.compare_url
+
+        let url = self
+            .url_patterns
+            .compare_url
             .replace("{base_url}", &self.base_url)
             .replace("{owner}", &owner)
             .replace("{repo}", &repo)
             .replace("{from}", from_ref)
             .replace("{to}", to_ref);
-            
+
         Some(url)
     }
 
@@ -577,8 +583,10 @@ impl RepositoryHostConfig {
     /// A tuple of (owner, repo) or None if parsing fails
     fn parse_repository_parts(repository_url: &str) -> Option<(String, String)> {
         // Handle different URL formats
-        let url = if repository_url.starts_with("http://") || repository_url.starts_with("https://") {
-            repository_url.strip_prefix("http://")
+        let url = if repository_url.starts_with("http://") || repository_url.starts_with("https://")
+        {
+            repository_url
+                .strip_prefix("http://")
                 .or_else(|| repository_url.strip_prefix("https://"))?
         } else {
             repository_url
@@ -603,12 +611,10 @@ impl UrlPatterns {
         Self {
             commit_url: "https://{base_url}/{owner}/{repo}/commit/{hash}".to_string(),
             compare_url: "https://{base_url}/{owner}/{repo}/compare/{from}...{to}".to_string(),
-            ssh_conversions: vec![
-                SshConversion {
-                    ssh_pattern: "git@github.com:".to_string(),
-                    https_replacement: "https://github.com/".to_string(),
-                },
-            ],
+            ssh_conversions: vec![SshConversion {
+                ssh_pattern: "git@github.com:".to_string(),
+                https_replacement: "https://github.com/".to_string(),
+            }],
         }
     }
 
@@ -617,13 +623,13 @@ impl UrlPatterns {
     pub fn github_enterprise(enterprise_url: &str) -> Self {
         Self {
             commit_url: format!("https://{enterprise_url}/{{owner}}/{{repo}}/commit/{{hash}}"),
-            compare_url: format!("https://{enterprise_url}/{{owner}}/{{repo}}/compare/{{from}}...{{to}}"),
-            ssh_conversions: vec![
-                SshConversion {
-                    ssh_pattern: format!("git@{enterprise_url}:"),
-                    https_replacement: format!("https://{enterprise_url}/"),
-                },
-            ],
+            compare_url: format!(
+                "https://{enterprise_url}/{{owner}}/{{repo}}/compare/{{from}}...{{to}}"
+            ),
+            ssh_conversions: vec![SshConversion {
+                ssh_pattern: format!("git@{enterprise_url}:"),
+                https_replacement: format!("https://{enterprise_url}/"),
+            }],
         }
     }
 
@@ -633,12 +639,10 @@ impl UrlPatterns {
         Self {
             commit_url: "https://{base_url}/{owner}/{repo}/-/commit/{hash}".to_string(),
             compare_url: "https://{base_url}/{owner}/{repo}/-/compare/{from}...{to}".to_string(),
-            ssh_conversions: vec![
-                SshConversion {
-                    ssh_pattern: "git@gitlab.com:".to_string(),
-                    https_replacement: "https://gitlab.com/".to_string(),
-                },
-            ],
+            ssh_conversions: vec![SshConversion {
+                ssh_pattern: "git@gitlab.com:".to_string(),
+                https_replacement: "https://gitlab.com/".to_string(),
+            }],
         }
     }
 
@@ -647,13 +651,13 @@ impl UrlPatterns {
     pub fn gitlab_custom(gitlab_url: &str) -> Self {
         Self {
             commit_url: format!("https://{gitlab_url}/{{owner}}/{{repo}}/-/commit/{{hash}}"),
-            compare_url: format!("https://{gitlab_url}/{{owner}}/{{repo}}/-/compare/{{from}}...{{to}}"),
-            ssh_conversions: vec![
-                SshConversion {
-                    ssh_pattern: format!("git@{gitlab_url}:"),
-                    https_replacement: format!("https://{gitlab_url}/"),
-                },
-            ],
+            compare_url: format!(
+                "https://{gitlab_url}/{{owner}}/{{repo}}/-/compare/{{from}}...{{to}}"
+            ),
+            ssh_conversions: vec![SshConversion {
+                ssh_pattern: format!("git@{gitlab_url}:"),
+                https_replacement: format!("https://{gitlab_url}/"),
+            }],
         }
     }
 
@@ -662,13 +666,12 @@ impl UrlPatterns {
     pub fn bitbucket() -> Self {
         Self {
             commit_url: "https://{base_url}/{owner}/{repo}/commits/{hash}".to_string(),
-            compare_url: "https://{base_url}/{owner}/{repo}/branches/compare/{to}..{from}".to_string(),
-            ssh_conversions: vec![
-                SshConversion {
-                    ssh_pattern: "git@bitbucket.org:".to_string(),
-                    https_replacement: "https://bitbucket.org/".to_string(),
-                },
-            ],
+            compare_url: "https://{base_url}/{owner}/{repo}/branches/compare/{to}..{from}"
+                .to_string(),
+            ssh_conversions: vec![SshConversion {
+                ssh_pattern: "git@bitbucket.org:".to_string(),
+                https_replacement: "https://bitbucket.org/".to_string(),
+            }],
         }
     }
 

@@ -12,8 +12,8 @@ pub mod storage;
 
 // Explicit exports to avoid wildcard re-exports
 pub use core::{
-    Changeset, ChangesetStatus, ChangesetSpec, ChangesetApplication,
-    ChangesetFilter, ValidationResult, DeploymentResult, EnvironmentDeploymentResult
+    Changeset, ChangesetApplication, ChangesetFilter, ChangesetSpec, ChangesetStatus,
+    DeploymentResult, EnvironmentDeploymentResult, ValidationResult,
 };
 pub use manager::ChangesetManager;
 pub use storage::ChangesetStorage;

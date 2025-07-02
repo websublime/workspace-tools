@@ -3,7 +3,7 @@
 //! Handles updating configuration values with validation and change tracking.
 //! This component is responsible for all configuration modification operations.
 
-use crate::config::{MonorepoConfig, ConfigPersistence};
+use crate::config::{ConfigPersistence, MonorepoConfig};
 use crate::error::Result;
 use std::path::{Path, PathBuf};
 
@@ -19,12 +19,7 @@ impl ConfigWriter {
     /// Create a new config writer with the given configuration
     #[must_use]
     pub fn new(config: MonorepoConfig) -> Self {
-        Self {
-            config,
-            config_path: None,
-            auto_save: false,
-            persistence: ConfigPersistence::new(),
-        }
+        Self { config, config_path: None, auto_save: false, persistence: ConfigPersistence::new() }
     }
 
     /// Create a config writer from file
@@ -41,13 +36,8 @@ impl ConfigWriter {
         let path = path.as_ref();
         let persistence = ConfigPersistence::new();
         let config = persistence.load_from_file(path)?;
-        
-        Ok(Self {
-            config,
-            config_path: Some(path.to_path_buf()),
-            auto_save: false,
-            persistence,
-        })
+
+        Ok(Self { config, config_path: Some(path.to_path_buf()), auto_save: false, persistence })
     }
 
     /// Get immutable reference to the configuration
@@ -173,7 +163,7 @@ impl ConfigWriter {
     }
 
     /// Update specific configuration sections with validation
-    
+
     /// Enable or disable hooks globally
     ///
     /// # Arguments

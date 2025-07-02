@@ -245,12 +245,19 @@ impl ChangelogGenerator {
         let breaking_indicator = if commit.breaking_change { "⚠️ " } else { "" };
 
         let commit_link = if let Some(repo_url) = &variables.repository_url {
-            format!("[{hash_short}]({repo_url}/commit/{commit_hash})", hash_short = &commit.hash[..8], commit_hash = commit.hash)
+            format!(
+                "[{hash_short}]({repo_url}/commit/{commit_hash})",
+                hash_short = &commit.hash[..8],
+                commit_hash = commit.hash
+            )
         } else {
             commit.hash[..8].to_string()
         };
 
-        format!("- {breaking_indicator}{scope_str}{description} ({commit_link})\n", description = commit.description)
+        format!(
+            "- {breaking_indicator}{scope_str}{description} ({commit_link})\n",
+            description = commit.description
+        )
     }
 
     /// Generate plain text format changelog

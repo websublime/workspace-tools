@@ -1,45 +1,44 @@
 //! Core monorepo project types and implementations
-//! 
+//!
 //! This module provides the central `MonorepoProject` type that aggregates
 //! functionality from all base crates, as well as the enhanced `MonorepoPackageInfo`
 //! type that provides monorepo-specific package information.
 
-pub mod types;
 pub mod components;
-pub mod services;
-mod project;
 mod package;
-mod version;
+mod project;
+pub mod services;
 mod tools;
-
+pub mod types;
+mod version;
 
 pub use types::{
+    AggressiveVersioningStrategy,
+    BreakingChangeAnalysis,
     // Core package types
     Changeset,
     ChangesetStatus,
+    ConflictType,
+    ConservativeVersioningStrategy,
+    DefaultVersioningStrategy,
+    DependencyChainImpact,
     MonorepoPackageInfo,
-    VersionStatus,
-    // Version management types
-    VersioningResult,
+    // Core implementation types
+    MonorepoProject,
+    MonorepoTools,
+    PackageImpactAnalysis,
     PackageVersionUpdate,
     PropagationResult,
     VersionConflict,
-    ConflictType,
     VersionImpactAnalysis,
-    PackageImpactAnalysis,
-    BreakingChangeAnalysis,
-    DependencyChainImpact,
+    VersionManager,
+    VersionStatus,
     VersioningPlan,
     VersioningPlanStep,
+    // Version management types
+    VersioningResult,
     // Versioning strategy implementations
     VersioningStrategy,
-    DefaultVersioningStrategy,
-    ConservativeVersioningStrategy,
-    AggressiveVersioningStrategy,
-    // Core implementation types
-    MonorepoProject,
-    VersionManager,
-    MonorepoTools,
 };
 
 // Interfaces removed - using direct access patterns instead

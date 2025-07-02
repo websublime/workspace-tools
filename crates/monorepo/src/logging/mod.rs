@@ -169,7 +169,8 @@ impl ErrorContext {
 
     /// Log the error with context
     pub fn log_error(self, error: impl Display) {
-        let mut message = format!("[error] Operation '{operation}' failed: {error}", operation = self.operation);
+        let mut message =
+            format!("[error] Operation '{operation}' failed: {error}", operation = self.operation);
 
         if let Some(pkg) = self.package {
             message.push_str(&format!("\n  Package: {pkg}"));

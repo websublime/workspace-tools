@@ -307,7 +307,9 @@ impl EventBus {
                 filters.iter().all(|f| Self::event_matches_filter(event, f))
             }
 
-            EventFilter::Or(filters) => filters.iter().any(|f| Self::event_matches_filter(event, f)),
+            EventFilter::Or(filters) => {
+                filters.iter().any(|f| Self::event_matches_filter(event, f))
+            }
 
             EventFilter::Custom(predicate) => predicate(event),
         }

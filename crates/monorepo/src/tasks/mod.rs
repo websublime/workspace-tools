@@ -2,7 +2,7 @@
 //!
 //! This module provides comprehensive task management capabilities for monorepos,
 //! including task definition, execution, condition checking, and result tracking.
-//! 
+//!
 //! # What
 //! Manages task execution based on package.json scripts and custom commands, with
 //! support for conditional execution, scoping, and parallel execution.
@@ -16,25 +16,21 @@
 //! Essential for automated workflows where different tasks need to run based on
 //! what has changed, enabling efficient CI/CD and development workflows.
 
-pub mod types;
+mod async_adapter;
 mod builder;
+mod checker;
+mod executor;
 mod manager;
 mod registry;
-mod executor;
-mod checker;
-mod async_adapter;
-
+pub mod types;
 
 // Re-export main types for convenience
 pub use types::{
-    TaskDefinition, TaskCommand, PackageScript, TaskPriority,
-    TaskCondition, TaskScope, TaskTrigger, FilePattern, FilePatternType,
-    EnvironmentCondition, BranchCondition,
-    TaskExecutionResult, TaskStatus, TaskOutput, TaskError,
-    TaskErrorCode, TaskExecutionStats, TaskExecutionLog, TaskLogLevel,
-    TaskManager, ExecutionContext,
+    BranchCondition, EnvironmentCondition, ExecutionContext, FilePattern, FilePatternType,
+    PackageScript, TaskCommand, TaskCondition, TaskDefinition, TaskError, TaskErrorCode,
+    TaskExecutionLog, TaskExecutionResult, TaskExecutionStats, TaskLogLevel, TaskManager,
+    TaskOutput, TaskPriority, TaskScope, TaskStatus, TaskTrigger,
 };
 
 // Re-export async boundary adapter
 pub use async_adapter::AsyncConditionAdapter;
-

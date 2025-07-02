@@ -76,7 +76,11 @@ impl<'a> PackageInfoReader<'a> {
     /// Get pending changesets
     #[must_use]
     pub fn pending_changesets(&self) -> Vec<&Changeset> {
-        self.package.changesets.iter().filter(|cs| matches!(cs.status, ChangesetStatus::Pending)).collect()
+        self.package
+            .changesets
+            .iter()
+            .filter(|cs| matches!(cs.status, ChangesetStatus::Pending))
+            .collect()
     }
 
     /// Get all changesets associated with this package
@@ -154,7 +158,7 @@ impl<'a> PackageInfoReader<'a> {
         let total_changesets = self.package.changesets.len();
         let dependents_count = self.package.dependents.len();
         let external_deps_count = self.package.dependencies_external.len();
-        
+
         PackageStats {
             pending_changesets,
             total_changesets,

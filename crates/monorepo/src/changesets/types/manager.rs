@@ -3,19 +3,19 @@
 //! Follows direct borrowing patterns instead of trait objects.
 
 use super::ChangesetStorage;
-use crate::tasks::TaskManager;
-use crate::core::MonorepoPackageInfo;
 use crate::config::MonorepoConfig;
+use crate::core::MonorepoPackageInfo;
+use crate::tasks::TaskManager;
+use std::path::Path;
 use sublime_git_tools::Repo;
 use sublime_standard_tools::filesystem::FileSystemManager;
-use std::path::Path;
 
 /// Manager for changeset operations
 ///
 /// The `ChangesetManager` provides the main interface for working with changesets.
 /// It handles creation, validation, storage, and deployment of changesets across
 /// different environments during the development workflow.
-/// 
+///
 /// Uses direct borrowing from MonorepoProject components instead of trait objects.
 /// This follows Rust ownership principles and eliminates Arc proliferation.
 pub struct ChangesetManager<'a> {
@@ -36,7 +36,7 @@ pub struct ChangesetManager<'a> {
 
     /// Direct reference to git repository
     pub(crate) repository: &'a Repo,
-    
+
     /// Direct reference to root path
     pub(crate) root_path: &'a Path,
 }

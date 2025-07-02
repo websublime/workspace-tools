@@ -41,15 +41,15 @@
 //! # }
 //! ```
 
-mod types;
-mod manager;
 mod builtin;
+mod manager;
 mod registry;
+mod types;
 
 // Re-export main types for public API
 pub use types::{
-    MonorepoPlugin, PluginInfo, PluginContext, PluginResult, PluginError,
-    PluginCommand, PluginCapabilities, PluginLifecycle,
+    MonorepoPlugin, PluginCapabilities, PluginCommand, PluginContext, PluginError, PluginInfo,
+    PluginLifecycle, PluginResult,
 };
 
 pub use manager::PluginManager;

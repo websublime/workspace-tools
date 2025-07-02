@@ -3,28 +3,24 @@
 //! This module contains all the type definitions for the hook management system,
 //! including hook types, definitions, execution contexts, and results.
 
+mod context;
 mod definitions;
 mod results;
-mod context;
 
 // Implementation structs (moved from main modules)
 mod installer;
 mod manager;
 mod validator;
 
-pub use definitions::{
-    HookType, HookDefinition, HookScript, HookCondition, DependencyType,
-};
+pub use definitions::{DependencyType, HookCondition, HookDefinition, HookScript, HookType};
 
 pub use results::{
-    HookExecutionResult, PreCommitResult, PrePushResult, PostCommitResult,
-    HookStatus, HookError, HookErrorCode, HookValidationResult, ValidationCheck,
+    HookError, HookErrorCode, HookExecutionResult, HookStatus, HookValidationResult,
+    PostCommitResult, PreCommitResult, PrePushResult, ValidationCheck,
 };
 
-pub use context::{
-    HookExecutionContext, GitOperationType, RemoteInfo, CommitInfo,
-};
+pub use context::{CommitInfo, GitOperationType, HookExecutionContext, RemoteInfo};
 
 pub use installer::HookInstaller;
 pub use manager::HookManager;
-pub use validator::{HookValidator, ChangesetValidationResult};
+pub use validator::{ChangesetValidationResult, HookValidator};

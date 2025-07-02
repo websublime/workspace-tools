@@ -3,28 +3,36 @@
 //! This module provides comprehensive change detection capabilities including
 //! configurable rules, detection engines, and change detectors for monorepos.
 
-pub mod types;
 pub mod conventional;
 mod detector;
-mod rules;
 mod engine;
-
+mod rules;
+pub mod types;
 
 // Explicit re-exports from types module
 pub use types::{
-    // Core types
-    PackageChangeType, ChangeSignificance, VersionBumpType, PackageChange,
+    ChangeDetectionEngine,
     // Rule definitions
-    ChangeDetectionRules, ChangeTypeRule, SignificanceRule, VersionBumpRule,
-    // Pattern matching
-    FilePattern, PatternType, RuleConditions, FileSizeCondition,
-    // Project overrides
-    ProjectRuleOverrides, SignificanceThresholds,
+    ChangeDetectionRules,
     // Implementation structs
-    ChangeDetector, ChangeDetectionEngine,
+    ChangeDetector,
+    ChangeSignificance,
+    ChangeTypeRule,
+    // Pattern matching
+    FilePattern,
+    FileSizeCondition,
+    PackageChange,
+    // Core types
+    PackageChangeType,
+    PatternType,
+    // Project overrides
+    ProjectRuleOverrides,
+    RuleConditions,
+    SignificanceRule,
+    SignificanceThresholds,
+    VersionBumpRule,
+    VersionBumpType,
 };
 
 // Re-exports from conventional commits module
-pub use conventional::{
-    ChangeDecisionSource, ConventionalCommitParser,
-};
+pub use conventional::{ChangeDecisionSource, ConventionalCommitParser};

@@ -54,7 +54,9 @@ impl PackageVersionManager {
         }
 
         // Update in PackageInfo
-        self.package.package_info.update_version(new_version)
+        self.package
+            .package_info
+            .update_version(new_version)
             .map_err(|e| Error::package(format!("Failed to update package info version: {e}")))?;
 
         // Update in WorkspacePackage
@@ -79,7 +81,8 @@ impl PackageVersionManager {
             return Err(Error::package("SHA must be at least 7 characters long"));
         }
 
-        let snapshot_version = format!("{base_version}-snapshot.{sha_short}", sha_short = &sha[..7]);
+        let snapshot_version =
+            format!("{base_version}-snapshot.{sha_short}", sha_short = &sha[..7]);
         self.update_version(&snapshot_version)?;
         self.package.version_status = VersionStatus::Snapshot { sha: sha.to_string() };
         Ok(())
@@ -126,7 +129,7 @@ impl PackageVersionManager {
     /// Returns an error if the version bump fails
     pub fn bump_version(&mut self, bump_type: VersionBumpType) -> Result<String> {
         let current_version = self.current_version();
-        
+
         let new_version = match bump_type {
             VersionBumpType::Major => Version::bump_major(current_version)?.to_string(),
             VersionBumpType::Minor => Version::bump_minor(current_version)?.to_string(),
@@ -166,10 +169,13 @@ impl PackageVersionManager {
     /// Get suggested version bump based on pending changesets
     #[must_use]
     pub fn suggested_version_bump(&self) -> Option<VersionBumpType> {
-        let pending_changesets: Vec<_> = self.package.changesets.iter()
+        let pending_changesets: Vec<_> = self
+            .package
+            .changesets
+            .iter()
             .filter(|cs| matches!(cs.status, super::super::types::ChangesetStatus::Pending))
             .collect();
-        
+
         if pending_changesets.is_empty() {
             return None;
         }
@@ -199,7 +205,7 @@ impl PackageVersionManager {
     /// Returns an error if the version format is invalid
     pub fn preview_version_bump(&self, bump_type: VersionBumpType) -> Result<String> {
         let current_version = self.current_version();
-        
+
         match bump_type {
             VersionBumpType::Major => Ok(Version::bump_major(current_version)?.to_string()),
             VersionBumpType::Minor => Ok(Version::bump_minor(current_version)?.to_string()),
@@ -219,9 +225,7 @@ impl PackageVersionManager {
     /// Get version components (major, minor, patch) if valid semver
     #[must_use]
     pub fn version_components(&self) -> Option<(u64, u64, u64)> {
-        Version::parse(self.current_version())
-            .ok()
-            .map(|v| (v.major, v.minor, v.patch))
+        Version::parse(self.current_version()).ok().map(|v| (v.major, v.minor, v.patch))
     }
 
     /// Consume the manager and return the updated package

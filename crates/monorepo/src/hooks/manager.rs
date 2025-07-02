@@ -443,11 +443,8 @@ impl<'a> HookManager<'a> {
         use crate::tasks::TaskManager;
 
         // Create changeset storage with direct borrowing
-        let storage = ChangesetStorage::new(
-            self.config.changesets.clone(),
-            self.file_system,
-            self.root_path,
-        );
+        let storage =
+            ChangesetStorage::new(self.config.changesets.clone(), self.file_system, self.root_path);
 
         // Create task manager with direct component borrowing
         let task_manager = TaskManager::with_components(
@@ -846,7 +843,8 @@ impl<'a> HookManager<'a> {
         let completion_context =
             EventContext::new("HookManager").with_priority(EventPriority::High);
 
-        let completion_event = TaskEvent::Completed { context: completion_context, result: Box::new(result) };
+        let completion_event =
+            TaskEvent::Completed { context: completion_context, result: Box::new(result) };
 
         // Non-blocking event emission
         let _ = self.emit_event(MonorepoEvent::Task(completion_event));

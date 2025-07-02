@@ -294,7 +294,8 @@ impl PackageChangesetManager {
 
             // Check for valid version bump
             if matches!(changeset.version_bump, VersionBumpType::Snapshot) {
-                errors.push(format!("Changeset {id} uses snapshot version bump", id = changeset.id));
+                errors
+                    .push(format!("Changeset {id} uses snapshot version bump", id = changeset.id));
             }
         }
 

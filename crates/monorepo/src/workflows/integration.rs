@@ -12,51 +12,80 @@ use sublime_standard_tools::filesystem::FileSystem;
 /// This workflow ensures that changesets are properly validated during
 /// Git operations and provides seamless integration between the changeset
 /// system and Git hooks.
+/// Configuration for creating a ChangesetHookIntegration
+///
+/// Groups all the dependencies needed to create a changeset-hook integration
+/// to avoid too_many_arguments clippy warning and improve API usability.
+pub struct ChangesetHookIntegrationConfig<'a> {
+    /// Changeset manager for changeset operations
+    pub changeset_manager: ChangesetManager<'a>,
+    /// Hook manager for Git hook operations
+    pub hook_manager: crate::hooks::HookManager<'a>,
+    /// Task manager for validation tasks
+    pub task_manager: crate::tasks::TaskManager<'a>,
+    /// Direct reference to configuration
+    pub config: &'a crate::config::MonorepoConfig,
+    /// Direct reference to packages
+    pub packages: &'a [crate::core::MonorepoPackageInfo],
+    /// Direct reference to git repository
+    pub repository: &'a sublime_git_tools::Repo,
+    /// Direct reference to file system manager
+    pub file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
+    /// Direct reference to root path
+    pub root_path: &'a std::path::Path,
+}
+
 // Import struct definition from types module
 use crate::workflows::types::ChangesetHookIntegration;
 
 impl<'a> ChangesetHookIntegration<'a> {
-    /// Creates a new changeset-hook integration with injected dependencies
+    /// Creates a new changeset-hook integration with configuration struct
+    ///
+    /// Uses borrowing instead of trait objects to eliminate Arc proliferation
+    /// and work with Rust ownership principles. Accepts a configuration struct
+    /// to avoid too_many_arguments issues and improve maintainability.
     ///
     /// # Arguments
     ///
-    /// * `changeset_manager` - Changeset manager for changeset operations
-    /// * `hook_manager` - Hook manager for Git hook operations
-    /// * `task_manager` - Task manager for validation tasks
-    /// * `config_provider` - Configuration provider for accessing settings
-    /// * `git_provider` - Git provider for repository operations
-    /// * `file_system_provider` - File system provider for file operations
-    /// * `package_provider` - Package provider for accessing package information
+    /// * `config` - Integration configuration containing all dependencies
     ///
     /// # Returns
     ///
-    /// A new integration instance.
+    /// A new integration instance
     ///
-    /// # Errors
+    /// # Examples
     ///
-    /// Returns an error if any of the required components cannot be initialized.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        changeset_manager: ChangesetManager<'a>,
-        hook_manager: crate::hooks::HookManager<'a>,
-        task_manager: crate::tasks::TaskManager<'a>,
-        config: &'a crate::config::MonorepoConfig,
-        packages: &'a [crate::core::MonorepoPackageInfo],
-        repository: &'a sublime_git_tools::Repo,
-        file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
-        root_path: &'a std::path::Path,
-    ) -> Self {
+    /// ```rust
+    /// use sublime_monorepo_tools::workflows::{ChangesetHookIntegration, ChangesetHookIntegrationConfig};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let config = ChangesetHookIntegrationConfig {
+    ///     changeset_manager: changeset_manager,
+    ///     hook_manager: hook_manager,
+    ///     task_manager: task_manager,
+    ///     config: &project.config,
+    ///     packages: &project.packages,
+    ///     repository: &project.repository,
+    ///     file_system: &project.file_system,
+    ///     root_path: &project.root_path,
+    /// };
+    /// let integration = ChangesetHookIntegration::new(config);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn new(config: ChangesetHookIntegrationConfig<'a>) -> Self {
         Self {
-            changeset_manager,
-            hook_manager,
-            task_manager,
-            config,
-            packages,
-            repository,
-            file_system,
-            root_path,
+            changeset_manager: config.changeset_manager,
+            hook_manager: config.hook_manager,
+            task_manager: config.task_manager,
+            config: config.config,
+            packages: config.packages,
+            repository: config.repository,
+            file_system: config.file_system,
+            root_path: config.root_path,
         }
     }
+
 
     /// Creates a new changeset-hook integration from project (convenience method)
     ///
@@ -409,13 +438,15 @@ impl<'a> ChangesetHookIntegration<'a> {
         }
 
         // Verify changeset directory exists
-        let changeset_dir =
-            self.root_path.join(&self.config.changesets.changeset_dir);
+        let changeset_dir = self.root_path.join(&self.config.changesets.changeset_dir);
         if !changeset_dir.exists() {
             self.file_system.create_dir_all(&changeset_dir).map_err(|e| {
                 Error::workflow(format!("Failed to create changeset directory: {e}"))
             })?;
-            println!("✅ Created changeset directory: {changeset_dir}", changeset_dir = changeset_dir.display());
+            println!(
+                "✅ Created changeset directory: {changeset_dir}",
+                changeset_dir = changeset_dir.display()
+            );
         }
 
         println!("🔗 Changeset-hook integration setup complete!");
@@ -477,7 +508,6 @@ impl<'a> ChangesetHookIntegration<'a> {
         log::info!("✅ Post-merge validation completed successfully");
         Ok(())
     }
-
 
     /// Validates that dependency versions are consistent across the monorepo
     ///
@@ -588,20 +618,20 @@ impl<'a> ChangesetHookIntegration<'a> {
             let package_json_path = pkg.path().join("package.json");
             if let Ok(bytes) = self.file_system.read_file(&package_json_path) {
                 if let Ok(content) = String::from_utf8(bytes) {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                    // Check dependencies, devDependencies, and peerDependencies
-                    let dep_sections = ["dependencies", "devDependencies", "peerDependencies"];
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                        // Check dependencies, devDependencies, and peerDependencies
+                        let dep_sections = ["dependencies", "devDependencies", "peerDependencies"];
 
-                    for section in &dep_sections {
-                        if let Some(deps) = json[section].as_object() {
-                            if deps.contains_key(package) {
-                                dependents.push(pkg.name().to_string());
-                                break; // No need to check other sections for this package
+                        for section in &dep_sections {
+                            if let Some(deps) = json[section].as_object() {
+                                if deps.contains_key(package) {
+                                    dependents.push(pkg.name().to_string());
+                                    break; // No need to check other sections for this package
+                                }
                             }
                         }
                     }
                 }
-            }
             }
         }
 
@@ -624,16 +654,15 @@ impl<'a> ChangesetHookIntegration<'a> {
 
         // Get the dependent package info
         let dependent_info =
-            self.packages.iter().find(|pkg| pkg.name() == dependent_package).ok_or_else(
-                || Error::workflow(format!("Dependent package '{dependent_package}' not found")),
-            )?;
+            self.packages.iter().find(|pkg| pkg.name() == dependent_package).ok_or_else(|| {
+                Error::workflow(format!("Dependent package '{dependent_package}' not found"))
+            })?;
 
         // Read the dependent package's package.json to check version requirements
         let package_json_path = dependent_info.path().join("package.json");
-        let content =
-            self.file_system.read_file_string(&package_json_path).map_err(|e| {
-                Error::workflow(format!("Failed to read package.json for {dependent_package}: {e}"))
-            })?;
+        let content = self.file_system.read_file_string(&package_json_path).map_err(|e| {
+            Error::workflow(format!("Failed to read package.json for {dependent_package}: {e}"))
+        })?;
 
         let json: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
             Error::workflow(format!("Failed to parse package.json for {dependent_package}: {e}"))
@@ -762,24 +791,23 @@ impl<'a> ChangesetHookIntegration<'a> {
         let mut dependencies = Vec::new();
 
         // Find the package info
-        if let Some(pkg_info) = self.packages.iter().find(|pkg| pkg.name() == package_name)
-        {
+        if let Some(pkg_info) = self.packages.iter().find(|pkg| pkg.name() == package_name) {
             // Read package.json to get dependencies
             let package_json_path = pkg_info.path().join("package.json");
             if let Ok(bytes) = self.file_system.read_file(&package_json_path) {
                 if let Ok(content) = String::from_utf8(bytes) {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                    // Only check production dependencies for cycle detection
-                    if let Some(deps) = json["dependencies"].as_object() {
-                        for (dep_name, _) in deps {
-                            // Only include internal monorepo dependencies
-                            if self.packages.iter().any(|pkg| pkg.name() == dep_name) {
-                                dependencies.push(dep_name.clone());
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                        // Only check production dependencies for cycle detection
+                        if let Some(deps) = json["dependencies"].as_object() {
+                            for (dep_name, _) in deps {
+                                // Only include internal monorepo dependencies
+                                if self.packages.iter().any(|pkg| pkg.name() == dep_name) {
+                                    dependencies.push(dep_name.clone());
+                                }
                             }
                         }
                     }
                 }
-            }
             }
         }
 

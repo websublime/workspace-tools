@@ -15,16 +15,16 @@
 //! - `tools`: Monorepo tools implementation struct
 
 mod changeset;
-mod package;
-mod versioning_old;
 pub mod impact;
-pub mod versioning;
+mod package;
 mod strategies;
+pub mod versioning;
+mod versioning_old;
 
 // Implementation structs (moved from main modules)
 mod project;
-mod version_manager;
 mod tools;
+mod version_manager;
 
 // Explicit exports to avoid wildcard re-exports
 
@@ -32,17 +32,18 @@ mod tools;
 pub use changeset::{Changeset, ChangesetStatus};
 
 // Package types
-pub use package::{MonorepoPackageInfo, VersionStatus, PackageType, PackageDependency, DependencyType};
+pub use package::{
+    DependencyType, MonorepoPackageInfo, PackageDependency, PackageType, VersionStatus,
+};
 
 // Versioning types
 pub use versioning_old::{
-    VersioningResult, PackageVersionUpdate, PropagationResult, 
-    VersionConflict, ConflictType
+    ConflictType, PackageVersionUpdate, PropagationResult, VersionConflict, VersioningResult,
 };
 
 // Impact analysis types
 pub use impact::{
-    VersionImpactAnalysis, PackageImpactAnalysis, BreakingChangeAnalysis, DependencyChainImpact
+    BreakingChangeAnalysis, DependencyChainImpact, PackageImpactAnalysis, VersionImpactAnalysis,
 };
 
 // Versioning plan types
@@ -50,13 +51,11 @@ pub use versioning::{VersioningPlan, VersioningPlanStep};
 
 // Strategy types
 pub use strategies::{
+    AggressiveVersioningStrategy, ConservativeVersioningStrategy, DefaultVersioningStrategy,
     VersioningStrategy,
-    DefaultVersioningStrategy,
-    ConservativeVersioningStrategy,
-    AggressiveVersioningStrategy,
 };
 
 // Implementation structs
 pub use project::MonorepoProject;
-pub use version_manager::VersionManager;
 pub use tools::MonorepoTools;
+pub use version_manager::VersionManager;

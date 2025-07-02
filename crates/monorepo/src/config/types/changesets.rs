@@ -1,8 +1,8 @@
 //! Changesets configuration types
 
+use super::Environment;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use super::Environment;
 
 /// Changesets configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -15,13 +15,13 @@
 
 mod analyzer;
 mod core;
+pub mod dependency;
+pub mod diff;
 pub mod package;
 mod packages;
-pub mod dependency;
 mod registries;
-mod workspace;
 mod upgrades;
-pub mod diff;
+mod workspace;
 
 // Explicit exports to avoid wildcard re-exports
 pub use analyzer::MonorepoAnalyzer;
@@ -42,15 +42,14 @@ pub use dependency::DependencyGraphAnalysis;
 pub use registries::{RegistryAnalysisResult, RegistryInfo};
 
 // Workspace types
-pub use workspace::{WorkspaceConfigAnalysis, WorkspacePatternAnalysis, PatternStatistics};
+pub use workspace::{PatternStatistics, WorkspaceConfigAnalysis, WorkspacePatternAnalysis};
 
 // Upgrade types
 pub use upgrades::{UpgradeAnalysisResult, UpgradeInfo};
 
 // Diff types
 pub use diff::{
-    ChangeAnalyzer, ChangeAnalysisResult, DiffAnalyzer, BranchComparisonResult,
-    ChangeAnalysis, AffectedPackagesAnalysis, ChangeSignificanceResult,
-    ComprehensiveChangeAnalysisResult
+    AffectedPackagesAnalysis, BranchComparisonResult, ChangeAnalysis, ChangeAnalysisResult,
+    ChangeAnalyzer, ChangeSignificanceResult, ComprehensiveChangeAnalysisResult, DiffAnalyzer,
 };
 // PackageChange should be imported directly from changes module to avoid duplication

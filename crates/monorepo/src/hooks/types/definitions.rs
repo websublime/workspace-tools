@@ -30,57 +30,56 @@ pub enum HookType {
 pub struct HookDefinition {
     /// The script or command to execute
     pub script: HookScript,
-    
+
     /// Conditions that must be met for the hook to execute
     pub conditions: Vec<HookCondition>,
-    
+
     /// Whether to fail the Git operation if the hook fails
     pub fail_on_error: bool,
-    
+
     /// Timeout for hook execution
     pub timeout: Option<Duration>,
-    
+
     /// Environment variables to set during execution
     pub environment: HashMap<String, String>,
-    
+
     /// Working directory for hook execution
     pub working_directory: Option<PathBuf>,
-    
+
     /// Description of what this hook does
     pub description: String,
-    
+
     /// Whether this hook is enabled
     pub enabled: bool,
 }
-
 
 /// Script types that can be executed by hooks
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum HookScript {
     /// Execute registered tasks by name
-    TaskExecution { 
+    TaskExecution {
         /// Names of tasks to execute
         tasks: Vec<String>,
         /// Whether to run tasks in parallel
         parallel: bool,
     },
-    
+
     /// Execute a shell command
-    Command { 
+    Command {
         /// Command to execute
         cmd: String,
         /// Command arguments
         args: Vec<String>,
     },
-    
+
     /// Execute a script file
-    ScriptFile { 
+    ScriptFile {
         /// Path to the script file
         path: PathBuf,
         /// Arguments to pass to the script
         args: Vec<String>,
     },
-    
+
     /// Execute multiple scripts in sequence
     Sequence {
         /// Scripts to execute in order
@@ -89,7 +88,6 @@ pub enum HookScript {
         stop_on_failure: bool,
     },
 }
-
 
 /// Conditions that determine when a hook should execute
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,7 +99,7 @@ pub enum HookCondition {
         /// Whether to match any pattern (true) or all patterns (false)
         match_any: bool,
     },
-    
+
     /// Only execute if specific packages have changed
     PackagesChanged {
         /// Package names to check
@@ -109,31 +107,31 @@ pub enum HookCondition {
         /// Whether to match any package (true) or all packages (false)
         match_any: bool,
     },
-    
+
     /// Only execute if dependencies have changed
     DependenciesChanged {
         /// Specific dependency types to check
         dependency_types: Vec<DependencyType>,
     },
-    
+
     /// Only execute on specific branches
     OnBranch {
         /// Branch name pattern (supports wildcards)
         pattern: String,
     },
-    
+
     /// Only execute in specific environments
     Environment {
         /// Environment to check
         env: Environment,
     },
-    
+
     /// Only execute if changeset exists for changes
     ChangesetExists {
         /// Whether to require changeset for all changes
         require_for_all: bool,
     },
-    
+
     /// Custom condition based on environment variables
     EnvironmentVariable {
         /// Environment variable name
@@ -141,7 +139,7 @@ pub enum HookCondition {
         /// Expected value (optional)
         value: Option<String>,
     },
-    
+
     /// Only execute if specific Git refs exist
     GitRefExists {
         /// Git reference pattern
@@ -175,4 +173,3 @@ impl fmt::Display for HookType {
         }
     }
 }
-

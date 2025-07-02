@@ -4,8 +4,8 @@
 //! These plugins demonstrate the plugin system and provide essential functionality.
 
 use super::types::{
-    MonorepoPlugin, PluginInfo, PluginContext, PluginResult, PluginCapabilities, 
-    PluginCommand, PluginArgument, PluginArgumentType
+    MonorepoPlugin, PluginArgument, PluginArgumentType, PluginCapabilities, PluginCommand,
+    PluginContext, PluginInfo, PluginResult,
 };
 use crate::error::Result;
 
@@ -25,11 +25,7 @@ pub struct AnalyzerPlugin {
 impl AnalyzerPlugin {
     /// Create a new analyzer plugin
     pub fn new() -> Self {
-        Self {
-            name: "analyzer".to_string(),
-            version: "1.0.0".to_string(),
-            initialized: false,
-        }
+        Self { name: "analyzer".to_string(), version: "1.0.0".to_string(), initialized: false }
     }
 }
 
@@ -45,15 +41,13 @@ impl MonorepoPlugin for AnalyzerPlugin {
                     PluginCommand {
                         name: "analyze-dependencies".to_string(),
                         description: "Analyze package dependencies and relationships".to_string(),
-                        arguments: vec![
-                            PluginArgument {
-                                name: "package".to_string(),
-                                description: "Specific package to analyze (optional)".to_string(),
-                                required: false,
-                                arg_type: PluginArgumentType::String,
-                                default_value: None,
-                            },
-                        ],
+                        arguments: vec![PluginArgument {
+                            name: "package".to_string(),
+                            description: "Specific package to analyze (optional)".to_string(),
+                            required: false,
+                            arg_type: PluginArgumentType::String,
+                            default_value: None,
+                        }],
                         async_support: true,
                     },
                     PluginCommand {
@@ -65,22 +59,24 @@ impl MonorepoPlugin for AnalyzerPlugin {
                     PluginCommand {
                         name: "impact-analysis".to_string(),
                         description: "Analyze change impact across packages".to_string(),
-                        arguments: vec![
-                            PluginArgument {
-                                name: "since".to_string(),
-                                description: "Analyze changes since this commit/tag".to_string(),
-                                required: false,
-                                arg_type: PluginArgumentType::String,
-                                default_value: Some("HEAD~1".to_string()),
-                            },
-                        ],
+                        arguments: vec![PluginArgument {
+                            name: "since".to_string(),
+                            description: "Analyze changes since this commit/tag".to_string(),
+                            required: false,
+                            arg_type: PluginArgumentType::String,
+                            default_value: Some("HEAD~1".to_string()),
+                        }],
                         async_support: true,
                     },
                 ],
                 async_support: true,
                 parallel_support: false,
                 categories: vec!["analyzer".to_string(), "dependencies".to_string()],
-                file_patterns: vec!["package.json".to_string(), "*.ts".to_string(), "*.js".to_string()],
+                file_patterns: vec![
+                    "package.json".to_string(),
+                    "*.ts".to_string(),
+                    "*.js".to_string(),
+                ],
             },
         }
     }
@@ -91,7 +87,12 @@ impl MonorepoPlugin for AnalyzerPlugin {
         Ok(())
     }
 
-    fn execute_command(&self, command: &str, args: &[String], context: &PluginContext) -> Result<PluginResult> {
+    fn execute_command(
+        &self,
+        command: &str,
+        args: &[String],
+        context: &PluginContext,
+    ) -> Result<PluginResult> {
         if !self.initialized {
             return Ok(PluginResult::error("Plugin not initialized".to_string()));
         }
@@ -101,9 +102,7 @@ impl MonorepoPlugin for AnalyzerPlugin {
                 let package_filter = args.first().map(std::string::String::as_str);
                 self.analyze_dependencies(package_filter, context)
             }
-            "detect-cycles" => {
-                self.detect_cycles(context)
-            }
+            "detect-cycles" => self.detect_cycles(context),
             "impact-analysis" => {
                 let since = args.first().map_or("HEAD~1", |s| s.as_str());
                 self.impact_analysis(since, context)
@@ -135,86 +134,131 @@ impl AnalyzerPlugin {
     #[allow(clippy::unused_self)]
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::cast_precision_loss)]
-    fn analyze_dependencies(&self, package_filter: Option<&str>, context: &PluginContext) -> Result<PluginResult> {
+    fn analyze_dependencies(
+        &self,
+        package_filter: Option<&str>,
+        context: &PluginContext,
+    ) -> Result<PluginResult> {
         let start_time = std::time::Instant::now();
-        
+
         // Create file system service for package discovery
         let file_system_service = crate::core::services::FileSystemService::new(context.root_path)
-            .map_err(|e| crate::error::Error::plugin(format!("Failed to create file system service: {e}")))?;
-        
+            .map_err(|e| {
+                crate::error::Error::plugin(format!("Failed to create file system service: {e}"))
+            })?;
+
         // Create package service for dependency analysis
         let package_service = crate::core::services::PackageDiscoveryService::new(
             context.root_path,
             &file_system_service,
             context.config_ref,
-        ).map_err(|e| crate::error::Error::plugin(format!("Failed to create package service: {e}")))?;
+        )
+        .map_err(|e| {
+            crate::error::Error::plugin(format!("Failed to create package service: {e}"))
+        })?;
 
         // Create dependency service for real analysis
         let mut dependency_service = crate::core::services::DependencyAnalysisService::new(
             &package_service,
             context.config_ref,
-        ).map_err(|e| crate::error::Error::plugin(format!("Failed to create dependency service: {e}")))?;
+        )
+        .map_err(|e| {
+            crate::error::Error::plugin(format!("Failed to create dependency service: {e}"))
+        })?;
 
         // Build dependency graph for comprehensive analysis
-        let dependency_graph = dependency_service.build_dependency_graph()
-            .map_err(|e| crate::error::Error::plugin(format!("Failed to build dependency graph: {e}")))?;
-        
+        let dependency_graph = dependency_service.build_dependency_graph().map_err(|e| {
+            crate::error::Error::plugin(format!("Failed to build dependency graph: {e}"))
+        })?;
+
         // Clone the dependency graph data to avoid borrowing issues
         let dependencies_count = dependency_graph.dependencies.len();
 
         // Get external dependencies
-        let external_dependencies = dependency_service.get_external_dependencies()
-            .map_err(|e| crate::error::Error::plugin(format!("Failed to get external dependencies: {e}")))?;
+        let external_dependencies =
+            dependency_service.get_external_dependencies().map_err(|e| {
+                crate::error::Error::plugin(format!("Failed to get external dependencies: {e}"))
+            })?;
 
         // Detect dependency conflicts
         let conflicts = dependency_service.detect_dependency_conflicts();
 
         // Prepare analysis result
         let mut analysis = serde_json::Map::new();
-        analysis.insert("total_packages".to_string(), serde_json::Value::Number(serde_json::Number::from(context.packages.len())));
-        analysis.insert("external_dependencies".to_string(), serde_json::Value::Number(serde_json::Number::from(external_dependencies.len())));
-        analysis.insert("internal_dependencies".to_string(), serde_json::Value::Number(serde_json::Number::from(dependencies_count)));
-        analysis.insert("dependency_conflicts".to_string(), serde_json::Value::Number(serde_json::Number::from(conflicts.len())));
-        
+        analysis.insert(
+            "total_packages".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(context.packages.len())),
+        );
+        analysis.insert(
+            "external_dependencies".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(external_dependencies.len())),
+        );
+        analysis.insert(
+            "internal_dependencies".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(dependencies_count)),
+        );
+        analysis.insert(
+            "dependency_conflicts".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(conflicts.len())),
+        );
+
         // Add external dependencies list
-        let external_deps: Vec<serde_json::Value> = external_dependencies.into_iter()
-            .map(serde_json::Value::String)
-            .collect();
-        analysis.insert("external_dependency_list".to_string(), serde_json::Value::Array(external_deps));
-        
+        let external_deps: Vec<serde_json::Value> =
+            external_dependencies.into_iter().map(serde_json::Value::String).collect();
+        analysis.insert(
+            "external_dependency_list".to_string(),
+            serde_json::Value::Array(external_deps),
+        );
+
         // Add conflicts details
-        let conflicts_json: Vec<serde_json::Value> = conflicts.into_iter()
-            .map(|conflict| serde_json::json!({
-                "dependency_name": conflict.dependency_name,
-                "conflicting_packages": conflict.conflicting_packages.into_iter()
-                    .map(|pkg| serde_json::json!({
-                        "package_name": pkg.package_name,
-                        "version_requirement": pkg.version_requirement
-                    }))
-                    .collect::<Vec<_>>()
-            }))
+        let conflicts_json: Vec<serde_json::Value> = conflicts
+            .into_iter()
+            .map(|conflict| {
+                serde_json::json!({
+                    "dependency_name": conflict.dependency_name,
+                    "conflicting_packages": conflict.conflicting_packages.into_iter()
+                        .map(|pkg| serde_json::json!({
+                            "package_name": pkg.package_name,
+                            "version_requirement": pkg.version_requirement
+                        }))
+                        .collect::<Vec<_>>()
+                })
+            })
             .collect();
         analysis.insert("conflicts_detail".to_string(), serde_json::Value::Array(conflicts_json));
-        
+
         // Package-specific analysis if filtered
         if let Some(package_name) = package_filter {
-            analysis.insert("analyzed_package".to_string(), serde_json::Value::String(package_name.to_string()));
-            
+            analysis.insert(
+                "analyzed_package".to_string(),
+                serde_json::Value::String(package_name.to_string()),
+            );
+
             // Get dependencies for specific package
-            let package_deps = dependency_service.get_dependencies(package_name)
-                .map_err(|e| crate::error::Error::plugin(format!("Failed to get package dependencies: {e}")))?;
-            
-            let package_dependents = dependency_service.get_dependents(package_name)
-                .map_err(|e| crate::error::Error::plugin(format!("Failed to get package dependents: {e}")))?;
-            
+            let package_deps = dependency_service.get_dependencies(package_name).map_err(|e| {
+                crate::error::Error::plugin(format!("Failed to get package dependencies: {e}"))
+            })?;
+
+            let package_dependents =
+                dependency_service.get_dependents(package_name).map_err(|e| {
+                    crate::error::Error::plugin(format!("Failed to get package dependents: {e}"))
+                })?;
+
             analysis.insert("package_dependencies".to_string(), serde_json::json!(package_deps));
-            analysis.insert("package_dependents".to_string(), serde_json::json!(package_dependents));
-            analysis.insert("dependencies_count".to_string(), serde_json::Value::Number(serde_json::Number::from(package_deps.len())));
-            analysis.insert("dependents_count".to_string(), serde_json::Value::Number(serde_json::Number::from(package_dependents.len())));
+            analysis
+                .insert("package_dependents".to_string(), serde_json::json!(package_dependents));
+            analysis.insert(
+                "dependencies_count".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(package_deps.len())),
+            );
+            analysis.insert(
+                "dependents_count".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(package_dependents.len())),
+            );
         }
-        
+
         let execution_time = start_time.elapsed().as_millis() as u64;
-        
+
         Ok(PluginResult::success_with_time(analysis, execution_time)
             .with_metadata("command", "analyze-dependencies")
             .with_metadata("analyzer", "builtin")
@@ -243,27 +287,37 @@ impl AnalyzerPlugin {
     #[allow(clippy::cast_precision_loss)]
     fn detect_cycles(&self, context: &PluginContext) -> Result<PluginResult> {
         let start_time = std::time::Instant::now();
-        
+
         // Create file system service for package discovery
         let file_system_service = crate::core::services::FileSystemService::new(context.root_path)
-            .map_err(|e| crate::error::Error::plugin(format!("Failed to create file system service: {e}")))?;
-        
+            .map_err(|e| {
+                crate::error::Error::plugin(format!("Failed to create file system service: {e}"))
+            })?;
+
         // Create package service for dependency analysis
         let package_service = crate::core::services::PackageDiscoveryService::new(
             context.root_path,
             &file_system_service,
             context.config_ref,
-        ).map_err(|e| crate::error::Error::plugin(format!("Failed to create package service: {e}")))?;
+        )
+        .map_err(|e| {
+            crate::error::Error::plugin(format!("Failed to create package service: {e}"))
+        })?;
 
         // Create dependency service for real circular dependency detection
         let mut dependency_service = crate::core::services::DependencyAnalysisService::new(
             &package_service,
             context.config_ref,
-        ).map_err(|e| crate::error::Error::plugin(format!("Failed to create dependency service: {e}")))?;
+        )
+        .map_err(|e| {
+            crate::error::Error::plugin(format!("Failed to create dependency service: {e}"))
+        })?;
 
         // Detect circular dependencies using real analysis
-        let circular_dependencies = dependency_service.detect_circular_dependencies()
-            .map_err(|e| crate::error::Error::plugin(format!("Failed to detect circular dependencies: {e}")))?;
+        let circular_dependencies =
+            dependency_service.detect_circular_dependencies().map_err(|e| {
+                crate::error::Error::plugin(format!("Failed to detect circular dependencies: {e}"))
+            })?;
 
         // Analyze cycle severity and create detailed report
         let mut affected_packages = std::collections::HashSet::new();
@@ -274,7 +328,7 @@ impl AnalyzerPlugin {
                 for package in cycle {
                     affected_packages.insert(package.clone());
                 }
-                
+
                 // Determine cycle severity based on length and package types
                 let severity = if cycle.len() <= 2 {
                     "low"  // Simple bidirectional dependency
@@ -283,7 +337,7 @@ impl AnalyzerPlugin {
                 } else {
                     "high"  // Very complex cycle
                 };
-                
+
                 serde_json::json!({
                     "cycle_id": index + 1,
                     "packages": cycle,
@@ -313,7 +367,7 @@ impl AnalyzerPlugin {
             0 => "clean",
             1..=2 => "warning",
             3..=5 => "error",
-            _ => "critical"
+            _ => "critical",
         };
 
         let cycles = serde_json::json!({
@@ -335,7 +389,7 @@ impl AnalyzerPlugin {
         });
 
         let execution_time = start_time.elapsed().as_millis() as u64;
-        
+
         Ok(PluginResult::success_with_time(cycles, execution_time)
             .with_metadata("command", "detect-cycles")
             .with_metadata("analyzer", "builtin")
@@ -368,22 +422,27 @@ impl AnalyzerPlugin {
     #[allow(clippy::too_many_lines)]
     fn impact_analysis(&self, since: &str, context: &PluginContext) -> Result<PluginResult> {
         let start_time = std::time::Instant::now();
-        
+
         // Get changed files using real Git operations
-        let changed_files = context.repository.get_all_files_changed_since_sha_with_status(since)
-            .map_err(|e| crate::error::Error::plugin(format!("Failed to get changed files since {since}: {e}")))?;
+        let changed_files = context
+            .repository
+            .get_all_files_changed_since_sha_with_status(since)
+            .map_err(|e| {
+            crate::error::Error::plugin(format!("Failed to get changed files since {since}: {e}"))
+        })?;
 
         // Analyze which packages are directly affected
         let mut directly_affected = std::collections::HashSet::new();
         let mut file_changes_by_package = std::collections::HashMap::new();
-        
+
         for changed_file in &changed_files {
             for package in context.packages {
                 let package_path = package.path().to_string_lossy();
                 if changed_file.path.starts_with(package_path.as_ref()) {
                     directly_affected.insert(package.name().to_string());
-                    
-                    file_changes_by_package.entry(package.name().to_string())
+
+                    file_changes_by_package
+                        .entry(package.name().to_string())
                         .or_insert_with(Vec::new)
                         .push(serde_json::json!({
                             "file": changed_file.path,
@@ -398,48 +457,60 @@ impl AnalyzerPlugin {
                 }
             }
         }
-        
+
         // Create dependency service for propagation analysis
         let file_system_service = crate::core::services::FileSystemService::new(context.root_path)
-            .map_err(|e| crate::error::Error::plugin(format!("Failed to create file system service: {e}")))?;
-        
+            .map_err(|e| {
+                crate::error::Error::plugin(format!("Failed to create file system service: {e}"))
+            })?;
+
         let package_service = crate::core::services::PackageDiscoveryService::new(
             context.root_path,
             &file_system_service,
             context.config_ref,
-        ).map_err(|e| crate::error::Error::plugin(format!("Failed to create package service: {e}")))?;
+        )
+        .map_err(|e| {
+            crate::error::Error::plugin(format!("Failed to create package service: {e}"))
+        })?;
 
         let mut dependency_service = crate::core::services::DependencyAnalysisService::new(
             &package_service,
             context.config_ref,
-        ).map_err(|e| crate::error::Error::plugin(format!("Failed to create dependency service: {e}")))?;
+        )
+        .map_err(|e| {
+            crate::error::Error::plugin(format!("Failed to create dependency service: {e}"))
+        })?;
 
         // Get packages affected through dependencies (propagation)
         let changed_package_names: Vec<String> = directly_affected.iter().cloned().collect();
-        let all_affected = dependency_service.get_affected_packages(&changed_package_names)
-            .map_err(|e| crate::error::Error::plugin(format!("Failed to get affected packages: {e}")))?;
+        let all_affected =
+            dependency_service.get_affected_packages(&changed_package_names).map_err(|e| {
+                crate::error::Error::plugin(format!("Failed to get affected packages: {e}"))
+            })?;
 
         // Separate directly vs indirectly affected
-        let indirectly_affected: Vec<String> = all_affected.iter()
-            .filter(|pkg| !directly_affected.contains(*pkg))
-            .cloned()
-            .collect();
+        let indirectly_affected: Vec<String> =
+            all_affected.iter().filter(|pkg| !directly_affected.contains(*pkg)).cloned().collect();
 
         // Analyze change types and severity
         let mut change_types = std::collections::HashMap::new();
         for changed_file in &changed_files {
             let change_type = if changed_file.path.contains("package.json") {
                 "dependency_change"
-            } else if changed_file.path.contains(".config") || changed_file.path.contains("config") {
+            } else if changed_file.path.contains(".config") || changed_file.path.contains("config")
+            {
                 "configuration_change"
-            } else if changed_file.path.contains(".test.") || changed_file.path.contains("test/") || changed_file.path.contains("__tests__") {
+            } else if changed_file.path.contains(".test.")
+                || changed_file.path.contains("test/")
+                || changed_file.path.contains("__tests__")
+            {
                 "test_change"
             } else if changed_file.path.contains(".md") || changed_file.path.contains("README") {
                 "documentation_change"
             } else {
                 "source_code_change"
             };
-            
+
             *change_types.entry(change_type.to_string()).or_insert(0) += 1;
         }
 
@@ -455,12 +526,14 @@ impl AnalyzerPlugin {
             p if p >= 50.0 => "high",
             p if p >= 20.0 => "medium",
             p if p > 0.0 => "low",
-            _ => "none"
+            _ => "none",
         };
 
         // Get commit information for better context
-        let commits = context.repository.get_commits_since(Some(since.to_string()), &None)
-            .map_err(|e| crate::error::Error::plugin(format!("Failed to get commits since {since}: {e}")))?;
+        let commits =
+            context.repository.get_commits_since(Some(since.to_string()), &None).map_err(|e| {
+                crate::error::Error::plugin(format!("Failed to get commits since {since}: {e}"))
+            })?;
 
         let impact = serde_json::json!({
             "since": since,
@@ -506,7 +579,7 @@ impl AnalyzerPlugin {
         });
 
         let execution_time = start_time.elapsed().as_millis() as u64;
-        
+
         Ok(PluginResult::success_with_time(impact, execution_time)
             .with_metadata("command", "impact-analysis")
             .with_metadata("analyzer", "builtin")
@@ -530,10 +603,7 @@ pub struct GeneratorPlugin {
 impl GeneratorPlugin {
     /// Create a new generator plugin
     pub fn new() -> Self {
-        Self {
-            name: "generator".to_string(),
-            version: "1.0.0".to_string(),
-        }
+        Self { name: "generator".to_string(), version: "1.0.0".to_string() }
     }
 }
 
@@ -570,15 +640,13 @@ impl MonorepoPlugin for GeneratorPlugin {
                     PluginCommand {
                         name: "generate-config".to_string(),
                         description: "Generate configuration files".to_string(),
-                        arguments: vec![
-                            PluginArgument {
-                                name: "type".to_string(),
-                                description: "Configuration type (eslint, prettier, etc.)".to_string(),
-                                required: true,
-                                arg_type: PluginArgumentType::String,
-                                default_value: None,
-                            },
-                        ],
+                        arguments: vec![PluginArgument {
+                            name: "type".to_string(),
+                            description: "Configuration type (eslint, prettier, etc.)".to_string(),
+                            required: true,
+                            arg_type: PluginArgumentType::String,
+                            default_value: None,
+                        }],
                         async_support: false,
                     },
                 ],
@@ -595,15 +663,24 @@ impl MonorepoPlugin for GeneratorPlugin {
         Ok(())
     }
 
-    fn execute_command(&self, command: &str, args: &[String], context: &PluginContext) -> Result<PluginResult> {
+    fn execute_command(
+        &self,
+        command: &str,
+        args: &[String],
+        context: &PluginContext,
+    ) -> Result<PluginResult> {
         match command {
             "generate-package" => {
-                let name = args.first().ok_or_else(|| crate::error::Error::plugin("Package name required"))?;
+                let name = args
+                    .first()
+                    .ok_or_else(|| crate::error::Error::plugin("Package name required"))?;
                 let template = args.get(1).map_or("default", |s| s.as_str());
                 self.generate_package(name, template, context)
             }
             "generate-config" => {
-                let config_type = args.first().ok_or_else(|| crate::error::Error::plugin("Config type required"))?;
+                let config_type = args
+                    .first()
+                    .ok_or_else(|| crate::error::Error::plugin("Config type required"))?;
                 self.generate_config(config_type, context)
             }
             _ => Ok(PluginResult::error(format!("Unknown command: {command}"))),
@@ -629,32 +706,40 @@ impl GeneratorPlugin {
     #[allow(clippy::unused_self)]
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::too_many_lines)]
-    fn generate_package(&self, name: &str, template: &str, context: &PluginContext) -> Result<PluginResult> {
+    fn generate_package(
+        &self,
+        name: &str,
+        template: &str,
+        context: &PluginContext,
+    ) -> Result<PluginResult> {
         let start_time = std::time::Instant::now();
-        
+
         // Validate package name
         if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
             return Ok(PluginResult::error(format!("Invalid package name: {name}. Use alphanumeric characters, hyphens, and underscores only.")));
         }
-        
+
         // Check if package already exists
         for existing_package in context.packages {
             if existing_package.name() == name {
-                return Ok(PluginResult::error(format!("Package '{name}' already exists at {}", existing_package.path().display())));
+                return Ok(PluginResult::error(format!(
+                    "Package '{name}' already exists at {}",
+                    existing_package.path().display()
+                )));
             }
         }
-        
+
         // Determine package path based on monorepo structure
         let packages_dir = context.root_path.join("packages");
         let package_path = packages_dir.join(name);
-        
+
         // Create package directory
         if let Err(e) = std::fs::create_dir_all(&package_path) {
             return Ok(PluginResult::error(format!("Failed to create package directory: {e}")));
         }
-        
+
         let mut generated_files = Vec::new();
-        
+
         // Generate package.json based on template
         let package_json = match template {
             "library" => serde_json::json!({
@@ -718,25 +803,26 @@ impl GeneratorPlugin {
                 "keywords": [name],
                 "author": "Generated by Sublime Monorepo Tools",
                 "license": "MIT"
-            })
+            }),
         };
-        
+
         // Write package.json
         let package_json_path = package_path.join("package.json");
-        let package_json_content = serde_json::to_string_pretty(&package_json)
-            .map_err(|e| crate::error::Error::plugin(format!("Failed to serialize package.json: {e}")))?;
-        
+        let package_json_content = serde_json::to_string_pretty(&package_json).map_err(|e| {
+            crate::error::Error::plugin(format!("Failed to serialize package.json: {e}"))
+        })?;
+
         if let Err(e) = std::fs::write(&package_json_path, package_json_content) {
             return Ok(PluginResult::error(format!("Failed to write package.json: {e}")));
         }
         generated_files.push("package.json".to_string());
-        
+
         // Create src directory and main file
         let src_dir = package_path.join("src");
         if let Err(e) = std::fs::create_dir_all(&src_dir) {
             return Ok(PluginResult::error(format!("Failed to create src directory: {e}")));
         }
-        
+
         // Generate main file based on template
         let (main_file, main_content) = match template {
             "library" => ("index.ts", format!(
@@ -749,24 +835,24 @@ impl GeneratorPlugin {
                 "/**\n * {name}\n * Generated by Sublime Monorepo Tools\n */\n\nexport function greet(name: string): string {{\n    return `Hello, ${{name}}!`;\n}}\n\nconsole.log(greet('{name}'));\n"
             ))
         };
-        
+
         let main_file_path = src_dir.join(main_file);
         if let Err(e) = std::fs::write(&main_file_path, main_content) {
             return Ok(PluginResult::error(format!("Failed to write main file: {e}")));
         }
         generated_files.push(format!("src/{main_file}"));
-        
+
         // Generate README.md
         let readme_content = format!(
             "# {name}\n\nGenerated package by Sublime Monorepo Tools\n\n## Template: {template}\n\n## Installation\n\n```bash\nnpm install\n```\n\n## Build\n\n```bash\nnpm run build\n```\n\n## Test\n\n```bash\nnpm test\n```\n"
         );
-        
+
         let readme_path = package_path.join("README.md");
         if let Err(e) = std::fs::write(&readme_path, readme_content) {
             return Ok(PluginResult::error(format!("Failed to write README.md: {e}")));
         }
         generated_files.push("README.md".to_string());
-        
+
         // Generate TypeScript config if applicable
         if template == "library" || template == "app" {
             let tsconfig = serde_json::json!({
@@ -786,19 +872,20 @@ impl GeneratorPlugin {
                 "include": ["src/**/*"],
                 "exclude": ["node_modules", "dist"]
             });
-            
+
             let tsconfig_path = package_path.join("tsconfig.json");
-            let tsconfig_content = serde_json::to_string_pretty(&tsconfig)
-                .map_err(|e| crate::error::Error::plugin(format!("Failed to serialize tsconfig.json: {e}")))?;
-            
+            let tsconfig_content = serde_json::to_string_pretty(&tsconfig).map_err(|e| {
+                crate::error::Error::plugin(format!("Failed to serialize tsconfig.json: {e}"))
+            })?;
+
             if let Err(e) = std::fs::write(&tsconfig_path, tsconfig_content) {
                 return Ok(PluginResult::error(format!("Failed to write tsconfig.json: {e}")));
             }
             generated_files.push("tsconfig.json".to_string());
         }
-        
+
         let execution_time = start_time.elapsed().as_millis() as u64;
-        
+
         let result = serde_json::json!({
             "package_name": name,
             "template_used": template,
@@ -807,7 +894,7 @@ impl GeneratorPlugin {
             "status": "successfully_generated",
             "file_count": generated_files.len()
         });
-        
+
         Ok(PluginResult::success_with_time(result, execution_time)
             .with_metadata("command", "generate-package")
             .with_metadata("generator", "builtin")
@@ -833,9 +920,9 @@ impl GeneratorPlugin {
     #[allow(clippy::too_many_lines)]
     fn generate_config(&self, config_type: &str, context: &PluginContext) -> Result<PluginResult> {
         let start_time = std::time::Instant::now();
-        
+
         let mut generated_files = Vec::new();
-        
+
         match config_type {
             "eslint" => {
                 let eslint_config = serde_json::json!({
@@ -864,16 +951,17 @@ impl GeneratorPlugin {
                     },
                     "ignorePatterns": ["dist/", "node_modules/", "*.js"]
                 });
-                
+
                 let eslint_path = context.root_path.join(".eslintrc.json");
-                let eslint_content = serde_json::to_string_pretty(&eslint_config)
-                    .map_err(|e| crate::error::Error::plugin(format!("Failed to serialize eslint config: {e}")))?;
-                
+                let eslint_content = serde_json::to_string_pretty(&eslint_config).map_err(|e| {
+                    crate::error::Error::plugin(format!("Failed to serialize eslint config: {e}"))
+                })?;
+
                 if let Err(e) = std::fs::write(&eslint_path, eslint_content) {
                     return Ok(PluginResult::error(format!("Failed to write .eslintrc.json: {e}")));
                 }
                 generated_files.push(".eslintrc.json".to_string());
-            },
+            }
             "prettier" => {
                 let prettier_config = serde_json::json!({
                     "semi": true,
@@ -887,25 +975,34 @@ impl GeneratorPlugin {
                     "bracketSpacing": true,
                     "bracketSameLine": false
                 });
-                
+
                 let prettier_path = context.root_path.join(".prettierrc.json");
-                let prettier_content = serde_json::to_string_pretty(&prettier_config)
-                    .map_err(|e| crate::error::Error::plugin(format!("Failed to serialize prettier config: {e}")))?;
-                
+                let prettier_content =
+                    serde_json::to_string_pretty(&prettier_config).map_err(|e| {
+                        crate::error::Error::plugin(format!(
+                            "Failed to serialize prettier config: {e}"
+                        ))
+                    })?;
+
                 if let Err(e) = std::fs::write(&prettier_path, prettier_content) {
-                    return Ok(PluginResult::error(format!("Failed to write .prettierrc.json: {e}")));
+                    return Ok(PluginResult::error(format!(
+                        "Failed to write .prettierrc.json: {e}"
+                    )));
                 }
                 generated_files.push(".prettierrc.json".to_string());
-                
+
                 // Also generate .prettierignore
-                let prettier_ignore = "dist/\nnode_modules/\n*.min.js\n*.bundle.js\ncoverage/\n.nyc_output/\n";
+                let prettier_ignore =
+                    "dist/\nnode_modules/\n*.min.js\n*.bundle.js\ncoverage/\n.nyc_output/\n";
                 let prettier_ignore_path = context.root_path.join(".prettierignore");
-                
+
                 if let Err(e) = std::fs::write(&prettier_ignore_path, prettier_ignore) {
-                    return Ok(PluginResult::error(format!("Failed to write .prettierignore: {e}")));
+                    return Ok(PluginResult::error(format!(
+                        "Failed to write .prettierignore: {e}"
+                    )));
                 }
                 generated_files.push(".prettierignore".to_string());
-            },
+            }
             "typescript" => {
                 let tsconfig = serde_json::json!({
                     "compilerOptions": {
@@ -932,16 +1029,17 @@ impl GeneratorPlugin {
                     "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts"],
                     "compileOnSave": true
                 });
-                
+
                 let tsconfig_path = context.root_path.join("tsconfig.json");
-                let tsconfig_content = serde_json::to_string_pretty(&tsconfig)
-                    .map_err(|e| crate::error::Error::plugin(format!("Failed to serialize tsconfig: {e}")))?;
-                
+                let tsconfig_content = serde_json::to_string_pretty(&tsconfig).map_err(|e| {
+                    crate::error::Error::plugin(format!("Failed to serialize tsconfig: {e}"))
+                })?;
+
                 if let Err(e) = std::fs::write(&tsconfig_path, tsconfig_content) {
                     return Ok(PluginResult::error(format!("Failed to write tsconfig.json: {e}")));
                 }
                 generated_files.push("tsconfig.json".to_string());
-            },
+            }
             "jest" => {
                 let jest_config = serde_json::json!({
                     "preset": "ts-jest",
@@ -971,35 +1069,38 @@ impl GeneratorPlugin {
                     "setupFilesAfterEnv": [],
                     "verbose": true
                 });
-                
+
                 let jest_path = context.root_path.join("jest.config.json");
-                let jest_content = serde_json::to_string_pretty(&jest_config)
-                    .map_err(|e| crate::error::Error::plugin(format!("Failed to serialize jest config: {e}")))?;
-                
+                let jest_content = serde_json::to_string_pretty(&jest_config).map_err(|e| {
+                    crate::error::Error::plugin(format!("Failed to serialize jest config: {e}"))
+                })?;
+
                 if let Err(e) = std::fs::write(&jest_path, jest_content) {
-                    return Ok(PluginResult::error(format!("Failed to write jest.config.json: {e}")));
+                    return Ok(PluginResult::error(format!(
+                        "Failed to write jest.config.json: {e}"
+                    )));
                 }
                 generated_files.push("jest.config.json".to_string());
-            },
+            }
             "gitignore" => {
                 let gitignore_content = "# Dependencies\nnode_modules/\nnpm-debug.log*\nyarn-debug.log*\nyarn-error.log*\n\n# Runtime data\npids\n*.pid\n*.seed\n*.pid.lock\n\n# Coverage\ncoverage/\n.nyc_output/\n\n# Build outputs\ndist/\nbuild/\n*.tsbuildinfo\n\n# Environment\n.env\n.env.local\n.env.development.local\n.env.test.local\n.env.production.local\n\n# Editor\n.vscode/\n.idea/\n*.swp\n*.swo\n*~\n\n# OS\n.DS_Store\nThumbs.db\n\n# Logs\nlogs\n*.log\n\n# Cache\n.cache/\n.parcel-cache/\n";
-                
+
                 let gitignore_path = context.root_path.join(".gitignore");
-                
+
                 if let Err(e) = std::fs::write(&gitignore_path, gitignore_content) {
                     return Ok(PluginResult::error(format!("Failed to write .gitignore: {e}")));
                 }
                 generated_files.push(".gitignore".to_string());
-            },
+            }
             _ => {
                 return Ok(PluginResult::error(format!(
                     "Unknown config type: {config_type}. Supported types: eslint, prettier, typescript, jest, gitignore"
                 )));
             }
         }
-        
+
         let execution_time = start_time.elapsed().as_millis() as u64;
-        
+
         let result = serde_json::json!({
             "config_type": config_type,
             "generated_files": generated_files,
@@ -1007,7 +1108,7 @@ impl GeneratorPlugin {
             "status": "successfully_generated",
             "location": context.root_path.to_string_lossy()
         });
-        
+
         Ok(PluginResult::success_with_time(result, execution_time)
             .with_metadata("command", "generate-config")
             .with_metadata("generator", "builtin")
@@ -1030,10 +1131,7 @@ pub struct ValidatorPlugin {
 impl ValidatorPlugin {
     /// Create a new validator plugin
     pub fn new() -> Self {
-        Self {
-            name: "validator".to_string(),
-            version: "1.0.0".to_string(),
-        }
+        Self { name: "validator".to_string(), version: "1.0.0".to_string() }
     }
 }
 
@@ -1055,36 +1153,36 @@ impl MonorepoPlugin for ValidatorPlugin {
                     PluginCommand {
                         name: "validate-dependencies".to_string(),
                         description: "Validate dependency constraints and versions".to_string(),
-                        arguments: vec![
-                            PluginArgument {
-                                name: "strict".to_string(),
-                                description: "Enable strict validation mode".to_string(),
-                                required: false,
-                                arg_type: PluginArgumentType::Boolean,
-                                default_value: Some("false".to_string()),
-                            },
-                        ],
+                        arguments: vec![PluginArgument {
+                            name: "strict".to_string(),
+                            description: "Enable strict validation mode".to_string(),
+                            required: false,
+                            arg_type: PluginArgumentType::Boolean,
+                            default_value: Some("false".to_string()),
+                        }],
                         async_support: true,
                     },
                     PluginCommand {
                         name: "validate-commits".to_string(),
                         description: "Validate commit messages against conventions".to_string(),
-                        arguments: vec![
-                            PluginArgument {
-                                name: "count".to_string(),
-                                description: "Number of recent commits to validate".to_string(),
-                                required: false,
-                                arg_type: PluginArgumentType::Integer,
-                                default_value: Some("10".to_string()),
-                            },
-                        ],
+                        arguments: vec![PluginArgument {
+                            name: "count".to_string(),
+                            description: "Number of recent commits to validate".to_string(),
+                            required: false,
+                            arg_type: PluginArgumentType::Integer,
+                            default_value: Some("10".to_string()),
+                        }],
                         async_support: false,
                     },
                 ],
                 async_support: true,
                 parallel_support: true,
                 categories: vec!["validator".to_string(), "quality".to_string()],
-                file_patterns: vec!["package.json".to_string(), "*.js".to_string(), "*.ts".to_string()],
+                file_patterns: vec![
+                    "package.json".to_string(),
+                    "*.js".to_string(),
+                    "*.ts".to_string(),
+                ],
             },
         }
     }
@@ -1094,21 +1192,20 @@ impl MonorepoPlugin for ValidatorPlugin {
         Ok(())
     }
 
-    fn execute_command(&self, command: &str, args: &[String], context: &PluginContext) -> Result<PluginResult> {
+    fn execute_command(
+        &self,
+        command: &str,
+        args: &[String],
+        context: &PluginContext,
+    ) -> Result<PluginResult> {
         match command {
-            "validate-structure" => {
-                Ok(self.validate_structure(context))
-            }
+            "validate-structure" => Ok(self.validate_structure(context)),
             "validate-dependencies" => {
-                let strict = args.first()
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(false);
+                let strict = args.first().and_then(|s| s.parse().ok()).unwrap_or(false);
                 self.validate_dependencies(strict, context)
             }
             "validate-commits" => {
-                let count = args.first()
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(10);
+                let count = args.first().and_then(|s| s.parse().ok()).unwrap_or(10);
                 self.validate_commits(count, context)
             }
             _ => Ok(PluginResult::error(format!("Unknown command: {command}"))),
@@ -1137,11 +1234,11 @@ impl ValidatorPlugin {
     #[allow(clippy::too_many_lines)]
     fn validate_structure(&self, context: &PluginContext) -> PluginResult {
         let start_time = std::time::Instant::now();
-        
+
         let mut issues = Vec::new();
         let mut recommendations = Vec::new();
         let mut warnings = Vec::new();
-        
+
         // 1. Validate root structure
         let expected_root_files = vec!["package.json", ".gitignore", "README.md"];
         for expected_file in &expected_root_files {
@@ -1151,11 +1248,14 @@ impl ValidatorPlugin {
                 recommendations.push(format!("Create {expected_file} in the root directory"));
             }
         }
-        
+
         // 2. Validate package structure
         if context.packages.is_empty() {
             issues.push("No packages found in monorepo".to_string());
-            recommendations.push("Add packages to the packages/ directory or verify package discovery configuration".to_string());
+            recommendations.push(
+                "Add packages to the packages/ directory or verify package discovery configuration"
+                    .to_string(),
+            );
         } else {
             for package in context.packages {
                 // Check if package has required files
@@ -1163,22 +1263,28 @@ impl ValidatorPlugin {
                 if !package_json_path.exists() {
                     issues.push(format!("Package '{}' missing package.json", package.name()));
                 }
-                
+
                 // Check if package has source directory
                 let src_path = package.path().join("src");
                 if !src_path.exists() {
                     warnings.push(format!("Package '{}' has no src/ directory", package.name()));
-                    recommendations.push(format!("Consider adding src/ directory to package '{}'", package.name()));
+                    recommendations.push(format!(
+                        "Consider adding src/ directory to package '{}'",
+                        package.name()
+                    ));
                 }
-                
+
                 // Validate package name convention
                 let package_name = package.name();
-                if !package_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '/') {
+                if !package_name
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '/')
+                {
                     warnings.push(format!("Package '{package_name}' has non-standard name format"));
                 }
             }
         }
-        
+
         // 3. Check for workspace configuration consistency
         let workspace_config_path = context.root_path.join("package.json");
         if workspace_config_path.exists() {
@@ -1188,27 +1294,35 @@ impl ValidatorPlugin {
                         Ok(json) => {
                             // Check for workspaces configuration
                             if json.get("workspaces").is_none() {
-                                warnings.push("Root package.json missing workspaces configuration".to_string());
-                                recommendations.push("Add workspaces configuration to root package.json".to_string());
+                                warnings.push(
+                                    "Root package.json missing workspaces configuration"
+                                        .to_string(),
+                                );
+                                recommendations.push(
+                                    "Add workspaces configuration to root package.json".to_string(),
+                                );
                             }
-                            
+
                             // Check for private flag
                             if json.get("private") != Some(&serde_json::Value::Bool(true)) {
-                                warnings.push("Root package.json should be marked as private".to_string());
-                                recommendations.push("Set \"private\": true in root package.json".to_string());
+                                warnings.push(
+                                    "Root package.json should be marked as private".to_string(),
+                                );
+                                recommendations
+                                    .push("Set \"private\": true in root package.json".to_string());
                             }
-                        },
+                        }
                         Err(_) => {
                             issues.push("Root package.json contains invalid JSON".to_string());
                         }
                     }
-                },
+                }
                 Err(_) => {
                     issues.push("Cannot read root package.json".to_string());
                 }
             }
         }
-        
+
         // 4. Check for common configuration files
         let config_files = vec![
             (".eslintrc.json", "ESLint configuration for code quality"),
@@ -1216,18 +1330,18 @@ impl ValidatorPlugin {
             ("tsconfig.json", "TypeScript configuration"),
             (".gitignore", "Git ignore patterns"),
         ];
-        
+
         for (config_file, description) in &config_files {
             let config_path = context.root_path.join(config_file);
             if !config_path.exists() {
                 recommendations.push(format!("Consider adding {config_file} for {description}"));
             }
         }
-        
+
         // 5. Validate directory structure patterns
         let common_dirs = vec!["packages", "apps", "libs", "tools"];
         let mut has_package_dir = false;
-        
+
         for dir in &common_dirs {
             let dir_path = context.root_path.join(dir);
             if dir_path.exists() && dir_path.is_dir() {
@@ -1235,32 +1349,37 @@ impl ValidatorPlugin {
                 break;
             }
         }
-        
+
         if !has_package_dir && !context.packages.is_empty() {
-            warnings.push("Packages found but no standard package directory structure detected".to_string());
-            recommendations.push("Consider organizing packages in packages/, apps/, or libs/ directories".to_string());
+            warnings.push(
+                "Packages found but no standard package directory structure detected".to_string(),
+            );
+            recommendations.push(
+                "Consider organizing packages in packages/, apps/, or libs/ directories"
+                    .to_string(),
+            );
         }
-        
+
         // Calculate validation score
-        let _total_checks = expected_root_files.len() + context.packages.len() + config_files.len() + 3;
+        let _total_checks =
+            expected_root_files.len() + context.packages.len() + config_files.len() + 3;
         let issues_count = issues.len();
         let warnings_count = warnings.len();
-        
-        let validation_score = std::cmp::max(0, 
-            100 - (issues_count * 10) - (warnings_count * 3)
-        ) as u8;
-        
+
+        let validation_score =
+            std::cmp::max(0, 100 - (issues_count * 10) - (warnings_count * 3)) as u8;
+
         let structure_valid = issues.is_empty();
         let overall_status = match validation_score {
             90..=100 => "excellent",
             75..=89 => "good",
             60..=74 => "fair",
             40..=59 => "poor",
-            _ => "critical"
+            _ => "critical",
         };
-        
+
         let execution_time = start_time.elapsed().as_millis() as u64;
-        
+
         let result = serde_json::json!({
             "structure_valid": structure_valid,
             "validation_score": validation_score,
@@ -1281,7 +1400,7 @@ impl ValidatorPlugin {
                 "directory_patterns": true
             }
         });
-        
+
         PluginResult::success_with_time(result, execution_time)
             .with_metadata("command", "validate-structure")
             .with_metadata("validator", "builtin")
@@ -1312,30 +1431,39 @@ impl ValidatorPlugin {
     #[allow(clippy::too_many_lines)]
     fn validate_dependencies(&self, strict: bool, context: &PluginContext) -> Result<PluginResult> {
         let start_time = std::time::Instant::now();
-        
+
         let mut violations = Vec::new();
         let mut warnings = Vec::new();
         let mut recommendations = Vec::new();
-        
+
         // Create dependency service for real analysis
         let file_system_service = crate::core::services::FileSystemService::new(context.root_path)
-            .map_err(|e| crate::error::Error::plugin(format!("Failed to create file system service: {e}")))?;
-        
+            .map_err(|e| {
+                crate::error::Error::plugin(format!("Failed to create file system service: {e}"))
+            })?;
+
         let package_service = crate::core::services::PackageDiscoveryService::new(
             context.root_path,
             &file_system_service,
             context.config_ref,
-        ).map_err(|e| crate::error::Error::plugin(format!("Failed to create package service: {e}")))?;
+        )
+        .map_err(|e| {
+            crate::error::Error::plugin(format!("Failed to create package service: {e}"))
+        })?;
 
         let mut dependency_service = crate::core::services::DependencyAnalysisService::new(
             &package_service,
             context.config_ref,
-        ).map_err(|e| crate::error::Error::plugin(format!("Failed to create dependency service: {e}")))?;
+        )
+        .map_err(|e| {
+            crate::error::Error::plugin(format!("Failed to create dependency service: {e}"))
+        })?;
 
         // 1. Check for circular dependencies (critical)
-        let circular_deps = dependency_service.detect_circular_dependencies()
-            .map_err(|e| crate::error::Error::plugin(format!("Failed to detect circular dependencies: {e}")))?;
-        
+        let circular_deps = dependency_service.detect_circular_dependencies().map_err(|e| {
+            crate::error::Error::plugin(format!("Failed to detect circular dependencies: {e}"))
+        })?;
+
         for cycle in &circular_deps {
             violations.push(serde_json::json!({
                 "type": "circular_dependency",
@@ -1345,10 +1473,10 @@ impl ValidatorPlugin {
                 "resolution": "Refactor packages to break the circular dependency"
             }));
         }
-        
+
         // 2. Check for dependency conflicts
         let conflicts = dependency_service.detect_dependency_conflicts();
-        
+
         for conflict in &conflicts {
             violations.push(serde_json::json!({
                 "type": "version_conflict",
@@ -1367,15 +1495,16 @@ impl ValidatorPlugin {
                 "resolution": "Align version requirements across all packages"
             }));
         }
-        
+
         // 3. Validate individual package dependencies
         let mut dependency_stats = std::collections::HashMap::new();
-        
+
         for package in context.packages {
             let package_name = package.name();
-            
+
             // Check for empty dependencies (potential issue)
-            if package.dependencies.is_empty() && package.dependencies_external.is_empty() && strict {
+            if package.dependencies.is_empty() && package.dependencies_external.is_empty() && strict
+            {
                 warnings.push(serde_json::json!({
                     "type": "no_dependencies",
                     "severity": "low",
@@ -1384,7 +1513,7 @@ impl ValidatorPlugin {
                     "suggestion": "Verify if this package should have dependencies"
                 }));
             }
-            
+
             // Check for excessive dependencies (potential bloat)
             let total_deps = package.dependencies.len() + package.dependencies_external.len();
             if total_deps > 50 {
@@ -1396,18 +1525,18 @@ impl ValidatorPlugin {
                     "suggestion": "Review if all dependencies are necessary"
                 }));
             }
-            
+
             // Analyze dependency patterns
             let mut dev_deps = 0;
             let mut prod_deps = 0;
-            
+
             for dep in &package.dependencies {
                 match dep.dependency_type {
                     crate::core::types::DependencyType::Development => dev_deps += 1,
                     crate::core::types::DependencyType::Runtime => prod_deps += 1,
                     _ => {}
                 }
-                
+
                 // Check for problematic version ranges in strict mode
                 if strict {
                     if dep.version_requirement == "*" {
@@ -1423,8 +1552,10 @@ impl ValidatorPlugin {
                             "resolution": "Specify exact or bounded version range"
                         }));
                     }
-                    
-                    if dep.version_requirement.starts_with("file:") || dep.version_requirement.starts_with("git+") {
+
+                    if dep.version_requirement.starts_with("file:")
+                        || dep.version_requirement.starts_with("git+")
+                    {
                         warnings.push(serde_json::json!({
                             "type": "non_registry_dependency",
                             "severity": "medium",
@@ -1439,7 +1570,7 @@ impl ValidatorPlugin {
                     }
                 }
             }
-            
+
             dependency_stats.insert(package_name.to_string(), serde_json::json!({
                 "total_dependencies": total_deps,
                 "production_dependencies": prod_deps,
@@ -1448,7 +1579,7 @@ impl ValidatorPlugin {
                 "internal_dependencies": package.dependencies.len() - package.dependencies_external.len()
             }));
         }
-        
+
         // 4. Check dependency constraint consistency
         if let Err(constraint_error) = dependency_service.validate_dependency_constraints() {
             violations.push(serde_json::json!({
@@ -1458,40 +1589,42 @@ impl ValidatorPlugin {
                 "resolution": "Review and fix dependency constraints across all packages"
             }));
         }
-        
+
         // 5. Generate recommendations based on analysis
         if circular_deps.is_empty() && conflicts.is_empty() {
             recommendations.push("Dependency graph is healthy with no critical issues".to_string());
         }
-        
+
         if !violations.is_empty() {
-            recommendations.push("Address critical dependency violations before proceeding".to_string());
+            recommendations
+                .push("Address critical dependency violations before proceeding".to_string());
         }
-        
+
         if warnings.len() > 5 {
             recommendations.push("Consider reviewing dependency management practices".to_string());
         }
-        
+
         // Calculate dependency health score
         let critical_issues = violations.iter().filter(|v| v["severity"] == "critical").count();
         let high_issues = violations.iter().filter(|v| v["severity"] == "high").count();
         let medium_issues = warnings.iter().filter(|w| w["severity"] == "medium").count();
-        
-        let health_score = std::cmp::max(0, 
-            100 - (critical_issues * 25) - (high_issues * 10) - (medium_issues * 5)
+
+        let health_score = std::cmp::max(
+            0,
+            100 - (critical_issues * 25) - (high_issues * 10) - (medium_issues * 5),
         ) as u8;
-        
+
         let dependencies_valid = violations.is_empty();
         let overall_status = match health_score {
             90..=100 => "excellent",
             75..=89 => "good",
             60..=74 => "fair",
             40..=59 => "poor",
-            _ => "critical"
+            _ => "critical",
         };
-        
+
         let execution_time = start_time.elapsed().as_millis() as u64;
-        
+
         let result = serde_json::json!({
             "dependencies_valid": dependencies_valid,
             "strict_mode": strict,
@@ -1515,7 +1648,7 @@ impl ValidatorPlugin {
                 "packages_analyzed": context.packages.len()
             }
         });
-        
+
         Ok(PluginResult::success_with_time(result, execution_time)
             .with_metadata("command", "validate-dependencies")
             .with_metadata("validator", "builtin")
@@ -1548,18 +1681,20 @@ impl ValidatorPlugin {
     #[allow(clippy::too_many_lines)]
     fn validate_commits(&self, count: i32, context: &PluginContext) -> Result<PluginResult> {
         let start_time = std::time::Instant::now();
-        
+
         let mut valid_commits = Vec::new();
         let mut invalid_commits = Vec::new();
         let mut warnings = Vec::new();
         let mut recommendations = Vec::new();
-        
+
         // Get recent commits using real Git operations
-        let commits = context.repository.get_commits_since(None, &None)
+        let commits = context
+            .repository
+            .get_commits_since(None, &None)
             .map_err(|e| crate::error::Error::plugin(format!("Failed to get commits: {e}")))?;
-        
+
         let commits_to_check = commits.into_iter().take(count as usize).collect::<Vec<_>>();
-        
+
         if commits_to_check.is_empty() {
             return Ok(PluginResult::success(serde_json::json!({
                 "commits_checked": 0,
@@ -1568,80 +1703,94 @@ impl ValidatorPlugin {
                 "message": "No commits found to validate"
             })));
         }
-        
+
         // Conventional commit patterns
         let conventional_pattern = regex::Regex::new(
-            r"^(feat|fix|docs|style|refactor|perf|test|chore|ci|build)?(\(.+\))?!?: .{1,50}"
-        ).map_err(|e| crate::error::Error::plugin(format!("Failed to compile regex: {e}")))?;
-        
+            r"^(feat|fix|docs|style|refactor|perf|test|chore|ci|build)?(\(.+\))?!?: .{1,50}",
+        )
+        .map_err(|e| crate::error::Error::plugin(format!("Failed to compile regex: {e}")))?;
+
         for commit in &commits_to_check {
             let mut commit_issues = Vec::new();
             let mut commit_warnings = Vec::new();
-            
+
             let message_lines: Vec<&str> = commit.message.lines().collect();
             let first_line = message_lines.first().unwrap_or(&"");
-            
+
             // 1. Validate conventional commit format
             if !conventional_pattern.is_match(first_line) {
                 commit_issues.push("Does not follow conventional commit format".to_string());
             }
-            
+
             // 2. Validate commit message length
             if first_line.len() > 72 {
                 commit_issues.push("Subject line too long (max 72 characters)".to_string());
             }
-            
+
             if first_line.len() < 10 {
-                commit_warnings.push("Subject line very short (consider more descriptive message)".to_string());
+                commit_warnings.push(
+                    "Subject line very short (consider more descriptive message)".to_string(),
+                );
             }
-            
+
             // 3. Validate commit message quality
             if first_line.ends_with('.') {
                 commit_warnings.push("Subject line should not end with a period".to_string());
             }
-            
-            if !first_line.chars().next().map_or(false, char::is_uppercase) && 
-               !first_line.starts_with("feat") && !first_line.starts_with("fix") && 
-               !first_line.starts_with("docs") && !first_line.starts_with("style") &&
-               !first_line.starts_with("refactor") && !first_line.starts_with("perf") &&
-               !first_line.starts_with("test") && !first_line.starts_with("chore") &&
-               !first_line.starts_with("ci") && !first_line.starts_with("build") {
-                commit_warnings.push("Subject line should start with capital letter or conventional commit type".to_string());
+
+            if !first_line.chars().next().map_or(false, char::is_uppercase)
+                && !first_line.starts_with("feat")
+                && !first_line.starts_with("fix")
+                && !first_line.starts_with("docs")
+                && !first_line.starts_with("style")
+                && !first_line.starts_with("refactor")
+                && !first_line.starts_with("perf")
+                && !first_line.starts_with("test")
+                && !first_line.starts_with("chore")
+                && !first_line.starts_with("ci")
+                && !first_line.starts_with("build")
+            {
+                commit_warnings.push(
+                    "Subject line should start with capital letter or conventional commit type"
+                        .to_string(),
+                );
             }
-            
+
             // 4. Check for merge commits (usually OK but note them)
             if first_line.starts_with("Merge") {
-                commit_warnings.push("Merge commit detected - consider squashing for cleaner history".to_string());
+                commit_warnings.push(
+                    "Merge commit detected - consider squashing for cleaner history".to_string(),
+                );
             }
-            
+
             // 5. Check for empty or placeholder messages
             let placeholder_messages = ["wip", "temp", "fix", "update", ".", "test"];
             if placeholder_messages.contains(&first_line.to_lowercase().as_str()) {
                 commit_issues.push("Placeholder or non-descriptive commit message".to_string());
             }
-            
+
             // 6. Validate author information
             if commit.author_email.is_empty() || !commit.author_email.contains('@') {
                 commit_issues.push("Invalid or missing author email".to_string());
             }
-            
+
             if commit.author_name.is_empty() || commit.author_name.len() < 2 {
                 commit_issues.push("Invalid or missing author name".to_string());
             }
-            
+
             // 7. Check body format if present (lines after first)
             if message_lines.len() > 1 {
                 if message_lines.len() > 1 && !message_lines[1].is_empty() {
                     commit_warnings.push("Missing blank line between subject and body".to_string());
                 }
-                
+
                 for (i, line) in message_lines.iter().enumerate().skip(2) {
                     if line.len() > 72 {
                         commit_warnings.push(format!("Body line {} exceeds 72 characters", i + 1));
                     }
                 }
             }
-            
+
             let commit_data = serde_json::json!({
                 "hash": commit.hash[0..8].to_string(),
                 "full_hash": commit.hash,
@@ -1655,13 +1804,13 @@ impl ValidatorPlugin {
                 "message_length": first_line.len(),
                 "has_body": message_lines.len() > 1
             });
-            
+
             if commit_issues.is_empty() {
                 valid_commits.push(commit_data);
             } else {
                 invalid_commits.push(commit_data);
             }
-            
+
             // Accumulate warnings
             for warning in commit_warnings {
                 warnings.push(serde_json::json!({
@@ -1670,40 +1819,40 @@ impl ValidatorPlugin {
                 }));
             }
         }
-        
+
         // Generate recommendations based on analysis
         let invalid_percentage = if commits_to_check.is_empty() {
             0.0
         } else {
             (invalid_commits.len() as f64 / commits_to_check.len() as f64) * 100.0
         };
-        
+
         if invalid_percentage > 50.0 {
             recommendations.push("Consider adopting conventional commit standards".to_string());
             recommendations.push("Set up commit message templates or hooks".to_string());
         }
-        
+
         if warnings.len() > commits_to_check.len() / 2 {
             recommendations.push("Review commit message best practices with the team".to_string());
         }
-        
+
         if invalid_commits.is_empty() && warnings.is_empty() {
-            recommendations.push("Excellent commit hygiene! Keep up the good practices".to_string());
+            recommendations
+                .push("Excellent commit hygiene! Keep up the good practices".to_string());
         }
-        
+
         // Calculate commit quality score
-        let quality_score = std::cmp::max(0, 
-            100 - (invalid_commits.len() * 15) - (warnings.len() * 3)
-        ) as u8;
-        
+        let quality_score =
+            std::cmp::max(0, 100 - (invalid_commits.len() * 15) - (warnings.len() * 3)) as u8;
+
         let overall_status = match quality_score {
             90..=100 => "excellent",
             75..=89 => "good",
             60..=74 => "fair",
             40..=59 => "poor",
-            _ => "critical"
+            _ => "critical",
         };
-        
+
         // Analyze commit patterns
         let mut commit_types = std::collections::HashMap::new();
         for commit in &commits_to_check {
@@ -1716,9 +1865,9 @@ impl ValidatorPlugin {
                 *commit_types.entry("non-conventional".to_string()).or_insert(0) += 1;
             }
         }
-        
+
         let execution_time = start_time.elapsed().as_millis() as u64;
-        
+
         let result = serde_json::json!({
             "commits_checked": commits_to_check.len(),
             "valid_commits": valid_commits.len(),
@@ -1744,7 +1893,7 @@ impl ValidatorPlugin {
                 "oldest_commit": commits_to_check.last().map(|c| &c.author_date)
             }
         });
-        
+
         Ok(PluginResult::success_with_time(result, execution_time)
             .with_metadata("command", "validate-commits")
             .with_metadata("validator", "builtin")

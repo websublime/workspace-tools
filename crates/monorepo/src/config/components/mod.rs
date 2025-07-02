@@ -9,17 +9,17 @@
 //!
 //! These components replace the monolithic ConfigManager with focused, single-responsibility components.
 
+pub mod matcher;
 pub mod persistence;
 pub mod reader;
-pub mod writer;
 pub mod workspace;
-pub mod matcher;
+pub mod writer;
 
+pub use matcher::{MultiPatternMatcher, PatternMatcher};
 pub use persistence::ConfigPersistence;
 pub use reader::ConfigReader;
-pub use writer::ConfigWriter;
 pub use workspace::WorkspacePatternManager;
-pub use matcher::{PatternMatcher, MultiPatternMatcher};
+pub use writer::ConfigWriter;
 
 /// Configuration manager factory for creating focused components
 pub struct ConfigComponents;
@@ -56,13 +56,17 @@ impl ConfigComponents {
     ///
     /// # Errors
     /// Returns an error if the file cannot be loaded
-    pub fn writer_from_file(path: impl AsRef<std::path::Path>) -> crate::error::Result<ConfigWriter> {
+    pub fn writer_from_file(
+        path: impl AsRef<std::path::Path>,
+    ) -> crate::error::Result<ConfigWriter> {
         ConfigWriter::from_file(path)
     }
 
     /// Create a workspace pattern manager
     #[must_use]
-    pub fn workspace_manager(workspace_config: crate::config::WorkspaceConfig) -> WorkspacePatternManager {
+    pub fn workspace_manager(
+        workspace_config: crate::config::WorkspaceConfig,
+    ) -> WorkspacePatternManager {
         WorkspacePatternManager::new(workspace_config)
     }
 

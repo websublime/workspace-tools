@@ -22,16 +22,16 @@ use crate::changes::PackageChange;
 
 impl<'a> DiffAnalyzer<'a> {
     /// Create a new diff analyzer with direct borrowing from project
-    /// 
+    ///
     /// Uses borrowing instead of trait objects to eliminate Arc proliferation
     /// and work with Rust ownership principles.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `project` - Reference to monorepo project
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A new diff analyzer instance
     #[must_use]
     pub fn new(project: &'a MonorepoProject) -> Self {
@@ -67,23 +67,23 @@ impl<'a> DiffAnalyzer<'a> {
     }
 
     /// Creates a new diff analyzer from an existing MonorepoProject
-    /// 
+    ///
     /// Convenience method that wraps the `new` constructor for backward compatibility.
     /// Uses real direct borrowing following Rust ownership principles.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `project` - Reference to the monorepo project
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A new DiffAnalyzer instance with built-in analyzers and direct borrowing
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust
     /// use sublime_monorepo_tools::{DiffAnalyzer, MonorepoProject};
-    /// 
+    ///
     /// let project = MonorepoProject::new("/path/to/monorepo")?;
     /// let diff_analyzer = DiffAnalyzer::from_project(&project);
     /// ```
@@ -330,7 +330,9 @@ impl<'a> DiffAnalyzer<'a> {
                 let mut reasons = Vec::new();
 
                 // Enhance significance based on package role
-                if let Some(package_info) = self.packages.iter().find(|pkg| pkg.name() == change.package_name) {
+                if let Some(package_info) =
+                    self.packages.iter().find(|pkg| pkg.name() == change.package_name)
+                {
                     // Check if package has many dependents
                     let dependents = self.get_dependents(&change.package_name);
                     if dependents.len() > 5 {
@@ -515,22 +517,24 @@ impl<'a> DiffAnalyzer<'a> {
         Ok(conflicts)
     }
 
-
     /// Get dependents of a package
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `package_name` - Name of the package to find dependents for
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Vector of packages that depend on the given package
     fn get_dependents(&self, package_name: &str) -> Vec<&crate::core::MonorepoPackageInfo> {
         if let Some(package) = self.packages.iter().find(|pkg| pkg.name() == package_name) {
             // Use the dependents field from the package info to find dependent packages
-            package.dependents
+            package
+                .dependents
                 .iter()
-                .filter_map(|dependent_name| self.packages.iter().find(|pkg| pkg.name() == dependent_name))
+                .filter_map(|dependent_name| {
+                    self.packages.iter().find(|pkg| pkg.name() == dependent_name)
+                })
                 .collect()
         } else {
             Vec::new()

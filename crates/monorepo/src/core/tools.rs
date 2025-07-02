@@ -1,34 +1,34 @@
 //! MonorepoTools implementation - main orchestrator for monorepo functionality
 
 use crate::analysis::{DiffAnalyzer, MonorepoAnalyzer};
-use crate::core::{MonorepoProject, VersionManager, VersioningPlan, VersioningStrategy};
 use crate::core::types::MonorepoTools;
+use crate::core::{MonorepoProject, VersionManager, VersioningPlan, VersioningStrategy};
 use crate::error::Result;
-use crate::tasks::TaskManager;
-use crate::workflows::{DevelopmentResult, DevelopmentWorkflow};
-use crate::workflows::{ChangeAnalysisWorkflowResult, VersioningWorkflowResult};
-use crate::workflows::{ReleaseWorkflow, ReleaseResult, ReleaseOptions};
 use crate::plugins::PluginManager;
+use crate::tasks::TaskManager;
+use crate::workflows::{ChangeAnalysisWorkflowResult, VersioningWorkflowResult};
+use crate::workflows::{DevelopmentResult, DevelopmentWorkflow};
+use crate::workflows::{ReleaseOptions, ReleaseResult, ReleaseWorkflow};
 
 impl<'a> MonorepoTools<'a> {
     /// Creates monorepo tools from an existing MonorepoProject
-    /// 
+    ///
     /// Uses direct borrowing from the project to eliminate Arc proliferation
     /// and work with Rust ownership principles.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `project` - Reference to the monorepo project
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A configured MonorepoTools instance ready for operations
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust
     /// use sublime_monorepo_tools::{MonorepoTools, MonorepoProject};
-    /// 
+    ///
     /// let project = MonorepoProject::new("/path/to/monorepo")?;
     /// let tools = MonorepoTools::new(&project);
     /// ```
@@ -94,7 +94,7 @@ impl<'a> MonorepoTools<'a> {
     }
 
     /// Get a hook manager (Phase 3 functionality)
-    /// 
+    ///
     /// TODO: This method has lifetime issues that need to be resolved in FASE 2
     /// when we eliminate async infection and restructure component dependencies.
     /// For now, create HookManager directly where needed.
@@ -144,7 +144,8 @@ impl<'a> MonorepoTools<'a> {
             // Create plan from current changes
             let diff_analyzer = self.diff_analyzer();
             let git_config = &self.project.config.git;
-            let changes = diff_analyzer.detect_changes_since(&git_config.default_since_ref, None)?;
+            let changes =
+                diff_analyzer.detect_changes_since(&git_config.default_since_ref, None)?;
             let plan = version_manager.create_versioning_plan(&changes)?;
             let result = version_manager.execute_versioning_plan(&plan)?;
 
@@ -214,7 +215,7 @@ impl<'a> MonorepoTools<'a> {
     /// let tools = MonorepoTools::initialize("/path/to/monorepo")?;
     /// let options = ReleaseOptions::default();
     /// let result = tools.release_workflow(options).await?;
-    /// 
+    ///
     /// if result.success {
     ///     println!("Release completed successfully!");
     ///     println!("Affected packages: {}", result.affected_packages.len());

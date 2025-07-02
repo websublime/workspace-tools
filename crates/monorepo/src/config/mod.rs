@@ -1,44 +1,59 @@
 //! Configuration management for monorepo tools
-//! 
+//!
 //! This module provides types and utilities for managing monorepo configurations,
 //! including versioning, tasks, changelogs, hooks, changesets, and plugins.
 
-pub mod types;
 pub mod components;
-mod manager;
 mod defaults;
-
+mod manager;
+pub mod types;
 
 // Explicit re-exports from types module
 pub use types::{
-    // Core
-    MonorepoConfig, Environment,
-    // Manager
-    ConfigManager, PatternMatcher,
-    // Versioning
-    VersioningConfig, VersionBumpType,
-    // Tasks
-    TasksConfig,
+    BranchConfig,
+    BranchType,
+    BunWorkspaceConfig,
     // Changelog
-    ChangelogConfig, ChangelogTemplate, CommitGrouping, ChangelogFormat,
-    // Hooks
-    HooksConfig, HookConfig,
+    ChangelogConfig,
+    ChangelogFormat,
+    ChangelogTemplate,
     // Changesets
     ChangesetsConfig,
+    CommitGrouping,
+    // Manager
+    ConfigManager,
+    Environment,
+    // Git
+    GitConfig,
+    HookConfig,
+    // Hooks
+    HooksConfig,
+    // Core
+    MonorepoConfig,
+    NpmWorkspaceConfig,
+    PackageDiscoveryConfig,
+    PackageManagerConfigs,
+    PackageManagerType,
+    PatternMatcher,
     // Plugins
     PluginsConfig,
+    PnpmWorkspaceConfig,
+    // Tasks
+    TasksConfig,
+    VersionBumpType,
+    // Versioning
+    VersioningConfig,
     // Workspace
-    WorkspaceConfig, WorkspacePattern, WorkspacePatternOptions,
-    PackageManagerType, PackageManagerConfigs,
-    NpmWorkspaceConfig, YarnWorkspaceConfig, YarnVersion,
-    PnpmWorkspaceConfig, BunWorkspaceConfig,
-    WorkspaceValidationConfig, PackageDiscoveryConfig,
-    // Git
-    GitConfig, BranchConfig, BranchType,
+    WorkspaceConfig,
+    WorkspacePattern,
+    WorkspacePatternOptions,
+    WorkspaceValidationConfig,
+    YarnVersion,
+    YarnWorkspaceConfig,
 };
 
 // Re-export components
 pub use components::{
-    ConfigComponents, ConfigPersistence, ConfigReader, ConfigWriter,
-    WorkspacePatternManager, MultiPatternMatcher,
+    ConfigComponents, ConfigPersistence, ConfigReader, ConfigWriter, MultiPatternMatcher,
+    WorkspacePatternManager,
 };

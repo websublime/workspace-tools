@@ -4,8 +4,8 @@
 //! pattern internally while maintaining backward compatibility with the existing API.
 //! The refactoring breaks the god object pattern by delegating to focused services.
 
-use super::types::{MonorepoPackageInfo, MonorepoProject};
 use super::services::MonorepoServices;
+use super::types::{MonorepoPackageInfo, MonorepoProject};
 use crate::config::{ConfigManager, MonorepoConfig};
 use crate::error::{Error, Result};
 use std::path::Path;
@@ -33,16 +33,13 @@ impl MonorepoProject {
         let root_path = path.to_path_buf();
         let config = services.config_service().get_configuration().clone();
         let file_system = sublime_standard_tools::filesystem::FileSystemManager::new();
-        
+
         // Create new Repo instance instead of cloning
-        let path_str = path.to_str()
-            .ok_or_else(|| Error::git("Invalid UTF-8 in repository path"))?;
-        let repository = Repo::open(path_str)
-            .map_err(|e| Error::git(format!(
-                "Failed to open Git repository at {}: {}", 
-                path.display(), 
-                e
-            )))?;
+        let path_str =
+            path.to_str().ok_or_else(|| Error::git("Invalid UTF-8 in repository path"))?;
+        let repository = Repo::open(path_str).map_err(|e| {
+            Error::git(format!("Failed to open Git repository at {}: {}", path.display(), e))
+        })?;
 
         Ok(Self {
             services,

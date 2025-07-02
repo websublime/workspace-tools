@@ -5,8 +5,8 @@
 //! Rust ownership principles and provides clear async/sync separation.
 
 use crate::error::Result;
-use crate::tasks::types::ExecutionContext;
 use crate::tasks::types::ConditionChecker;
+use crate::tasks::types::ExecutionContext;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -66,7 +66,6 @@ pub struct AsyncConditionAdapter<'a> {
     /// The synchronous condition checker
     checker: ConditionChecker<'a>,
 }
-
 
 impl<'a> AsyncConditionAdapter<'a> {
     /// Create a new async boundary adapter

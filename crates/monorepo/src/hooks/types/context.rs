@@ -3,52 +3,52 @@
 //! This module defines the execution context types that provide hooks with
 //! information about the current Git operation and repository state.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
 
 /// Context information provided to hooks during execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HookExecutionContext {
     /// The Git repository root path
     pub repository_root: PathBuf,
-    
+
     /// Current branch name
     pub current_branch: String,
-    
+
     /// Previous branch (for post-checkout hooks)
     pub previous_branch: Option<String>,
-    
+
     /// Current commit hash
     pub current_commit: Option<String>,
-    
+
     /// Previous commit hash
     pub previous_commit: Option<String>,
-    
+
     /// List of files changed in this operation
     pub changed_files: Vec<String>,
-    
+
     /// List of packages affected by the changes
     pub affected_packages: Vec<String>,
-    
+
     /// Environment variables available during execution
     pub environment: HashMap<String, String>,
-    
+
     /// Git operation type (commit, push, merge, etc.)
     pub operation_type: GitOperationType,
-    
+
     /// Remote repository information (for push operations)
     pub remote_info: Option<RemoteInfo>,
-    
+
     /// Commit information for operations involving commits
     pub commits: Vec<CommitInfo>,
-    
+
     /// Whether this is a merge commit
     pub is_merge: bool,
-    
+
     /// Working directory where the hook should execute
     pub working_directory: PathBuf,
-    
+
     /// Additional metadata specific to the hook type
     pub metadata: HashMap<String, String>,
 }
@@ -103,7 +103,6 @@ pub struct CommitInfo {
     /// Files changed in this commit
     pub changed_files: Vec<String>,
 }
-
 
 impl Default for GitOperationType {
     fn default() -> Self {

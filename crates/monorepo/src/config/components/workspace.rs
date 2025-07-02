@@ -3,7 +3,7 @@
 //! Handles workspace pattern operations including pattern matching, validation,
 //! and workspace configuration management.
 
-use crate::config::{WorkspacePattern, WorkspaceConfig, PackageManagerType};
+use crate::config::{PackageManagerType, WorkspaceConfig, WorkspacePattern};
 use crate::error::{Error, Result};
 use glob::Pattern;
 use std::collections::HashMap;
@@ -35,11 +35,7 @@ impl WorkspacePatternManager {
     /// Vector of enabled workspace patterns
     #[must_use]
     pub fn get_effective_workspace_patterns(&self) -> Vec<&WorkspacePattern> {
-        self.workspace_config
-            .patterns
-            .iter()
-            .filter(|pattern| pattern.enabled)
-            .collect()
+        self.workspace_config.patterns.iter().filter(|pattern| pattern.enabled).collect()
     }
 
     /// Add a workspace pattern
@@ -69,8 +65,12 @@ impl WorkspacePatternManager {
         }
 
         // Test if pattern is valid glob
-        Pattern::new(&pattern.pattern)
-            .map_err(|e| Error::config(format!("Invalid glob pattern '{pattern}': {e}", pattern = pattern.pattern)))?;
+        Pattern::new(&pattern.pattern).map_err(|e| {
+            Error::config(format!(
+                "Invalid glob pattern '{pattern}': {e}",
+                pattern = pattern.pattern
+            ))
+        })?;
 
         self.workspace_config.patterns.push(pattern);
         Ok(())
@@ -105,11 +105,11 @@ impl WorkspacePatternManager {
         let initial_len = self.workspace_config.patterns.len();
         self.workspace_config.patterns.retain(|p| p.pattern != pattern);
         let removed = self.workspace_config.patterns.len() < initial_len;
-        
+
         if removed {
             log::debug!("Removed workspace pattern: {}", pattern);
         }
-        
+
         Ok(removed)
     }
 
@@ -170,12 +170,16 @@ impl WorkspacePatternManager {
     /// # Returns
     /// Vector of patterns specific to the package manager
     #[must_use]
-    pub fn get_package_manager_patterns(&self, package_manager: &PackageManagerType) -> Vec<String> {
+    pub fn get_package_manager_patterns(
+        &self,
+        package_manager: &PackageManagerType,
+    ) -> Vec<String> {
         self.workspace_config
             .patterns
             .iter()
             .filter(|pattern| {
-                pattern.package_managers
+                pattern
+                    .package_managers
                     .as_ref()
                     .map_or(false, |managers| managers.contains(package_manager))
             })
@@ -193,10 +197,10 @@ impl WorkspacePatternManager {
     #[must_use]
     pub fn validate_workspace_config(&self, existing_packages: &[String]) -> Vec<String> {
         let mut warnings = Vec::new();
-        
+
         // Check if patterns are too broad or too narrow
         let effective_patterns = self.get_effective_workspace_patterns();
-        
+
         if effective_patterns.is_empty() {
             warnings.push("No enabled workspace patterns found".to_string());
             return warnings;
@@ -229,7 +233,7 @@ impl WorkspacePatternManager {
         for pattern in &effective_patterns {
             *pattern_counts.entry(&pattern.pattern).or_insert(0) += 1;
         }
-        
+
         for (pattern, count) in pattern_counts {
             if count > 1 {
                 warnings.push(format!("Duplicate workspace pattern: {pattern}"));
@@ -255,20 +259,21 @@ impl WorkspacePatternManager {
                 if glob_pattern.matches(package_path) {
                     return true;
                 }
-                
+
                 // Try with trailing slash for directories
-                let package_path_with_slash = format!("{package_path}/", package_path = package_path.trim_end_matches('/'));
+                let package_path_with_slash =
+                    format!("{package_path}/", package_path = package_path.trim_end_matches('/'));
                 if glob_pattern.matches(&package_path_with_slash) {
                     return true;
                 }
-                
+
                 // Try matching just the package name (last component)
                 if let Some(package_name) = package_path.split('/').last() {
                     if glob_pattern.matches(package_name) {
                         return true;
                     }
                 }
-                
+
                 false
             }
             Err(_) => {
@@ -293,7 +298,7 @@ impl WorkspacePatternManager {
         package_paths: &[String],
     ) -> HashMap<String, Vec<String>> {
         let mut results = HashMap::new();
-        
+
         for pattern in patterns {
             let mut matches = Vec::new();
             for package_path in package_paths {
@@ -303,7 +308,7 @@ impl WorkspacePatternManager {
             }
             results.insert(pattern.clone(), matches);
         }
-        
+
         results
     }
 
@@ -317,7 +322,10 @@ impl WorkspacePatternManager {
     ///
     /// # Errors
     /// Returns an error if the pattern is invalid
-    pub fn create_pattern_matcher(&self, pattern: &str) -> Result<crate::config::components::PatternMatcher> {
+    pub fn create_pattern_matcher(
+        &self,
+        pattern: &str,
+    ) -> Result<crate::config::components::PatternMatcher> {
         crate::config::components::PatternMatcher::from_pattern(pattern)
     }
 
@@ -346,14 +354,15 @@ impl WorkspacePatternManager {
     #[must_use]
     pub fn get_pattern_stats(&self) -> (usize, usize, usize) {
         let total_patterns = self.workspace_config.patterns.len();
-        let enabled_patterns = self.workspace_config.patterns.iter()
-            .filter(|p| p.enabled)
-            .count();
-        let package_managers: std::collections::HashSet<_> = self.workspace_config.patterns.iter()
+        let enabled_patterns = self.workspace_config.patterns.iter().filter(|p| p.enabled).count();
+        let package_managers: std::collections::HashSet<_> = self
+            .workspace_config
+            .patterns
+            .iter()
             .filter_map(|p| p.package_managers.as_ref())
             .flatten()
             .collect();
-        
+
         (total_patterns, enabled_patterns, package_managers.len())
     }
 }

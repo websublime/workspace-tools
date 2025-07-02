@@ -10,20 +10,27 @@ mod progress;
 pub mod release;
 pub mod types;
 
-
 // Import from types module instead of implementation files
-pub use types::{DevelopmentWorkflow, ChangesetHookIntegration, ReleaseWorkflow};
+pub use types::{ChangesetHookIntegration, DevelopmentWorkflow, ReleaseWorkflow};
 
 // Explicit re-exports from types module
 pub use types::{
+    AffectedPackageInfo,
+    ChangeAnalysisResult,
+    ChangeAnalysisWorkflowResult,
+    ConfidenceLevel,
+    DevelopmentResult,
+    ImpactLevel,
+    // Data
+    PackageChangeFacts,
     // Options
     ReleaseOptions,
     // Results
-    ReleaseResult, DevelopmentResult, ChangeAnalysisResult,
-    AffectedPackageInfo, VersionRecommendation, VersioningWorkflowResult,
-    ImpactLevel, ConfidenceLevel, ChangeAnalysisWorkflowResult,
+    ReleaseResult,
+    VersionRecommendation,
+    VersioningWorkflowResult,
+    WorkflowProgress,
+    WorkflowStatus,
     // Status
-    WorkflowStep, WorkflowProgress, WorkflowStatus,
-    // Data
-    PackageChangeFacts,
+    WorkflowStep,
 };

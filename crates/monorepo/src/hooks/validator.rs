@@ -7,32 +7,29 @@
 #![allow(clippy::unnecessary_wraps)]
 #![allow(clippy::unused_self)]
 
+use super::types::{ChangesetValidationResult, HookValidator};
 use super::{HookCondition, HookExecutionContext, HookValidationResult, ValidationCheck};
-use super::types::{HookValidator, ChangesetValidationResult};
+use crate::changesets::Changeset;
 use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
-use crate::{Environment};
-use crate::changesets::Changeset;
+use crate::Environment;
 
 impl<'a> HookValidator<'a> {
     /// Create a new hook validator with direct borrowing from project
-    /// 
+    ///
     /// Uses borrowing instead of trait objects to eliminate Arc proliferation
     /// and work with Rust ownership principles.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `project` - Reference to monorepo project
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A new hook validator instance
     #[must_use]
     pub fn new(project: &'a MonorepoProject) -> Self {
-        Self { 
-            repository: &project.repository,
-            config: &project.config,
-        }
+        Self { repository: &project.repository, config: &project.config }
     }
 
     /// Check if all conditions are met for hook execution
@@ -164,7 +161,10 @@ impl<'a> HookValidator<'a> {
         if matched_files.is_empty() {
             Ok(ValidationCheck::failed("No changed files match the required patterns"))
         } else {
-            Ok(ValidationCheck::passed(format!("{count} files match the patterns", count = matched_files.len())))
+            Ok(ValidationCheck::passed(format!(
+                "{count} files match the patterns",
+                count = matched_files.len()
+            )))
         }
     }
 
@@ -306,7 +306,7 @@ impl<'a> HookValidator<'a> {
         // Full changeset integration will be implemented in Phase 2
         log::warn!("Changeset validation requested but full integration not yet complete");
         log::warn!("To disable changeset requirements, set config.changesets.required = false");
-        
+
         // Return false to indicate changesets are required but not found
         // This ensures the validation fails safely when changesets are expected
         Ok(false)
@@ -322,10 +322,10 @@ impl<'a> HookValidator<'a> {
         // The repository working directory is assumed to be the project root
         let current_dir = std::env::current_dir()
             .map_err(|e| Error::hook(format!("Failed to get current directory: {e}")))?;
-        
+
         let file_system_service = crate::core::services::FileSystemService::new(&current_dir)
             .map_err(|e| Error::hook(format!("Failed to create file system service: {e}")))?;
-        
+
         let changeset_storage = crate::changesets::ChangesetStorage::new(
             self.config.changesets.clone(),
             file_system_service.manager(),
@@ -393,9 +393,9 @@ impl<'a> HookValidator<'a> {
     fn get_branch_naming_patterns(&self) -> Result<Vec<String>> {
         let config = self.config;
         let branch_config = &config.git.branches;
-        
+
         let mut patterns = Vec::new();
-        
+
         // Add feature branch patterns
         patterns.extend(branch_config.feature_prefixes.iter().map(|prefix| {
             if prefix.ends_with('/') {
@@ -404,8 +404,8 @@ impl<'a> HookValidator<'a> {
                 format!("{prefix}/*")
             }
         }));
-        
-        // Add hotfix branch patterns  
+
+        // Add hotfix branch patterns
         patterns.extend(branch_config.hotfix_prefixes.iter().map(|prefix| {
             if prefix.ends_with('/') {
                 format!("{prefix}*")
@@ -413,7 +413,7 @@ impl<'a> HookValidator<'a> {
                 format!("{prefix}/*")
             }
         }));
-        
+
         // Add release branch patterns
         patterns.extend(branch_config.release_prefixes.iter().map(|prefix| {
             if prefix.ends_with('/') {
@@ -422,11 +422,11 @@ impl<'a> HookValidator<'a> {
                 format!("{prefix}/*")
             }
         }));
-        
+
         // Also include main and develop branches as valid patterns
         patterns.extend(branch_config.main_branches.clone());
         patterns.extend(branch_config.develop_branches.clone());
-        
+
         Ok(patterns)
     }
 
@@ -439,7 +439,7 @@ impl<'a> HookValidator<'a> {
     /// - `[!seq]` matches any character not in seq
     fn matches_pattern(&self, text: &str, pattern: &str) -> bool {
         use glob::Pattern;
-        
+
         // Create the glob pattern
         match Pattern::new(pattern) {
             Ok(glob_pattern) => glob_pattern.matches(text),
@@ -494,7 +494,7 @@ impl<'a> HookValidator<'a> {
     /// Check if a Git reference exists
     fn check_git_ref_exists(&self, ref_pattern: &str) -> Result<bool> {
         let repository = self.repository;
-        
+
         // Handle glob patterns in references
         if ref_pattern.contains('*') || ref_pattern.contains('?') {
             // Get all branches and check if any match the pattern
@@ -523,10 +523,10 @@ impl<'a> HookValidator<'a> {
                     if branches.iter().any(|branch| branch == ref_pattern) {
                         return Ok(true);
                     }
-                    
+
                     // If not a branch, check if it's a commit SHA by trying to get files changed
                     match repository.get_all_files_changed_since_sha(ref_pattern) {
-                        Ok(_) => Ok(true),  // SHA exists
+                        Ok(_) => Ok(true),   // SHA exists
                         Err(_) => Ok(false), // SHA doesn't exist
                     }
                 }
@@ -542,4 +542,3 @@ impl<'a> HookValidator<'a> {
     // This functionality can be re-implemented in FASE 2 with proper async patterns
     // if changeset operations are needed in hook validation context
 }
-

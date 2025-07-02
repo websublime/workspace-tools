@@ -84,7 +84,12 @@ pub trait MonorepoPlugin: Send + Sync {
     /// # Returns
     ///
     /// Plugin execution result containing data or error information
-    fn execute_command(&self, command: &str, args: &[String], context: &PluginContext) -> Result<PluginResult>;
+    fn execute_command(
+        &self,
+        command: &str,
+        args: &[String],
+        context: &PluginContext,
+    ) -> Result<PluginResult>;
 
     /// Get the lifecycle state of the plugin
     ///
@@ -124,7 +129,7 @@ pub struct PluginInfo {
 ///
 /// Contains references to the monorepo project and configuration
 /// that plugins can use during execution.
-/// 
+///
 /// Uses direct borrowing from MonorepoProject components instead of Arc.
 pub struct PluginContext<'a> {
     /// Direct reference to configuration
@@ -145,12 +150,12 @@ pub struct PluginContext<'a> {
 
 impl<'a> PluginContext<'a> {
     /// Create a new plugin context with direct borrowing from project
-    /// 
+    ///
     /// Uses borrowing instead of Arc to eliminate Arc proliferation
     /// and work with Rust ownership principles.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `project` - Reference to monorepo project
     /// * `config` - Plugin configuration
     /// * `working_directory` - Working directory for plugin operations
@@ -332,11 +337,7 @@ impl PluginError {
     ///
     /// * `message` - Error message
     pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-            code: None,
-            context: HashMap::new(),
-        }
+        Self { message: message.into(), code: None, context: HashMap::new() }
     }
 
     /// Create a plugin error with code
@@ -346,11 +347,7 @@ impl PluginError {
     /// * `message` - Error message
     /// * `code` - Error code
     pub fn with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-            code: Some(code.into()),
-            context: HashMap::new(),
-        }
+        Self { message: message.into(), code: Some(code.into()), context: HashMap::new() }
     }
 }
 

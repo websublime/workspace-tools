@@ -3,17 +3,17 @@
 //! Follows direct borrowing patterns instead of trait objects.
 
 use super::{HookDefinition, HookInstaller, HookType, HookValidator};
-use crate::events::EventBus;
-use crate::core::MonorepoPackageInfo;
 use crate::config::MonorepoConfig;
+use crate::core::MonorepoPackageInfo;
+use crate::events::EventBus;
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::Arc;
 use sublime_git_tools::Repo;
 use sublime_standard_tools::filesystem::FileSystemManager;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::path::Path;
 
 /// Central manager for Git hook installation, execution, and validation
-/// 
+///
 /// Uses direct borrowing from MonorepoProject components instead of trait objects.
 /// This follows Rust ownership principles and eliminates Arc proliferation.
 pub struct HookManager<'a> {
@@ -25,7 +25,7 @@ pub struct HookManager<'a> {
 
     /// Registry of custom hook definitions
     pub(crate) custom_hooks: HashMap<HookType, HookDefinition>,
-    
+
     /// Default hook definitions (owned instead of static)
     pub(crate) default_hooks: HashMap<HookType, HookDefinition>,
 

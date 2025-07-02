@@ -3,8 +3,10 @@
 //! This module provides a comprehensive error hierarchy that integrates errors from all base crates
 //! (git, standard, and package tools) as well as monorepo-specific errors.
 
+use sublime_package_tools::errors::{
+    DependencyResolutionError, PackageError, PackageRegistryError, RegistryError, VersionError,
+};
 use thiserror::Error;
-use sublime_package_tools::errors::{VersionError, DependencyResolutionError, PackageRegistryError, RegistryError, PackageError};
 
 /// Main error type for monorepo tools operations
 #[derive(Error, Debug)]

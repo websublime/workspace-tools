@@ -1,10 +1,10 @@
 //! Configurable change detection engine
 
-use super::types::{
-    ChangeDetectionRules, ChangeTypeRule, FilePattern, PatternType, RuleConditions,
-    SignificanceRule, ChangeDetectionEngine,
-};
 use super::types::engine::CompiledPattern;
+use super::types::{
+    ChangeDetectionEngine, ChangeDetectionRules, ChangeTypeRule, FilePattern, PatternType,
+    RuleConditions, SignificanceRule,
+};
 use crate::core::MonorepoPackageInfo;
 use glob::Pattern;
 use log::warn;
@@ -56,12 +56,12 @@ impl ChangeDetectionEngine {
     /// Validate a single pattern
     fn validate_pattern(pattern: &FilePattern) -> Result<(), String> {
         match &pattern.pattern_type {
-            PatternType::Glob => Pattern::new(&pattern.pattern)
-                .map(|_| ())
-                .map_err(|e| format!("Invalid glob pattern '{pattern}': {e}", pattern = pattern.pattern)),
-            PatternType::Regex => Regex::new(&pattern.pattern)
-                .map(|_| ())
-                .map_err(|e| format!("Invalid regex pattern '{pattern}': {e}", pattern = pattern.pattern)),
+            PatternType::Glob => Pattern::new(&pattern.pattern).map(|_| ()).map_err(|e| {
+                format!("Invalid glob pattern '{pattern}': {e}", pattern = pattern.pattern)
+            }),
+            PatternType::Regex => Regex::new(&pattern.pattern).map(|_| ()).map_err(|e| {
+                format!("Invalid regex pattern '{pattern}': {e}", pattern = pattern.pattern)
+            }),
             _ => Ok(()), // Other pattern types don't need validation
         }
     }
@@ -69,8 +69,8 @@ impl ChangeDetectionEngine {
     /// Load rules from configuration file
     pub fn from_config_file(path: &std::path::Path) -> Result<Self, Box<dyn std::error::Error>> {
         let fs = sublime_standard_tools::filesystem::FileSystemManager::new();
-        let content = fs.read_file_string(path)
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+        let content =
+            fs.read_file_string(path).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         let rules: ChangeDetectionRules =
             if path.extension().and_then(|s| s.to_str()) == Some("yaml") {
                 serde_yaml::from_str(&content)?
@@ -338,6 +338,7 @@ impl ChangeDetectionEngine {
     }
 
     /// Evaluate additional rule conditions
+    #[allow(clippy::too_many_lines)]
     fn evaluate_conditions(conditions: &RuleConditions, files: &[&GitChangedFile]) -> bool {
         // Check file count conditions
         if let Some(min_files) = conditions.min_files {
@@ -355,14 +356,14 @@ impl ChangeDetectionEngine {
         // Check file size conditions (if available)
         if let Some(file_size) = &conditions.file_size {
             log::debug!("Evaluating file size conditions for {} files", files.len());
-            
+
             let mut total_size = 0u64;
             let mut largest_file_size = 0u64;
-            
+
             // Calculate file sizes for all changed files
             for file in files {
                 let file_path = Path::new(&file.path);
-                
+
                 // Only check size for existing files (not deleted ones)
                 if file_path.exists() {
                     match std::fs::metadata(file_path) {
@@ -379,71 +380,91 @@ impl ChangeDetectionEngine {
                     }
                 }
             }
-            
-            log::debug!("Total size: {} bytes, largest file: {} bytes", total_size, largest_file_size);
-            
+
+            log::debug!(
+                "Total size: {} bytes, largest file: {} bytes",
+                total_size,
+                largest_file_size
+            );
+
             // Check minimum total size constraint
             if let Some(min_total_size) = file_size.min_total_size {
                 if total_size < min_total_size {
-                    log::debug!("Total size {} < min required {}, condition failed", total_size, min_total_size);
+                    log::debug!(
+                        "Total size {} < min required {}, condition failed",
+                        total_size,
+                        min_total_size
+                    );
                     return false;
                 }
             }
-            
+
             // Check maximum total size constraint
             if let Some(max_total_size) = file_size.max_total_size {
                 if total_size > max_total_size {
-                    log::debug!("Total size {} > max allowed {}, condition failed", total_size, max_total_size);
+                    log::debug!(
+                        "Total size {} > max allowed {}, condition failed",
+                        total_size,
+                        max_total_size
+                    );
                     return false;
                 }
             }
-            
+
             // Check minimum largest file size constraint
             if let Some(min_largest_file) = file_size.min_largest_file {
                 if largest_file_size < min_largest_file {
-                    log::debug!("Largest file size {} < min required {}, condition failed", largest_file_size, min_largest_file);
+                    log::debug!(
+                        "Largest file size {} < min required {}, condition failed",
+                        largest_file_size,
+                        min_largest_file
+                    );
                     return false;
                 }
             }
-            
+
             log::debug!("All file size conditions passed");
         }
 
         // Custom script execution (if specified)
         if let Some(script) = &conditions.custom_script {
             log::debug!("Executing custom validation script: {}", script);
-            
+
             // Prepare environment variables for the script
             let changed_files = files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>().join(",");
             let file_count = files.len().to_string();
-            
+
             // Create and execute the command
-            let mut command = if script.contains(' ') || script.contains('|') || script.contains(';') {
-                // Complex script - run through shell
-                let shell = if cfg!(windows) { "cmd" } else { "sh" };
-                let shell_flag = if cfg!(windows) { "/C" } else { "-c" };
-                let mut cmd = std::process::Command::new(shell);
-                cmd.arg(shell_flag).arg(script);
-                cmd
-            } else {
-                // Simple command
-                std::process::Command::new(script)
-            };
-            
+            let mut command =
+                if script.contains(' ') || script.contains('|') || script.contains(';') {
+                    // Complex script - run through shell
+                    let shell = if cfg!(windows) { "cmd" } else { "sh" };
+                    let shell_flag = if cfg!(windows) { "/C" } else { "-c" };
+                    let mut cmd = std::process::Command::new(shell);
+                    cmd.arg(shell_flag).arg(script);
+                    cmd
+                } else {
+                    // Simple command
+                    std::process::Command::new(script)
+                };
+
             // Add environment variables
-            command
-                .env("CHANGED_FILES", &changed_files)
-                .env("FILE_COUNT", &file_count);
-            
+            command.env("CHANGED_FILES", &changed_files).env("FILE_COUNT", &file_count);
+
             // Execute the script
             match command.output() {
                 Ok(output) => {
                     if output.status.success() {
-                        log::debug!("Custom script succeeded: {}", String::from_utf8_lossy(&output.stdout));
+                        log::debug!(
+                            "Custom script succeeded: {}",
+                            String::from_utf8_lossy(&output.stdout)
+                        );
                     } else {
-                        log::debug!("Custom script failed with exit code {}: {}", 
+                        log::debug!(
+                            "Custom script failed with exit code {}: {}",
                             output.status.code().unwrap_or(-1),
-                            String::from_utf8_lossy(&output.stderr));
+                            String::from_utf8_lossy(&output.stderr)
+                        );
                         return false;
                     }
                 }
@@ -452,7 +473,7 @@ impl ChangeDetectionEngine {
                     return false;
                 }
             }
-            
+
             log::debug!("Custom script validation passed");
         }
 

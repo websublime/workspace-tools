@@ -1,10 +1,10 @@
 //! Monorepo tools type definitions
 
-use crate::analysis::MonorepoAnalyzer;
 use super::MonorepoProject;
+use crate::analysis::MonorepoAnalyzer;
 
 /// The main orchestrator for monorepo tools functionality
-/// 
+///
 /// Uses direct borrowing from MonorepoProject components instead of trait objects.
 /// This follows Rust ownership principles and eliminates Arc proliferation.
 pub struct MonorepoTools<'a> {

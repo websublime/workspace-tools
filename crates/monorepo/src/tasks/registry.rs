@@ -232,7 +232,10 @@ impl TaskRegistry {
 
         // Check for self-dependency
         if task.dependencies.contains(&task.name) {
-            return Err(Error::task(format!("Task cannot depend on itself: {task_name}", task_name = task.name)));
+            return Err(Error::task(format!(
+                "Task cannot depend on itself: {task_name}",
+                task_name = task.name
+            )));
         }
 
         // Validate commands

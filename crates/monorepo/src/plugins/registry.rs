@@ -3,7 +3,7 @@
 //! Provides a centralized registry for discovering, registering, and managing
 //! plugin metadata. Supports both built-in and external plugin discovery.
 
-use super::types::{PluginInfo, PluginCapabilities};
+use super::types::{PluginCapabilities, PluginInfo};
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -108,12 +108,7 @@ impl PluginRegistry {
     /// * `name` - Plugin name
     /// * `version` - Plugin version
     /// * `description` - Plugin description
-    pub fn register_builtin(
-        &mut self,
-        name: &str,
-        version: &str,
-        description: &str,
-    ) {
+    pub fn register_builtin(&mut self, name: &str, version: &str, description: &str) {
         let info = PluginInfo {
             name: name.to_string(),
             version: version.to_string(),
@@ -153,7 +148,10 @@ impl PluginRegistry {
         location: String,
     ) -> Result<()> {
         if self.plugins.contains_key(&info.name) {
-            return Err(Error::plugin(format!("Plugin {plugin_name} is already registered", plugin_name = info.name)));
+            return Err(Error::plugin(format!(
+                "Plugin {plugin_name} is already registered",
+                plugin_name = info.name
+            )));
         }
 
         let entry = PluginRegistryEntry {
@@ -197,10 +195,8 @@ impl PluginRegistry {
                 }
                 Err(e) => {
                     log::warn!("Failed to discover plugins in {}: {}", path.display(), e);
-                    unavailable_plugins.push((
-                        path.display().to_string(),
-                        format!("Discovery failed: {e}"),
-                    ));
+                    unavailable_plugins
+                        .push((path.display().to_string(), format!("Discovery failed: {e}")));
                 }
             }
         }
@@ -210,11 +206,7 @@ impl PluginRegistry {
 
         let total_found = available_plugins.len() + unavailable_plugins.len();
 
-        Ok(PluginDiscoveryResult {
-            total_found,
-            available_plugins,
-            unavailable_plugins,
-        })
+        Ok(PluginDiscoveryResult { total_found, available_plugins, unavailable_plugins })
     }
 
     /// Get plugin information by name
@@ -303,30 +295,44 @@ impl PluginRegistry {
         }
 
         if !path.is_dir() {
-            return Err(Error::plugin(format!("Path is not a directory: {path}", path = path.display())));
+            return Err(Error::plugin(format!(
+                "Path is not a directory: {path}",
+                path = path.display()
+            )));
         }
 
         // Read directory entries
-        let entries = std::fs::read_dir(path)
-            .map_err(|e| Error::plugin(format!("Cannot read directory {path}: {e}", path = path.display())))?;
+        let entries = std::fs::read_dir(path).map_err(|e| {
+            Error::plugin(format!("Cannot read directory {path}: {e}", path = path.display()))
+        })?;
 
         for entry in entries {
-            let entry = entry
-                .map_err(|e| Error::plugin(format!("Cannot read directory entry: {e}")))?;
-            
+            let entry =
+                entry.map_err(|e| Error::plugin(format!("Cannot read directory entry: {e}")))?;
+
             let entry_path = entry.path();
-            
+
             // Look for plugin manifest files
-            if entry_path.is_file() && entry_path.extension().and_then(|s| s.to_str()) == Some("json") {
+            if entry_path.is_file()
+                && entry_path.extension().and_then(|s| s.to_str()) == Some("json")
+            {
                 if let Some(file_name) = entry_path.file_stem().and_then(|s| s.to_str()) {
                     if file_name.ends_with(".plugin") {
                         match Self::load_plugin_manifest(&entry_path) {
                             Ok(info) => {
                                 plugins.push(info);
-                                log::debug!("Discovered external plugin: {} at {}", file_name, entry_path.display());
+                                log::debug!(
+                                    "Discovered external plugin: {} at {}",
+                                    file_name,
+                                    entry_path.display()
+                                );
                             }
                             Err(e) => {
-                                log::warn!("Failed to load plugin manifest {}: {}", entry_path.display(), e);
+                                log::warn!(
+                                    "Failed to load plugin manifest {}: {}",
+                                    entry_path.display(),
+                                    e
+                                );
                             }
                         }
                     }
@@ -355,7 +361,7 @@ impl PluginRegistry {
         unavailable: &mut Vec<(String, String)>,
     ) {
         let plugin_names: Vec<String> = self.plugins.keys().cloned().collect();
-        
+
         for name in plugin_names {
             if let Some(entry) = self.plugins.get_mut(&name) {
                 match &entry.source {
@@ -372,7 +378,10 @@ impl PluginRegistry {
                             entry.available = false;
                             unavailable.push((
                                 name.clone(),
-                                format!("Plugin file not found: {location}", location = entry.location),
+                                format!(
+                                    "Plugin file not found: {location}",
+                                    location = entry.location
+                                ),
                             ));
                         }
                     }
@@ -392,20 +401,20 @@ impl PluginRegistry {
 impl Default for PluginRegistry {
     fn default() -> Self {
         let mut registry = Self::new();
-        
+
         // Register built-in plugins
         registry.register_builtin(
             "analyzer",
             "1.0.0",
             "Built-in code analysis and dependency tracking plugin",
         );
-        
+
         registry.register_builtin(
             "generator",
             "1.0.0",
             "Built-in code generation and templating plugin",
         );
-        
+
         registry.register_builtin(
             "validator",
             "1.0.0",

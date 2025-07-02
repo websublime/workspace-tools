@@ -20,10 +20,10 @@ use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
 ///
 /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let fs_service = FileSystemService::new("/path/to/monorepo")?;
-/// 
+///
 /// // Read a file relative to monorepo root
 /// let content = fs_service.read_file_string("package.json")?;
-/// 
+///
 /// // Check if a path exists
 /// if fs_service.exists("src/main.rs") {
 ///     println!("Main source file found");
@@ -35,7 +35,7 @@ use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
 pub(crate) struct FileSystemService {
     /// Underlying file system manager
     file_system: FileSystemManager,
-    
+
     /// Root path of the monorepo
     root_path: PathBuf,
 }
@@ -63,23 +63,20 @@ impl FileSystemService {
     /// - File system manager cannot be created
     pub fn new<P: AsRef<Path>>(root_path: P) -> Result<Self> {
         let root_path = root_path.as_ref().to_path_buf();
-        
+
         // Ensure root path exists
         if !root_path.exists() {
             return Err(crate::error::Error::filesystem(format!(
-                "Monorepo root path does not exist: {}", 
+                "Monorepo root path does not exist: {}",
                 root_path.display()
             )));
         }
-        
+
         let file_system = FileSystemManager::new();
-        
-        Ok(Self {
-            file_system,
-            root_path,
-        })
+
+        Ok(Self { file_system, root_path })
     }
-    
+
     /// Get the underlying file system manager
     ///
     /// Provides access to the underlying FileSystemManager for operations
@@ -91,7 +88,7 @@ impl FileSystemService {
     pub fn manager(&self) -> &FileSystemManager {
         &self.file_system
     }
-    
+
     /// Get the root path
     ///
     /// Returns the root path of the monorepo that this service manages.
@@ -102,7 +99,7 @@ impl FileSystemService {
     pub fn root_path(&self) -> &Path {
         &self.root_path
     }
-    
+
     /// Resolve a relative path to absolute path
     ///
     /// Converts a path relative to the monorepo root into an absolute path.
@@ -123,7 +120,7 @@ impl FileSystemService {
             self.root_path.join(path)
         }
     }
-    
+
     /// Check if a path exists
     ///
     /// Checks whether a file or directory exists at the specified path
@@ -139,7 +136,7 @@ impl FileSystemService {
     pub fn exists<P: AsRef<Path>>(&self, relative_path: P) -> bool {
         self.resolve_path(relative_path).exists()
     }
-    
+
     /// Check if a path is a directory
     ///
     /// Checks whether the specified path is a directory.
@@ -154,7 +151,7 @@ impl FileSystemService {
     pub fn is_dir<P: AsRef<Path>>(&self, relative_path: P) -> bool {
         self.resolve_path(relative_path).is_dir()
     }
-    
+
     /// Check if a path is a file
     ///
     /// Checks whether the specified path is a file.
@@ -169,7 +166,7 @@ impl FileSystemService {
     pub fn is_file<P: AsRef<Path>>(&self, relative_path: P) -> bool {
         self.resolve_path(relative_path).is_file()
     }
-    
+
     /// Read file as string
     ///
     /// Reads the entire contents of a file as a UTF-8 string.
@@ -190,14 +187,15 @@ impl FileSystemService {
     /// - File contents are not valid UTF-8
     pub fn read_file_string<P: AsRef<Path>>(&self, relative_path: P) -> Result<String> {
         let absolute_path = self.resolve_path(relative_path);
-        self.file_system.read_file_string(&absolute_path)
-            .map_err(|e| crate::error::Error::filesystem(format!(
-                "Failed to read file {}: {}", 
-                absolute_path.display(), 
+        self.file_system.read_file_string(&absolute_path).map_err(|e| {
+            crate::error::Error::filesystem(format!(
+                "Failed to read file {}: {}",
+                absolute_path.display(),
                 e
-            )))
+            ))
+        })
     }
-    
+
     /// Read file as bytes
     ///
     /// Reads the entire contents of a file as raw bytes.
@@ -217,14 +215,15 @@ impl FileSystemService {
     /// - File cannot be read
     pub fn read_file<P: AsRef<Path>>(&self, relative_path: P) -> Result<Vec<u8>> {
         let absolute_path = self.resolve_path(relative_path);
-        self.file_system.read_file(&absolute_path)
-            .map_err(|e| crate::error::Error::filesystem(format!(
-                "Failed to read file {}: {}", 
-                absolute_path.display(), 
+        self.file_system.read_file(&absolute_path).map_err(|e| {
+            crate::error::Error::filesystem(format!(
+                "Failed to read file {}: {}",
+                absolute_path.display(),
                 e
-            )))
+            ))
+        })
     }
-    
+
     /// Write string to file
     ///
     /// Writes a string to the specified file, creating directories as needed.
@@ -246,14 +245,15 @@ impl FileSystemService {
     /// - Insufficient permissions
     pub fn write_file_string<P: AsRef<Path>>(&self, relative_path: P, content: &str) -> Result<()> {
         let absolute_path = self.resolve_path(relative_path);
-        self.file_system.write_file_string(&absolute_path, content)
-            .map_err(|e| crate::error::Error::filesystem(format!(
-                "Failed to write file {}: {}", 
-                absolute_path.display(), 
+        self.file_system.write_file_string(&absolute_path, content).map_err(|e| {
+            crate::error::Error::filesystem(format!(
+                "Failed to write file {}: {}",
+                absolute_path.display(),
                 e
-            )))
+            ))
+        })
     }
-    
+
     /// Write bytes to file
     ///
     /// Writes raw bytes to the specified file, creating directories as needed.
@@ -275,14 +275,15 @@ impl FileSystemService {
     /// - Insufficient permissions
     pub fn write_file<P: AsRef<Path>>(&self, relative_path: P, content: &[u8]) -> Result<()> {
         let absolute_path = self.resolve_path(relative_path);
-        self.file_system.write_file(&absolute_path, content)
-            .map_err(|e| crate::error::Error::filesystem(format!(
-                "Failed to write file {}: {}", 
-                absolute_path.display(), 
+        self.file_system.write_file(&absolute_path, content).map_err(|e| {
+            crate::error::Error::filesystem(format!(
+                "Failed to write file {}: {}",
+                absolute_path.display(),
                 e
-            )))
+            ))
+        })
     }
-    
+
     /// Create directory
     ///
     /// Creates a directory and all necessary parent directories.
@@ -302,14 +303,15 @@ impl FileSystemService {
     /// - Insufficient permissions
     pub fn create_dir_all<P: AsRef<Path>>(&self, relative_path: P) -> Result<()> {
         let absolute_path = self.resolve_path(relative_path);
-        self.file_system.create_dir_all(&absolute_path)
-            .map_err(|e| crate::error::Error::filesystem(format!(
-                "Failed to create directory {}: {}", 
-                absolute_path.display(), 
+        self.file_system.create_dir_all(&absolute_path).map_err(|e| {
+            crate::error::Error::filesystem(format!(
+                "Failed to create directory {}: {}",
+                absolute_path.display(),
                 e
-            )))
+            ))
+        })
     }
-    
+
     /// List directory contents
     ///
     /// Lists all files and directories in the specified directory.
@@ -330,24 +332,27 @@ impl FileSystemService {
     /// - Insufficient permissions
     pub fn list_directory<P: AsRef<Path>>(&self, relative_path: P) -> Result<Vec<PathBuf>> {
         let absolute_path = self.resolve_path(relative_path);
-        
-        let entries = std::fs::read_dir(&absolute_path)
-            .map_err(|e| crate::error::Error::filesystem(format!(
-                "Failed to read directory {}: {}", 
-                absolute_path.display(), 
+
+        let entries = std::fs::read_dir(&absolute_path).map_err(|e| {
+            crate::error::Error::filesystem(format!(
+                "Failed to read directory {}: {}",
+                absolute_path.display(),
                 e
-            )))?;
-        
+            ))
+        })?;
+
         let mut paths = Vec::new();
         for entry in entries {
-            let entry = entry.map_err(|e| crate::error::Error::filesystem(format!(
-                "Failed to read directory entry in {}: {}", 
-                absolute_path.display(), 
-                e
-            )))?;
+            let entry = entry.map_err(|e| {
+                crate::error::Error::filesystem(format!(
+                    "Failed to read directory entry in {}: {}",
+                    absolute_path.display(),
+                    e
+                ))
+            })?;
             paths.push(entry.path());
         }
-        
+
         Ok(paths)
     }
 }

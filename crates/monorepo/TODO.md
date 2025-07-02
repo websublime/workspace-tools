@@ -188,17 +188,17 @@
 **Validação**: `cargo clippy -- -D warnings` = sucesso
 
 ### Tarefas dos erros encontrados:
-- [ ] Fix `too_many_arguments` (3 ocorrências):
-  - [ ] `workflows/development.rs:43` - refatorar para struct de configuração
-  - [ ] `workflows/integration.rs:38` - refatorar para struct de configuração
-  - [ ] `workflows/release.rs:63` - refatorar para struct de configuração
-- [ ] Fix `needless_borrow`:
-  - [ ] `workflows/release.rs:255` - remover `&` desnecessário
-- [ ] Fix `explicit_auto_deref`:
-  - [ ] `workflows/release.rs:530` - simplificar deref
-- [ ] Fix `collapsible_match` - simplificar matches aninhados onde indicado
-- [ ] Executar `cargo fmt` - formatar código
-- [ ] Executar `cargo clippy -- -D warnings` - DEVE PASSAR SEM ERROS
+- [x] Fix `too_many_arguments` (3 ocorrências):
+  - [x] `workflows/development.rs:43` - refatorar para struct de configuração
+  - [x] `workflows/integration.rs:38` - refatorar para struct de configuração
+  - [x] `workflows/release.rs:63` - refatorar para struct de configuração
+- [x] Fix `needless_borrow`:
+  - [x] `workflows/release.rs:255` - remover `&` desnecessário
+- [x] Fix `explicit_auto_deref`:
+  - [x] `workflows/release.rs:530` - simplificar deref
+- [x] Fix `collapsible_match` - simplificar matches aninhados onde indicado
+- [x] Executar `cargo fmt` - formatar código
+- [x] Executar `cargo clippy -- -D warnings` - DEVE PASSAR SEM ERROS
 
 ---
 
@@ -208,20 +208,20 @@
 **Validação**: Todos os comandos passam
 
 ### Checklist Final:
-- [ ] `cargo build --release` - compila sem warnings
-- [ ] `cargo test` - todos os testes passam
-- [ ] `cargo clippy -- -D warnings` - zero warnings/erros
-- [ ] `cargo doc --no-deps` - gera documentação sem warnings
-- [ ] Executar comandos de validação arquitetural:
+- [x] `cargo build --release` - compila sem warnings
+- [x] `cargo test` - todos os testes passam
+- [x] `cargo clippy -- -D warnings` - zero warnings/erros
+- [x] `cargo doc --no-deps` - gera documentação sem warnings
+- [x] Executar comandos de validação arquitetural:
   ```bash
   grep -r "Arc<MonorepoProject>" src/          # deve retornar 0
   grep -r "#\[allow(clippy::unused_async)\]" src/  # deve retornar 0
   grep -r "FASE 2 ASYNC ELIMINATION" src/      # deve retornar 0
   grep -r "Box<dyn.*Provider>" src/            # deve retornar 0
   ```
-- [ ] Confirmar que APIs públicas em `lib.rs` estão corretas
-- [ ] Confirmar que não há campos não utilizados (dead code)
-- [ ] Confirmar que há apenas uma versão de cada método (sem duplicatas)
+- [x] Confirmar que APIs públicas em `lib.rs` estão corretas
+- [x] Confirmar que não há campos não utilizados (dead code)
+- [x] Confirmar que há apenas uma versão de cada método (sem duplicatas)
 
 ---
 

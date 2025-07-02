@@ -92,16 +92,22 @@
 //! # }
 //! ```
 
-pub mod types;
-pub mod storage;
 pub mod manager;
-
+pub mod storage;
+pub mod types;
 
 // Explicit re-exports from types module
 pub use types::{
     // Core types
-    Changeset, ChangesetStatus, ChangesetSpec, ChangesetApplication,
-    ChangesetFilter, ValidationResult, DeploymentResult, EnvironmentDeploymentResult,
+    Changeset,
+    ChangesetApplication,
+    ChangesetFilter,
     // Implementation
-    ChangesetManager, ChangesetStorage,
+    ChangesetManager,
+    ChangesetSpec,
+    ChangesetStatus,
+    ChangesetStorage,
+    DeploymentResult,
+    EnvironmentDeploymentResult,
+    ValidationResult,
 };

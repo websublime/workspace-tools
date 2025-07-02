@@ -14,34 +14,34 @@ use std::time::Duration;
 pub struct HookExecutionResult {
     /// The hook type that was executed
     pub hook_type: super::HookType,
-    
+
     /// Overall status of the hook execution
     pub status: HookStatus,
-    
+
     /// Duration of the hook execution
     pub duration: Duration,
-    
+
     /// Standard output from the hook
     pub stdout: String,
-    
+
     /// Standard error from the hook
     pub stderr: String,
-    
+
     /// Exit code of the hook execution
     pub exit_code: Option<i32>,
-    
+
     /// Detailed error information if the hook failed
     pub error: Option<HookError>,
-    
+
     /// Validation results from pre-commit/pre-push checks
     pub validation_result: Option<HookValidationResult>,
-    
+
     /// Timestamp when the hook started
     pub started_at: DateTime<Utc>,
-    
+
     /// Timestamp when the hook completed
     pub completed_at: DateTime<Utc>,
-    
+
     /// Additional metadata about the execution
     pub metadata: HashMap<String, String>,
 }

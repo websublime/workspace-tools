@@ -28,16 +28,16 @@ pub enum EventPriority {
 pub struct EventContext {
     /// Unique event identifier
     pub event_id: Uuid,
-    
+
     /// Timestamp when event was created
     pub timestamp: chrono::DateTime<chrono::Utc>,
-    
+
     /// Priority of the event
     pub priority: EventPriority,
-    
+
     /// Source component that emitted the event
     pub source: String,
-    
+
     /// Additional metadata
     pub metadata: HashMap<String, serde_json::Value>,
 }
@@ -53,14 +53,14 @@ impl EventContext {
             metadata: HashMap::new(),
         }
     }
-    
+
     /// Set event priority
     #[must_use]
     pub fn with_priority(mut self, priority: EventPriority) -> Self {
         self.priority = priority;
         self
     }
-    
+
     /// Add metadata
     #[must_use]
     pub fn with_metadata(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
@@ -74,22 +74,22 @@ impl EventContext {
 pub enum MonorepoEvent {
     /// Configuration-related events
     Config(ConfigEvent),
-    
+
     /// Task execution events
     Task(TaskEvent),
-    
+
     /// Changeset management events
     Changeset(ChangesetEvent),
-    
+
     /// Git hook events
     Hook(HookEvent),
-    
+
     /// Package management events
     Package(PackageEvent),
-    
+
     /// File system events
     FileSystem(FileSystemEvent),
-    
+
     /// Workflow events
     Workflow(WorkflowEvent),
 }
@@ -106,7 +106,7 @@ pub enum ConfigEvent {
         /// Map of changed configuration values
         changes: HashMap<String, serde_json::Value>,
     },
-    
+
     /// Configuration was reloaded from file
     Reloaded {
         /// Event execution context with metadata and timing
@@ -114,7 +114,7 @@ pub enum ConfigEvent {
         /// Path to the configuration file that was reloaded
         config_path: PathBuf,
     },
-    
+
     /// Configuration validation failed
     ValidationFailed {
         /// Event execution context with metadata and timing
@@ -136,7 +136,7 @@ pub enum TaskEvent {
         /// List of packages affected by this task
         packages: Vec<String>,
     },
-    
+
     /// Task execution completed
     Completed {
         /// Event execution context with metadata and timing
@@ -144,7 +144,7 @@ pub enum TaskEvent {
         /// Result of the task execution
         result: Box<TaskExecutionResult>,
     },
-    
+
     /// Task execution failed
     Failed {
         /// Event execution context with metadata and timing
@@ -154,7 +154,7 @@ pub enum TaskEvent {
         /// Error message describing the failure
         error: String,
     },
-    
+
     /// Request to execute task for validation
     ValidationRequested {
         /// Event execution context with metadata and timing
@@ -176,7 +176,7 @@ pub enum ChangesetEvent {
         /// The created changeset
         changeset: Changeset,
     },
-    
+
     /// Changeset creation was requested
     CreationRequested {
         /// Event execution context with metadata and timing
@@ -186,7 +186,7 @@ pub enum ChangesetEvent {
         /// Reason for requesting changeset creation
         reason: String,
     },
-    
+
     /// Changeset validation completed
     Validated {
         /// Event execution context with metadata and timing
@@ -198,7 +198,7 @@ pub enum ChangesetEvent {
         /// List of validation errors if any
         errors: Vec<String>,
     },
-    
+
     /// Changesets were applied/consumed
     Applied {
         /// Event execution context with metadata and timing
@@ -222,7 +222,7 @@ pub enum HookEvent {
         /// List of packages affected by the hook execution
         affected_packages: Vec<String>,
     },
-    
+
     /// Hook execution completed
     Completed {
         /// Event execution context with metadata and timing
@@ -234,7 +234,7 @@ pub enum HookEvent {
         /// Optional message from hook execution
         message: Option<String>,
     },
-    
+
     /// Hook installation completed
     Installed {
         /// Event execution context with metadata and timing
@@ -242,7 +242,7 @@ pub enum HookEvent {
         /// List of hook types that were installed
         hook_types: Vec<String>,
     },
-    
+
     /// Hook validation failed
     ValidationFailed {
         /// Event execution context with metadata and timing
@@ -268,7 +268,7 @@ pub enum PackageEvent {
         /// New version of the package
         new_version: String,
     },
-    
+
     /// Package dependencies changed
     DependenciesChanged {
         /// Event execution context with metadata and timing
@@ -282,7 +282,7 @@ pub enum PackageEvent {
         /// List of updated dependencies
         updated: Vec<String>,
     },
-    
+
     /// Package was published
     Published {
         /// Event execution context with metadata and timing
@@ -294,7 +294,7 @@ pub enum PackageEvent {
         /// Registry where the package was published
         registry: String,
     },
-    
+
     /// Package discovery completed
     DiscoveryCompleted {
         /// Event execution context with metadata and timing
@@ -318,7 +318,7 @@ pub enum FileSystemEvent {
         /// List of packages affected by the file changes
         affected_packages: Vec<String>,
     },
-    
+
     /// Workspace structure changed
     WorkspaceChanged {
         /// Event execution context with metadata and timing
@@ -328,7 +328,7 @@ pub enum FileSystemEvent {
         /// List of packages that were removed from the workspace
         removed_packages: Vec<String>,
     },
-    
+
     /// Configuration file changed
     ConfigFileChanged {
         /// Event execution context with metadata and timing
@@ -350,7 +350,7 @@ pub enum WorkflowEvent {
         /// List of packages targeted by the workflow
         target_packages: Vec<String>,
     },
-    
+
     /// Workflow completed
     Completed {
         /// Event execution context with metadata and timing
@@ -362,7 +362,7 @@ pub enum WorkflowEvent {
         /// Results and outputs from the workflow execution
         results: HashMap<String, serde_json::Value>,
     },
-    
+
     /// Workflow stage completed
     StageCompleted {
         /// Event execution context with metadata and timing
@@ -382,53 +382,53 @@ impl MonorepoEvent {
     pub fn context(&self) -> &EventContext {
         match self {
             Self::Config(event) => match event {
-                ConfigEvent::Updated { context, .. } |
-                ConfigEvent::Reloaded { context, .. } |
-                ConfigEvent::ValidationFailed { context, .. } => context,
+                ConfigEvent::Updated { context, .. }
+                | ConfigEvent::Reloaded { context, .. }
+                | ConfigEvent::ValidationFailed { context, .. } => context,
             },
             Self::Task(event) => match event {
-                TaskEvent::Started { context, .. } |
-                TaskEvent::Completed { context, .. } |
-                TaskEvent::Failed { context, .. } |
-                TaskEvent::ValidationRequested { context, .. } => context,
+                TaskEvent::Started { context, .. }
+                | TaskEvent::Completed { context, .. }
+                | TaskEvent::Failed { context, .. }
+                | TaskEvent::ValidationRequested { context, .. } => context,
             },
             Self::Changeset(event) => match event {
-                ChangesetEvent::Created { context, .. } |
-                ChangesetEvent::CreationRequested { context, .. } |
-                ChangesetEvent::Validated { context, .. } |
-                ChangesetEvent::Applied { context, .. } => context,
+                ChangesetEvent::Created { context, .. }
+                | ChangesetEvent::CreationRequested { context, .. }
+                | ChangesetEvent::Validated { context, .. }
+                | ChangesetEvent::Applied { context, .. } => context,
             },
             Self::Hook(event) => match event {
-                HookEvent::Started { context, .. } |
-                HookEvent::Completed { context, .. } |
-                HookEvent::Installed { context, .. } |
-                HookEvent::ValidationFailed { context, .. } => context,
+                HookEvent::Started { context, .. }
+                | HookEvent::Completed { context, .. }
+                | HookEvent::Installed { context, .. }
+                | HookEvent::ValidationFailed { context, .. } => context,
             },
             Self::Package(event) => match event {
-                PackageEvent::Updated { context, .. } |
-                PackageEvent::DependenciesChanged { context, .. } |
-                PackageEvent::Published { context, .. } |
-                PackageEvent::DiscoveryCompleted { context, .. } => context,
+                PackageEvent::Updated { context, .. }
+                | PackageEvent::DependenciesChanged { context, .. }
+                | PackageEvent::Published { context, .. }
+                | PackageEvent::DiscoveryCompleted { context, .. } => context,
             },
             Self::FileSystem(event) => match event {
-                FileSystemEvent::FilesChanged { context, .. } |
-                FileSystemEvent::WorkspaceChanged { context, .. } |
-                FileSystemEvent::ConfigFileChanged { context, .. } => context,
+                FileSystemEvent::FilesChanged { context, .. }
+                | FileSystemEvent::WorkspaceChanged { context, .. }
+                | FileSystemEvent::ConfigFileChanged { context, .. } => context,
             },
             Self::Workflow(event) => match event {
-                WorkflowEvent::Started { context, .. } |
-                WorkflowEvent::Completed { context, .. } |
-                WorkflowEvent::StageCompleted { context, .. } => context,
+                WorkflowEvent::Started { context, .. }
+                | WorkflowEvent::Completed { context, .. }
+                | WorkflowEvent::StageCompleted { context, .. } => context,
             },
         }
     }
-    
+
     /// Get the event priority
     #[must_use]
     pub fn priority(&self) -> EventPriority {
         self.context().priority
     }
-    
+
     /// Get the event source component
     #[must_use]
     pub fn source(&self) -> &str {

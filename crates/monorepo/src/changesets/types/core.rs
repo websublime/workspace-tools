@@ -38,31 +38,31 @@ use crate::VersionBumpType;
 pub struct Changeset {
     /// Unique identifier for this changeset
     pub id: String,
-    
+
     /// Package name that this changeset affects
     pub package: String,
-    
+
     /// Type of version bump for this change
     pub version_bump: VersionBumpType,
-    
+
     /// Human-readable description of the changes
     pub description: String,
-    
+
     /// Git branch where this changeset was created
     pub branch: String,
-    
+
     /// Environments where this change should be deployed during development
     pub development_environments: Vec<Environment>,
-    
+
     /// Whether this changeset should be deployed to production
     pub production_deployment: bool,
-    
+
     /// When this changeset was created
     pub created_at: DateTime<Utc>,
-    
+
     /// Author of this changeset
     pub author: String,
-    
+
     /// Current status of this changeset
     pub status: ChangesetStatus,
 }
@@ -74,24 +74,24 @@ pub struct Changeset {
 pub enum ChangesetStatus {
     /// Changeset is created but not yet deployed anywhere
     Pending,
-    
+
     /// Changeset has been deployed to some but not all environments
     PartiallyDeployed {
         /// Environments where this changeset has been deployed
         environments: Vec<Environment>,
     },
-    
+
     /// Changeset has been deployed to all specified environments
     FullyDeployed {
         /// When the final deployment completed
         deployed_at: DateTime<Utc>,
     },
-    
+
     /// Changeset has been merged and finalized
     Merged {
         /// When the changeset was merged
         merged_at: DateTime<Utc>,
-        
+
         /// Final version that was applied
         final_version: String,
     },
@@ -119,19 +119,19 @@ pub enum ChangesetStatus {
 pub struct ChangesetSpec {
     /// Package name that this changeset will affect
     pub package: String,
-    
+
     /// Type of version bump for this change
     pub version_bump: VersionBumpType,
-    
+
     /// Human-readable description of the changes
     pub description: String,
-    
+
     /// Environments where this change should be deployed during development
     pub development_environments: Vec<Environment>,
-    
+
     /// Whether this changeset should be deployed to production
     pub production_deployment: bool,
-    
+
     /// Optional author (if not provided, will be inferred from Git config)
     pub author: Option<String>,
 }
@@ -144,19 +144,19 @@ pub struct ChangesetSpec {
 pub struct ChangesetApplication {
     /// ID of the changeset that was applied
     pub changeset_id: String,
-    
+
     /// Package that was affected
     pub package: String,
-    
+
     /// Version before the changeset was applied
     pub old_version: String,
-    
+
     /// Version after the changeset was applied
     pub new_version: String,
-    
+
     /// Environments where this changeset was deployed
     pub environments_deployed: Vec<Environment>,
-    
+
     /// Whether the application was successful
     pub success: bool,
 }
@@ -183,16 +183,16 @@ pub struct ChangesetApplication {
 pub struct ChangesetFilter {
     /// Filter by package name
     pub package: Option<String>,
-    
+
     /// Filter by changeset status
     pub status: Option<ChangesetStatus>,
-    
+
     /// Filter by environment (changesets that deploy to this environment)
     pub environment: Option<Environment>,
-    
+
     /// Filter by Git branch
     pub branch: Option<String>,
-    
+
     /// Filter by author
     pub author: Option<String>,
 }
@@ -204,13 +204,13 @@ pub struct ChangesetFilter {
 pub struct ValidationResult {
     /// Whether the changeset is valid
     pub is_valid: bool,
-    
+
     /// Validation errors that prevent the changeset from being used
     pub errors: Vec<String>,
-    
+
     /// Validation warnings that should be addressed but don't prevent usage
     pub warnings: Vec<String>,
-    
+
     /// Additional metadata from validation
     pub metadata: HashMap<String, String>,
 }
@@ -222,13 +222,13 @@ pub struct ValidationResult {
 pub struct DeploymentResult {
     /// Changeset that was deployed
     pub changeset_id: String,
-    
+
     /// Overall success of the deployment
     pub success: bool,
-    
+
     /// Results for each environment
     pub environment_results: HashMap<Environment, EnvironmentDeploymentResult>,
-    
+
     /// Overall deployment duration
     pub duration: std::time::Duration,
 }
@@ -238,16 +238,16 @@ pub struct DeploymentResult {
 pub struct EnvironmentDeploymentResult {
     /// Whether deployment to this environment was successful
     pub success: bool,
-    
+
     /// Error message if deployment failed
     pub error: Option<String>,
-    
+
     /// When deployment started
     pub started_at: DateTime<Utc>,
-    
+
     /// When deployment completed (successfully or with failure)
     pub completed_at: Option<DateTime<Utc>>,
-    
+
     /// Any metadata from the deployment process
     pub metadata: HashMap<String, String>,
 }

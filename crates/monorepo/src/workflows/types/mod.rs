@@ -9,13 +9,13 @@
 //! - `status`: Status tracking and progress monitoring types
 //! - `data`: Simple data structures used within workflows
 
-mod options;
-mod results;
-mod status;
 mod data;
 mod development;
-mod release;
 mod integration;
+mod options;
+mod release;
+mod results;
+mod status;
 
 // Explicit exports to avoid wildcard re-exports
 
@@ -24,18 +24,17 @@ pub use options::ReleaseOptions;
 
 // Results types
 pub use results::{
-    ReleaseResult, DevelopmentResult, ChangeAnalysisResult,
-    AffectedPackageInfo, VersionRecommendation, VersioningWorkflowResult,
-    ImpactLevel, ConfidenceLevel, ChangeAnalysisWorkflowResult
+    AffectedPackageInfo, ChangeAnalysisResult, ChangeAnalysisWorkflowResult, ConfidenceLevel,
+    DevelopmentResult, ImpactLevel, ReleaseResult, VersionRecommendation, VersioningWorkflowResult,
 };
 
 // Status types
-pub use status::{WorkflowStep, WorkflowProgress, WorkflowStatus, SubStep};
+pub use status::{SubStep, WorkflowProgress, WorkflowStatus, WorkflowStep};
 
 // Data types
 pub use data::PackageChangeFacts;
 
 // Implementation structs
 pub use development::DevelopmentWorkflow;
-pub use release::ReleaseWorkflow;
 pub use integration::ChangesetHookIntegration;
+pub use release::ReleaseWorkflow;

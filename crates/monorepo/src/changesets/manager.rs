@@ -8,25 +8,24 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use super::types::{
-    Changeset, ChangesetApplication, ChangesetFilter, ChangesetSpec, ChangesetStatus,
-    DeploymentResult, EnvironmentDeploymentResult, ValidationResult,
-    ChangesetManager, ChangesetStorage,
+    Changeset, ChangesetApplication, ChangesetFilter, ChangesetManager, ChangesetSpec,
+    ChangesetStatus, ChangesetStorage, DeploymentResult, EnvironmentDeploymentResult,
+    ValidationResult,
 };
-use sublime_standard_tools::filesystem::FileSystem;
 use crate::config::types::Environment;
 use crate::error::Error;
 use crate::tasks::TaskManager;
 use crate::VersionBumpType;
-
+use sublime_standard_tools::filesystem::FileSystem;
 
 impl<'a> ChangesetManager<'a> {
     /// Creates a new changeset manager with direct borrowing from project
-    /// 
+    ///
     /// Uses borrowing instead of trait objects to eliminate Arc proliferation
     /// and work with Rust ownership principles.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `storage` - Changeset storage for persistence
     /// * `task_manager` - Task manager for executing deployment tasks
     /// * `config` - Direct reference to configuration
@@ -34,9 +33,9 @@ impl<'a> ChangesetManager<'a> {
     /// * `packages` - Direct reference to packages
     /// * `repository` - Direct reference to git repository
     /// * `root_path` - Direct reference to root path
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A new changeset manager instance
     pub fn new(
         storage: ChangesetStorage<'a>,
@@ -47,15 +46,7 @@ impl<'a> ChangesetManager<'a> {
         repository: &'a sublime_git_tools::Repo,
         root_path: &'a std::path::Path,
     ) -> Self {
-        Self {
-            storage,
-            task_manager,
-            config,
-            file_system,
-            packages,
-            repository,
-            root_path,
-        }
+        Self { storage, task_manager, config, file_system, packages, repository, root_path }
     }
 
     /// Creates a new changeset manager from project (convenience method)
@@ -71,14 +62,16 @@ impl<'a> ChangesetManager<'a> {
     /// # Errors
     ///
     /// Returns an error if any of the required components cannot be initialized.
-    pub fn from_project(project: &'a crate::core::MonorepoProject) -> Result<Self, crate::error::Error> {
+    pub fn from_project(
+        project: &'a crate::core::MonorepoProject,
+    ) -> Result<Self, crate::error::Error> {
         let task_manager = crate::tasks::TaskManager::new(project)?;
         let storage = crate::changesets::ChangesetStorage::new(
             project.config.changesets.clone(),
             &project.file_system,
             &project.root_path,
         );
-        
+
         Ok(Self::new(
             storage,
             task_manager,
@@ -356,7 +349,10 @@ impl<'a> ChangesetManager<'a> {
                     }
                 }
             } else {
-                errors.push(format!("Package '{package}' not found in project", package = changeset.package));
+                errors.push(format!(
+                    "Package '{package}' not found in project",
+                    package = changeset.package
+                ));
             }
         }
 
@@ -563,13 +559,22 @@ impl<'a> ChangesetManager<'a> {
 
         // For now, just validate format - in a real implementation would check semver constraints
         let major: u32 = version_parts[0].parse().map_err(|_| {
-            Error::changeset(format!("Invalid major version in {package}: {version}", version = version_parts[0]))
+            Error::changeset(format!(
+                "Invalid major version in {package}: {version}",
+                version = version_parts[0]
+            ))
         })?;
         let minor: u32 = version_parts[1].parse().map_err(|_| {
-            Error::changeset(format!("Invalid minor version in {package}: {version}", version = version_parts[1]))
+            Error::changeset(format!(
+                "Invalid minor version in {package}: {version}",
+                version = version_parts[1]
+            ))
         })?;
         let patch: u32 = version_parts[2].parse().map_err(|_| {
-            Error::changeset(format!("Invalid patch version in {package}: {version}", version = version_parts[2]))
+            Error::changeset(format!(
+                "Invalid patch version in {package}: {version}",
+                version = version_parts[2]
+            ))
         })?;
 
         // Validate bump type makes sense
@@ -606,10 +611,9 @@ impl<'a> ChangesetManager<'a> {
 
         // Read package.json
         let package_json_path = package_info.path().join("package.json");
-        let content =
-            self.file_system.read_file_string(&package_json_path).map_err(|e| {
-                Error::changeset(format!("Failed to read package.json for {package}: {e}"))
-            })?;
+        let content = self.file_system.read_file_string(&package_json_path).map_err(|e| {
+            Error::changeset(format!("Failed to read package.json for {package}: {e}"))
+        })?;
 
         // Parse JSON to extract version
         let json: serde_json::Value = serde_json::from_str(&content)
@@ -778,13 +782,22 @@ impl<'a> ChangesetManager<'a> {
         }
 
         let major: u32 = version_parts[0].parse().map_err(|_| {
-            Error::changeset(format!("Invalid major version: {version}", version = version_parts[0]))
+            Error::changeset(format!(
+                "Invalid major version: {version}",
+                version = version_parts[0]
+            ))
         })?;
         let minor: u32 = version_parts[1].parse().map_err(|_| {
-            Error::changeset(format!("Invalid minor version: {version}", version = version_parts[1]))
+            Error::changeset(format!(
+                "Invalid minor version: {version}",
+                version = version_parts[1]
+            ))
         })?;
         let patch: u32 = version_parts[2].parse().map_err(|_| {
-            Error::changeset(format!("Invalid patch version: {version}", version = version_parts[2]))
+            Error::changeset(format!(
+                "Invalid patch version: {version}",
+                version = version_parts[2]
+            ))
         })?;
 
         let (new_major, new_minor, new_patch) = match version_bump {
@@ -812,10 +825,9 @@ impl<'a> ChangesetManager<'a> {
 
         // Read package.json
         let package_json_path = package_info.path().join("package.json");
-        let content =
-            self.file_system.read_file_string(&package_json_path).map_err(|e| {
-                Error::changeset(format!("Failed to read package.json for {package}: {e}"))
-            })?;
+        let content = self.file_system.read_file_string(&package_json_path).map_err(|e| {
+            Error::changeset(format!("Failed to read package.json for {package}: {e}"))
+        })?;
 
         // Parse JSON
         let mut json: serde_json::Value = serde_json::from_str(&content)
@@ -829,11 +841,9 @@ impl<'a> ChangesetManager<'a> {
             Error::changeset(format!("Failed to serialize updated package.json: {e}"))
         })?;
 
-        self.file_system
-            .write_file_string(&package_json_path, &updated_content)
-            .map_err(|e| {
-                Error::changeset(format!("Failed to write updated package.json for {package}: {e}"))
-            })?;
+        self.file_system.write_file_string(&package_json_path, &updated_content).map_err(|e| {
+            Error::changeset(format!("Failed to write updated package.json for {package}: {e}"))
+        })?;
 
         Ok(())
     }
@@ -846,18 +856,16 @@ impl<'a> ChangesetManager<'a> {
         new_version: &str,
     ) -> Result<(), Error> {
         // Get package information
-        let package_info = self.packages.iter().find(|p| p.name() == dependent_package).ok_or_else(|| {
-            Error::changeset(format!("Dependent package not found: {dependent_package}"))
-        })?;
+        let package_info =
+            self.packages.iter().find(|p| p.name() == dependent_package).ok_or_else(|| {
+                Error::changeset(format!("Dependent package not found: {dependent_package}"))
+            })?;
 
         // Read package.json
         let package_json_path = package_info.path().join("package.json");
-        let content =
-            self.file_system.read_file_string(&package_json_path).map_err(|e| {
-                Error::changeset(format!(
-                    "Failed to read package.json for {dependent_package}: {e}"
-                ))
-            })?;
+        let content = self.file_system.read_file_string(&package_json_path).map_err(|e| {
+            Error::changeset(format!("Failed to read package.json for {dependent_package}: {e}"))
+        })?;
 
         // Parse JSON
         let mut json: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
@@ -883,13 +891,13 @@ impl<'a> ChangesetManager<'a> {
                 Error::changeset(format!("Failed to serialize updated package.json: {e}"))
             })?;
 
-            self.file_system
-                .write_file_string(&package_json_path, &updated_content)
-                .map_err(|e| {
+            self.file_system.write_file_string(&package_json_path, &updated_content).map_err(
+                |e| {
                     Error::changeset(format!(
                         "Failed to write updated package.json for {dependent_package}: {e}"
                     ))
-                })?;
+                },
+            )?;
         }
 
         Ok(())

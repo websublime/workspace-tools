@@ -32,7 +32,9 @@ impl PackagePersistence {
     /// # Errors
     /// Returns an error if the file cannot be written
     pub fn save(&self) -> Result<()> {
-        self.package.package_info.write_package_json()
+        self.package
+            .package_info
+            .write_package_json()
             .map_err(|e| Error::package(format!("Failed to save package.json: {e}")))
     }
 
@@ -46,8 +48,12 @@ impl PackagePersistence {
     pub fn save_to_path(&self, path: &Path) -> Result<()> {
         // This would require copying the file from current location to new path
         let current_path = self.package_json_path();
-        std::fs::copy(&current_path, path)
-            .map_err(|e| Error::package(format!("Failed to copy package.json to {path}: {e}", path = path.display())))?;
+        std::fs::copy(&current_path, path).map_err(|e| {
+            Error::package(format!(
+                "Failed to copy package.json to {path}: {e}",
+                path = path.display()
+            ))
+        })?;
         Ok(())
     }
 
@@ -61,7 +67,7 @@ impl PackagePersistence {
     pub fn create_backup(&self) -> Result<std::path::PathBuf> {
         let package_path = &self.package.workspace_package.absolute_path;
         let package_json_path = package_path.join("package.json");
-        
+
         if !package_json_path.exists() {
             return Err(Error::package("package.json not found"));
         }
@@ -106,27 +112,29 @@ impl PackagePersistence {
     /// Returns an error if the package information cannot be reloaded
     pub fn reload(&mut self) -> Result<()> {
         let package_json_path = self.package_json_path();
-        
+
         // Read the package.json file
         let content = std::fs::read_to_string(&package_json_path)
             .map_err(|e| Error::package(format!("Failed to read package.json: {e}")))?;
-        
+
         // Parse JSON content
         let pkg_json: serde_json::Value = serde_json::from_str(&content)
             .map_err(|e| Error::package(format!("Failed to parse package.json: {e}")))?;
-        
+
         // Extract package name and version
-        let name = pkg_json["name"].as_str()
+        let name = pkg_json["name"]
+            .as_str()
             .ok_or_else(|| Error::package("Missing 'name' field in package.json"))?
             .to_string();
-        
-        let version = pkg_json["version"].as_str()
+
+        let version = pkg_json["version"]
+            .as_str()
             .ok_or_else(|| Error::package("Missing 'version' field in package.json"))?
             .to_string();
-        
+
         // Create dependency registry for parsing dependencies
         let mut dependency_registry = sublime_package_tools::DependencyRegistry::new();
-        
+
         // Parse dependencies
         let mut dependencies = Vec::new();
         if let Some(deps_obj) = pkg_json["dependencies"].as_object() {
@@ -136,31 +144,32 @@ impl PackagePersistence {
                 }
             }
         }
-        
+
         // Create new Package with dependencies
         let new_package = sublime_package_tools::Package::new_with_registry(
-            &name, 
-            &version, 
+            &name,
+            &version,
             Some(dependencies),
-            &mut dependency_registry
-        ).map_err(|e| Error::package(format!("Failed to create package: {e}")))?;
-        
+            &mut dependency_registry,
+        )
+        .map_err(|e| Error::package(format!("Failed to create package: {e}")))?;
+
         // Create new PackageInfo
         let new_package_info = sublime_package_tools::PackageInfo::new(
             new_package,
             package_json_path.to_string_lossy().to_string(),
             self.package.workspace_package.absolute_path.to_string_lossy().to_string(),
             self.package.workspace_package.location.to_string_lossy().to_string(),
-            pkg_json
+            pkg_json,
         );
-        
+
         // Update the package info
         self.package.package_info = new_package_info;
-        
+
         // Update workspace package version to match
         self.package.workspace_package.version = version;
         self.package.workspace_package.name = name;
-        
+
         Ok(())
     }
 
@@ -193,7 +202,8 @@ impl PackagePersistence {
     /// Returns an error if the file metadata cannot be read
     pub fn is_package_json_modified(&self) -> Result<bool> {
         let metadata = self.package_json_metadata()?;
-        let modified_time = metadata.modified()
+        let modified_time = metadata
+            .modified()
             .map_err(|e| Error::package(format!("Failed to get modification time: {e}")))?;
 
         // Compare with package info last modified time
@@ -236,7 +246,10 @@ impl PackagePersistence {
         // Check for required directories
         let package_path = &self.package.workspace_package.absolute_path;
         if !package_path.exists() {
-            errors.push(format!("Package directory not found: {package_path}", package_path = package_path.display()));
+            errors.push(format!(
+                "Package directory not found: {package_path}",
+                package_path = package_path.display()
+            ));
         }
 
         errors

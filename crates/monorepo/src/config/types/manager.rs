@@ -1,13 +1,13 @@
 //! Configuration manager type definitions
 
-use std::path::PathBuf;
 use super::MonorepoConfig;
+use std::path::PathBuf;
 
 /// Type alias for pattern matcher function
 pub type PatternMatcher = Box<dyn Fn(&str) -> bool + Send + Sync>;
 
 /// Configuration manager that handles loading, saving, and managing monorepo configurations
-/// 
+///
 /// Uses direct ownership instead of Arc<RwLock<>> for better Rust ownership semantics.
 /// Methods that need to modify config return new ConfigManager instances.
 #[derive(Debug)]

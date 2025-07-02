@@ -5,7 +5,7 @@ use crate::config::MonorepoConfig;
 use crate::core::MonorepoPackageInfo;
 
 /// Manager for package versioning with dependency propagation
-/// 
+///
 /// Uses direct borrowing from MonorepoProject components instead of Arc.
 /// This follows Rust ownership principles and eliminates Arc proliferation.
 pub struct VersionManager<'a> {

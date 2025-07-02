@@ -3,12 +3,12 @@
 //! Handles package discovery, metadata parsing, and package relationship analysis
 //! within Node.js monorepos. Provides centralized package management operations.
 
+use super::FileSystemService;
 use crate::config::MonorepoConfig;
 use crate::core::types::MonorepoPackageInfo;
 use crate::error::Result;
 use std::path::Path;
 use sublime_standard_tools::monorepo::{MonorepoDescriptor, PackageManager};
-use super::FileSystemService;
 
 /// Package discovery and management service for Node.js monorepos
 ///
@@ -25,11 +25,11 @@ use super::FileSystemService;
 /// let fs_service = FileSystemService::new("/path/to/monorepo")?;
 /// let config = MonorepoConfig::default();
 /// let package_service = PackageDiscoveryService::new("/path/to/monorepo", &fs_service, &config)?;
-/// 
+///
 /// // Discover all packages in the Node.js monorepo
 /// let packages = package_service.discover_packages()?;
 /// println!("Found {} packages", packages.len());
-/// 
+///
 /// // Get package manager information
 /// let package_manager = package_service.get_package_manager();
 /// # Ok(())
@@ -39,13 +39,13 @@ use super::FileSystemService;
 pub(crate) struct PackageDiscoveryService {
     /// Monorepo descriptor from standard-tools
     descriptor: MonorepoDescriptor,
-    
+
     /// Package manager information (NPM/Yarn/PNPM/Bun)
     package_manager: PackageManager,
-    
+
     /// Discovered packages cache
     packages: Vec<MonorepoPackageInfo>,
-    
+
     /// Configuration for package discovery
     config: MonorepoConfig,
 }
@@ -81,21 +81,30 @@ impl PackageDiscoveryService {
         config: &MonorepoConfig,
     ) -> Result<Self> {
         let root_path = root_path.as_ref().to_path_buf();
-        
+
         // Determine Node.js package manager first
-        let package_manager = PackageManager::detect(&root_path)
-            .map_err(|e| crate::error::Error::package(format!(
-                "Failed to detect Node.js package manager for {}: {}", 
-                root_path.display(), 
+        let package_manager = PackageManager::detect(&root_path).map_err(|e| {
+            crate::error::Error::package(format!(
+                "Failed to detect Node.js package manager for {}: {}",
+                root_path.display(),
                 e
-            )))?;
-        
+            ))
+        })?;
+
         // Determine monorepo kind based on Node.js package manager
         let kind = match package_manager.kind() {
-            sublime_standard_tools::monorepo::PackageManagerKind::Npm => sublime_standard_tools::monorepo::MonorepoKind::NpmWorkSpace,
-            sublime_standard_tools::monorepo::PackageManagerKind::Yarn => sublime_standard_tools::monorepo::MonorepoKind::YarnWorkspaces, 
-            sublime_standard_tools::monorepo::PackageManagerKind::Pnpm => sublime_standard_tools::monorepo::MonorepoKind::PnpmWorkspaces,
-            sublime_standard_tools::monorepo::PackageManagerKind::Bun => sublime_standard_tools::monorepo::MonorepoKind::BunWorkspaces,
+            sublime_standard_tools::monorepo::PackageManagerKind::Npm => {
+                sublime_standard_tools::monorepo::MonorepoKind::NpmWorkSpace
+            }
+            sublime_standard_tools::monorepo::PackageManagerKind::Yarn => {
+                sublime_standard_tools::monorepo::MonorepoKind::YarnWorkspaces
+            }
+            sublime_standard_tools::monorepo::PackageManagerKind::Pnpm => {
+                sublime_standard_tools::monorepo::MonorepoKind::PnpmWorkspaces
+            }
+            sublime_standard_tools::monorepo::PackageManagerKind::Bun => {
+                sublime_standard_tools::monorepo::MonorepoKind::BunWorkspaces
+            }
             sublime_standard_tools::monorepo::PackageManagerKind::Jsr => {
                 return Err(crate::error::Error::package(format!(
                     "Unsupported package manager kind for Node.js monorepo: {:?}",
@@ -103,27 +112,23 @@ impl PackageDiscoveryService {
                 )));
             }
         };
-        
+
         // Initialize with empty packages - will be populated later
         let descriptor = MonorepoDescriptor::new(
             kind,
             root_path.clone(),
-            Vec::new() // Packages will be discovered after initialization
+            Vec::new(), // Packages will be discovered after initialization
         );
-        
-        let mut service = Self {
-            descriptor,
-            package_manager,
-            packages: Vec::new(),
-            config: config.clone(),
-        };
-        
+
+        let mut service =
+            Self { descriptor, package_manager, packages: Vec::new(), config: config.clone() };
+
         // Perform initial package discovery
         service.refresh_packages(file_system_service)?;
-        
+
         Ok(service)
     }
-    
+
     /// Get the monorepo descriptor
     ///
     /// Provides access to the underlying monorepo descriptor which contains
@@ -135,7 +140,7 @@ impl PackageDiscoveryService {
     pub fn descriptor(&self) -> &MonorepoDescriptor {
         &self.descriptor
     }
-    
+
     /// Get the package manager
     ///
     /// Returns information about the detected Node.js package manager including
@@ -147,7 +152,7 @@ impl PackageDiscoveryService {
     pub fn get_package_manager(&self) -> &PackageManager {
         &self.package_manager
     }
-    
+
     /// Discover all packages in the Node.js monorepo
     ///
     /// Returns the cached list of discovered packages. Use refresh_packages()
@@ -160,7 +165,7 @@ impl PackageDiscoveryService {
     pub fn discover_packages(&self) -> Result<Vec<MonorepoPackageInfo>> {
         Ok(self.packages.clone())
     }
-    
+
     /// Get packages by name pattern
     ///
     /// Filters the discovered packages by name using a simple pattern match.
@@ -177,17 +182,13 @@ impl PackageDiscoveryService {
         if pattern.contains('*') {
             // Simple wildcard matching
             let pattern = pattern.replace('*', "");
-            self.packages.iter()
-                .filter(|pkg| pkg.name().contains(&pattern))
-                .collect()
+            self.packages.iter().filter(|pkg| pkg.name().contains(&pattern)).collect()
         } else {
             // Exact match
-            self.packages.iter()
-                .filter(|pkg| pkg.name() == pattern)
-                .collect()
+            self.packages.iter().filter(|pkg| pkg.name() == pattern).collect()
         }
     }
-    
+
     /// Get package by exact name
     ///
     /// Finds a package with the exact specified name.
@@ -200,10 +201,9 @@ impl PackageDiscoveryService {
     ///
     /// Reference to the package if found, None otherwise.
     pub fn get_package_by_name(&self, name: &str) -> Option<&MonorepoPackageInfo> {
-        self.packages.iter()
-            .find(|pkg| pkg.name() == name)
+        self.packages.iter().find(|pkg| pkg.name() == name)
     }
-    
+
     /// Get all package names
     ///
     /// Returns a list of all discovered package names in the monorepo.
@@ -212,11 +212,9 @@ impl PackageDiscoveryService {
     ///
     /// Vector of package names.
     pub fn get_package_names(&self) -> Vec<String> {
-        self.packages.iter()
-            .map(|pkg| pkg.name().to_string())
-            .collect()
+        self.packages.iter().map(|pkg| pkg.name().to_string()).collect()
     }
-    
+
     /// Get packages in a specific directory
     ///
     /// Returns packages that are located within or under the specified directory.
@@ -229,13 +227,12 @@ impl PackageDiscoveryService {
     ///
     /// Vector of packages in the specified directory.
     pub fn get_packages_in_directory(&self, directory: &str) -> Vec<&MonorepoPackageInfo> {
-        self.packages.iter()
-            .filter(|pkg| {
-                pkg.path().to_string_lossy().starts_with(directory)
-            })
+        self.packages
+            .iter()
+            .filter(|pkg| pkg.path().to_string_lossy().starts_with(directory))
             .collect()
     }
-    
+
     /// Refresh package discovery cache
     ///
     /// Re-scans the file system to update the package cache with any
@@ -259,24 +256,25 @@ impl PackageDiscoveryService {
     pub fn refresh_packages(&mut self, file_system_service: &FileSystemService) -> Result<()> {
         // Clear existing packages
         self.packages.clear();
-        
+
         // Use workspace configuration to discover packages
         let workspace_patterns = &self.config.workspace.patterns;
-        
+
         for pattern in workspace_patterns {
             if pattern.enabled {
-                let discovered = self.discover_packages_by_pattern(&pattern.pattern, file_system_service);
+                let discovered =
+                    self.discover_packages_by_pattern(&pattern.pattern, file_system_service);
                 self.packages.extend(discovered);
             }
         }
-        
+
         // Remove duplicates by name (keep first occurrence)
         self.packages.sort_by(|a, b| a.name().cmp(b.name()));
         self.packages.dedup_by(|a, b| a.name() == b.name());
-        
+
         Ok(())
     }
-    
+
     /// Discover packages matching a specific pattern
     ///
     /// Internal method to discover packages matching a glob pattern
@@ -296,7 +294,7 @@ impl PackageDiscoveryService {
         file_system_service: &FileSystemService,
     ) -> Vec<MonorepoPackageInfo> {
         let mut packages = Vec::new();
-        
+
         // For now, implement a simple directory-based discovery
         // This would be enhanced with proper glob pattern matching
         let search_dirs = if pattern.contains('*') {
@@ -306,17 +304,17 @@ impl PackageDiscoveryService {
         } else {
             vec![pattern]
         };
-        
+
         for search_dir in search_dirs {
             if file_system_service.is_dir(search_dir) {
                 let discovered = self.scan_directory_for_packages(search_dir, file_system_service);
                 packages.extend(discovered);
             }
         }
-        
+
         packages
     }
-    
+
     /// Scan directory for Node.js package files
     ///
     /// Internal method to scan a directory and its subdirectories for
@@ -336,17 +334,17 @@ impl PackageDiscoveryService {
         file_system_service: &FileSystemService,
     ) -> Vec<MonorepoPackageInfo> {
         let mut packages = Vec::new();
-        
+
         // Check for Node.js package definition files
         let package_files = ["package.json"];
-        
+
         for &package_file in &package_files {
             let package_path = if directory.is_empty() {
                 package_file.to_string()
             } else {
                 format!("{directory}/{package_file}")
             };
-            
+
             if file_system_service.exists(&package_path) {
                 match Self::parse_package_info(&package_path, file_system_service) {
                     Ok(package_info) => packages.push(package_info),
@@ -357,12 +355,12 @@ impl PackageDiscoveryService {
                 }
             }
         }
-        
+
         // Recursively scan subdirectories if configured
         // Use discovery settings for nested packages
-        let include_nested = self.config.workspace.patterns.first()
-            .map_or(true, |p| p.options.include_nested);
-        
+        let include_nested =
+            self.config.workspace.patterns.first().map_or(true, |p| p.options.include_nested);
+
         if include_nested {
             match file_system_service.list_directory(directory) {
                 Ok(entries) => {
@@ -375,8 +373,9 @@ impl PackageDiscoveryService {
                                     } else {
                                         format!("{directory}/{dir_str}")
                                     };
-                                    
-                                    let subpackages = self.scan_directory_for_packages(&subdir, file_system_service);
+
+                                    let subpackages = self
+                                        .scan_directory_for_packages(&subdir, file_system_service);
                                     packages.extend(subpackages);
                                 }
                             }
@@ -388,10 +387,10 @@ impl PackageDiscoveryService {
                 }
             }
         }
-        
+
         packages
     }
-    
+
     /// Parse package information from package.json file
     ///
     /// Internal method to parse package metadata from package.json files.
@@ -417,7 +416,7 @@ impl PackageDiscoveryService {
             .parent()
             .unwrap_or(std::path::Path::new("."))
             .to_path_buf();
-        
+
         // Parse package.json only (Node.js monorepo)
         if package_file_path.ends_with("package.json") {
             Self::parse_npm_package(&content, &package_dir)
@@ -427,7 +426,7 @@ impl PackageDiscoveryService {
             )))
         }
     }
-    
+
     /// Parse NPM package.json file
     ///
     /// Internal method to parse NPM package metadata from package.json.
@@ -449,42 +448,53 @@ impl PackageDiscoveryService {
         package_dir: &std::path::Path,
     ) -> Result<MonorepoPackageInfo> {
         // Parse JSON using serde_json
-        let package_json: serde_json::Value = serde_json::from_str(content)
-            .map_err(|e| crate::error::Error::package(format!("Failed to parse package.json: {e}")))?;
-        
-        let name = package_json.get("name")
+        let package_json: serde_json::Value = serde_json::from_str(content).map_err(|e| {
+            crate::error::Error::package(format!("Failed to parse package.json: {e}"))
+        })?;
+
+        let name = package_json
+            .get("name")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| crate::error::Error::package("Missing 'name' field in package.json".to_string()))?
+            .ok_or_else(|| {
+                crate::error::Error::package("Missing 'name' field in package.json".to_string())
+            })?
             .to_string();
-            
-        let version = package_json.get("version")
+
+        let version = package_json
+            .get("version")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| crate::error::Error::package("Missing 'version' field in package.json".to_string()))?
+            .ok_or_else(|| {
+                crate::error::Error::package("Missing 'version' field in package.json".to_string())
+            })?
             .to_string();
-            
+
         // Parse dependencies
         let dependencies = Self::parse_package_json_dependencies(&package_json);
         let dependencies_external = Self::extract_external_dependencies(&dependencies);
-        
+
         // Create proper package using sublime-package-tools
-        let package = sublime_package_tools::Package::new(&name, &version, None)
-            .map_err(|e| crate::error::Error::package(format!("Failed to create package {name}: {e}")))?;
-        
+        let package = sublime_package_tools::Package::new(&name, &version, None).map_err(|e| {
+            crate::error::Error::package(format!("Failed to create package {name}: {e}"))
+        })?;
+
         let package_info = sublime_package_tools::PackageInfo {
             package: std::rc::Rc::new(std::cell::RefCell::new(package)),
             package_json_path: package_dir.join("package.json").to_string_lossy().to_string(),
             package_path: package_dir.to_string_lossy().to_string(),
-            package_relative_path: package_dir.file_name()
+            package_relative_path: package_dir
+                .file_name()
                 .and_then(|n| n.to_str())
-                .ok_or_else(|| crate::error::Error::package("Invalid package directory name".to_string()))?
+                .ok_or_else(|| {
+                    crate::error::Error::package("Invalid package directory name".to_string())
+                })?
                 .to_string(),
             pkg_json: std::rc::Rc::new(std::cell::RefCell::new(package_json.clone())),
         };
-        
+
         // Parse workspace dependencies from package.json
-        let (workspace_dependencies, workspace_dev_dependencies) = 
+        let (workspace_dependencies, workspace_dev_dependencies) =
             Self::parse_workspace_dependencies(&package_json);
-            
+
         let workspace_package = sublime_standard_tools::monorepo::WorkspacePackage {
             name: name.clone(),
             version: version.clone(),
@@ -493,7 +503,7 @@ impl PackageDiscoveryService {
             workspace_dependencies,
             workspace_dev_dependencies,
         };
-        
+
         Ok(MonorepoPackageInfo {
             package_info,
             workspace_package,
@@ -505,11 +515,13 @@ impl PackageDiscoveryService {
             changesets: Vec::new(),
         })
     }
-    
+
     /// Parse dependencies from package.json
-    fn parse_package_json_dependencies(package_json: &serde_json::Value) -> Vec<crate::core::types::PackageDependency> {
+    fn parse_package_json_dependencies(
+        package_json: &serde_json::Value,
+    ) -> Vec<crate::core::types::PackageDependency> {
         let mut dependencies = Vec::new();
-        
+
         // Parse regular dependencies
         if let Some(deps) = package_json.get("dependencies").and_then(|v| v.as_object()) {
             for (name, version) in deps {
@@ -522,7 +534,7 @@ impl PackageDiscoveryService {
                 });
             }
         }
-        
+
         // Parse dev dependencies
         if let Some(deps) = package_json.get("devDependencies").and_then(|v| v.as_object()) {
             for (name, version) in deps {
@@ -535,7 +547,7 @@ impl PackageDiscoveryService {
                 });
             }
         }
-        
+
         // Parse peer dependencies
         if let Some(deps) = package_json.get("peerDependencies").and_then(|v| v.as_object()) {
             for (name, version) in deps {
@@ -548,7 +560,7 @@ impl PackageDiscoveryService {
                 });
             }
         }
-        
+
         // Parse optional dependencies
         if let Some(deps) = package_json.get("optionalDependencies").and_then(|v| v.as_object()) {
             for (name, version) in deps {
@@ -561,22 +573,26 @@ impl PackageDiscoveryService {
                 });
             }
         }
-        
+
         dependencies
     }
-    
+
     /// Extract external dependencies (not part of the monorepo)
-    fn extract_external_dependencies(dependencies: &[crate::core::types::PackageDependency]) -> Vec<String> {
+    fn extract_external_dependencies(
+        dependencies: &[crate::core::types::PackageDependency],
+    ) -> Vec<String> {
         // This would typically check against the list of internal packages
         // For now, assume all are external - this should be improved with workspace detection
         dependencies.iter().map(|dep| dep.name.clone()).collect()
     }
-    
+
     /// Parse workspace dependencies from package.json
-    fn parse_workspace_dependencies(package_json: &serde_json::Value) -> (Vec<String>, Vec<String>) {
+    fn parse_workspace_dependencies(
+        package_json: &serde_json::Value,
+    ) -> (Vec<String>, Vec<String>) {
         let mut workspace_deps = Vec::new();
         let mut workspace_dev_deps = Vec::new();
-        
+
         // Check for workspace: protocol in dependencies
         if let Some(deps) = package_json.get("dependencies").and_then(|v| v.as_object()) {
             for (name, version) in deps {
@@ -587,7 +603,7 @@ impl PackageDiscoveryService {
                 }
             }
         }
-        
+
         // Check for workspace: protocol in devDependencies
         if let Some(deps) = package_json.get("devDependencies").and_then(|v| v.as_object()) {
             for (name, version) in deps {
@@ -598,7 +614,7 @@ impl PackageDiscoveryService {
                 }
             }
         }
-        
+
         (workspace_deps, workspace_dev_deps)
     }
 }

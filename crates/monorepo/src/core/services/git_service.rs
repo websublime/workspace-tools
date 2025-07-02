@@ -5,7 +5,7 @@
 
 use crate::error::Result;
 use std::path::Path;
-use sublime_git_tools::{Repo, RepoCommit, GitChangedFile};
+use sublime_git_tools::{GitChangedFile, Repo, RepoCommit};
 
 /// Git operations service
 ///
@@ -20,11 +20,11 @@ use sublime_git_tools::{Repo, RepoCommit, GitChangedFile};
 ///
 /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let git_service = GitOperationsService::new("/path/to/monorepo")?;
-/// 
+///
 /// // Get current branch
 /// let branch = git_service.get_current_branch()?;
 /// println!("Current branch: {}", branch);
-/// 
+///
 /// // Get repository status
 /// let is_clean = git_service.is_repository_clean()?;
 /// println!("Repository clean: {}", is_clean);
@@ -60,19 +60,22 @@ impl GitOperationsService {
     /// - Git repository is corrupted or inaccessible
     /// - Insufficient permissions to access repository
     pub fn new<P: AsRef<Path>>(root_path: P) -> Result<Self> {
-        let path_str = root_path.as_ref().to_str()
+        let path_str = root_path
+            .as_ref()
+            .to_str()
             .ok_or_else(|| crate::error::Error::git("Invalid UTF-8 in repository path"))?;
-        
-        let repository = Repo::open(path_str)
-            .map_err(|e| crate::error::Error::git(format!(
-                "Failed to open Git repository at {}: {}", 
-                root_path.as_ref().display(), 
+
+        let repository = Repo::open(path_str).map_err(|e| {
+            crate::error::Error::git(format!(
+                "Failed to open Git repository at {}: {}",
+                root_path.as_ref().display(),
                 e
-            )))?;
-        
+            ))
+        })?;
+
         Ok(Self { repository })
     }
-    
+
     /// Get the underlying repository
     ///
     /// Provides access to the underlying Git repository for operations
@@ -84,7 +87,7 @@ impl GitOperationsService {
     pub fn repository(&self) -> &Repo {
         &self.repository
     }
-    
+
     /// Get current branch name
     ///
     /// Returns the name of the currently checked out branch.
@@ -99,10 +102,11 @@ impl GitOperationsService {
     /// - Repository is in a detached HEAD state
     /// - Git operation fails
     pub fn get_current_branch(&self) -> Result<String> {
-        self.repository.get_current_branch()
+        self.repository
+            .get_current_branch()
             .map_err(|e| crate::error::Error::git(format!("Failed to get current branch: {e}")))
     }
-    
+
     /// Check if repository is clean
     ///
     /// Returns true if the repository has no uncommitted changes,
@@ -120,7 +124,7 @@ impl GitOperationsService {
         let unstaged_files = self.get_unstaged_files()?;
         Ok(staged_files.is_empty() && unstaged_files.is_empty())
     }
-    
+
     /// Get staged files
     ///
     /// Returns a list of files that are staged for commit.
@@ -133,10 +137,11 @@ impl GitOperationsService {
     ///
     /// Returns an error if Git status cannot be determined.
     pub fn get_staged_files(&self) -> Result<Vec<String>> {
-        self.repository.get_staged_files()
+        self.repository
+            .get_staged_files()
             .map_err(|e| crate::error::Error::git(format!("Failed to get staged files: {e}")))
     }
-    
+
     /// Get unstaged files
     ///
     /// Returns a list of files that have modifications but are not staged.
@@ -154,7 +159,7 @@ impl GitOperationsService {
         // For now, we'll return an empty list as a placeholder
         Ok(Vec::new())
     }
-    
+
     /// Get commits since a reference
     ///
     /// Returns a list of commits that have been made since the specified
@@ -174,11 +179,16 @@ impl GitOperationsService {
     /// Returns an error if:
     /// - Reference does not exist
     /// - Git operation fails
-    pub fn get_commits_since(&self, since_ref: Option<String>, until_ref: &Option<String>) -> Result<Vec<RepoCommit>> {
-        self.repository.get_commits_since(since_ref, until_ref)
+    pub fn get_commits_since(
+        &self,
+        since_ref: Option<String>,
+        until_ref: &Option<String>,
+    ) -> Result<Vec<RepoCommit>> {
+        self.repository
+            .get_commits_since(since_ref, until_ref)
             .map_err(|e| crate::error::Error::git(format!("Failed to get commits: {e}")))
     }
-    
+
     /// Get changed files for a commit
     ///
     /// Returns a list of files that were changed in the specified commit.
@@ -197,18 +207,22 @@ impl GitOperationsService {
     /// - Commit hash does not exist
     /// - Git operation fails
     pub fn get_changed_files_for_commit(&self, commit_hash: &str) -> Result<Vec<GitChangedFile>> {
-        self.repository.get_all_files_changed_since_sha(commit_hash)
+        self.repository
+            .get_all_files_changed_since_sha(commit_hash)
             .map(|files| {
-                files.into_iter().map(|path| GitChangedFile {
-                    path,
-                    status: sublime_git_tools::GitFileStatus::Modified, // Simplified for now
-                    staged: false,
-                    workdir: true,
-                }).collect()
+                files
+                    .into_iter()
+                    .map(|path| GitChangedFile {
+                        path,
+                        status: sublime_git_tools::GitFileStatus::Modified, // Simplified for now
+                        staged: false,
+                        workdir: true,
+                    })
+                    .collect()
             })
             .map_err(|e| crate::error::Error::git(format!("Failed to get changed files: {e}")))
     }
-    
+
     /// Get all files changed since a commit
     ///
     /// Returns a list of all files that have been changed since the specified commit.
@@ -227,10 +241,13 @@ impl GitOperationsService {
     /// - Commit hash does not exist
     /// - Git operation fails
     pub fn get_all_files_changed_since(&self, commit_hash: &str) -> Result<Vec<String>> {
-        self.repository.get_all_files_changed_since_sha(commit_hash)
-            .map_err(|e| crate::error::Error::git(format!("Failed to get changed files since {commit_hash}: {e}")))
+        self.repository.get_all_files_changed_since_sha(commit_hash).map_err(|e| {
+            crate::error::Error::git(format!(
+                "Failed to get changed files since {commit_hash}: {e}"
+            ))
+        })
     }
-    
+
     /// Get last tag
     ///
     /// Returns the most recent Git tag in the repository.
@@ -245,10 +262,11 @@ impl GitOperationsService {
     /// - No tags exist in the repository
     /// - Git operation fails
     pub fn get_last_tag(&self) -> Result<String> {
-        self.repository.get_last_tag()
+        self.repository
+            .get_last_tag()
             .map_err(|e| crate::error::Error::git(format!("Failed to get last tag: {e}")))
     }
-    
+
     /// Get repository configuration
     ///
     /// Returns the Git configuration for the repository as a key-value map.
@@ -261,10 +279,11 @@ impl GitOperationsService {
     ///
     /// Returns an error if Git configuration cannot be read.
     pub fn get_repository_config(&self) -> Result<std::collections::HashMap<String, String>> {
-        self.repository.list_config()
+        self.repository
+            .list_config()
             .map_err(|e| crate::error::Error::git(format!("Failed to get repository config: {e}")))
     }
-    
+
     /// Check if path is ignored by Git
     ///
     /// Returns true if the specified path is ignored by .gitignore rules.
@@ -287,7 +306,7 @@ impl GitOperationsService {
         let _ = path; // Suppress unused parameter warning
         Ok(false)
     }
-    
+
     /// Get repository root path
     ///
     /// Returns the absolute path to the root of the Git repository.

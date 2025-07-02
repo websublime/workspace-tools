@@ -6,10 +6,10 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::changesets::types::ChangesetApplication;
-use crate::tasks::types::results::TaskExecutionResult;
 use crate::analysis::{BranchComparisonResult, ChangeAnalysis};
+use crate::changesets::types::ChangesetApplication;
 use crate::core::{VersioningPlan, VersioningResult};
+use crate::tasks::types::results::TaskExecutionResult;
 
 /// Result of a release workflow execution
 ///

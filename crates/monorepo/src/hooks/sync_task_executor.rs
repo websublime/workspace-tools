@@ -5,14 +5,14 @@
 //! It manages a dedicated runtime to avoid nested runtime issues.
 
 use crate::error::Result;
-use crate::tasks::{TaskManager, TaskDefinition};
+use crate::tasks::{TaskDefinition, TaskManager};
 
 /// Synchronous task executor that bridges sync hooks with async task execution
 ///
 /// This adapter pattern isolates async execution from synchronous hook code,
 /// preventing runtime nesting issues while maintaining the synchronous API
 /// required by Git hooks.
-/// 
+///
 /// Uses direct borrowing from TaskManager instead of ownership.
 /// This follows Rust ownership principles and eliminates Arc proliferation.
 pub struct SyncTaskExecutor<'a> {
@@ -22,7 +22,7 @@ pub struct SyncTaskExecutor<'a> {
 
 impl<'a> SyncTaskExecutor<'a> {
     /// Creates a new synchronous task executor with direct borrowing
-    /// 
+    ///
     /// Uses borrowing instead of ownership to eliminate Arc proliferation
     /// and work with Rust ownership principles.
     ///
@@ -35,9 +35,7 @@ impl<'a> SyncTaskExecutor<'a> {
     /// # Errors
     /// Returns an error if the runtime cannot be created
     pub fn new(task_manager: &'a TaskManager<'a>) -> Result<Self> {
-        Ok(Self {
-            task_manager,
-        })
+        Ok(Self { task_manager })
     }
 
     /// Execute a task synchronously for hook validation
@@ -67,7 +65,7 @@ impl<'a> SyncTaskExecutor<'a> {
         // For hook validation, we perform lightweight validation checks
         // rather than full task execution to maintain performance
         let mut all_valid = true;
-        
+
         for package_name in packages {
             // Perform basic validation checks for the task and package combination
             if !Self::validate_task_for_package(task_name, package_name) {
@@ -78,7 +76,7 @@ impl<'a> SyncTaskExecutor<'a> {
 
         all_valid
     }
-    
+
     /// Validate a task for a specific package
     ///
     /// Performs lightweight validation checks suitable for hook execution.
@@ -87,7 +85,8 @@ impl<'a> SyncTaskExecutor<'a> {
         match task_name {
             "lint" | "test" | "build" | "check" => {
                 // Common tasks - perform basic package validation
-                !package_name.is_empty() && package_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+                !package_name.is_empty()
+                    && package_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
             }
             _ => {
                 // Unknown tasks - allow them through for flexibility
@@ -135,4 +134,3 @@ impl<'a> SyncTaskExecutor<'a> {
         results
     }
 }
-

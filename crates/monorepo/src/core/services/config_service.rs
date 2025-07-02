@@ -3,10 +3,10 @@
 //! Handles all configuration-related operations for the monorepo including
 //! loading, validating, and providing access to configuration settings.
 
+use super::FileSystemService;
 use crate::config::{ConfigManager, MonorepoConfig};
 use crate::error::Result;
 use std::path::Path;
-use super::FileSystemService;
 
 /// Configuration management service
 ///
@@ -22,7 +22,7 @@ use super::FileSystemService;
 /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let fs_service = FileSystemService::new("/path/to/monorepo")?;
 /// let config_service = ConfigurationService::new("/path/to/monorepo", &fs_service)?;
-/// 
+///
 /// let config = config_service.get_configuration();
 /// println!("Workspace type: {:?}", config.workspace.workspace_type);
 /// # Ok(())
@@ -33,10 +33,10 @@ pub(crate) struct ConfigurationService {
     /// Configuration manager for loading and validation
     #[allow(dead_code)]
     config_manager: ConfigManager,
-    
+
     /// Current loaded configuration
     config: MonorepoConfig,
-    
+
     /// Root path of the monorepo
     root_path: std::path::PathBuf,
 }
@@ -64,25 +64,21 @@ impl ConfigurationService {
     /// - Configuration is invalid or malformed
     /// - Required configuration sections are missing
     pub fn new<P: AsRef<Path>>(
-        root_path: P, 
-        _file_system_service: &FileSystemService
+        root_path: P,
+        _file_system_service: &FileSystemService,
     ) -> Result<Self> {
         let root_path = root_path.as_ref().to_path_buf();
-        
+
         // Create configuration manager and load configuration
         let config_manager = ConfigManager::new();
         let config = config_manager.load_config(&root_path)?;
-        
+
         // Validate configuration
         config_manager.validate_config(&config)?;
-        
-        Ok(Self {
-            config_manager,
-            config,
-            root_path,
-        })
+
+        Ok(Self { config_manager, config, root_path })
     }
-    
+
     /// Get the current configuration
     ///
     /// Returns a reference to the loaded and validated configuration.
@@ -94,7 +90,7 @@ impl ConfigurationService {
     pub fn get_configuration(&self) -> &MonorepoConfig {
         &self.config
     }
-    
+
     /// Reload configuration from disk
     ///
     /// Reloads the configuration from the file system, useful when
@@ -113,7 +109,7 @@ impl ConfigurationService {
         self.config = new_config;
         Ok(())
     }
-    
+
     /// Validate a configuration
     ///
     /// Validates a configuration object without loading it as the active
@@ -134,7 +130,7 @@ impl ConfigurationService {
     pub fn validate_configuration(&self, config: &MonorepoConfig) -> Result<()> {
         self.config_manager.validate_config(config)
     }
-    
+
     /// Get the root path
     ///
     /// Returns the root path of the monorepo that this configuration
@@ -146,7 +142,7 @@ impl ConfigurationService {
     pub fn root_path(&self) -> &Path {
         &self.root_path
     }
-    
+
     /// Check if configuration file exists
     ///
     /// Checks whether a monorepo configuration file exists at the expected
@@ -159,7 +155,7 @@ impl ConfigurationService {
         let config_path = self.root_path.join("monorepo.toml");
         config_path.exists()
     }
-    
+
     /// Get configuration file path
     ///
     /// Returns the expected path to the monorepo configuration file.

@@ -24,10 +24,7 @@ impl PatternMatcher {
     #[must_use]
     pub fn new(pattern: Pattern) -> Self {
         let pattern_string = pattern.as_str().to_string();
-        Self {
-            pattern,
-            pattern_string,
-        }
+        Self { pattern, pattern_string }
     }
 
     /// Create a pattern matcher from a string
@@ -43,7 +40,7 @@ impl PatternMatcher {
     pub fn from_pattern(pattern_str: &str) -> Result<Self> {
         let pattern = Pattern::new(pattern_str)
             .map_err(|e| Error::config(format!("Invalid glob pattern '{pattern_str}': {e}")))?;
-        
+
         Ok(Self::new(pattern))
     }
 
@@ -60,20 +57,20 @@ impl PatternMatcher {
         if self.pattern.matches(path) {
             return true;
         }
-        
+
         // Try with trailing slash for directories
         let path_with_slash = format!("{path}/", path = path.trim_end_matches('/'));
         if self.pattern.matches(&path_with_slash) {
             return true;
         }
-        
+
         // Try matching just the last component (package name)
         if let Some(last_component) = path.split('/').last() {
             if self.pattern.matches(last_component) {
                 return true;
             }
         }
-        
+
         false
     }
 
@@ -98,10 +95,7 @@ impl PatternMatcher {
     /// Vector of paths that match the pattern
     #[must_use]
     pub fn filter_matches(&self, paths: &[String]) -> Vec<String> {
-        paths.iter()
-            .filter(|path| self.matches(path))
-            .cloned()
-            .collect()
+        paths.iter().filter(|path| self.matches(path)).cloned().collect()
     }
 
     /// Get the pattern string
@@ -129,16 +123,14 @@ impl PatternMatcher {
         } else {
             0.0
         };
-        
+
         (total_paths, matching_paths, match_percentage)
     }
 }
 
 impl std::fmt::Debug for PatternMatcher {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PatternMatcher")
-            .field("pattern", &self.pattern_string)
-            .finish()
+        f.debug_struct("PatternMatcher").field("pattern", &self.pattern_string).finish()
     }
 }
 
@@ -151,9 +143,7 @@ impl MultiPatternMatcher {
     /// Create a new multi-pattern matcher
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            matchers: Vec::new(),
-        }
+        Self { matchers: Vec::new() }
     }
 
     /// Create a multi-pattern matcher from pattern strings
@@ -168,12 +158,12 @@ impl MultiPatternMatcher {
     /// Returns an error if any pattern is invalid
     pub fn from_patterns(patterns: &[String]) -> Result<Self> {
         let mut matchers = Vec::new();
-        
+
         for pattern_str in patterns {
             let matcher = PatternMatcher::from_pattern(pattern_str)?;
             matchers.push(matcher);
         }
-        
+
         Ok(Self { matchers })
     }
 
@@ -240,12 +230,12 @@ impl MultiPatternMatcher {
     #[must_use]
     pub fn batch_match(&self, paths: &[String]) -> HashMap<String, Vec<String>> {
         let mut results = HashMap::new();
-        
+
         for matcher in &self.matchers {
             let matches = matcher.filter_matches(paths);
             results.insert(matcher.pattern_string().to_string(), matches);
         }
-        
+
         results
     }
 
@@ -258,10 +248,7 @@ impl MultiPatternMatcher {
     /// Vector of paths that match at least one pattern
     #[must_use]
     pub fn get_any_matches(&self, paths: &[String]) -> Vec<String> {
-        paths.iter()
-            .filter(|path| self.matches_any(path))
-            .cloned()
-            .collect()
+        paths.iter().filter(|path| self.matches_any(path)).cloned().collect()
     }
 
     /// Get paths that match all patterns
@@ -276,11 +263,8 @@ impl MultiPatternMatcher {
         if self.matchers.is_empty() {
             return Vec::new();
         }
-        
-        paths.iter()
-            .filter(|path| self.matches_all(path))
-            .cloned()
-            .collect()
+
+        paths.iter().filter(|path| self.matches_all(path)).cloned().collect()
     }
 
     /// Get the number of patterns
@@ -292,10 +276,7 @@ impl MultiPatternMatcher {
     /// Get all pattern strings
     #[must_use]
     pub fn pattern_strings(&self) -> Vec<String> {
-        self.matchers
-            .iter()
-            .map(|matcher| matcher.pattern_string().to_string())
-            .collect()
+        self.matchers.iter().map(|matcher| matcher.pattern_string().to_string()).collect()
     }
 
     /// Check if the matcher is empty (no patterns)
@@ -317,14 +298,17 @@ impl MultiPatternMatcher {
     /// # Returns
     /// Map of pattern -> (total_paths, matching_paths, match_percentage)
     #[must_use]
-    pub fn get_comprehensive_stats(&self, paths: &[String]) -> HashMap<String, (usize, usize, f64)> {
+    pub fn get_comprehensive_stats(
+        &self,
+        paths: &[String],
+    ) -> HashMap<String, (usize, usize, f64)> {
         let mut stats = HashMap::new();
-        
+
         for matcher in &self.matchers {
             let (total, matching, percentage) = matcher.get_match_stats(paths);
             stats.insert(matcher.pattern_string().to_string(), (total, matching, percentage));
         }
-        
+
         stats
     }
 }
@@ -337,8 +321,6 @@ impl Default for MultiPatternMatcher {
 
 impl std::fmt::Debug for MultiPatternMatcher {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MultiPatternMatcher")
-            .field("patterns", &self.pattern_strings())
-            .finish()
+        f.debug_struct("MultiPatternMatcher").field("patterns", &self.pattern_strings()).finish()
     }
 }

@@ -2,28 +2,28 @@
 //!
 //! This module defines configuration structures for task execution, including
 //! timeouts, concurrency limits, and performance tuning parameters.
-//! 
+//!
 //! ## What
 //! Provides comprehensive task management configuration including:
 //! - Basic task execution settings (timeouts, concurrency)
 //! - Performance optimizations for different project sizes
 //! - Hook execution configuration
 //! - Impact level thresholds for workflow decisions
-//! 
+//!
 //! ## How
 //! Uses structured configuration with defaults for different scenarios:
 //! - Small projects: Lower concurrency, standard timeouts
 //! - Large projects: Higher concurrency, extended timeouts
 //! - Configurable thresholds for impact assessment
-//! 
+//!
 //! ## Why
 //! Centralizes all timeout and concurrency values that were previously
 //! hardcoded throughout the codebase, enabling users to tune performance
 //! based on their specific project needs and CI/CD constraints.
 
+use super::Environment;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use super::Environment;
 
 /// Task management configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,9 +106,9 @@ impl Default for TasksConfig {
 impl Default for TaskPerformanceConfig {
     fn default() -> Self {
         Self {
-            hook_timeout: 300, // 5 minutes
+            hook_timeout: 300,               // 5 minutes
             version_planning_per_package: 5, // 5 seconds per package
-            cache_duration: 300, // 5 minutes
+            cache_duration: 300,             // 5 minutes
             large_project: LargeProjectConfig::default(),
             impact_thresholds: ImpactThresholdConfig::default(),
         }
@@ -126,10 +126,7 @@ impl Default for LargeProjectConfig {
 
 impl Default for ImpactThresholdConfig {
     fn default() -> Self {
-        Self {
-            medium_impact_files: 5,
-            high_impact_files: 15,
-        }
+        Self { medium_impact_files: 5, high_impact_files: 15 }
     }
 }
 
@@ -137,11 +134,11 @@ impl TasksConfig {
     /// Get the appropriate max concurrent value based on project size
     ///
     /// # Arguments
-    /// 
+    ///
     /// * `is_large_project` - Whether this is considered a large project
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// The maximum number of concurrent tasks for this project size
     #[must_use]
     pub fn get_max_concurrent(&self, is_large_project: bool) -> usize {
@@ -151,15 +148,15 @@ impl TasksConfig {
             self.max_concurrent
         }
     }
-    
+
     /// Get the appropriate timeout value based on project size
     ///
     /// # Arguments
-    /// 
+    ///
     /// * `is_large_project` - Whether this is considered a large project
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// The timeout in seconds for this project size
     #[must_use]
     pub fn get_timeout(&self, is_large_project: bool) -> u64 {

@@ -15,8 +15,8 @@ pub mod handlers;
 pub mod types;
 
 pub use bus::{EventBus, EventSubscription};
-pub use handlers::{EventHandler, AsyncEventHandler};
-pub use types::{MonorepoEvent, EventContext, EventPriority};
+pub use handlers::{AsyncEventHandler, EventHandler};
+pub use types::{EventContext, EventPriority, MonorepoEvent};
 
 use crate::error::Result;
 
@@ -36,7 +36,7 @@ pub trait EventSubscriber {
 pub trait EventCoordinator {
     /// Initialize event system integration
     fn initialize_events(&mut self, bus: &mut EventBus) -> Result<()>;
-    
+
     /// Shutdown and cleanup event subscriptions
     fn shutdown_events(&mut self) -> Result<()>;
 }

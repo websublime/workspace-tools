@@ -3,7 +3,7 @@
 //! This module provides implementation methods for hook definitions, scripts, and conditions,
 //! following the project's pattern of separating declarations from implementations.
 
-use super::{HookType, HookDefinition, HookScript, HookCondition, DependencyType};
+use super::{DependencyType, HookCondition, HookDefinition, HookScript, HookType};
 use crate::Environment;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -31,13 +31,7 @@ impl HookType {
     /// Get all supported hook types
     #[must_use]
     pub fn all() -> Vec<Self> {
-        vec![
-            Self::PreCommit,
-            Self::PrePush,
-            Self::PostCommit,
-            Self::PostMerge,
-            Self::PostCheckout,
-        ]
+        vec![Self::PreCommit, Self::PrePush, Self::PostCommit, Self::PostMerge, Self::PostCheckout]
     }
 }
 
@@ -58,7 +52,7 @@ impl HookDefinition {
     }
 
     /// Get the default timeout for hook execution
-    /// 
+    ///
     /// This can be overridden by configuration, but provides a sensible default
     /// when no configuration is available.
     #[must_use]

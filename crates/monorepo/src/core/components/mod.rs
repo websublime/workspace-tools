@@ -20,7 +20,7 @@ pub mod dependency_manager;
 pub mod persistence;
 
 // Re-export main components
-pub use package_info::{PackageInfoReader, PackageStats};
-pub(crate) use version_manager::PackageVersionManager;
 pub(crate) use changeset_manager::PackageChangesetManager;
+pub use package_info::{PackageInfoReader, PackageStats};
 pub use persistence::PackagePersistence;
+pub(crate) use version_manager::PackageVersionManager;

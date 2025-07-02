@@ -30,7 +30,7 @@ pub struct ChangeAnalysisResult {
 }
 
 /// Analyzer for detecting and analyzing differences between branches and commits
-/// 
+///
 /// Uses direct borrowing from MonorepoProject components instead of trait objects.
 /// This follows Rust ownership principles and eliminates Arc proliferation.
 pub struct DiffAnalyzer<'a> {
@@ -42,7 +42,7 @@ pub struct DiffAnalyzer<'a> {
 
     /// Direct reference to packages
     pub(crate) packages: &'a [crate::core::MonorepoPackageInfo],
-    
+
     /// Direct reference to root path
     pub(crate) root_path: &'a std::path::Path,
 }

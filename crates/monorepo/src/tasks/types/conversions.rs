@@ -3,30 +3,30 @@
 //! Implementation of conversion traits between task types and standard library types.
 //! Separated from type definitions for better architecture organization.
 
-use super::definitions::{TaskCommand, TaskCommandCore, TaskPriority, PackageScript};
-use sublime_standard_tools::command::{Command, CommandPriority, CommandBuilder};
+use super::definitions::{PackageScript, TaskCommand, TaskCommandCore, TaskPriority};
+use sublime_standard_tools::command::{Command, CommandBuilder, CommandPriority};
 
 /// Convert TaskCommandCore to standard Command
 impl From<TaskCommandCore> for Command {
     fn from(task_cmd: TaskCommandCore) -> Self {
         let mut builder = CommandBuilder::new(task_cmd.program);
-        
+
         for arg in task_cmd.args {
             builder = builder.arg(arg);
         }
-        
+
         for (key, value) in task_cmd.env {
             builder = builder.env(key, value);
         }
-        
+
         if let Some(dir) = task_cmd.current_dir {
             builder = builder.current_dir(dir);
         }
-        
+
         if let Some(timeout) = task_cmd.timeout {
             builder = builder.timeout(timeout);
         }
-        
+
         builder.build()
     }
 }
@@ -64,12 +64,12 @@ impl From<PackageScript> for Command {
     fn from(script: PackageScript) -> Self {
         // Determine package manager command
         let manager = script.package_manager.as_deref().unwrap_or("npm");
-        
+
         let mut builder = CommandBuilder::new(manager);
-        
+
         // Add run command for script execution
         builder = builder.arg("run").arg(script.script_name);
-        
+
         // Add extra arguments
         if !script.extra_args.is_empty() {
             builder = builder.arg("--");
@@ -77,12 +77,12 @@ impl From<PackageScript> for Command {
                 builder = builder.arg(arg);
             }
         }
-        
+
         // Set working directory if specified
         if let Some(dir) = script.working_directory {
             builder = builder.current_dir(dir);
         }
-        
+
         builder.build()
     }
 }

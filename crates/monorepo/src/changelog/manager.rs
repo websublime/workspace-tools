@@ -86,23 +86,23 @@ impl<'a> ChangelogManager<'a> {
     }
 
     /// Creates a new changelog manager from an existing MonorepoProject
-    /// 
+    ///
     /// Convenience method that wraps the `new` constructor for backward compatibility.
     /// Uses real direct borrowing following Rust ownership principles.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `project` - Reference to the monorepo project
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A new ChangelogManager instance with direct borrowing
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust
     /// use sublime_monorepo_tools::{ChangelogManager, MonorepoProject};
-    /// 
+    ///
     /// let project = MonorepoProject::new("/path/to/monorepo")?;
     /// let changelog_manager = ChangelogManager::from_project(&project);
     /// ```
@@ -168,11 +168,7 @@ impl<'a> ChangelogManager<'a> {
 
         // Create template variables
         let package_name = request.package_name.clone().unwrap_or_else(|| {
-            self.root_path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("monorepo")
-                .to_string()
+            self.root_path.file_name().and_then(|n| n.to_str()).unwrap_or("monorepo").to_string()
         });
 
         let variables = self.create_template_variables(&package_name, &request.version)?;
@@ -491,9 +487,9 @@ impl<'a> ChangelogManager<'a> {
             self.get_default_changelog_path(&request.package_name)?
         };
 
-        self.file_system.write_file_string(Path::new(&output_path), content).map_err(
-            |e| Error::changelog(format!("Failed to write changelog to {output_path}: {e}")),
-        )?;
+        self.file_system.write_file_string(Path::new(&output_path), content).map_err(|e| {
+            Error::changelog(format!("Failed to write changelog to {output_path}: {e}"))
+        })?;
 
         log::info!("Wrote changelog to: {}", output_path);
         Ok(output_path)

@@ -13,10 +13,10 @@ use std::future::Future;
 pub trait EventHandler: Send + Sync {
     /// Handle an event synchronously
     fn handle_event(&self, event: MonorepoEvent) -> Result<()>;
-    
+
     /// Get handler name for debugging
     fn handler_name(&self) -> &str;
-    
+
     /// Check if this handler can process the given event
     fn can_handle(&self, event: &MonorepoEvent) -> bool {
         // Default implementation accepts all events
@@ -30,22 +30,22 @@ pub trait EventHandler: Send + Sync {
 pub trait AsyncEventHandler: Send + Sync {
     /// Handle an event asynchronously
     async fn handle_event(&self, event: MonorepoEvent) -> Result<()>;
-    
+
     /// Get handler name for debugging
     fn handler_name(&self) -> &str;
-    
+
     /// Check if this handler can process the given event
     fn can_handle(&self, event: &MonorepoEvent) -> bool {
         // Default implementation accepts all events
         let _ = event;
         true
     }
-    
+
     /// Called when handler is registered with event bus
     async fn on_register(&self) -> Result<()> {
         Ok(())
     }
-    
+
     /// Called when handler is unregistered from event bus
     async fn on_unregister(&self) -> Result<()> {
         Ok(())
@@ -68,9 +68,7 @@ impl fmt::Debug for AsyncEventHandlerWrapper {
 impl AsyncEventHandlerWrapper {
     /// Create a new wrapper
     pub fn new<T: AsyncEventHandler + 'static>(handler: T) -> Self {
-        Self {
-            handler: Box::new(AsyncEventHandlerImpl(handler)),
-        }
+        Self { handler: Box::new(AsyncEventHandlerImpl(handler)) }
     }
 }
 
@@ -79,19 +77,19 @@ impl AsyncEventHandler for AsyncEventHandlerWrapper {
     async fn handle_event(&self, event: MonorepoEvent) -> Result<()> {
         self.handler.handle_event_dyn(event).await
     }
-    
+
     fn handler_name(&self) -> &str {
         self.handler.handler_name_dyn()
     }
-    
+
     fn can_handle(&self, event: &MonorepoEvent) -> bool {
         self.handler.can_handle_dyn(event)
     }
-    
+
     async fn on_register(&self) -> Result<()> {
         self.handler.on_register_dyn().await
     }
-    
+
     async fn on_unregister(&self) -> Result<()> {
         self.handler.on_unregister_dyn().await
     }
@@ -115,32 +113,32 @@ impl<T: AsyncEventHandler> AsyncEventHandlerTrait for AsyncEventHandlerImpl<T> {
     async fn handle_event_dyn(&self, event: MonorepoEvent) -> Result<()> {
         self.0.handle_event(event).await
     }
-    
+
     fn handler_name_dyn(&self) -> &str {
         self.0.handler_name()
     }
-    
+
     fn can_handle_dyn(&self, event: &MonorepoEvent) -> bool {
         self.0.can_handle(event)
     }
-    
+
     async fn on_register_dyn(&self) -> Result<()> {
         self.0.on_register().await
     }
-    
+
     async fn on_unregister_dyn(&self) -> Result<()> {
         self.0.on_unregister().await
     }
 }
 
 /// Function-based event handler for simple use cases
-pub struct FunctionHandler<F> 
+pub struct FunctionHandler<F>
 where
     F: Fn(MonorepoEvent) -> Result<()> + Send + Sync,
 {
     /// Handler function
     handler_fn: F,
-    
+
     /// Handler name
     name: String,
 }
@@ -152,10 +150,7 @@ where
     /// Create a new function-based handler
     #[must_use]
     pub fn new(name: impl Into<String>, handler_fn: F) -> Self {
-        Self {
-            handler_fn,
-            name: name.into(),
-        }
+        Self { handler_fn, name: name.into() }
     }
 }
 
@@ -166,7 +161,7 @@ where
     fn handle_event(&self, event: MonorepoEvent) -> Result<()> {
         (self.handler_fn)(event)
     }
-    
+
     fn handler_name(&self) -> &str {
         &self.name
     }
@@ -180,7 +175,7 @@ where
 {
     /// Handler function
     handler_fn: F,
-    
+
     /// Handler name
     name: String,
 }
@@ -193,10 +188,7 @@ where
     /// Create a new async function-based handler
     #[must_use]
     pub fn new(name: impl Into<String>, handler_fn: F) -> Self {
-        Self {
-            handler_fn,
-            name: name.into(),
-        }
+        Self { handler_fn, name: name.into() }
     }
 }
 
@@ -209,7 +201,7 @@ where
     async fn handle_event(&self, event: MonorepoEvent) -> Result<()> {
         (self.handler_fn)(event).await
     }
-    
+
     fn handler_name(&self) -> &str {
         &self.name
     }
@@ -219,7 +211,7 @@ where
 pub struct DelegatingHandler {
     /// Sub-handlers
     handlers: Vec<Box<dyn AsyncEventHandler>>,
-    
+
     /// Handler name
     name: String,
 }
@@ -228,17 +220,14 @@ impl DelegatingHandler {
     /// Create a new delegating handler
     #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
-        Self {
-            handlers: Vec::new(),
-            name: name.into(),
-        }
+        Self { handlers: Vec::new(), name: name.into() }
     }
-    
+
     /// Add a sub-handler
     pub fn add_handler(&mut self, handler: Box<dyn AsyncEventHandler>) {
         self.handlers.push(handler);
     }
-    
+
     /// Remove all handlers
     pub fn clear_handlers(&mut self) {
         self.handlers.clear();
@@ -252,8 +241,8 @@ impl AsyncEventHandler for DelegatingHandler {
             if handler.can_handle(&event) {
                 if let Err(e) = handler.handle_event(event.clone()).await {
                     log::error!(
-                        "Sub-handler '{}' failed to process event: {}", 
-                        handler.handler_name(), 
+                        "Sub-handler '{}' failed to process event: {}",
+                        handler.handler_name(),
                         e
                     );
                     // Continue processing other handlers
@@ -262,18 +251,18 @@ impl AsyncEventHandler for DelegatingHandler {
         }
         Ok(())
     }
-    
+
     fn handler_name(&self) -> &str {
         &self.name
     }
-    
+
     async fn on_register(&self) -> Result<()> {
         for handler in &self.handlers {
             handler.on_register().await?;
         }
         Ok(())
     }
-    
+
     async fn on_unregister(&self) -> Result<()> {
         for handler in &self.handlers {
             handler.on_unregister().await?;
@@ -289,10 +278,10 @@ where
 {
     /// Underlying handler
     inner: H,
-    
+
     /// Filter predicate
     filter: Box<dyn Fn(&MonorepoEvent) -> bool + Send + Sync>,
-    
+
     /// Handler name
     name: String,
 }
@@ -308,11 +297,7 @@ where
         inner: H,
         filter: Box<dyn Fn(&MonorepoEvent) -> bool + Send + Sync>,
     ) -> Self {
-        Self {
-            inner,
-            filter,
-            name: name.into(),
-        }
+        Self { inner, filter, name: name.into() }
     }
 }
 
@@ -328,19 +313,19 @@ where
             Ok(())
         }
     }
-    
+
     fn handler_name(&self) -> &str {
         &self.name
     }
-    
+
     fn can_handle(&self, event: &MonorepoEvent) -> bool {
         (self.filter)(event) && self.inner.can_handle(event)
     }
-    
+
     async fn on_register(&self) -> Result<()> {
         self.inner.on_register().await
     }
-    
+
     async fn on_unregister(&self) -> Result<()> {
         self.inner.on_unregister().await
     }
@@ -350,7 +335,7 @@ where
 pub struct LoggingHandler {
     /// Log level
     level: log::Level,
-    
+
     /// Handler name
     name: String,
 }
@@ -359,10 +344,7 @@ impl LoggingHandler {
     /// Create a new logging handler
     #[must_use]
     pub fn new(name: impl Into<String>, level: log::Level) -> Self {
-        Self {
-            level,
-            name: name.into(),
-        }
+        Self { level, name: name.into() }
     }
 }
 
@@ -379,7 +361,7 @@ impl AsyncEventHandler for LoggingHandler {
         );
         Ok(())
     }
-    
+
     fn handler_name(&self) -> &str {
         &self.name
     }
@@ -390,43 +372,99 @@ impl LoggingHandler {
     fn get_event_description(event: &MonorepoEvent) -> String {
         match event {
             MonorepoEvent::Config(config_event) => match config_event {
-                super::types::ConfigEvent::Updated { section, .. } => format!("Config updated: {section}"),
+                super::types::ConfigEvent::Updated { section, .. } => {
+                    format!("Config updated: {section}")
+                }
                 super::types::ConfigEvent::Reloaded { .. } => "Config reloaded".to_string(),
-                super::types::ConfigEvent::ValidationFailed { .. } => "Config validation failed".to_string(),
+                super::types::ConfigEvent::ValidationFailed { .. } => {
+                    "Config validation failed".to_string()
+                }
             },
             MonorepoEvent::Task(task_event) => match task_event {
-                super::types::TaskEvent::Started { task_name, .. } => format!("Task started: {task_name}"),
-                super::types::TaskEvent::Completed { result, .. } => format!("Task completed: {task_name}", task_name = result.task_name),
-                super::types::TaskEvent::Failed { task_name, .. } => format!("Task failed: {task_name}"),
-                super::types::TaskEvent::ValidationRequested { task_name, .. } => format!("Task validation requested: {task_name}"),
+                super::types::TaskEvent::Started { task_name, .. } => {
+                    format!("Task started: {task_name}")
+                }
+                super::types::TaskEvent::Completed { result, .. } => {
+                    format!("Task completed: {task_name}", task_name = result.task_name)
+                }
+                super::types::TaskEvent::Failed { task_name, .. } => {
+                    format!("Task failed: {task_name}")
+                }
+                super::types::TaskEvent::ValidationRequested { task_name, .. } => {
+                    format!("Task validation requested: {task_name}")
+                }
             },
             MonorepoEvent::Changeset(changeset_event) => match changeset_event {
-                super::types::ChangesetEvent::Created { changeset, .. } => format!("Changeset created: {id}", id = changeset.id),
-                super::types::ChangesetEvent::CreationRequested { .. } => "Changeset creation requested".to_string(),
-                super::types::ChangesetEvent::Validated { changeset_id, .. } => format!("Changeset validated: {changeset_id}"),
-                super::types::ChangesetEvent::Applied { changesets, .. } => format!("Changesets applied: {count}", count = changesets.len()),
+                super::types::ChangesetEvent::Created { changeset, .. } => {
+                    format!("Changeset created: {id}", id = changeset.id)
+                }
+                super::types::ChangesetEvent::CreationRequested { .. } => {
+                    "Changeset creation requested".to_string()
+                }
+                super::types::ChangesetEvent::Validated { changeset_id, .. } => {
+                    format!("Changeset validated: {changeset_id}")
+                }
+                super::types::ChangesetEvent::Applied { changesets, .. } => {
+                    format!("Changesets applied: {count}", count = changesets.len())
+                }
             },
             MonorepoEvent::Hook(hook_event) => match hook_event {
-                super::types::HookEvent::Started { hook_type, .. } => format!("Hook started: {hook_type}"),
-                super::types::HookEvent::Completed { hook_type, success, .. } => format!("Hook completed: {hook_type} ({})", if *success { "success" } else { "failed" }),
-                super::types::HookEvent::Installed { hook_types, .. } => format!("Hooks installed: {count}", count = hook_types.len()),
-                super::types::HookEvent::ValidationFailed { hook_type, .. } => format!("Hook validation failed: {hook_type}"),
+                super::types::HookEvent::Started { hook_type, .. } => {
+                    format!("Hook started: {hook_type}")
+                }
+                super::types::HookEvent::Completed { hook_type, success, .. } => format!(
+                    "Hook completed: {hook_type} ({})",
+                    if *success { "success" } else { "failed" }
+                ),
+                super::types::HookEvent::Installed { hook_types, .. } => {
+                    format!("Hooks installed: {count}", count = hook_types.len())
+                }
+                super::types::HookEvent::ValidationFailed { hook_type, .. } => {
+                    format!("Hook validation failed: {hook_type}")
+                }
             },
             MonorepoEvent::Package(package_event) => match package_event {
-                super::types::PackageEvent::Updated { package_name, new_version, .. } => format!("Package updated: {package_name}@{new_version}"),
-                super::types::PackageEvent::DependenciesChanged { package_name, .. } => format!("Dependencies changed: {package_name}"),
-                super::types::PackageEvent::Published { package_name, version, .. } => format!("Package published: {package_name}@{version}"),
-                super::types::PackageEvent::DiscoveryCompleted { packages, .. } => format!("Package discovery completed: {count} packages", count = packages.len()),
+                super::types::PackageEvent::Updated { package_name, new_version, .. } => {
+                    format!("Package updated: {package_name}@{new_version}")
+                }
+                super::types::PackageEvent::DependenciesChanged { package_name, .. } => {
+                    format!("Dependencies changed: {package_name}")
+                }
+                super::types::PackageEvent::Published { package_name, version, .. } => {
+                    format!("Package published: {package_name}@{version}")
+                }
+                super::types::PackageEvent::DiscoveryCompleted { packages, .. } => {
+                    format!("Package discovery completed: {count} packages", count = packages.len())
+                }
             },
             MonorepoEvent::FileSystem(fs_event) => match fs_event {
-                super::types::FileSystemEvent::FilesChanged { changed_files, .. } => format!("Files changed: {count} files", count = changed_files.len()),
-                super::types::FileSystemEvent::WorkspaceChanged { added_packages, removed_packages, .. } => format!("Workspace changed: +{added} -{removed} packages", added = added_packages.len(), removed = removed_packages.len()),
-                super::types::FileSystemEvent::ConfigFileChanged { .. } => "Config file changed".to_string(),
+                super::types::FileSystemEvent::FilesChanged { changed_files, .. } => {
+                    format!("Files changed: {count} files", count = changed_files.len())
+                }
+                super::types::FileSystemEvent::WorkspaceChanged {
+                    added_packages,
+                    removed_packages,
+                    ..
+                } => format!(
+                    "Workspace changed: +{added} -{removed} packages",
+                    added = added_packages.len(),
+                    removed = removed_packages.len()
+                ),
+                super::types::FileSystemEvent::ConfigFileChanged { .. } => {
+                    "Config file changed".to_string()
+                }
             },
             MonorepoEvent::Workflow(workflow_event) => match workflow_event {
-                super::types::WorkflowEvent::Started { workflow_type, .. } => format!("Workflow started: {workflow_type}"),
-                super::types::WorkflowEvent::Completed { workflow_type, success, .. } => format!("Workflow completed: {workflow_type} ({})", if *success { "success" } else { "failed" }),
-                super::types::WorkflowEvent::StageCompleted { workflow_type, stage, .. } => format!("Workflow stage completed: {workflow_type}::{stage}"),
+                super::types::WorkflowEvent::Started { workflow_type, .. } => {
+                    format!("Workflow started: {workflow_type}")
+                }
+                super::types::WorkflowEvent::Completed { workflow_type, success, .. } => format!(
+                    "Workflow completed: {workflow_type} ({})",
+                    if *success { "success" } else { "failed" }
+                ),
+                super::types::WorkflowEvent::StageCompleted { workflow_type, stage, .. } => {
+                    format!("Workflow stage completed: {workflow_type}::{stage}")
+                }
             },
         }
     }
@@ -442,9 +480,7 @@ impl StatsHandler {
     /// Create a new statistics handler
     #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-        }
+        Self { name: name.into() }
     }
 }
 
@@ -469,7 +505,7 @@ impl AsyncEventHandler for StatsHandler {
         );
         Ok(())
     }
-    
+
     fn handler_name(&self) -> &str {
         &self.name
     }

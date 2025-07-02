@@ -7,7 +7,10 @@
 use std::time::Instant;
 
 use crate::analysis::{AffectedPackagesAnalysis, ChangeAnalysis, MonorepoAnalyzer};
-use crate::changes::{ChangeSignificance, PackageChange, PackageChangeType, ChangeDecisionSource, ConventionalCommitParser, VersionBumpType};
+use crate::changes::{
+    ChangeDecisionSource, ChangeSignificance, ConventionalCommitParser, PackageChange,
+    PackageChangeType, VersionBumpType,
+};
 use crate::changesets::types::ChangesetFilter;
 use crate::core::MonorepoProject;
 use crate::error::Error;
@@ -20,45 +23,74 @@ use sublime_git_tools::GitChangedFile;
 // Import struct definition from types module
 use crate::workflows::types::DevelopmentWorkflow;
 
+/// Configuration for creating a DevelopmentWorkflow
+///
+/// Groups all the dependencies needed to create a development workflow
+/// to avoid too_many_arguments clippy warning and improve API usability.
+pub struct DevelopmentWorkflowConfig<'a> {
+    /// Analyzer for detecting changes and affected packages
+    pub analyzer: MonorepoAnalyzer<'a>,
+    /// Task manager for executing development tasks
+    pub task_manager: crate::tasks::TaskManager<'a>,
+    /// Changeset manager for handling development changesets
+    pub changeset_manager: crate::changesets::ChangesetManager<'a>,
+    /// Direct reference to configuration
+    pub config: &'a crate::config::MonorepoConfig,
+    /// Direct reference to packages
+    pub packages: &'a [crate::core::MonorepoPackageInfo],
+    /// Direct reference to git repository
+    pub repository: &'a sublime_git_tools::Repo,
+    /// Direct reference to root path
+    pub root_path: &'a std::path::Path,
+}
+
 impl<'a> DevelopmentWorkflow<'a> {
-    /// Creates a new development workflow with direct borrowing from project
+    /// Creates a new development workflow with configuration struct
     ///
     /// Uses borrowing instead of trait objects to eliminate Arc proliferation
-    /// and work with Rust ownership principles.
+    /// and work with Rust ownership principles. Accepts a configuration struct
+    /// to avoid too_many_arguments issues and improve maintainability.
     ///
     /// # Arguments
     ///
-    /// * `analyzer` - Analyzer for detecting changes and affected packages
-    /// * `task_manager` - Task manager for executing development tasks
-    /// * `changeset_manager` - Changeset manager for handling development changesets
-    /// * `config` - Direct reference to configuration
-    /// * `packages` - Direct reference to packages
-    /// * `repository` - Direct reference to git repository
-    /// * `file_system` - Direct reference to file system manager
-    /// * `root_path` - Direct reference to root path
+    /// * `config` - Development workflow configuration containing all dependencies
     ///
     /// # Returns
     ///
     /// A new development workflow instance
-    pub fn new(
-        analyzer: MonorepoAnalyzer<'a>,
-        task_manager: crate::tasks::TaskManager<'a>,
-        changeset_manager: crate::changesets::ChangesetManager<'a>,
-        config: &'a crate::config::MonorepoConfig,
-        packages: &'a [crate::core::MonorepoPackageInfo],
-        repository: &'a sublime_git_tools::Repo,
-        root_path: &'a std::path::Path,
-    ) -> Self {
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_monorepo_tools::workflows::{DevelopmentWorkflow, DevelopmentWorkflowConfig};
+    /// use sublime_monorepo_tools::analysis::MonorepoAnalyzer;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let config = DevelopmentWorkflowConfig {
+    ///     analyzer: MonorepoAnalyzer::new(&project),
+    ///     task_manager: task_manager,
+    ///     changeset_manager: changeset_manager,
+    ///     config: &project.config,
+    ///     packages: &project.packages,
+    ///     repository: &project.repository,
+    ///     root_path: &project.root_path,
+    /// };
+    /// let workflow = DevelopmentWorkflow::new(config);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn new(config: DevelopmentWorkflowConfig<'a>) -> Self {
         Self {
-            analyzer,
-            task_manager,
-            changeset_manager,
-            config,
-            packages,
-            repository,
-            root_path,
+            analyzer: config.analyzer,
+            task_manager: config.task_manager,
+            changeset_manager: config.changeset_manager,
+            config: config.config,
+            packages: config.packages,
+            repository: config.repository,
+            root_path: config.root_path,
         }
     }
+
 
     /// Creates a new development workflow from project (convenience method)
     ///
@@ -104,15 +136,17 @@ impl<'a> DevelopmentWorkflow<'a> {
             &project.root_path,
         );
 
-        Ok(Self::new(
+        let config = DevelopmentWorkflowConfig {
             analyzer,
             task_manager,
             changeset_manager,
-            &project.config,
-            &project.packages,
-            &project.repository,
-            &project.root_path,
-        ))
+            config: &project.config,
+            packages: &project.packages,
+            repository: &project.repository,
+            root_path: &project.root_path,
+        };
+
+        Ok(Self::new(config))
     }
 
     /// Executes the development workflow synchronously
@@ -185,7 +219,6 @@ impl<'a> DevelopmentWorkflow<'a> {
             duration: start_time.elapsed(),
         })
     }
-
 
     /// Analyzes changes and provides detailed analysis
     ///
@@ -557,11 +590,15 @@ impl<'a> DevelopmentWorkflow<'a> {
 
         for package_change in package_changes {
             // Determine version bump using changeset-first, conventional-commits-fallback approach
-            let version_decision = self.determine_version_bump(&package_change.package_name, &package_change.changed_files)?;
+            let version_decision = self.determine_version_bump(
+                &package_change.package_name,
+                &package_change.changed_files,
+            )?;
             let suggested_version_bump = version_decision.version_bump();
-            
+
             // Infer change type from version bump and files (simplified approach)
-            let change_type = Self::infer_change_type(&package_change.changed_files, suggested_version_bump);
+            let change_type =
+                Self::infer_change_type(&package_change.changed_files, suggested_version_bump);
 
             // Determine significance based on version bump and change type
             let significance = Self::infer_significance_from_version_bump(suggested_version_bump);
@@ -603,10 +640,8 @@ impl<'a> DevelopmentWorkflow<'a> {
         Ok(converted_changes)
     }
 
-
     /// Analyzes the significance of changes based on files and change type
     ///
-
 
     /// Determines version bump using changeset-first, conventional-commits-fallback approach
     ///
@@ -643,7 +678,9 @@ impl<'a> DevelopmentWorkflow<'a> {
         }
 
         // Step 2: Analyze conventional commits (intelligent fallback)
-        if let Some(conventional_bump) = self.analyze_conventional_commits_for_files(changed_files)? {
+        if let Some(conventional_bump) =
+            self.analyze_conventional_commits_for_files(changed_files)?
+        {
             log::debug!(
                 "Determined version bump from conventional commits for package '{}': {:?}",
                 package_name,
@@ -676,7 +713,10 @@ impl<'a> DevelopmentWorkflow<'a> {
     /// # Errors
     ///
     /// Returns an error if changeset retrieval fails
-    fn find_changeset_for_package(&self, package_name: &str) -> Result<Option<VersionBumpType>, Error> {
+    fn find_changeset_for_package(
+        &self,
+        package_name: &str,
+    ) -> Result<Option<VersionBumpType>, Error> {
         // Get pending changesets for this package
         let filter = ChangesetFilter {
             package: Some(package_name.to_string()),
@@ -723,12 +763,13 @@ impl<'a> DevelopmentWorkflow<'a> {
         } else {
             // Fallback: get all recent commits (no relative filter)
             self.repository.get_commits_since(None, &None)
-        }.map_err(|e| Error::workflow(format!("Failed to get commits: {e}")))?;
+        }
+        .map_err(|e| Error::workflow(format!("Failed to get commits: {e}")))?;
 
         // Filter commits to only those that are relevant (this is a simplified approach)
         // In a more sophisticated implementation, we could check if commits touch the specific files
         // For now, we'll analyze all commits in the range which is reasonable for conventional commits
-        
+
         // Parse conventional commits
         let parser = ConventionalCommitParser::new();
         Ok(parser.analyze_commits(commits))
@@ -759,9 +800,10 @@ impl<'a> DevelopmentWorkflow<'a> {
         // Simple heuristic: check for specific well-known dependency files
         for file in changed_files {
             let path_lower = file.path.to_lowercase();
-            if path_lower.ends_with("cargo.toml") 
+            if path_lower.ends_with("cargo.toml")
                 || path_lower.ends_with("package.json")
-                || path_lower.ends_with("go.mod") {
+                || path_lower.ends_with("go.mod")
+            {
                 return PackageChangeType::Dependencies;
             }
         }

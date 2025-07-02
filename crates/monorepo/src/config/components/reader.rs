@@ -4,8 +4,8 @@
 //! for retrieving specific configuration sections and values without modification.
 
 use crate::config::{
-    ChangelogConfig, ChangesetsConfig, HooksConfig, PluginsConfig, TasksConfig,
-    VersioningConfig, WorkspaceConfig, MonorepoConfig,
+    ChangelogConfig, ChangesetsConfig, HooksConfig, MonorepoConfig, PluginsConfig, TasksConfig,
+    VersioningConfig, WorkspaceConfig,
 };
 use crate::Environment;
 use std::path::Path;
@@ -180,12 +180,12 @@ impl<'a> ConfigReader<'a> {
     #[must_use]
     pub fn get_package_manager_patterns(&self) -> Vec<String> {
         let mut patterns = Vec::new();
-        
+
         // Add patterns based on workspace configuration
         for pattern in &self.config.workspace.patterns {
             patterns.push(pattern.pattern.clone());
         }
-        
+
         patterns
     }
 

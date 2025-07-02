@@ -1,9 +1,9 @@
 //! Package-related types and implementations
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use sublime_package_tools::PackageInfo;
 use sublime_standard_tools::monorepo::WorkspacePackage;
-use std::collections::HashMap;
 
 /// Status of a package version
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

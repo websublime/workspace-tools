@@ -1,6 +1,6 @@
 //! Implementation of workflow status and progress types
 
-use super::types::{WorkflowProgress, WorkflowStatus, WorkflowStep, SubStep};
+use super::types::{SubStep, WorkflowProgress, WorkflowStatus, WorkflowStep};
 
 impl WorkflowProgress {
     /// Create a new workflow progress tracker
@@ -181,7 +181,7 @@ impl WorkflowProgress {
                     completed: false,
                 };
                 current_step.substeps.push(substep);
-                
+
                 log::debug!(
                     "Added substep '{}' to step '{}' (total substeps: {})",
                     description,
@@ -199,9 +199,10 @@ impl WorkflowProgress {
         } else {
             log::warn!("Cannot add substep '{}' - no current step available", description);
         }
-        
+
         // Update the current step description to reflect the latest substep
-        self.current_step_description = format!("{current}: {description}", current = self.current_step_description);
+        self.current_step_description =
+            format!("{current}: {description}", current = self.current_step_description);
     }
 
     /// Mark the current substep as completed
@@ -234,9 +235,7 @@ impl WorkflowProgress {
     /// Get the total number of substeps for the current step
     #[must_use]
     pub fn current_step_total_substeps(&self) -> usize {
-        self.steps
-            .last()
-            .map_or(0, |step| step.substeps.len())
+        self.steps.last().map_or(0, |step| step.substeps.len())
     }
 
     /// Get substep completion percentage for the current step (0.0 to 100.0)
@@ -247,7 +246,7 @@ impl WorkflowProgress {
         if total == 0 {
             return 100.0;
         }
-        
+
         let completed = self.current_step_completed_substeps();
         (completed as f64 / total as f64) * 100.0
     }

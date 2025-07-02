@@ -3,8 +3,8 @@
 //! Types that define when and how tasks should be executed based on
 //! various conditions like file changes, package changes, or environment.
 
-use serde::{Deserialize, Serialize};
 use crate::config::Environment;
+use serde::{Deserialize, Serialize};
 
 /// Conditions that must be met for a task to execute
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -14,31 +14,31 @@ pub enum TaskCondition {
         /// List of package names
         packages: Vec<String>,
     },
-    
+
     /// Files matching patterns have changed
     FilesChanged {
         /// Glob patterns to match
         patterns: Vec<FilePattern>,
     },
-    
+
     /// Dependencies have changed
     DependenciesChanged {
         /// Optional filter for specific dependencies
         filter: Option<DependencyFilter>,
     },
-    
+
     /// Current branch matches pattern
     OnBranch {
         /// Branch pattern (supports wildcards)
         pattern: BranchCondition,
     },
-    
+
     /// Specific environment is active
     Environment {
         /// Environment condition
         env: EnvironmentCondition,
     },
-    
+
     /// Custom script returns true
     CustomScript {
         /// Script to execute
@@ -46,19 +46,19 @@ pub enum TaskCondition {
         /// Expected output
         expected_output: Option<String>,
     },
-    
+
     /// All conditions must be true
     All {
         /// List of conditions
         conditions: Vec<TaskCondition>,
     },
-    
+
     /// Any condition must be true
     Any {
         /// List of conditions
         conditions: Vec<TaskCondition>,
     },
-    
+
     /// Condition must be false
     Not {
         /// Condition to negate
@@ -71,22 +71,22 @@ pub enum TaskCondition {
 pub enum TaskScope {
     /// Run globally (once)
     Global,
-    
+
     /// Run for a specific package
     Package(String),
-    
+
     /// Run for all affected packages
     AffectedPackages,
-    
+
     /// Run for all packages in monorepo
     AllPackages,
-    
+
     /// Run for packages matching pattern
     PackagesMatching {
         /// Pattern to match package names
         pattern: String,
     },
-    
+
     /// Custom scope with filter
     Custom {
         /// Filter function name
@@ -105,28 +105,28 @@ impl Default for TaskScope {
 pub enum TaskTrigger {
     /// Manual trigger only
     Manual,
-    
+
     /// On file save
     OnSave,
-    
+
     /// On commit
     OnCommit,
-    
+
     /// On push
     OnPush,
-    
+
     /// On pull request
     OnPullRequest,
-    
+
     /// On merge
     OnMerge,
-    
+
     /// On schedule
     Scheduled {
         /// Cron expression
         cron: String,
     },
-    
+
     /// On webhook
     OnWebhook {
         /// Webhook event name
@@ -139,10 +139,10 @@ pub enum TaskTrigger {
 pub struct FilePattern {
     /// The pattern to match
     pub pattern: String,
-    
+
     /// Whether this is an exclude pattern
     pub exclude: bool,
-    
+
     /// Pattern type
     pub pattern_type: FilePatternType,
 }
@@ -167,16 +167,16 @@ pub enum FilePatternType {
 pub struct DependencyFilter {
     /// Include only these dependencies
     pub include: Vec<String>,
-    
+
     /// Exclude these dependencies
     pub exclude: Vec<String>,
-    
+
     /// Include dev dependencies
     pub include_dev: bool,
-    
+
     /// Include peer dependencies
     pub include_peer: bool,
-    
+
     /// Version change threshold
     pub version_change: VersionChangeThreshold,
 }
@@ -211,25 +211,25 @@ pub enum VersionChangeThreshold {
 pub enum BranchCondition {
     /// Exact branch name
     Equals(String),
-    
+
     /// Branch name pattern (with wildcards)
     Matches(String),
-    
+
     /// Is main branch (main/master/develop)
     IsMain,
-    
+
     /// Is feature branch
     IsFeature,
-    
+
     /// Is release branch
     IsRelease,
-    
+
     /// Is hotfix branch
     IsHotfix,
-    
+
     /// One of multiple branches
     OneOf(Vec<String>),
-    
+
     /// Not on these branches
     NoneOf(Vec<String>),
 }
@@ -239,19 +239,19 @@ pub enum BranchCondition {
 pub enum EnvironmentCondition {
     /// Specific environment
     Is(Environment),
-    
+
     /// One of multiple environments
     OneOf(Vec<Environment>),
-    
+
     /// Not these environments
     Not(Vec<Environment>),
-    
+
     /// Environment variable exists
     VariableExists {
         /// Variable name
         key: String,
     },
-    
+
     /// Environment variable has value
     VariableEquals {
         /// Variable name
@@ -259,7 +259,7 @@ pub enum EnvironmentCondition {
         /// Expected value
         value: String,
     },
-    
+
     /// Environment variable matches pattern
     VariableMatches {
         /// Variable name
@@ -267,7 +267,7 @@ pub enum EnvironmentCondition {
         /// Pattern to match
         pattern: String,
     },
-    
+
     /// Custom environment check
     Custom {
         /// Checker function name

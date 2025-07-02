@@ -1,11 +1,10 @@
 //! Core configuration types for monorepo tools
 
-use serde::{Deserialize, Serialize};
 use super::{
-    VersioningConfig, TasksConfig, ChangelogConfig, HooksConfig,
-    ChangesetsConfig, PluginsConfig, WorkspaceConfig, GitConfig,
-    ValidationConfig,
+    ChangelogConfig, ChangesetsConfig, GitConfig, HooksConfig, PluginsConfig, TasksConfig,
+    ValidationConfig, VersioningConfig, WorkspaceConfig,
 };
+use serde::{Deserialize, Serialize};
 
 /// Main configuration for monorepo tools
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -8,13 +8,13 @@ use crate::config::MonorepoConfig;
 use sublime_git_tools::Repo;
 
 /// Validator for hook conditions and requirements
-/// 
+///
 /// Uses direct borrowing from MonorepoProject components instead of trait objects.
 /// This follows Rust ownership principles and eliminates Arc proliferation.
 pub struct HookValidator<'a> {
     /// Direct reference to git repository
     pub(crate) repository: &'a Repo,
-    
+
     /// Direct reference to configuration
     pub(crate) config: &'a MonorepoConfig,
 }

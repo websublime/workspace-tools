@@ -62,7 +62,6 @@ impl<'a> TaskExecutor<'a> {
         Self { packages, config, root_path }
     }
 
-
     /// Execute a task with specified scope
     ///
     /// Executes the task synchronously without async infection.
@@ -166,7 +165,6 @@ impl<'a> TaskExecutor<'a> {
 
         Ok(result)
     }
-
 
     // Private helper methods
 
@@ -280,7 +278,11 @@ impl<'a> TaskExecutor<'a> {
 
         // Convert CommandOutput to TaskOutput
         let task_output = TaskOutput {
-            command: format!("{program} {args}", program = command.command.program, args = command.command.args.join(" ")),
+            command: format!(
+                "{program} {args}",
+                program = command.command.program,
+                args = command.command.args.join(" ")
+            ),
             working_dir,
             exit_code: Some(output.status()),
             stdout: output.stdout().to_string(),

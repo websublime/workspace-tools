@@ -12,34 +12,34 @@ use std::time::Duration;
 pub struct TaskDefinition {
     /// Unique name of the task
     pub name: String,
-    
+
     /// Human-readable description
     pub description: String,
-    
+
     /// Commands to execute
     pub commands: Vec<TaskCommand>,
-    
+
     /// Package.json scripts to run
     pub package_scripts: Vec<PackageScript>,
-    
+
     /// Tasks that must run before this one
     pub dependencies: Vec<String>,
-    
+
     /// Conditions that must be met for task to run
     pub conditions: Vec<super::TaskCondition>,
-    
+
     /// Execution priority
     pub priority: TaskPriority,
-    
+
     /// Scope of task execution
     pub scope: super::TaskScope,
-    
+
     /// Whether to continue on error
     pub continue_on_error: bool,
-    
+
     /// Maximum execution time
     pub timeout: Option<TaskTimeout>,
-    
+
     /// Environment variables
     pub environment: TaskEnvironment,
 }
@@ -50,11 +50,11 @@ pub struct TaskCommand {
     /// The underlying command (using standard crate)
     #[serde(flatten)]
     pub command: TaskCommandCore,
-    
+
     /// Whether to run in shell
     pub shell: bool,
-    
-    /// Expected exit codes (default: [0])
+
+    /// Expected exit codes (default: \[0\])
     pub expected_exit_codes: Vec<i32>,
 }
 
@@ -63,16 +63,16 @@ pub struct TaskCommand {
 pub struct TaskCommandCore {
     /// Program to execute
     pub program: String,
-    
+
     /// Arguments to pass
     pub args: Vec<String>,
-    
+
     /// Working directory (relative to package or absolute)
     pub current_dir: Option<PathBuf>,
-    
+
     /// Environment variables for this command
     pub env: HashMap<String, String>,
-    
+
     /// Command-specific timeout
     pub timeout: Option<Duration>,
 }
@@ -82,16 +82,16 @@ pub struct TaskCommandCore {
 pub struct PackageScript {
     /// Package name (if None, runs in all affected packages)
     pub package_name: Option<String>,
-    
+
     /// Script name from package.json
     pub script_name: String,
-    
+
     /// Working directory override
     pub working_directory: Option<PathBuf>,
-    
+
     /// Additional arguments to pass
     pub extra_args: Vec<String>,
-    
+
     /// Package manager to use (npm, yarn, pnpm)
     pub package_manager: Option<String>,
 }
@@ -127,7 +127,10 @@ impl TaskPriority {
 
     /// Create TaskPriority from configuration using priority name
     #[must_use]
-    pub fn from_config(config: &crate::config::types::ValidationConfig, priority_name: &str) -> Self {
+    pub fn from_config(
+        config: &crate::config::types::ValidationConfig,
+        priority_name: &str,
+    ) -> Self {
         let value = config.get_task_priority(priority_name);
         Self::from_config_value(value)
     }
@@ -154,11 +157,10 @@ pub enum TaskTimeout {
 pub struct TaskEnvironment {
     /// Environment variables to set
     pub variables: HashMap<String, String>,
-    
+
     /// Variables to inherit from parent process
     pub inherit: Vec<String>,
-    
+
     /// Variables to explicitly unset
     pub unset: Vec<String>,
 }
-

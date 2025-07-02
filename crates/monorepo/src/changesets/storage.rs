@@ -4,8 +4,8 @@
 //! from standard-tools. Changesets are stored as JSON files in the configured
 //! changeset directory with structured naming for easy querying.
 
-use std::path::PathBuf;
 use serde_json;
+use std::path::PathBuf;
 
 use super::types::{Changeset, ChangesetFilter, ChangesetStorage};
 use crate::error::Error;
@@ -29,18 +29,18 @@ impl<'a> ChangesetStorage<'a> {
     /// let storage = ChangesetStorage::new(project);
     /// ```
     /// Creates a new changeset storage with direct borrowing from project
-    /// 
+    ///
     /// Uses borrowing instead of trait objects to eliminate Arc proliferation
     /// and work with Rust ownership principles.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `config` - Changeset configuration
     /// * `file_system` - Direct reference to file system manager
     /// * `root_path` - Direct reference to root path
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A new changeset storage instance
     #[must_use]
     pub fn new(
@@ -48,13 +48,8 @@ impl<'a> ChangesetStorage<'a> {
         file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
         root_path: &'a std::path::Path,
     ) -> Self {
-        Self {
-            config,
-            file_system,
-            root_path,
-        }
+        Self { config, file_system, root_path }
     }
-
 
     /// Saves a changeset to storage
     ///
@@ -156,10 +151,9 @@ impl<'a> ChangesetStorage<'a> {
                 // Try to match either the full ID or the short hash (first 8 characters)
                 let short_id = if id.len() > 8 { &id[..8] } else { id };
                 if filename.contains(id) || filename.contains(short_id) {
-                    let content =
-                        self.file_system.read_file(&file).map_err(|e| {
-                            Error::changeset(format!("Failed to read changeset file: {e}"))
-                        })?;
+                    let content = self.file_system.read_file(&file).map_err(|e| {
+                        Error::changeset(format!("Failed to read changeset file: {e}"))
+                    })?;
                     let content = String::from_utf8(content).map_err(|e| {
                         Error::changeset(format!("Invalid UTF-8 in changeset file: {e}"))
                     })?;
@@ -296,10 +290,9 @@ impl<'a> ChangesetStorage<'a> {
                 let short_id = if id.len() > 8 { &id[..8] } else { id };
                 if filename.contains(id) || filename.contains(short_id) {
                     // Verify this is the correct changeset
-                    let content =
-                        self.file_system.read_file(&file).map_err(|e| {
-                            Error::changeset(format!("Failed to read changeset file: {e}"))
-                        })?;
+                    let content = self.file_system.read_file(&file).map_err(|e| {
+                        Error::changeset(format!("Failed to read changeset file: {e}"))
+                    })?;
                     let content = String::from_utf8(content).map_err(|e| {
                         Error::changeset(format!("Invalid UTF-8 in changeset file: {e}"))
                     })?;

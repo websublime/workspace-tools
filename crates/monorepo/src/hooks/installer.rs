@@ -3,8 +3,8 @@
 //! The `HookInstaller` manages the installation, uninstallation, and status checking
 //! of Git hooks in the repository, leveraging `FileSystemManager` for file operations.
 
-use super::{HookDefinition, HookType};
 use super::types::HookInstaller;
+use super::{HookDefinition, HookType};
 use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
 use std::collections::HashMap;
@@ -12,20 +12,20 @@ use std::path::{Path, PathBuf};
 
 impl HookInstaller {
     /// Create a new hook installer with direct borrowing from project
-    /// 
+    ///
     /// Uses borrowing instead of trait objects to eliminate Arc proliferation
     /// and work with Rust ownership principles.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `project` - Reference to monorepo project
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A new hook installer instance
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if:
     /// - The Git directory cannot be found
     /// - The hooks directory cannot be accessed
@@ -33,12 +33,8 @@ impl HookInstaller {
         let hooks_dir = Self::find_git_hooks_directory(project)?;
         let hook_template = Self::get_hook_template();
 
-        Ok(Self { 
-            hooks_dir, 
-            hook_template 
-        })
+        Ok(Self { hooks_dir, hook_template })
     }
-
 
     /// Install a specific Git hook
     ///
@@ -154,8 +150,10 @@ impl HookInstaller {
             let hook_path = self.hooks_dir.join(hook_filename);
 
             if hook_path.exists() {
-                let backup_name =
-                    format!("{hook_filename}.backup.{timestamp}", timestamp = chrono::Utc::now().timestamp());
+                let backup_name = format!(
+                    "{hook_filename}.backup.{timestamp}",
+                    timestamp = chrono::Utc::now().timestamp()
+                );
                 let backup_path = backup_dir.join(backup_name);
 
                 self.copy_file(&hook_path, &backup_path)?;

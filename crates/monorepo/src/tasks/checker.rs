@@ -232,10 +232,7 @@ impl<'a> ConditionChecker<'a> {
     }
 
     /// Check if specified packages have changed
-    pub fn check_packages_changed(
-        packages: &[String],
-        context: &ExecutionContext,
-    ) -> Result<bool> {
+    pub fn check_packages_changed(packages: &[String], context: &ExecutionContext) -> Result<bool> {
         // If no packages specified, condition is met (no restrictions)
         if packages.is_empty() {
             return Ok(true);
@@ -1204,7 +1201,9 @@ impl<'a> ConditionChecker<'a> {
                     TaskCondition::CustomScript { script, .. } => {
                         acc.push(format!("CustomScript('{script})"));
                     }
-                    TaskCondition::Environment { env: crate::tasks::EnvironmentCondition::Custom { checker } } => {
+                    TaskCondition::Environment {
+                        env: crate::tasks::EnvironmentCondition::Custom { checker },
+                    } => {
                         acc.push(format!("CustomEnvironment('{checker})"));
                     }
                     TaskCondition::All { conditions } | TaskCondition::Any { conditions } => {

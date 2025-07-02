@@ -4,17 +4,17 @@
 
 use super::{ConditionChecker, TaskExecutor, TaskRegistry};
 use crate::core::MonorepoPackageInfo;
-use sublime_standard_tools::filesystem::FileSystemManager;
 use std::collections::HashMap;
+use sublime_standard_tools::filesystem::FileSystemManager;
 
 /// Central manager for task execution and coordination
-/// 
+///
 /// Uses direct borrowing from MonorepoProject components instead of trait objects.
 /// This follows Rust ownership principles and eliminates Arc proliferation.
 pub struct TaskManager<'a> {
     /// Direct reference to file system manager
     pub(crate) file_system: &'a FileSystemManager,
-    
+
     /// Direct reference to packages
     pub(crate) packages: &'a [MonorepoPackageInfo],
 

@@ -7,10 +7,10 @@
 use std::time::Instant;
 
 use super::types::{ReleaseOptions, ReleaseResult};
+use crate::analysis::ChangeAnalysis;
 use crate::analysis::MonorepoAnalyzer;
 use crate::core::MonorepoProject;
 use crate::error::Error;
-use crate::analysis::ChangeAnalysis;
 
 /// Release workflow orchestrator
 ///
@@ -37,48 +37,77 @@ use crate::analysis::ChangeAnalysis;
 /// # Ok(())
 /// # }
 /// ```
-
 // Import struct definition from types module
 use crate::workflows::types::ReleaseWorkflow;
 
+/// Configuration for creating a ReleaseWorkflow
+///
+/// Groups all the dependencies needed to create a release workflow
+/// to avoid too_many_arguments clippy warning and improve API usability.
+pub struct ReleaseWorkflowConfig<'a> {
+    /// Analyzer for detecting changes and affected packages
+    pub analyzer: MonorepoAnalyzer<'a>,
+    /// Changeset manager for applying production changesets
+    pub changeset_manager: crate::changesets::ChangesetManager<'a>,
+    /// Task manager for executing release tasks
+    pub task_manager: crate::tasks::TaskManager<'a>,
+    /// Direct reference to configuration
+    pub config: &'a crate::config::MonorepoConfig,
+    /// Direct reference to packages
+    pub packages: &'a [crate::core::MonorepoPackageInfo],
+    /// Direct reference to git repository
+    pub repository: &'a sublime_git_tools::Repo,
+    /// Direct reference to root path
+    pub root_path: &'a std::path::Path,
+}
+
 impl<'a> ReleaseWorkflow<'a> {
-    /// Creates a new release workflow with injected dependencies
+    /// Creates a new release workflow with configuration struct
+    ///
+    /// Uses borrowing instead of trait objects to eliminate Arc proliferation
+    /// and work with Rust ownership principles. Accepts a configuration struct
+    /// to avoid too_many_arguments issues and improve maintainability.
     ///
     /// # Arguments
     ///
-    /// * `analyzer` - Analyzer for detecting changes and affected packages
-    /// * `version_manager` - Version manager for handling version bumps
-    /// * `changeset_manager` - Changeset manager for applying production changesets
-    /// * `task_manager` - Task manager for executing release tasks
-    /// * `config_provider` - Configuration provider for accessing settings
-    /// * `git_provider` - Git provider for repository operations
+    /// * `config` - Release workflow configuration containing all dependencies
     ///
     /// # Returns
     ///
-    /// A new `ReleaseWorkflow` instance ready to execute releases.
+    /// A new release workflow instance
     ///
-    /// # Errors
+    /// # Examples
     ///
-    /// Returns an error if any of the required components cannot be initialized.
-    pub fn new(
-        analyzer: MonorepoAnalyzer<'a>,
-        changeset_manager: crate::changesets::ChangesetManager<'a>,
-        task_manager: crate::tasks::TaskManager<'a>,
-        config: &'a crate::config::MonorepoConfig,
-        packages: &'a [crate::core::MonorepoPackageInfo],
-        repository: &'a sublime_git_tools::Repo,
-        root_path: &'a std::path::Path,
-    ) -> Self {
+    /// ```rust
+    /// use sublime_monorepo_tools::workflows::{ReleaseWorkflow, ReleaseWorkflowConfig};
+    /// use sublime_monorepo_tools::analysis::MonorepoAnalyzer;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let config = ReleaseWorkflowConfig {
+    ///     analyzer: MonorepoAnalyzer::new(&project),
+    ///     changeset_manager: changeset_manager,
+    ///     task_manager: task_manager,
+    ///     config: &project.config,
+    ///     packages: &project.packages,
+    ///     repository: &project.repository,
+    ///     root_path: &project.root_path,
+    /// };
+    /// let workflow = ReleaseWorkflow::new(config);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn new(config: ReleaseWorkflowConfig<'a>) -> Self {
         Self {
-            analyzer,
-            changeset_manager,
-            task_manager,
-            config,
-            packages,
-            repository,
-            root_path,
+            analyzer: config.analyzer,
+            changeset_manager: config.changeset_manager,
+            task_manager: config.task_manager,
+            config: config.config,
+            packages: config.packages,
+            repository: config.repository,
+            root_path: config.root_path,
         }
     }
+
 
     /// Creates a new release workflow from project (convenience method)
     ///
@@ -97,11 +126,14 @@ impl<'a> ReleaseWorkflow<'a> {
     /// # Examples
     ///
     /// ```rust
-    /// use std::sync::Arc;
     /// use sublime_monorepo_tools::{ReleaseWorkflow, MonorepoProject};
     ///
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let project = Arc::new(MonorepoProject::new("/path/to/monorepo")?);
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let project = MonorepoProject::new("/path/to/monorepo")?;
+    /// let workflow = ReleaseWorkflow::from_project(&project)?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn from_project(project: &'a MonorepoProject) -> Result<Self, Error> {
         use crate::analysis::MonorepoAnalyzer;
         use crate::changesets::{ChangesetManager, ChangesetStorage};
@@ -138,15 +170,17 @@ impl<'a> ReleaseWorkflow<'a> {
             &project.root_path,
         );
 
-        Ok(Self::new(
+        let config = ReleaseWorkflowConfig {
             analyzer,
             changeset_manager,
             task_manager,
-            &project.config,
-            &project.packages,
-            &project.repository,
-            &project.root_path,
-        ))
+            config: &project.config,
+            packages: &project.packages,
+            repository: &project.repository,
+            root_path: &project.root_path,
+        };
+
+        Ok(Self::new(config))
     }
 
     /// Executes the complete release workflow synchronously
@@ -258,7 +292,10 @@ impl<'a> ReleaseWorkflow<'a> {
                         .collect();
 
                     if !failed_tasks.is_empty() && !options.force {
-                        errors.push(format!("Release tasks failed: {count} tasks", count = failed_tasks.len()));
+                        errors.push(format!(
+                            "Release tasks failed: {count} tasks",
+                            count = failed_tasks.len()
+                        ));
                         success = false;
                     }
 
@@ -357,7 +394,6 @@ impl<'a> ReleaseWorkflow<'a> {
         self.task_manager.execute_tasks_for_affected_packages(&affected_packages)
     }
 
-
     /// Deploys to the specified environments synchronously
     fn deploy_to_environments_sync(&self, environments: &[String]) -> Result<(), Error> {
         // Execute deployment tasks for each environment using TaskManager
@@ -402,7 +438,6 @@ impl<'a> ReleaseWorkflow<'a> {
 
         Ok(())
     }
-
 
     /// Gets deployment tasks for a specific environment
     ///
@@ -519,7 +554,10 @@ impl<'a> ReleaseWorkflow<'a> {
             log::info!("Generating changelog for package: {}", package_change.package_name);
 
             // Determine version based on suggested version bump
-            let next_version = self.calculate_next_version(&package_change.package_name, package_change.suggested_version_bump)?;
+            let next_version = self.calculate_next_version(
+                &package_change.package_name,
+                package_change.suggested_version_bump,
+            )?;
 
             // Create changelog request for this package
             let request = ChangelogRequest {
@@ -541,7 +579,7 @@ impl<'a> ReleaseWorkflow<'a> {
                         changelog_result.commit_count,
                         if changelog_result.has_breaking_changes { "has" } else { "no" }
                     );
-                    
+
                     if let Some(output_path) = &changelog_result.output_path {
                         log::debug!("Changelog written to: {}", output_path);
                     }
@@ -563,7 +601,7 @@ impl<'a> ReleaseWorkflow<'a> {
         // Generate root changelog if there are multiple packages
         if changes.package_changes.len() > 1 {
             log::info!("Generating root monorepo changelog");
-            
+
             let root_request = ChangelogRequest {
                 package_name: None, // Root changelog
                 version: "latest".to_string(),
@@ -586,7 +624,11 @@ impl<'a> ReleaseWorkflow<'a> {
     ///
     /// This method determines the next semantic version based on the suggested
     /// version bump type from the change analysis.
-    fn calculate_next_version(&self, package_name: &str, version_bump: crate::VersionBumpType) -> Result<String, Error> {
+    fn calculate_next_version(
+        &self,
+        package_name: &str,
+        version_bump: crate::VersionBumpType,
+    ) -> Result<String, Error> {
         // Get current version of the package
         let packages = self.packages;
         let package = packages
@@ -595,7 +637,7 @@ impl<'a> ReleaseWorkflow<'a> {
             .ok_or_else(|| Error::workflow(format!("Package '{package_name}' not found")))?;
 
         let current_version = &package.workspace_package.version;
-        
+
         // Parse current version to increment appropriately
         let version_parts: Vec<&str> = current_version.split('.').collect();
         if version_parts.len() != 3 {
@@ -604,26 +646,37 @@ impl<'a> ReleaseWorkflow<'a> {
             )));
         }
 
-        let major: u32 = version_parts[0].parse()
-            .map_err(|_| Error::workflow(format!("Invalid major version: {version}", version = version_parts[0])))?;
-        let minor: u32 = version_parts[1].parse()
-            .map_err(|_| Error::workflow(format!("Invalid minor version: {version}", version = version_parts[1])))?;
-        let patch: u32 = version_parts[2].parse()
-            .map_err(|_| Error::workflow(format!("Invalid patch version: {version}", version = version_parts[2])))?;
+        let major: u32 = version_parts[0].parse().map_err(|_| {
+            Error::workflow(format!("Invalid major version: {version}", version = version_parts[0]))
+        })?;
+        let minor: u32 = version_parts[1].parse().map_err(|_| {
+            Error::workflow(format!("Invalid minor version: {version}", version = version_parts[1]))
+        })?;
+        let patch: u32 = version_parts[2].parse().map_err(|_| {
+            Error::workflow(format!("Invalid patch version: {version}", version = version_parts[2]))
+        })?;
 
         let next_version = match version_bump {
             crate::VersionBumpType::Major => format!("{major_new}.0.0", major_new = major + 1),
-            crate::VersionBumpType::Minor => format!("{major}.{minor_new}.0", minor_new = minor + 1),
-            crate::VersionBumpType::Patch => format!("{major}.{minor}.{patch_new}", patch_new = patch + 1),
-            crate::VersionBumpType::Snapshot => format!("{major}.{minor}.{patch_new}-SNAPSHOT", patch_new = patch + 1),
+            crate::VersionBumpType::Minor => {
+                format!("{major}.{minor_new}.0", minor_new = minor + 1)
+            }
+            crate::VersionBumpType::Patch => {
+                format!("{major}.{minor}.{patch_new}", patch_new = patch + 1)
+            }
+            crate::VersionBumpType::Snapshot => {
+                format!("{major}.{minor}.{patch_new}-SNAPSHOT", patch_new = patch + 1)
+            }
         };
 
         log::debug!(
             "Version bump for {}: {} -> {} ({})",
-            package_name, current_version, next_version, 
+            package_name,
+            current_version,
+            next_version,
             match version_bump {
                 crate::VersionBumpType::Major => "major",
-                crate::VersionBumpType::Minor => "minor", 
+                crate::VersionBumpType::Minor => "minor",
                 crate::VersionBumpType::Patch => "patch",
                 crate::VersionBumpType::Snapshot => "snapshot",
             }
@@ -638,10 +691,10 @@ impl<'a> ReleaseWorkflow<'a> {
     /// for use with the changelog manager.
     fn create_project_reference(&self) -> Result<std::rc::Rc<crate::core::MonorepoProject>, Error> {
         let root_path = self.root_path;
-        let project = std::rc::Rc::new(
-            crate::core::MonorepoProject::new(root_path)
-                .map_err(|e| Error::workflow(format!("Failed to create project reference: {e}")))?
-        );
+        let project =
+            std::rc::Rc::new(crate::core::MonorepoProject::new(root_path).map_err(|e| {
+                Error::workflow(format!("Failed to create project reference: {e}"))
+            })?);
         Ok(project)
     }
 }

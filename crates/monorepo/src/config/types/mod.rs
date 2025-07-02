@@ -2,7 +2,7 @@
 
 // Core configuration types
 pub mod core;
-pub use core::{MonorepoConfig, Environment};
+pub use core::{Environment, MonorepoConfig};
 
 // Implementation structs (moved from main modules)
 pub mod manager;
@@ -10,7 +10,7 @@ pub use manager::{ConfigManager, PatternMatcher};
 
 // Versioning configuration types
 pub mod versioning;
-pub use versioning::{VersioningConfig, VersionBumpType};
+pub use versioning::{VersionBumpType, VersioningConfig};
 
 // Task configuration types
 pub mod tasks;
@@ -18,13 +18,11 @@ pub use tasks::TasksConfig;
 
 // Changelog configuration types
 pub mod changelog;
-pub use changelog::{
-    ChangelogConfig, ChangelogTemplate, CommitGrouping, ChangelogFormat,
-};
+pub use changelog::{ChangelogConfig, ChangelogFormat, ChangelogTemplate, CommitGrouping};
 
 // Git hooks configuration types
 pub mod hooks;
-pub use hooks::{HooksConfig, HookConfig};
+pub use hooks::{HookConfig, HooksConfig};
 
 // Changesets configuration types
 pub mod changesets;
@@ -37,24 +35,21 @@ pub use plugins::PluginsConfig;
 // Workspace configuration types
 pub mod workspace;
 pub use workspace::{
-    WorkspaceConfig, WorkspacePattern, WorkspacePatternOptions,
-    PackageManagerType, PackageManagerConfigs,
-    NpmWorkspaceConfig, YarnWorkspaceConfig, YarnVersion,
-    PnpmWorkspaceConfig, BunWorkspaceConfig,
-    WorkspaceValidationConfig, PackageDiscoveryConfig,
+    BunWorkspaceConfig, NpmWorkspaceConfig, PackageDiscoveryConfig, PackageManagerConfigs,
+    PackageManagerType, PnpmWorkspaceConfig, WorkspaceConfig, WorkspacePattern,
+    WorkspacePatternOptions, WorkspaceValidationConfig, YarnVersion, YarnWorkspaceConfig,
 };
 
 // Git configuration types
 pub mod git;
 pub use git::{
-    GitConfig, BranchConfig, BranchType,
-    RepositoryHostConfig, RepositoryProvider, UrlPatterns, SshConversion,
+    BranchConfig, BranchType, GitConfig, RepositoryHostConfig, RepositoryProvider, SshConversion,
+    UrlPatterns,
 };
 
 // Validation configuration types
 pub mod validation;
 pub use validation::{
-    ValidationConfig, TaskPriorityConfig, ChangeDetectionRulesConfig,
-    VersionBumpRulesConfig, DependencyAnalysisConfig, PatternScoringConfig,
-    ValidationPatternsConfig, QualityGatesConfig,
+    ChangeDetectionRulesConfig, DependencyAnalysisConfig, PatternScoringConfig, QualityGatesConfig,
+    TaskPriorityConfig, ValidationConfig, ValidationPatternsConfig, VersionBumpRulesConfig,
 };

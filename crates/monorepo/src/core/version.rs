@@ -6,30 +6,30 @@
 use crate::config::VersionBumpType;
 use crate::core::{
     BreakingChangeAnalysis, ConflictType, DefaultVersioningStrategy, DependencyChainImpact,
-    MonorepoProject, MonorepoPackageInfo, PackageImpactAnalysis, PackageVersionUpdate, PropagationResult,
-    VersionConflict, VersionImpactAnalysis, VersionManager, VersioningPlan, VersioningPlanStep,
-    VersioningResult, VersioningStrategy,
+    MonorepoPackageInfo, MonorepoProject, PackageImpactAnalysis, PackageVersionUpdate,
+    PropagationResult, VersionConflict, VersionImpactAnalysis, VersionManager, VersioningPlan,
+    VersioningPlanStep, VersioningResult, VersioningStrategy,
 };
 use crate::error::Result;
+use semver::Version;
 use std::collections::HashMap;
 use sublime_package_tools::DependencyRegistry;
-use semver::Version;
 // Import the diff_analyzer types for consistency
 use crate::analysis::ChangeAnalysis;
 use crate::changes::PackageChange;
 
 impl<'a> VersionManager<'a> {
     /// Create a new version manager with direct borrowing from project
-    /// 
+    ///
     /// Uses borrowing instead of Arc to eliminate Arc proliferation
     /// and work with Rust ownership principles.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `project` - Reference to monorepo project
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A new version manager instance with default strategy
     pub fn new(project: &'a MonorepoProject) -> Self {
         Self {
@@ -41,16 +41,16 @@ impl<'a> VersionManager<'a> {
     }
 
     /// Create a version manager with a custom strategy
-    /// 
+    ///
     /// Uses direct borrowing with custom versioning strategy.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `project` - Reference to monorepo project
     /// * `strategy` - Custom versioning strategy implementation
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A new version manager instance with custom strategy
     pub fn with_strategy(
         project: &'a MonorepoProject,
@@ -71,10 +71,10 @@ impl<'a> VersionManager<'a> {
         bump_type: VersionBumpType,
         commit_sha: Option<&str>,
     ) -> Result<VersioningResult> {
-        let package_info = self.packages
-            .iter()
-            .find(|pkg| pkg.name() == package_name)
-            .ok_or_else(|| crate::error::Error::versioning(format!("Package '{package_name}' not found")))?;
+        let package_info =
+            self.packages.iter().find(|pkg| pkg.name() == package_name).ok_or_else(|| {
+                crate::error::Error::versioning(format!("Package '{package_name}' not found"))
+            })?;
 
         let current_version = package_info.version();
 
@@ -121,11 +121,10 @@ impl<'a> VersionManager<'a> {
         let mut conflicts = Vec::new();
 
         // Find dependent packages by checking dependencies from dependencies_external field
-        let dependents: Vec<&MonorepoPackageInfo> = self.packages
+        let dependents: Vec<&MonorepoPackageInfo> = self
+            .packages
             .iter()
-            .filter(|pkg| {
-                pkg.dependencies_external.iter().any(|dep| dep == updated_package)
-            })
+            .filter(|pkg| pkg.dependencies_external.iter().any(|dep| dep == updated_package))
             .collect();
 
         for dependent_pkg in dependents {
@@ -143,7 +142,8 @@ impl<'a> VersionManager<'a> {
                 conflicts.extend(package_conflicts);
 
                 // Only proceed if no blocking conflicts
-                if !conflicts.iter().any(|c| c.conflict_type == ConflictType::DirtyWorkingDirectory) {
+                if !conflicts.iter().any(|c| c.conflict_type == ConflictType::DirtyWorkingDirectory)
+                {
                     // DRY: Use the same version bumping logic as bump_package_version
                     let new_version_str =
                         self.perform_version_bump(current_version, bump_type, None)?;
@@ -163,7 +163,6 @@ impl<'a> VersionManager<'a> {
 
         Ok(PropagationResult { updates, conflicts })
     }
-
 
     /// Analyze the impact of proposed version changes
     pub fn analyze_version_impact(
@@ -185,7 +184,8 @@ impl<'a> VersionManager<'a> {
                 breaking_changes.push(BreakingChangeAnalysis {
                     package_name: change.package_name.clone(),
                     reason: "Major version bump suggested".to_string(),
-                    affected_dependents: self.packages
+                    affected_dependents: self
+                        .packages
                         .iter()
                         .filter(|pkg| {
                             pkg.dependencies_external.iter().any(|dep| dep == &change.package_name)
@@ -213,11 +213,10 @@ impl<'a> VersionManager<'a> {
     fn analyze_single_package_impact(&self, change: &PackageChange) -> PackageImpactAnalysis {
         let package_name = &change.package_name;
         // Find dependent packages by checking dependencies
-        let dependents: Vec<&MonorepoPackageInfo> = self.packages
+        let dependents: Vec<&MonorepoPackageInfo> = self
+            .packages
             .iter()
-            .filter(|pkg| {
-                pkg.dependencies_external.iter().any(|dep| dep == package_name)
-            })
+            .filter(|pkg| pkg.dependencies_external.iter().any(|dep| dep == package_name))
             .collect();
 
         let direct_dependents = dependents.len();
@@ -263,11 +262,10 @@ impl<'a> VersionManager<'a> {
         visited.insert(package_name.to_string());
 
         // Find dependent packages by checking dependencies
-        let dependents: Vec<&MonorepoPackageInfo> = self.packages
+        let dependents: Vec<&MonorepoPackageInfo> = self
+            .packages
             .iter()
-            .filter(|pkg| {
-                pkg.dependencies_external.iter().any(|dep| dep == package_name)
-            })
+            .filter(|pkg| pkg.dependencies_external.iter().any(|dep| dep == package_name))
             .collect();
         for dependent in dependents {
             *count += 1;
@@ -332,11 +330,10 @@ impl<'a> VersionManager<'a> {
         chain.push(package_name.to_string());
 
         // Find dependent packages by checking dependencies
-        let dependents: Vec<&MonorepoPackageInfo> = self.packages
+        let dependents: Vec<&MonorepoPackageInfo> = self
+            .packages
             .iter()
-            .filter(|pkg| {
-                pkg.dependencies_external.iter().any(|dep| dep == package_name)
-            })
+            .filter(|pkg| pkg.dependencies_external.iter().any(|dep| dep == package_name))
             .collect();
         for dependent in dependents {
             self.build_dependency_chain(
@@ -361,11 +358,10 @@ impl<'a> VersionManager<'a> {
         }
 
         // Find dependent packages by checking dependencies
-        let dependents: Vec<&MonorepoPackageInfo> = self.packages
+        let dependents: Vec<&MonorepoPackageInfo> = self
+            .packages
             .iter()
-            .filter(|pkg| {
-                pkg.dependencies_external.iter().any(|dep| dep == package_name)
-            })
+            .filter(|pkg| pkg.dependencies_external.iter().any(|dep| dep == package_name))
             .collect();
         if dependents.is_empty() {
             return current_depth;
@@ -385,8 +381,7 @@ impl<'a> VersionManager<'a> {
     fn calculate_max_propagation_depth(&self, changes: &[PackageChange]) -> usize {
         let mut max_depth = 0;
 
-        let max_analysis_depth =
-            self.config.validation.dependency_analysis.max_analysis_depth;
+        let max_analysis_depth = self.config.validation.dependency_analysis.max_analysis_depth;
         for change in changes {
             let depth = self.calculate_chain_depth(&change.package_name, 0, max_analysis_depth);
             max_depth = max_depth.max(depth);
@@ -416,7 +411,8 @@ impl<'a> VersionManager<'a> {
             // Create plan step
             let step = VersioningPlanStep {
                 package_name: package_change.package_name.clone(),
-                current_version: self.packages
+                current_version: self
+                    .packages
                     .iter()
                     .find(|pkg| pkg.name() == package_change.package_name)
                     .map(|p| p.version().to_string())
@@ -499,18 +495,25 @@ impl<'a> VersionManager<'a> {
         bump_type: VersionBumpType,
         commit_sha: Option<&str>,
     ) -> Result<String> {
-        let parsed_version = Version::parse(current_version)
-            .map_err(|e| crate::error::Error::versioning(format!("Invalid version '{current_version}': {e}")))?;
+        let parsed_version = Version::parse(current_version).map_err(|e| {
+            crate::error::Error::versioning(format!("Invalid version '{current_version}': {e}"))
+        })?;
 
         let result = match bump_type {
             VersionBumpType::Major => Version::new(parsed_version.major + 1, 0, 0),
-            VersionBumpType::Minor => Version::new(parsed_version.major, parsed_version.minor + 1, 0),
-            VersionBumpType::Patch => Version::new(parsed_version.major, parsed_version.minor, parsed_version.patch + 1),
+            VersionBumpType::Minor => {
+                Version::new(parsed_version.major, parsed_version.minor + 1, 0)
+            }
+            VersionBumpType::Patch => {
+                Version::new(parsed_version.major, parsed_version.minor, parsed_version.patch + 1)
+            }
             VersionBumpType::Snapshot => {
                 let sha = commit_sha.unwrap_or("unknown");
                 let mut snapshot_version = parsed_version.clone();
                 snapshot_version.pre = semver::Prerelease::new(&format!("snapshot.{sha}"))
-                    .map_err(|e| crate::error::Error::versioning(format!("Invalid snapshot prerelease: {e}")))?;
+                    .map_err(|e| {
+                        crate::error::Error::versioning(format!("Invalid snapshot prerelease: {e}"))
+                    })?;
                 snapshot_version
             }
         };
@@ -603,7 +606,7 @@ impl<'a> VersionManager<'a> {
 
     /// Execute a versioning plan
     ///
-    /// Executes all steps in the versioning plan with progress tracking and 
+    /// Executes all steps in the versioning plan with progress tracking and
     /// dependency conflict resolution.
     pub fn execute_versioning_plan(&self, plan: &VersioningPlan) -> Result<VersioningResult> {
         let mut primary_updates = Vec::new();
@@ -622,7 +625,8 @@ impl<'a> VersionManager<'a> {
             );
 
             // Execute the version bump synchronously
-            let result = self.bump_package_version(&step.package_name, step.planned_version_bump, None)?;
+            let result =
+                self.bump_package_version(&step.package_name, step.planned_version_bump, None)?;
 
             // Collect results
             primary_updates.extend(result.primary_updates);
@@ -671,13 +675,18 @@ impl<'a> VersionManager<'a> {
     /// - Package is not found in the monorepo
     /// - Dependency analysis fails
     /// - Version parsing or calculation fails
-    pub fn get_dependency_update_strategy(&self, package_name: &str) -> Result<Vec<PackageVersionUpdate>> {
-        let package = self.packages.iter().find(|pkg| pkg.name() == package_name)
-            .ok_or_else(|| crate::error::Error::package(format!("Package '{package_name}' not found")))?;
+    pub fn get_dependency_update_strategy(
+        &self,
+        package_name: &str,
+    ) -> Result<Vec<PackageVersionUpdate>> {
+        let package =
+            self.packages.iter().find(|pkg| pkg.name() == package_name).ok_or_else(|| {
+                crate::error::Error::package(format!("Package '{package_name}' not found"))
+            })?;
 
         // Create file system service for package discovery
         let file_system_service = crate::core::services::FileSystemService::new(self.root_path)?;
-        
+
         // Create package service for dependency analysis
         let package_service = crate::core::services::PackageDiscoveryService::new(
             self.root_path,
@@ -686,10 +695,8 @@ impl<'a> VersionManager<'a> {
         )?;
 
         // Create dependency service to analyze impact
-        let mut dependency_service = crate::core::services::DependencyAnalysisService::new(
-            &package_service,
-            self.config,
-        )?;
+        let mut dependency_service =
+            crate::core::services::DependencyAnalysisService::new(&package_service, self.config)?;
 
         // Get packages that depend on this package
         let dependents = dependency_service.get_dependents(package_name)?;
@@ -698,16 +705,16 @@ impl<'a> VersionManager<'a> {
         }
 
         // Analyze the impact of updating this package
-        let affected_packages = dependency_service.analyze_dependency_update_impact(
-            package_name,
-            package.version(),
-        );
+        let affected_packages =
+            dependency_service.analyze_dependency_update_impact(package_name, package.version());
 
         let mut updates = Vec::new();
 
         // For each dependent package, determine required version bump
         for dependent_name in &dependents {
-            if let Some(dependent_pkg) = self.packages.iter().find(|pkg| pkg.name() == dependent_name) {
+            if let Some(dependent_pkg) =
+                self.packages.iter().find(|pkg| pkg.name() == dependent_name)
+            {
                 // Determine version bump type based on dependency analysis
                 // Use conservative approach: if a dependency is updated, dependent gets patch bump
                 // unless explicitly configured otherwise
@@ -718,20 +725,33 @@ impl<'a> VersionManager<'a> {
                 };
 
                 // Calculate new version using sublime-package-tools
-                let current_version = Version::parse(dependent_pkg.version())
-                    .map_err(|e| crate::error::Error::versioning(
-                        format!("Invalid version '{}' for package '{}': {}", 
-                               dependent_pkg.version(), dependent_name, e)
-                    ))?;
+                let current_version = Version::parse(dependent_pkg.version()).map_err(|e| {
+                    crate::error::Error::versioning(format!(
+                        "Invalid version '{}' for package '{}': {}",
+                        dependent_pkg.version(),
+                        dependent_name,
+                        e
+                    ))
+                })?;
 
                 let new_version = match bump_type {
                     VersionBumpType::Major => Version::new(current_version.major + 1, 0, 0),
-                    VersionBumpType::Minor => Version::new(current_version.major, current_version.minor + 1, 0),
-                    VersionBumpType::Patch => Version::new(current_version.major, current_version.minor, current_version.patch + 1),
+                    VersionBumpType::Minor => {
+                        Version::new(current_version.major, current_version.minor + 1, 0)
+                    }
+                    VersionBumpType::Patch => Version::new(
+                        current_version.major,
+                        current_version.minor,
+                        current_version.patch + 1,
+                    ),
                     VersionBumpType::Snapshot => {
                         let mut snapshot_version = current_version.clone();
-                        snapshot_version.pre = semver::Prerelease::new("snapshot")
-                            .map_err(|e| crate::error::Error::versioning(format!("Invalid snapshot prerelease: {e}")))?;
+                        snapshot_version.pre =
+                            semver::Prerelease::new("snapshot").map_err(|e| {
+                                crate::error::Error::versioning(format!(
+                                    "Invalid snapshot prerelease: {e}"
+                                ))
+                            })?;
                         snapshot_version
                     }
                 };
@@ -775,7 +795,7 @@ impl<'a> VersionManager<'a> {
 
         // Create file system service for package discovery
         let file_system_service = crate::core::services::FileSystemService::new(self.root_path)?;
-        
+
         // Create package service for dependency analysis
         let package_service = crate::core::services::PackageDiscoveryService::new(
             self.root_path,
@@ -784,10 +804,8 @@ impl<'a> VersionManager<'a> {
         )?;
 
         // Create dependency service for analysis
-        let mut dependency_service = crate::core::services::DependencyAnalysisService::new(
-            &package_service,
-            self.config,
-        )?;
+        let mut dependency_service =
+            crate::core::services::DependencyAnalysisService::new(&package_service, self.config)?;
 
         // 1. Check for circular dependencies
         let circular_deps = dependency_service.detect_circular_dependencies()?;
@@ -837,7 +855,8 @@ impl<'a> VersionManager<'a> {
                         package.version(),
                         e
                     ),
-                    resolution_strategy: "Update package.json with valid semver version format".to_string(),
+                    resolution_strategy: "Update package.json with valid semver version format"
+                        .to_string(),
                 });
             }
 
@@ -854,7 +873,8 @@ impl<'a> VersionManager<'a> {
                         package.name(),
                         package.version()
                     ),
-                    resolution_strategy: "Release a stable version or disable auto_tag for pre-releases".to_string(),
+                    resolution_strategy:
+                        "Release a stable version or disable auto_tag for pre-releases".to_string(),
                 });
             }
         }
@@ -862,18 +882,20 @@ impl<'a> VersionManager<'a> {
         // 4. Perform comprehensive version compatibility analysis for internal dependencies
         let _dependency_graph = dependency_service.build_dependency_graph()?;
         let registry = dependency_service.registry();
-        
+
         for package in self.packages {
             for dependency in &package.dependencies {
                 // Check if this is an internal dependency (part of monorepo)
-                if let Some(dep_package) = self.packages.iter().find(|pkg| pkg.name() == dependency.name) {
+                if let Some(dep_package) =
+                    self.packages.iter().find(|pkg| pkg.name() == dependency.name)
+                {
                     let Ok(package_version) = Version::parse(package.version()) else { continue };
 
                     let Ok(dep_version) = Version::parse(dep_package.version()) else { continue };
 
                     // Use DependencyRegistry for robust version constraint validation
                     let registry_entry = registry.get(&dependency.name);
-                    
+
                     // Perform comprehensive semver compatibility analysis
                     let is_compatible = Self::validate_version_constraint(
                         &dependency.version_requirement,
@@ -891,9 +913,9 @@ impl<'a> VersionManager<'a> {
                                 dependency.name,
                                 dependency.version_requirement,
                                 dep_package.version(),
-                                if registry_entry.is_some() { 
-                                    "registry validation failed" 
-                                } else { 
+                                if registry_entry.is_some() {
+                                    "registry validation failed"
+                                } else {
                                     "version constraint mismatch" 
                                 }
                             ),
@@ -916,7 +938,8 @@ impl<'a> VersionManager<'a> {
                 package_name: "monorepo".to_string(),
                 conflict_type: ConflictType::DependencyMismatch,
                 description: format!("Dependency constraint validation failed: {constraint_error}"),
-                resolution_strategy: "Review and fix dependency constraints across all packages".to_string(),
+                resolution_strategy: "Review and fix dependency constraints across all packages"
+                    .to_string(),
             });
         }
 

@@ -5,16 +5,16 @@
 //! backward compatibility through the facade pattern.
 
 pub mod config_service;
+pub mod dependency_service;
 pub mod file_system_service;
 pub mod git_service;
 pub mod package_service;
-pub mod dependency_service;
 
 pub(crate) use config_service::ConfigurationService;
+pub(crate) use dependency_service::DependencyAnalysisService;
 pub(crate) use file_system_service::FileSystemService;
 pub(crate) use git_service::GitOperationsService;
 pub(crate) use package_service::PackageDiscoveryService;
-pub(crate) use dependency_service::DependencyAnalysisService;
 
 use crate::error::Result;
 use std::path::Path;
@@ -33,7 +33,7 @@ use std::path::Path;
 ///
 /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let services = MonorepoServices::new("/path/to/monorepo")?;
-/// 
+///
 /// // Access specific services
 /// let packages = services.package_service().discover_packages()?;
 /// let config = services.config_service().get_configuration();
@@ -46,16 +46,16 @@ use std::path::Path;
 pub(crate) struct MonorepoServices {
     /// Configuration management service
     config_service: ConfigurationService,
-    
+
     /// File system operations service
     file_system_service: FileSystemService,
-    
+
     /// Git operations service
     git_service: GitOperationsService,
-    
+
     /// Package discovery and management service
     package_service: PackageDiscoveryService,
-    
+
     /// Dependency analysis service
     dependency_service: DependencyAnalysisService,
 }
@@ -83,21 +83,19 @@ impl MonorepoServices {
     /// - File system access issues
     pub fn new<P: AsRef<Path>>(root_path: P) -> Result<Self> {
         let root_path = root_path.as_ref();
-        
+
         // Initialize services in dependency order
         let file_system_service = FileSystemService::new(root_path)?;
         let config_service = ConfigurationService::new(root_path, &file_system_service)?;
         let git_service = GitOperationsService::new(root_path)?;
         let package_service = PackageDiscoveryService::new(
-            root_path, 
+            root_path,
             &file_system_service,
-            config_service.get_configuration()
+            config_service.get_configuration(),
         )?;
-        let dependency_service = DependencyAnalysisService::new(
-            &package_service,
-            config_service.get_configuration()
-        )?;
-        
+        let dependency_service =
+            DependencyAnalysisService::new(&package_service, config_service.get_configuration())?;
+
         Ok(Self {
             config_service,
             file_system_service,
@@ -106,7 +104,7 @@ impl MonorepoServices {
             dependency_service,
         })
     }
-    
+
     /// Get the configuration service
     ///
     /// Provides access to configuration management operations including
@@ -118,7 +116,7 @@ impl MonorepoServices {
     pub fn config_service(&self) -> &ConfigurationService {
         &self.config_service
     }
-    
+
     /// Get the file system service
     ///
     /// Provides access to file system operations with proper error handling
@@ -130,7 +128,7 @@ impl MonorepoServices {
     pub fn file_system_service(&self) -> &FileSystemService {
         &self.file_system_service
     }
-    
+
     /// Get the Git operations service
     ///
     /// Provides access to Git repository operations including status checking,
@@ -142,7 +140,7 @@ impl MonorepoServices {
     pub fn git_service(&self) -> &GitOperationsService {
         &self.git_service
     }
-    
+
     /// Get the package discovery service
     ///
     /// Provides access to package discovery, metadata parsing, and package
@@ -154,7 +152,7 @@ impl MonorepoServices {
     pub fn package_service(&self) -> &PackageDiscoveryService {
         &self.package_service
     }
-    
+
     /// Get the dependency analysis service
     ///
     /// Provides access to dependency graph analysis, conflict detection,
