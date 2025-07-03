@@ -69,5 +69,6 @@ When creating a compact or summary for a new session, **ALWAYS include this appr
 6. **PROPER VISIBILITY**: Explicit public APIs, rest with `pub(crate)`
 7. **NO NEW FILES**: Refactor in place, eliminate complexity
 8. **TESTS**: Tests may have exceptions to the clippy rules and must be run with `cargo test -- --nocapture` without errors
+9. **AVOID**: Avoid unused self usage and unnecessary wrappes like Result
 
 **Please confirm that you understand and have activated this mode.**

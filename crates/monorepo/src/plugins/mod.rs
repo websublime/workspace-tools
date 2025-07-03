@@ -41,7 +41,7 @@
 //! # }
 //! ```
 
-mod builtin;
+pub mod builtin;
 mod manager;
 mod registry;
 mod types;

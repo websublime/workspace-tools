@@ -57,6 +57,8 @@ mod comprehensive_plugin_tests {
         // Create the MonorepoProject instance
         let project = MonorepoProject::new(&root_path)
             .expect("Failed to create MonorepoProject from test directory");
+        
+        // Remove debug output for now
 
         (temp_dir, project)
     }
@@ -174,6 +176,12 @@ mod comprehensive_plugin_tests {
 
         // Create configuration files
         create_configuration_files(root_path);
+
+        // Create package-lock.json for NPM package manager detection
+        create_package_lock_file(root_path);
+
+        // Create monorepo configuration with workspace patterns
+        create_monorepo_config_file(root_path);
 
         // Create README.md
         std::fs::write(
@@ -300,6 +308,152 @@ mod comprehensive_plugin_tests {
             serde_json::to_string_pretty(&tsconfig).unwrap(),
         )
         .expect("Failed to write tsconfig.json");
+    }
+
+    /// Create package-lock.json for NPM package manager detection
+    ///
+    /// Creates a minimal but valid package-lock.json file that allows 
+    /// PackageManager::detect() to properly identify NPM as the package manager.
+    /// This is essential for package discovery to work in tests.
+    ///
+    /// # Arguments
+    ///
+    /// * `root_path` - Root path where package-lock.json should be created
+    ///
+    /// # Panics
+    ///
+    /// Panics if package-lock.json cannot be written
+    fn create_package_lock_file(root_path: &std::path::Path) {
+        let package_lock = serde_json::json!({
+            "name": "test-monorepo",
+            "version": "1.0.0",
+            "lockfileVersion": 3,
+            "requires": true,
+            "packages": {
+                "": {
+                    "name": "test-monorepo",
+                    "version": "1.0.0",
+                    "workspaces": ["packages/*", "apps/*"],
+                    "devDependencies": {
+                        "eslint": "^8.0.0",
+                        "typescript": "^5.0.0",
+                        "jest": "^29.0.0"
+                    }
+                },
+                "packages/core": {
+                    "name": "core",
+                    "version": "1.0.0",
+                    "devDependencies": {
+                        "typescript": "^5.0.0",
+                        "@types/node": "^20.0.0"
+                    }
+                },
+                "packages/utils": {
+                    "name": "utils", 
+                    "version": "1.2.0",
+                    "dependencies": {
+                        "lodash": "^4.0.0"
+                    },
+                    "devDependencies": {
+                        "typescript": "^5.0.0",
+                        "@types/node": "^20.0.0"
+                    }
+                },
+                "packages/api": {
+                    "name": "api",
+                    "version": "2.0.0",
+                    "dependencies": {
+                        "express": "^4.0.0",
+                        "core": "workspace:*"
+                    },
+                    "devDependencies": {
+                        "typescript": "^5.0.0",
+                        "@types/node": "^20.0.0"
+                    }
+                },
+                "apps/web": {
+                    "name": "web",
+                    "version": "1.0.0", 
+                    "dependencies": {
+                        "react": "^4.0.0",
+                        "api": "workspace:*",
+                        "utils": "workspace:*"
+                    },
+                    "devDependencies": {
+                        "typescript": "^5.0.0",
+                        "@types/node": "^20.0.0"
+                    }
+                }
+            }
+        });
+
+        std::fs::write(
+            root_path.join("package-lock.json"),
+            serde_json::to_string_pretty(&package_lock).unwrap(),
+        )
+        .expect("Failed to write package-lock.json");
+    }
+
+    /// Create monorepo configuration file with workspace patterns
+    ///
+    /// Creates a minimal monorepo.config.toml that defines workspace patterns
+    /// for package discovery. This is essential for the package service to 
+    /// find packages in the test project structure.
+    ///
+    /// # Arguments
+    ///
+    /// * `root_path` - Root path where monorepo.config.toml should be created
+    ///
+    /// # Panics
+    ///
+    /// Panics if monorepo.config.toml cannot be written
+    fn create_monorepo_config_file(root_path: &std::path::Path) {
+        use crate::config::MonorepoConfig;
+        use crate::config::types::workspace::{WorkspacePattern, WorkspacePatternOptions};
+        
+        // Create a minimal config with just the workspace patterns needed for testing
+        let mut config = MonorepoConfig::default();
+        
+        // Add workspace patterns for packages/* and apps/*
+        config.workspace.patterns = vec![
+            WorkspacePattern {
+                pattern: "packages/*".to_string(),
+                description: Some("Packages directory".to_string()),
+                enabled: true,
+                priority: 100,
+                package_managers: None,
+                environments: None,
+                options: WorkspacePatternOptions {
+                    include_nested: true,
+                    max_depth: Some(2),
+                    exclude_patterns: vec![],
+                    follow_symlinks: false,
+                    override_detection: false,
+                },
+            },
+            WorkspacePattern {
+                pattern: "apps/*".to_string(),
+                description: Some("Applications directory".to_string()),
+                enabled: true,
+                priority: 100,
+                package_managers: None,
+                environments: None,
+                options: WorkspacePatternOptions {
+                    include_nested: true,
+                    max_depth: Some(2),
+                    exclude_patterns: vec![],
+                    follow_symlinks: false,
+                    override_detection: false,
+                },
+            },
+        ];
+        
+        // Serialize to TOML and write to file
+        let config_content = toml::to_string(&config)
+            .expect("Failed to serialize config to TOML");
+        
+        std::fs::write(root_path.join("monorepo.toml"), config_content)
+            .expect("Failed to write monorepo.toml");
     }
 
     /// Create configuration files for comprehensive testing
@@ -637,9 +791,7 @@ mod comprehensive_plugin_tests {
 
         // Verify our test project structure is reflected
         let total_packages = data.get("total_packages").unwrap().as_u64().unwrap();
-        // TODO: Package detection needs investigation - temporarily accept 0
-        // assert!(total_packages >= 1); // core, utils, api, web
-        let _ = total_packages; // Just verify it exists
+        assert!(total_packages >= 4, "Expected at least 4 packages, found {total_packages}");
 
         // Test analyze-dependencies with specific package filter
         let result = plugin_manager.execute_plugin_command(
@@ -1012,9 +1164,9 @@ mod comprehensive_plugin_tests {
         assert!(validation_score <= 100); // Score should be valid percentage
 
         let statistics = data.get("statistics").unwrap();
-        // TODO: Package detection needs investigation
-        let _total_packages = statistics.get("total_packages").unwrap().as_u64().unwrap();
-        // Just verify statistics exist for now
+        // Should detect our test packages: core, utils, api, web
+        let total_packages = statistics.get("total_packages").unwrap().as_u64().unwrap();
+        assert!(total_packages >= 4, "Expected at least 4 packages in statistics, found {total_packages}");
     }
 
     #[test]
@@ -1173,9 +1325,8 @@ mod comprehensive_plugin_tests {
         // Verify context properties
         assert_eq!(context.root_path, project.root_path);
         assert_eq!(context.packages.len(), project.packages.len());
-        // Note: Package detection may vary, so we just verify it's working
-        // TODO: Package discovery needs investigation - temporarily disabled
-        // assert!(!context.packages.is_empty()); // At least some packages detected
+        assert!(!context.packages.is_empty(), "Context should have detected packages");
+        assert!(context.packages.len() >= 4, "Expected at least 4 packages in context");
 
         // Verify working directory
         assert_eq!(context.working_directory, project.root_path);
@@ -1647,7 +1798,8 @@ mod comprehensive_plugin_tests {
         assert!(config_content.contains("[tasks]"));
         assert!(config_content.contains("[workspace]"));
         assert!(config_content.contains("[git]"));
-        assert!(config_content.contains("[validation]"));
+        // Validation section can be at top level or under workspace
+        assert!(config_content.contains("[validation]") || config_content.contains("[workspace.validation]"));
 
         // Verify analysis summary
         let analysis_summary = data.get("analysis_summary").unwrap();
@@ -1686,26 +1838,26 @@ mod comprehensive_plugin_tests {
         let templates = ["basic", "enterprise", "performance", "ci-cd", "smart"];
 
         for template in &templates {
-            let output_file = format!("{}-config.toml", template);
+            let output_file = format!("{template}-config.toml");
             
             let result = plugin_manager.execute_plugin_command(
                 "configurator",
                 "generate-config",
-                &[template.to_string(), output_file.clone()],
+                &[(*template).to_string(), output_file.clone()],
             );
-            assert!(result.is_ok(), "Failed to generate {} template", template);
+            assert!(result.is_ok(), "Failed to generate {template} template");
 
             let plugin_result = result.unwrap();
-            assert!(plugin_result.success, "Template {} generation failed", template);
+            assert!(plugin_result.success, "Template {template} generation failed");
 
             // Verify file was created
             let config_path = project.root_path.join(&output_file);
-            assert!(config_path.exists(), "Config file for {} template not found", template);
+            assert!(config_path.exists(), "Config file for {template} template not found");
 
             // Verify template-specific content
             let config_content = std::fs::read_to_string(&config_path).unwrap();
             assert!(config_content.contains(&format!("# Template: {}", template.to_uppercase())), 
-                    "Template {} doesn't have correct header", template);
+                    "Template {template} doesn't have correct header");
 
             // Verify basic TOML structure
             assert!(config_content.contains("[versioning]"));
@@ -1773,22 +1925,31 @@ mod comprehensive_plugin_tests {
         assert_eq!(data.get("config_path").unwrap().as_str().unwrap(), "test-config.toml");
         
         assert!(data.get("is_valid").is_some());
-        // TODO: Generated config validation needs structure alignment
-        // For now, just verify the validation process works
-        let _is_valid = data.get("is_valid").unwrap().as_bool().unwrap();
+        let is_valid = data.get("is_valid").unwrap().as_bool().unwrap();
         
         assert!(data.get("validation_issues").is_some());
-        let _issues = data.get("validation_issues").unwrap().as_array().unwrap();
-        // TODO: Validation structure needs alignment with MonorepoConfig
+        let issues = data.get("validation_issues").unwrap().as_array().unwrap();
+        
+        // Check that is_valid is true when there are no critical errors
+        if !issues.is_empty() {
+            // If there are issues, they should only be warnings or suggestions, not errors
+            for issue in issues {
+                let severity = issue.get("severity").unwrap().as_str().unwrap();
+                assert_ne!(severity, "error", "Generated config should not have error-level issues");
+                assert_ne!(severity, "critical", "Generated config should not have critical issues");
+            }
+        }
+        
+        // The configuration should be considered valid (no critical errors)
+        assert!(is_valid, "Generated config should be valid (no critical errors found)");
         
         assert!(data.get("warnings").is_some());
         assert!(data.get("suggestions").is_some());
         assert!(data.get("file_size_bytes").is_some());
         assert!(data.get("file_lines").is_some());
         assert!(data.get("validation_timestamp").is_some());
-        // TODO: Config validation structure needs alignment
-        let _status = data.get("status").unwrap().as_str().unwrap();
-        // Just verify status field exists for now
+        let status = data.get("status").unwrap().as_str().unwrap();
+        assert_eq!(status, "valid", "Config status should be 'valid'");
 
         // Test validation of non-existent config
         let missing_result = plugin_manager.execute_plugin_command(
@@ -1818,7 +1979,7 @@ mod comprehensive_plugin_tests {
         assert!(invalid_plugin_result.success); // Command succeeds but config is invalid
         
         let invalid_data = &invalid_plugin_result.data;
-        assert_eq!(invalid_data.get("is_valid").unwrap().as_bool().unwrap(), false);
+        assert!(!invalid_data.get("is_valid").unwrap().as_bool().unwrap());
         assert_eq!(invalid_data.get("status").unwrap().as_str().unwrap(), "invalid");
         
         let validation_issues = invalid_data.get("validation_issues").unwrap().as_array().unwrap();

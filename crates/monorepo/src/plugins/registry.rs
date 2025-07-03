@@ -405,23 +405,27 @@ impl Default for PluginRegistry {
         // Register built-in plugins with their actual capabilities
         let analyzer_plugin = super::builtin::AnalyzerPlugin::new();
         let analyzer_info = analyzer_plugin.info();
-        registry.register_plugin(analyzer_info, PluginSource::Builtin, "builtin".to_string())
-            .expect("Failed to register analyzer plugin");
+        if let Err(e) = registry.register_plugin(analyzer_info, PluginSource::Builtin, "builtin".to_string()) {
+            log::error!("Failed to register analyzer plugin: {}", e);
+        }
 
         let generator_plugin = super::builtin::GeneratorPlugin::new();
         let generator_info = generator_plugin.info();
-        registry.register_plugin(generator_info, PluginSource::Builtin, "builtin".to_string())
-            .expect("Failed to register generator plugin");
+        if let Err(e) = registry.register_plugin(generator_info, PluginSource::Builtin, "builtin".to_string()) {
+            log::error!("Failed to register generator plugin: {}", e);
+        }
 
         let validator_plugin = super::builtin::ValidatorPlugin::new();
         let validator_info = validator_plugin.info();
-        registry.register_plugin(validator_info, PluginSource::Builtin, "builtin".to_string())
-            .expect("Failed to register validator plugin");
+        if let Err(e) = registry.register_plugin(validator_info, PluginSource::Builtin, "builtin".to_string()) {
+            log::error!("Failed to register validator plugin: {}", e);
+        }
 
         let configurator_plugin = super::builtin::ConfiguratorPlugin::new();
         let configurator_info = configurator_plugin.info();
-        registry.register_plugin(configurator_info, PluginSource::Builtin, "builtin".to_string())
-            .expect("Failed to register configurator plugin");
+        if let Err(e) = registry.register_plugin(configurator_info, PluginSource::Builtin, "builtin".to_string()) {
+            log::error!("Failed to register configurator plugin: {}", e);
+        }
 
         // Also add to builtin_plugins map for discovery
         registry.builtin_plugins.insert("analyzer".to_string(), analyzer_plugin.info());
