@@ -7,6 +7,7 @@ pub mod conventional;
 mod detector;
 mod engine;
 mod rules;
+#[cfg(test)]
 mod tests;
 pub mod types;
 

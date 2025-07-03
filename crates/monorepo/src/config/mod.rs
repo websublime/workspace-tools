@@ -25,7 +25,7 @@
 //! ## Main Configuration Sections
 //!
 //! ### Workspace Configuration
-//! 
+//!
 //! Manages workspace patterns for package discovery and organization:
 //!
 //! ```toml
@@ -664,6 +664,7 @@
 pub mod components;
 mod defaults;
 mod manager;
+#[cfg(test)]
 mod tests;
 pub mod types;
 
@@ -686,6 +687,8 @@ pub use types::Environment;
 // Additional re-exports organized by category
 
 // Workspace configuration types
+/// Package discovery settings for auto-detection
+pub use types::PackageDiscoveryConfig;
 /// Configuration for workspace discovery and management
 pub use types::WorkspaceConfig;
 /// Individual workspace pattern definition with filtering options
@@ -694,30 +697,28 @@ pub use types::WorkspacePattern;
 pub use types::WorkspacePatternOptions;
 /// Validation rules for workspace configuration
 pub use types::WorkspaceValidationConfig;
-/// Package discovery settings for auto-detection
-pub use types::PackageDiscoveryConfig;
 
 // Package manager specific configurations
-/// Supported package manager types (npm, yarn, pnpm, bun, custom)
-pub use types::PackageManagerType;
-/// Container for all package manager specific configurations
-pub use types::PackageManagerConfigs;
-/// npm-specific workspace configuration
-pub use types::NpmWorkspaceConfig;
-/// Yarn-specific workspace configuration
-pub use types::YarnWorkspaceConfig;
-/// Yarn version specification (classic vs berry)
-pub use types::YarnVersion;
-/// pnpm-specific workspace configuration
-pub use types::PnpmWorkspaceConfig;
 /// Bun-specific workspace configuration
 pub use types::BunWorkspaceConfig;
+/// npm-specific workspace configuration
+pub use types::NpmWorkspaceConfig;
+/// Container for all package manager specific configurations
+pub use types::PackageManagerConfigs;
+/// Supported package manager types (npm, yarn, pnpm, bun, custom)
+pub use types::PackageManagerType;
+/// pnpm-specific workspace configuration
+pub use types::PnpmWorkspaceConfig;
+/// Yarn version specification (classic vs berry)
+pub use types::YarnVersion;
+/// Yarn-specific workspace configuration
+pub use types::YarnWorkspaceConfig;
 
 // Versioning configuration
-/// Version management and propagation settings
-pub use types::VersioningConfig;
 /// Type of version bump (major, minor, patch, snapshot)
 pub use types::VersionBumpType;
+/// Version management and propagation settings
+pub use types::VersioningConfig;
 
 // Task management configuration
 /// Task execution and performance settings
@@ -734,16 +735,16 @@ pub use types::ChangelogTemplate;
 pub use types::CommitGrouping;
 
 // Git and hooks configuration
-/// Git-related settings including branch management
-pub use types::GitConfig;
-/// Git hooks automation settings
-pub use types::HooksConfig;
-/// Individual hook configuration
-pub use types::HookConfig;
 /// Branch configuration for different environments
 pub use types::BranchConfig;
 /// Branch type specification (main, develop, feature, etc.)
 pub use types::BranchType;
+/// Git-related settings including branch management
+pub use types::GitConfig;
+/// Individual hook configuration
+pub use types::HookConfig;
+/// Git hooks automation settings
+pub use types::HooksConfig;
 
 // Changesets configuration
 /// Changeset management settings

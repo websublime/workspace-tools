@@ -94,7 +94,8 @@
 
 pub mod manager;
 pub mod storage;
-pub mod tests;
+#[cfg(test)]
+mod tests;
 pub mod types;
 
 // Explicit re-exports from types module
