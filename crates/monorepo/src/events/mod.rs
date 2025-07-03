@@ -14,6 +14,9 @@ pub mod bus;
 pub mod handlers;
 pub mod types;
 
+#[cfg(test)]
+mod tests;
+
 pub use bus::{EventBus, EventSubscription};
 pub use handlers::{AsyncEventHandler, EventHandler};
 pub use types::{EventContext, EventPriority, MonorepoEvent};
