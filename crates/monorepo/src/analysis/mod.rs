@@ -8,6 +8,9 @@ mod analyzer;
 mod diff;
 pub mod types;
 
+#[cfg(test)]
+mod tests;
+
 // Explicit re-exports from types module
 pub use types::{
     AffectedPackagesAnalysis,
