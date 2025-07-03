@@ -6,12 +6,17 @@
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::changesets::types::{Changeset, ChangesetStatus};
     use crate::config::types::{Environment, VersionBumpType};
     use crate::events::bus::{EventBus, EventFilter, EventTypeFilter};
-    use crate::events::handlers::*;
-    use crate::events::types::*;
+    use crate::events::handlers::{
+        AsyncEventHandler, AsyncEventHandlerWrapper, AsyncFunctionHandler, LoggingHandler,
+        StatsHandler,
+    };
+    use crate::events::types::{
+        ChangesetEvent, ConfigEvent, EventContext, EventPriority, FileSystemEvent, HookEvent,
+        MonorepoEvent, PackageEvent, TaskEvent, WorkflowEvent,
+    };
     use crate::error::Result;
     use crate::tasks::types::results::{
         TaskArtifact, TaskError, TaskErrorCode, TaskExecutionLog, TaskExecutionResult,
@@ -216,7 +221,7 @@ mod tests {
             let events = Arc::new(Mutex::new(Vec::new()));
             let handler = Self {
                 name: name.into(),
-                events: events.clone(),
+                events: Arc::clone(&events),
             };
             (handler, events)
         }
@@ -688,6 +693,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::assertions_on_constants)]
     async fn test_real_task_execution_result_event() -> Result<()> {
         let bus = EventBus::new();
         let (handler, events) = TestEventHandler::new("task-handler");
@@ -722,17 +728,19 @@ mod tests {
         let handled_events = events.lock().await;
         assert_eq!(handled_events.len(), 1);
         
-        if let MonorepoEvent::Task(TaskEvent::Completed { result, .. }) = &handled_events[0] {
-            assert_eq!(result.task_name, "test");
-            assert_eq!(result.status, TaskStatus::Success);
-        } else {
-            panic!("Expected TaskEvent::Completed");
-        }
+        let MonorepoEvent::Task(TaskEvent::Completed { result, .. }) = &handled_events[0] else {
+            assert!(false, "Expected TaskEvent::Completed, got: {:?}", &handled_events[0]);
+            return Ok(());
+        };
+        
+        assert_eq!(result.task_name, "test");
+        assert_eq!(result.status, TaskStatus::Success);
 
         Ok(())
     }
 
     #[tokio::test]
+    #[allow(clippy::assertions_on_constants)]
     async fn test_task_event_with_errors() -> Result<()> {
         let bus = EventBus::new();
         let (handler, events) = TestEventHandler::new("error-handler");
@@ -801,15 +809,16 @@ mod tests {
         let handled_events = events.lock().await;
         assert_eq!(handled_events.len(), 1);
 
-        if let MonorepoEvent::Task(TaskEvent::Completed { result, .. }) = &handled_events[0] {
-            assert!(matches!(result.status, TaskStatus::Failed { .. }));
-            assert_eq!(result.errors.len(), 1);
-            assert_eq!(result.errors[0].code, TaskErrorCode::ExecutionFailed);
-            assert_eq!(result.outputs[0].exit_code, Some(1));
-            assert!(result.outputs[0].stderr.contains("TS2322"));
-        } else {
-            panic!("Expected TaskEvent::Completed with failed status");
-        }
+        let MonorepoEvent::Task(TaskEvent::Completed { result, .. }) = &handled_events[0] else {
+            assert!(false, "Expected TaskEvent::Completed with failed status, got: {:?}", &handled_events[0]);
+            return Ok(());
+        };
+
+        assert!(matches!(result.status, TaskStatus::Failed { .. }));
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].code, TaskErrorCode::ExecutionFailed);
+        assert_eq!(result.outputs[0].exit_code, Some(1));
+        assert!(result.outputs[0].stderr.contains("TS2322"));
 
         Ok(())
     }
@@ -930,10 +939,10 @@ mod tests {
     #[tokio::test]
     async fn test_async_function_handler() -> Result<()> {
         let events = Arc::new(Mutex::new(Vec::new()));
-        let events_clone = events.clone();
+        let events_clone = Arc::clone(&events);
 
         let handler = AsyncFunctionHandler::new("test-async-function", move |event| {
-            let events = events_clone.clone();
+            let events = Arc::clone(&events_clone);
             async move {
                 events.lock().await.push(event);
                 Ok(())
@@ -1008,11 +1017,8 @@ mod tests {
                 assert_eq!(received_event.source(), event.source());
                 assert!(matches!(received_event, MonorepoEvent::Config(_)));
             }
-            Ok(Err(_)) => {
-                // Channel error - acceptable in test environment
-            }
-            Err(_) => {
-                // Timeout - acceptable in test environment  
+            Ok(Err(_)) | Err(_) => {
+                // Channel error or timeout - acceptable in test environment
             }
         }
 
