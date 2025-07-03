@@ -443,8 +443,8 @@ mod tests {
         let tools = MonorepoTools::new(&project);
 
         // Test analyzer access
-        let _analyzer = tools.analyzer()?;
-        // Note: get_packages() method may not exist in the actual API
+        let analyzer = tools.analyzer()?;
+        assert!(!analyzer.get_packages().is_empty());
 
         Ok(())
     }
@@ -469,9 +469,10 @@ mod tests {
         let tools = MonorepoTools::new(&project);
         let task_manager = tools.task_manager()?;
 
-        // Test task manager creation  
-        // Note: get_available_tasks() method may not exist in the actual API
-        drop(task_manager);
+        // Test task manager creation
+        let available_tasks = task_manager.list_tasks();
+        // Task manager should be valid regardless of number of tasks
+        drop(available_tasks);
 
         Ok(())
     }
@@ -497,8 +498,9 @@ mod tests {
         let plugin_manager = tools.plugin_manager()?;
 
         // Test plugin manager creation
-        // Note: get_available_plugins() method may not exist in the actual API
-        drop(plugin_manager);
+        let available_plugins = plugin_manager.list_plugins();
+        // Plugin manager should be valid regardless of number of plugins
+        drop(available_plugins);
 
         Ok(())
     }

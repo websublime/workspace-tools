@@ -36,6 +36,33 @@ impl<'a> MonorepoAnalyzer<'a> {
         }
     }
 
+    /// Get all packages in the monorepo
+    ///
+    /// Returns a reference to all packages that are part of this monorepo for analysis.
+    /// This method provides direct access to the package list used by the analyzer.
+    ///
+    /// # Returns
+    ///
+    /// A slice containing all MonorepoPackageInfo instances
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_monorepo_tools::MonorepoTools;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let tools = MonorepoTools::initialize("/path/to/monorepo")?;
+    /// let analyzer = tools.analyzer()?;
+    /// let packages = analyzer.get_packages();
+    /// println!("Found {} packages", packages.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn get_packages(&self) -> &[crate::core::MonorepoPackageInfo] {
+        self.packages
+    }
+
     /// Creates a new analyzer from an existing MonorepoProject
     ///
     /// Convenience method that wraps the `new` constructor for backward compatibility.
