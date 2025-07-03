@@ -10,11 +10,13 @@ mod comprehensive_plugin_tests {
         builtin::{AnalyzerPlugin, GeneratorPlugin, ValidatorPlugin},
         manager::PluginManager,
         registry::{PluginRegistry, PluginSource},
-        types::{MonorepoPlugin, PluginContext, PluginInfo, PluginCapabilities, 
-                PluginCommand, PluginArgument, PluginArgumentType, PluginResult},
+        types::{
+            MonorepoPlugin, PluginArgument, PluginArgumentType, PluginCapabilities, PluginCommand,
+            PluginContext, PluginInfo, PluginResult,
+        },
     };
-    use crate::error::Result;
     use crate::core::MonorepoProject;
+    use crate::error::Result;
     use std::collections::HashMap;
     use std::path::PathBuf;
     use tempfile::TempDir;
@@ -57,7 +59,7 @@ mod comprehensive_plugin_tests {
         // Create the MonorepoProject instance
         let project = MonorepoProject::new(&root_path)
             .expect("Failed to create MonorepoProject from test directory");
-        
+
         // Remove debug output for now
 
         (temp_dir, project)
@@ -83,10 +85,11 @@ mod comprehensive_plugin_tests {
             .output()
             .expect("Failed to execute git init command");
 
-        assert!(output.status.success(), 
-                "Git init failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
+        assert!(
+            output.status.success(),
+            "Git init failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         // Configure Git user for testing
         let commands = [
@@ -102,10 +105,11 @@ mod comprehensive_plugin_tests {
                 .output()
                 .expect("Failed to execute git config command");
 
-            assert!(output.status.success(), 
-                    "Git config failed: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
+            assert!(
+                output.status.success(),
+                "Git config failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
         }
 
         // Add and commit initial files to enable change analysis
@@ -191,11 +195,8 @@ mod comprehensive_plugin_tests {
         .expect("Failed to write README.md");
 
         // Create .gitignore
-        std::fs::write(
-            root_path.join(".gitignore"),
-            "node_modules/\ndist/\n*.log\n.env\n",
-        )
-        .expect("Failed to write .gitignore");
+        std::fs::write(root_path.join(".gitignore"), "node_modules/\ndist/\n*.log\n.env\n")
+            .expect("Failed to write .gitignore");
 
         // Create package-lock.json to indicate npm as package manager
         let package_lock = serde_json::json!({
@@ -312,7 +313,7 @@ mod comprehensive_plugin_tests {
 
     /// Create package-lock.json for NPM package manager detection
     ///
-    /// Creates a minimal but valid package-lock.json file that allows 
+    /// Creates a minimal but valid package-lock.json file that allows
     /// PackageManager::detect() to properly identify NPM as the package manager.
     /// This is essential for package discovery to work in tests.
     ///
@@ -349,7 +350,7 @@ mod comprehensive_plugin_tests {
                     }
                 },
                 "packages/utils": {
-                    "name": "utils", 
+                    "name": "utils",
                     "version": "1.2.0",
                     "dependencies": {
                         "lodash": "^4.0.0"
@@ -373,7 +374,7 @@ mod comprehensive_plugin_tests {
                 },
                 "apps/web": {
                     "name": "web",
-                    "version": "1.0.0", 
+                    "version": "1.0.0",
                     "dependencies": {
                         "react": "^4.0.0",
                         "api": "workspace:*",
@@ -397,7 +398,7 @@ mod comprehensive_plugin_tests {
     /// Create monorepo configuration file with workspace patterns
     ///
     /// Creates a minimal monorepo.config.toml that defines workspace patterns
-    /// for package discovery. This is essential for the package service to 
+    /// for package discovery. This is essential for the package service to
     /// find packages in the test project structure.
     ///
     /// # Arguments
@@ -408,12 +409,12 @@ mod comprehensive_plugin_tests {
     ///
     /// Panics if monorepo.config.toml cannot be written
     fn create_monorepo_config_file(root_path: &std::path::Path) {
-        use crate::config::MonorepoConfig;
         use crate::config::types::workspace::{WorkspacePattern, WorkspacePatternOptions};
-        
+        use crate::config::MonorepoConfig;
+
         // Create a minimal config with just the workspace patterns needed for testing
         let mut config = MonorepoConfig::default();
-        
+
         // Add workspace patterns for packages/* and apps/*
         config.workspace.patterns = vec![
             WorkspacePattern {
@@ -447,11 +448,10 @@ mod comprehensive_plugin_tests {
                 },
             },
         ];
-        
+
         // Serialize to TOML and write to file
-        let config_content = toml::to_string(&config)
-            .expect("Failed to serialize config to TOML");
-        
+        let config_content = toml::to_string(&config).expect("Failed to serialize config to TOML");
+
         std::fs::write(root_path.join("monorepo.toml"), config_content)
             .expect("Failed to write monorepo.toml");
     }
@@ -1154,7 +1154,10 @@ mod comprehensive_plugin_tests {
         let statistics = data.get("statistics").unwrap();
         // Should detect our test packages: core, utils, api, web
         let total_packages = statistics.get("total_packages").unwrap().as_u64().unwrap();
-        assert!(total_packages >= 4, "Expected at least 4 packages in statistics, found {total_packages}");
+        assert!(
+            total_packages >= 4,
+            "Expected at least 4 packages in statistics, found {total_packages}"
+        );
     }
 
     #[test]
@@ -1326,16 +1329,21 @@ mod comprehensive_plugin_tests {
 
         // Verify configuration reference exists
         // Note: We just verify the config reference is properly set
-        assert!(!context.config_ref.environments.is_empty() || context.config_ref.environments.is_empty());
+        assert!(
+            !context.config_ref.environments.is_empty()
+                || context.config_ref.environments.is_empty()
+        );
 
         // Verify file system reference exists
         // Note: Cannot test file system operations directly without exposing internals
 
         // Test context with custom config
         let mut custom_config = HashMap::new();
-        custom_config.insert("test_key".to_string(), serde_json::Value::String("test_value".to_string()));
+        custom_config
+            .insert("test_key".to_string(), serde_json::Value::String("test_value".to_string()));
 
-        let custom_context = PluginContext::new(&project, custom_config.clone(), project.root_path.clone());
+        let custom_context =
+            PluginContext::new(&project, custom_config.clone(), project.root_path.clone());
         assert_eq!(custom_context.config, custom_config);
     }
 
@@ -1368,20 +1376,18 @@ mod comprehensive_plugin_tests {
                 description: "Test custom plugin for developer integration testing".to_string(),
                 author: "Test Developer".to_string(),
                 capabilities: PluginCapabilities {
-                    commands: vec![
-                        PluginCommand {
-                            name: "custom-command".to_string(),
-                            description: "Test custom command".to_string(),
-                            arguments: vec![PluginArgument {
-                                name: "message".to_string(),
-                                description: "Message to echo".to_string(),
-                                required: false,
-                                arg_type: PluginArgumentType::String,
-                                default_value: Some("Hello from custom plugin!".to_string()),
-                            }],
-                            async_support: false,
-                        },
-                    ],
+                    commands: vec![PluginCommand {
+                        name: "custom-command".to_string(),
+                        description: "Test custom command".to_string(),
+                        arguments: vec![PluginArgument {
+                            name: "message".to_string(),
+                            description: "Message to echo".to_string(),
+                            required: false,
+                            arg_type: PluginArgumentType::String,
+                            default_value: Some("Hello from custom plugin!".to_string()),
+                        }],
+                        async_support: false,
+                    }],
                     async_support: false,
                     parallel_support: false,
                     categories: vec!["custom".to_string(), "test".to_string()],
@@ -1430,7 +1436,7 @@ mod comprehensive_plugin_tests {
         // Test custom plugin loading
         let custom_plugin = TestCustomPlugin::new();
         let plugin_info = custom_plugin.info();
-        
+
         // Verify plugin info structure
         assert_eq!(plugin_info.name, "test-custom");
         assert_eq!(plugin_info.version, "1.0.0");
@@ -1446,7 +1452,7 @@ mod comprehensive_plugin_tests {
 
         // Verify plugin is loaded and active
         assert!(plugin_manager.has_plugin("test-custom"));
-        
+
         // Test plugin info retrieval
         let retrieved_info = plugin_manager.get_plugin_info("test-custom");
         assert!(retrieved_info.is_some());
@@ -1454,16 +1460,12 @@ mod comprehensive_plugin_tests {
         assert_eq!(info.name, "test-custom");
 
         // Test custom command execution with default argument
-        let result = plugin_manager.execute_plugin_command(
-            "test-custom",
-            "custom-command",
-            &[]
-        );
+        let result = plugin_manager.execute_plugin_command("test-custom", "custom-command", &[]);
         assert!(result.is_ok());
-        
+
         let plugin_result = result.unwrap();
         assert!(plugin_result.success);
-        
+
         let data = &plugin_result.data;
         assert_eq!(data.get("message").unwrap().as_str().unwrap(), "Hello from custom plugin!");
         assert_eq!(data.get("plugin_name").unwrap().as_str().unwrap(), "test-custom");
@@ -1473,24 +1475,24 @@ mod comprehensive_plugin_tests {
         let result = plugin_manager.execute_plugin_command(
             "test-custom",
             "custom-command",
-            &["Custom message from developer!".to_string()]
+            &["Custom message from developer!".to_string()],
         );
         assert!(result.is_ok());
-        
+
         let plugin_result = result.unwrap();
         assert!(plugin_result.success);
-        
+
         let data = &plugin_result.data;
-        assert_eq!(data.get("message").unwrap().as_str().unwrap(), "Custom message from developer!");
+        assert_eq!(
+            data.get("message").unwrap().as_str().unwrap(),
+            "Custom message from developer!"
+        );
 
         // Test error handling for unknown command
-        let error_result = plugin_manager.execute_plugin_command(
-            "test-custom",
-            "unknown-command",
-            &[]
-        );
+        let error_result =
+            plugin_manager.execute_plugin_command("test-custom", "unknown-command", &[]);
         assert!(error_result.is_ok());
-        
+
         let error_plugin_result = error_result.unwrap();
         assert!(!error_plugin_result.success);
         assert!(error_plugin_result.error.is_some());
@@ -1540,18 +1542,21 @@ mod comprehensive_plugin_tests {
         let validator = ValidatorPlugin::new();
 
         let analyzer_info = analyzer.info();
-        let analyzer_commands: Vec<_> = analyzer_info.capabilities.commands.iter().map(|c| &c.name).collect();
+        let analyzer_commands: Vec<_> =
+            analyzer_info.capabilities.commands.iter().map(|c| &c.name).collect();
         assert!(analyzer_commands.contains(&&"analyze-dependencies".to_string()));
         assert!(analyzer_commands.contains(&&"detect-cycles".to_string()));
         assert!(analyzer_commands.contains(&&"impact-analysis".to_string()));
 
         let generator_info = generator.info();
-        let generator_commands: Vec<_> = generator_info.capabilities.commands.iter().map(|c| &c.name).collect();
+        let generator_commands: Vec<_> =
+            generator_info.capabilities.commands.iter().map(|c| &c.name).collect();
         assert!(generator_commands.contains(&&"generate-package".to_string()));
         assert!(generator_commands.contains(&&"generate-config".to_string()));
 
         let validator_info = validator.info();
-        let validator_commands: Vec<_> = validator_info.capabilities.commands.iter().map(|c| &c.name).collect();
+        let validator_commands: Vec<_> =
+            validator_info.capabilities.commands.iter().map(|c| &c.name).collect();
         assert!(validator_commands.contains(&&"validate-structure".to_string()));
         assert!(validator_commands.contains(&&"validate-dependencies".to_string()));
         assert!(validator_commands.contains(&&"validate-commits".to_string()));
@@ -1608,19 +1613,21 @@ mod comprehensive_plugin_tests {
 
         // Create and configure plugin manager
         let mut plugin_manager = PluginManager::from_project(&project).unwrap();
-        
+
         // Load all built-in plugins
         let loaded_plugins = plugin_manager.load_builtin_plugins().unwrap();
         assert_eq!(loaded_plugins.len(), 4); // Updated for configurator plugin
 
         // Execute a complete workflow using all plugins
-        
+
         // 1. Analyze the project structure
-        let structure_result = plugin_manager.execute_plugin_command("validator", "validate-structure", &[]);
+        let structure_result =
+            plugin_manager.execute_plugin_command("validator", "validate-structure", &[]);
         assert!(structure_result.is_ok() && structure_result.unwrap().success);
 
         // 2. Analyze dependencies
-        let deps_result = plugin_manager.execute_plugin_command("analyzer", "analyze-dependencies", &[]);
+        let deps_result =
+            plugin_manager.execute_plugin_command("analyzer", "analyze-dependencies", &[]);
         assert!(deps_result.is_ok() && deps_result.unwrap().success);
 
         // 3. Check for circular dependencies
@@ -1636,7 +1643,8 @@ mod comprehensive_plugin_tests {
         assert!(gen_result.is_ok() && gen_result.unwrap().success);
 
         // 5. Validate the updated structure
-        let final_validation = plugin_manager.execute_plugin_command("validator", "validate-structure", &[]);
+        let final_validation =
+            plugin_manager.execute_plugin_command("validator", "validate-structure", &[]);
         assert!(final_validation.is_ok() && final_validation.unwrap().success);
 
         // 6. Verify metrics were collected throughout
@@ -1679,7 +1687,7 @@ mod comprehensive_plugin_tests {
         // Verify analysis result structure
         let data = &plugin_result.data;
         let analysis = data.get("project_analysis").unwrap();
-        
+
         // Verify package manager detection
         assert!(analysis.get("package_manager").is_some());
         let package_manager = analysis.get("package_manager").unwrap().as_str().unwrap();
@@ -1704,7 +1712,7 @@ mod comprehensive_plugin_tests {
 
         // Verify recommendations
         assert!(data.get("recommendations").is_some());
-        let recommendations = data.get("recommendations").unwrap().as_array().unwrap();
+        let _recommendations = data.get("recommendations").unwrap().as_array().unwrap();
         // Recommendations may be empty for well-configured projects
 
         // Verify template suggestions
@@ -1714,19 +1722,19 @@ mod comprehensive_plugin_tests {
 
         // Test detailed analysis
         let result = plugin_manager.execute_plugin_command(
-            "configurator", 
-            "analyze-project", 
-            &["true".to_string()]
+            "configurator",
+            "analyze-project",
+            &["true".to_string()],
         );
         assert!(result.is_ok());
 
         let detailed_result = result.unwrap();
         assert!(detailed_result.success);
-        
+
         let detailed_data = &detailed_result.data;
         assert!(detailed_data.get("detailed_analysis").is_some());
         let detailed_analysis = detailed_data.get("detailed_analysis").unwrap();
-        
+
         // Verify detailed analysis components
         assert!(detailed_analysis.get("file_structure").is_some());
         assert!(detailed_analysis.get("dependency_analysis").is_some());
@@ -1753,10 +1761,10 @@ mod comprehensive_plugin_tests {
         let data = &plugin_result.data;
         assert!(data.get("template_type").is_some());
         assert_eq!(data.get("template_type").unwrap().as_str().unwrap(), "smart");
-        
+
         assert!(data.get("output_file").is_some());
         assert_eq!(data.get("output_file").unwrap().as_str().unwrap(), "monorepo.config.toml");
-        
+
         assert!(data.get("output_path").is_some());
         assert!(data.get("config_size_bytes").is_some());
         assert!(data.get("config_lines").is_some());
@@ -1772,14 +1780,19 @@ mod comprehensive_plugin_tests {
         let config_content = std::fs::read_to_string(&config_path).unwrap();
         assert!(!config_content.is_empty());
         assert!(config_content.contains("# Monorepo Configuration"));
-        assert!(config_content.contains("# Generated by Sublime Monorepo Tools Configurator Plugin"));
+        assert!(
+            config_content.contains("# Generated by Sublime Monorepo Tools Configurator Plugin")
+        );
         assert!(config_content.contains("# Template: SMART"));
         assert!(config_content.contains("[versioning]"));
         assert!(config_content.contains("[tasks]"));
         assert!(config_content.contains("[workspace]"));
         assert!(config_content.contains("[git]"));
         // Validation section can be at top level or under workspace
-        assert!(config_content.contains("[validation]") || config_content.contains("[workspace.validation]"));
+        assert!(
+            config_content.contains("[validation]")
+                || config_content.contains("[workspace.validation]")
+        );
 
         // Verify analysis summary
         let analysis_summary = data.get("analysis_summary").unwrap();
@@ -1798,7 +1811,7 @@ mod comprehensive_plugin_tests {
 
         let custom_plugin_result = custom_result.unwrap();
         assert!(custom_plugin_result.success);
-        
+
         let custom_data = &custom_plugin_result.data;
         assert_eq!(custom_data.get("template_type").unwrap().as_str().unwrap(), "basic");
         assert_eq!(custom_data.get("output_file").unwrap().as_str().unwrap(), "custom-config.toml");
@@ -1819,7 +1832,7 @@ mod comprehensive_plugin_tests {
 
         for template in &templates {
             let output_file = format!("{template}-config.toml");
-            
+
             let result = plugin_manager.execute_plugin_command(
                 "configurator",
                 "generate-config",
@@ -1836,8 +1849,10 @@ mod comprehensive_plugin_tests {
 
             // Verify template-specific content
             let config_content = std::fs::read_to_string(&config_path).unwrap();
-            assert!(config_content.contains(&format!("# Template: {}", template.to_uppercase())), 
-                    "Template {template} doesn't have correct header");
+            assert!(
+                config_content.contains(&format!("# Template: {}", template.to_uppercase())),
+                "Template {template} doesn't have correct header"
+            );
 
             // Verify basic TOML structure
             assert!(config_content.contains("[versioning]"));
@@ -1903,26 +1918,32 @@ mod comprehensive_plugin_tests {
         let data = &plugin_result.data;
         assert!(data.get("config_path").is_some());
         assert_eq!(data.get("config_path").unwrap().as_str().unwrap(), "test-config.toml");
-        
+
         assert!(data.get("is_valid").is_some());
         let is_valid = data.get("is_valid").unwrap().as_bool().unwrap();
-        
+
         assert!(data.get("validation_issues").is_some());
         let issues = data.get("validation_issues").unwrap().as_array().unwrap();
-        
+
         // Check that is_valid is true when there are no critical errors
         if !issues.is_empty() {
             // If there are issues, they should only be warnings or suggestions, not errors
             for issue in issues {
                 let severity = issue.get("severity").unwrap().as_str().unwrap();
-                assert_ne!(severity, "error", "Generated config should not have error-level issues");
-                assert_ne!(severity, "critical", "Generated config should not have critical issues");
+                assert_ne!(
+                    severity, "error",
+                    "Generated config should not have error-level issues"
+                );
+                assert_ne!(
+                    severity, "critical",
+                    "Generated config should not have critical issues"
+                );
             }
         }
-        
+
         // The configuration should be considered valid (no critical errors)
         assert!(is_valid, "Generated config should be valid (no critical errors found)");
-        
+
         assert!(data.get("warnings").is_some());
         assert!(data.get("suggestions").is_some());
         assert!(data.get("file_size_bytes").is_some());
@@ -1957,14 +1978,14 @@ mod comprehensive_plugin_tests {
 
         let invalid_plugin_result = invalid_result.unwrap();
         assert!(invalid_plugin_result.success); // Command succeeds but config is invalid
-        
+
         let invalid_data = &invalid_plugin_result.data;
         assert!(!invalid_data.get("is_valid").unwrap().as_bool().unwrap());
         assert_eq!(invalid_data.get("status").unwrap().as_str().unwrap(), "invalid");
-        
+
         let validation_issues = invalid_data.get("validation_issues").unwrap().as_array().unwrap();
         assert!(!validation_issues.is_empty());
-        
+
         // Should contain parse error
         let first_issue = &validation_issues[0];
         assert_eq!(first_issue.get("type").unwrap().as_str().unwrap(), "parse_error");
@@ -1998,7 +2019,7 @@ mod comprehensive_plugin_tests {
         let plugin_result = result.unwrap();
         // Should fallback to smart template instead of failing
         assert!(plugin_result.success);
-        
+
         let data = &plugin_result.data;
         // Even with invalid template, should fallback to smart
         assert_eq!(data.get("template_type").unwrap().as_str().unwrap(), "invalid-template");
@@ -2052,9 +2073,8 @@ mod comprehensive_plugin_tests {
         assert!(command_names.contains(&&"validate-config".to_string()));
 
         // Verify generate-config command details
-        let generate_cmd = capabilities.commands.iter()
-            .find(|c| c.name == "generate-config")
-            .unwrap();
+        let generate_cmd =
+            capabilities.commands.iter().find(|c| c.name == "generate-config").unwrap();
         assert_eq!(generate_cmd.arguments.len(), 2);
         assert!(!generate_cmd.async_support);
 
@@ -2075,15 +2095,15 @@ mod comprehensive_plugin_tests {
         use super::super::registry::PluginRegistry;
 
         let registry = PluginRegistry::default();
-        
+
         // Verify configurator plugin is registered in default registry
         assert!(registry.has_plugin("configurator"));
-        
+
         let configurator_entry = registry.get_plugin("configurator").unwrap();
         assert_eq!(configurator_entry.info.name, "configurator");
         assert_eq!(configurator_entry.info.version, "1.0.0");
         assert!(configurator_entry.available);
-        
+
         // Verify it's categorized correctly
         let configurator_plugins = registry.get_plugins_by_category("configurator");
         assert_eq!(configurator_plugins.len(), 1);
@@ -2091,8 +2111,7 @@ mod comprehensive_plugin_tests {
 
         let analysis_plugins = registry.get_plugins_by_category("analysis");
         assert!(!analysis_plugins.is_empty());
-        let has_configurator = analysis_plugins.iter()
-            .any(|p| p.info.name == "configurator");
+        let has_configurator = analysis_plugins.iter().any(|p| p.info.name == "configurator");
         assert!(has_configurator);
     }
 }

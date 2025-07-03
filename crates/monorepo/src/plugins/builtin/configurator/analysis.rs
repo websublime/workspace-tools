@@ -2,8 +2,8 @@
 
 use crate::plugins::builtin::common::success_with_timing;
 use crate::plugins::types::{PluginContext, PluginResult};
-use sublime_standard_tools::monorepo::PackageManager;
 use std::time::Instant;
+use sublime_standard_tools::monorepo::PackageManager;
 
 /// Project analysis data structure
 #[derive(Debug, Default)]
@@ -112,7 +112,6 @@ impl super::ConfiguratorPlugin {
         }
     }
 
-
     /// Classify project size based on package count
     fn classify_project_size(package_count: usize) -> String {
         match package_count {
@@ -124,14 +123,13 @@ impl super::ConfiguratorPlugin {
         }
     }
 
-
     /// Check if existing monorepo configuration is present
     /// Checks for various monorepo config file patterns with multiple extensions
     fn has_existing_config(context: &PluginContext) -> bool {
-        let config_base_names = ["monorepo.config", "monorepo"];
+        let config_base_names = ["monorepo.config", "monorepo", ".monorepo"];
         let extensions = ["toml", "json", "yaml", "yml"];
         let legacy_configs = ["lerna.json", "nx.json", "rush.json", "workspace.json"];
-        
+
         // Check modern config files with multiple extensions
         for base_name in &config_base_names {
             for ext in &extensions {
@@ -141,11 +139,10 @@ impl super::ConfiguratorPlugin {
                 }
             }
         }
-        
+
         // Check legacy config files
         legacy_configs.iter().any(|file| context.root_path.join(file).exists())
     }
-
 
     /// Generate recommendations based on analysis
     fn generate_recommendations(analysis: &ProjectAnalysis) -> Vec<String> {
@@ -158,9 +155,7 @@ impl super::ConfiguratorPlugin {
         }
 
         if !analysis.has_existing_config {
-            recommendations.push(
-                "Consider creating a monorepo configuration file".to_string(),
-            );
+            recommendations.push("Consider creating a monorepo configuration file".to_string());
         }
 
         recommendations
