@@ -59,6 +59,8 @@
 mod generator;
 mod manager;
 mod parser;
+#[cfg(test)]
+mod tests;
 mod types;
 
 // Re-export main types for public API

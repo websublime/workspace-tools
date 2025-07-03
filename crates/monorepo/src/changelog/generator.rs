@@ -244,14 +244,19 @@ impl ChangelogGenerator {
 
         let breaking_indicator = if commit.breaking_change { "⚠️ " } else { "" };
 
+        let hash_short = if commit.hash.len() >= 8 {
+            &commit.hash[..8]
+        } else {
+            &commit.hash
+        };
+
         let commit_link = if let Some(repo_url) = &variables.repository_url {
             format!(
                 "[{hash_short}]({repo_url}/commit/{commit_hash})",
-                hash_short = &commit.hash[..8],
                 commit_hash = commit.hash
             )
         } else {
-            commit.hash[..8].to_string()
+            hash_short.to_string()
         };
 
         format!(
@@ -284,10 +289,16 @@ impl ChangelogGenerator {
 
             let breaking_indicator = if commit.breaking_change { "[BREAKING] " } else { "" };
 
+            let hash_short = if commit.hash.len() >= 8 {
+                &commit.hash[..8]
+            } else {
+                &commit.hash
+            };
+
             content.push_str(&format!(
                 "- {breaking_indicator}{scope_str}{} ({})\n",
                 commit.description,
-                &commit.hash[..8]
+                hash_short
             ));
         }
 
