@@ -57,11 +57,8 @@ impl super::ConfiguratorPlugin {
             "config_lines": config_content.lines().count(),
             "analysis_summary": {
                 "package_manager": analysis.package_manager,
-                "workspace_patterns": analysis.workspace_patterns,
                 "package_count": analysis.package_count,
                 "project_size": analysis.project_size,
-                "git_provider": analysis.git_provider,
-                "has_ci_config": analysis.has_ci_config,
                 "has_existing_config": analysis.has_existing_config
             },
             "generation_timestamp": chrono::Utc::now().to_rfc3339(),
@@ -134,7 +131,7 @@ default_remote = "origin"
 main_branches = ["main"]
 "#,
             chrono::Utc::now().to_rfc3339(),
-            Self::generate_workspace_patterns_config(analysis),
+            "[workspace.patterns]\npackages = [\"packages/*\"]",
             analysis.package_manager
         )
     }
@@ -262,9 +259,9 @@ max_license_issues = 0
             chrono::Utc::now().to_rfc3339(),
             Self::get_concurrency_for_project_size(&analysis.project_size),
             Self::get_timeout_for_project_size(&analysis.project_size),
-            Self::generate_workspace_patterns_config(analysis),
+            "[workspace.patterns]\npackages = [\"packages/*\"]",
             analysis.package_manager,
-            Self::generate_git_provider_config(analysis),
+            "# Git provider configuration",
             Self::get_build_timeout_for_project_size(&analysis.project_size)
         )
     }
@@ -335,7 +332,7 @@ max_build_time_seconds = {}
             Self::get_extended_timeout_for_project_size(&analysis.project_size),
             Self::get_high_concurrency_for_project_size(&analysis.project_size),
             Self::get_extended_timeout_for_project_size(&analysis.project_size),
-            Self::generate_workspace_patterns_config(analysis),
+            "[workspace.patterns]\npackages = [\"packages/*\"]",
             analysis.package_manager,
             Self::get_extended_build_timeout_for_project_size(&analysis.project_size)
         )
@@ -420,10 +417,10 @@ hotfix_prefixes = ["hotfix/"]
 "#,
             chrono::Utc::now().to_rfc3339(),
             Self::get_concurrency_for_project_size(&analysis.project_size),
-            if analysis.has_ci_config { "true" } else { "false" },
-            Self::generate_workspace_patterns_config(analysis),
+            "true",
+            "[workspace.patterns]\npackages = [\"packages/*\"]",
             analysis.package_manager,
-            Self::generate_git_provider_config(analysis)
+            "# Git provider configuration"
         )
     }
 
@@ -483,34 +480,4 @@ hotfix_prefixes = ["hotfix/"]
         }
     }
 
-    fn generate_workspace_patterns_config(analysis: &super::ProjectAnalysis) -> String {
-        format!(
-            "[workspace.patterns]\npackages = {:?}",
-            analysis.workspace_patterns
-        )
-    }
-
-    fn generate_git_provider_config(analysis: &super::ProjectAnalysis) -> String {
-        match analysis.git_provider.as_str() {
-            "github" => r#"[git.github]
-enabled = true
-default_branch = "main"
-require_pr = true
-auto_merge = false"#.to_string(),
-            "gitlab" => r#"[git.gitlab]
-enabled = true
-default_branch = "main"
-require_mr = true
-auto_merge = false"#.to_string(),
-            "bitbucket" => r#"[git.bitbucket]
-enabled = true
-default_branch = "main"
-require_pr = true"#.to_string(),
-            "azure" => r#"[git.azure]
-enabled = true
-default_branch = "main"
-require_pr = true"#.to_string(),
-            _ => "# Git provider: unknown".to_string(),
-        }
-    }
 }

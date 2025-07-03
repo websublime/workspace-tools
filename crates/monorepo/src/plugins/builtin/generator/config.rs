@@ -24,24 +24,15 @@ impl super::GeneratorPlugin {
         let mut generated_files = Vec::new();
 
         match config_type {
-            "eslint" => {
-                Self::generate_eslint_config(context, &mut generated_files)?;
-            }
-            "prettier" => {
-                Self::generate_prettier_config(context, &mut generated_files)?;
-            }
             "typescript" => {
                 Self::generate_typescript_config(context, &mut generated_files)?;
-            }
-            "jest" => {
-                Self::generate_jest_config(context, &mut generated_files)?;
             }
             "gitignore" => {
                 Self::generate_gitignore_config(context, &mut generated_files)?;
             }
             _ => {
                 return Ok(PluginResult::error(format!(
-                    "Unknown config type: {config_type}. Supported types: eslint, prettier, typescript, jest, gitignore"
+                    "Unknown config type: {config_type}. Supported types: typescript, gitignore"
                 )));
             }
         }
@@ -61,92 +52,19 @@ impl super::GeneratorPlugin {
             .with_metadata("config_location", context.root_path.to_string_lossy()))
     }
 
-    fn generate_eslint_config(context: &PluginContext, generated_files: &mut Vec<String>) -> Result<()> {
-        let eslint_config = serde_json::json!({
-            "env": {
-                "browser": true,
-                "es2021": true,
-                "node": true
-            },
-            "extends": [
-                "eslint:recommended",
-                "@typescript-eslint/recommended"
-            ],
-            "parser": "@typescript-eslint/parser",
-            "parserOptions": {
-                "ecmaVersion": "latest",
-                "sourceType": "module"
-            },
-            "plugins": ["@typescript-eslint"],
-            "rules": {
-                "indent": ["error", 2],
-                "linebreak-style": ["error", "unix"],
-                "quotes": ["error", "single"],
-                "semi": ["error", "always"],
-                "@typescript-eslint/no-unused-vars": "error",
-                "@typescript-eslint/explicit-function-return-type": "warn"
-            },
-            "ignorePatterns": ["dist/", "node_modules/", "*.js"]
-        });
-
-        let eslint_path = context.root_path.join(".eslintrc.json");
-        let eslint_content = serde_json::to_string_pretty(&eslint_config).map_err(|e| {
-            crate::error::Error::plugin(format!("Failed to serialize eslint config: {e}"))
-        })?;
-
-        std::fs::write(&eslint_path, eslint_content).map_err(|e| {
-            crate::error::Error::plugin(format!("Failed to write .eslintrc.json: {e}"))
-        })?;
-        generated_files.push(".eslintrc.json".to_string());
-        Ok(())
-    }
-
-    fn generate_prettier_config(context: &PluginContext, generated_files: &mut Vec<String>) -> Result<()> {
-        let prettier_config = serde_json::json!({
-            "semi": true,
-            "trailingComma": "es5",
-            "singleQuote": true,
-            "printWidth": 80,
-            "tabWidth": 2,
-            "useTabs": false,
-            "endOfLine": "lf",
-            "arrowParens": "avoid",
-            "bracketSpacing": true,
-            "bracketSameLine": false
-        });
-
-        let prettier_path = context.root_path.join(".prettierrc.json");
-        let prettier_content = serde_json::to_string_pretty(&prettier_config).map_err(|e| {
-            crate::error::Error::plugin(format!("Failed to serialize prettier config: {e}"))
-        })?;
-
-        std::fs::write(&prettier_path, prettier_content).map_err(|e| {
-            crate::error::Error::plugin(format!("Failed to write .prettierrc.json: {e}"))
-        })?;
-        generated_files.push(".prettierrc.json".to_string());
-
-        // Also generate .prettierignore
-        let prettier_ignore = "dist/\nnode_modules/\n*.min.js\n*.bundle.js\ncoverage/\n.nyc_output/\n";
-        let prettier_ignore_path = context.root_path.join(".prettierignore");
-
-        std::fs::write(&prettier_ignore_path, prettier_ignore).map_err(|e| {
-            crate::error::Error::plugin(format!("Failed to write .prettierignore: {e}"))
-        })?;
-        generated_files.push(".prettierignore".to_string());
-        Ok(())
-    }
 
     fn generate_typescript_config(context: &PluginContext, generated_files: &mut Vec<String>) -> Result<()> {
         let tsconfig = serde_json::json!({
             "compilerOptions": {
                 "target": "ES2020",
                 "lib": ["ES2020", "DOM"],
-                "module": "commonjs",
+                "module": "ESNext",
                 "moduleResolution": "node",
                 "outDir": "./dist",
                 "rootDir": "./src",
                 "strict": true,
                 "esModuleInterop": true,
+                "allowSyntheticDefaultImports": true,
                 "skipLibCheck": true,
                 "forceConsistentCasingInFileNames": true,
                 "declaration": true,
@@ -158,9 +76,8 @@ impl super::GeneratorPlugin {
                 "noImplicitReturns": true,
                 "noFallthroughCasesInSwitch": true
             },
-            "include": ["src/**/*", "tests/**/*"],
-            "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts"],
-            "compileOnSave": true
+            "include": ["src/**/*"],
+            "exclude": ["node_modules", "dist"]
         });
 
         let tsconfig_path = context.root_path.join("tsconfig.json");
@@ -175,47 +92,6 @@ impl super::GeneratorPlugin {
         Ok(())
     }
 
-    fn generate_jest_config(context: &PluginContext, generated_files: &mut Vec<String>) -> Result<()> {
-        let jest_config = serde_json::json!({
-            "preset": "ts-jest",
-            "testEnvironment": "node",
-            "roots": ["<rootDir>/src", "<rootDir>/tests"],
-            "testMatch": ["**/__tests__/**/*.ts", "**/?(*.)+(spec|test).ts"],
-            "transform": {
-                "^.+\\.ts$": "ts-jest"
-            },
-            "collectCoverageFrom": [
-                "src/**/*.ts",
-                "!src/**/*.d.ts",
-                "!src/**/*.test.ts",
-                "!src/**/*.spec.ts"
-            ],
-            "coverageDirectory": "coverage",
-            "coverageReporters": ["text", "lcov", "html"],
-            "coverageThreshold": {
-                "global": {
-                    "branches": 80,
-                    "functions": 80,
-                    "lines": 80,
-                    "statements": 80
-                }
-            },
-            "moduleFileExtensions": ["ts", "js", "json"],
-            "setupFilesAfterEnv": [],
-            "verbose": true
-        });
-
-        let jest_path = context.root_path.join("jest.config.json");
-        let jest_content = serde_json::to_string_pretty(&jest_config).map_err(|e| {
-            crate::error::Error::plugin(format!("Failed to serialize jest config: {e}"))
-        })?;
-
-        std::fs::write(&jest_path, jest_content).map_err(|e| {
-            crate::error::Error::plugin(format!("Failed to write jest.config.json: {e}"))
-        })?;
-        generated_files.push("jest.config.json".to_string());
-        Ok(())
-    }
 
     fn generate_gitignore_config(context: &PluginContext, generated_files: &mut Vec<String>) -> Result<()> {
         let gitignore_content = "# Dependencies\nnode_modules/\nnpm-debug.log*\nyarn-debug.log*\nyarn-error.log*\n\n# Runtime data\npids\n*.pid\n*.seed\n*.pid.lock\n\n# Coverage\ncoverage/\n.nyc_output/\n\n# Build outputs\ndist/\nbuild/\n*.tsbuildinfo\n\n# Environment\n.env\n.env.local\n.env.development.local\n.env.test.local\n.env.production.local\n\n# Editor\n.vscode/\n.idea/\n*.swp\n*.swo\n*~\n\n# OS\n.DS_Store\nThumbs.db\n\n# Logs\nlogs\n*.log\n\n# Cache\n.cache/\n.parcel-cache/\n";

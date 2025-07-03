@@ -28,14 +28,11 @@ impl super::ValidatorPlugin {
         let mut recommendations = Vec::new();
         let mut warnings = Vec::new();
 
-        // 1. Validate root structure
-        let expected_root_files = vec!["package.json", ".gitignore", "README.md"];
-        for expected_file in &expected_root_files {
-            let file_path = context.root_path.join(expected_file);
-            if !file_path.exists() {
-                issues.push(format!("Missing required root file: {expected_file}"));
-                recommendations.push(format!("Create {expected_file} in the root directory"));
-            }
+        // 1. Validate root structure - only check package.json as it's essential for monorepos
+        let package_json_path = context.root_path.join("package.json");
+        if !package_json_path.exists() {
+            issues.push("Missing required root file: package.json".to_string());
+            recommendations.push("Create package.json in the root directory".to_string());
         }
 
         // 2. Validate package structure
@@ -112,44 +109,45 @@ impl super::ValidatorPlugin {
             }
         }
 
-        // 4. Check for common configuration files
-        let config_files = vec![
-            ("tsconfig.json", "TypeScript configuration"),
-            (".gitignore", "Git ignore patterns"),
-        ];
-
-        for (config_file, description) in &config_files {
-            let config_path = context.root_path.join(config_file);
-            if !config_path.exists() {
-                recommendations.push(format!("Consider adding {config_file} for {description}"));
+        // 4. Check for monorepo configuration using the same logic as has_existing_config
+        let config_base_names = ["monorepo.config", "monorepo"];
+        let extensions = ["toml", "json", "yaml", "yml"];
+        let legacy_configs = ["lerna.json", "nx.json", "rush.json", "workspace.json"];
+        
+        let mut has_monorepo_config = false;
+        
+        // Check modern config files with multiple extensions
+        for base_name in &config_base_names {
+            for ext in &extensions {
+                let file_name = format!("{base_name}.{ext}");
+                if context.root_path.join(&file_name).exists() {
+                    has_monorepo_config = true;
+                    break;
+                }
             }
+            if has_monorepo_config { break; }
+        }
+        
+        // Check legacy config files
+        if !has_monorepo_config {
+            has_monorepo_config = legacy_configs.iter().any(|file| context.root_path.join(file).exists());
+        }
+        
+        if !has_monorepo_config {
+            recommendations.push("Consider adding a monorepo configuration file (monorepo.config.toml)".to_string());
         }
 
-        // 5. Validate directory structure patterns
-        let common_dirs = vec!["packages", "apps", "libs", "tools"];
-        let mut has_package_dir = false;
-
-        for dir in &common_dirs {
-            let dir_path = context.root_path.join(dir);
-            if dir_path.exists() && dir_path.is_dir() {
-                has_package_dir = true;
-                break;
+        // 5. Basic structure validation - just ensure packages have proper locations
+        if !context.packages.is_empty() {
+            for package in context.packages {
+                if !package.path().exists() {
+                    warnings.push(format!("Package '{}' path does not exist: {}", 
+                        package.name(), package.path().display()));
+                }
             }
-        }
-
-        if !has_package_dir && !context.packages.is_empty() {
-            warnings.push(
-                "Packages found but no standard package directory structure detected".to_string(),
-            );
-            recommendations.push(
-                "Consider organizing packages in packages/, apps/, or libs/ directories"
-                    .to_string(),
-            );
         }
 
         // Calculate validation score
-        let _total_checks =
-            expected_root_files.len() + context.packages.len() + config_files.len() + 3;
         let issues_count = issues.len();
         let warnings_count = warnings.len();
 
