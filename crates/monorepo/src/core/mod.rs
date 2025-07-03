@@ -8,6 +8,8 @@ pub mod components;
 mod package;
 mod project;
 pub mod services;
+#[cfg(test)]
+mod tests;
 mod tools;
 pub mod types;
 mod version;
