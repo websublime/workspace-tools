@@ -204,6 +204,7 @@ mod tests {
         assert!(matches!(parser, ConventionalCommitParser));
     }
 
+    #[allow(clippy::default_constructed_unit_structs)]
     #[test]
     fn test_conventional_commit_parser_default() {
         let parser = ConventionalCommitParser::default();
@@ -612,6 +613,7 @@ mod tests {
         assert!(matches!(generator, ChangelogGenerator));
     }
 
+    #[allow(clippy::default_constructed_unit_structs)]
     #[test]
     fn test_changelog_generator_default() {
         let generator = ChangelogGenerator::default();
@@ -647,6 +649,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::field_reassign_with_default)]
     #[test]
     fn test_generate_markdown_changelog_no_breaking_changes() -> Result<()> {
         let generator = ChangelogGenerator::new();
@@ -670,6 +673,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::field_reassign_with_default)]
     #[test]
     fn test_generate_markdown_changelog_by_scope() -> Result<()> {
         let generator = ChangelogGenerator::new();
@@ -694,6 +698,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::field_reassign_with_default)]
     #[test]
     fn test_generate_markdown_changelog_ungrouped() -> Result<()> {
         let generator = ChangelogGenerator::new();
@@ -718,6 +723,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::field_reassign_with_default)]
     #[test]
     fn test_generate_text_changelog() -> Result<()> {
         let generator = ChangelogGenerator::new();
@@ -745,6 +751,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::field_reassign_with_default)]
     #[test]
     fn test_generate_json_changelog() -> Result<()> {
         let generator = ChangelogGenerator::new();
@@ -817,6 +824,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::assertions_on_constants)]
     #[test]
     fn test_parse_conventional_commits_all() -> Result<()> {
         let (_temp_dir, project) = create_test_project()?;
@@ -838,6 +846,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::assertions_on_constants)]
     #[test]
     fn test_parse_conventional_commits_for_package() -> Result<()> {
         let (_temp_dir, project) = create_test_project()?;
@@ -897,6 +906,7 @@ mod tests {
     }
 
     // Integration Tests
+    #[allow(clippy::assertions_on_constants)]
     #[test]
     fn test_full_changelog_generation_workflow() -> Result<()> {
         let (_temp_dir, project) = create_test_project()?;
@@ -933,6 +943,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::assertions_on_constants)]
     #[test]
     fn test_changelog_generation_with_file_output() -> Result<()> {
         let (_temp_dir, project) = create_test_project()?;
@@ -966,6 +977,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::assertions_on_constants)]
     #[test]
     fn test_changelog_generation_for_specific_package() -> Result<()> {
         let (_temp_dir, project) = create_test_project()?;
