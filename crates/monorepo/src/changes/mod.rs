@@ -7,6 +7,7 @@ pub mod conventional;
 mod detector;
 mod engine;
 mod rules;
+mod tests;
 pub mod types;
 
 // Explicit re-exports from types module
