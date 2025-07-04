@@ -182,19 +182,19 @@ impl<'a> DiffAnalyzer<'a> {
         let package_changes = self.map_changes_to_packages(&changed_files);
 
         // Identify affected packages with dependency analysis
-        let affected_packages = self.identify_affected_packages(&changed_files)?;
+        let mut affected_packages = self.identify_affected_packages(&changed_files)?;
 
         // Analyze significance of changes
         let significance_analysis = self.analyze_change_significance(&package_changes);
 
-        Ok(ChangeAnalysis {
-            from_ref: since_ref.to_string(),
-            to_ref: to_ref.to_string(),
-            changed_files,
-            package_changes,
-            affected_packages,
-            significance_analysis,
-        })
+        // Update the affected packages analysis with the correct refs
+        affected_packages.from_ref = since_ref.to_string();
+        affected_packages.to_ref = to_ref.to_string();
+        affected_packages.changed_files = changed_files;
+        affected_packages.package_changes = package_changes;
+        affected_packages.significance_analysis = significance_analysis;
+
+        Ok(affected_packages)
     }
 
     /// Map changed files to affected packages
@@ -271,7 +271,7 @@ impl<'a> DiffAnalyzer<'a> {
     pub fn identify_affected_packages(
         &self,
         changes: &[GitChangedFile],
-    ) -> Result<AffectedPackagesAnalysis> {
+    ) -> Result<ChangeAnalysis> {
         let direct_changes = self.map_changes_to_packages(changes);
 
         let mut directly_affected = std::collections::HashSet::new();
@@ -308,12 +308,17 @@ impl<'a> DiffAnalyzer<'a> {
 
         let total_affected_count = directly_affected.len() + dependents_affected.len();
 
-        Ok(AffectedPackagesAnalysis {
+        Ok(ChangeAnalysis {
+            from_ref: "HEAD".to_string(),
+            to_ref: "HEAD".to_string(),
+            changed_files: changes.to_vec(),
+            package_changes: direct_changes,
             directly_affected,
             dependents_affected,
             change_propagation_graph: change_graph,
             impact_scores,
             total_affected_count,
+            significance_analysis: Vec::new(),
         })
     }
 

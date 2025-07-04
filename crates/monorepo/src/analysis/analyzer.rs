@@ -389,10 +389,10 @@ impl<'a> MonorepoAnalyzer<'a> {
 
     /// Analyze configured registries
     pub fn analyze_registries(&self) -> Result<RegistryAnalysisResult> {
-        let rm = self.registry_manager;
-
-        let default_registry = rm.default_registry().to_string();
-        let registry_urls = rm.registry_urls();
+        // Since registry_manager is not available in the simplified analyzer,
+        // we'll analyze registries from configuration files directly
+        let default_registry = "https://registry.npmjs.org/".to_string();
+        let registry_urls = vec![default_registry.clone()];
 
         let mut registries = Vec::new();
         let mut scoped_registries = HashMap::new();
@@ -418,7 +418,7 @@ impl<'a> MonorepoAnalyzer<'a> {
                     .unwrap_or_else(|| "custom".to_string());
 
             // Check for authentication (basic heuristic)
-            let has_auth = self.check_registry_auth(url);
+            let has_auth = self.check_registry_auth(&url);
 
             // Find scopes associated with this registry
             let mut scopes = Vec::new();
@@ -427,7 +427,7 @@ impl<'a> MonorepoAnalyzer<'a> {
             let fs = FileSystemManager::new();
             if let Ok(npmrc_content) = fs.read_file_string(&self.root_path.join(".npmrc")) {
                 for line in npmrc_content.lines() {
-                    if line.contains(url) && line.contains('@') {
+                    if line.contains(&url) && line.contains('@') {
                         // Extract scope from lines like "@scope:registry=url"
                         if let Some(scope_part) = line.split(':').next() {
                             if scope_part.starts_with('@') {
@@ -455,11 +455,10 @@ impl<'a> MonorepoAnalyzer<'a> {
                 for dep_name in deps.keys() {
                     if dep_name.starts_with('@') {
                         let scope = dep_name.split('/').next().unwrap_or(dep_name);
-                        if rm.has_scope(scope) {
-                            if let Some(scope_registry) = rm.get_registry_for_scope(scope) {
-                                scoped_registries
-                                    .insert(scope.to_string(), scope_registry.to_string());
-                            }
+                        // For simplified analysis, assume scoped packages use default registry
+                        // unless configured otherwise in .npmrc
+                        if !scoped_registries.contains_key(scope) {
+                            scoped_registries.insert(scope.to_string(), default_registry.clone());
                         }
                     }
                 }
@@ -588,8 +587,8 @@ impl<'a> MonorepoAnalyzer<'a> {
             });
         }
 
-        // Create upgrader with the project's registry manager
-        let mut upgrader = Upgrader::with_registry_manager(self.registry_manager.clone());
+        // Create upgrader with default registry manager
+        let mut upgrader = Upgrader::new();
 
         // Extract Package objects for upgrade analysis
         let packages_for_analysis: Result<Vec<_>> = self
@@ -697,7 +696,9 @@ impl<'a> MonorepoAnalyzer<'a> {
 
     /// Analyze workspace configuration using standard-tools and config
     pub fn analyze_workspace_config(&self) -> Result<WorkspaceConfigAnalysis> {
-        let descriptor = self.descriptor;
+        // Detect monorepo on-demand since descriptor is not available in simplified analyzer
+        let detector = MonorepoDetector::new();
+        let descriptor = detector.detect_monorepo(self.root_path)?;
         let mut patterns = Vec::new();
         let mut has_nohoist = false;
         let mut nohoist_patterns = Vec::new();
@@ -973,8 +974,9 @@ impl<'a> MonorepoAnalyzer<'a> {
             return Ok(patterns);
         }
 
-        // Get existing package locations
-        let descriptor = self.descriptor;
+        // Get existing package locations - detect on-demand
+        let detector = MonorepoDetector::new();
+        let descriptor = detector.detect_monorepo(self.root_path)?;
         let package_locations: Vec<String> = descriptor
             .packages()
             .iter()
@@ -1032,7 +1034,8 @@ impl<'a> MonorepoAnalyzer<'a> {
     #[allow(clippy::unnecessary_wraps)]
     #[allow(clippy::manual_strip)]
     fn pattern_has_matches(&self, pattern: &str) -> Result<bool> {
-        let descriptor = self.descriptor;
+        let detector = MonorepoDetector::new();
+        let descriptor = detector.detect_monorepo(self.root_path)?;
         let packages = descriptor.packages();
 
         for package in packages {
@@ -1098,8 +1101,9 @@ impl<'a> MonorepoAnalyzer<'a> {
         let config_patterns = self.get_config_workspace_patterns()?;
         let auto_detected = self.get_auto_detected_patterns()?;
 
-        // Validate patterns against existing packages
-        let descriptor = self.descriptor;
+        // Validate patterns against existing packages - detect on-demand
+        let detector = MonorepoDetector::new();
+        let descriptor = detector.detect_monorepo(self.root_path)?;
         let existing_packages: Vec<String> = descriptor
             .packages()
             .iter()
@@ -1164,7 +1168,10 @@ impl<'a> MonorepoAnalyzer<'a> {
     pub fn find_orphaned_packages(&self, patterns: &[String]) -> Vec<String> {
         let mut orphaned = Vec::new();
 
-        let descriptor = self.descriptor;
+        let detector = MonorepoDetector::new();
+        let Ok(descriptor) = detector.detect_monorepo(self.root_path) else {
+            return orphaned; // Return empty if detection fails
+        };
         for package in descriptor.packages() {
             let package_path = package.location.to_string_lossy();
             let mut matches_pattern = false;
@@ -1309,22 +1316,17 @@ impl<'a> MonorepoAnalyzer<'a> {
             }
         }
 
-        // Create affected packages analysis
-        let affected_packages = crate::analysis::types::AffectedPackagesAnalysis {
-            directly_affected: directly_affected.clone(),
-            dependents_affected: Vec::new(), // Would need dependency analysis for this
-            change_propagation_graph: std::collections::HashMap::new(),
-            impact_scores: std::collections::HashMap::new(),
-            total_affected_count: directly_affected.len(),
-        };
-
         // Create comprehensive change analysis
         Ok(ChangeAnalysis {
             from_ref: since_ref.to_string(),
             to_ref: until_ref.unwrap_or("HEAD").to_string(),
             changed_files,
             package_changes,
-            affected_packages,
+            directly_affected: directly_affected.clone(),
+            dependents_affected: Vec::new(), // Would need dependency analysis for this
+            change_propagation_graph: std::collections::HashMap::new(),
+            impact_scores: std::collections::HashMap::new(),
+            total_affected_count: directly_affected.len(),
             significance_analysis: Vec::new(), // Would need deeper analysis for this
         })
     }

@@ -811,10 +811,10 @@ mod tests {
     fn test_changelog_manager_with_components() -> Result<()> {
         let (_temp_dir, project) = create_test_project()?;
         let _manager = ChangelogManager::with_components(
-            project.services.config_service().get_configuration(),
+            &project.config,
             &project.packages,
             project.repository(),
-            project.services.file_system_service().manager(),
+            &project.file_system,
             project.root_path(),
         );
 

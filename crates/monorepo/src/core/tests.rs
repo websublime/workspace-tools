@@ -187,7 +187,7 @@ mod tests {
         assert!(!project.packages.is_empty());
 
         // Test that services are initialized
-        assert!(project.services.config_service().get_configuration().versioning.propagate_changes);
+        assert!(project.config.versioning.propagate_changes);
 
         Ok(())
     }
@@ -273,9 +273,9 @@ mod tests {
     fn test_monorepo_project_dependency_graph() -> Result<()> {
         let (_temp_dir, mut project) = create_test_monorepo()?;
 
-        // Test dependency graph building
+        // Test dependency graph building - dependency_graph field was removed in simplification
+        // The dependency graph is now built on-demand by the analyzer
         project.build_dependency_graph()?;
-        assert!(project.dependency_graph.is_some());
 
         Ok(())
     }
@@ -298,9 +298,8 @@ mod tests {
 
         // Test service access methods
         assert!(!project.root_path().to_string_lossy().is_empty());
-        // Registry manager and dependency registry tests simplified due to API differences
-        let _registry_manager = project.registry_manager();
-        let _dependency_registry = project.dependency_registry();
+        // Registry manager and dependency registry removed in simplified API
+        // These are now handled through the analyzer
 
         Ok(())
     }

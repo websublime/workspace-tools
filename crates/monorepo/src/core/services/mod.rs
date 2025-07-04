@@ -43,6 +43,7 @@ use std::path::Path;
 /// ```
 #[derive(Debug)]
 #[allow(clippy::struct_field_names)]
+#[allow(dead_code)]
 pub(crate) struct MonorepoServices {
     /// Configuration management service
     config_service: ConfigurationService,
@@ -60,6 +61,7 @@ pub(crate) struct MonorepoServices {
     dependency_service: DependencyAnalysisService,
 }
 
+#[allow(dead_code)]
 impl MonorepoServices {
     /// Create a new service container for the monorepo
     ///

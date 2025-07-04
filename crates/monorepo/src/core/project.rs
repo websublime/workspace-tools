@@ -35,7 +35,7 @@ impl MonorepoProject {
         })?;
 
         // Direct package discovery using base crates
-        let packages = Self::discover_packages_direct(&root_path, &file_system, &config)?;
+        let packages = Self::discover_packages_direct(&root_path, &file_system, &config);
 
         Ok(Self {
             packages,
@@ -54,10 +54,10 @@ impl MonorepoProject {
         _root_path: &Path,
         _file_system: &FileSystemManager,
         _config: &MonorepoConfig,
-    ) -> Result<Vec<MonorepoPackageInfo>> {
+    ) -> Vec<MonorepoPackageInfo> {
         // Simplified package discovery for now - return empty list
         // Full implementation will be added when we have the correct base crate APIs
-        Ok(Vec::new())
+        Vec::new()
     }
 
     /// Get the root path of the monorepo
@@ -177,7 +177,7 @@ impl MonorepoProject {
         log::info!("Refreshing packages for project at: {}", self.root_path.display());
 
         // Refresh packages using direct base crate access
-        self.packages = Self::discover_packages_direct(&self.root_path, &self.file_system, &self.config)?;
+        self.packages = Self::discover_packages_direct(&self.root_path, &self.file_system, &self.config);
 
         log::info!("Successfully refreshed {} packages", self.packages.len());
         Ok(())

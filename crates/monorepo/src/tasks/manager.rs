@@ -35,7 +35,7 @@ impl<'a> TaskManager<'a> {
         let condition_checker = ConditionChecker::new(project);
 
         Ok(Self {
-            file_system: project.services.file_system_service().manager(),
+            file_system: &project.file_system,
             packages: &project.packages,
             registry,
             executor,

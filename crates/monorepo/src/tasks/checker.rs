@@ -42,7 +42,7 @@ impl<'a> ConditionChecker<'a> {
     pub fn new(project: &'a MonorepoProject) -> Self {
         Self {
             repository: project.repository(),
-            config: project.services.config_service().get_configuration(),
+            config: &project.config,
             packages: &project.packages,
             file_system: &project.file_system,
             root_path: &project.root_path,

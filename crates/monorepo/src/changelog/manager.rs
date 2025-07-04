@@ -75,11 +75,11 @@ impl<'a> ChangelogManager<'a> {
     /// A new changelog manager instance
     pub fn new(project: &'a MonorepoProject) -> Self {
         Self {
-            repository: project.repository(),
+            repository: &project.repository,
             packages: &project.packages,
-            file_system: project.services.file_system_service().manager(),
-            config: project.services.config_service().get_configuration(),
-            root_path: project.root_path(),
+            file_system: &project.file_system,
+            config: &project.config,
+            root_path: &project.root_path,
             parser: ConventionalCommitParser::new(),
             generator: ChangelogGenerator::new(),
         }

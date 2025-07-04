@@ -33,7 +33,7 @@ impl<'a> TaskExecutor<'a> {
     pub fn new(project: &'a MonorepoProject) -> Self {
         Self {
             packages: &project.packages,
-            config: project.services.config_service().get_configuration(),
+            config: &project.config,
             root_path: project.root_path(),
         }
     }
