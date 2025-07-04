@@ -477,33 +477,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_monorepo_tools_development_workflow() -> Result<()> {
-        let (_temp_dir, project) = create_test_monorepo()?;
 
-        let tools = MonorepoTools::new(&project);
-        let result = tools.development_workflow(Some("main"))?;
-
-        // Test development workflow execution - should complete without error regardless of result
-        drop(result);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_monorepo_tools_plugin_manager() -> Result<()> {
-        let (_temp_dir, project) = create_test_monorepo()?;
-
-        let tools = MonorepoTools::new(&project);
-        let plugin_manager = tools.plugin_manager()?;
-
-        // Test plugin manager creation
-        let available_plugins = plugin_manager.list_plugins();
-        // Plugin manager should be valid regardless of number of plugins
-        drop(available_plugins);
-
-        Ok(())
-    }
 
     // =========================================================================================
     // VersionManager Tests

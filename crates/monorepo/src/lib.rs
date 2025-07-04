@@ -20,9 +20,7 @@
 //! - **Monorepo Analysis**: Package manager detection, dependency graph, internal/external packages
 //! - **Monorepo as Project**: Aggregate complete monorepo information
 //! - **Changelogs**: Based on conventional commits with customizable templates
-//! - **Hooks**: Git hooks (pre-commit, pre-push) with validations
 //! - **Changesets**: Change management with deployment environments
-//! - **Plugins**: Extensible system for customization
 //!
 //! ## Architecture
 //!
@@ -66,11 +64,7 @@ pub mod changesets;
 pub mod config;
 pub mod core;
 pub mod error;
-pub mod events;
-pub mod hooks;
-pub mod plugins;
 pub mod tasks;
-pub mod workflows;
 
 // Essential API surface - core re-exports for common usage
 // Advanced types available through module paths (e.g., crate::changesets::ChangesetApplication)
@@ -81,8 +75,6 @@ pub use crate::core::{MonorepoProject, MonorepoTools};
 // Essential result and error types (2 types)
 pub use crate::error::{Error, Result};
 
-// Main workflow types - primary user interfaces (4 types)
-pub use crate::workflows::{DevelopmentWorkflow, ReleaseOptions, ReleaseResult, ReleaseWorkflow};
 
 // Core analysis types (3 types)
 pub use crate::analysis::{AffectedPackagesAnalysis, ChangeAnalysis, MonorepoAnalyzer};
@@ -96,10 +88,8 @@ pub use crate::changes::{ChangeDetector, PackageChange};
 // Core version management (2 types)
 pub use crate::core::{VersionManager, VersioningResult};
 
-// Plugin system - main interface (2 types)
-pub use crate::plugins::{MonorepoPlugin, PluginManager};
 
-// Total: 20 essential types - advanced functionality available via module paths
+// Total: 14 essential types - advanced functionality available via module paths
 
 // Main entry point struct re-exported from core module
 // Implementation moved to core/tools.rs for better separation

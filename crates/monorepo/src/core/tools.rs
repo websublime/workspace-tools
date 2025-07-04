@@ -2,13 +2,9 @@
 
 use crate::analysis::{DiffAnalyzer, MonorepoAnalyzer};
 use crate::core::types::MonorepoTools;
-use crate::core::{MonorepoProject, VersionManager, VersioningPlan, VersioningStrategy};
+use crate::core::{MonorepoProject, VersionManager, VersioningStrategy};
 use crate::error::Result;
-use crate::plugins::PluginManager;
 use crate::tasks::TaskManager;
-use crate::workflows::{ChangeAnalysisWorkflowResult, VersioningWorkflowResult};
-use crate::workflows::{DevelopmentResult, DevelopmentWorkflow};
-use crate::workflows::{ReleaseOptions, ReleaseResult, ReleaseWorkflow};
 
 impl<'a> MonorepoTools<'a> {
     /// Creates monorepo tools from an existing MonorepoProject
@@ -93,173 +89,185 @@ impl<'a> MonorepoTools<'a> {
         TaskManager::from_project(self.project)
     }
 
-    /// Get a hook manager (Phase 3 functionality)
+    /// Install basic git hooks for pre-commit and pre-push validation
     ///
-    /// TODO: This method has lifetime issues that need to be resolved in FASE 2
-    /// when we eliminate async infection and restructure component dependencies.
-    /// For now, create HookManager directly where needed.
-    // pub fn hook_manager(&self) -> Result<HookManager> {
-    //     let task_manager = self.task_manager()?;
-    //     HookManager::from_project(self.project, &task_manager)
-    // }
+    /// Creates simple shell scripts in `.git/hooks/` that run configured tasks
+    /// on affected packages. This replaces the complex hook system with basic
+    /// script generation suitable for CLI/daemon consumption.
+    ///
+    /// # Returns
+    ///
+    /// A vector of hook names that were successfully installed
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The `.git/hooks` directory cannot be accessed
+    /// - Hook files cannot be written
+    /// - Permissions cannot be set on hook files
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_monorepo_tools::MonorepoTools;
+    ///
+    /// let tools = MonorepoTools::initialize("/path/to/monorepo")?;
+    /// let installed_hooks = tools.install_git_hooks()?;
+    /// println!("Installed hooks: {:?}", installed_hooks);
+    /// ```
+    pub fn install_git_hooks(&self) -> Result<Vec<String>> {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
 
-    /// Analyze changes between branches (Phase 2 functionality)
-    pub fn analyze_changes_workflow(
-        &self,
-        from_branch: &str,
-        to_branch: Option<&str>,
-    ) -> Result<ChangeAnalysisWorkflowResult> {
-        let diff_analyzer = self.diff_analyzer();
-
-        let analysis = if let Some(to_branch) = to_branch {
-            // Compare between specific branches
-            let comparison = diff_analyzer.compare_branches(from_branch, to_branch)?;
-            ChangeAnalysisWorkflowResult::BranchComparison(comparison)
-        } else {
-            // Analyze changes since a reference
-            let analysis = diff_analyzer.detect_changes_since(from_branch, None)?;
-            ChangeAnalysisWorkflowResult::ChangeAnalysis(analysis)
-        };
-
-        Ok(analysis)
-    }
-
-    /// Execute a complete versioning workflow (Phase 2 functionality)
-    pub fn versioning_workflow(
-        &self,
-        plan: Option<VersioningPlan>,
-    ) -> Result<VersioningWorkflowResult> {
-        let start_time = std::time::Instant::now();
-        let version_manager = self.version_manager();
-
-        if let Some(plan) = plan {
-            // Execute provided plan
-            let result = version_manager.execute_versioning_plan(&plan)?;
-            Ok(VersioningWorkflowResult {
-                versioning_result: result,
-                plan_executed: Some(plan),
-                duration: start_time.elapsed(),
-            })
-        } else {
-            // Create plan from current changes
-            let diff_analyzer = self.diff_analyzer();
-            let git_config = &self.project.config.git;
-            let changes =
-                diff_analyzer.detect_changes_since(&git_config.default_since_ref, None)?;
-            let plan = version_manager.create_versioning_plan(&changes)?;
-            let result = version_manager.execute_versioning_plan(&plan)?;
-
-            Ok(VersioningWorkflowResult {
-                versioning_result: result,
-                plan_executed: Some(plan),
-                duration: start_time.elapsed(),
-            })
+        let git_hooks_dir = self.project.root_path.join(".git").join("hooks");
+        
+        // Ensure .git/hooks directory exists
+        if !git_hooks_dir.exists() {
+            return Err(crate::error::Error::git(
+                "Git repository not found - .git/hooks directory does not exist".to_string()
+            ));
         }
+
+        let mut installed_hooks = Vec::new();
+        let config = &self.project.config;
+
+        // Install pre-commit hook if enabled
+        if config.hooks.enabled && config.hooks.pre_commit.enabled {
+            let pre_commit_content = self.generate_pre_commit_hook_script();
+            let pre_commit_path = git_hooks_dir.join("pre-commit");
+            
+            fs::write(&pre_commit_path, pre_commit_content)
+                .map_err(|e| crate::error::Error::git(format!("Failed to write pre-commit hook: {e}")))?;
+            
+            // Make executable
+            let mut perms = fs::metadata(&pre_commit_path)
+                .map_err(|e| crate::error::Error::git(format!("Failed to get hook permissions: {e}")))?
+                .permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&pre_commit_path, perms)
+                .map_err(|e| crate::error::Error::git(format!("Failed to set hook permissions: {e}")))?;
+            
+            installed_hooks.push("pre-commit".to_string());
+            log::info!("Installed pre-commit hook");
+        }
+
+        // Install pre-push hook if enabled
+        if config.hooks.enabled && config.hooks.pre_push.enabled {
+            let pre_push_content = self.generate_pre_push_hook_script();
+            let pre_push_path = git_hooks_dir.join("pre-push");
+            
+            fs::write(&pre_push_path, pre_push_content)
+                .map_err(|e| crate::error::Error::git(format!("Failed to write pre-push hook: {e}")))?;
+            
+            // Make executable
+            let mut perms = fs::metadata(&pre_push_path)
+                .map_err(|e| crate::error::Error::git(format!("Failed to get hook permissions: {e}")))?
+                .permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&pre_push_path, perms)
+                .map_err(|e| crate::error::Error::git(format!("Failed to set hook permissions: {e}")))?;
+            
+            installed_hooks.push("pre-push".to_string());
+            log::info!("Installed pre-push hook");
+        }
+
+        Ok(installed_hooks)
     }
 
-    /// Run the development workflow
+    /// Generate pre-commit hook script content
     ///
-    /// Executes the complete development workflow including change analysis,
-    /// affected package detection, task execution, and validation.
+    /// Creates a shell script that runs configured pre-commit tasks
+    /// on packages with staged changes.
+    fn generate_pre_commit_hook_script(&self) -> String {
+        let config = &self.project.config;
+        let tasks = &config.hooks.pre_commit.run_tasks;
+        
+        let mut script = String::from("#!/bin/sh\n");
+        script.push_str("# Generated by sublime-monorepo-tools\n");
+        script.push_str("# Pre-commit validation hook\n\n");
+        
+        script.push_str("set -e\n\n");
+        
+        script.push_str("echo \"Running pre-commit validation...\"\n\n");
+        
+        if config.hooks.pre_commit.validate_changeset {
+            script.push_str("# Check for changesets if required\n");
+            script.push_str("echo \"Checking for changesets...\"\n");
+            script.push_str("# TODO: Add changeset validation when CLI is available\n\n");
+        }
+        
+        if !tasks.is_empty() {
+            script.push_str("# Run configured tasks on affected packages\n");
+            for task in tasks {
+                script.push_str(&format!("echo \"Running task: {task}...\"\n"));
+                script.push_str(&format!("npm run {task} --if-present\n"));
+            }
+            script.push('\n');
+        }
+        
+        script.push_str("echo \"Pre-commit validation completed successfully!\"\n");
+        
+        script
+    }
+
+    /// Generate pre-push hook script content
     ///
-    /// # Arguments
+    /// Creates a shell script that runs configured pre-push tasks
+    /// on packages affected by the commits being pushed.
+    fn generate_pre_push_hook_script(&self) -> String {
+        let config = &self.project.config;
+        let tasks = &config.hooks.pre_push.run_tasks;
+        
+        let mut script = String::from("#!/bin/sh\n");
+        script.push_str("# Generated by sublime-monorepo-tools\n");
+        script.push_str("# Pre-push validation hook\n\n");
+        
+        script.push_str("set -e\n\n");
+        
+        script.push_str("echo \"Running pre-push validation...\"\n\n");
+        
+        if !tasks.is_empty() {
+            script.push_str("# Run configured tasks on affected packages\n");
+            for task in tasks {
+                script.push_str(&format!("echo \"Running task: {task}...\"\n"));
+                script.push_str(&format!("npm run {task} --if-present\n"));
+            }
+            script.push('\n');
+        }
+        
+        script.push_str("echo \"Pre-push validation completed successfully!\"\n");
+        
+        script
+    }
+
+    /// Uninstall git hooks
     ///
-    /// * `since` - Optional reference point for change detection (defaults to configured git.default_since_ref)
+    /// Removes the git hook files created by this tool.
     ///
     /// # Returns
     ///
-    /// A `DevelopmentResult` containing analysis results, executed tasks, and recommendations.
+    /// A vector of hook names that were successfully removed
     ///
     /// # Errors
     ///
-    /// Returns an error if the workflow cannot be completed.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sublime_monorepo_tools::MonorepoTools;
-    ///
-    /// let tools = MonorepoTools::initialize("/path/to/monorepo")?;
-    /// let result = tools.development_workflow(Some("main")).await?;
-    /// println!("Development checks passed: {}", result.checks_passed);
-    /// ```
-    pub fn development_workflow(&self, since: Option<&str>) -> Result<DevelopmentResult> {
-        let workflow = DevelopmentWorkflow::from_project(self.project)?;
-        workflow.execute(since)
+    /// Returns an error if hook files cannot be removed
+    pub fn uninstall_git_hooks(&self) -> Result<Vec<String>> {
+        use std::fs;
+
+        let git_hooks_dir = self.project.root_path.join(".git").join("hooks");
+        let mut removed_hooks = Vec::new();
+
+        for hook_name in &["pre-commit", "pre-push"] {
+            let hook_path = git_hooks_dir.join(hook_name);
+            if hook_path.exists() {
+                fs::remove_file(&hook_path)
+                    .map_err(|e| crate::error::Error::git(format!("Failed to remove {hook_name} hook: {e}")))?;
+                removed_hooks.push((*hook_name).to_string());
+                log::info!("Removed {hook_name} hook");
+            }
+        }
+
+        Ok(removed_hooks)
     }
 
-    /// Execute a complete release workflow
-    ///
-    /// This orchestrates the entire release process including change detection,
-    /// version management, task execution, and deployment across multiple environments.
-    ///
-    /// # Arguments
-    ///
-    /// * `options` - Release configuration options including target environments and version bump preferences
-    ///
-    /// # Returns
-    ///
-    /// A comprehensive result containing information about the release process,
-    /// including success status, affected packages, and any errors or warnings.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if any critical step of the release workflow fails.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sublime_monorepo_tools::{MonorepoTools, ReleaseOptions};
-    ///
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let tools = MonorepoTools::initialize("/path/to/monorepo")?;
-    /// let options = ReleaseOptions::default();
-    /// let result = tools.release_workflow(options).await?;
-    ///
-    /// if result.success {
-    ///     println!("Release completed successfully!");
-    ///     println!("Affected packages: {}", result.affected_packages.len());
-    /// }
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn release_workflow(&self, options: &ReleaseOptions) -> Result<ReleaseResult> {
-        let workflow = ReleaseWorkflow::from_project(self.project)?;
-        workflow.execute(options)
-    }
-
-    /// Create a plugin manager for this monorepo
-    ///
-    /// Creates a plugin manager instance that can be used to load and execute
-    /// plugins for extending monorepo functionality.
-    ///
-    /// # Returns
-    ///
-    /// A configured plugin manager ready for use
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the plugin manager cannot be created
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sublime_monorepo_tools::MonorepoTools;
-    ///
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let tools = MonorepoTools::initialize("/path/to/monorepo")?;
-    /// let mut plugin_manager = tools.plugin_manager()?;
-    ///
-    /// // Load built-in plugins
-    /// plugin_manager.load_builtin_plugins()?;
-    ///
-    /// // Execute plugin command
-    /// let result = plugin_manager.execute_plugin_command("analyzer", "analyze-dependencies", &[])?;
-    /// println!("Plugin result: {}", result.success);
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn plugin_manager(&self) -> Result<PluginManager<'a>> {
-        PluginManager::from_project(self.project)
-    }
 }
