@@ -7,7 +7,6 @@ use crate::core::MonorepoProject;
 use crate::error::Result;
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::Command;
 use sublime_git_tools::{GitChangedFile, GitFileStatus};
 
 // Import consistent types from changes module
@@ -110,34 +109,20 @@ impl<'a> DiffAnalyzer<'a> {
             ));
         }
 
-        // Validate branches exist using git commands
-        let repo_root = self.root_path;
-
+        // Validate branches exist using git repository
         // Check if base branch exists
-        let base_check = Command::new("git")
-            .args(["rev-parse", "--verify", base_branch])
-            .current_dir(repo_root)
-            .output()
-            .map_err(|e| {
-                crate::error::Error::Analysis(format!("Failed to verify base branch: {e}"))
-            })?;
-
-        if !base_check.status.success() {
+        if !self.repository.branch_exists(base_branch).map_err(|e| {
+            crate::error::Error::Analysis(format!("Failed to verify base branch: {e}"))
+        })? {
             return Err(crate::error::Error::Analysis(format!(
                 "Base branch '{base_branch}' does not exist"
             )));
         }
 
         // Check if target branch exists
-        let target_check = Command::new("git")
-            .args(["rev-parse", "--verify", target_branch])
-            .current_dir(repo_root)
-            .output()
-            .map_err(|e| {
-                crate::error::Error::Analysis(format!("Failed to verify target branch: {e}"))
-            })?;
-
-        if !target_check.status.success() {
+        if !self.repository.branch_exists(target_branch).map_err(|e| {
+            crate::error::Error::Analysis(format!("Failed to verify target branch: {e}"))
+        })? {
             return Err(crate::error::Error::Analysis(format!(
                 "Target branch '{target_branch}' does not exist"
             )));
@@ -468,61 +453,22 @@ impl<'a> DiffAnalyzer<'a> {
         target_branch: &str,
     ) -> Result<Vec<String>> {
         use std::collections::HashSet;
-        use std::process::Command;
 
-        // Get the repository root for running git commands
-        let repo_root = self.root_path;
-
-        // Get merge base between the two branches
-        let merge_base_output = Command::new("git")
-            .args(["merge-base", base_branch, target_branch])
-            .current_dir(repo_root)
-            .output()
+        // Get merge base between the two branches using git repository
+        let merge_base = self.repository.get_merge_base(base_branch, target_branch)
             .map_err(|e| crate::error::Error::Analysis(format!("Failed to get merge base: {e}")))?;
 
-        if !merge_base_output.status.success() {
-            return Ok(vec![]); // No common ancestor or invalid branches
-        }
-
-        let merge_base = String::from_utf8_lossy(&merge_base_output.stdout).trim().to_string();
-
         // Get files changed from merge base to base branch
-        let base_changes_output = Command::new("git")
-            .args(["diff", "--name-only", &merge_base, base_branch])
-            .current_dir(repo_root)
-            .output()
-            .map_err(|e| {
-                crate::error::Error::Analysis(format!("Failed to get base changes: {e}"))
-            })?;
-
-        let base_changes: HashSet<String> = if base_changes_output.status.success() {
-            String::from_utf8_lossy(&base_changes_output.stdout)
-                .lines()
-                .filter(|line| !line.trim().is_empty())
-                .map(|line| line.trim().to_string())
-                .collect()
-        } else {
-            HashSet::new()
-        };
+        let base_changes = self.repository.get_files_changed_between(&merge_base, base_branch)
+            .map_err(|e| crate::error::Error::Analysis(format!("Failed to get base changes: {e}")))?;
+        
+        let base_changes: HashSet<String> = base_changes.into_iter().map(|f| f.path).collect();
 
         // Get files changed from merge base to target branch
-        let target_changes_output = Command::new("git")
-            .args(["diff", "--name-only", &merge_base, target_branch])
-            .current_dir(repo_root)
-            .output()
-            .map_err(|e| {
-                crate::error::Error::Analysis(format!("Failed to get target changes: {e}"))
-            })?;
-
-        let target_changes: HashSet<String> = if target_changes_output.status.success() {
-            String::from_utf8_lossy(&target_changes_output.stdout)
-                .lines()
-                .filter(|line| !line.trim().is_empty())
-                .map(|line| line.trim().to_string())
-                .collect()
-        } else {
-            HashSet::new()
-        };
+        let target_changes = self.repository.get_files_changed_between(&merge_base, target_branch)
+            .map_err(|e| crate::error::Error::Analysis(format!("Failed to get target changes: {e}")))?;
+            
+        let target_changes: HashSet<String> = target_changes.into_iter().map(|f| f.path).collect();
 
         // Find files that were modified in both branches
         let conflicts: Vec<String> = base_changes.intersection(&target_changes).cloned().collect();

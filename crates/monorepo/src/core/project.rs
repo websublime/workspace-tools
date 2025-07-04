@@ -18,7 +18,11 @@ impl MonorepoProject {
     /// Eliminates service abstractions in favor of direct base crate usage.
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
-        let root_path = path.to_path_buf();
+        
+        // Canonicalize path to handle symlinks and resolve real path
+        let root_path = path.canonicalize().map_err(|e| {
+            Error::generic(format!("Failed to canonicalize monorepo path '{}': {}", path.display(), e))
+        })?;
 
         // Initialize base crate components directly
         let file_system = FileSystemManager::new();
@@ -27,11 +31,11 @@ impl MonorepoProject {
         let config_manager = ConfigManager::new();
         let config = config_manager.load_config(&root_path)?;
 
-        // Initialize Git repository directly
+        // Initialize Git repository directly using canonicalized path
         let path_str =
-            path.to_str().ok_or_else(|| Error::git("Invalid UTF-8 in repository path"))?;
+            root_path.to_str().ok_or_else(|| Error::git("Invalid UTF-8 in repository path"))?;
         let repository = Repo::open(path_str).map_err(|e| {
-            Error::git(format!("Failed to open Git repository at {}: {}", path.display(), e))
+            Error::git(format!("Failed to open Git repository at {}: {}", root_path.display(), e))
         })?;
 
         // Direct package discovery using base crates
@@ -55,85 +59,63 @@ impl MonorepoProject {
         _file_system: &FileSystemManager,
         _config: &MonorepoConfig,
     ) -> Vec<MonorepoPackageInfo> {
-        // Basic package discovery for testing - find package.json files
-        let mut packages = Vec::new();
+        // Use MonorepoDetector to discover packages properly
+        let detector = sublime_standard_tools::monorepo::MonorepoDetector::new();
         
-        // Look for package.json files in common locations
-        let search_paths = [
-            "packages/*/package.json",
-            "apps/*/package.json", 
-            "libs/*/package.json",
-            "packages/*/*/package.json", // nested packages
-        ];
-        
-        for pattern in &search_paths {
-            let full_pattern = root_path.join(pattern);
-            if let Ok(entries) = glob::glob(&full_pattern.to_string_lossy()) {
-                for entry in entries.flatten() {
-                    if let Ok(content) = std::fs::read_to_string(&entry) {
-                        if let Ok(package_json) = serde_json::from_str::<serde_json::Value>(&content) {
-                            if let (Some(name), Some(version)) = (
-                                package_json.get("name").and_then(|n| n.as_str()),
-                                package_json.get("version").and_then(|v| v.as_str()),
-                            ) {
-                                // Create basic package info
-                                if let Ok(package) = sublime_package_tools::Package::new(name, version, None) {
-                                    let package_dir = entry.parent().unwrap_or(root_path);
-                                    let package_info = sublime_package_tools::PackageInfo::new(
-                                        package,
-                                        entry.to_string_lossy().to_string(),
-                                        package_dir.to_string_lossy().to_string(),
-                                        package_dir.to_string_lossy().to_string(),
-                                        package_json.clone(),
-                                    );
-                                    
-                                    // Parse dependencies and devDependencies
-                                    let mut workspace_deps = Vec::new();
-                                    let mut workspace_dev_deps = Vec::new();
-                                    
-                                    if let Some(deps) = package_json.get("dependencies").and_then(|d| d.as_object()) {
-                                        for (dep_name, _version) in deps {
-                                            workspace_deps.push(dep_name.clone());
-                                        }
-                                    }
-                                    
-                                    if let Some(dev_deps) = package_json.get("devDependencies").and_then(|d| d.as_object()) {
-                                        for (dep_name, _version) in dev_deps {
-                                            workspace_dev_deps.push(dep_name.clone());
-                                        }
-                                    }
-                                    
-                                    let workspace_package = sublime_standard_tools::monorepo::WorkspacePackage {
-                                        name: name.to_string(),
-                                        version: version.to_string(),
-                                        location: package_dir.to_path_buf(),
-                                        absolute_path: package_dir.to_path_buf(),
-                                        workspace_dependencies: workspace_deps,
-                                        workspace_dev_dependencies: workspace_dev_deps,
-                                    };
-                                    
-                                    let mut monorepo_package = MonorepoPackageInfo::new(package_info, &workspace_package, true);
-                                    
-                                    // Populate external dependencies
-                                    if let Some(deps) = package_json.get("dependencies").and_then(|d| d.as_object()) {
-                                        for (dep_name, _version) in deps {
-                                            // For now, assume any dependency that doesn't start with '@test/' is external
-                                            if !dep_name.starts_with("@test/") {
-                                                monorepo_package.dependencies_external.push(dep_name.clone());
-                                            }
-                                        }
-                                    }
-                                    
-                                    packages.push(monorepo_package);
-                                }
+        match detector.detect_monorepo(root_path) {
+            Ok(monorepo_descriptor) => {
+                let mut packages = Vec::new();
+                
+                for workspace_package in monorepo_descriptor.packages() {
+                    // Create package using sublime_package_tools
+                    if let Ok(package) = sublime_package_tools::Package::new(
+                        &workspace_package.name, 
+                        &workspace_package.version, 
+                        None
+                    ) {
+                        // Create package.json path
+                        let package_json_path = workspace_package.absolute_path.join("package.json");
+                        
+                        // Read package.json to get the actual content
+                        let package_json = if let Ok(content) = std::fs::read_to_string(&package_json_path) {
+                            serde_json::from_str(&content).unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()))
+                        } else {
+                            serde_json::Value::Object(serde_json::Map::new())
+                        };
+                        
+                        let package_info = sublime_package_tools::PackageInfo::new(
+                            package,
+                            package_json_path.to_string_lossy().to_string(),
+                            workspace_package.location.to_string_lossy().to_string(),
+                            workspace_package.absolute_path.to_string_lossy().to_string(),
+                            package_json.clone(),
+                        );
+                        
+                        let mut monorepo_package = MonorepoPackageInfo::new(package_info, workspace_package, true);
+                        
+                        // Determine external dependencies (those not in this monorepo)
+                        for dep_name in &workspace_package.workspace_dependencies {
+                            // Check if this dependency is internal to the monorepo
+                            let is_internal = monorepo_descriptor.packages()
+                                .iter()
+                                .any(|pkg| pkg.name == *dep_name);
+                            
+                            if !is_internal {
+                                monorepo_package.dependencies_external.push(dep_name.clone());
                             }
                         }
+                        
+                        packages.push(monorepo_package);
                     }
                 }
+                
+                packages
+            }
+            Err(e) => {
+                log::warn!("Failed to detect monorepo at {}: {}", root_path.display(), e);
+                Vec::new() // Return empty if detection fails
             }
         }
-        
-        packages
     }
 
     /// Get the root path of the monorepo
