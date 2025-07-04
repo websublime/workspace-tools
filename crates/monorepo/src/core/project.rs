@@ -207,37 +207,31 @@ impl MonorepoProject {
     /// Internal method for direct dependency analysis without service abstractions
     #[allow(clippy::unnecessary_wraps)]
     fn populate_dependents_mapping(&mut self) -> Result<()> {
-        log::debug!("Populating dependents mapping for {} packages", self.packages.len());
 
         // Clear existing dependents to rebuild from scratch
         for package in &mut self.packages {
             package.dependents.clear();
         }
 
-        // Build reverse dependency mapping
-        // For each package, find its dependencies and add this package to their dependents list
-        let package_dependencies: Vec<(String, Vec<String>)> = self
-            .packages
-            .iter()
-            .map(|pkg| {
-                let package_name = pkg.name().to_string();
-                let dependencies = pkg.workspace_package.workspace_dependencies.clone();
-                (package_name, dependencies)
-            })
-            .collect();
+        // Build reverse dependency mapping efficiently using HashMap for O(1) lookups
+        let mut dependents_map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+        
+        // Collect all package dependencies
+        for pkg in &self.packages {
+            let package_name = pkg.name().to_string();
+            for dependency_name in &pkg.workspace_package.workspace_dependencies {
+                dependents_map
+                    .entry(dependency_name.clone())
+                    .or_default()
+                    .push(package_name.clone());
+            }
+        }
 
-        // Now update the dependents fields
-        for (package_name, dependencies) in package_dependencies {
-            for dependency_name in dependencies {
-                // Find the dependency package and add this package as a dependent
-                if let Some(dependency_package) =
-                    self.packages.iter_mut().find(|pkg| pkg.name() == dependency_name)
-                {
-                    if !dependency_package.dependents.contains(&package_name) {
-                        dependency_package.dependents.push(package_name.clone());
-                        log::debug!("Added {} as dependent of {}", package_name, dependency_name);
-                    }
-                }
+        // Update the dependents fields efficiently
+        for package in &mut self.packages {
+            let package_name = package.name().to_string();
+            if let Some(dependents) = dependents_map.remove(&package_name) {
+                package.dependents = dependents;
             }
         }
 

@@ -201,6 +201,12 @@ impl<'a> DiffAnalyzer<'a> {
     pub fn map_changes_to_packages(&self, changed_files: &[GitChangedFile]) -> Vec<PackageChange> {
         let mut package_changes: HashMap<String, PackageChangeBuilder> = HashMap::new();
 
+        // Pre-canonicalize package paths once for better performance
+        let canonical_packages: Vec<_> = self.packages.iter().map(|pkg| {
+            let canonical_path = pkg.path().canonicalize().unwrap_or_else(|_| pkg.path().clone());
+            (pkg, canonical_path)
+        }).collect();
+
         for file in changed_files {
             // Find which package this file belongs to
             let file_path = Path::new(&file.path);
@@ -215,40 +221,42 @@ impl<'a> DiffAnalyzer<'a> {
                 project_root.join(file_path)
             };
 
-            // Canonicalize the file path to handle symlinks like /private/var -> /var on macOS
-            // For deleted files, canonicalization will fail, so we fall back to the full path
-            let canonical_file_path = if file.status == sublime_git_tools::GitFileStatus::Deleted {
-                // For deleted files, canonicalize the parent directory and append the filename
-                if let Some(parent) = full_file_path.parent() {
-                    if let Some(filename) = full_file_path.file_name() {
-                        parent
-                            .canonicalize()
-                            .unwrap_or_else(|_| parent.to_path_buf())
-                            .join(filename)
+            // Optimize: Skip canonicalization for most cases, use string prefix matching first
+            let package = canonical_packages.iter().find(|(pkg, canonical_pkg_path)| {
+                // Fast path: try string-based prefix matching first (works for most cases)
+                if file.path.starts_with(pkg.path().to_string_lossy().as_ref()) {
+                    return true;
+                }
+                
+                // Fallback: use canonicalized paths for edge cases (symlinks, etc.)
+                let canonical_file_path = if file.status == sublime_git_tools::GitFileStatus::Deleted {
+                    // For deleted files, canonicalize the parent directory and append the filename
+                    if let Some(parent) = full_file_path.parent() {
+                        if let Some(filename) = full_file_path.file_name() {
+                            parent
+                                .canonicalize()
+                                .unwrap_or_else(|_| parent.to_path_buf())
+                                .join(filename)
+                        } else {
+                            full_file_path.clone()
+                        }
                     } else {
-                        full_file_path
+                        full_file_path.clone()
                     }
                 } else {
-                    full_file_path
-                }
-            } else {
-                full_file_path.canonicalize().unwrap_or(full_file_path)
-            };
-
-            // Find package by checking canonicalized path from direct packages access
-            let package = self.packages.iter().find(|pkg| {
-                let canonical_pkg_path =
-                    pkg.path().canonicalize().unwrap_or_else(|_| pkg.path().clone());
-                canonical_file_path.starts_with(&canonical_pkg_path)
-            });
+                    full_file_path.canonicalize().unwrap_or(full_file_path.clone())
+                };
+                
+                canonical_file_path.starts_with(canonical_pkg_path)
+            }).map(|(pkg, _)| *pkg);
 
             if let Some(package) = package {
-                let package_name = package.name().to_string();
+                let package_name = package.name();
 
-                // Get or create package change builder
+                // Get or create package change builder (optimized to avoid clone in hot path)
                 let change_builder = package_changes
-                    .entry(package_name.clone())
-                    .or_insert_with(|| PackageChangeBuilder::new(package_name));
+                    .entry(package_name.to_string())
+                    .or_insert_with(|| PackageChangeBuilder::new(package_name.to_string()));
 
                 // Add the file change
                 change_builder.add_file_change(file.clone());

@@ -7,11 +7,11 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "A robust library for managing Node.js monorepos"
-documentation = "https://docs.rs/sublime_package_tools"
+description = "Streamlined library for CLI/daemon Node.js monorepo management"
+documentation = "https://docs.rs/sublime_monorepo_tools"
 readme = "README.md"
-keywords = ["nodejs", "package", "dependency", "semver", "graph"]
-categories = ["development-tools", "monorepo"]
+keywords = ["nodejs", "monorepo", "cli", "daemon", "analysis"]
+categories = ["development-tools", "command-line-utilities"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -37,8 +37,6 @@ toml = "0.8.22"
 serde_yaml = "0.9"
 chrono = { version = "0.4", features = ["serde"] }
 semver = "1.0"
-tokio = { version = "1.35", features = ["full"] }
-async-trait = "0.1"
 dirs = "5.0"
 regex = "1.10"
 glob = "0.3"
@@ -46,4 +44,3 @@ glob = "0.3"
 [dev-dependencies]
 rstest = "0.25.0"
 tempfile = "3.19.1"
-tokio = { version = "1.35", features = ["full", "test-util"] }
