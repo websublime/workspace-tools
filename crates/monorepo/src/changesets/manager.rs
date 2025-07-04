@@ -9,12 +9,11 @@ use uuid::Uuid;
 
 use super::types::{
     Changeset, ChangesetApplication, ChangesetFilter, ChangesetManager, ChangesetSpec,
-    ChangesetStatus, ChangesetStorage, DeploymentResult, EnvironmentDeploymentResult,
-    ValidationResult,
+    ChangesetStatus, ChangesetStorage, ValidationResult,
 };
+#[allow(unused_imports)] // Used in documentation examples and validation logic
 use crate::config::types::Environment;
 use crate::error::Error;
-use crate::tasks::TaskManager;
 use crate::VersionBumpType;
 use sublime_standard_tools::filesystem::FileSystem;
 
@@ -22,12 +21,11 @@ impl<'a> ChangesetManager<'a> {
     /// Creates a new changeset manager with direct borrowing from project
     ///
     /// Uses borrowing instead of trait objects to eliminate Arc proliferation
-    /// and work with Rust ownership principles.
+    /// and work with Rust ownership principles. Focused on CRUD operations for CLI consumption.
     ///
     /// # Arguments
     ///
     /// * `storage` - Changeset storage for persistence
-    /// * `task_manager` - Task manager for executing deployment tasks
     /// * `config` - Direct reference to configuration
     /// * `file_system` - Direct reference to file system manager
     /// * `packages` - Direct reference to packages
@@ -39,14 +37,13 @@ impl<'a> ChangesetManager<'a> {
     /// A new changeset manager instance
     pub fn new(
         storage: ChangesetStorage<'a>,
-        task_manager: TaskManager<'a>,
         config: &'a crate::config::MonorepoConfig,
         file_system: &'a sublime_standard_tools::filesystem::FileSystemManager,
         packages: &'a [crate::core::MonorepoPackageInfo],
         repository: &'a sublime_git_tools::Repo,
         root_path: &'a std::path::Path,
     ) -> Self {
-        Self { storage, task_manager, config, file_system, packages, repository, root_path }
+        Self { storage, config, file_system, packages, repository, root_path }
     }
 
     /// Creates a new changeset manager from project (convenience method)
@@ -65,7 +62,6 @@ impl<'a> ChangesetManager<'a> {
     pub fn from_project(
         project: &'a crate::core::MonorepoProject,
     ) -> Result<Self, crate::error::Error> {
-        let task_manager = crate::tasks::TaskManager::new(project)?;
         let storage = crate::changesets::ChangesetStorage::new(
             project.config.changesets.clone(),
             &project.file_system,
@@ -74,7 +70,6 @@ impl<'a> ChangesetManager<'a> {
 
         Ok(Self::new(
             storage,
-            task_manager,
             &project.config,
             &project.file_system,
             &project.packages,
@@ -455,88 +450,6 @@ impl<'a> ChangesetManager<'a> {
         Ok(ValidationResult { is_valid: errors.is_empty(), errors, warnings, metadata })
     }
 
-    /// Deploys a changeset to specific environments during development
-    ///
-    /// Executes deployment tasks for the specified environments and updates
-    /// the changeset status accordingly.
-    ///
-    /// # Arguments
-    ///
-    /// * `changeset_id` - ID of the changeset to deploy
-    /// * `environments` - Target environments for deployment
-    ///
-    /// # Returns
-    ///
-    /// Deployment result with success status and environment-specific results.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the deployment cannot be initiated.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sublime_monorepo_tools::Environment;
-    ///
-    /// # fn example(manager: &ChangesetManager) -> Result<(), Box<dyn std::error::Error>> {
-    /// let environments = vec![Environment::Development, Environment::Staging];
-    /// let result = manager.deploy_to_environments("changeset-123", &environments)?;
-    /// println!("Deployment success: {}", result.success);
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn deploy_to_environments(
-        &self,
-        changeset_id: &str,
-        environments: &[Environment],
-    ) -> Result<DeploymentResult, Error> {
-        let start_time = std::time::Instant::now();
-
-        // Load changeset
-        let changeset = self
-            .storage
-            .load(changeset_id)?
-            .ok_or_else(|| Error::changeset(format!("Changeset {changeset_id} not found")))?;
-
-        let mut environment_results = std::collections::HashMap::new();
-        let mut overall_success = true;
-
-        for environment in environments {
-            let env_start = Utc::now();
-
-            // Execute deployment for this environment
-            let env_result = self.deploy_to_environment(&changeset, environment);
-
-            let env_deployment_result = match env_result {
-                Ok(()) => EnvironmentDeploymentResult {
-                    success: true,
-                    error: None,
-                    started_at: env_start,
-                    completed_at: Some(Utc::now()),
-                    metadata: std::collections::HashMap::new(),
-                },
-                Err(e) => {
-                    overall_success = false;
-                    EnvironmentDeploymentResult {
-                        success: false,
-                        error: Some(e.to_string()),
-                        started_at: env_start,
-                        completed_at: Some(Utc::now()),
-                        metadata: std::collections::HashMap::new(),
-                    }
-                }
-            };
-
-            environment_results.insert(environment.clone(), env_deployment_result);
-        }
-
-        Ok(DeploymentResult {
-            changeset_id: changeset_id.to_string(),
-            success: overall_success,
-            environment_results,
-            duration: start_time.elapsed(),
-        })
-    }
 
     /// Validates that a version bump is appropriate for a package
     ///
@@ -903,146 +816,4 @@ impl<'a> ChangesetManager<'a> {
         Ok(())
     }
 
-    /// Deploys a changeset to a specific environment
-    fn deploy_to_environment(
-        &self,
-        changeset: &Changeset,
-        environment: &Environment,
-    ) -> Result<(), Error> {
-        // Get deployment tasks for this environment
-        let tasks = self.get_deployment_tasks_for_environment(environment)?;
-
-        if tasks.is_empty() {
-            // No specific deployment tasks for this environment
-            log::info!("No deployment tasks configured for environment: {}", environment);
-            return Ok(());
-        }
-
-        // Execute deployment tasks using TaskManager
-        let task_results = self.task_manager.execute_tasks_batch(&tasks)?;
-
-        // Check if all tasks succeeded
-        let failed_tasks: Vec<_> = task_results
-            .iter()
-            .filter(|result| {
-                !matches!(result.status, crate::tasks::types::results::TaskStatus::Success)
-            })
-            .collect();
-
-        if !failed_tasks.is_empty() {
-            let error_msg = failed_tasks
-                .iter()
-                .map(|task| {
-                    format!(
-                        "{}: {}",
-                        task.task_name,
-                        task.errors.first().map_or("Unknown error", |e| &e.message)
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-
-            return Err(Error::changeset(format!(
-                "Deployment to {} failed for changeset '{}': {}",
-                environment, changeset.id, error_msg
-            )));
-        }
-
-        log::info!(
-            "✅ Successfully deployed changeset '{}' to environment '{}'",
-            changeset.id,
-            environment
-        );
-        Ok(())
-    }
-
-    /// Gets deployment tasks for a specific environment
-    #[allow(clippy::unnecessary_wraps)]
-    fn get_deployment_tasks_for_environment(
-        &self,
-        environment: &Environment,
-    ) -> Result<Vec<String>, Error> {
-        // Check if deployment tasks are configured for this environment in the project config
-        let env_tasks = self.config.tasks.deployment_tasks.get(environment);
-
-        if let Some(configured_tasks) = env_tasks {
-            // Use configured tasks for this environment
-            let available_tasks = self.task_manager.list_tasks();
-            let available_task_names: std::collections::HashSet<String> =
-                available_tasks.iter().map(|task| task.name.clone()).collect();
-
-            // Filter to only include tasks that are actually registered
-            let filtered_tasks: Vec<String> = configured_tasks
-                .iter()
-                .filter(|task_name| available_task_names.contains(*task_name))
-                .cloned()
-                .collect();
-
-            if filtered_tasks.is_empty() {
-                log::warn!(
-                    "No registered tasks found for environment '{}' deployment",
-                    environment
-                );
-            }
-
-            Ok(filtered_tasks)
-        } else {
-            // Environment not configured, try to infer default tasks based on environment type
-            let default_tasks = self.get_default_tasks_for_environment_type(environment);
-            let available_tasks = self.task_manager.list_tasks();
-            let available_task_names: std::collections::HashSet<String> =
-                available_tasks.iter().map(|task| task.name.clone()).collect();
-
-            // Filter default tasks to only include those that are registered
-            let filtered_tasks: Vec<String> = default_tasks
-                .into_iter()
-                .filter(|task_name| available_task_names.contains(task_name))
-                .collect();
-
-            if filtered_tasks.is_empty() {
-                log::info!(
-                    "No deployment tasks available for environment '{}' - using basic validation",
-                    environment
-                );
-                // Return basic tasks that should always exist
-                Ok(vec!["build".to_string()])
-            } else {
-                Ok(filtered_tasks)
-            }
-        }
-    }
-
-    /// Gets default tasks for a given environment type when not explicitly configured
-    #[allow(clippy::unused_self)]
-    fn get_default_tasks_for_environment_type(&self, environment: &Environment) -> Vec<String> {
-        match environment {
-            Environment::Development => {
-                vec!["build".to_string(), "test:unit".to_string(), "lint".to_string()]
-            }
-            Environment::Staging => {
-                vec![
-                    "build".to_string(),
-                    "test:unit".to_string(),
-                    "test:integration".to_string(),
-                    "lint".to_string(),
-                    "audit".to_string(),
-                ]
-            }
-            Environment::Integration => {
-                vec!["build".to_string(), "test:integration".to_string(), "test:e2e".to_string()]
-            }
-            Environment::Production => {
-                vec![
-                    "build".to_string(),
-                    "test".to_string(),
-                    "lint".to_string(),
-                    "audit".to_string(),
-                    "security-scan".to_string(),
-                ]
-            }
-            Environment::Custom(_) => {
-                vec!["build".to_string(), "test".to_string()]
-            }
-        }
-    }
 }

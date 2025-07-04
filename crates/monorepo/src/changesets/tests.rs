@@ -2,14 +2,13 @@
 //!
 //! This module provides complete test coverage for all changeset functionality,
 //! including core types, storage operations, manager workflows, validation,
-//! deployment, and integration with Git and package management.
+//! and integration with Git and package management.
 
 #[cfg(test)]
 mod tests {
     use crate::changesets::{
         Changeset, ChangesetApplication, ChangesetFilter, ChangesetManager, ChangesetSpec,
-        ChangesetStatus, ChangesetStorage, DeploymentResult, EnvironmentDeploymentResult,
-        ValidationResult,
+        ChangesetStatus, ChangesetStorage, ValidationResult,
     };
     use crate::config::types::{ChangesetsConfig, Environment};
     use crate::core::MonorepoProject;
@@ -283,34 +282,6 @@ mod tests {
         assert!(result.warnings.is_empty());
     }
 
-    #[test]
-    fn test_deployment_result_success() {
-        let result = DeploymentResult {
-            changeset_id: "test-123".to_string(),
-            success: true,
-            environment_results: HashMap::new(),
-            duration: std::time::Duration::from_secs(30),
-        };
-
-        assert!(result.success);
-        assert_eq!(result.changeset_id, "test-123");
-        assert_eq!(result.duration.as_secs(), 30);
-    }
-
-    #[test]
-    fn test_environment_deployment_result() {
-        let result = EnvironmentDeploymentResult {
-            success: false,
-            error: Some("Deployment failed".to_string()),
-            started_at: Utc::now(),
-            completed_at: Some(Utc::now()),
-            metadata: HashMap::new(),
-        };
-
-        assert!(!result.success);
-        assert!(result.error.is_some());
-        assert!(result.completed_at.is_some());
-    }
 
     #[test]
     fn test_changeset_application() {

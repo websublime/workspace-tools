@@ -1,24 +1,24 @@
 //! Changeset management module
 //!
 //! This module provides functionality for managing changesets in a monorepo environment.
-//! Changesets track planned changes to packages with support for multiple deployment
-//! environments and integration with the development workflow.
+//! Changesets track planned changes to packages for CI/CD integration and version bump
+//! indicators. Designed for CLI and daemon consumption.
 //!
 //! # Overview
 //!
 //! The changeset system allows developers to:
 //! - Create changesets that describe planned changes to packages
-//! - Track version bumps and deployment environments
+//! - Track version bumps and environment targeting for CLI hooks
 //! - Validate changesets before applying them
-//! - Deploy changesets to specific environments during development
 //! - Apply changesets automatically on merge
+//! - Provide bump indicators for CI/CD systems
 //!
 //! # Architecture
 //!
 //! The module is organized into several components:
 //! - `types` - Core type definitions for changesets
-//! - `storage` - Persistent storage using FileSystemManager
-//! - `manager` - Main interface for changeset operations
+//! - `storage` - JSON-based persistent storage for CLI consumption
+//! - `manager` - Main interface for CRUD operations
 //! - `tests` - Unit tests for changeset functionality
 //!
 //! # Examples
@@ -70,23 +70,14 @@
 //! # }
 //! ```
 //!
-//! ## Deploying to environments
+//! ## Applying changesets on merge
 //!
 //! ```rust
-//! use sublime_monorepo_tools::Environment;
-//!
 //! # async fn example(manager: &ChangesetManager) -> Result<(), Box<dyn std::error::Error>> {
-//! let environments = vec![Environment::Development, Environment::Staging];
-//! let result = manager.deploy_to_environments("changeset-id", &environments).await?;
-//!
-//! if result.success {
-//!     println!("Successfully deployed to all environments");
-//! } else {
-//!     for (env, result) in result.environment_results {
-//!         if !result.success {
-//!             println!("Failed to deploy to {}: {:?}", env, result.error);
-//!         }
-//!     }
+//! let applications = manager.apply_changesets_on_merge("feature/new-api")?;
+//! for app in applications {
+//!     println!("Applied changeset {} to {}: {} -> {}",
+//!         app.changeset_id, app.package, app.old_version, app.new_version);
 //! }
 //! # Ok(())
 //! # }
@@ -109,7 +100,5 @@ pub use types::{
     ChangesetSpec,
     ChangesetStatus,
     ChangesetStorage,
-    DeploymentResult,
-    EnvironmentDeploymentResult,
     ValidationResult,
 };

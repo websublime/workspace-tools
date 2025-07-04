@@ -215,39 +215,3 @@ pub struct ValidationResult {
     pub metadata: HashMap<String, String>,
 }
 
-/// Result of deploying a changeset to environments
-///
-/// Contains information about deployment success and any failures.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DeploymentResult {
-    /// Changeset that was deployed
-    pub changeset_id: String,
-
-    /// Overall success of the deployment
-    pub success: bool,
-
-    /// Results for each environment
-    pub environment_results: HashMap<Environment, EnvironmentDeploymentResult>,
-
-    /// Overall deployment duration
-    pub duration: std::time::Duration,
-}
-
-/// Result of deploying to a specific environment
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EnvironmentDeploymentResult {
-    /// Whether deployment to this environment was successful
-    pub success: bool,
-
-    /// Error message if deployment failed
-    pub error: Option<String>,
-
-    /// When deployment started
-    pub started_at: DateTime<Utc>,
-
-    /// When deployment completed (successfully or with failure)
-    pub completed_at: Option<DateTime<Utc>>,
-
-    /// Any metadata from the deployment process
-    pub metadata: HashMap<String, String>,
-}
