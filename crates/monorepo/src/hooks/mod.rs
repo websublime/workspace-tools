@@ -23,6 +23,8 @@ mod installer;
 mod manager;
 mod results;
 mod sync_task_executor;
+#[cfg(test)]
+mod tests;
 pub mod types;
 mod validator;
 
