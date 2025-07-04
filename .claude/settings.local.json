@@ -36,7 +36,9 @@
       "Bash(diff:*)",
       "Bash(/dev/null)",
       "Bash(echo:*)",
-      "Bash(cargo fmt:*)"
+      "Bash(cargo fmt:*)",
+      "Bash(cloc:*)",
+      "Bash(git rm:*)"
     ],
     "deny": []
   }
