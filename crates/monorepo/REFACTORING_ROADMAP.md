@@ -643,14 +643,229 @@ Note: All core functionality tests pass - remaining failures are non-essential f
 
 ---
 
-## 📞 Next Steps
+## 🔧 Phase 5: Implementation Quality Fixes
 
-1. **Review and Approve** this roadmap with stakeholders
-2. **Start Phase 1** with workflow module removal
-3. **Set up tracking** system for task completion
-4. **Schedule regular check-ins** for progress review
-5. **Prepare branch strategy** for safe refactoring
+**Status**: New Phase Required  
+**Priority**: Critical for Production Readiness  
+**Identified Issues**: 14 failing tests expose fundamental implementation problems
+
+### Task 5.1: Fix Git Repository Handling
+**Priority**: Critical | **Estimated Time**: 3 hours
+
+#### Root Cause Analysis:
+- Temp directories with symbolic links cause git detection failures
+- Removed canonicalization breaks path resolution
+- Multiple git access points create inconsistencies
+
+#### Issues to Fix:
+- [ ] Restore proper path canonicalization in git operations
+- [ ] Handle symbolic links correctly in temp directories
+- [ ] Implement consistent git repository detection
+- [ ] Fix git initialization in test helpers
+- [ ] Unify git access through single interface
+
+#### Implementation Tasks:
+- [ ] Add `path.canonicalize()` back to git operations where needed
+- [ ] Update `MonorepoProject::new()` to handle symlinks properly
+- [ ] Fix test helpers to create real git repos in temp dirs
+- [ ] Consolidate all git operations through `project.repository`
+- [ ] Add proper error handling for git detection failures
+
+#### Acceptance Criteria:
+- [ ] All git-related tests pass
+- [ ] Consistent git repository handling across codebase
+- [ ] Proper symlink and temp directory support
+- [ ] No hardcoded git assumptions
 
 ---
 
-*This roadmap is a living document and will be updated as we progress through the refactoring. Each checkbox represents a concrete, measurable milestone toward our simplified, focused monorepo tools crate.*
+### Task 5.2: Implement Proper Base Crate Integration
+**Priority**: Critical | **Estimated Time**: 4 hours
+
+#### Root Cause Analysis:
+- `discover_packages_direct()` is a fake implementation
+- Not using `sublime_standard_tools` and `sublime_package_tools` APIs correctly
+- Package discovery inconsistent with analyzer expectations
+
+#### Issues to Fix:
+- [ ] Remove fake package discovery implementation
+- [ ] Use `sublime_standard_tools::monorepo` APIs correctly
+- [ ] Implement proper workspace detection via base crates
+- [ ] Fix package metadata parsing using base crate utilities
+- [ ] Ensure consistent package discovery across all components
+
+#### Implementation Tasks:
+- [ ] Research correct `sublime_standard_tools::monorepo` API usage
+- [ ] Implement real package discovery using base crate detection
+- [ ] Use `sublime_package_tools` for dependency parsing
+- [ ] Remove hardcoded patterns and use workspace configuration
+- [ ] Validate discovered packages match expected format
+
+#### Acceptance Criteria:
+- [ ] Real base crate integration (no fake implementations)
+- [ ] Package discovery matches workspace configuration
+- [ ] Dependencies parsed correctly from package.json
+- [ ] Consistent package information across all access points
+
+---
+
+### Task 5.3: Eliminate Hardcoded Values and Assumptions
+**Priority**: High | **Estimated Time**: 2 hours
+
+#### Root Cause Analysis:
+- Hardcoded `@test/` prefix for internal package detection
+- Assumptions about directory structure (`packages/*`, `apps/*`)
+- Fixed patterns instead of configuration-driven detection
+
+#### Issues to Fix:
+- [ ] Remove hardcoded `@test/` internal package detection
+- [ ] Replace fixed directory patterns with dynamic configuration
+- [ ] Remove hardcoded external dependency assumptions
+- [ ] Implement proper internal vs external package classification
+- [ ] Use workspace configuration for package discovery patterns
+
+#### Implementation Tasks:
+- [ ] Replace `!dep_name.starts_with("@test/")` with proper logic
+- [ ] Use monorepo configuration to determine internal packages
+- [ ] Implement dynamic workspace pattern detection
+- [ ] Add configurable package classification rules
+- [ ] Remove all hardcoded assumptions about package structure
+
+#### Acceptance Criteria:
+- [ ] Zero hardcoded package names or patterns
+- [ ] Configuration-driven package classification
+- [ ] Dynamic workspace pattern detection
+- [ ] Flexible internal/external package determination
+
+---
+
+### Task 5.4: Fix Package Source Inconsistencies
+**Priority**: High | **Estimated Time**: 3 hours
+
+#### Root Cause Analysis:
+- `MonorepoAnalyzer` uses separate `MonorepoDetector` instead of project packages
+- Multiple package discovery mechanisms create inconsistencies
+- Analyzer and project have different views of packages
+
+#### Issues to Fix:
+- [ ] Unify package sources - single source of truth
+- [ ] Remove separate `MonorepoDetector` usage in analyzer
+- [ ] Ensure analyzer uses same packages as project
+- [ ] Fix package access patterns throughout codebase
+- [ ] Resolve public API access to package information
+
+#### Implementation Tasks:
+- [ ] Modify `MonorepoAnalyzer` to use `project.packages` as source
+- [ ] Remove `MonorepoDetector::new().detect_monorepo()` calls
+- [ ] Implement consistent package access patterns
+- [ ] Fix `find_orphaned_packages()` to use project packages
+- [ ] Add proper public API for package access
+
+#### Acceptance Criteria:
+- [ ] Single source of truth for package information
+- [ ] Analyzer and project use same package data
+- [ ] Consistent package access throughout codebase
+- [ ] No duplicate package discovery mechanisms
+
+---
+
+### Task 5.5: Implement Real Dependency Graph Building
+**Priority**: High | **Estimated Time**: 3 hours
+
+#### Root Cause Analysis:
+- Dependencies not properly linked between packages
+- External dependencies not populated correctly
+- Dependency graph building incomplete or broken
+
+#### Issues to Fix:
+- [ ] Implement proper dependency parsing from package.json
+- [ ] Build real relationships between internal packages
+- [ ] Populate external dependencies correctly
+- [ ] Fix dependency graph construction
+- [ ] Support dependency updates and propagation
+
+#### Implementation Tasks:
+- [ ] Parse all dependencies from package.json (deps + devDeps)
+- [ ] Classify dependencies as internal vs external dynamically
+- [ ] Build dependency graph with proper links
+- [ ] Implement dependency resolution logic
+- [ ] Add dependency update propagation support
+
+#### Acceptance Criteria:
+- [ ] Complete dependency information for all packages
+- [ ] Correct internal/external dependency classification
+- [ ] Functional dependency graph with proper relationships
+- [ ] Working dependency update propagation
+
+---
+
+### Task 5.6: Fix Change Detection Configuration
+**Priority**: Medium | **Estimated Time**: 2 hours
+
+#### Root Cause Analysis:
+- Change significance analysis returns wrong values
+- Change type determination incorrect
+- Detection rules not properly configured
+
+#### Issues to Fix:
+- [ ] Configure proper change significance rules
+- [ ] Fix change type detection logic
+- [ ] Align detection with test expectations
+- [ ] Implement proper file change analysis
+
+#### Implementation Tasks:
+- [ ] Review and configure change significance rules
+- [ ] Fix change type detection for different file types
+- [ ] Align change analysis with expected behavior
+- [ ] Test change detection with real git changes
+
+#### Acceptance Criteria:
+- [ ] Correct change significance analysis
+- [ ] Proper change type determination
+- [ ] Aligned with test expectations
+- [ ] Functional change detection
+
+---
+
+## 📊 Phase 5 Progress Tracking
+
+### Phase 5 Progress: 0/6 Tasks Complete 🔴
+- [ ] Task 5.1: Fix Git Repository Handling
+- [ ] Task 5.2: Implement Proper Base Crate Integration  
+- [ ] Task 5.3: Eliminate Hardcoded Values and Assumptions
+- [ ] Task 5.4: Fix Package Source Inconsistencies
+- [ ] Task 5.5: Implement Real Dependency Graph Building
+- [ ] Task 5.6: Fix Change Detection Configuration
+
+### Updated Overall Progress: 16/22 Tasks Complete (72.7%) 🟡
+
+---
+
+## 🎯 Phase 5 Success Criteria
+
+### Implementation Quality Metrics
+- **Test Coverage**: 100% (277/277 tests passing)
+- **Zero Hardcoded Values**: All configuration-driven
+- **Proper Base Crate Integration**: Real implementations only
+- **Consistent Package Sources**: Single source of truth
+- **Real Git Integration**: Proper repository handling
+
+### Quality Validation
+- **No Fake Implementations**: All code uses proper APIs
+- **No Workarounds**: All tests pass with real implementations
+- **No Assumptions**: All behavior configuration-driven
+- **Production Ready**: Real-world usage validated
+
+---
+
+## 📞 Next Steps
+
+1. **Analyze and approve Phase 5** implementation plan
+2. **Begin with Task 5.1** (Git Repository Handling) as foundation
+3. **Sequential execution** - each task builds on previous
+4. **Validate each task** with affected tests passing
+5. **No assumptions** - ask for clarification when needed
+
+---
+
+*Phase 5 addresses fundamental implementation issues identified during testing. Each task must be completed with real implementations, not workarounds.*
