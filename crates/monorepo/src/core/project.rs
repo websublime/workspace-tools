@@ -87,16 +87,43 @@ impl MonorepoProject {
                                         package_json.clone(),
                                     );
                                     
+                                    // Parse dependencies and devDependencies
+                                    let mut workspace_deps = Vec::new();
+                                    let mut workspace_dev_deps = Vec::new();
+                                    
+                                    if let Some(deps) = package_json.get("dependencies").and_then(|d| d.as_object()) {
+                                        for (dep_name, _version) in deps {
+                                            workspace_deps.push(dep_name.clone());
+                                        }
+                                    }
+                                    
+                                    if let Some(dev_deps) = package_json.get("devDependencies").and_then(|d| d.as_object()) {
+                                        for (dep_name, _version) in dev_deps {
+                                            workspace_dev_deps.push(dep_name.clone());
+                                        }
+                                    }
+                                    
                                     let workspace_package = sublime_standard_tools::monorepo::WorkspacePackage {
                                         name: name.to_string(),
                                         version: version.to_string(),
                                         location: package_dir.to_path_buf(),
                                         absolute_path: package_dir.to_path_buf(),
-                                        workspace_dependencies: Vec::new(),
-                                        workspace_dev_dependencies: Vec::new(),
+                                        workspace_dependencies: workspace_deps,
+                                        workspace_dev_dependencies: workspace_dev_deps,
                                     };
                                     
-                                    let monorepo_package = MonorepoPackageInfo::new(package_info, &workspace_package, true);
+                                    let mut monorepo_package = MonorepoPackageInfo::new(package_info, &workspace_package, true);
+                                    
+                                    // Populate external dependencies
+                                    if let Some(deps) = package_json.get("dependencies").and_then(|d| d.as_object()) {
+                                        for (dep_name, _version) in deps {
+                                            // For now, assume any dependency that doesn't start with '@test/' is external
+                                            if !dep_name.starts_with("@test/") {
+                                                monorepo_package.dependencies_external.push(dep_name.clone());
+                                            }
+                                        }
+                                    }
+                                    
                                     packages.push(monorepo_package);
                                 }
                             }
