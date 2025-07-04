@@ -17,7 +17,7 @@ use std::path::Path;
 use std::process::Command;
 use sublime_package_tools::Upgrader;
 use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
-use sublime_standard_tools::monorepo::{MonorepoDetector, PackageManagerKind};
+use sublime_standard_tools::monorepo::PackageManagerKind;
 
 impl<'a> MonorepoAnalyzer<'a> {
     /// Create a new simplified analyzer with direct borrowing from project
@@ -99,12 +99,22 @@ impl<'a> MonorepoAnalyzer<'a> {
     /// - Registry analysis fails
     /// - Workspace configuration analysis fails
     pub fn detect_monorepo_info(&self, path: &Path) -> Result<MonorepoAnalysisResult> {
-        // Use standard-tools detector
-        let detector = MonorepoDetector::new();
-        let descriptor = detector.detect_monorepo(path)?;
-
-        // Analyze package manager
+        // Analyze package manager to infer monorepo kind
         let package_manager = self.analyze_package_manager()?;
+        
+        // Infer monorepo kind from package manager
+        let kind = match package_manager.kind {
+            sublime_standard_tools::monorepo::PackageManagerKind::Npm => 
+                sublime_standard_tools::monorepo::MonorepoKind::NpmWorkSpace,
+            sublime_standard_tools::monorepo::PackageManagerKind::Yarn => 
+                sublime_standard_tools::monorepo::MonorepoKind::YarnWorkspaces,
+            sublime_standard_tools::monorepo::PackageManagerKind::Pnpm => 
+                sublime_standard_tools::monorepo::MonorepoKind::PnpmWorkspaces,
+            sublime_standard_tools::monorepo::PackageManagerKind::Bun => 
+                sublime_standard_tools::monorepo::MonorepoKind::BunWorkspaces,
+            sublime_standard_tools::monorepo::PackageManagerKind::Jsr => 
+                sublime_standard_tools::monorepo::MonorepoKind::DenoWorkspaces,
+        };
 
         // Build dependency graph
         let dependency_graph = self.build_dependency_graph()?;
@@ -119,8 +129,8 @@ impl<'a> MonorepoAnalyzer<'a> {
         let workspace_config = self.analyze_workspace_config()?;
 
         Ok(MonorepoAnalysisResult {
-            kind: descriptor.kind().clone(),
-            root_path: descriptor.root().to_path_buf(),
+            kind,
+            root_path: path.to_path_buf(),
             package_manager,
             packages,
             dependency_graph,
@@ -131,26 +141,13 @@ impl<'a> MonorepoAnalyzer<'a> {
 
     /// Analyze the package manager configuration
     pub fn analyze_package_manager(&self) -> Result<PackageManagerAnalysis> {
-        // Use standard-tools detector to determine package manager type
-        let detector = sublime_standard_tools::monorepo::MonorepoDetector::new();
-        let descriptor = detector.detect_monorepo(self.root_path)?;
-
-        // Convert MonorepoKind to PackageManagerKind
-        let kind = match descriptor.kind() {
-            sublime_standard_tools::monorepo::MonorepoKind::YarnWorkspaces => {
-                &sublime_standard_tools::monorepo::PackageManagerKind::Yarn
-            }
-            sublime_standard_tools::monorepo::MonorepoKind::PnpmWorkspaces => {
-                &sublime_standard_tools::monorepo::PackageManagerKind::Pnpm
-            }
-            sublime_standard_tools::monorepo::MonorepoKind::NpmWorkSpace => {
-                &sublime_standard_tools::monorepo::PackageManagerKind::Npm
-            }
-            _ => &sublime_standard_tools::monorepo::PackageManagerKind::Npm,
-        };
+        // Use direct package manager detection
+        let package_manager = sublime_standard_tools::monorepo::PackageManager::detect(self.root_path)
+            .map_err(|e| Error::Analysis(format!("Failed to detect package manager: {e}")))?;
+        let kind = package_manager.kind();
 
         // Get package manager version by executing the appropriate command
-        let version = self.detect_package_manager_version(*kind);
+        let version = self.detect_package_manager_version(kind);
 
         let package_json_path = self.root_path.join("package.json");
 
@@ -193,7 +190,7 @@ impl<'a> MonorepoAnalyzer<'a> {
         }
 
         Ok(PackageManagerAnalysis {
-            kind: *kind,
+            kind,
             version,
             lock_file: lock_file_path,
             config_files,
@@ -696,9 +693,7 @@ impl<'a> MonorepoAnalyzer<'a> {
 
     /// Analyze workspace configuration using standard-tools and config
     pub fn analyze_workspace_config(&self) -> Result<WorkspaceConfigAnalysis> {
-        // Detect monorepo on-demand since descriptor is not available in simplified analyzer
-        let detector = MonorepoDetector::new();
-        let descriptor = detector.detect_monorepo(self.root_path)?;
+        // Use existing packages instead of separate detection
         let mut patterns = Vec::new();
         let mut has_nohoist = false;
         let mut nohoist_patterns = Vec::new();
@@ -779,11 +774,10 @@ impl<'a> MonorepoAnalyzer<'a> {
             }
             _ => {
                 // For other package managers, try to infer patterns from detected packages
-                let package_dirs: std::collections::HashSet<String> = descriptor
-                    .packages()
+                let package_dirs: std::collections::HashSet<String> = self.packages
                     .iter()
                     .filter_map(|pkg| {
-                        pkg.location.parent().map(|p| p.to_string_lossy().to_string())
+                        pkg.relative_path().parent().map(|p| p.to_string_lossy().to_string())
                     })
                     .collect();
 
@@ -802,16 +796,15 @@ impl<'a> MonorepoAnalyzer<'a> {
 
         // If no patterns found, infer from package locations
         if patterns.is_empty() {
-            let package_dirs: std::collections::HashSet<String> = descriptor
-                .packages()
+            let package_dirs: std::collections::HashSet<String> = self.packages
                 .iter()
-                .filter_map(|pkg| pkg.location.parent().map(|p| p.to_string_lossy().to_string()))
+                .filter_map(|pkg| pkg.relative_path().parent().map(|p| p.to_string_lossy().to_string()))
                 .collect();
 
             patterns = package_dirs.into_iter().map(|dir| format!("{dir}/*")).collect();
         }
 
-        let matched_packages = descriptor.packages().len();
+        let matched_packages = self.packages.len();
 
         // Find orphaned packages (packages not matching any pattern)
         let orphaned_packages = self.find_orphaned_packages(&patterns);
@@ -844,19 +837,33 @@ impl<'a> MonorepoAnalyzer<'a> {
             _ => PackageManagerType::Custom(pm_kind_str),
         };
 
-        // Get auto-detected patterns from the current workspace structure
-        let _auto_detected_patterns = self.get_auto_detected_patterns()?;
+        // First, try to infer patterns from actual discovered packages (single source of truth)
+        if !self.packages.is_empty() {
+            let mut patterns = std::collections::HashSet::new();
+            
+            // Extract directory patterns from actual package locations
+            for package in self.packages {
+                let location = package.relative_path();
+                if let Some(parent) = location.parent() {
+                    let pattern = format!("{}/*", parent.to_string_lossy());
+                    patterns.insert(pattern);
+                }
+            }
+            
+            if !patterns.is_empty() {
+                return Ok(patterns.into_iter().collect());
+            }
+        }
 
-        // Get effective patterns from configuration (real implementation)
-        let effective_patterns = if self.config.workspace.discovery.common_patterns.is_empty() {
-            Vec::new()
-        } else {
-            self.config.workspace.discovery.common_patterns.clone()
-        };
+        // Fallback: Get auto-detected patterns from workspace configuration files
+        let auto_detected_patterns = self.get_auto_detected_patterns()?;
+        if !auto_detected_patterns.is_empty() {
+            return Ok(auto_detected_patterns);
+        }
 
-        // If we have effective patterns, return them
-        if !effective_patterns.is_empty() {
-            return Ok(effective_patterns);
+        // Last resort: Use configured common patterns if nothing else is available
+        if !self.config.workspace.discovery.common_patterns.is_empty() {
+            return Ok(self.config.workspace.discovery.common_patterns.clone());
         }
 
         // Fallback: Get package manager specific patterns (real implementation)
@@ -974,13 +981,14 @@ impl<'a> MonorepoAnalyzer<'a> {
             return Ok(patterns);
         }
 
-        // Get existing package locations - detect on-demand
-        let detector = MonorepoDetector::new();
-        let descriptor = detector.detect_monorepo(self.root_path)?;
-        let package_locations: Vec<String> = descriptor
-            .packages()
+        // Use existing packages from project (single source of truth)
+        if self.packages.is_empty() {
+            return Ok(patterns);
+        }
+
+        let package_locations: Vec<String> = self.packages
             .iter()
-            .filter_map(|pkg| pkg.location.parent().map(|p| p.to_string_lossy().to_string()))
+            .filter_map(|pkg| pkg.relative_path().parent().map(|p| p.to_string_lossy().to_string()))
             .collect();
 
         // Infer patterns from existing package locations
@@ -1000,16 +1008,7 @@ impl<'a> MonorepoAnalyzer<'a> {
             }
         }
 
-        // Add common patterns if configured and they exist
-        if workspace_config.discovery.scan_common_patterns {
-            for common_pattern in &workspace_config.discovery.common_patterns {
-                if self.pattern_has_matches(common_pattern)?
-                    && !patterns.contains(&common_pattern.to_string())
-                {
-                    patterns.push(common_pattern.to_string());
-                }
-            }
-        }
+        // No longer use common_patterns here - we have real detected packages
 
         // Remove patterns that match excluded directories
         patterns.retain(|pattern| {
@@ -1034,12 +1033,9 @@ impl<'a> MonorepoAnalyzer<'a> {
     #[allow(clippy::unnecessary_wraps)]
     #[allow(clippy::manual_strip)]
     fn pattern_has_matches(&self, pattern: &str) -> Result<bool> {
-        let detector = MonorepoDetector::new();
-        let descriptor = detector.detect_monorepo(self.root_path)?;
-        let packages = descriptor.packages();
-
-        for package in packages {
-            let package_path = package.location.to_string_lossy();
+        // Use existing packages from project
+        for package in self.packages {
+            let package_path = package.relative_path().to_string_lossy();
             if self.matches_glob_pattern(&package_path, pattern) {
                 return Ok(true);
             }
@@ -1101,13 +1097,10 @@ impl<'a> MonorepoAnalyzer<'a> {
         let config_patterns = self.get_config_workspace_patterns()?;
         let auto_detected = self.get_auto_detected_patterns()?;
 
-        // Validate patterns against existing packages - detect on-demand
-        let detector = MonorepoDetector::new();
-        let descriptor = detector.detect_monorepo(self.root_path)?;
-        let existing_packages: Vec<String> = descriptor
-            .packages()
+        // Validate patterns against existing packages
+        let existing_packages: Vec<String> = self.packages
             .iter()
-            .map(|pkg| pkg.location.to_string_lossy().to_string())
+            .map(|pkg| pkg.relative_path().to_string_lossy().to_string())
             .collect();
 
         // Validate workspace configuration (real implementation)
@@ -1168,12 +1161,9 @@ impl<'a> MonorepoAnalyzer<'a> {
     pub fn find_orphaned_packages(&self, patterns: &[String]) -> Vec<String> {
         let mut orphaned = Vec::new();
 
-        let detector = MonorepoDetector::new();
-        let Ok(descriptor) = detector.detect_monorepo(self.root_path) else {
-            return orphaned; // Return empty if detection fails
-        };
-        for package in descriptor.packages() {
-            let package_path = package.location.to_string_lossy();
+        // Use existing packages from project
+        for package in self.packages {
+            let package_path = package.relative_path().to_string_lossy();
             let mut matches_pattern = false;
 
             for pattern in patterns {
@@ -1184,7 +1174,7 @@ impl<'a> MonorepoAnalyzer<'a> {
             }
 
             if !matches_pattern {
-                orphaned.push(package.name.clone());
+                orphaned.push(package.name().to_string());
             }
         }
 
@@ -1443,9 +1433,6 @@ impl<'a> MonorepoAnalyzer<'a> {
     fn detect_package_manager_version(&self, kind: PackageManagerKind) -> String {
         // Use configurable commands and arguments
         let workspace_config = &self.config.workspace;
-        if workspace_config.discovery.common_patterns.is_empty() {
-            return "unknown".to_string();
-        };
         let pm_config = &workspace_config.package_manager_commands;
 
         // Handle JSR separately due to lifetime issues
@@ -1543,11 +1530,9 @@ impl<'a> MonorepoAnalyzer<'a> {
             }
         }
 
-        // Validate that at least one discovery method is enabled
-        if !workspace_config.discovery.scan_common_patterns
-            && workspace_config.discovery.common_patterns.is_empty()
-        {
-            errors.push("No package discovery method enabled. Enable scan_common_patterns or provide common_patterns.".to_string());
+        // Validate that package discovery is working (via real MonorepoDetector)
+        if self.packages.is_empty() && workspace_config.discovery.auto_detect {
+            errors.push("Auto-detection enabled but no packages found. Check workspace configuration files (package.json, pnpm-workspace.yaml, etc.).".to_string());
         }
 
         // Validate package manager consistency
