@@ -468,7 +468,7 @@ impl<'a> ReleaseWorkflow<'a> {
     ///
     /// Uses real project configuration and validates that tasks actually exist.
     #[allow(clippy::unnecessary_wraps)]
-    fn get_deployment_tasks_for_environment(
+    pub(crate) fn get_deployment_tasks_for_environment(
         &self,
         environment: &str,
     ) -> Result<Vec<String>, Error> {
@@ -654,7 +654,7 @@ impl<'a> ReleaseWorkflow<'a> {
     ///
     /// This method determines the next semantic version based on the suggested
     /// version bump type from the change analysis.
-    fn calculate_next_version(
+    pub(crate) fn calculate_next_version(
         &self,
         package_name: &str,
         version_bump: crate::VersionBumpType,

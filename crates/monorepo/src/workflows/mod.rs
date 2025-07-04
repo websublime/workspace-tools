@@ -8,6 +8,8 @@ pub mod development;
 pub mod integration;
 mod progress;
 pub mod release;
+#[cfg(test)]
+mod tests;
 pub mod types;
 
 // Import from types module instead of implementation files

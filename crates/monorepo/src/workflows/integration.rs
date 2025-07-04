@@ -763,7 +763,7 @@ impl<'a> ChangesetHookIntegration<'a> {
     }
 
     /// Detects circular dependencies in the package dependency graph
-    fn detect_circular_dependencies(&self) -> Result<(), Vec<String>> {
+    pub(crate) fn detect_circular_dependencies(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
         let mut visiting = std::collections::HashSet::new();
         let mut visited = std::collections::HashSet::new();
@@ -872,7 +872,7 @@ impl<'a> ChangesetHookIntegration<'a> {
     /// This is a simplified implementation for demonstration.
     /// In a real scenario, you would use a proper semver library like `semver` crate.
     #[allow(clippy::manual_strip)]
-    fn check_version_compatibility(&self, actual_version: &str, required_range: &str) -> bool {
+    pub(crate) fn check_version_compatibility(&self, actual_version: &str, required_range: &str) -> bool {
         // Handle exact version matches
         if actual_version == required_range {
             return true;
@@ -965,7 +965,7 @@ impl<'a> ChangesetHookIntegration<'a> {
 
     /// Parse version string into (major, minor, patch)
     #[allow(clippy::unused_self)]
-    fn parse_version(&self, version: &str) -> Option<(u32, u32, u32)> {
+    pub(crate) fn parse_version(&self, version: &str) -> Option<(u32, u32, u32)> {
         let parts: Vec<&str> = version.split('.').collect();
         if parts.len() != 3 {
             return None;
@@ -979,7 +979,7 @@ impl<'a> ChangesetHookIntegration<'a> {
     }
 
     /// Maps file paths to affected package names
-    fn map_files_to_packages(&self, files: &[String]) -> Vec<String> {
+    pub(crate) fn map_files_to_packages(&self, files: &[String]) -> Vec<String> {
         let mut affected_packages = Vec::new();
 
         for file_path in files {

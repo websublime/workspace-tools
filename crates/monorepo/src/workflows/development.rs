@@ -549,7 +549,7 @@ impl<'a> DevelopmentWorkflow<'a> {
     }
 
     /// Generates version bump recommendations based on facts
-    fn generate_version_recommendations(
+    pub(crate) fn generate_version_recommendations(
         &self,
         package_changes: &[PackageChange],
     ) -> Vec<super::types::VersionRecommendation> {
@@ -978,7 +978,7 @@ impl<'a> DevelopmentWorkflow<'a> {
     /// Checks if a file is a dependency file for JavaScript package managers
     ///
     /// Supports npm, pnpm, yarn, bun, and jsr package managers.
-    fn is_dependency_file(file_name: &str, path_lower: &str) -> bool {
+    pub(crate) fn is_dependency_file(file_name: &str, path_lower: &str) -> bool {
         matches!(file_name, 
             "package.json" | 
             "package-lock.json" | 
@@ -999,7 +999,7 @@ impl<'a> DevelopmentWorkflow<'a> {
 
     /// Checks if a file is a source code file
     #[allow(clippy::case_sensitive_file_extension_comparisons)]
-    fn is_source_code_file(file_name: &str, path_lower: &str) -> bool {
+    pub(crate) fn is_source_code_file(file_name: &str, path_lower: &str) -> bool {
         // JavaScript/TypeScript source files
         path_lower.ends_with(".js") ||
         path_lower.ends_with(".ts") ||
@@ -1019,7 +1019,7 @@ impl<'a> DevelopmentWorkflow<'a> {
 
     /// Checks if a file is a configuration file
     #[allow(clippy::case_sensitive_file_extension_comparisons)]
-    fn is_configuration_file(file_name: &str, path_lower: &str) -> bool {
+    pub(crate) fn is_configuration_file(file_name: &str, path_lower: &str) -> bool {
         matches!(file_name,
             "tsconfig.json" |
             "jsconfig.json" |
@@ -1059,7 +1059,7 @@ impl<'a> DevelopmentWorkflow<'a> {
 
     /// Checks if a file is a documentation file
     #[allow(clippy::case_sensitive_file_extension_comparisons)]
-    fn is_documentation_file(_file_name: &str, path_lower: &str) -> bool {
+    pub(crate) fn is_documentation_file(_file_name: &str, path_lower: &str) -> bool {
         path_lower.ends_with(".md") ||
         path_lower.ends_with(".mdx") ||
         path_lower.ends_with(".rst") ||
@@ -1073,7 +1073,7 @@ impl<'a> DevelopmentWorkflow<'a> {
 
     /// Checks if a file is a test file
     #[allow(clippy::case_sensitive_file_extension_comparisons)]
-    fn is_test_file(_file_name: &str, path_lower: &str) -> bool {
+    pub(crate) fn is_test_file(_file_name: &str, path_lower: &str) -> bool {
         path_lower.contains(".test.") ||
         path_lower.contains(".spec.") ||
         path_lower.contains("/__tests__/") ||
