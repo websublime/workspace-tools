@@ -25,8 +25,8 @@ pub use definitions::{
 };
 pub(crate) use executor::TaskExecutor;
 pub use manager::{ExecutionContext, TaskManager};
-pub(crate) use registry::TaskRegistry;
+pub use registry::TaskRegistry;
 pub use results::{
-    TaskError, TaskErrorCode, TaskExecutionLog, TaskExecutionResult, TaskExecutionStats,
+    TaskArtifact, TaskError, TaskErrorCode, TaskExecutionLog, TaskExecutionResult, TaskExecutionStats,
     TaskLogLevel, TaskOutput, TaskStatus,
 };

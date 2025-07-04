@@ -142,7 +142,7 @@ impl<'a> TaskManager<'a> {
         let mut results = Vec::new();
 
         // Get tasks that should run for affected packages
-        let applicable_tasks = self.registry.get_tasks_for_scope(&TaskScope::AffectedPackages);
+        let applicable_tasks = self.registry.get_tasks_by_scope(&TaskScope::AffectedPackages);
 
         for task in applicable_tasks {
             // Update execution context with affected packages
@@ -276,7 +276,7 @@ impl<'a> TaskManager<'a> {
 
     /// Remove a task
     pub fn remove_task(&mut self, name: &str) -> Result<()> {
-        self.registry.remove_task(name)
+        self.registry.remove_task_unit(name)
     }
 
     /// Update execution context

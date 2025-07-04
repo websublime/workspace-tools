@@ -22,6 +22,8 @@ mod checker;
 mod executor;
 mod manager;
 mod registry;
+#[cfg(test)]
+mod tests;
 pub mod types;
 
 // Re-export main types for convenience

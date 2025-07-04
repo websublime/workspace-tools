@@ -44,6 +44,49 @@ pub struct TaskDefinition {
     pub environment: TaskEnvironment,
 }
 
+impl TaskDefinition {
+    /// Validate the task definition
+    pub fn validate(&self) -> crate::error::Result<()> {
+        if self.name.is_empty() {
+            return Err(crate::error::Error::Task(
+                "Task name cannot be empty".to_string(),
+            ));
+        }
+
+        if self.description.is_empty() {
+            return Err(crate::error::Error::Task(
+                "Task description cannot be empty".to_string(),
+            ));
+        }
+
+        if self.commands.is_empty() && self.package_scripts.is_empty() {
+            return Err(crate::error::Error::Task(
+                "Task must have at least one command or package script".to_string(),
+            ));
+        }
+
+        // Validate commands
+        for command in &self.commands {
+            if command.command.program.is_empty() {
+                return Err(crate::error::Error::Task(
+                    "Command program cannot be empty".to_string(),
+                ));
+            }
+        }
+
+        // Validate package scripts
+        for script in &self.package_scripts {
+            if script.script_name.is_empty() {
+                return Err(crate::error::Error::Task(
+                    "Package script name cannot be empty".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
 /// Task command with standard Command integration and task-specific metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskCommand {
@@ -97,19 +140,30 @@ pub struct PackageScript {
 }
 
 /// Task execution priority
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TaskPriority {
     /// Lowest priority
-    Low = 0,
+    Low,
     /// Normal priority (default)
-    Normal = 50,
+    Normal,
     /// High priority
-    High = 100,
+    High,
     /// Critical priority
-    Critical = 200,
+    Critical,
     /// Custom priority value
     Custom(u32),
+}
+
+impl PartialOrd for TaskPriority {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for TaskPriority {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.to_value().cmp(&other.to_value())
+    }
 }
 
 impl TaskPriority {
@@ -122,6 +176,18 @@ impl TaskPriority {
             100 => Self::High,
             200 => Self::Critical,
             custom => Self::Custom(custom),
+        }
+    }
+
+    /// Get the numeric value for priority comparison
+    #[must_use]
+    pub fn to_value(&self) -> u32 {
+        match self {
+            Self::Low => 0,
+            Self::Normal => 50,
+            Self::High => 100,
+            Self::Critical => 200,
+            Self::Custom(value) => *value,
         }
     }
 
@@ -152,6 +218,21 @@ pub enum TaskTimeout {
     },
 }
 
+impl TaskTimeout {
+    /// Calculate the actual timeout duration based on package count
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn calculate_timeout(&self, package_count: usize) -> Duration {
+        match self {
+            Self::Fixed(duration) => *duration,
+            Self::PerPackage(duration) => *duration * package_count as u32,
+            Self::Dynamic { base, per_package } => {
+                *base + (*per_package * package_count as u32)
+            }
+        }
+    }
+}
+
 /// Task environment configuration
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TaskEnvironment {
@@ -163,4 +244,35 @@ pub struct TaskEnvironment {
 
     /// Variables to explicitly unset
     pub unset: Vec<String>,
+}
+
+impl TaskEnvironment {
+    /// Merge this environment with another, with the other taking precedence
+    #[must_use]
+    pub fn merge(&self, other: &Self) -> Self {
+        let mut variables = self.variables.clone();
+        for (key, value) in &other.variables {
+            variables.insert(key.clone(), value.clone());
+        }
+
+        let mut inherit = self.inherit.clone();
+        for var in &other.inherit {
+            if !inherit.contains(var) {
+                inherit.push(var.clone());
+            }
+        }
+
+        let mut unset = self.unset.clone();
+        for var in &other.unset {
+            if !unset.contains(var) {
+                unset.push(var.clone());
+            }
+        }
+
+        Self {
+            variables,
+            inherit,
+            unset,
+        }
+    }
 }
