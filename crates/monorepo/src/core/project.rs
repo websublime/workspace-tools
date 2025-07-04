@@ -51,13 +51,62 @@ impl MonorepoProject {
     /// Discovers packages using `sublime_standard_tools` and `sublime_package_tools` directly
     /// without service abstractions for optimal CLI/daemon performance.
     fn discover_packages_direct(
-        _root_path: &Path,
+        root_path: &Path,
         _file_system: &FileSystemManager,
         _config: &MonorepoConfig,
     ) -> Vec<MonorepoPackageInfo> {
-        // Simplified package discovery for now - return empty list
-        // Full implementation will be added when we have the correct base crate APIs
-        Vec::new()
+        // Basic package discovery for testing - find package.json files
+        let mut packages = Vec::new();
+        
+        // Look for package.json files in common locations
+        let search_paths = [
+            "packages/*/package.json",
+            "apps/*/package.json", 
+            "libs/*/package.json",
+            "packages/*/*/package.json", // nested packages
+        ];
+        
+        for pattern in &search_paths {
+            let full_pattern = root_path.join(pattern);
+            if let Ok(entries) = glob::glob(&full_pattern.to_string_lossy()) {
+                for entry in entries.flatten() {
+                    if let Ok(content) = std::fs::read_to_string(&entry) {
+                        if let Ok(package_json) = serde_json::from_str::<serde_json::Value>(&content) {
+                            if let (Some(name), Some(version)) = (
+                                package_json.get("name").and_then(|n| n.as_str()),
+                                package_json.get("version").and_then(|v| v.as_str()),
+                            ) {
+                                // Create basic package info
+                                if let Ok(package) = sublime_package_tools::Package::new(name, version, None) {
+                                    let package_dir = entry.parent().unwrap_or(root_path);
+                                    let package_info = sublime_package_tools::PackageInfo::new(
+                                        package,
+                                        entry.to_string_lossy().to_string(),
+                                        package_dir.to_string_lossy().to_string(),
+                                        package_dir.to_string_lossy().to_string(),
+                                        package_json.clone(),
+                                    );
+                                    
+                                    let workspace_package = sublime_standard_tools::monorepo::WorkspacePackage {
+                                        name: name.to_string(),
+                                        version: version.to_string(),
+                                        location: package_dir.to_path_buf(),
+                                        absolute_path: package_dir.to_path_buf(),
+                                        workspace_dependencies: Vec::new(),
+                                        workspace_dev_dependencies: Vec::new(),
+                                    };
+                                    
+                                    let monorepo_package = MonorepoPackageInfo::new(package_info, &workspace_package, true);
+                                    packages.push(monorepo_package);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        packages
     }
 
     /// Get the root path of the monorepo
