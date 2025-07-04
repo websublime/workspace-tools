@@ -41,7 +41,7 @@ impl<'a> ConditionChecker<'a> {
     #[must_use]
     pub fn new(project: &'a MonorepoProject) -> Self {
         Self {
-            repository: project.repository(),
+            repository: &project.repository,
             config: &project.config,
             packages: &project.packages,
             file_system: &project.file_system,
@@ -1223,16 +1223,4 @@ impl<'a> ConditionChecker<'a> {
         })
     }
 
-    /// Create an AsyncConditionAdapter from this ConditionChecker
-    ///
-    /// This method provides an easy way to upgrade from synchronous condition checking
-    /// to the async boundary adapter when async operations are needed.
-    ///
-    /// # Returns
-    ///
-    /// An AsyncConditionAdapter that can handle both sync and async conditions
-    #[must_use]
-    pub fn into_async_adapter(self) -> crate::tasks::AsyncConditionAdapter<'a> {
-        crate::tasks::AsyncConditionAdapter::new(self)
-    }
 }

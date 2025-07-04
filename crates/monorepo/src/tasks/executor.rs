@@ -34,7 +34,7 @@ impl<'a> TaskExecutor<'a> {
         Self {
             packages: &project.packages,
             config: &project.config,
-            root_path: project.root_path(),
+            root_path: &project.root_path,
         }
     }
 

@@ -1,22 +1,22 @@
-//! Task management system
+//! Task management system for CLI/daemon consumption
 //!
-//! This module provides comprehensive task management capabilities for monorepos,
-//! including task definition, execution, condition checking, and result tracking.
+//! This module provides streamlined task management optimized for CLI and daemon usage,
+//! including task definition, synchronous execution, condition checking, and result tracking.
 //!
 //! # What
 //! Manages task execution based on package.json scripts and custom commands, with
-//! support for conditional execution, scoping, and parallel execution.
+//! support for conditional execution, scoping, and parallel execution using direct
+//! base crate integration.
 //!
 //! # How
-//! Leverages the `CommandQueue` from standard-tools for execution, integrates with
-//! change detection to run tasks on affected packages, and provides sophisticated
-//! condition checking for when tasks should run.
+//! Uses `SharedSyncExecutor` from sublime-standard-tools for direct command execution,
+//! integrates with change detection to run tasks on affected packages, and provides
+//! efficient synchronous condition checking optimized for CLI responsiveness.
 //!
 //! # Why
-//! Essential for automated workflows where different tasks need to run based on
-//! what has changed, enabling efficient CI/CD and development workflows.
+//! Essential for CLI and daemon workflows where tasks need to run based on changes,
+//! providing sub-second performance and clean ownership patterns for real-time usage.
 
-mod async_adapter;
 mod builder;
 mod checker;
 mod executor;
@@ -33,6 +33,3 @@ pub use types::{
     TaskExecutionLog, TaskExecutionResult, TaskExecutionStats, TaskLogLevel, TaskManager,
     TaskOutput, TaskPriority, TaskScope, TaskStatus, TaskTrigger,
 };
-
-// Re-export async boundary adapter
-pub use async_adapter::AsyncConditionAdapter;
