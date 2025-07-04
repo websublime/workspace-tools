@@ -19,7 +19,6 @@ use crate::analysis::ChangeAnalysis;
 use crate::config::Environment;
 use crate::core::MonorepoProject;
 use crate::error::{Error, Result};
-use crate::logging::{log_operation, log_operation_error, ErrorContext};
 use glob::Pattern;
 use regex::Regex;
 use std::collections::HashSet;
@@ -201,14 +200,13 @@ impl<'a> ConditionChecker<'a> {
                 );
 
                 // Add structured error context for better debugging
-                ErrorContext::new("custom_script_async_boundary")
-                    .with_detail("script", script)
-                    .with_detail("solution", "Use AsyncConditionAdapter for async execution")
-                    .with_detail(
-                        "method",
-                        "evaluate_conditions_adaptive() or execute_custom_script()",
-                    )
-                    .log_error(Error::task("Async execution required".to_string()));
+                log::error!(
+                    "[error] Operation 'custom_script_async_boundary' failed: {} (script: {}, solution: {}, method: {})",
+                    "Async execution required",
+                    script,
+                    "Use AsyncConditionAdapter for async execution",
+                    "evaluate_conditions_adaptive() or execute_custom_script()"
+                );
 
                 Err(Error::task(error_message))
             }
@@ -512,16 +510,14 @@ impl<'a> ConditionChecker<'a> {
                     );
 
                     if matches {
-                        log_operation(
-                            "custom_script",
-                            "Output matched expected value",
-                            Some(script),
+                        log::info!(
+                            "[custom_script] {}: Output matched expected value",
+                            script
                         );
                     } else {
-                        log_operation(
-                            "custom_script",
-                            "Output did not match expected value",
-                            Some(script),
+                        log::info!(
+                            "[custom_script] {}: Output did not match expected value",
+                            script
                         );
                     }
 
@@ -531,12 +527,11 @@ impl<'a> ConditionChecker<'a> {
                     let success = result.success();
 
                     if success {
-                        log_operation("custom_script", "Completed successfully", Some(script));
+                        log::info!("[custom_script] {}: Completed successfully", script);
                     } else {
-                        log_operation(
-                            "custom_script",
-                            format!("Failed with exit code: {status}", status = result.status()),
-                            Some(script),
+                        log::info!(
+                            "[custom_script] {}: Failed with exit code: {}",
+                            script, result.status()
                         );
                     }
 
@@ -544,7 +539,10 @@ impl<'a> ConditionChecker<'a> {
                 }
             }
             Err(e) => {
-                ErrorContext::new("custom_script").with_detail("script", script).log_error(&e);
+                log::error!(
+                    "[error] Operation 'custom_script' failed: {} (script: {})",
+                    e, script
+                );
                 Ok(false)
             }
         }
@@ -672,11 +670,9 @@ impl<'a> ConditionChecker<'a> {
         // Convert package_json_path to relative path from repository root
         let repo_root = self.root_path;
         let Ok(relative_path) = package_json_path.strip_prefix(repo_root) else {
-            log_operation_error(
-                "dependency_analysis",
-                format!("Package.json path {package_json_path} is not within repository root {repo_root}",
-                       package_json_path = package_json_path.display(), repo_root = repo_root.display()),
-                None
+            log::error!(
+                "[dependency_analysis] Failed: Package.json path {} is not within repository root {}",
+                package_json_path.display(), repo_root.display()
             );
             return Ok(false);
         };
@@ -699,13 +695,9 @@ impl<'a> ConditionChecker<'a> {
                     return Ok(false);
                 }
 
-                log_operation(
-                    "dependency_analysis",
-                    format!(
-                        "Found changed package.json: {relative_path}",
-                        relative_path = relative_path.display()
-                    ),
-                    None,
+                log::info!(
+                    "[dependency_analysis] Found changed package.json: {}",
+                    relative_path.display()
                 );
 
                 // Since we don't have direct diff access, we'll check if the file is in context changed files
@@ -734,9 +726,10 @@ impl<'a> ConditionChecker<'a> {
                             }
                         }
                         Err(e) => {
-                            ErrorContext::new("dependency_analysis")
-                                .with_file(package_json_path.display().to_string())
-                                .log_error(&e);
+                            log::error!(
+                                "[error] Operation 'dependency_analysis' failed: {} (file: {})",
+                                e, package_json_path.display()
+                            );
                             // If file exists in changed list but we can't read it, assume dependencies changed
                             Ok(true)
                         }

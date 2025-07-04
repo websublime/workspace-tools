@@ -5,10 +5,6 @@
 
 use super::types::{MonorepoPlugin, PluginContext, PluginInfo, PluginLifecycle, PluginResult};
 use crate::error::{Error, Result};
-use crate::logging::{
-    log_operation, log_operation_complete, log_operation_error, log_operation_start,
-    log_performance, ErrorContext,
-};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
@@ -151,9 +147,9 @@ impl<'a> PluginManager<'a> {
                 self.plugin_states.insert(plugin_name.clone(), PluginLifecycle::Active);
                 self.plugins.insert(plugin_name, plugin);
 
-                log_operation_complete(
-                    "plugin_load",
-                    Some(&format!("{name} v{version}", name = info.name, version = info.version)),
+                log::info!(
+                    "[plugin_load] {}: Completed successfully",
+                    format!("{name} v{version}", name = info.name, version = info.version)
                 );
                 Ok(info)
             }
@@ -161,10 +157,10 @@ impl<'a> PluginManager<'a> {
                 // Plugin initialization failed
                 self.plugin_states.insert(plugin_name.clone(), PluginLifecycle::Errored);
 
-                ErrorContext::new("plugin_initialize")
-                    .with_detail("plugin", &plugin_name)
-                    .with_detail("version", &info.version)
-                    .log_error(&e);
+                log::error!(
+                    "[error] Operation 'plugin_initialize' failed: {} (plugin: {}, version: {})",
+                    e, plugin_name, info.version
+                );
 
                 Err(Error::plugin(format!("Failed to initialize plugin {plugin_name}: {e}")))
             }
@@ -186,11 +182,11 @@ impl<'a> PluginManager<'a> {
 
             // Clean up plugin resources
             if let Err(e) = plugin.cleanup() {
-                log_operation_error("plugin_cleanup", &e, Some(plugin_name));
+                log::error!("[plugin_cleanup] {}: Failed: {}", plugin_name, e);
             }
 
             self.plugin_states.remove(plugin_name);
-            log_operation_complete("plugin_unload", Some(plugin_name));
+            log::info!("[plugin_unload] {}: Completed successfully", plugin_name);
             Ok(())
         } else {
             Err(Error::plugin(format!("Plugin {plugin_name} is not loaded")))
@@ -283,10 +279,9 @@ impl<'a> PluginManager<'a> {
                 // Update metrics
                 self.update_metrics(plugin_name, result.execution_time_ms, false);
 
-                log_performance(
-                    &format!("plugin_command:{command}"),
-                    result.execution_time_ms,
-                    None,
+                log::info!(
+                    "[performance] plugin_command:{}: {}ms",
+                    command, result.execution_time_ms
                 );
 
                 result
@@ -297,11 +292,10 @@ impl<'a> PluginManager<'a> {
                 // Update error metrics
                 self.update_metrics(plugin_name, execution_time, true);
 
-                ErrorContext::new("plugin_command")
-                    .with_detail("plugin", plugin_name)
-                    .with_detail("command", command)
-                    .with_detail("execution_time_ms", execution_time.to_string())
-                    .log_error(&e);
+                log::error!(
+                    "[error] Operation 'plugin_command' failed: {} (plugin: {}, command: {}, execution_time_ms: {})",
+                    e, plugin_name, command, execution_time
+                );
 
                 PluginResult::error(format!("Command execution failed: {e}"))
                     .with_metadata("execution_time_ms", execution_time)
@@ -323,19 +317,20 @@ impl<'a> PluginManager<'a> {
     pub fn load_builtin_plugins(&mut self) -> Result<Vec<PluginInfo>> {
         let mut loaded_plugins = Vec::new();
 
-        log_operation_start("load_builtin_plugins", None);
+        log::info!("[load_builtin_plugins] Starting");
 
         // Load analyzer plugin
         let analyzer_plugin = super::builtin::AnalyzerPlugin::new();
         match self.load_plugin(Box::new(analyzer_plugin)) {
             Ok(info) => {
-                log_operation("load_builtin_plugin", "Loaded analyzer plugin", Some(&info.name));
+                log::info!("[load_builtin_plugin] {}: Loaded analyzer plugin", info.name);
                 loaded_plugins.push(info);
             }
             Err(e) => {
-                ErrorContext::new("load_builtin_plugin")
-                    .with_detail("plugin_type", "analyzer")
-                    .log_error(&e);
+                log::error!(
+                    "[error] Operation 'load_builtin_plugin' failed: {} (plugin_type: analyzer)",
+                    e
+                );
             }
         }
 
@@ -343,13 +338,14 @@ impl<'a> PluginManager<'a> {
         let generator_plugin = super::builtin::GeneratorPlugin::new();
         match self.load_plugin(Box::new(generator_plugin)) {
             Ok(info) => {
-                log_operation("load_builtin_plugin", "Loaded generator plugin", Some(&info.name));
+                log::info!("[load_builtin_plugin] {}: Loaded generator plugin", info.name);
                 loaded_plugins.push(info);
             }
             Err(e) => {
-                ErrorContext::new("load_builtin_plugin")
-                    .with_detail("plugin_type", "generator")
-                    .log_error(&e);
+                log::error!(
+                    "[error] Operation 'load_builtin_plugin' failed: {} (plugin_type: generator)",
+                    e
+                );
             }
         }
 
@@ -357,13 +353,14 @@ impl<'a> PluginManager<'a> {
         let validator_plugin = super::builtin::ValidatorPlugin::new();
         match self.load_plugin(Box::new(validator_plugin)) {
             Ok(info) => {
-                log_operation("load_builtin_plugin", "Loaded validator plugin", Some(&info.name));
+                log::info!("[load_builtin_plugin] {}: Loaded validator plugin", info.name);
                 loaded_plugins.push(info);
             }
             Err(e) => {
-                ErrorContext::new("load_builtin_plugin")
-                    .with_detail("plugin_type", "validator")
-                    .log_error(&e);
+                log::error!(
+                    "[error] Operation 'load_builtin_plugin' failed: {} (plugin_type: validator)",
+                    e
+                );
             }
         }
 
@@ -371,19 +368,20 @@ impl<'a> PluginManager<'a> {
         let configurator_plugin = super::builtin::ConfiguratorPlugin::new();
         match self.load_plugin(Box::new(configurator_plugin)) {
             Ok(info) => {
-                log_operation("load_builtin_plugin", "Loaded configurator plugin", Some(&info.name));
+                log::info!("[load_builtin_plugin] {}: Loaded configurator plugin", info.name);
                 loaded_plugins.push(info);
             }
             Err(e) => {
-                ErrorContext::new("load_builtin_plugin")
-                    .with_detail("plugin_type", "configurator")
-                    .log_error(&e);
+                log::error!(
+                    "[error] Operation 'load_builtin_plugin' failed: {} (plugin_type: configurator)",
+                    e
+                );
             }
         }
 
-        log_operation_complete(
-            "load_builtin_plugins",
-            Some(&format!("{count} plugins", count = loaded_plugins.len())),
+        log::info!(
+            "[load_builtin_plugins] {}: Completed successfully",
+            format!("{} plugins", loaded_plugins.len())
         );
         Ok(loaded_plugins)
     }
@@ -444,7 +442,7 @@ impl<'a> PluginManager<'a> {
     pub fn suspend_plugin(&mut self, plugin_name: &str) -> Result<()> {
         if self.plugins.contains_key(plugin_name) {
             self.plugin_states.insert(plugin_name.to_string(), PluginLifecycle::Suspended);
-            log_operation("plugin_suspend", "Plugin suspended", Some(plugin_name));
+            log::info!("[plugin_suspend] {}: Plugin suspended", plugin_name);
             Ok(())
         } else {
             Err(Error::plugin(format!("Plugin {plugin_name} not found")))
@@ -464,7 +462,7 @@ impl<'a> PluginManager<'a> {
         match self.plugin_states.get(plugin_name) {
             Some(PluginLifecycle::Suspended) => {
                 self.plugin_states.insert(plugin_name.to_string(), PluginLifecycle::Active);
-                log_operation("plugin_resume", "Plugin resumed", Some(plugin_name));
+                log::info!("[plugin_resume] {}: Plugin resumed", plugin_name);
                 Ok(())
             }
             Some(state) => Err(Error::plugin(format!(

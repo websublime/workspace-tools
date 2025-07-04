@@ -68,7 +68,6 @@ pub mod core;
 pub mod error;
 pub mod events;
 pub mod hooks;
-pub mod logging;
 pub mod plugins;
 pub mod tasks;
 pub mod workflows;
