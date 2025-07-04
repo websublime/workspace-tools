@@ -1,7 +1,7 @@
 //! Core monorepo project types and implementations
 //!
-//! This module provides the central `MonorepoProject` type that aggregates
-//! functionality from all base crates, as well as the enhanced `MonorepoPackageInfo`
+//! This module provides the central `MonorepoProject` type that uses base crates directly
+//! for CLI/daemon consumption, as well as the enhanced `MonorepoPackageInfo`
 //! type that provides monorepo-specific package information.
 
 pub mod components;

@@ -1,41 +1,28 @@
 //! Monorepo project type definitions
 //!
-//! This module defines the MonorepoProject structure that now uses the service
-//! container pattern to break the god object anti-pattern while maintaining
-//! backward compatibility through facade methods.
+//! This module defines the MonorepoProject structure that directly uses base crates
+//! for CLI/daemon consumption. Removes service abstraction layers for direct access patterns.
 
-use crate::core::services::MonorepoServices;
-
-/// Main project structure that provides a facade over the service container
+/// Main project structure for CLI and daemon consumption
 ///
-/// This structure has been refactored to use the Service Container pattern
-/// internally while maintaining complete backward compatibility with the
-/// existing API. The god object pattern has been eliminated by delegating
-/// operations to focused, single-responsibility services.
+/// This structure uses direct access patterns with base crates to provide
+/// simple, focused functionality for monorepo operations. Eliminates service
+/// abstractions in favor of direct base crate usage.
 ///
-/// # Service Architecture
+/// # Architecture
 ///
-/// The project now uses the following services internally:
-/// - ConfigurationService: Configuration management and validation
-/// - FileSystemService: File system operations with monorepo context
-/// - GitOperationsService: Git repository operations
-/// - PackageDiscoveryService: Package discovery and metadata management
-/// - DependencyAnalysisService: Dependency graph analysis and conflict detection
+/// The project directly uses base crates:
+/// - `sublime_standard_tools`: File system operations and monorepo detection
+/// - `sublime_git_tools`: Git repository operations  
+/// - `sublime_package_tools`: Package management and dependencies
 ///
-/// # Backward Compatibility
+/// # CLI/Daemon Focus
 ///
-/// All existing public methods remain unchanged, ensuring that existing code
-/// continues to work without modifications. The service delegation is completely
-/// transparent to external users.
+/// Designed for CLI and daemon consumption with direct borrowing patterns
+/// and minimal abstractions for optimal performance.
 pub struct MonorepoProject {
-    /// Service container with all focused services
-    pub(crate) services: MonorepoServices,
-
     /// All packages in the monorepo with enhanced information  
     pub(crate) packages: Vec<super::MonorepoPackageInfo>,
-
-    /// Dependency graph of all packages (built on-demand)
-    pub(crate) dependency_graph: Option<()>,
 
     /// Direct access to root path (pub(crate) field)
     pub(crate) root_path: std::path::PathBuf,
