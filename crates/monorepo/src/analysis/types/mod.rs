@@ -47,9 +47,9 @@ pub use workspace::{PatternStatistics, WorkspaceConfigAnalysis, WorkspacePattern
 // Upgrade types
 pub use upgrades::{UpgradeAnalysisResult, UpgradeInfo};
 
-// Diff types
+// Diff types (AffectedPackagesAnalysis removed - merged into ChangeAnalysis)
 pub use diff::{
-    AffectedPackagesAnalysis, BranchComparisonResult, ChangeAnalysis, ChangeAnalysisResult,
+    BranchComparisonResult, ChangeAnalysis, ChangeAnalysisResult,
     ChangeAnalyzer, ChangeSignificanceResult, ComprehensiveChangeAnalysisResult, DiffAnalyzer,
 };
 // PackageChange should be imported directly from changes module to avoid duplication

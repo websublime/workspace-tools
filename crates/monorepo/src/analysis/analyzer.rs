@@ -20,18 +20,16 @@ use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
 use sublime_standard_tools::monorepo::{MonorepoDetector, PackageManagerKind};
 
 impl<'a> MonorepoAnalyzer<'a> {
-    /// Create a new analyzer with direct borrowing from project
+    /// Create a new simplified analyzer with direct borrowing from project
     ///
-    /// Uses borrowing instead of trait objects to eliminate Arc proliferation
-    /// and work with Rust ownership principles.
+    /// Streamlined for CLI consumption focusing on essential features:
+    /// dependency graph, change detection, and package classification.
     #[must_use]
     pub fn new(project: &'a MonorepoProject) -> Self {
         Self {
             packages: &project.packages,
-            config: project.services.config_service().get_configuration(),
-            file_system: project.services.file_system_service().manager(),
-            registry_manager: project.services.dependency_service().registry_manager(),
-            descriptor: project.services.package_service().descriptor(),
+            config: &project.config,
+            file_system: &project.file_system,
             root_path: project.root_path(),
         }
     }

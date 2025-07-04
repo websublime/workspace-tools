@@ -15,7 +15,7 @@ use crate::changes::{ChangeSignificance, PackageChangeType};
 
 // Import types from types/diff and changes
 use super::types::diff::{
-    AffectedPackagesAnalysis, BranchComparisonResult, ChangeAnalysis, ChangeAnalysisResult,
+    BranchComparisonResult, ChangeAnalysis, ChangeAnalysisResult,
     ChangeAnalyzer, ChangeSignificanceResult, DiffAnalyzer,
 };
 use crate::changes::PackageChange;

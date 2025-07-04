@@ -65,6 +65,9 @@ pub struct BranchComparisonResult {
 }
 
 /// Analysis of changes between commits or branches
+/// 
+/// Consolidated analysis that includes affected packages directly
+/// for simplified CLI consumption.
 #[derive(Debug, Clone, Default)]
 pub struct ChangeAnalysis {
     /// Starting reference
@@ -75,17 +78,6 @@ pub struct ChangeAnalysis {
     pub changed_files: Vec<GitChangedFile>,
     /// Changes grouped by package
     pub package_changes: Vec<PackageChange>,
-    /// Analysis of affected packages including dependents
-    pub affected_packages: AffectedPackagesAnalysis,
-    /// Significance analysis for each change
-    pub significance_analysis: Vec<ChangeSignificanceResult>,
-}
-
-// PackageChange is now imported from crate::changes - no duplication
-
-/// Analysis of how changes affect packages in the monorepo
-#[derive(Debug, Clone, Default)]
-pub struct AffectedPackagesAnalysis {
     /// Packages directly changed
     pub directly_affected: Vec<String>,
     /// Packages affected through dependencies
@@ -96,6 +88,8 @@ pub struct AffectedPackagesAnalysis {
     pub impact_scores: HashMap<String, f32>,
     /// Total number of affected packages
     pub total_affected_count: usize,
+    /// Significance analysis for each change
+    pub significance_analysis: Vec<ChangeSignificanceResult>,
 }
 
 /// Analysis of the significance of changes
@@ -120,10 +114,8 @@ pub struct ComprehensiveChangeAnalysisResult {
     pub since_ref: String,
     /// The target commit or reference (None for current state)
     pub until_ref: Option<String>,
-    /// Detected changes
+    /// Detected changes (includes affected packages analysis)
     pub changes: ChangeAnalysis,
-    /// Analysis of affected packages
-    pub affected_packages: AffectedPackagesAnalysis,
     /// Significance analysis
     pub significance: ChangeSignificanceResult,
     /// Timestamp when the analysis was performed

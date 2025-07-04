@@ -76,8 +76,8 @@ pub use crate::core::{MonorepoProject, MonorepoTools};
 pub use crate::error::{Error, Result};
 
 
-// Core analysis types (3 types)
-pub use crate::analysis::{AffectedPackagesAnalysis, ChangeAnalysis, MonorepoAnalyzer};
+// Core analysis types (2 types - AffectedPackagesAnalysis merged into ChangeAnalysis)
+pub use crate::analysis::{ChangeAnalysis, MonorepoAnalyzer};
 
 // Essential configuration (3 types)
 pub use crate::config::{Environment, MonorepoConfig, VersionBumpType};
@@ -89,7 +89,7 @@ pub use crate::changes::{ChangeDetector, PackageChange};
 pub use crate::core::{VersionManager, VersioningResult};
 
 
-// Total: 14 essential types - advanced functionality available via module paths
+// Total: 13 essential types - advanced functionality available via module paths
 
 // Main entry point struct re-exported from core module
 // Implementation moved to core/tools.rs for better separation

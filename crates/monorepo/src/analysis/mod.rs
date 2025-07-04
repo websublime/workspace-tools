@@ -11,9 +11,8 @@ pub mod types;
 #[cfg(test)]
 mod tests;
 
-// Explicit re-exports from types module
+// Essential re-exports for CLI consumption
 pub use types::{
-    AffectedPackagesAnalysis,
     BranchComparisonResult,
     ChangeAnalysis,
     ChangeAnalysisResult,
