@@ -39,7 +39,8 @@
       "Bash(cargo fmt:*)",
       "Bash(cloc:*)",
       "Bash(git rm:*)",
-      "Bash(cargo:*)"
+      "Bash(cargo:*)",
+      "Bash(timeout 30s cargo run --example real_example_usage)"
     ],
     "deny": []
   }
