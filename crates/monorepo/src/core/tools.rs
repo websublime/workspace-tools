@@ -152,7 +152,7 @@ impl<'a> MonorepoTools<'a> {
                     Ok(mut husky_hooks) => {
                         // Prefix Husky hooks to distinguish them
                         for hook in &mut husky_hooks {
-                            *hook = format!("husky-{}", hook);
+                            *hook = format!("husky-{hook}");
                         }
                         all_hooks.append(&mut husky_hooks);
                     }
@@ -569,16 +569,10 @@ impl<'a> MonorepoTools<'a> {
             // Node.js project without Husky but auto-detection prefers Husky
             (false, true, false) if config.auto_detection.prefer_husky => HookStrategy::Husky,
             
-            // Has existing Git hooks, prefer to keep them
-            (false, _, true) => HookStrategy::Native,
-            
             // Both systems exist, use hybrid approach
-            (true, _, true) => HookStrategy::Hybrid,
+            (true, false, true) => HookStrategy::Hybrid,
             
-            // Default to native Git hooks for non-Node.js projects
-            (false, false, _) => HookStrategy::Native,
-            
-            // Default case: use native hooks
+            // Has existing Git hooks, prefer to keep them OR any other case defaults to native
             _ => HookStrategy::Native,
         }
     }

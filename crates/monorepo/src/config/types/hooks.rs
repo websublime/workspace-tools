@@ -155,6 +155,7 @@ impl Default for HuskyConfig {
 
 /// Auto-detection configuration for hook strategy
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct AutoDetectionConfig {
     /// Whether to enable auto-detection of hook strategy
     pub enabled: bool,
