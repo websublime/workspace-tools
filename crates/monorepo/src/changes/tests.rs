@@ -534,7 +534,7 @@ mod tests {
             }
 
             let package = &packages[0];
-            
+
             let significance = engine.analyze_significance(&changed_files, package);
 
             // With the brace expansion fix, the pattern now correctly matches.
@@ -565,14 +565,14 @@ mod tests {
             );
 
             assert_eq!(bump, VersionBumpType::Major);
-            
+
             // Also test Medium significance which is more common
             let bump_medium = engine.suggest_version_bump(
                 &PackageChangeType::SourceCode,
                 &ChangeSignificance::Medium,
                 package,
             );
-            
+
             assert_eq!(bump_medium, VersionBumpType::Minor);
 
             Ok(())
@@ -951,7 +951,10 @@ mod tests {
                 ("src/**/*.{ts,js}", vec!["src/**/*.ts", "src/**/*.js"]),
                 ("*.config.{js,ts,json}", vec!["*.config.js", "*.config.ts", "*.config.json"]),
                 // Now with recursive expansion, this should work correctly
-                ("**/*.{test,spec}.{ts,js}", vec!["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]),
+                (
+                    "**/*.{test,spec}.{ts,js}",
+                    vec!["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"],
+                ),
                 ("no-braces.ts", vec!["no-braces.ts"]),
                 ("{leading}.js", vec!["leading.js"]),
                 ("trailing.{js}", vec!["trailing.js"]),
@@ -959,10 +962,17 @@ mod tests {
 
             for (input, expected) in patterns {
                 let expanded = ChangeDetectionEngine::expand_brace_pattern(input);
-                assert_eq!(expanded.len(), expected.len(), "Pattern '{}' expansion count mismatch", input);
-                
+                assert_eq!(
+                    expanded.len(),
+                    expected.len(),
+                    "Pattern '{input}' expansion count mismatch"
+                );
+
                 for (i, exp) in expected.iter().enumerate() {
-                    assert_eq!(&expanded[i], exp, "Pattern '{}' expansion mismatch at index {}", input, i);
+                    assert_eq!(
+                        &expanded[i], exp,
+                        "Pattern '{input}' expansion mismatch at index {i}"
+                    );
                 }
             }
         }
@@ -972,7 +982,7 @@ mod tests {
             // Test nested braces (should expand recursively)
             let pattern = "**/*.{test,spec}.{ts,js}";
             let expanded = ChangeDetectionEngine::expand_brace_pattern(pattern);
-            
+
             // Should fully expand to 4 patterns:
             // ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
             assert_eq!(expanded.len(), 4);

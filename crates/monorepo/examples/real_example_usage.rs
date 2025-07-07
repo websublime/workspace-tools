@@ -1,7 +1,7 @@
 //! Real-world monorepo workflow example
 //!
 //! This example demonstrates a complete development workflow using sublime_monorepo_tools.
-//! It simulates a realistic scenario with feature development, change detection, 
+//! It implements a realistic scenario with feature development, change detection, 
 //! dependency management, and version propagation across multiple packages.
 //!
 //! ## Scenario Overview
@@ -22,15 +22,20 @@
 //! 6. **Version Propagation**: Apply semantic versioning across packages
 //! 7. **Changelog Generation**: Generate changelogs for all affected packages
 
+#![allow(clippy::print_stdout)]  // This is an example that demonstrates workflow through output
+#![allow(clippy::needless_raw_string_hashes)]  // Raw strings are used for code templates
+#![allow(clippy::too_many_lines)]  // Example needs to be comprehensive
+
 use sublime_monorepo_tools::{
     MonorepoProject, MonorepoAnalyzer, 
-    config::VersionBumpType,
+    config::{VersionBumpType, MonorepoConfig, ConfigManager, types::*},
     changes::ChangeDetectionEngine,
     Result,
 };
 use sublime_git_tools::Repo;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
+use serde_json::Value;
 
 /// Main example execution
 fn main() -> Result<()> {
@@ -176,7 +181,7 @@ impl WorkflowExample {
         self.create_git_branch("feature/ui-button-component")?;
         
         // Add Button component
-        let button_component = r#"
+        let button_component = "
 import React from 'react';
 
 export interface ButtonProps {
@@ -204,19 +209,19 @@ export const Button: React.FC<ButtonProps> = ({
     </button>
   );
 };
-"#;
+";
         
         self.create_file("packages/ui-lib/src/components/Button.tsx", button_component)?;
         
         // Update ui-lib index
-        let ui_index = r#"
+        let ui_index = "
 export { Button } from './components/Button';
 export type { ButtonProps } from './components/Button';
-"#;
+";
         self.update_file("packages/ui-lib/src/index.ts", ui_index)?;
         
         // Add tests
-        let button_tests = r#"
+        let button_tests = "
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Button } from './Button';
 
@@ -242,7 +247,7 @@ describe('Button', () => {
     expect(handleClick).not.toHaveBeenCalled();
   });
 });
-"#;
+";
         self.create_file("packages/ui-lib/src/components/Button.test.tsx", button_tests)?;
         
         // Commit changes
@@ -347,7 +352,7 @@ export const App: React.FC = () => {
         self.create_git_branch("feature/shared-validation-utils")?;
         
         // Add validation utilities
-        let validation_utils = r#"
+        let validation_utils = r"
 /**
  * Validation utilities for form inputs and user data
  */
@@ -416,20 +421,20 @@ export const validateForm = <T extends Record<string, any>>(
     errors: allErrors
   };
 };
-"#;
+";
         
         self.create_file("packages/shared/src/validation.ts", validation_utils)?;
         
         // Update shared index
-        let shared_index = r#"
+        let shared_index = "
 export * from './types';
 export * from './utils';
 export * from './validation';
-"#;
+";
         self.update_file("packages/shared/src/index.ts", shared_index)?;
         
         // Add comprehensive tests
-        let validation_tests = r#"
+        let validation_tests = "
 import { validateEmail, validatePassword, validateForm } from './validation';
 
 describe('Validation Utils', () => {
@@ -484,7 +489,7 @@ describe('Validation Utils', () => {
     });
   });
 });
-"#;
+";
         self.create_file("packages/shared/src/validation.test.ts", validation_tests)?;
         
         // Commit changes
@@ -514,7 +519,7 @@ describe('Validation Utils', () => {
         self.create_git_branch("feature/core-use-validation")?;
         
         // Update core lib to use validation
-        let auth_service = r#"
+        let auth_service = "
 import { validateEmail, validatePassword, validateForm } from '@acme/shared';
 
 export interface User {
@@ -584,23 +589,23 @@ export class AuthService {
     return newUser;
   }
 }
-"#;
+";
         
         self.create_file("packages/core-lib/src/auth.ts", auth_service)?;
         
         // Update core lib index
-        let core_index = r#"
+        let core_index = "
 export * from './types';
 export * from './auth';
 export * from './hooks';
-"#;
+";
         self.update_file("packages/core-lib/src/index.ts", core_index)?;
         
         // Update package dependencies
         self.update_package_dependency("packages/core-lib", "@acme/shared", "^1.2.0")?;
         
         // Add tests
-        let auth_tests = r#"
+        let auth_tests = "
 import { AuthService } from './auth';
 
 describe('AuthService', () => {
@@ -643,7 +648,7 @@ describe('AuthService', () => {
     await expect(authService.registerUser(userData)).rejects.toThrow('Password validation failed');
   });
 });
-"#;
+";
         self.create_file("packages/core-lib/src/auth.test.ts", auth_tests)?;
         
         // Commit changes
@@ -776,53 +781,131 @@ describe('AuthService', () => {
 
     /// Setup monorepo configuration
     fn setup_configuration(root_path: &Path) -> Result<()> {
-        // Use default configuration for simplicity
-        let config = sublime_monorepo_tools::config::MonorepoConfig::default();
-        let config_manager = sublime_monorepo_tools::config::ConfigManager::with_config(config);
+        // Create comprehensive custom configuration demonstrating all features
+        let mut config = MonorepoConfig::default();
+        
+        // Configure workspace patterns
+        config.workspace.patterns = vec![
+            WorkspacePattern {
+                pattern: "packages/*".to_string(),
+                description: Some("Main packages directory".to_string()),
+                enabled: true,
+                priority: 100,
+                package_managers: Some(vec![PackageManagerType::Npm]),
+                environments: Some(vec![Environment::Development, Environment::Production]),
+                options: WorkspacePatternOptions {
+                    include_nested: true,
+                    max_depth: Some(2),
+                    exclude_patterns: vec!["**/node_modules".to_string(), "**/dist".to_string()],
+                    follow_symlinks: false,
+                    override_detection: false,
+                },
+            },
+        ];
+        
+        // Configure file patterns for better change detection
+        config.workspace.file_patterns.source_patterns = vec![
+            "src/**/*.{ts,tsx,js,jsx}".to_string(),
+            "lib/**/*.{ts,tsx,js,jsx}".to_string(),
+            "components/**/*.{ts,tsx,js,jsx}".to_string(),
+        ];
+        
+        config.workspace.file_patterns.test_patterns = vec![
+            "**/*.{test,spec}.{ts,tsx,js,jsx}".to_string(),
+            "**/__tests__/**/*.{ts,tsx,js,jsx}".to_string(),
+            "**/tests/**/*.{ts,tsx,js,jsx}".to_string(),
+        ];
+        
+        // Configure validation rules
+        config.validation.change_detection_rules.significance_priorities.public_api_changes = 100;
+        config.validation.change_detection_rules.significance_priorities.internal_changes = 80;
+        config.validation.version_bump_rules.breaking_changes_priority = 100;
+        config.validation.version_bump_rules.feature_changes_priority = 80;
+        
+        // Configure versioning with snapshot format including git hash
+        config.versioning.snapshot_format = "{version}-snapshot.{sha}".to_string();
+        config.versioning.auto_tag = true;
+        config.versioning.tag_prefix = "v".to_string();
+        config.versioning.propagate_changes = true;
+        
+        // Configure task groups
+        config.tasks.default_tasks = vec!["lint".to_string(), "typecheck".to_string(), "test".to_string()];
+        config.tasks.parallel = true;
+        config.tasks.max_concurrent = 4;
+        config.tasks.timeout = 300;
+        
+        // Configure hook automation
+        config.hooks.enabled = true;
+        config.hooks.pre_commit.enabled = true;
+        config.hooks.pre_commit.validate_changeset = true;
+        config.hooks.pre_commit.run_tasks = vec!["lint".to_string(), "typecheck".to_string()];
+        config.hooks.pre_push.enabled = true;
+        config.hooks.pre_push.run_tasks = vec!["test".to_string(), "build".to_string()];
+        
+        // Configure changesets
+        config.changesets.required = true;
+        config.changesets.changeset_dir = ".changesets".to_string().into();
+        config.changesets.auto_deploy = true;
+        
+        // Configure quality gates
+        config.validation.quality_gates.min_test_coverage = 80.0;
+        config.validation.quality_gates.max_cyclomatic_complexity = 10;
+        config.validation.quality_gates.max_dependencies_per_package = 50;
+        
+        let config_manager = ConfigManager::with_config(config);
         config_manager.save_to_file(root_path.join("monorepo.toml"))?;
         
+        println!("📝 Custom configuration created with:");
+        println!("  - Workspace patterns for packages/*");
+        println!("  - Enhanced file pattern detection");
+        println!("  - Custom validation priorities");
+        println!("  - Snapshot versioning with git hash");
+        println!("  - Git hooks automation (pre-commit, pre-push)");
+        println!("  - Changesets management");
+        println!("  - Quality gates with coverage thresholds");
+        
         // Create root package.json
-        let root_package_json = r#"{
-  "name": "acme-monorepo",
-  "version": "1.0.0",
-  "private": true,
-  "workspaces": ["packages/*"],
-  "scripts": {
-    "build": "npm run build:packages",
-    "build:packages": "lerna run build",
-    "test": "lerna run test",
-    "lint": "lerna run lint",
-    "clean": "lerna run clean",
-    "publish": "lerna publish"
+        let root_package_json = "{
+  \"name\": \"acme-monorepo\",
+  \"version\": \"1.0.0\",
+  \"private\": true,
+  \"workspaces\": [\"packages/*\"],
+  \"scripts\": {
+    \"build\": \"npm run build:packages\",
+    \"build:packages\": \"lerna run build\",
+    \"test\": \"lerna run test\",
+    \"lint\": \"lerna run lint\",
+    \"clean\": \"lerna run clean\",
+    \"publish\": \"lerna publish\"
   },
-  "devDependencies": {
-    "@lerna/cli": "^7.1.4",
-    "typescript": "^5.1.6",
-    "@types/node": "^20.4.2",
-    "jest": "^29.6.1",
-    "@testing-library/react": "^13.4.0",
-    "eslint": "^8.45.0",
-    "prettier": "^3.0.0"
+  \"devDependencies\": {
+    \"@lerna/cli\": \"^7.1.4\",
+    \"typescript\": \"^5.1.6\",
+    \"@types/node\": \"^20.4.2\",
+    \"jest\": \"^29.6.1\",
+    \"@testing-library/react\": \"^13.4.0\",
+    \"eslint\": \"^8.45.0\",
+    \"prettier\": \"^3.0.0\"
   }
-}"#;
+}";
         
         std::fs::write(root_path.join("package.json"), root_package_json)
             .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
         
         // Create package-lock.json (required for MonorepoDetector)
-        let package_lock = r#"{
-  "name": "acme-monorepo",
-  "version": "1.0.0",
-  "lockfileVersion": 3,
-  "requires": true,
-  "packages": {
-    "": {
-      "name": "acme-monorepo",
-      "version": "1.0.0",
-      "workspaces": ["packages/*"]
+        let package_lock = "{
+  \"name\": \"acme-monorepo\",
+  \"version\": \"1.0.0\",
+  \"lockfileVersion\": 3,
+  \"requires\": true,
+  \"packages\": {
+    \"\": {
+      \"name\": \"acme-monorepo\",
+      \"version\": \"1.0.0\",
+      \"workspaces\": [\"packages/*\"]
     }
   }
-}"#;
+}";
         
         std::fs::write(root_path.join("package-lock.json"), package_lock)
             .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
@@ -848,29 +931,29 @@ describe('AuthService', () => {
     }
 
     fn setup_shared_package(root_path: &Path) -> Result<()> {
-        let package_json = r#"{
-  "name": "@acme/shared",
-  "version": "1.0.0",
-  "description": "Shared utilities and types",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "scripts": {
-    "build": "tsc",
-    "test": "jest",
-    "lint": "eslint src/**/*.ts"
+        let package_json = "{
+  \"name\": \"@acme/shared\",
+  \"version\": \"1.0.0\",
+  \"description\": \"Shared utilities and types\",
+  \"main\": \"dist/index.js\",
+  \"types\": \"dist/index.d.ts\",
+  \"scripts\": {
+    \"build\": \"tsc\",
+    \"test\": \"jest\",
+    \"lint\": \"eslint src/**/*.ts\"
   },
-  "dependencies": {},
-  "devDependencies": {
-    "typescript": "^5.1.6",
-    "jest": "^29.6.1",
-    "@types/jest": "^29.5.3"
+  \"dependencies\": {},
+  \"devDependencies\": {
+    \"typescript\": \"^5.1.6\",
+    \"jest\": \"^29.6.1\",
+    \"@types/jest\": \"^29.5.3\"
   }
-}"#;
+}";
         
         std::fs::write(root_path.join("packages/shared/package.json"), package_json)
             .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
         
-        let types_file = r#"
+        let types_file = "
 export interface User {
   id: string;
   name: string;
@@ -882,12 +965,12 @@ export interface AppConfig {
   environment: 'development' | 'staging' | 'production';
   features: Record<string, boolean>;
 }
-"#;
+";
         
         std::fs::write(root_path.join("packages/shared/src/types.ts"), types_file)
             .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
         
-        let utils_file = r#"
+        let utils_file = "
 export const formatDate = (date: Date): string => {
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
@@ -907,15 +990,15 @@ export const debounce = <T extends (...args: any[]) => void>(
     timeoutId = setTimeout(() => func(...args), delay);
   };
 };
-"#;
+";
         
         std::fs::write(root_path.join("packages/shared/src/utils.ts"), utils_file)
             .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
         
-        let index_file = r#"
+        let index_file = "
 export * from './types';
 export * from './utils';
-"#;
+";
         
         std::fs::write(root_path.join("packages/shared/src/index.ts"), index_file)
             .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
@@ -924,39 +1007,39 @@ export * from './utils';
     }
 
     fn setup_ui_lib_package(root_path: &Path) -> Result<()> {
-        let package_json = r#"{
-  "name": "@acme/ui-lib",
-  "version": "1.0.0",
-  "description": "React UI component library",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "scripts": {
-    "build": "tsc && rollup -c",
-    "test": "jest",
-    "lint": "eslint src/**/*.{ts,tsx}"
+        let package_json = "{
+  \"name\": \"@acme/ui-lib\",
+  \"version\": \"1.0.0\",
+  \"description\": \"React UI component library\",
+  \"main\": \"dist/index.js\",
+  \"types\": \"dist/index.d.ts\",
+  \"scripts\": {
+    \"build\": \"tsc && rollup -c\",
+    \"test\": \"jest\",
+    \"lint\": \"eslint src/**/*.{ts,tsx}\"
   },
-  "dependencies": {
-    "react": "^18.2.0",
-    "@acme/shared": "^1.0.0"
+  \"dependencies\": {
+    \"react\": \"^18.2.0\",
+    \"@acme/shared\": \"^1.0.0\"
   },
-  "devDependencies": {
-    "typescript": "^5.1.6",
-    "jest": "^29.6.1",
-    "@testing-library/react": "^13.4.0",
-    "@types/react": "^18.2.15"
+  \"devDependencies\": {
+    \"typescript\": \"^5.1.6\",
+    \"jest\": \"^29.6.1\",
+    \"@testing-library/react\": \"^13.4.0\",
+    \"@types/react\": \"^18.2.15\"
   },
-  "peerDependencies": {
-    "react": ">=17.0.0"
+  \"peerDependencies\": {
+    \"react\": \">=17.0.0\"
   }
-}"#;
+}";
         
         std::fs::write(root_path.join("packages/ui-lib/package.json"), package_json)
             .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
         
-        let index_file = r#"
+        let index_file = "
 // UI Library entry point
 // Components will be added via feature development
-"#;
+";
         
         std::fs::write(root_path.join("packages/ui-lib/src/index.ts"), index_file)
             .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
@@ -965,31 +1048,31 @@ export * from './utils';
     }
 
     fn setup_core_lib_package(root_path: &Path) -> Result<()> {
-        let package_json = r#"{
-  "name": "@acme/core-lib",
-  "version": "1.0.0",
-  "description": "Core business logic library",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "scripts": {
-    "build": "tsc",
-    "test": "jest",
-    "lint": "eslint src/**/*.ts"
+        let package_json = "{
+  \"name\": \"@acme/core-lib\",
+  \"version\": \"1.0.0\",
+  \"description\": \"Core business logic library\",
+  \"main\": \"dist/index.js\",
+  \"types\": \"dist/index.d.ts\",
+  \"scripts\": {
+    \"build\": \"tsc\",
+    \"test\": \"jest\",
+    \"lint\": \"eslint src/**/*.ts\"
   },
-  "dependencies": {
-    "@acme/shared": "^1.0.0"
+  \"dependencies\": {
+    \"@acme/shared\": \"^1.0.0\"
   },
-  "devDependencies": {
-    "typescript": "^5.1.6",
-    "jest": "^29.6.1",
-    "@types/jest": "^29.5.3"
+  \"devDependencies\": {
+    \"typescript\": \"^5.1.6\",
+    \"jest\": \"^29.6.1\",
+    \"@types/jest\": \"^29.5.3\"
   }
-}"#;
+}";
         
         std::fs::write(root_path.join("packages/core-lib/package.json"), package_json)
             .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
         
-        let hooks_file = r#"
+        let hooks_file = "
 import { User } from '@acme/shared';
 import { useState, useCallback } from 'react';
 
@@ -1016,15 +1099,15 @@ export const useAppLogic = () => {
     handleLogout
   };
 };
-"#;
+";
         
         std::fs::write(root_path.join("packages/core-lib/src/hooks.ts"), hooks_file)
             .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
         
-        let index_file = r#"
+        let index_file = "
 export * from './types';
 export * from './hooks';
-"#;
+";
         
         std::fs::write(root_path.join("packages/core-lib/src/index.ts"), index_file)
             .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
@@ -1033,37 +1116,37 @@ export * from './hooks';
     }
 
     fn setup_web_app_package(root_path: &Path) -> Result<()> {
-        let package_json = r#"{
-  "name": "@acme/web-app",
-  "version": "1.0.0",
-  "description": "Main web application",
-  "private": true,
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "test": "jest",
-    "test:e2e": "playwright test",
-    "lint": "eslint src/**/*.{ts,tsx}"
+        let package_json = "{
+  \"name\": \"@acme/web-app\",
+  \"version\": \"1.0.0\",
+  \"description\": \"Main web application\",
+  \"private\": true,
+  \"scripts\": {
+    \"dev\": \"vite\",
+    \"build\": \"tsc && vite build\",
+    \"test\": \"jest\",
+    \"test:e2e\": \"playwright test\",
+    \"lint\": \"eslint src/**/*.{ts,tsx}\"
   },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "@acme/shared": "^1.0.0",
-    "@acme/core-lib": "^1.0.0"
+  \"dependencies\": {
+    \"react\": \"^18.2.0\",
+    \"react-dom\": \"^18.2.0\",
+    \"@acme/shared\": \"^1.0.0\",
+    \"@acme/core-lib\": \"^1.0.0\"
   },
-  "devDependencies": {
-    "typescript": "^5.1.6",
-    "vite": "^4.4.0",
-    "@vitejs/plugin-react": "^4.0.0",
-    "jest": "^29.6.1",
-    "@playwright/test": "^1.36.0"
+  \"devDependencies\": {
+    \"typescript\": \"^5.1.6\",
+    \"vite\": \"^4.4.0\",
+    \"@vitejs/plugin-react\": \"^4.0.0\",
+    \"jest\": \"^29.6.1\",
+    \"@playwright/test\": \"^1.36.0\"
   }
-}"#;
+}";
         
         std::fs::write(root_path.join("packages/web-app/package.json"), package_json)
             .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
         
-        let app_file = r#"
+        let app_file = "
 import React from 'react';
 import { useAppLogic } from '@acme/core-lib';
 
@@ -1071,7 +1154,7 @@ export const App: React.FC = () => {
   const { user, handleLogin, handleLogout } = useAppLogic();
 
   return (
-    <div className="app">
+    <div className=\"app\">
       <header>
         <h1>Acme Web Application</h1>
       </header>
@@ -1092,7 +1175,7 @@ export const App: React.FC = () => {
     </div>
   );
 };
-"#;
+";
         
         std::fs::write(root_path.join("packages/web-app/src/App.tsx"), app_file)
             .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
@@ -1186,6 +1269,22 @@ export const App: React.FC = () => {
             .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
         
         Ok(())
+    }
+    
+    /// Get short git hash for snapshot versions
+    fn get_short_git_hash(&self) -> Result<String> {
+        let output = std::process::Command::new("git")
+            .args(["rev-parse", "--short=7", "HEAD"])
+            .current_dir(&self.root_path)
+            .output()
+            .map_err(|e| sublime_monorepo_tools::Error::generic(format!("Git command failed: {}", e)))?;
+        
+        if output.status.success() {
+            let hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            Ok(hash)
+        } else {
+            Err(sublime_monorepo_tools::Error::generic("Failed to get git hash".to_string()))
+        }
     }
 
     // === File Helper Methods ===
@@ -1315,9 +1414,38 @@ export const App: React.FC = () => {
     fn update_package_dependency(&self, package_path: &str, dep_name: &str, version: &str) -> Result<()> {
         println!("📦 Updating {} dependency in {}: {}", dep_name, package_path, version);
         
-        // In a real implementation, this would update package.json
-        // For the example, we just simulate it
+        let package_json_path = self.root_path.join(package_path).join("package.json");
         
+        // Read existing package.json
+        let content = std::fs::read_to_string(&package_json_path)
+            .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
+        
+        let mut package_json: Value = serde_json::from_str(&content)
+            .map_err(|e| sublime_monorepo_tools::Error::generic(format!("JSON parse error: {}", e)))?;
+        
+        // Update dependency version
+        if let Some(dependencies) = package_json.get_mut("dependencies").and_then(|v| v.as_object_mut()) {
+            if dependencies.contains_key(dep_name) {
+                dependencies.insert(dep_name.to_string(), Value::String(version.to_string()));
+                println!("  ✅ Updated {} in dependencies", dep_name);
+            }
+        }
+        
+        if let Some(dev_dependencies) = package_json.get_mut("devDependencies").and_then(|v| v.as_object_mut()) {
+            if dev_dependencies.contains_key(dep_name) {
+                dev_dependencies.insert(dep_name.to_string(), Value::String(version.to_string()));
+                println!("  ✅ Updated {} in devDependencies", dep_name);
+            }
+        }
+        
+        // Write updated package.json
+        let updated_content = serde_json::to_string_pretty(&package_json)
+            .map_err(|e| sublime_monorepo_tools::Error::generic(format!("JSON serialize error: {}", e)))?;
+        
+        std::fs::write(&package_json_path, updated_content)
+            .map_err(|e| sublime_monorepo_tools::Error::generic(format!("IO error: {}", e)))?;
+        
+        println!("  📝 Package.json updated successfully");
         Ok(())
     }
 
@@ -1342,10 +1470,14 @@ export const App: React.FC = () => {
             println!("📝 Changelog for {}:", package);
             
             let new_version = match bump_type {
-                VersionBumpType::Major => "2.0.0",
-                VersionBumpType::Minor => "1.1.0", 
-                VersionBumpType::Patch => "1.0.1",
-                VersionBumpType::Snapshot => "1.0.0-SNAPSHOT",
+                VersionBumpType::Major => "2.0.0".to_string(),
+                VersionBumpType::Minor => "1.1.0".to_string(), 
+                VersionBumpType::Patch => "1.0.1".to_string(),
+                VersionBumpType::Snapshot => {
+                    // Get short git hash for snapshot version
+                    let git_hash = self.get_short_git_hash().unwrap_or_else(|_| "unknown".to_string());
+                    format!("1.0.0-snapshot.{}", git_hash)
+                },
             };
             
             println!("  ## v{} ({})", new_version, chrono::Utc::now().format("%Y-%m-%d"));

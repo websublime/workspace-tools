@@ -55,12 +55,12 @@ pub fn default_change_type_rules() -> Vec<ChangeTypeRule> {
             patterns: vec![
                 FilePattern {
                     pattern_type: PatternType::Glob,
-                    pattern: "src/**/*.{ts,js,tsx,jsx}".to_string(),
+                    pattern: "src/**/*.{ts,js,tsx,jsx,mts,mjs,cjs}".to_string(),
                     exclude: false,
                 },
                 FilePattern {
                     pattern_type: PatternType::Glob,
-                    pattern: "lib/**/*.{ts,js}".to_string(),
+                    pattern: "lib/**/*.{ts,js,mts,mjs,cjs}".to_string(),
                     exclude: false,
                 },
             ],
@@ -73,7 +73,7 @@ pub fn default_change_type_rules() -> Vec<ChangeTypeRule> {
             patterns: vec![
                 FilePattern {
                     pattern_type: PatternType::Glob,
-                    pattern: "*.config.{js,ts,json}".to_string(),
+                    pattern: "*.config.{js,ts,json,mts,mjs,cjs}".to_string(),
                     exclude: false,
                 },
                 FilePattern {
@@ -96,7 +96,7 @@ pub fn default_change_type_rules() -> Vec<ChangeTypeRule> {
             patterns: vec![
                 FilePattern {
                     pattern_type: PatternType::Glob,
-                    pattern: "**/*.{test,spec}.{ts,js}".to_string(),
+                    pattern: "**/*.{test,spec}.{ts,js,mts,mjs}".to_string(),
                     exclude: false,
                 },
                 FilePattern {
@@ -149,12 +149,12 @@ pub fn default_significance_rules() -> Vec<SignificanceRule> {
             patterns: vec![
                 FilePattern {
                     pattern_type: PatternType::Glob,
-                    pattern: "src/index.{ts,js}".to_string(),
+                    pattern: "src/index.{ts,js,mts,mjs}".to_string(),
                     exclude: false,
                 },
                 FilePattern {
                     pattern_type: PatternType::Glob,
-                    pattern: "**/*.d.ts".to_string(),
+                    pattern: "**/*.{d.ts,d.mts}".to_string(),
                     exclude: false,
                 },
             ],
@@ -171,12 +171,12 @@ pub fn default_significance_rules() -> Vec<SignificanceRule> {
             patterns: vec![
                 FilePattern {
                     pattern_type: PatternType::Glob,
-                    pattern: "src/**/*.{ts,js}".to_string(),
+                    pattern: "src/**/*.{ts,js,mts,mjs}".to_string(),
                     exclude: false,
                 },
                 FilePattern {
                     pattern_type: PatternType::Glob,
-                    pattern: "lib/**/*.{ts,js}".to_string(),
+                    pattern: "lib/**/*.{ts,js,mts,mjs}".to_string(),
                     exclude: false,
                 },
             ],
@@ -217,7 +217,7 @@ pub fn default_significance_rules() -> Vec<SignificanceRule> {
             patterns: vec![
                 FilePattern {
                     pattern_type: PatternType::Glob,
-                    pattern: "*.config.{js,ts,json}".to_string(),
+                    pattern: "*.config.{js,ts,json,mts,mjs,cjs}".to_string(),
                     exclude: false,
                 },
                 FilePattern {
@@ -261,7 +261,7 @@ pub fn default_significance_rules() -> Vec<SignificanceRule> {
             patterns: vec![
                 FilePattern {
                     pattern_type: PatternType::Glob,
-                    pattern: "**/*.{test,spec}.{ts,js}".to_string(),
+                    pattern: "**/*.{test,spec}.{ts,js,mts,mjs}".to_string(),
                     exclude: false,
                 },
                 FilePattern {
