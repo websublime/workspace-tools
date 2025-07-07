@@ -22,7 +22,9 @@ pub use changelog::{ChangelogConfig, ChangelogFormat, ChangelogTemplate, CommitG
 
 // Git hooks configuration types
 pub mod hooks;
-pub use hooks::{HookConfig, HooksConfig};
+pub use hooks::{
+    AutoDetectionConfig, HookConfig, HooksConfig, HookStrategy, HuskyConfig,
+};
 
 // Changesets configuration types
 pub mod changesets;
