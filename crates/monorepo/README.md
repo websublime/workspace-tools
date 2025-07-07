@@ -311,6 +311,26 @@ use_workspaces = true
 options = { install_optional = false }
 
 #####################################
+# Enterprise Registry Configuration  
+#####################################
+[workspace.tool_configs]
+# Registry URL patterns and their types
+[workspace.tool_configs.registry_patterns]
+"registry.npmjs.org" = "npm"
+"npm.pkg.github.com" = "github"
+"pkgs.dev.azure.com" = "azure"
+"gitlab.com" = "gitlab"
+"npm.company.com" = "company"
+
+# Authentication environment variables for each registry
+[workspace.tool_configs.auth_env_vars]
+npm = ["NPM_TOKEN"]
+github = ["GITHUB_TOKEN", "NPM_TOKEN"]
+azure = ["AZURE_TOKEN"]
+gitlab = ["GITLAB_TOKEN"]
+company = ["COMPANY_NPM_TOKEN"]
+
+#####################################
 # Git Configuration
 #####################################
 [git]
@@ -456,6 +476,27 @@ Controls package discovery and workspace management:
 - **`validation`**: Rules for validating workspace structure
 - **`discovery`**: Settings for automatic package discovery
 - **`package_manager_configs`**: Package manager specific configurations
+- **`tool_configs`**: Enterprise registry and authentication configuration
+
+### 🏢 Enterprise Registry Configuration
+
+Configure custom npm registries and authentication for enterprise environments:
+
+- **`registry_patterns`**: Map registry URLs to registry types for proper authentication
+- **`auth_env_vars`**: Environment variables for each registry type's authentication
+- **`config_file_patterns`**: Configuration file discovery patterns
+- **`default_task_groups`**: Default task groups for different operations
+
+**Example enterprise setup:**
+```toml
+[workspace.tool_configs.registry_patterns]
+"npm.company.com" = "company"
+"registry.internal.dev" = "internal"
+
+[workspace.tool_configs.auth_env_vars]
+company = ["COMPANY_NPM_TOKEN", "COMPANY_AUTH_TOKEN"]
+internal = ["INTERNAL_REGISTRY_TOKEN"]
+```
 
 ### 🔧 Git Configuration
 
