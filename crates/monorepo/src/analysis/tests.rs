@@ -177,6 +177,14 @@ mod tests {
             .output()
             .map_err(crate::error::Error::Io)?;
 
+        // Ensure we have a 'main' branch for consistent testing across different Git configurations
+        // Some CI environments might initialize with 'master' or no default branch
+        std::process::Command::new("git")
+            .args(["checkout", "-b", "main"])
+            .current_dir(&root_path)
+            .output()
+            .map_err(crate::error::Error::Io)?;
+
         let project = MonorepoProject::new(&root_path)?;
         Ok((temp_dir, project))
     }
@@ -597,7 +605,7 @@ mod tests {
         let (_temp_dir, project) = create_test_project()?;
         let analyzer = MonorepoAnalyzer::new(&project);
 
-        // Create a new branch
+        // Create a new branch from main
         std::process::Command::new("git")
             .args(["checkout", "-b", "feature-branch"])
             .current_dir(project.root_path())
@@ -917,13 +925,13 @@ mod tests {
         let analyzer = DiffAnalyzer::new(&project);
 
         // Test branch comparison with invalid branches
-        let result = analyzer.compare_branches("", "main");
+        let result = analyzer.compare_branches("", "feature-test");
         assert!(result.is_err());
 
-        let result = analyzer.compare_branches("main", "");
+        let result = analyzer.compare_branches("feature-test", "");
         assert!(result.is_err());
 
-        let result = analyzer.compare_branches("nonexistent-branch", "main");
+        let result = analyzer.compare_branches("nonexistent-branch", "feature-test");
         assert!(result.is_err());
 
         Ok(())
