@@ -558,6 +558,183 @@ impl Repo {
         Ok(branch_names)
     }
 
+    /// Check if a branch exists in the repository
+    ///
+    /// # Arguments
+    ///
+    /// * `branch_name` - The name of the branch to check
+    ///
+    /// # Returns
+    ///
+    /// * `Result<bool, RepoError>` - True if the branch exists, false otherwise
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The repository is not accessible
+    /// - Branch references cannot be accessed
+    /// - The branch name contains invalid characters
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use git::repo::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let exists = repo.branch_exists("main").expect("Failed to check branch");
+    /// if exists {
+    ///     println!("Branch 'main' exists");
+    /// }
+    /// ```
+    pub fn branch_exists(&self, branch_name: &str) -> Result<bool, RepoError> {
+        // Try to find the branch reference
+        match self.repo.find_branch(branch_name, git2::BranchType::Local) {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                if e.code() == git2::ErrorCode::NotFound {
+                    Ok(false)
+                } else {
+                    Err(RepoError::BranchError(e))
+                }
+            }
+        }
+    }
+
+    /// Get the merge base between two branches or commits
+    ///
+    /// # Arguments
+    ///
+    /// * `branch1` - First branch or commit reference
+    /// * `branch2` - Second branch or commit reference
+    ///
+    /// # Returns
+    ///
+    /// * `Result<String, RepoError>` - The SHA of the merge base commit
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Either branch or commit reference doesn't exist
+    /// - No common ancestor exists between the references
+    /// - Repository access fails
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use git::repo::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let merge_base = repo.get_merge_base("main", "feature-branch")
+    ///     .expect("Failed to get merge base");
+    /// println!("Merge base: {}", merge_base);
+    /// ```
+    pub fn get_merge_base(&self, branch1: &str, branch2: &str) -> Result<String, RepoError> {
+        // Resolve the references to commit IDs
+        let commit1 = self.repo.revparse_single(branch1)
+            .map_err(RepoError::ReferenceError)?
+            .id();
+        
+        let commit2 = self.repo.revparse_single(branch2)
+            .map_err(RepoError::ReferenceError)?
+            .id();
+
+        // Find the merge base
+        let merge_base = self.repo.merge_base(commit1, commit2)
+            .map_err(RepoError::CommitError)?;
+
+        Ok(merge_base.to_string())
+    }
+
+    /// Get files changed between two commits or branches
+    ///
+    /// # Arguments
+    ///
+    /// * `from_ref` - Starting commit or branch reference
+    /// * `to_ref` - Ending commit or branch reference
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Vec<GitChangedFile>, RepoError>` - List of changed files with status
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Either reference doesn't exist
+    /// - Repository access fails
+    /// - Diff calculation fails
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use git::repo::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let changed_files = repo.get_files_changed_between("main", "feature-branch")
+    ///     .expect("Failed to get changed files");
+    /// for file in changed_files {
+    ///     println!("{}: {:?}", file.path, file.status);
+    /// }
+    /// ```
+    pub fn get_files_changed_between(&self, from_ref: &str, to_ref: &str) -> Result<Vec<GitChangedFile>, RepoError> {
+        use crate::{GitChangedFile, GitFileStatus};
+        
+        // Resolve the references to commits
+        let from_commit = self.repo.revparse_single(from_ref)
+            .map_err(RepoError::ReferenceError)?
+            .peel_to_commit()
+            .map_err(RepoError::CommitError)?;
+        
+        let to_commit = self.repo.revparse_single(to_ref)
+            .map_err(RepoError::ReferenceError)?
+            .peel_to_commit()
+            .map_err(RepoError::CommitError)?;
+
+        // Get the trees for both commits
+        let from_tree = from_commit.tree()
+            .map_err(RepoError::TreeError)?;
+        let to_tree = to_commit.tree()
+            .map_err(RepoError::TreeError)?;
+
+        // Create diff between the trees
+        let diff = self.repo.diff_tree_to_tree(Some(&from_tree), Some(&to_tree), None)
+            .map_err(RepoError::DiffError)?;
+
+        let mut changed_files = Vec::new();
+
+        // Process each delta in the diff
+        diff.foreach(
+            &mut |delta, _progress| {
+                let old_file = delta.old_file();
+                let new_file = delta.new_file();
+                
+                let path = new_file.path()
+                    .or_else(|| old_file.path())
+                    .and_then(|p| p.to_str())
+                    .unwrap_or("unknown");
+
+                let status = match delta.status() {
+                    git2::Delta::Added | git2::Delta::Copied => GitFileStatus::Added,
+                    git2::Delta::Deleted => GitFileStatus::Deleted,
+                    _ => GitFileStatus::Modified, // All other cases are treated as modified
+                };
+
+                changed_files.push(GitChangedFile {
+                    path: path.to_string(),
+                    status,
+                    staged: false,
+                    workdir: false,
+                });
+
+                true // Continue processing
+            },
+            None, // No binary callback
+            None, // No hunk callback  
+            None, // No line callback
+        ).map_err(RepoError::DiffError)?;
+
+        Ok(changed_files)
+    }
+
     /// Lists all configuration entries for the repository
     ///
     /// # Returns

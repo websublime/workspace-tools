@@ -1029,28 +1029,6 @@ impl<'a> MonorepoAnalyzer<'a> {
         Ok(patterns)
     }
 
-    /// Check if a pattern has any matches in the current workspace
-    #[allow(clippy::unnecessary_wraps)]
-    #[allow(clippy::manual_strip)]
-    fn pattern_has_matches(&self, pattern: &str) -> Result<bool> {
-        // Use existing packages from project
-        for package in self.packages {
-            let package_path = package.relative_path().to_string_lossy();
-            if self.matches_glob_pattern(&package_path, pattern) {
-                return Ok(true);
-            }
-        }
-
-        // Also check if the pattern directory structure exists
-        let pattern_path = if pattern.ends_with("/*") {
-            self.root_path.join(&pattern[..pattern.len() - 2])
-        } else {
-            self.root_path.join(pattern)
-        };
-
-        Ok(pattern_path.exists())
-    }
-
     /// Calculate pattern specificity for sorting (higher is more specific)
     #[allow(clippy::cast_possible_truncation)]
     pub fn calculate_pattern_specificity(&self, pattern: &str) -> u32 {

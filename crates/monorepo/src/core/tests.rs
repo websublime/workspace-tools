@@ -121,6 +121,56 @@ mod tests {
             }"#,
         ).unwrap();
 
+        // Create package-lock.json (required for MonorepoDetector)
+        fs::write(
+            root_path.join("package-lock.json"),
+            r#"{
+              "name": "test-monorepo",
+              "version": "1.0.0",
+              "lockfileVersion": 3,
+              "requires": true,
+              "packages": {
+                "": {
+                  "name": "test-monorepo",
+                  "version": "1.0.0",
+                  "workspaces": ["packages/*"]
+                },
+                "node_modules/@test/core": {
+                  "resolved": "packages/core",
+                  "link": true
+                },
+                "node_modules/@test/utils": {
+                  "resolved": "packages/utils",
+                  "link": true
+                },
+                "node_modules/@test/web": {
+                  "resolved": "packages/web",
+                  "link": true
+                },
+                "packages/core": {
+                  "name": "@test/core",
+                  "version": "1.0.0"
+                },
+                "packages/utils": {
+                  "name": "@test/utils",
+                  "version": "1.2.0",
+                  "dependencies": {
+                    "@test/core": "^1.0.0"
+                  }
+                },
+                "packages/web": {
+                  "name": "@test/web",
+                  "version": "2.1.0",
+                  "dependencies": {
+                    "@test/core": "^1.0.0",
+                    "@test/utils": "^1.2.0",
+                    "react": "^18.0.0"
+                  }
+                }
+              }
+            }"#,
+        ).unwrap();
+
         Ok(())
     }
 
