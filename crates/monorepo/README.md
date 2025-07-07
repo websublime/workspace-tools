@@ -66,377 +66,415 @@ cargo run --example automated_workflow_example
 
 ## Complete Monorepo Configuration
 
-Create a `monorepo.toml` file in your repository root with comprehensive configuration:
+Create a `monorepo.toml` file in your repository root:
 
 ```toml
-# Main Monorepo Configuration File
-# This file controls all aspects of monorepo automation and tooling
-
-#####################################
-# Workspace Configuration
-#####################################
-[workspace]
-# Custom workspace patterns for package discovery
-# These patterns define where packages are located in your monorepo
-[[workspace.patterns]]
-pattern = "packages/*"                    # Glob pattern for package discovery
-description = "Main packages directory"  # Human-readable description
-enabled = true                          # Whether this pattern is active
-priority = 100                          # Higher priority patterns are checked first
-package_managers = ["npm", "yarn", "pnpm"]  # Which package managers this applies to
-environments = ["development", "production"]  # Which environments this applies to
-
-[workspace.patterns.options]
-include_nested = true                    # Include packages within packages
-max_depth = 2                           # Maximum depth to search
-exclude_patterns = ["**/node_modules", "**/dist"]  # Patterns to exclude
-follow_symlinks = false                 # Whether to follow symbolic links
-override_detection = false              # Override auto-detection
-
-# Whether to merge custom patterns with auto-detected ones
-merge_with_detected = true
-
-# Package discovery settings
-[workspace.discovery]
-auto_detect_patterns = true            # Automatically detect workspace patterns
-scan_package_json = true               # Look for workspaces in package.json
-scan_pnpm_workspace = true             # Look for pnpm-workspace.yaml
-scan_rush_json = true                  # Look for rush.json
-cache_discovery_results = true         # Cache discovery results for performance
-
-# Package manager specific configurations
-[workspace.package_manager_configs]
-npm_install_command = "npm ci"          # Command for npm installs
-yarn_install_command = "yarn install --frozen-lockfile"  # Command for yarn installs
-pnpm_install_command = "pnpm install --frozen-lockfile"  # Command for pnpm installs
-
-# Validation rules for workspace structure
-[workspace.validation]
-require_package_json = true            # All packages must have package.json
-validate_dependencies = true           # Validate internal dependencies exist
-check_circular_dependencies = true     # Detect circular dependencies
-enforce_naming_convention = false      # Enforce package naming patterns
-naming_pattern = "@company/*"          # Pattern for package names
-
 #####################################
 # Versioning Configuration
 #####################################
 [versioning]
-# Default versioning strategy for packages
-strategy = "independent"               # "independent" | "fixed" | "fixed-group"
+# Default version bump type when not specified
+default_bump = "patch"                # "major" | "minor" | "patch" | "snapshot"
 
-# Whether to automatically bump dependent packages
-auto_bump_dependents = true
+# Whether to propagate version changes to dependents
+propagate_changes = true
 
-# How to handle dependent package bumps
-dependent_bump_strategy = "inherit"    # "inherit" | "patch" | "minor" | "none"
+# Snapshot version format
+snapshot_format = "{version}-snapshot.{sha}"
 
-# Pre-release configuration
-[versioning.prerelease]
-enabled = true                         # Enable pre-release versions
-prefix = "alpha"                       # Pre-release prefix (alpha, beta, rc)
-include_commit_sha = true              # Include short commit SHA
-include_timestamp = false              # Include timestamp in version
+# Version tag prefix
+tag_prefix = "v"
 
-# Version constraints
-[versioning.constraints]
-min_major_version = 0                  # Minimum major version
-max_major_version = 999                # Maximum major version
-allow_major_zero = true                # Allow 0.x.x versions
+# Whether to create tags automatically
+auto_tag = true
+
+# Optional version constraint for validating version formats
+version_constraint = "^1.0.0"
 
 #####################################
 # Task Configuration
 #####################################
 [tasks]
-# Global task execution settings
-default_timeout = 300                 # Default timeout in seconds (5 minutes)
-max_concurrent = 4                     # Maximum concurrent tasks
-continue_on_failure = false           # Continue if tasks fail
-execution_mode = "parallel"           # "parallel" | "sequential" | "dependency"
+# Default tasks to run on changes
+default_tasks = ["test", "lint"]
 
-# Environment variables for all tasks
-[tasks.environment_variables]
-NODE_ENV = "development"
-CI = "true"
-
-# Task-specific configurations
-[tasks.task_configs.lint]
-command = "npm run lint"               # Command to execute
-working_directory = "."                # Working directory (relative to package)
-timeout = 120                         # Task-specific timeout in seconds
-parallel = true                       # Whether this task can run in parallel
-dependencies = []                      # Tasks that must run before this one
-
-# Conditions for when to run this task
-[tasks.task_configs.lint.conditions]
-on_file_changes = ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"]  # Run on these file changes
-environments = ["development", "production"]  # Run in these environments
-package_types = ["library", "application"]    # Run for these package types
-
-[tasks.task_configs.test]
-command = "npm test"
-timeout = 600                         # 10 minutes for tests
+# Whether to run tasks in parallel
 parallel = true
-dependencies = ["lint"]               # Must lint before testing
 
-[tasks.task_configs.test.conditions]
-on_file_changes = ["**/*.js", "**/*.ts", "**/*.test.*", "**/*.spec.*"]
+# Maximum concurrent tasks
+max_concurrent = 4
 
-[tasks.task_configs.build]
-command = "npm run build"
-timeout = 300                         # 5 minutes for build
-parallel = false                      # Build serially to avoid conflicts
-dependencies = ["lint", "test"]       # Must lint and test before building
+# Task timeout in seconds
+timeout = 300
 
-#####################################
-# Git Hooks Configuration
-#####################################
-[hooks]
-enabled = true                        # Enable all hooks globally
+# Task groups
+[tasks.groups]
+quality = ["lint", "typecheck", "test"]
+build = ["clean", "compile", "bundle"]
+release = ["quality", "build", "docs"]
 
-# Pre-commit hook configuration
-[hooks.pre_commit]
-enabled = true                        # Enable pre-commit hook
-validate_changeset = true             # Ensure changesets exist for changes
-run_tasks = ["lint", "typecheck"]     # Tasks to run on pre-commit
-block_on_failure = true               # Block commit if tasks fail
-affected_packages_only = true         # Only run on affected packages
+# Deployment tasks for each environment
+[tasks.deployment_tasks]
+development = ["build", "deploy-dev"]
+staging = ["build", "test", "deploy-staging"]
+production = ["build", "test", "security-scan", "deploy-prod"]
 
-# Pre-push hook configuration
-[hooks.pre_push]
-enabled = true                        # Enable pre-push hook
-run_tasks = ["lint", "test", "build"] # Tasks to run on pre-push
-block_on_failure = true               # Block push if tasks fail
-affected_packages_only = true         # Only run on affected packages
+# Performance and timing configuration
+[tasks.performance]
+# Hook execution timeout in seconds
+hook_timeout = 300
 
-# Post-merge hook configuration
-[hooks.post_merge]
-enabled = true                        # Enable post-merge hook
-auto_apply_changesets = true          # Automatically apply changesets after merge
-auto_generate_changelogs = true       # Generate changelogs after merge
-run_tasks = ["install"]               # Tasks to run after merge
+# Version planning estimation per package in seconds
+version_planning_per_package = 5
+
+# Cache duration for task results in seconds
+cache_duration = 300
+
+# Large project configuration overrides
+[tasks.performance.large_project]
+max_concurrent = 8
+timeout = 600
+
+# Workflow impact thresholds
+[tasks.performance.impact_thresholds]
+medium_impact_files = 5
+high_impact_files = 15
 
 #####################################
 # Changelog Configuration
 #####################################
 [changelog]
-enabled = true                        # Enable changelog generation
-format = "markdown"                   # "markdown" | "json" | "html"
-include_all_commits = false           # Include all commits or only conventional commits
+# How to group commits
+grouping = "type"                     # "type" | "scope" | "none"
 
-# Changelog sections configuration
-[[changelog.sections]]
-title = "Breaking Changes"            # Section title
-commit_types = ["feat"]               # Commit types to include
-hide_if_empty = false                 # Hide section if no commits
+# Output format
+output_format = "markdown"            # "markdown" | "text" | "json"
 
-[[changelog.sections]]
-title = "Features"
-commit_types = ["feat"]
-hide_if_empty = true
+# Whether to include breaking changes section
+include_breaking_changes = true
 
-[[changelog.sections]]
-title = "Bug Fixes"
-commit_types = ["fix"]
-hide_if_empty = true
+# Conventional commit type mappings
+[changelog.conventional_commit_types]
+feat = "Features"
+fix = "Bug Fixes"
+docs = "Documentation"
+style = "Styles"
+refactor = "Code Refactoring"
+perf = "Performance Improvements"
+test = "Tests"
+build = "Build System"
+ci = "Continuous Integration"
+chore = "Chores"
+revert = "Reverts"
 
-[[changelog.sections]]
-title = "Documentation"
-commit_types = ["docs"]
-hide_if_empty = true
+# Changelog template configuration
+[changelog.template]
+header_template = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\n"
+section_template = "## [{version}] - {date}\n\n"
+commit_template = "- {description} ([{hash}]({url}))\n"
+footer_template = "\n---\n\nGenerated by [Sublime Monorepo Tools](https://github.com/websublime/workspace-node-tools)\n"
 
-# Custom commit type configurations
-[changelog.commit_types.feat]
-display_name = "Features"             # Display name for this commit type
-include_in_changelog = true           # Whether to include in changelog
-breaking = false                      # Whether this type represents breaking changes
-section = "Features"                  # Which section this belongs to
+#####################################
+# Git Hooks Configuration
+#####################################
+[hooks]
+# Whether hooks are enabled
+enabled = true
 
-[changelog.commit_types.fix]
-display_name = "Bug Fixes"
-include_in_changelog = true
-breaking = false
-section = "Bug Fixes"
+# Custom hooks directory
+hooks_dir = ".git/hooks"
 
-[changelog.commit_types.docs]
-display_name = "Documentation"
-include_in_changelog = true
-breaking = false
-section = "Documentation"
+# Pre-commit hook configuration
+[hooks.pre_commit]
+enabled = true
+validate_changeset = true
+run_tasks = ["lint"]
+custom_script = "./scripts/pre-commit.sh"
 
-[changelog.commit_types.chore]
-display_name = "Chores"
-include_in_changelog = false          # Don't include chores in changelog
-breaking = false
+# Pre-push hook configuration
+[hooks.pre_push]
+enabled = true
+validate_changeset = false
+run_tasks = ["test", "build"]
+custom_script = "./scripts/pre-push.sh"
+
+# Post-merge hook configuration
+[hooks.post_merge]
+enabled = true
+validate_changeset = false
+run_tasks = ["install"]
+custom_script = "./scripts/post-merge.sh"
 
 #####################################
 # Changesets Configuration
 #####################################
 [changesets]
-required = true                       # Require changesets for changes
-auto_deploy = true                    # Automatically deploy changesets on merge
-changesets_dir = ".changesets"        # Directory to store changeset files
-validate_format = true                # Validate changeset format
-required_environments = ["production"]  # Environments that require changesets
+# Whether changesets are required
+required = true
 
-#####################################
-# Git Configuration
-#####################################
-[git]
-# Default branch configuration
-default_branch = "main"               # Default branch name
-protected_branches = ["main", "develop"]  # Branches that require special handling
+# Changeset directory
+changeset_dir = ".changesets"
 
-# Commit message validation
-[git.commit_validation]
-enforce_conventional_commits = true   # Enforce conventional commit format
-require_signed_commits = false        # Require GPG signed commits
-max_subject_length = 72               # Maximum commit subject length
-require_issue_reference = false       # Require issue/ticket reference
+# Default environments for new changesets
+default_environments = ["development", "staging"]
 
-# Branch naming conventions
-[git.branch_naming]
-enforce_naming = true                 # Enforce branch naming conventions
-feature_prefix = "feature/"           # Prefix for feature branches
-bugfix_prefix = "fix/"                # Prefix for bugfix branches
-release_prefix = "release/"           # Prefix for release branches
+# Whether to auto-deploy to environments
+auto_deploy = false
 
-#####################################
-# Validation Configuration
-#####################################
-[validation]
-# Quality gates that must pass
-[validation.quality_gates]
-min_test_coverage = 80.0              # Minimum test coverage percentage
-max_bundle_size_mb = 5.0              # Maximum bundle size in MB
-max_dependencies = 50                 # Maximum number of dependencies per package
-require_readme = true                 # Require README files
-require_license = true                # Require LICENSE files
-
-# Code quality rules
-[validation.code_quality]
-enforce_prettier = true               # Enforce Prettier formatting
-enforce_eslint = true                 # Enforce ESLint rules
-require_typescript = false            # Require TypeScript usage
-max_cyclomatic_complexity = 10        # Maximum cyclomatic complexity
-
-# Security validation
-[validation.security]
-audit_dependencies = true             # Audit dependencies for vulnerabilities
-block_vulnerable_deps = true          # Block deployment with vulnerable deps
-max_vulnerability_severity = "moderate"  # Maximum allowed vulnerability severity
+# Changeset filename format
+filename_format = "{timestamp}-{branch}-{hash}.json"
 
 #####################################
 # Plugin System Configuration
 #####################################
 [plugins]
-enabled = true                        # Enable plugin system
+# Enabled plugins
+enabled = ["semantic-release", "conventional-changelog"]
 
-# Plugin configurations
-[[plugins.plugin_configs]]
-name = "semantic-release"             # Plugin name
-enabled = true                        # Whether this plugin is enabled
-config = { "branches" = ["main"] }    # Plugin-specific configuration
+# Plugin directories
+plugin_dirs = ["./plugins", "./node_modules/.plugins"]
 
-[[plugins.plugin_configs]]
-name = "conventional-changelog"
+# Plugin-specific configurations
+[plugins.configs]
+semantic-release = { branches = ["main"] }
+conventional-changelog = { preset = "angular" }
+
+#####################################
+# Workspace Configuration
+#####################################
+[workspace]
+# Whether to merge custom patterns with auto-detected ones
+merge_with_detected = true
+
+# Custom workspace patterns
+[[workspace.patterns]]
+pattern = "packages/*"
+description = "Main packages directory"
 enabled = true
-config = { "preset" = "angular" }
+priority = 100
+package_managers = ["npm", "yarn", "pnpm"]
+environments = ["development", "staging", "production"]
+
+[workspace.patterns.options]
+include_nested = true
+max_depth = 2
+exclude_patterns = ["**/node_modules", "**/dist"]
+follow_symlinks = false
+override_detection = false
+
+# Workspace validation rules
+[workspace.validation]
+require_pattern_matches = false
+warn_orphaned_packages = true
+validate_naming = false
+naming_patterns = ["@company/*"]
+validate_structure = false
+required_files = ["package.json"]
+
+# Package discovery settings
+[workspace.discovery]
+auto_detect = true
+scan_common_patterns = true
+common_patterns = ["packages/*", "apps/*", "libs/*", "services/*", "tools/*", "modules/*"]
+exclude_directories = ["node_modules", ".git", "dist", "build", "coverage"]
+max_scan_depth = 3
+cache_results = true
+cache_duration = 300
+
+# Package manager specific configurations
+[workspace.package_manager_configs]
+# npm configuration
+[workspace.package_manager_configs.npm]
+workspaces_override = ["packages/*"]
+use_workspaces = true
+options = { fund = false }
+
+# Yarn configuration
+[workspace.package_manager_configs.yarn]
+workspaces_override = ["packages/*"]
+nohoist_patterns = ["**/react-native", "**/react-native/**"]
+use_workspaces = true
+version = "classic"                   # "classic" | "berry" | "auto"
+options = { silent = true }
+
+# pnpm configuration
+[workspace.package_manager_configs.pnpm]
+packages_override = ["packages/*"]
+use_workspaces = true
+filter_options = ["--filter", "!docs"]
+options = { shamefully_hoist = false }
+
+# bun configuration
+[workspace.package_manager_configs.bun]
+workspaces_override = ["packages/*"]
+use_workspaces = true
+options = { install_optional = false }
+
+#####################################
+# Git Configuration
+#####################################
+[git]
+# Default reference for change detection
+default_since_ref = "HEAD~1"
+
+# Default target for comparisons
+default_until_ref = "HEAD"
+
+# Remote name for push operations
+default_remote = "origin"
+
+# Branch configuration
+[git.branches]
+main_branches = ["main", "master", "trunk", "develop"]
+develop_branches = ["develop", "dev", "development"]
+release_prefixes = ["release/", "releases/", "rel/"]
+feature_prefixes = ["feature/", "feat/", "features/"]
+hotfix_prefixes = ["hotfix/", "fix/", "bugfix/"]
+default_base_branch = "main"
+
+# Repository hosting configuration
+[git.repository]
+provider = "github"                   # "github" | "gitlab" | "bitbucket" | "azure_devops" | "custom"
+base_url = "github.com"
+auto_detect = true
+url_override = "https://github.com/company/repo"
+
+[git.repository.url_patterns]
+commit_url = "https://{base_url}/{owner}/{repo}/commit/{hash}"
+compare_url = "https://{base_url}/{owner}/{repo}/compare/{from}...{to}"
+
+#####################################
+# Validation Configuration
+#####################################
+[validation]
+# Task priority configuration
+[validation.task_priorities]
+low = 0
+normal = 50
+high = 100
+critical = 200
+
+# Change detection rules
+[validation.change_detection_rules]
+dependency_changes_priority = 100
+source_code_changes_priority = 80
+configuration_changes_priority = 70
+test_changes_priority = 60
+documentation_changes_priority = 50
+
+# Version bump rules
+[validation.version_bump_rules]
+breaking_changes_priority = 100
+feature_changes_priority = 80
+dependency_changes_priority = 70
+patch_changes_priority = 60
+
+# Quality gates
+[validation.quality_gates]
+min_test_coverage = 80.0
+max_cyclomatic_complexity = 10
+max_file_size_bytes = 100000
+max_lines_per_file = 1000
+max_dependencies_per_package = 50
+min_documentation_coverage = 70.0
 
 #####################################
 # Environment Configuration
 #####################################
 # Define deployment environments
-environments = [
-    "development",                    # Development environment
-    "staging",                        # Staging environment  
-    "integration",                    # Integration testing environment
-    "production"                      # Production environment
-]
-
-# Environment-specific configurations
-[environments.development]
-auto_deploy = true                    # Auto-deploy to development
-require_approval = false              # No approval required
-run_tests = true                      # Run tests before deploy
-
-[environments.staging]
-auto_deploy = false                   # Manual deploy to staging
-require_approval = true               # Require approval
-run_tests = true                      # Run tests before deploy
-approval_count = 1                    # Number of approvals required
-
-[environments.production]
-auto_deploy = false                   # Manual deploy to production
-require_approval = true               # Require approval
-run_tests = true                      # Run tests before deploy
-approval_count = 2                    # Number of approvals required
-require_changeset = true              # Require changeset for production
+environments = ["development", "staging", "integration", "production"]
 ```
 
 ## Configuration Sections Explained
-
-### 📁 Workspace Configuration
-
-Controls package discovery and workspace management:
-
-- **`patterns`**: Define where packages are located using glob patterns
-- **`merge_with_detected`**: Whether to combine custom patterns with auto-detected ones
-- **`discovery`**: Settings for automatic package discovery
-- **`validation`**: Rules for validating workspace structure
 
 ### 🔄 Versioning Configuration
 
 Manages how versions are bumped and propagated:
 
-- **`strategy`**: How versions are managed across packages (`independent`, `fixed`, `fixed-group`)
-- **`auto_bump_dependents`**: Whether dependent packages are automatically bumped
-- **`dependent_bump_strategy`**: How dependent packages are bumped (`inherit`, `patch`, `minor`, `none`)
-- **`prerelease`**: Configuration for pre-release versions
+- **`default_bump`**: Default version bump type (`major`, `minor`, `patch`, `snapshot`)
+- **`propagate_changes`**: Whether to propagate version changes to dependents
+- **`snapshot_format`**: Template for snapshot version generation
+- **`tag_prefix`**: Prefix for Git tags (e.g., "v" for v1.0.0)
+- **`auto_tag`**: Whether to create Git tags automatically
 
 ### 🎯 Task Configuration
 
 Controls task execution across packages:
 
-- **`default_timeout`**: Global timeout for all tasks
-- **`max_concurrent`**: Number of tasks that can run simultaneously
-- **`execution_mode`**: How tasks are executed (`parallel`, `sequential`, `dependency`)
-- **`task_configs`**: Specific configuration for individual tasks
-- **`conditions`**: When tasks should run (file changes, environments, package types)
-
-### 🪝 Hooks Configuration
-
-Git hooks integration for automated quality gates:
-
-- **`pre_commit`**: Validates changesets and runs quality checks before commits
-- **`pre_push`**: Runs comprehensive tests before pushing to remote
-- **`post_merge`**: Automates changeset application and changelog generation after merges
+- **`default_tasks`**: Tasks to run when packages change
+- **`parallel`**: Whether to run tasks in parallel
+- **`max_concurrent`**: Maximum number of concurrent tasks
+- **`timeout`**: Global timeout for task execution
+- **`groups`**: Logical groupings of related tasks
+- **`deployment_tasks`**: Environment-specific task definitions
+- **`performance`**: Timing and performance optimizations
 
 ### 📝 Changelog Configuration
 
 Controls automated changelog generation:
 
-- **`format`**: Output format (`markdown`, `json`, `html`)
-- **`sections`**: How to organize changelog entries
-- **`commit_types`**: Configuration for different types of commits
-- **`include_all_commits`**: Whether to include all commits or only conventional ones
+- **`grouping`**: How to group commits (`type`, `scope`, `none`)
+- **`output_format`**: Output format (`markdown`, `text`, `json`)
+- **`include_breaking_changes`**: Whether to include breaking changes section
+- **`conventional_commit_types`**: Mapping of commit types to display names
+- **`template`**: Customizable templates for changelog sections
+
+### 🪝 Hooks Configuration
+
+Git hooks integration for automated quality gates:
+
+- **`enabled`**: Whether hooks are globally enabled
+- **`hooks_dir`**: Directory for custom hook scripts
+- **`pre_commit`**: Pre-commit validation and task execution
+- **`pre_push`**: Pre-push testing and validation
+- **`post_merge`**: Post-merge automation and cleanup
 
 ### 📦 Changesets Configuration
 
 Manages the changeset lifecycle:
 
 - **`required`**: Whether changesets are mandatory for changes
-- **`auto_deploy`**: Whether to automatically deploy changesets on merge
-- **`validate_format`**: Whether to validate changeset file format
-- **`required_environments`**: Which environments require changesets
+- **`changeset_dir`**: Directory to store changeset files
+- **`default_environments`**: Default environments for new changesets
+- **`auto_deploy`**: Whether to automatically deploy changesets
+- **`filename_format`**: Template for changeset filenames
+
+### 🔌 Plugin System Configuration
+
+Simple plugin system for extensibility:
+
+- **`enabled`**: List of enabled plugins
+- **`plugin_dirs`**: Directories to search for plugins
+- **`configs`**: Plugin-specific configuration objects
+
+### 📁 Workspace Configuration
+
+Controls package discovery and workspace management:
+
+- **`patterns`**: Custom workspace patterns for package discovery
+- **`merge_with_detected`**: Whether to combine custom patterns with auto-detected ones
+- **`validation`**: Rules for validating workspace structure
+- **`discovery`**: Settings for automatic package discovery
+- **`package_manager_configs`**: Package manager specific configurations
+
+### 🔧 Git Configuration
+
+Git operations and repository management:
+
+- **`default_since_ref`**: Default reference for change detection
+- **`default_until_ref`**: Default target for comparisons
+- **`default_remote`**: Remote name for push operations
+- **`branches`**: Branch classification and naming patterns
+- **`repository`**: Repository hosting provider configuration
 
 ### 🔒 Validation Configuration
 
-Quality gates and code standards:
+Quality gates and validation rules:
 
-- **`quality_gates`**: Minimum standards that must be met
-- **`code_quality`**: Code formatting and linting requirements  
-- **`security`**: Security validation and vulnerability management
+- **`task_priorities`**: Priority levels for different task types
+- **`change_detection_rules`**: Rules for analyzing change significance
+- **`version_bump_rules`**: Rules for determining version bump types
+- **`quality_gates`**: Minimum quality standards that must be met
 
 ## Project Management
 
