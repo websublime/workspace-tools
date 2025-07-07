@@ -31,8 +31,8 @@ use std::{
 
 use sublime_standard_tools::{
     command::{
-        CommandBuilder, CommandExecutor, CommandPriority, CommandQueue, CommandQueueConfig,
-        DefaultCommandExecutor, StreamConfig,
+        CommandBuilder, CommandPriority, CommandQueue, CommandQueueConfig, DefaultCommandExecutor,
+        Executor, StreamConfig,
     },
     error::{Error, Result},
     filesystem::{FileSystem, FileSystemManager, NodePathKind, PathExt, PathUtils},

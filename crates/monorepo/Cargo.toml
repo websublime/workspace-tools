@@ -1,0 +1,52 @@
+[package]
+name = "sublime_monorepo_tools"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Streamlined library for CLI/daemon Node.js monorepo management"
+documentation = "https://docs.rs/sublime_monorepo_tools"
+readme = "README.md"
+keywords = ["nodejs", "monorepo", "cli", "daemon", "analysis"]
+categories = ["development-tools", "command-line-utilities"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sublime_standard_tools = { workspace = true }
+sublime_git_tools = { workspace = true }
+sublime_package_tools = { workspace = true }
+
+thiserror = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+log = { workspace = true }
+uuid = { version = "1.2", features = ["v4", "v5", "serde"] }
+toml = "0.8.22"
+serde_yaml = "0.9"
+chrono = { version = "0.4", features = ["serde"] }
+semver = "1.0"
+dirs = "5.0"
+regex = "1.10"
+glob = "0.3"
+
+[dev-dependencies]
+rstest = "0.25.0"
+tempfile = "3.19.1"
+# Beautiful terminal output for examples
+console = "0.15"
+indicatif = "0.17"
+tabled = "0.16"
+# For snapshot version generation
+uuid = { version = "1.11", features = ["v4"] }

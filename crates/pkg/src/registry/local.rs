@@ -3,8 +3,8 @@
 //! This module provides a local in-memory package registry implementation, primarily
 //! useful for testing and simulating registry behavior without network calls.
 
-use crate::{PackageRegistry, PackageRegistryError};
 use crate::package::registry::PackageRegistryClone;
+use crate::{errors::PackageRegistryError, PackageRegistry};
 use semver::Version;
 use serde_json::{json, Value};
 use std::{
@@ -138,7 +138,8 @@ impl PackageRegistry for LocalRegistry {
                     0x00, 0x00, 0x00, 0x00, // timestamp
                     0x00, 0xff, // extra flags
                     // Mock tar content would follow here
-                    0x70, 0x61, 0x63, 0x6b, 0x61, 0x67, 0x65, 0x2e, 0x6a, 0x73, 0x6f, 0x6e, // "package.json"
+                    0x70, 0x61, 0x63, 0x6b, 0x61, 0x67, 0x65, 0x2e, 0x6a, 0x73, 0x6f,
+                    0x6e, // "package.json"
                 ];
                 Ok(mock_tarball)
             } else {
@@ -198,24 +199,36 @@ impl PackageRegistry for LocalRegistry {
         }
 
         // Create a mock package.json file
-        let package_info = packages.get(package_name)
+        let package_info = packages
+            .get(package_name)
             .and_then(|versions| versions.get(version))
             .cloned()
-            .unwrap_or_else(|| json!({
-                "name": package_name,
-                "version": version,
-                "_note": "Mock package created by LocalRegistry"
-            }));
+            .unwrap_or_else(|| {
+                json!({
+                    "name": package_name,
+                    "version": version,
+                    "_note": "Mock package created by LocalRegistry"
+                })
+            });
 
         let package_json_path = package_dir.join("package.json");
-        if let Err(e) = fs::write(&package_json_path, serde_json::to_string_pretty(&package_info).unwrap()) {
-            return Err(PackageRegistryError::ExtractionFailure {
+        let package_json_content = serde_json::to_string_pretty(&package_info).map_err(|e| {
+            PackageRegistryError::ExtractionFailure {
+                package_name: package_name.to_string(),
+                version: version.to_string(),
+                destination: destination.display().to_string(),
+                source: std::io::Error::new(std::io::ErrorKind::InvalidData, e),
+            }
+        })?;
+
+        fs::write(&package_json_path, package_json_content).map_err(|e| {
+            PackageRegistryError::ExtractionFailure {
                 package_name: package_name.to_string(),
                 version: version.to_string(),
                 destination: destination.display().to_string(),
                 source: e,
-            });
-        }
+            }
+        })?;
 
         Ok(())
     }
@@ -243,6 +256,11 @@ impl LocalRegistry {
     ///
     /// `Ok(())` if the package was added successfully, or a `PackageRegistryError` if the operation fails.
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The internal lock for the package storage fails
+    ///
     /// # Examples
     ///
     /// ```
@@ -251,7 +269,7 @@ impl LocalRegistry {
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let registry = LocalRegistry::default();
-    /// 
+    ///
     /// // Add a package version
     /// registry.add_package_version(
     ///     "react",
@@ -275,19 +293,19 @@ impl LocalRegistry {
         metadata: Option<Value>,
     ) -> Result<(), PackageRegistryError> {
         let mut packages = self.packages.lock()?;
-        
+
         let package_metadata = metadata.unwrap_or_else(|| {
             json!({
                 "name": package_name,
                 "version": version
             })
         });
-        
+
         packages
             .entry(package_name.to_string())
             .or_default()
             .insert(version.to_string(), package_metadata);
-        
+
         Ok(())
     }
 
@@ -304,6 +322,12 @@ impl LocalRegistry {
     ///
     /// `Ok(())` if all versions were added successfully, or a `PackageRegistryError` if any operation fails.
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The internal lock for the package storage fails
+    /// - Any individual package version addition fails
+    ///
     /// # Examples
     ///
     /// ```
@@ -311,7 +335,7 @@ impl LocalRegistry {
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let registry = LocalRegistry::default();
-    /// 
+    ///
     /// // Add multiple versions at once
     /// registry.add_package_versions("lodash", &["4.17.20", "4.17.21"])?;
     ///
@@ -340,6 +364,11 @@ impl LocalRegistry {
     ///
     /// `Ok(())` if the registry was cleared successfully, or a `PackageRegistryError` if the operation fails.
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The internal lock for the package storage fails
+    ///
     /// # Examples
     ///
     /// ```
@@ -347,7 +376,7 @@ impl LocalRegistry {
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let registry = LocalRegistry::default();
-    /// 
+    ///
     /// // Add some packages
     /// registry.add_package_version("react", "18.2.0", None)?;
     /// registry.add_package_version("lodash", "4.17.21", None)?;
@@ -377,6 +406,11 @@ impl LocalRegistry {
     ///
     /// `Ok(true)` if the package exists, `Ok(false)` if it doesn't, or a `PackageRegistryError` if the operation fails.
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The internal lock for the package storage fails
+    ///
     /// # Examples
     ///
     /// ```
@@ -384,9 +418,9 @@ impl LocalRegistry {
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let registry = LocalRegistry::default();
-    /// 
+    ///
     /// assert!(!registry.has_package("react")?);
-    /// 
+    ///
     /// registry.add_package_version("react", "18.2.0", None)?;
     /// assert!(registry.has_package("react")?);
     /// # Ok(())

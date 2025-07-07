@@ -1,7 +1,7 @@
 //! # Monorepo Descriptor Implementation
 //!
 //! ## What
-//! This file implements the MonorepoDescriptor struct, providing methods to
+//! This file implements the `MonorepoDescriptor` struct, providing methods to
 //! analyze and query monorepo structures, packages, and dependencies.
 //!
 //! ## How
@@ -20,7 +20,7 @@ use std::{
 };
 
 impl MonorepoDescriptor {
-    /// Creates a new MonorepoDescriptor instance.
+    /// Creates a new `MonorepoDescriptor` instance.
     ///
     /// # Arguments
     ///
@@ -30,7 +30,7 @@ impl MonorepoDescriptor {
     ///
     /// # Returns
     ///
-    /// A new MonorepoDescriptor instance with the provided properties.
+    /// A new `MonorepoDescriptor` instance with the provided properties.
     ///
     /// # Examples
     ///
@@ -49,6 +49,7 @@ impl MonorepoDescriptor {
     ///     packages
     /// );
     /// ```
+    #[must_use]
     pub fn new(kind: MonorepoKind, root: PathBuf, packages: Vec<WorkspacePackage>) -> Self {
         // Build name-to-package map for quick lookups
         let mut name_to_package = HashMap::new();
@@ -64,7 +65,7 @@ impl MonorepoDescriptor {
     ///
     /// # Returns
     ///
-    /// A reference to the MonorepoKind indicating what type of monorepo this is.
+    /// A reference to the `MonorepoKind` indicating what type of monorepo this is.
     ///
     /// # Examples
     ///
@@ -116,7 +117,7 @@ impl MonorepoDescriptor {
     ///
     /// # Returns
     ///
-    /// A slice containing all WorkspacePackage instances in the monorepo.
+    /// A slice containing all `WorkspacePackage` instances in the monorepo.
     ///
     /// # Examples
     ///
@@ -186,7 +187,7 @@ impl MonorepoDescriptor {
     ///
     /// # Returns
     ///
-    /// A HashMap mapping package names to vectors of their dependent packages.
+    /// A `HashMap` mapping package names to vectors of their dependent packages.
     ///
     /// # Examples
     ///
@@ -265,7 +266,7 @@ impl MonorepoDescriptor {
     ///
     /// # Returns
     ///
-    /// A vector of references to the WorkspacePackage objects that the
+    /// A vector of references to the `WorkspacePackage` objects that the
     /// specified package depends on.
     ///
     /// # Examples

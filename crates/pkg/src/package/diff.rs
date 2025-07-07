@@ -17,7 +17,7 @@ use std::{
     fmt,
 };
 
-use crate::{ChangeType, DependencyChange, Package, PackageError};
+use crate::{errors::PackageError, ChangeType, DependencyChange, Package};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 
@@ -259,18 +259,14 @@ impl PackageDiff {
         let mut curr_deps = HashMap::new();
 
         // Fill the previous dependencies map
-        for dep_rc in previous.dependencies() {
-            let dep = dep_rc.borrow();
-
+        for dep in previous.dependencies() {
             if let Ok(fixed_version) = dep.fixed_version() {
                 prev_deps.insert(dep.name().to_string(), fixed_version.to_string());
             }
         }
 
         // Fill the current dependencies map
-        for dep_rc in current.dependencies() {
-            let dep = dep_rc.borrow();
-
+        for dep in current.dependencies() {
             if let Ok(fixed_version) = dep.fixed_version() {
                 curr_deps.insert(dep.name().to_string(), fixed_version.to_string());
             }
@@ -365,6 +361,7 @@ impl PackageDiff {
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn count_breaking_changes(&self) -> usize {
         self.dependency_changes.iter().filter(|c| c.breaking).count()
     }
@@ -417,6 +414,7 @@ impl PackageDiff {
     /// # Ok(())
     /// # }
     /// ```
+    #[must_use]
     pub fn count_changes_by_type(&self) -> HashMap<ChangeType, usize> {
         let mut counts = HashMap::new();
 

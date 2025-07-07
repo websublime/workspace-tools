@@ -19,9 +19,39 @@ mod tests {
     #[cfg(not(windows))]
     use std::fs::set_permissions;
 
+    /// Test workspace that automatically cleans up on drop
+    struct TestWorkspace {
+        path: PathBuf,
+    }
+
+    impl TestWorkspace {
+        fn new() -> Result<Self, std::io::Error> {
+            let path = create_workspace()?;
+            Ok(Self { path })
+        }
+
+        fn path(&self) -> &PathBuf {
+            &self.path
+        }
+    }
+
+    impl Drop for TestWorkspace {
+        fn drop(&mut self) {
+            if self.path.exists() {
+                let _ = remove_dir_all(&self.path);
+            }
+        }
+    }
+
     fn create_workspace() -> Result<PathBuf, std::io::Error> {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+
         let temp_dir = temp_dir();
-        let monorepo_root_dir = temp_dir.join("monorepo-workspace");
+        let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let timestamp =
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let monorepo_root_dir = temp_dir.join(format!("monorepo-workspace-{counter}-{timestamp}"));
 
         if monorepo_root_dir.exists() {
             remove_dir_all(&monorepo_root_dir)?;
@@ -61,7 +91,8 @@ mod tests {
 
     #[test]
     fn test_create_branch() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
@@ -74,7 +105,8 @@ mod tests {
 
     #[test]
     fn test_list_branches() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
@@ -90,7 +122,8 @@ mod tests {
 
     #[test]
     fn test_list_config() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         let config = repo.config("Sublime Git Bot", "git-boot@websublime.com")?.list_config()?;
@@ -102,7 +135,8 @@ mod tests {
 
     #[test]
     fn test_checkout_branch() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
@@ -118,7 +152,8 @@ mod tests {
 
     #[test]
     fn test_get_current_branch() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
@@ -131,7 +166,8 @@ mod tests {
 
     #[test]
     fn test_get_last_tag() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
@@ -146,7 +182,8 @@ mod tests {
 
     #[test]
     fn test_get_current_sha() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
@@ -159,7 +196,8 @@ mod tests {
 
     #[test]
     fn test_commit_changes() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
@@ -179,7 +217,8 @@ mod tests {
 
     #[test]
     fn test_add_all() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
@@ -198,7 +237,8 @@ mod tests {
 
     #[test]
     fn test_get_previous_sha_without_parent() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         let parent_sha = repo.get_previous_sha()?;
@@ -210,7 +250,8 @@ mod tests {
 
     #[test]
     fn test_get_previous_sha() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
 
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
@@ -231,7 +272,8 @@ mod tests {
 
     #[test]
     fn test_status() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
 
@@ -248,7 +290,8 @@ mod tests {
 
     #[test]
     fn test_get_branch_from_commit() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
 
@@ -265,8 +308,10 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::panic)]
     fn test_get_all_files_changed_since_sha_with_status() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
 
@@ -328,6 +373,10 @@ mod tests {
                     has_deleted = true;
                     assert!(change.path.contains("TEMP_FILE.md"));
                 }
+                GitFileStatus::Untracked => {
+                    // Untracked files should not be in the result
+                    panic!("Unexpected untracked file in changes: {}", change.path);
+                }
             }
         }
 
@@ -341,7 +390,8 @@ mod tests {
 
     #[test]
     fn test_get_all_files_changed_since_sha() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
 
@@ -387,7 +437,8 @@ mod tests {
 
     #[test]
     fn test_get_commits_since() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
 
@@ -474,7 +525,8 @@ mod tests {
 
     #[test]
     fn test_get_local_tags() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
 
@@ -512,7 +564,8 @@ mod tests {
     #[test]
     #[allow(clippy::items_after_statements)]
     fn test_get_all_files_changed_since_branch() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
 
@@ -656,7 +709,8 @@ mod tests {
 
     #[test]
     fn test_get_all_files_changed_since_branch_with_duplicates() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
 
@@ -719,7 +773,8 @@ mod tests {
 
     #[test]
     fn test_get_diverged_commit() -> Result<(), RepoError> {
-        let workspace_path = &create_workspace().unwrap();
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
         let repo = Repo::create(workspace_path.display().to_string().as_str())?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
 

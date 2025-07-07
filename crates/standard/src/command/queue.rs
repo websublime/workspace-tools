@@ -37,12 +37,12 @@ use tokio::{
 use crate::error::{Error, Result};
 
 use super::{
-    executor::CommandExecutor,
+    executor::Executor,
     types::{
         CommandOutput, CommandPriority, CommandQueue, CommandQueueConfig, CommandQueueResult,
-        CommandStatus, QueueMessage, QueueProcessor, QueuedCommand,
+        CommandStatus, DefaultCommandExecutor, QueueMessage, QueueProcessor, QueuedCommand,
     },
-    Command, DefaultCommandExecutor,
+    Command,
 };
 
 impl Default for CommandPriority {
@@ -322,7 +322,7 @@ impl CommandQueue {
     /// let queue = CommandQueue::with_executor(executor);
     /// ```
     #[must_use]
-    pub fn with_executor<E: CommandExecutor + 'static>(executor: E) -> Self {
+    pub fn with_executor<E: Executor + 'static>(executor: E) -> Self {
         Self {
             config: CommandQueueConfig::default(),
             executor: Arc::new(executor),
@@ -350,6 +350,9 @@ impl CommandQueue {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the queue is already started.
     pub fn start(mut self) -> Result<Self> {
         if self.queue_sender.is_some() {
             return Err(Error::operation("Command queue already started".to_string()));
@@ -396,6 +399,9 @@ impl CommandQueue {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the queue is not started or if the channel is closed.
     pub async fn enqueue(&self, command: Command, priority: CommandPriority) -> Result<String> {
         let Some(sender) = &self.queue_sender else {
             return Err(Error::operation("Command queue not started".to_string()));
@@ -440,7 +446,7 @@ impl CommandQueue {
     ///
     /// # Arguments
     ///
-    /// * `commands` - Vector of (Command, CommandPriority) tuples to enqueue
+    /// * `commands` - Vector of (Command, `CommandPriority`) tuples to enqueue
     ///
     /// # Returns
     ///
@@ -464,6 +470,9 @@ impl CommandQueue {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the queue is not started or if the channel is closed.
     pub async fn enqueue_batch(
         &self,
         commands: Vec<(Command, CommandPriority)>,
@@ -651,6 +660,9 @@ impl CommandQueue {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the command is not found or if the timeout is reached.
     pub async fn wait_for_command(
         &self,
         id: &str,
@@ -709,6 +721,9 @@ impl CommandQueue {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if unable to access command statuses or if timeout is reached.
     pub async fn wait_for_completion(&self) -> Result<()> {
         // Get all command IDs
         let command_ids = {
@@ -784,6 +799,9 @@ impl CommandQueue {
     /// # Ok(())
     /// # }
     /// ```
+    /// # Errors
+    ///
+    /// Returns an error if the queue was not started.
     pub async fn shutdown(&mut self) -> Result<()> {
         if let Some(sender) = self.queue_sender.take() {
             // Send shutdown message
@@ -841,7 +859,7 @@ impl QueueProcessor {
     fn new(
         config: CommandQueueConfig,
         receiver: Receiver<QueueMessage>,
-        executor: Arc<dyn CommandExecutor>,
+        executor: Arc<dyn Executor>,
         statuses: Arc<Mutex<HashMap<String, CommandStatus>>>,
         results: Arc<Mutex<HashMap<String, CommandQueueResult>>>,
     ) -> Self {
@@ -993,25 +1011,24 @@ impl QueueProcessor {
         // Launch the command execution in a separate task
         tokio::spawn(async move {
             // Acquire a permit from the semaphore
-            let permit = match semaphore.acquire().await {
-                Ok(permit) => permit,
-                Err(_) => {
-                    // Semaphore was closed
-                    if let Ok(mut statuses) = statuses.lock() {
-                        statuses.insert(id.clone(), CommandStatus::Failed);
-                    }
-
-                    if let Ok(mut results_map) = results.lock() {
-                        results_map.insert(
-                            id.clone(),
-                            CommandQueueResult::failure(
-                                id,
-                                "Failed to acquire execution permit".to_string(),
-                            ),
-                        );
-                    }
-                    return;
+            let permit = if let Ok(permit) = semaphore.acquire().await {
+                permit
+            } else {
+                // Semaphore was closed
+                if let Ok(mut statuses) = statuses.lock() {
+                    statuses.insert(id.clone(), CommandStatus::Failed);
                 }
+
+                if let Ok(mut results_map) = results.lock() {
+                    results_map.insert(
+                        id.clone(),
+                        CommandQueueResult::failure(
+                            id,
+                            "Failed to acquire execution permit".to_string(),
+                        ),
+                    );
+                }
+                return;
             };
 
             // Execute the command and hold the permit until completion

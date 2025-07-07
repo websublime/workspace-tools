@@ -1,11 +1,11 @@
 //! # Monorepo Kind Implementations
 //!
 //! ## What
-//! This file implements methods for the MonorepoKind enum, providing
+//! This file implements methods for the `MonorepoKind` enum, providing
 //! functionality to identify and work with different types of monorepos.
 //!
 //! ## How
-//! Methods are implemented on the MonorepoKind enum to provide information
+//! Methods are implemented on the `MonorepoKind` enum to provide information
 //! about each monorepo type, such as its name and configuration file.
 //!
 //! ## Why
@@ -68,6 +68,7 @@ impl MonorepoKind {
     /// let kind = MonorepoKind::PnpmWorkspaces;
     /// assert_eq!(kind.config_file(), "pnpm-workspace.yaml");
     /// ```
+    #[must_use]
     pub fn config_file(self) -> String {
         match self {
             MonorepoKind::YarnWorkspaces | MonorepoKind::NpmWorkSpace => {
@@ -92,7 +93,7 @@ impl MonorepoKind {
     ///
     /// # Returns
     ///
-    /// A new MonorepoKind::Custom variant with the specified properties.
+    /// A new `MonorepoKind::Custom` variant with the specified properties.
     ///
     /// # Examples
     ///

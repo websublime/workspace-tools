@@ -1,4 +1,4 @@
-//! # Error handling for sublime_standard_tools
+//! # Error handling for `sublime_standard_tools`
 //!
 //! ## What
 //! This module provides comprehensive error types for various operations within
@@ -25,4 +25,11 @@ mod tests;
 pub use types::{
     CommandError, CommandResult, Error, FileSystemError, FileSystemResult, MonorepoError,
     MonorepoResult, Result, WorkspaceError, WorkspaceResult,
+};
+
+// Short aliases to avoid module name repetitions in user code
+pub use types::{
+    CommandError as CmdError, CommandResult as CmdResult, FileSystemError as FsError,
+    FileSystemResult as FsResult, MonorepoError as RepoError, MonorepoResult as RepoResult,
+    WorkspaceError as WsError, WorkspaceResult as WsResult,
 };

@@ -78,6 +78,7 @@ pub struct PackageScopeMetadata {
 /// // Not a scoped package
 /// assert!(package_scope_name_version("regular-package").is_none());
 /// ```
+#[must_use]
 pub fn package_scope_name_version(pkg_name: &str) -> Option<PackageScopeMetadata> {
     // Must start with @ to be a scoped package
     if !pkg_name.starts_with('@') {

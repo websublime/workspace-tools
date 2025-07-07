@@ -1,7 +1,7 @@
 //! # Project Management Implementation
 //!
 //! ## What
-//! This file implements functionality for the Project and ProjectManager structs,
+//! This file implements functionality for the Project and `ProjectManager` structs,
 //! providing methods to detect, validate, and work with Node.js projects.
 //!
 //! ## How
@@ -28,11 +28,11 @@ impl Default for ProjectConfig {
 }
 
 impl ProjectConfig {
-    /// Creates a new ProjectConfig with default values.
+    /// Creates a new `ProjectConfig` with default values.
     ///
     /// # Returns
     ///
-    /// A new ProjectConfig with default settings:
+    /// A new `ProjectConfig` with default settings:
     /// - No specified root (uses current directory)
     /// - Package manager detection enabled
     /// - Structure validation enabled
@@ -235,7 +235,7 @@ impl Project {
     ///
     /// # Returns
     ///
-    /// A reference to the ProjectValidationStatus indicating the validation state.
+    /// A reference to the `ProjectValidationStatus` indicating the validation state.
     ///
     /// # Examples
     ///
@@ -302,11 +302,11 @@ impl Default for ProjectManager<FileSystemManager> {
 }
 
 impl ProjectManager<FileSystemManager> {
-    /// Creates a new ProjectManager instance with the default filesystem implementation.
+    /// Creates a new `ProjectManager` instance with the default filesystem implementation.
     ///
     /// # Returns
     ///
-    /// A new ProjectManager instance using the FileSystemManager.
+    /// A new `ProjectManager` instance using the `FileSystemManager`.
     ///
     /// # Examples
     ///
@@ -322,7 +322,7 @@ impl ProjectManager<FileSystemManager> {
 }
 
 impl<F: FileSystem> ProjectManager<F> {
-    /// Creates a new ProjectManager with a custom filesystem implementation.
+    /// Creates a new `ProjectManager` with a custom filesystem implementation.
     ///
     /// # Arguments
     ///
@@ -330,7 +330,7 @@ impl<F: FileSystem> ProjectManager<F> {
     ///
     /// # Returns
     ///
-    /// A new ProjectManager instance using the provided filesystem.
+    /// A new `ProjectManager` instance using the provided filesystem.
     ///
     /// # Examples
     ///
@@ -355,6 +355,14 @@ impl<F: FileSystem> ProjectManager<F> {
     ///
     /// * `path` - The path to analyze for a Node.js project
     /// * `config` - Configuration options for project detection
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if:
+    /// - The path does not exist or cannot be accessed
+    /// - The package.json file exists but cannot be parsed
+    /// - The path is not a valid Node.js project
+    /// - An I/O error occurs while reading project files
     ///
     /// # Returns
     ///
@@ -415,11 +423,18 @@ impl<F: FileSystem> ProjectManager<F> {
     /// This method checks various aspects of the project structure such as:
     /// - Presence and validity of package.json
     /// - Consistency of the detected package manager with lock files
-    /// - Existence of node_modules (if the project has dependencies)
+    /// - Existence of `node_modules` (if the project has dependencies)
     ///
     /// # Arguments
     ///
     /// * `project` - A mutable reference to the Project to validate
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if:
+    /// - An I/O error occurs while reading project files
+    /// - Configuration files cannot be parsed
+    /// - The filesystem cannot be accessed
     ///
     /// # Returns
     ///

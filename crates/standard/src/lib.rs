@@ -1,4 +1,4 @@
-//! # sublime_standard_tools
+//! # `sublime_standard_tools`
 //!
 //! A comprehensive toolkit for working with Node.js projects from Rust applications.
 //!

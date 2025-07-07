@@ -1,5 +1,5 @@
 use git2::{Error as Git2Error, Repository};
-use std::{path::PathBuf, rc::Rc};
+use std::path::PathBuf;
 use thiserror::Error;
 
 /// Represents a Git repository with high-level operation methods
@@ -22,9 +22,8 @@ use thiserror::Error;
 /// repo.add_all().expect("Failed to stage changes");
 /// let commit_id = repo.commit("feat: add new feature").expect("Failed to commit");
 /// ```
-#[derive(Clone)]
 pub struct Repo {
-    pub(crate) repo: Rc<Repository>,
+    pub(crate) repo: Repository,
     pub(crate) local_path: PathBuf,
 }
 
@@ -42,7 +41,7 @@ pub struct Repo {
 ///     GitFileStatus::Deleted => println!("File was deleted"),
 /// }
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GitFileStatus {
     /// File has been added to the repository
     Added,
@@ -50,9 +49,11 @@ pub enum GitFileStatus {
     Modified,
     /// File has been deleted
     Deleted,
+    /// File is untracked (not in the repository)
+    Untracked,
 }
 
-/// Represents a changed file in the Git repository
+/// Represents a changed file in the Git repository with staging information
 ///
 /// # Examples
 ///
@@ -62,6 +63,8 @@ pub enum GitFileStatus {
 /// let file = GitChangedFile {
 ///     path: "src/main.rs".to_string(),
 ///     status: GitFileStatus::Modified,
+///     staged: true,
+///     workdir: false,
 /// };
 ///
 /// println!("Changed file: {} ({})", file.path,
@@ -69,15 +72,24 @@ pub enum GitFileStatus {
 ///         GitFileStatus::Added => "added",
 ///         GitFileStatus::Modified => "modified",
 ///         GitFileStatus::Deleted => "deleted",
+///         GitFileStatus::Untracked => "untracked",
 ///     }
 /// );
+///
+/// if file.staged {
+///     println!("File is staged for commit");
+/// }
 /// ```
 #[derive(Debug, Clone)]
 pub struct GitChangedFile {
     /// The path to the changed file
     pub path: String,
-    /// The status of the file (Added, Modified, or Deleted)
+    /// The status of the file (Added, Modified, Deleted, or Untracked)
     pub status: GitFileStatus,
+    /// Whether the file is staged in the index
+    pub staged: bool,
+    /// Whether the file has changes in the working directory
+    pub workdir: bool,
 }
 
 /// Represents a commit in the Git repository

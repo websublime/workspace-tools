@@ -1,7 +1,5 @@
 #[cfg(test)]
 mod graph_tests {
-    use std::cell::RefCell;
-    use std::rc::Rc;
     use sublime_package_tools::{
         build_dependency_graph_from_packages, generate_ascii, generate_dot, Dependency, DotOptions,
         Package, Step, ValidationIssue, ValidationOptions, ValidationReport,
@@ -10,28 +8,28 @@ mod graph_tests {
     // Helper function to create test packages
     fn create_test_packages() -> Vec<Package> {
         let mut packages = Vec::new();
+        let mut registry = sublime_package_tools::DependencyRegistry::new();
 
         // Package A depends on B and C
-        let pkg_a = Package::new(
+        let pkg_a = Package::new_with_registry(
             "pkg-a",
             "1.0.0",
-            Some(vec![
-                Rc::new(RefCell::new(Dependency::new("pkg-b", "^1.0.0").unwrap())),
-                Rc::new(RefCell::new(Dependency::new("pkg-c", "^1.0.0").unwrap())),
-            ]),
+            Some(vec![("pkg-b", "^1.0.0"), ("pkg-c", "^1.0.0")]),
+            &mut registry,
         )
         .unwrap();
 
         // Package B depends on C
-        let pkg_b = Package::new(
+        let pkg_b = Package::new_with_registry(
             "pkg-b",
             "1.0.0",
-            Some(vec![Rc::new(RefCell::new(Dependency::new("pkg-c", "^1.0.0").unwrap()))]),
+            Some(vec![("pkg-c", "^1.0.0")]),
+            &mut registry,
         )
         .unwrap();
 
         // Package C has no dependencies
-        let pkg_c = Package::new("pkg-c", "1.0.0", None).unwrap();
+        let pkg_c = Package::new_with_registry("pkg-c", "1.0.0", None, &mut registry).unwrap();
 
         packages.push(pkg_a);
         packages.push(pkg_b);
@@ -43,28 +41,32 @@ mod graph_tests {
     // Helper function to create packages with circular dependencies
     fn create_circular_packages() -> Vec<Package> {
         let mut packages = Vec::new();
+        let mut registry = sublime_package_tools::DependencyRegistry::new();
 
         // Package X depends on Y
-        let pkg_x = Package::new(
+        let pkg_x = Package::new_with_registry(
             "pkg-x",
             "1.0.0",
-            Some(vec![Rc::new(RefCell::new(Dependency::new("pkg-y", "^1.0.0").unwrap()))]),
+            Some(vec![("pkg-y", "^1.0.0")]),
+            &mut registry,
         )
         .unwrap();
 
         // Package Y depends on Z
-        let pkg_y = Package::new(
+        let pkg_y = Package::new_with_registry(
             "pkg-y",
             "1.0.0",
-            Some(vec![Rc::new(RefCell::new(Dependency::new("pkg-z", "^1.0.0").unwrap()))]),
+            Some(vec![("pkg-z", "^1.0.0")]),
+            &mut registry,
         )
         .unwrap();
 
         // Package Z depends on X (creating a cycle)
-        let pkg_z = Package::new(
+        let pkg_z = Package::new_with_registry(
             "pkg-z",
             "1.0.0",
-            Some(vec![Rc::new(RefCell::new(Dependency::new("pkg-x", "^1.0.0").unwrap()))]),
+            Some(vec![("pkg-x", "^1.0.0")]),
+            &mut registry,
         )
         .unwrap();
 
@@ -120,10 +122,12 @@ mod graph_tests {
         let mut packages = create_test_packages();
 
         // Add a package with external dependency
-        let pkg_d = Package::new(
+        let mut registry = sublime_package_tools::DependencyRegistry::new();
+        let pkg_d = Package::new_with_registry(
             "pkg-d",
             "1.0.0",
-            Some(vec![Rc::new(RefCell::new(Dependency::new("external-pkg", "^1.0.0").unwrap()))]),
+            Some(vec![("external-pkg", "^1.0.0")]),
+            &mut registry,
         )
         .unwrap();
         packages.push(pkg_d);
@@ -140,25 +144,28 @@ mod graph_tests {
     #[test]
     fn test_find_version_conflicts() {
         let mut packages = Vec::new();
+        let mut registry = sublime_package_tools::DependencyRegistry::new();
 
         // Package A depends on C v1.0.0
-        let pkg_a = Package::new(
+        let pkg_a = Package::new_with_registry(
             "pkg-a",
             "1.0.0",
-            Some(vec![Rc::new(RefCell::new(Dependency::new("pkg-c", "^1.0.0").unwrap()))]),
+            Some(vec![("pkg-c", "^1.0.0")]),
+            &mut registry,
         )
         .unwrap();
 
         // Package B depends on C v2.0.0 (conflict)
-        let pkg_b = Package::new(
+        let pkg_b = Package::new_with_registry(
             "pkg-b",
             "1.0.0",
-            Some(vec![Rc::new(RefCell::new(Dependency::new("pkg-c", "^2.0.0").unwrap()))]),
+            Some(vec![("pkg-c", "^2.0.0")]),
+            &mut registry,
         )
         .unwrap();
 
         // Package C v1.0.0
-        let pkg_c = Package::new("pkg-c", "1.0.0", None).unwrap();
+        let pkg_c = Package::new_with_registry("pkg-c", "1.0.0", None, &mut registry).unwrap();
 
         packages.push(pkg_a);
         packages.push(pkg_b);
@@ -181,10 +188,12 @@ mod graph_tests {
         let mut packages = create_test_packages();
 
         // Add package with external dependency
-        let pkg_d = Package::new(
+        let mut registry = sublime_package_tools::DependencyRegistry::new();
+        let pkg_d = Package::new_with_registry(
             "pkg-d",
             "1.0.0",
-            Some(vec![Rc::new(RefCell::new(Dependency::new("external-pkg", "^1.0.0").unwrap()))]),
+            Some(vec![("external-pkg", "^1.0.0")]),
+            &mut registry,
         )
         .unwrap();
         packages.push(pkg_d);

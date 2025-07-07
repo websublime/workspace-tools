@@ -3,14 +3,7 @@
     "rust-analyzer": {
       "procMacro": {
         "ignored": {
-          "napi-derive": [
-            "napi"
-          ]
-        }
-      },
-      "initialization_options": {
-        "checkOnSave": {
-          "command": "clippy" // rust-analyzer.checkOnSave.command
+          "napi-derive": ["napi"]
         }
       }
     }

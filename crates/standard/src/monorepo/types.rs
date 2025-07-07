@@ -7,9 +7,9 @@
 //!
 //! ## How
 //! Types are defined as enums and structs that model the structure of
-//! monorepos and their components. The MonorepoKind enum represents different
-//! monorepo implementations, WorkspacePackage stores information about individual
-//! packages, and MonorepoDescriptor ties everything together.
+//! monorepos and their components. The `MonorepoKind` enum represents different
+//! monorepo implementations, `WorkspacePackage` stores information about individual
+//! packages, and `MonorepoDescriptor` ties everything together.
 //!
 //! ## Why
 //! A well-defined type system ensures that monorepo structures are represented
@@ -94,7 +94,7 @@ pub struct WorkspacePackage {
     pub absolute_path: PathBuf,
     /// Direct dependencies within the workspace
     pub workspace_dependencies: Vec<String>,
-    /// Direct dev_dependencies within the workspace
+    /// Direct `dev_dependencies` within the workspace
     pub workspace_dev_dependencies: Vec<String>,
 }
 

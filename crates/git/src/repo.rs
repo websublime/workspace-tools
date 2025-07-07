@@ -63,7 +63,6 @@ use git2::{
 use std::collections::HashMap;
 use std::fs::canonicalize;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 
 use crate::{GitChangedFile, GitFileStatus, Repo, RepoCommit, RepoError, RepoTags};
 
@@ -76,6 +75,14 @@ use crate::{GitChangedFile, GitFileStatus, Repo, RepoCommit, RepoError, RepoTags
 /// # Returns
 ///
 /// * `Result<String, RepoError>` - The canonicalized path as a string, or an error
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// - The path does not exist
+/// - File system permissions prevent accessing the path
+/// - The path contains invalid characters or sequences
+/// - I/O errors occur while resolving the path
 ///
 /// # Examples
 ///
@@ -309,6 +316,14 @@ impl Repo {
     ///
     /// * `Result<Self, RepoError>` - A new `Repo` instance or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The path cannot be canonicalized
+    /// - The directory cannot be created
+    /// - Git repository initialization fails
+    /// - The repository cannot be opened after creation
+    ///
     /// # Examples
     ///
     /// ```
@@ -329,7 +344,7 @@ impl Repo {
         .map_err(RepoError::CreateRepoFailure)?;
 
         // Just return the repo without making any commits
-        let result = Self { repo: Rc::new(repo), local_path: location_buf };
+        let result = Self { repo, local_path: location_buf };
 
         // Now make the initial commit using our new instance
         result.make_initial_commit()?;
@@ -347,6 +362,14 @@ impl Repo {
     ///
     /// * `Result<Self, RepoError>` - A `Repo` instance or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The path cannot be canonicalized
+    /// - The path does not contain a valid Git repository
+    /// - The repository cannot be opened due to permission issues
+    /// - The repository is corrupted or invalid
+    ///
     /// # Examples
     ///
     /// ```
@@ -356,11 +379,12 @@ impl Repo {
     /// let branch = repo.get_current_branch().expect("Failed to get current branch");
     /// println!("Current branch: {}", branch);
     /// ```
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn open(path: &str) -> Result<Self, RepoError> {
         let local_path = canonicalize_path(path)?;
         let repo = Repository::open(path).map_err(RepoError::OpenRepoFailure)?;
 
-        Ok(Self { repo: Rc::new(repo), local_path: PathBuf::from(local_path) })
+        Ok(Self { repo, local_path: PathBuf::from(local_path) })
     }
 
     /// Clones a Git repository from a URL to a local path
@@ -374,6 +398,16 @@ impl Repo {
     ///
     /// * `Result<Self, RepoError>` - A `Repo` instance or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The path cannot be canonicalized
+    /// - The URL is invalid or unreachable
+    /// - Network connectivity issues prevent cloning
+    /// - Authentication is required but not provided or fails
+    /// - The destination path already exists or cannot be created
+    /// - Insufficient disk space or permissions
+    ///
     /// # Examples
     ///
     /// ```
@@ -386,7 +420,7 @@ impl Repo {
         let local_path = canonicalize_path(path)?;
         let repo = Repository::clone(url, path).map_err(RepoError::CloneRepoFailure)?;
 
-        Ok(Self { repo: Rc::new(repo), local_path: PathBuf::from(local_path) })
+        Ok(Self { repo, local_path: PathBuf::from(local_path) })
     }
 
     /// Gets the local path of the repository
@@ -403,6 +437,7 @@ impl Repo {
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// println!("Repository path: {}", repo.get_repo_path().display());
     /// ```
+    #[must_use]
     pub fn get_repo_path(&self) -> &Path {
         self.local_path.as_path()
     }
@@ -417,6 +452,14 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<&Self, RepoError>` - A reference to self for method chaining, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The repository configuration cannot be accessed
+    /// - The configuration settings cannot be written
+    /// - Invalid configuration values are provided
+    /// - File system permissions prevent configuration changes
     ///
     /// # Examples
     ///
@@ -446,6 +489,15 @@ impl Repo {
     ///
     /// * `Result<&Self, RepoError>` - A reference to self for method chaining, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The current HEAD reference cannot be accessed
+    /// - The HEAD cannot be peeled to a commit
+    /// - A branch with the same name already exists
+    /// - The repository is in an invalid state
+    /// - Insufficient permissions to create the branch
+    ///
     /// # Examples
     ///
     /// ```
@@ -467,6 +519,14 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<Vec<String>, RepoError>` - A list of branch names, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The repository's branch references cannot be accessed
+    /// - Branch iteration fails due to corrupted references
+    /// - Branch names contain invalid UTF-8 sequences
+    /// - The repository is in an invalid state
     ///
     /// # Examples
     ///
@@ -498,11 +558,196 @@ impl Repo {
         Ok(branch_names)
     }
 
+    /// Check if a branch exists in the repository
+    ///
+    /// # Arguments
+    ///
+    /// * `branch_name` - The name of the branch to check
+    ///
+    /// # Returns
+    ///
+    /// * `Result<bool, RepoError>` - True if the branch exists, false otherwise
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The repository is not accessible
+    /// - Branch references cannot be accessed
+    /// - The branch name contains invalid characters
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use git::repo::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let exists = repo.branch_exists("main").expect("Failed to check branch");
+    /// if exists {
+    ///     println!("Branch 'main' exists");
+    /// }
+    /// ```
+    pub fn branch_exists(&self, branch_name: &str) -> Result<bool, RepoError> {
+        // Try to find the branch reference
+        match self.repo.find_branch(branch_name, git2::BranchType::Local) {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                if e.code() == git2::ErrorCode::NotFound {
+                    Ok(false)
+                } else {
+                    Err(RepoError::BranchError(e))
+                }
+            }
+        }
+    }
+
+    /// Get the merge base between two branches or commits
+    ///
+    /// # Arguments
+    ///
+    /// * `branch1` - First branch or commit reference
+    /// * `branch2` - Second branch or commit reference
+    ///
+    /// # Returns
+    ///
+    /// * `Result<String, RepoError>` - The SHA of the merge base commit
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Either branch or commit reference doesn't exist
+    /// - No common ancestor exists between the references
+    /// - Repository access fails
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use git::repo::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let merge_base = repo.get_merge_base("main", "feature-branch")
+    ///     .expect("Failed to get merge base");
+    /// println!("Merge base: {}", merge_base);
+    /// ```
+    pub fn get_merge_base(&self, branch1: &str, branch2: &str) -> Result<String, RepoError> {
+        // Resolve the references to commit IDs
+        let commit1 = self.repo.revparse_single(branch1)
+            .map_err(RepoError::ReferenceError)?
+            .id();
+        
+        let commit2 = self.repo.revparse_single(branch2)
+            .map_err(RepoError::ReferenceError)?
+            .id();
+
+        // Find the merge base
+        let merge_base = self.repo.merge_base(commit1, commit2)
+            .map_err(RepoError::CommitError)?;
+
+        Ok(merge_base.to_string())
+    }
+
+    /// Get files changed between two commits or branches
+    ///
+    /// # Arguments
+    ///
+    /// * `from_ref` - Starting commit or branch reference
+    /// * `to_ref` - Ending commit or branch reference
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Vec<GitChangedFile>, RepoError>` - List of changed files with status
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Either reference doesn't exist
+    /// - Repository access fails
+    /// - Diff calculation fails
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use git::repo::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let changed_files = repo.get_files_changed_between("main", "feature-branch")
+    ///     .expect("Failed to get changed files");
+    /// for file in changed_files {
+    ///     println!("{}: {:?}", file.path, file.status);
+    /// }
+    /// ```
+    pub fn get_files_changed_between(&self, from_ref: &str, to_ref: &str) -> Result<Vec<GitChangedFile>, RepoError> {
+        use crate::{GitChangedFile, GitFileStatus};
+        
+        // Resolve the references to commits
+        let from_commit = self.repo.revparse_single(from_ref)
+            .map_err(RepoError::ReferenceError)?
+            .peel_to_commit()
+            .map_err(RepoError::CommitError)?;
+        
+        let to_commit = self.repo.revparse_single(to_ref)
+            .map_err(RepoError::ReferenceError)?
+            .peel_to_commit()
+            .map_err(RepoError::CommitError)?;
+
+        // Get the trees for both commits
+        let from_tree = from_commit.tree()
+            .map_err(RepoError::TreeError)?;
+        let to_tree = to_commit.tree()
+            .map_err(RepoError::TreeError)?;
+
+        // Create diff between the trees
+        let diff = self.repo.diff_tree_to_tree(Some(&from_tree), Some(&to_tree), None)
+            .map_err(RepoError::DiffError)?;
+
+        let mut changed_files = Vec::new();
+
+        // Process each delta in the diff
+        diff.foreach(
+            &mut |delta, _progress| {
+                let old_file = delta.old_file();
+                let new_file = delta.new_file();
+                
+                let path = new_file.path()
+                    .or_else(|| old_file.path())
+                    .and_then(|p| p.to_str())
+                    .unwrap_or("unknown");
+
+                let status = match delta.status() {
+                    git2::Delta::Added | git2::Delta::Copied => GitFileStatus::Added,
+                    git2::Delta::Deleted => GitFileStatus::Deleted,
+                    _ => GitFileStatus::Modified, // All other cases are treated as modified
+                };
+
+                changed_files.push(GitChangedFile {
+                    path: path.to_string(),
+                    status,
+                    staged: false,
+                    workdir: false,
+                });
+
+                true // Continue processing
+            },
+            None, // No binary callback
+            None, // No hunk callback  
+            None, // No line callback
+        ).map_err(RepoError::DiffError)?;
+
+        Ok(changed_files)
+    }
+
     /// Lists all configuration entries for the repository
     ///
     /// # Returns
     ///
     /// * `Result<HashMap<String, String>, RepoError>` - A map of config keys to values, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The repository configuration cannot be accessed
+    /// - Configuration entries cannot be read or iterated
+    /// - Configuration values contain invalid data
+    /// - File system permissions prevent reading configuration
     ///
     /// # Examples
     ///
@@ -544,6 +789,15 @@ impl Repo {
     ///
     /// * `Result<&Self, RepoError>` - A reference to self for method chaining, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The specified branch does not exist
+    /// - The branch reference is invalid or corrupted
+    /// - The HEAD reference cannot be updated
+    /// - There are uncommitted changes that would be lost
+    /// - File system permissions prevent checkout
+    ///
     /// # Examples
     ///
     /// ```
@@ -577,6 +831,14 @@ impl Repo {
     ///
     /// * `Result<String, RepoError>` - The current branch name, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The HEAD reference cannot be accessed
+    /// - The HEAD reference is invalid or corrupted
+    /// - The repository is in a detached HEAD state
+    /// - The branch name contains invalid characters
+    ///
     /// # Examples
     ///
     /// ```
@@ -605,6 +867,15 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<(), RepoError>` - Success or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - A tag with the same name already exists
+    /// - The repository signature cannot be created
+    /// - The HEAD reference cannot be accessed
+    /// - The target object for the tag cannot be found
+    /// - Insufficient permissions to create the tag
     ///
     /// # Examples
     ///
@@ -651,6 +922,15 @@ impl Repo {
     ///
     /// * `Result<&Self, RepoError>` - A reference to self for method chaining, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The specified file does not exist
+    /// - The file path is invalid or inaccessible
+    /// - The Git index cannot be accessed or modified
+    /// - The index cannot be written to disk
+    /// - Insufficient permissions to read the file or write the index
+    ///
     /// # Examples
     ///
     /// ```
@@ -679,6 +959,15 @@ impl Repo {
     ///
     /// * `Result<&Self, RepoError>` - A reference to self for method chaining, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The Git index cannot be accessed or modified
+    /// - Files cannot be read due to permission issues
+    /// - The index cannot be written to disk
+    /// - Some files are locked or in use by other processes
+    /// - The working directory contains invalid or corrupted files
+    ///
     /// # Examples
     ///
     /// ```
@@ -706,6 +995,14 @@ impl Repo {
     ///
     /// * `Result<String, RepoError>` - The last tag name, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - No tags exist in the repository
+    /// - Tag references cannot be accessed
+    /// - Tag names are corrupted or invalid
+    /// - The repository state is invalid
+    ///
     /// # Examples
     ///
     /// ```
@@ -720,11 +1017,161 @@ impl Repo {
     pub fn get_last_tag(&self) -> Result<String, RepoError> {
         let tags = self.repo.tag_names(None).map_err(RepoError::LastTagError)?;
 
-        let last_tag = tags.iter().flatten().max_by_key(|&tag| tag.parse::<u64>().unwrap_or(0));
+        let last_tag = tags.iter().flatten().max_by(|&a, &b| self.compare_version_tags(a, b));
 
         last_tag
             .map(std::string::ToString::to_string)
             .ok_or_else(|| RepoError::LastTagError(Git2Error::from_str("No tags found")))
+    }
+
+    /// Compares two version tags for semantic version ordering
+    ///
+    /// This method handles various tag formats including:
+    /// - Semantic versions: "1.2.3", "v1.2.3"
+    /// - Pre-release versions: "1.2.3-alpha", "v2.0.0-beta.1"
+    /// - Non-semantic tags: falls back to string comparison
+    ///
+    /// # Arguments
+    ///
+    /// * `tag_a` - First tag to compare
+    /// * `tag_b` - Second tag to compare
+    ///
+    /// # Returns
+    ///
+    /// * `std::cmp::Ordering` - The comparison result
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use git::repo::Repo;
+    /// use std::cmp::Ordering;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let result = repo.compare_version_tags("v1.2.3", "v2.0.0");
+    /// assert_eq!(result, Ordering::Less);
+    /// ```
+    fn compare_version_tags(&self, tag_a: &str, tag_b: &str) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+
+        // Try to parse both tags as semantic versions
+        let version_a = self.parse_semantic_version(tag_a);
+        let version_b = self.parse_semantic_version(tag_b);
+
+        match (version_a, version_b) {
+            (Some(v_a), Some(v_b)) => {
+                // Both are semantic versions - compare properly
+                self.compare_semantic_versions(&v_a, &v_b)
+            }
+            (Some(_), None) => {
+                // Only A is semantic version - semantic versions are "newer"
+                Ordering::Greater
+            }
+            (None, Some(_)) => {
+                // Only B is semantic version - semantic versions are "newer"
+                Ordering::Less
+            }
+            (None, None) => {
+                // Neither is semantic version - fall back to string comparison
+                tag_a.cmp(tag_b)
+            }
+        }
+    }
+
+    /// Parses a tag into semantic version components
+    ///
+    /// Handles tags with or without "v" prefix and extracts major, minor, patch numbers.
+    /// Also handles pre-release identifiers for proper ordering.
+    ///
+    /// # Arguments
+    ///
+    /// * `tag` - The tag string to parse
+    ///
+    /// # Returns
+    ///
+    /// * `Option<(u32, u32, u32, Option<String>)>` - Major, minor, patch, and pre-release identifier
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use git::repo::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let version = repo.parse_semantic_version("v1.2.3-alpha");
+    /// assert_eq!(version, Some((1, 2, 3, Some("alpha".to_string()))));
+    /// ```
+    #[allow(clippy::unused_self)]
+    fn parse_semantic_version(&self, tag: &str) -> Option<(u32, u32, u32, Option<String>)> {
+        // Remove 'v' prefix if present
+        let version_str = tag.strip_prefix('v').unwrap_or(tag);
+
+        // Split on '-' to separate version from pre-release
+        let parts: Vec<&str> = version_str.splitn(2, '-').collect();
+        let version_part = parts[0];
+        let pre_release = parts.get(1).map(|s| ToString::to_string(&s));
+
+        // Parse semantic version components
+        let version_components: Vec<&str> = version_part.split('.').collect();
+
+        if version_components.len() < 3 {
+            return None; // Not a valid semantic version
+        }
+
+        let major = version_components[0].parse::<u32>().ok()?;
+        let minor = version_components[1].parse::<u32>().ok()?;
+        let patch = version_components[2].parse::<u32>().ok()?;
+
+        Some((major, minor, patch, pre_release))
+    }
+
+    /// Compare two semantic version tuples
+    ///
+    /// Properly implements semantic version precedence rules including pre-release handling.
+    /// According to SemVer spec: pre-release versions have lower precedence than normal versions.
+    ///
+    /// # Arguments
+    ///
+    /// * `version_a` - First version tuple (major, minor, patch, pre_release)
+    /// * `version_b` - Second version tuple (major, minor, patch, pre_release)
+    ///
+    /// # Returns
+    ///
+    /// * `std::cmp::Ordering` - The comparison result
+    #[allow(clippy::unused_self)]
+    fn compare_semantic_versions(
+        &self,
+        version_a: &(u32, u32, u32, Option<String>),
+        version_b: &(u32, u32, u32, Option<String>),
+    ) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+
+        let (maj_a, min_a, patch_a, pre_a) = version_a;
+        let (maj_b, min_b, patch_b, pre_b) = version_b;
+
+        // Compare major version first
+        match maj_a.cmp(maj_b) {
+            Ordering::Equal => {
+                // Major versions equal, compare minor
+                match min_a.cmp(min_b) {
+                    Ordering::Equal => {
+                        // Minor versions equal, compare patch
+                        match patch_a.cmp(patch_b) {
+                            Ordering::Equal => {
+                                // Patch versions equal, compare pre-release
+                                match (pre_a, pre_b) {
+                                    (None, None) => Ordering::Equal,
+                                    (Some(_), None) => Ordering::Less, // Pre-release < normal version
+                                    (None, Some(_)) => Ordering::Greater, // Normal version > pre-release
+                                    (Some(pre_a), Some(pre_b)) => pre_a.cmp(pre_b), // Compare pre-release strings
+                                }
+                            }
+                            other => other,
+                        }
+                    }
+                    other => other,
+                }
+            }
+            other => other,
+        }
     }
 
     /// Gets the SHA of the current HEAD commit
@@ -732,6 +1179,14 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<String, RepoError>` - The current commit SHA, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The HEAD reference cannot be accessed
+    /// - The HEAD reference has no target (repository is empty)
+    /// - The repository is in an invalid state
+    /// - The commit object cannot be found
     ///
     /// # Examples
     ///
@@ -757,6 +1212,15 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<String, RepoError>` - The previous commit SHA, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The HEAD reference cannot be accessed
+    /// - The HEAD cannot be peeled to a commit
+    /// - The parent commit cannot be found or accessed
+    /// - The repository has no commits (empty repository)
+    /// - The commit objects are corrupted
     ///
     /// # Examples
     ///
@@ -798,6 +1262,16 @@ impl Repo {
     ///
     /// * `Result<String, RepoError>` - The new commit's SHA, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The repository signature cannot be created
+    /// - The HEAD reference cannot be accessed
+    /// - The index cannot be accessed or is empty
+    /// - The tree cannot be written or found
+    /// - The commit cannot be created due to repository state issues
+    /// - Insufficient permissions to write the commit
+    ///
     /// # Examples
     ///
     /// ```
@@ -832,7 +1306,7 @@ impl Repo {
 
     /// Adds all changes and creates a new commit
     ///
-    /// This method performs both add_all() and commit() in one step.
+    /// This method performs both `add_all()` and `commit()` in one step.
     ///
     /// # Arguments
     ///
@@ -841,6 +1315,16 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<String, RepoError>` - The new commit's SHA, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The repository signature cannot be created
+    /// - The HEAD reference cannot be accessed
+    /// - Files cannot be added to the index due to permission issues
+    /// - The tree cannot be written or found
+    /// - The commit cannot be created due to repository state issues
+    /// - There are no changes to commit
     ///
     /// # Examples
     ///
@@ -882,6 +1366,14 @@ impl Repo {
     ///
     /// * `Result<Vec<String>, RepoError>` - List of changed file paths, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The repository status cannot be read
+    /// - File system permissions prevent accessing working directory files
+    /// - The index is corrupted or cannot be read
+    /// - The working directory contains invalid or inaccessible files
+    ///
     /// # Examples
     ///
     /// ```
@@ -916,6 +1408,112 @@ impl Repo {
         Ok(result)
     }
 
+    /// Get detailed file status information including staging state
+    ///
+    /// Returns detailed information about file changes including whether files
+    /// are staged, have working directory changes, and their status type.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Vec<GitChangedFile>, RepoError>` - List of files with detailed status
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Git status cannot be read
+    /// - Repository is in an invalid state
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use git::repo::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let detailed_status = repo.get_status_detailed()
+    ///     .expect("Failed to get detailed status");
+    ///
+    /// for file in detailed_status {
+    ///     if file.staged {
+    ///         println!("Staged: {} ({:?})", file.path, file.status);
+    ///     }
+    ///     if file.workdir {
+    ///         println!("Working dir: {} ({:?})", file.path, file.status);
+    ///     }
+    /// }
+    /// ```
+    pub fn get_status_detailed(&self) -> Result<Vec<GitChangedFile>, RepoError> {
+        let mut status_options = StatusOptions::new();
+        status_options
+            .include_untracked(true)
+            .include_ignored(false)
+            .include_unmodified(false)
+            .recurse_untracked_dirs(true)
+            .show(git2::StatusShow::IndexAndWorkdir);
+
+        let statuses =
+            self.repo.statuses(Some(&mut status_options)).map_err(RepoError::StatusError)?;
+
+        let mut result = Vec::new();
+
+        for entry in statuses.iter() {
+            let path = entry.path().unwrap_or("").to_string();
+            let git2_status = entry.status();
+
+            // Determine primary status and staging information
+            let (status, staged, workdir) = if git2_status.is_index_new() || git2_status.is_wt_new()
+            {
+                (GitFileStatus::Added, git2_status.is_index_new(), git2_status.is_wt_new())
+            } else if git2_status.is_index_modified() || git2_status.is_wt_modified() {
+                (
+                    GitFileStatus::Modified,
+                    git2_status.is_index_modified(),
+                    git2_status.is_wt_modified(),
+                )
+            } else if git2_status.is_index_deleted() || git2_status.is_wt_deleted() {
+                (
+                    GitFileStatus::Deleted,
+                    git2_status.is_index_deleted(),
+                    git2_status.is_wt_deleted(),
+                )
+            } else {
+                // For untracked files and other cases
+                (GitFileStatus::Untracked, false, true)
+            };
+
+            result.push(GitChangedFile { path, status, staged, workdir });
+        }
+
+        Ok(result)
+    }
+
+    /// Get only staged files (files in the index ready for commit)
+    ///
+    /// Returns a list of files that are currently staged and ready to be committed.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Vec<String>, RepoError>` - List of staged file paths
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use git::repo::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let staged_files = repo.get_staged_files()
+    ///     .expect("Failed to get staged files");
+    ///
+    /// println!("Files ready for commit: {:?}", staged_files);
+    /// ```
+    pub fn get_staged_files(&self) -> Result<Vec<String>, RepoError> {
+        let detailed_status = self.get_status_detailed()?;
+
+        let staged_files: Vec<String> =
+            detailed_status.into_iter().filter(|file| file.staged).map(|file| file.path).collect();
+
+        Ok(staged_files)
+    }
+
     /// Finds the branch that contains a specific commit
     ///
     /// # Arguments
@@ -925,6 +1523,15 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<Option<String>, RepoError>` - The branch name if found, None if not found, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The provided SHA string is not a valid commit hash
+    /// - The commit object cannot be found in the repository
+    /// - Branch references cannot be accessed or iterated
+    /// - Branch names are corrupted or invalid
+    /// - The repository graph cannot be analyzed
     ///
     /// # Examples
     ///
@@ -992,6 +1599,15 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<Vec<String>, RepoError>` - List of branch names containing the commit, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The provided SHA string is not a valid commit hash
+    /// - The commit object cannot be found in the repository
+    /// - Branch references cannot be accessed or iterated
+    /// - Branch names are corrupted or invalid
+    /// - The repository graph cannot be analyzed
     ///
     /// # Examples
     ///
@@ -1064,6 +1680,16 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<(), RepoError>` - Success or an error, including `MergeConflictError`.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The current HEAD reference cannot be accessed
+    /// - The branch to merge does not exist or cannot be resolved
+    /// - Merge conflicts occur that cannot be automatically resolved
+    /// - The repository is in an invalid state for merging
+    /// - File system permissions prevent merge operations
+    /// - The working directory has uncommitted changes that would conflict
     ///
     /// # Examples
     ///
@@ -1217,6 +1843,17 @@ impl Repo {
     ///
     /// * `Result<bool, RepoError>` - Success indicator or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The specified remote does not exist
+    /// - Authentication fails (SSH keys, credentials)
+    /// - Network connectivity issues prevent pushing
+    /// - The remote repository rejects the push (non-fast-forward, etc.)
+    /// - The current branch has no commits to push
+    /// - File system permissions prevent accessing SSH keys
+    /// - The remote server is unreachable or down
+    ///
     /// # Examples
     ///
     /// ```
@@ -1288,6 +1925,17 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<bool, RepoError>` - Success indicator or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The specified remote does not exist
+    /// - Authentication fails (SSH keys, credentials)
+    /// - Network connectivity issues prevent fetching
+    /// - Invalid refspecs are provided
+    /// - The remote repository is unreachable
+    /// - File system permissions prevent accessing SSH keys
+    /// - The local repository cannot be updated with fetched data
     ///
     /// # Examples
     ///
@@ -1385,6 +2033,18 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<bool, RepoError>` - Success indicator or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The specified remote does not exist
+    /// - Authentication fails during fetch operation
+    /// - Network connectivity issues prevent fetching
+    /// - The remote branch does not exist
+    /// - Merge conflicts occur during the pull
+    /// - The current branch cannot be fast-forwarded
+    /// - The working directory has uncommitted changes that would be lost
+    /// - The repository state prevents merging
     ///
     /// # Examples
     ///
@@ -1509,6 +2169,17 @@ impl Repo {
     ///
     /// * `Result<bool, RepoError>` - Success indicator or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The specified remote does not exist
+    /// - None of the provided SSH keys are valid or accessible
+    /// - Authentication fails with all provided SSH keys
+    /// - Network connectivity issues prevent pushing
+    /// - The remote repository rejects the push
+    /// - The current branch has no commits to push
+    /// - File system permissions prevent accessing SSH key files
+    ///
     /// # Examples
     ///
     /// ```
@@ -1582,6 +2253,15 @@ impl Repo {
     ///
     /// * `Result<String, RepoError>` - The SHA of the common ancestor commit, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The provided git reference does not exist or is invalid
+    /// - The reference cannot be resolved to a commit object
+    /// - The HEAD reference cannot be accessed
+    /// - No common ancestor exists between the references
+    /// - The repository graph is corrupted or invalid
+    ///
     /// # Examples
     ///
     /// ```
@@ -1620,6 +2300,16 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<Vec<GitChangedFile>, RepoError>` - List of changed files with status, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The provided git reference does not exist or is invalid
+    /// - The reference cannot be resolved to a commit object
+    /// - The HEAD reference cannot be accessed
+    /// - Commit trees cannot be accessed or are corrupted
+    /// - The diff operation fails due to repository state issues
+    /// - File paths cannot be processed due to encoding issues
     ///
     /// # Examples
     ///
@@ -1705,8 +2395,12 @@ impl Repo {
 
                         // Only add if we haven't seen it yet
                         if !file_exists {
-                            changed_files
-                                .push(GitChangedFile { path: path_str.to_string(), status });
+                            changed_files.push(GitChangedFile {
+                                path: path_str.to_string(),
+                                status,
+                                staged: false,  // Historical changes are not staged
+                                workdir: false, // Historical changes are already committed
+                            });
                         }
                     }
                 }
@@ -1757,6 +2451,8 @@ impl Repo {
                         changed_files.push(GitChangedFile {
                             path: path_str.to_string(),
                             status: GitFileStatus::Deleted,
+                            staged: false,  // Historical changes are not staged
+                            workdir: false, // Historical changes are already committed
                         });
                     }
                 }
@@ -1775,6 +2471,16 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<Vec<String>, RepoError>` - List of changed file paths, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The provided git reference does not exist or is invalid
+    /// - The reference cannot be resolved to a commit object
+    /// - The HEAD reference cannot be accessed
+    /// - Commit trees cannot be accessed or are corrupted
+    /// - The diff operation fails due to repository state issues
+    /// - File paths cannot be processed due to encoding issues
     ///
     /// # Examples
     ///
@@ -1809,6 +2515,15 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<Vec<String>, RepoError>` - List of changed file paths within the packages, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The provided branch reference does not exist or is invalid
+    /// - Package paths cannot be canonicalized or are invalid
+    /// - The underlying `get_all_files_changed_since_sha` function fails
+    /// - File paths cannot be processed due to encoding issues
+    /// - File system permissions prevent path access
     ///
     /// # Examples
     ///
@@ -1875,6 +2590,16 @@ impl Repo {
     /// # Returns
     ///
     /// * `Result<Vec<RepoCommit>, RepoError>` - List of commits, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The provided reference (since) does not exist or is invalid
+    /// - The reference cannot be resolved to a commit object
+    /// - The revision walk cannot be initialized
+    /// - Commit objects cannot be accessed or are corrupted
+    /// - File path filtering fails due to invalid paths
+    /// - The repository state is invalid or corrupted
     ///
     /// # Examples
     ///
@@ -1999,6 +2724,17 @@ impl Repo {
     ///
     /// * `Result<Vec<RepoTags>, RepoError>` - List of tags, or an error
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Local tags: Tag references cannot be accessed or are corrupted
+    /// - Local tags: Tag objects cannot be found or are invalid
+    /// - Remote tags: The 'origin' remote does not exist
+    /// - Remote tags: Authentication fails when connecting to remote
+    /// - Remote tags: Network connectivity issues prevent remote access
+    /// - Remote tags: The remote repository is unreachable
+    /// - Tag names contain invalid UTF-8 sequences
+    ///
     /// # Examples
     ///
     /// ```
@@ -2072,27 +2808,26 @@ impl Repo {
         };
 
         // Try to find a username from public key if username wasn't provided in URL
-        let username = match username_from_url {
-            Some(name) => name.to_string(),
-            None => {
-                // Try to extract username from the public key files
-                for key_path in &key_paths {
-                    let pub_key_path = key_path.with_extension("pub");
-                    if let Ok(content) = std::fs::read_to_string(&pub_key_path) {
-                        // Public key format is typically: ssh-xxx AAAAB3Nza... username@host
-                        if let Some(username_part) = content.split_whitespace().nth(2) {
-                            if let Some(username) = username_part.split('@').next() {
-                                return Cred::ssh_key(username, None, key_path, None);
-                            }
+        let username = if let Some(name) = username_from_url {
+            name.to_string()
+        } else {
+            // Try to extract username from the public key files
+            for key_path in &key_paths {
+                let pub_key_path = key_path.with_extension("pub");
+                if let Ok(content) = std::fs::read_to_string(&pub_key_path) {
+                    // Public key format is typically: ssh-xxx AAAAB3Nza... username@host
+                    if let Some(username_part) = content.split_whitespace().nth(2) {
+                        if let Some(username) = username_part.split('@').next() {
+                            return Cred::ssh_key(username, None, key_path, None);
                         }
                     }
                 }
+            }
 
-                // Fallback to environment user or "git"
-                match std::env::var("USER").or_else(|_| std::env::var("USERNAME")) {
-                    Ok(name) => name,
-                    Err(_) => "git".to_string(),
-                }
+            // Fallback to environment user or "git"
+            match std::env::var("USER").or_else(|_| std::env::var("USERNAME")) {
+                Ok(name) => name,
+                Err(_) => "git".to_string(),
             }
         };
 
@@ -2115,7 +2850,7 @@ impl Repo {
 
     /// Checks if a commit touches a specific path
     ///
-    /// This is an internal helper method used by get_commits_since.
+    /// This is an internal helper method used by `get_commits_since`.
     ///
     /// # Arguments
     ///
@@ -2157,7 +2892,7 @@ impl Repo {
 
     /// Gets all local tags in the repository
     ///
-    /// This is an internal helper method used by get_remote_or_local_tags.
+    /// This is an internal helper method used by `get_remote_or_local_tags`.
     ///
     /// # Returns
     ///
@@ -2203,7 +2938,7 @@ impl Repo {
 
     /// Gets all remote tags from the 'origin' remote
     ///
-    /// This is an internal helper method used by get_remote_or_local_tags.
+    /// This is an internal helper method used by `get_remote_or_local_tags`.
     ///
     /// # Returns
     ///
@@ -2266,5 +3001,76 @@ impl Repo {
             .map_err(RepoError::CommitError)?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_parse_semantic_version() {
+        // Create a temporary directory for testing
+        let temp_dir = std::env::temp_dir().join("test_git_repo");
+        let _ = std::fs::remove_dir_all(&temp_dir); // Clean up if exists
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let repo =
+            Repo { repo: git2::Repository::init_bare(&temp_dir).unwrap(), local_path: temp_dir };
+
+        // Test standard semantic versions
+        assert_eq!(repo.parse_semantic_version("1.2.3"), Some((1, 2, 3, None)));
+        assert_eq!(repo.parse_semantic_version("v1.2.3"), Some((1, 2, 3, None)));
+        assert_eq!(repo.parse_semantic_version("10.20.30"), Some((10, 20, 30, None)));
+
+        // Test pre-release versions
+        assert_eq!(
+            repo.parse_semantic_version("1.2.3-alpha"),
+            Some((1, 2, 3, Some("alpha".to_string())))
+        );
+        assert_eq!(
+            repo.parse_semantic_version("v2.0.0-beta.1"),
+            Some((2, 0, 0, Some("beta.1".to_string())))
+        );
+
+        // Test invalid versions
+        assert_eq!(repo.parse_semantic_version("1.2"), None);
+        assert_eq!(repo.parse_semantic_version("not-a-version"), None);
+        assert_eq!(repo.parse_semantic_version("v1.2.x"), None);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_compare_version_tags() {
+        use std::cmp::Ordering;
+
+        // Create a temporary directory for testing
+        let temp_dir = std::env::temp_dir().join("test_git_repo_compare");
+        let _ = std::fs::remove_dir_all(&temp_dir); // Clean up if exists
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let repo =
+            Repo { repo: git2::Repository::init_bare(&temp_dir).unwrap(), local_path: temp_dir };
+
+        // Test semantic version comparison
+        assert_eq!(repo.compare_version_tags("v1.2.3", "v2.0.0"), Ordering::Less);
+        assert_eq!(repo.compare_version_tags("v2.0.0", "v1.2.3"), Ordering::Greater);
+        assert_eq!(repo.compare_version_tags("v1.2.3", "v1.2.3"), Ordering::Equal);
+
+        // Test with and without 'v' prefix
+        assert_eq!(repo.compare_version_tags("1.2.3", "v1.2.3"), Ordering::Equal);
+        assert_eq!(repo.compare_version_tags("v1.2.3", "1.2.3"), Ordering::Equal);
+
+        // Test pre-release versions (pre-release should be less than regular)
+        assert_eq!(repo.compare_version_tags("v1.2.3-alpha", "v1.2.3"), Ordering::Less);
+        assert_eq!(repo.compare_version_tags("v1.2.3", "v1.2.3-alpha"), Ordering::Greater);
+
+        // Test non-semantic vs semantic (semantic should be greater)
+        assert_eq!(repo.compare_version_tags("release-1", "v1.0.0"), Ordering::Less);
+        assert_eq!(repo.compare_version_tags("v1.0.0", "release-1"), Ordering::Greater);
+
+        // Test non-semantic comparison
+        assert_eq!(repo.compare_version_tags("release-a", "release-b"), Ordering::Less);
     }
 }

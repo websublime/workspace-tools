@@ -17,7 +17,6 @@
 #![allow(clippy::unnecessary_wraps)]
 
 use serde_json::{json, Value};
-use std::{cell::RefCell, rc::Rc};
 use sublime_package_tools::{
     build_dependency_graph_from_packages, generate_ascii, generate_dot, AvailableUpgrade,
     ChangeType, Dependency, DependencyGraph, DependencyRegistry, DotOptions, ExecutionMode,
@@ -387,8 +386,7 @@ fn create_package_infos(
         // Add dependencies to JSON
         if let Some(deps) = pkg_json.get_mut("dependencies") {
             if let Some(deps_obj) = deps.as_object_mut() {
-                for dep_rc in package.dependencies() {
-                    let dep = dep_rc.borrow();
+                for dep in package.dependencies() {
                     deps_obj
                         .insert(dep.name().to_string(), Value::String(dep.version().to_string()));
                 }
@@ -419,13 +417,19 @@ fn create_package_infos(
 
         // Test dependency version update
         if !first_info.package.borrow().dependencies().is_empty() {
-            let package = first_info.package.borrow();
-            let first_dep = &package.dependencies()[0];
-            let dep_name = first_dep.borrow().name().to_string();
-            let old_version = first_dep.borrow().version().to_string();
+            let (dep_name, old_version) = {
+                let package = first_info.package.borrow();
+                let first_dep = &package.dependencies()[0];
+                (first_dep.name().to_string(), first_dep.version().to_string())
+            };
 
             first_info.update_dependency_version(&dep_name, "^99.0.0")?;
-            let new_version = first_dep.borrow().version().to_string();
+
+            let new_version = {
+                let package = first_info.package.borrow();
+                let first_dep = &package.dependencies()[0];
+                first_dep.version().to_string()
+            };
 
             println!("      - Dependency {dep_name} updated: {old_version} → {new_version}");
         }
@@ -445,15 +449,18 @@ fn track_package_changes(packages: &[Package]) -> Result<(), Box<dyn std::error:
 
     // Create a modified version of the first package
     let original = &packages[0];
-    let modified = Package::new(
+    // Create modified version using registry approach
+    let mut temp_registry = DependencyRegistry::new();
+    let modified = Package::new_with_registry(
         original.name(),
         "2.2.0", // Bumped version
         Some(vec![
             // Add new dependency
-            Rc::new(RefCell::new(Dependency::new("new-dependency", "^1.0.0")?)),
+            ("new-dependency", "^1.0.0"),
             // Keep one existing dependency but update version
-            Rc::new(RefCell::new(Dependency::new("react", "^18.0.0")?)),
+            ("react", "^18.0.0"),
         ]),
+        &mut temp_registry,
     )?;
 
     // Generate diff
@@ -559,8 +566,7 @@ fn simulate_upgrade_checks(packages: &[Package]) -> Result<(), Box<dyn std::erro
     for package in packages {
         println!("      📦 {}", package.name());
 
-        for dep_rc in package.dependencies() {
-            let dep = dep_rc.borrow();
+        for dep in package.dependencies() {
             let current_version = dep.version().to_string();
 
             // Simulate different upgrade scenarios
@@ -717,11 +723,11 @@ fn test_advanced_scenarios(
     let dep1 = registry.get_or_create("test-package", "^1.0.0")?;
     let dep2 = registry.get_or_create("test-package", "^1.2.0")?;
 
-    // Both should reference the same dependency instance (with higher version)
-    let ptr_equal = Rc::ptr_eq(&dep1, &dep2);
-    let version_updated = dep1.borrow().version().to_string() == "^1.2.0";
+    // Both should reference the same dependency (with higher version)
+    let same_dependency = dep1.name() == dep2.name();
+    let version_updated = dep1.version().to_string() == "^1.2.0";
 
-    println!("      - Same instance: {ptr_equal}");
+    println!("      - Same dependency: {same_dependency}");
     println!("      - Version updated to higher: {version_updated}");
 
     // Test complex version requirements

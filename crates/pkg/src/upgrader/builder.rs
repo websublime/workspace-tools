@@ -4,9 +4,9 @@
 //! across packages in a workspace.
 
 use crate::{
-    AvailableUpgrade, Dependency, DependencyResolutionError, ExecutionMode, Package,
-    PackageRegistryError, RegistryManager, UpgradeConfig, UpgradeStatus, VersionStability,
-    VersionUpdateStrategy,
+    errors::{DependencyResolutionError, PackageRegistryError},
+    AvailableUpgrade, Dependency, ExecutionMode, Package, RegistryManager, UpgradeConfig,
+    UpgradeStatus, VersionStability, VersionUpdateStrategy,
 };
 use semver::{Version, VersionReq};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -134,6 +134,7 @@ impl Upgrader {
     /// # Returns
     ///
     /// Reference to the upgrader's registry manager
+    #[must_use]
     pub fn registry_manager(&self) -> &RegistryManager {
         &self.registry_manager
     }
@@ -161,6 +162,7 @@ impl Upgrader {
     /// # Returns
     ///
     /// Reference to the upgrader's configuration
+    #[must_use]
     pub fn config(&self) -> &UpgradeConfig {
         &self.config
     }
@@ -174,6 +176,12 @@ impl Upgrader {
     /// # Returns
     ///
     /// List of available versions, or a `PackageRegistryError` if the lookup fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
     fn get_cached_versions(
         &mut self,
         package_name: &str,
@@ -198,6 +206,12 @@ impl Upgrader {
     ///
     /// The highest satisfying version string, or `None` if no satisfying version exists,
     /// or a `PackageRegistryError` if the lookup fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
     fn find_highest_satisfying_version(
         &mut self,
         package_name: &str,
@@ -276,6 +290,12 @@ impl Upgrader {
     ///
     /// The highest version string, or `None` if no versions exist,
     /// or a `PackageRegistryError` if the lookup fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
     fn find_latest_version(
         &mut self,
         package_name: &str,
@@ -405,6 +425,13 @@ impl Upgrader {
     ///
     /// Information about available upgrades, or a `PackageRegistryError` if the check fails
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
+    /// - Package versions cannot be compared due to invalid format
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -424,6 +451,7 @@ impl Upgrader {
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(clippy::needless_borrow)]
     pub fn check_dependency_upgrade(
         &mut self,
         package_name: &str,
@@ -492,6 +520,13 @@ impl Upgrader {
     ///
     /// List of available upgrades, or a `PackageRegistryError` if any check fails
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
+    /// - Package versions cannot be compared due to invalid format
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -513,6 +548,7 @@ impl Upgrader {
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(clippy::needless_borrow)]
     pub fn check_package_upgrades(
         &mut self,
         package: &Package,
@@ -528,9 +564,7 @@ impl Upgrader {
 
         let mut upgrades = Vec::new();
 
-        for dep_rc in package.dependencies() {
-            let dep = dep_rc.borrow();
-
+        for dep in package.dependencies() {
             // Skip if this dependency is not in our target list (if specified)
             if !self.config.target_dependencies.is_empty()
                 && !self.config.target_dependencies.iter().any(|d| d == dep.name())
@@ -569,6 +603,13 @@ impl Upgrader {
     /// # Returns
     ///
     /// List of available upgrades across all packages, or a `PackageRegistryError` if any check fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Network request to the registry fails
+    /// - The response cannot be parsed as JSON
+    /// - Package versions cannot be compared due to invalid format
     ///
     /// # Examples
     ///
@@ -609,6 +650,12 @@ impl Upgrader {
     /// # Returns
     ///
     /// List of upgrades that were actually applied, or a `DependencyResolutionError` if any update fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The dependency with the specified name is not found in the package
+    /// - The new version string is not a valid semantic version
     ///
     /// # Examples
     ///
@@ -655,7 +702,7 @@ impl Upgrader {
                 if let Some(package_rc) =
                     packages.iter().find(|p| p.borrow().name() == upgrade.package_name)
                 {
-                    let package = package_rc.borrow();
+                    let mut package = package_rc.borrow_mut();
 
                     // Apply the upgrade
                     package.update_dependency_version(&upgrade.dependency_name, new_version)?;
@@ -677,6 +724,7 @@ impl Upgrader {
     /// # Returns
     ///
     /// A formatted string report of the upgrades
+    #[must_use]
     ///
     /// # Examples
     ///

@@ -2,7 +2,7 @@
 mod error_tests {
     use std::error::Error;
     use std::io;
-    use sublime_package_tools::{
+    use sublime_package_tools::errors::{
         DependencyResolutionError, PackageError, PackageRegistryError, RegistryError, VersionError,
     };
 

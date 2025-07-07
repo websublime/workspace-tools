@@ -4,7 +4,7 @@
 //!
 //! When resolving dependency conflicts or performing upgrades, the system
 //! needs to track which dependencies need to be updated, in which packages,
-//! and to what versions. The `DependencyUpdate` struct captures this information.
+//! and to what versions. The `Update` struct captures this information.
 
 /// Represents a required update to a dependency.
 ///
@@ -34,7 +34,7 @@
 /// );
 /// ```
 #[derive(Debug)]
-pub struct DependencyUpdate {
+pub struct Update {
     /// Package where the dependency needs to be updated
     ///
     /// The name of the package containing the dependency that needs to be updated.
@@ -52,3 +52,11 @@ pub struct DependencyUpdate {
     /// The new version requirement string (e.g., "^17.0.0").
     pub new_version: String,
 }
+
+/// Type alias for backward compatibility
+///
+/// # Deprecation
+///
+/// This alias maintains compatibility with existing code.
+/// Prefer using `Update` directly in new code.
+pub type DependencyUpdate = Update;

@@ -1,11 +1,11 @@
 #[cfg(test)]
 mod dependency_tests {
-    use std::{cmp::Ordering, collections::HashMap, rc::Rc};
+    use std::{cmp::Ordering, collections::HashMap};
 
     use sublime_package_tools::{
-        build_dependency_graph_from_packages, ChangeType, Dependency, DependencyChange,
-        DependencyFilter, DependencyRegistry, DependencyResolutionError, DependencyUpdate, Package,
-        ResolutionResult, ValidationOptions,
+        build_dependency_graph_from_packages, errors::DependencyResolutionError, ChangeType,
+        Dependency, DependencyChange, DependencyFilter, DependencyRegistry, DependencyUpdate,
+        Package, ResolutionResult, ValidationOptions,
     };
 
     #[test]
@@ -64,11 +64,22 @@ mod dependency_tests {
 
     #[test]
     fn test_update_version() {
-        let dep = Dependency::new("react", "^17.0.0").unwrap();
+        let mut dep = Dependency::new("react", "^17.0.0").unwrap();
         assert!(dep.update_version("^18.0.0").is_ok());
         assert_eq!(dep.version().to_string(), "^18.0.0");
 
         assert!(dep.update_version("not-a-version").is_err());
+    }
+
+    #[test]
+    fn test_with_version() {
+        let dep = Dependency::new("react", "^17.0.0").unwrap();
+        let updated = dep.with_version("^18.0.0").unwrap();
+        assert_eq!(updated.version().to_string(), "^18.0.0");
+        // Original is unchanged
+        assert_eq!(dep.version().to_string(), "^17.0.0");
+
+        assert!(dep.with_version("not-a-version").is_err());
     }
 
     #[test]
@@ -147,20 +158,20 @@ mod dependency_tests {
 
         // Create initial dependency
         let dep1 = registry.get_or_create("react", "^17.0.0").unwrap();
-        assert_eq!(dep1.borrow().name(), "react");
+        assert_eq!(dep1.name(), "react");
 
-        // Get the same dependency (should return same instance)
+        // Get the same dependency (should return same dependency)
         let dep1_again = registry.get_or_create("react", "^17.0.0").unwrap();
-        assert!(Rc::ptr_eq(&dep1, &dep1_again));
+        assert_eq!(dep1.name(), dep1_again.name());
 
         // Request same dependency with higher version (should update)
         let dep1_upgraded = registry.get_or_create("react", "^18.0.0").unwrap();
-        assert!(Rc::ptr_eq(&dep1, &dep1_upgraded)); // Same instance
-        assert_eq!(dep1.borrow().version().to_string(), "^18.0.0"); // But updated version
+        assert_eq!(dep1.name(), dep1_upgraded.name()); // Same dependency name
+        assert_eq!(dep1_upgraded.version().to_string(), "^18.0.0"); // But updated version
 
         // Request with lower version (should not downgrade)
-        let _ = registry.get_or_create("react", "^17.0.0").unwrap();
-        assert_eq!(dep1.borrow().version().to_string(), "^18.0.0"); // Version remains higher
+        let dep_lower = registry.get_or_create("react", "^17.0.0").unwrap();
+        assert_eq!(dep_lower.version().to_string(), "^18.0.0"); // Version remains higher
 
         // Get non-existent dependency
         assert!(registry.get("nonexistent").is_none());
@@ -195,10 +206,12 @@ mod dependency_tests {
 
         // Apply resolution to registry
         let mut registry = DependencyRegistry::new();
-        let react_dep = registry.get_or_create("react", "^17.0.0").unwrap();
+        let _react_dep = registry.get_or_create("react", "^17.0.0").unwrap();
 
         assert!(registry.apply_resolution_result(&result).is_ok());
-        assert_eq!(react_dep.borrow().version().to_string(), "^18.0.0");
+        // Get the dependency again after resolution to see the updated version
+        let updated_react_dep = registry.get("react").unwrap();
+        assert_eq!(updated_react_dep.version().to_string(), "^18.0.0");
     }
 
     #[test]
@@ -275,7 +288,7 @@ mod dependency_tests {
         let mut registry = DependencyRegistry::new();
 
         // Create a package with a dependency
-        let pkg = Package::new_with_registry(
+        let mut pkg = Package::new_with_registry(
             "my-app",
             "1.0.0",
             Some(vec![("react", "^17.0.0")]),

@@ -1,14 +1,14 @@
 //! # Command Builder Implementation
 //!
 //! ## What
-//! This file implements the CommandBuilder struct, providing a fluent interface
+//! This file implements the `CommandBuilder` struct, providing a fluent interface
 //! for constructing Command objects with various configuration options.
 //!
 //! ## How
 //! The implementation uses the builder pattern to provide a clean, method-chaining
 //! API for setting command properties like arguments, environment variables,
 //! working directory, and timeout values. Each method returns the builder itself
-//! to enable chaining, and the build() method finalizes the configuration into a
+//! to enable chaining, and the `build()` method finalizes the configuration into a
 //! Command object.
 //!
 //! ## Why
@@ -21,7 +21,7 @@ use super::types::CommandOutput;
 use std::time::Duration;
 
 impl CommandOutput {
-    /// Creates a new CommandOutput instance.
+    /// Creates a new `CommandOutput` instance.
     ///
     /// # Arguments
     ///
@@ -32,7 +32,7 @@ impl CommandOutput {
     ///
     /// # Returns
     ///
-    /// A new CommandOutput with the provided values
+    /// A new `CommandOutput` with the provided values
     ///
     /// # Examples
     ///

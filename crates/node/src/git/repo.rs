@@ -35,6 +35,7 @@ impl From<RepoGitFileStatus> for GitFileStatus {
             RepoGitFileStatus::Added => GitFileStatus::Added,
             RepoGitFileStatus::Deleted => GitFileStatus::Deleted,
             RepoGitFileStatus::Modified => GitFileStatus::Modified,
+            RepoGitFileStatus::Untracked => GitFileStatus::Untracked,
         }
     }
 }

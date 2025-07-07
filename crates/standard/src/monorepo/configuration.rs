@@ -1,14 +1,14 @@
 //! # Configuration Management Implementation
 //!
 //! ## What
-//! This file implements functionality for the ConfigManager struct and ConfigValue enum,
+//! This file implements functionality for the `ConfigManager` struct and `ConfigValue` enum,
 //! providing methods to load, save, and manipulate configuration settings across different
 //! scopes (global, user, project, runtime). It supports multiple configuration formats
 //! including JSON, TOML, and YAML.
 //!
 //! ## How
 //! The implementation provides methods for loading and saving configurations from files,
-//! accessing and modifying configuration values in a thread-safe manner using RwLock,
+//! accessing and modifying configuration values in a thread-safe manner using `RwLock`,
 //! and converting between different configuration file formats. Configuration values
 //! are represented as a flexible enum that can store various data types.
 //!
@@ -347,11 +347,11 @@ impl Default for ConfigManager {
 }
 
 impl ConfigManager {
-    /// Creates a new ConfigManager with empty settings.
+    /// Creates a new `ConfigManager` with empty settings.
     ///
     /// # Returns
     ///
-    /// A new ConfigManager instance with no configuration loaded.
+    /// A new `ConfigManager` instance with no configuration loaded.
     ///
     /// # Examples
     ///
@@ -419,6 +419,14 @@ impl ConfigManager {
     /// which is memory-only. If a configuration file cannot be loaded, an error
     /// is returned.
     ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if:
+    /// - A configuration file cannot be read
+    /// - A configuration file contains invalid format or syntax
+    /// - An I/O error occurs while accessing a configuration file
+    /// - The configuration format cannot be determined
+    ///
     /// # Returns
     ///
     /// * `Ok(())` - If all configurations were loaded successfully
@@ -454,6 +462,14 @@ impl ConfigManager {
     /// # Arguments
     ///
     /// * `path` - The path to the configuration file to load
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if:
+    /// - The configuration file cannot be read
+    /// - The file contains invalid format or syntax
+    /// - An I/O error occurs while accessing the file
+    /// - The configuration format cannot be determined from the file extension
     ///
     /// # Returns
     ///
@@ -504,6 +520,14 @@ impl ConfigManager {
     /// which is memory-only. If a configuration file cannot be saved, an error
     /// is returned.
     ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if:
+    /// - A configuration file cannot be written
+    /// - An I/O error occurs while accessing a configuration file
+    /// - The configuration format cannot be determined
+    /// - The configuration data cannot be serialized
+    ///
     /// # Returns
     ///
     /// * `Ok(())` - If all configurations were saved successfully
@@ -539,6 +563,14 @@ impl ConfigManager {
     /// # Arguments
     ///
     /// * `path` - The path to the configuration file to save
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if:
+    /// - The configuration file cannot be written
+    /// - An I/O error occurs while accessing the file
+    /// - The configuration format cannot be determined from the file extension
+    /// - The configuration data cannot be serialized to the target format
     ///
     /// # Returns
     ///
@@ -604,6 +636,7 @@ impl ConfigManager {
     ///     }
     /// }
     /// ```
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<ConfigValue> {
         match self.settings.read() {
             Ok(settings) => settings.get(key).cloned(),
@@ -665,6 +698,7 @@ impl ConfigManager {
     ///     println!("Removed temporary value");
     /// }
     /// ```
+    #[must_use]
     pub fn remove(&self, key: &str) -> Option<ConfigValue> {
         match self.settings.write() {
             Ok(mut settings) => settings.remove(key),
@@ -684,7 +718,7 @@ impl ConfigManager {
     ///
     /// # Returns
     ///
-    /// The detected ConfigFormat (Json, Toml, or Yaml)
+    /// The detected `ConfigFormat` (Json, Toml, or Yaml)
     ///
     /// # Examples
     ///

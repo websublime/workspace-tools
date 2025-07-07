@@ -41,7 +41,7 @@
 //! # }
 //! ```
 
-use crate::VersionError;
+use crate::errors::VersionError;
 use semver::{BuildMetadata, Prerelease, Version as SemVersion};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -79,9 +79,9 @@ pub enum VersionStability {
     IncludePrerelease,
 }
 
-/// Default implementation for VersionStability
+/// Default implementation for `VersionStability`
 ///
-/// Defaults to StableOnly for maximum stability.
+/// Defaults to `StableOnly` for maximum stability.
 impl Default for VersionStability {
     fn default() -> Self {
         Self::StableOnly
@@ -120,7 +120,7 @@ pub enum VersionRelationship {
     Indeterminate,
 }
 
-/// Display implementation for VersionRelationship
+/// Display implementation for `VersionRelationship`
 ///
 /// Provides a string representation of the relationship.
 impl Display for VersionRelationship {
@@ -198,6 +198,11 @@ impl Version {
     ///
     /// A new semantic version with bumped major component, or a `VersionError` if parsing fails
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The version string is not a valid semantic version
+    ///
     /// # Examples
     ///
     /// ```
@@ -232,6 +237,11 @@ impl Version {
     ///
     /// A new semantic version with bumped minor component, or a `VersionError` if parsing fails
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The version string is not a valid semantic version
+    ///
     /// # Examples
     ///
     /// ```
@@ -264,6 +274,11 @@ impl Version {
     /// # Returns
     ///
     /// A new semantic version with bumped patch component, or a `VersionError` if parsing fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The version string is not a valid semantic version
     ///
     /// # Examples
     ///
@@ -298,6 +313,11 @@ impl Version {
     ///
     /// A new semantic version with snapshot prerelease tag, or a `VersionError` if parsing fails
     ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The version string is not a valid semantic version
+    ///
     /// # Examples
     ///
     /// ```
@@ -328,6 +348,7 @@ impl Version {
     /// # Returns
     ///
     /// A `VersionRelationship` describing how v2 relates to v1
+    #[must_use]
     ///
     /// # Examples
     ///
@@ -392,6 +413,7 @@ impl Version {
     /// # Returns
     ///
     /// `true` if moving from v1 to v2 is a breaking change, `false` otherwise
+    #[must_use]
     ///
     /// # Examples
     ///
@@ -425,6 +447,11 @@ impl Version {
     /// # Returns
     ///
     /// A parsed semantic version, or a `VersionError` if parsing fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The version string is not a valid semantic version
     ///
     /// # Examples
     ///
