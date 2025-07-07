@@ -186,7 +186,6 @@ impl<'a> MonorepoTools<'a> {
     /// Install native Git hooks in .git/hooks/
     fn install_native_git_hooks(&self) -> Result<Vec<String>> {
         use std::fs;
-        use std::os::unix::fs::PermissionsExt;
 
         let git_hooks_dir = self.project.root_path.join(".git").join("hooks");
         
@@ -208,13 +207,8 @@ impl<'a> MonorepoTools<'a> {
             fs::write(&pre_commit_path, pre_commit_content)
                 .map_err(|e| crate::error::Error::git(format!("Failed to write pre-commit hook: {e}")))?;
             
-            // Make executable
-            let mut perms = fs::metadata(&pre_commit_path)
-                .map_err(|e| crate::error::Error::git(format!("Failed to get hook permissions: {e}")))?
-                .permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&pre_commit_path, perms)
-                .map_err(|e| crate::error::Error::git(format!("Failed to set hook permissions: {e}")))?;
+            // Make executable (platform-specific)
+            self.make_file_executable(&pre_commit_path)?;
             
             installed_hooks.push("pre-commit".to_string());
             log::info!("Installed pre-commit hook");
@@ -228,13 +222,8 @@ impl<'a> MonorepoTools<'a> {
             fs::write(&pre_push_path, pre_push_content)
                 .map_err(|e| crate::error::Error::git(format!("Failed to write pre-push hook: {e}")))?;
             
-            // Make executable
-            let mut perms = fs::metadata(&pre_push_path)
-                .map_err(|e| crate::error::Error::git(format!("Failed to get hook permissions: {e}")))?
-                .permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&pre_push_path, perms)
-                .map_err(|e| crate::error::Error::git(format!("Failed to set hook permissions: {e}")))?;
+            // Make executable (platform-specific)
+            self.make_file_executable(&pre_push_path)?;
             
             installed_hooks.push("pre-push".to_string());
             log::info!("Installed pre-push hook");
@@ -448,7 +437,6 @@ impl<'a> MonorepoTools<'a> {
     /// - File permissions cannot be set
     pub fn install_husky_hooks(&self) -> Result<Vec<String>> {
         use std::fs;
-        use std::os::unix::fs::PermissionsExt;
 
         let config = &self.project.config.hooks;
         let husky_dir = self.project.root_path.join(&config.husky.husky_dir);
@@ -467,13 +455,8 @@ impl<'a> MonorepoTools<'a> {
             fs::write(&pre_commit_path, pre_commit_content)
                 .map_err(|e| crate::error::Error::git(format!("Failed to write Husky pre-commit hook: {e}")))?;
             
-            // Make executable
-            let mut perms = fs::metadata(&pre_commit_path)
-                .map_err(|e| crate::error::Error::git(format!("Failed to get Husky hook permissions: {e}")))?
-                .permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&pre_commit_path, perms)
-                .map_err(|e| crate::error::Error::git(format!("Failed to set Husky hook permissions: {e}")))?;
+            // Make executable (platform-specific)
+            self.make_file_executable(&pre_commit_path)?;
             
             installed_hooks.push("pre-commit".to_string());
             log::info!("Installed Husky pre-commit hook");
@@ -487,13 +470,8 @@ impl<'a> MonorepoTools<'a> {
             fs::write(&pre_push_path, pre_push_content)
                 .map_err(|e| crate::error::Error::git(format!("Failed to write Husky pre-push hook: {e}")))?;
             
-            // Make executable
-            let mut perms = fs::metadata(&pre_push_path)
-                .map_err(|e| crate::error::Error::git(format!("Failed to get Husky hook permissions: {e}")))?
-                .permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&pre_push_path, perms)
-                .map_err(|e| crate::error::Error::git(format!("Failed to set Husky hook permissions: {e}")))?;
+            // Make executable (platform-specific)
+            self.make_file_executable(&pre_push_path)?;
             
             installed_hooks.push("pre-push".to_string());
             log::info!("Installed Husky pre-push hook");
@@ -684,6 +662,49 @@ impl<'a> MonorepoTools<'a> {
             }
             Err(_) => false,
         }
+    }
+
+    /// Make a file executable using platform-specific methods
+    ///
+    /// On Unix systems, sets the executable bit (0o755).
+    /// On Windows, files are executable by default if they have the right extension,
+    /// so this method is a no-op.
+    ///
+    /// # Arguments
+    ///
+    /// * `file_path` - Path to the file to make executable
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or failure
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if file permissions cannot be modified on Unix systems
+    #[allow(clippy::unused_self)]
+    fn make_file_executable(&self, file_path: &std::path::Path) -> Result<()> {
+        #[cfg(unix)]
+        {
+            use std::fs;
+            use std::os::unix::fs::PermissionsExt;
+            
+            let mut perms = fs::metadata(file_path)
+                .map_err(|e| crate::error::Error::git(format!("Failed to get file permissions: {e}")))?
+                .permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(file_path, perms)
+                .map_err(|e| crate::error::Error::git(format!("Failed to set file permissions: {e}")))?;
+        }
+        
+        #[cfg(windows)]
+        {
+            // On Windows, executable permissions are determined by file extension
+            // and registry associations. Git hooks are shell scripts and will be
+            // executed by Git regardless of Windows file permissions.
+            // No action needed here.
+        }
+        
+        Ok(())
     }
 }
 
