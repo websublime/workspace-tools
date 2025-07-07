@@ -38,7 +38,8 @@
       "Bash(echo:*)",
       "Bash(cargo fmt:*)",
       "Bash(cloc:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(cargo:*)"
     ],
     "deny": []
   }

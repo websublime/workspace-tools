@@ -537,10 +537,9 @@ mod tests {
             
             let significance = engine.analyze_significance(&changed_files, package);
 
-            // The glob pattern "src/**/*.{ts,js}" might not work correctly with the glob crate
-            // It might need to be split into separate patterns like "src/**/*.ts" and "src/**/*.js"
-            // For now, we expect Low significance since the pattern might not match
-            assert_eq!(significance, ChangeSignificance::Low);
+            // With the brace expansion fix, the pattern now correctly matches.
+            // The file "src/index.ts" matches the "public_api_changes" rule which returns High
+            assert_eq!(significance, ChangeSignificance::High);
 
             Ok(())
         }
@@ -943,6 +942,44 @@ mod tests {
             assert!(!decision.is_authoritative());
 
             Ok(())
+        }
+
+        #[test]
+        fn test_brace_pattern_expansion() {
+            // Test the brace expansion functionality
+            let patterns = vec![
+                ("src/**/*.{ts,js}", vec!["src/**/*.ts", "src/**/*.js"]),
+                ("*.config.{js,ts,json}", vec!["*.config.js", "*.config.ts", "*.config.json"]),
+                // Now with recursive expansion, this should work correctly
+                ("**/*.{test,spec}.{ts,js}", vec!["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]),
+                ("no-braces.ts", vec!["no-braces.ts"]),
+                ("{leading}.js", vec!["leading.js"]),
+                ("trailing.{js}", vec!["trailing.js"]),
+            ];
+
+            for (input, expected) in patterns {
+                let expanded = ChangeDetectionEngine::expand_brace_pattern(input);
+                assert_eq!(expanded.len(), expected.len(), "Pattern '{}' expansion count mismatch", input);
+                
+                for (i, exp) in expected.iter().enumerate() {
+                    assert_eq!(&expanded[i], exp, "Pattern '{}' expansion mismatch at index {}", input, i);
+                }
+            }
+        }
+
+        #[test]
+        fn test_nested_brace_pattern_expansion() {
+            // Test nested braces (should expand recursively)
+            let pattern = "**/*.{test,spec}.{ts,js}";
+            let expanded = ChangeDetectionEngine::expand_brace_pattern(pattern);
+            
+            // Should fully expand to 4 patterns:
+            // ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
+            assert_eq!(expanded.len(), 4);
+            assert!(expanded.contains(&"**/*.test.ts".to_string()));
+            assert!(expanded.contains(&"**/*.test.js".to_string()));
+            assert!(expanded.contains(&"**/*.spec.ts".to_string()));
+            assert!(expanded.contains(&"**/*.spec.js".to_string()));
         }
     }
 }

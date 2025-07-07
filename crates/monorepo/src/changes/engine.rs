@@ -257,6 +257,54 @@ impl ChangeDetectionEngine {
         true
     }
 
+    /// Expand brace patterns like "*.{ts,js}" into multiple patterns
+    #[cfg(test)]
+    pub fn expand_brace_pattern(pattern: &str) -> Vec<String> {
+        Self::expand_brace_pattern_internal(pattern)
+    }
+
+    /// Internal implementation of brace pattern expansion
+    fn expand_brace_pattern_internal(pattern: &str) -> Vec<String> {
+        // Find first complete brace pattern
+        if let Some(start) = pattern.find('{') {
+            // Find the matching closing brace
+            let mut brace_count = 0;
+            let mut end = None;
+            
+            for (i, ch) in pattern[start..].char_indices() {
+                match ch {
+                    '{' => brace_count += 1,
+                    '}' => {
+                        brace_count -= 1;
+                        if brace_count == 0 {
+                            end = Some(start + i);
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            
+            if let Some(end_pos) = end {
+                let prefix = &pattern[..start];
+                let suffix = &pattern[end_pos + 1..];
+                let options = &pattern[start + 1..end_pos];
+                
+                // Split by comma and expand each option
+                let mut results = Vec::new();
+                for opt in options.split(',') {
+                    let expanded = format!("{}{}{}", prefix, opt.trim(), suffix);
+                    // Recursively expand any remaining braces
+                    results.extend(Self::expand_brace_pattern_internal(&expanded));
+                }
+                return results;
+            }
+        }
+        
+        // No braces found, return original pattern
+        vec![pattern.to_string()]
+    }
+
     /// Check if a file matches any of the given patterns
     fn file_matches_patterns(
         &mut self,
@@ -278,24 +326,37 @@ impl ChangeDetectionEngine {
         for pattern in patterns {
             let pattern_matches = match &pattern.pattern_type {
                 PatternType::Glob => {
-                    let compiled =
-                        self.glob_cache.entry(pattern.pattern.clone()).or_insert_with(|| {
-                            match Pattern::new(&pattern.pattern) {
-                                Ok(glob) => CompiledPattern::Valid(glob),
-                                Err(e) => {
-                                    warn!(
-                                        "Invalid glob pattern '{}': {}. Pattern will never match.",
-                                        pattern.pattern, e
-                                    );
-                                    CompiledPattern::Invalid(())
+                    // Expand brace patterns before matching
+                    let expanded_patterns = Self::expand_brace_pattern_internal(&pattern.pattern);
+                    let mut any_match = false;
+                    
+                    for expanded in expanded_patterns {
+                        let compiled =
+                            self.glob_cache.entry(expanded.clone()).or_insert_with(|| {
+                                match Pattern::new(&expanded) {
+                                    Ok(glob) => CompiledPattern::Valid(glob),
+                                    Err(e) => {
+                                        warn!(
+                                            "Invalid glob pattern '{}': {}. Pattern will never match.",
+                                            expanded, e
+                                        );
+                                        CompiledPattern::Invalid(())
+                                    }
+                                }
+                            });
+
+                        match compiled {
+                            CompiledPattern::Valid(glob) => {
+                                if glob.matches(&relative_path) {
+                                    any_match = true;
+                                    break;
                                 }
                             }
-                        });
-
-                    match compiled {
-                        CompiledPattern::Valid(glob) => glob.matches(&relative_path),
-                        CompiledPattern::Invalid(()) => false,
+                            CompiledPattern::Invalid(()) => {}
+                        }
                     }
+                    
+                    any_match
                 }
                 PatternType::Regex => {
                     let compiled =
