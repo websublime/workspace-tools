@@ -4,7 +4,7 @@ mod dependency_tests {
 
     use sublime_package_tools::{
         build_dependency_graph_from_packages, errors::DependencyResolutionError, ChangeType,
-        Dependency, DependencyChange, DependencyFilter, DependencyRegistry, DependencyUpdate,
+        Dependency, Change, Filter, Registry, Update,
         Package, ResolutionResult, ValidationOptions,
     };
 
@@ -114,7 +114,7 @@ mod dependency_tests {
     #[test]
     fn test_dependency_change() {
         // Test adding a dependency
-        let add_change = DependencyChange::new("react", None, Some("^17.0.0"), ChangeType::Added);
+        let add_change = Change::new("react", None, Some("^17.0.0"), ChangeType::Added);
         assert_eq!(add_change.name, "react");
         assert_eq!(add_change.previous_version, None);
         assert_eq!(add_change.current_version, Some("^17.0.0".to_string()));
@@ -122,19 +122,19 @@ mod dependency_tests {
 
         // Test removing a dependency
         let remove_change =
-            DependencyChange::new("react", Some("^17.0.0"), None, ChangeType::Removed);
+            Change::new("react", Some("^17.0.0"), None, ChangeType::Removed);
         assert_eq!(remove_change.previous_version, Some("^17.0.0".to_string()));
         assert_eq!(remove_change.current_version, None);
         assert!(remove_change.breaking); // Removing is breaking
 
         // Test updating a dependency (non-breaking)
         let minor_update =
-            DependencyChange::new("react", Some("^17.0.0"), Some("^17.1.0"), ChangeType::Updated);
+            Change::new("react", Some("^17.0.0"), Some("^17.1.0"), ChangeType::Updated);
         assert!(!minor_update.breaking);
 
         // Test updating a dependency (breaking)
         let major_update =
-            DependencyChange::new("react", Some("^17.0.0"), Some("^18.0.0"), ChangeType::Updated);
+            Change::new("react", Some("^17.0.0"), Some("^18.0.0"), ChangeType::Updated);
         assert!(major_update.breaking);
     }
 
@@ -142,19 +142,19 @@ mod dependency_tests {
     #[test]
     fn test_dependency_filter() {
         // Test default filter
-        let default_filter = DependencyFilter::default();
-        assert!(matches!(default_filter, DependencyFilter::WithDevelopment));
+        let default_filter = Filter::default();
+        assert!(matches!(default_filter, Filter::WithDevelopment));
 
         // Test other filter types
-        let _prod_only = DependencyFilter::ProductionOnly;
-        let _all_deps = DependencyFilter::AllDependencies;
+        let _prod_only = Filter::ProductionOnly;
+        let _all_deps = Filter::AllDependencies;
 
         // These are enums without methods, so we're just verifying they exist and can be created
     }
 
     #[test]
     fn test_dependency_registry_operations() {
-        let mut registry = DependencyRegistry::new();
+        let mut registry = Registry::new();
 
         // Create initial dependency
         let dep1 = registry.get_or_create("react", "^17.0.0").unwrap();
@@ -190,7 +190,7 @@ mod dependency_tests {
         resolved_versions.insert("react".to_string(), "18.0.0".to_string());
         resolved_versions.insert("lodash".to_string(), "4.17.21".to_string());
 
-        let updates = vec![DependencyUpdate {
+        let updates = vec![Update {
             package_name: "my-app".to_string(),
             dependency_name: "react".to_string(),
             current_version: "^17.0.0".to_string(),
@@ -205,7 +205,7 @@ mod dependency_tests {
         assert_eq!(result.updates_required[0].dependency_name, "react");
 
         // Apply resolution to registry
-        let mut registry = DependencyRegistry::new();
+        let mut registry = Registry::new();
         let _react_dep = registry.get_or_create("react", "^17.0.0").unwrap();
 
         assert!(registry.apply_resolution_result(&result).is_ok());
@@ -217,7 +217,7 @@ mod dependency_tests {
     #[test]
     fn test_dependency_graph_integration() {
         // Create packages with dependencies
-        let mut registry = DependencyRegistry::new();
+        let mut registry = Registry::new();
 
         let pkg_a = Package::new_with_registry(
             "pkg-a",
@@ -285,7 +285,7 @@ mod dependency_tests {
 
     #[test]
     fn test_resolution_error_handling() {
-        let mut registry = DependencyRegistry::new();
+        let mut registry = Registry::new();
 
         // Create a package with a dependency
         let mut pkg = Package::new_with_registry(

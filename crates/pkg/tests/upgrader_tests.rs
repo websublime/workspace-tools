@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod upgrader_tests {
     use sublime_package_tools::{
-        AvailableUpgrade, Dependency, DependencyFilter, ExecutionMode, RegistryManager,
+        AvailableUpgrade, Dependency, Filter, ExecutionMode, RegistryManager,
         UpgradeConfig, UpgradeStatus, Upgrader, Version, VersionRelationship, VersionStability,
         VersionUpdateStrategy,
     };
@@ -71,7 +71,7 @@ mod upgrader_tests {
 
         // Full upgrade config
         let full_config = UpgradeConfig {
-            dependency_types: DependencyFilter::AllDependencies,
+            dependency_types: Filter::AllDependencies,
             update_strategy: VersionUpdateStrategy::AllUpdates,
             version_stability: VersionStability::IncludePrerelease,
             target_packages: vec!["ui".to_string()],

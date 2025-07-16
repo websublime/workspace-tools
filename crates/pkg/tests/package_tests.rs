@@ -4,8 +4,8 @@ mod package_tests {
     use std::collections::HashMap;
     use std::time::Duration;
     use sublime_package_tools::{
-        package_scope_name_version, CacheEntry, ChangeType, Dependency, DependencyChange,
-        DependencyRegistry, Package, PackageDiff, PackageInfo, ResolutionResult,
+        package_scope_name_version, CacheEntry, ChangeType, Dependency, Change,
+        Registry, Package, PackageDiff, Info, ResolutionResult,
     };
 
     #[test]
@@ -15,7 +15,7 @@ mod package_tests {
         assert!(pkg.is_ok());
 
         // Create package with dependencies using registry
-        let mut registry = DependencyRegistry::new();
+        let mut registry = Registry::new();
         let pkg_with_deps = Package::new_with_registry(
             "my-app",
             "1.0.0",
@@ -31,7 +31,7 @@ mod package_tests {
 
     #[test]
     fn test_package_with_registry() {
-        let mut registry = DependencyRegistry::new();
+        let mut registry = Registry::new();
 
         // Create package with registry
         let pkg = Package::new_with_registry(
@@ -76,7 +76,7 @@ mod package_tests {
 
     #[test]
     fn test_dependency_operations() {
-        let mut registry = DependencyRegistry::new();
+        let mut registry = Registry::new();
 
         // Create package with registry
         let mut pkg = Package::new_with_registry(
@@ -108,8 +108,8 @@ mod package_tests {
     #[test]
     fn test_package_diff() {
         // Create two separate registries to avoid shared references
-        let mut registry_before = DependencyRegistry::new();
-        let mut registry_after = DependencyRegistry::new();
+        let mut registry_before = Registry::new();
+        let mut registry_after = Registry::new();
 
         // Create "before" package
         let before_pkg = Package::new_with_registry(
@@ -183,7 +183,7 @@ mod package_tests {
         let pkg = Package::new("test-pkg", "1.0.0", None).unwrap();
 
         // Create package info
-        let pkg_info = PackageInfo::new(
+        let pkg_info = Info::new(
             pkg,
             "/path/to/package.json".to_string(),
             "/path/to".to_string(),
@@ -205,7 +205,7 @@ mod package_tests {
         assert_eq!(pkg_info.package.borrow().version_str(), "1.1.0");
 
         // Test dependency update
-        let mut registry = DependencyRegistry::new();
+        let mut registry = Registry::new();
         let pkg_with_deps = Package::new_with_registry(
             "test-pkg",
             "1.0.0",
@@ -214,7 +214,7 @@ mod package_tests {
         )
         .unwrap();
 
-        let pkg_info_with_deps = PackageInfo::new(
+        let pkg_info_with_deps = Info::new(
             pkg_with_deps,
             "/path/to/package.json".to_string(),
             "/path/to".to_string(),
@@ -234,7 +234,7 @@ mod package_tests {
     #[test]
     fn test_dependency_change() {
         // Added dependency
-        let added = DependencyChange::new("express", None, Some("^4.17.1"), ChangeType::Added);
+        let added = Change::new("express", None, Some("^4.17.1"), ChangeType::Added);
         assert_eq!(added.name, "express");
         assert_eq!(added.previous_version, None);
         assert_eq!(added.current_version, Some("^4.17.1".to_string()));
@@ -242,7 +242,7 @@ mod package_tests {
         assert!(!added.breaking);
 
         // Updated dependency (non-breaking)
-        let updated = DependencyChange::new(
+        let updated = Change::new(
             "lodash",
             Some("^4.17.20"),
             Some("^4.17.21"),
@@ -253,11 +253,11 @@ mod package_tests {
 
         // Breaking update
         let breaking =
-            DependencyChange::new("react", Some("^17.0.0"), Some("^18.0.0"), ChangeType::Updated);
+            Change::new("react", Some("^17.0.0"), Some("^18.0.0"), ChangeType::Updated);
         assert!(breaking.breaking);
 
         // Removed dependency
-        let removed = DependencyChange::new("moment", Some("^2.29.1"), None, ChangeType::Removed);
+        let removed = Change::new("moment", Some("^2.29.1"), None, ChangeType::Removed);
         assert_eq!(removed.change_type, ChangeType::Removed);
     }
 
@@ -349,7 +349,7 @@ mod package_tests {
     #[test]
     fn test_package_info_dependency_resolution() {
         // Create package with dependencies
-        let mut temp_registry = DependencyRegistry::new();
+        let mut temp_registry = Registry::new();
         let pkg = Package::new_with_registry(
             "test-pkg",
             "1.0.0",
@@ -359,7 +359,7 @@ mod package_tests {
         .unwrap();
 
         // Create package info with JSON
-        let pkg_info = PackageInfo::new(
+        let pkg_info = Info::new(
             pkg,
             "/path/to/package.json".to_string(),
             "/path/to".to_string(),

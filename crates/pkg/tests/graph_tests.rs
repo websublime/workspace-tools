@@ -8,7 +8,7 @@ mod graph_tests {
     // Helper function to create test packages
     fn create_test_packages() -> Vec<Package> {
         let mut packages = Vec::new();
-        let mut registry = sublime_package_tools::DependencyRegistry::new();
+        let mut registry = sublime_package_tools::Registry::new();
 
         // Package A depends on B and C
         let pkg_a = Package::new_with_registry(
@@ -41,7 +41,7 @@ mod graph_tests {
     // Helper function to create packages with circular dependencies
     fn create_circular_packages() -> Vec<Package> {
         let mut packages = Vec::new();
-        let mut registry = sublime_package_tools::DependencyRegistry::new();
+        let mut registry = sublime_package_tools::Registry::new();
 
         // Package X depends on Y
         let pkg_x = Package::new_with_registry(
@@ -122,7 +122,7 @@ mod graph_tests {
         let mut packages = create_test_packages();
 
         // Add a package with external dependency
-        let mut registry = sublime_package_tools::DependencyRegistry::new();
+        let mut registry = sublime_package_tools::Registry::new();
         let pkg_d = Package::new_with_registry(
             "pkg-d",
             "1.0.0",
@@ -144,7 +144,7 @@ mod graph_tests {
     #[test]
     fn test_find_version_conflicts() {
         let mut packages = Vec::new();
-        let mut registry = sublime_package_tools::DependencyRegistry::new();
+        let mut registry = sublime_package_tools::Registry::new();
 
         // Package A depends on C v1.0.0
         let pkg_a = Package::new_with_registry(
@@ -188,7 +188,7 @@ mod graph_tests {
         let mut packages = create_test_packages();
 
         // Add package with external dependency
-        let mut registry = sublime_package_tools::DependencyRegistry::new();
+        let mut registry = sublime_package_tools::Registry::new();
         let pkg_d = Package::new_with_registry(
             "pkg-d",
             "1.0.0",

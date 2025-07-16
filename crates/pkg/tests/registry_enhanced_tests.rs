@@ -6,7 +6,7 @@
 #![allow(clippy::unwrap_used)]
 
 use semver::VersionReq;
-use sublime_package_tools::{DependencyRegistry, LocalRegistry, NpmRegistry};
+use sublime_package_tools::{Registry, LocalRegistry, NpmRegistry};
 
 /// Test the enhanced dependency registry with local package registry
 #[test]
@@ -21,7 +21,7 @@ fn test_dependency_registry_with_local_registry() {
     local_registry.add_package_versions("lodash", &["4.17.20", "4.17.21"]).unwrap();
 
     // Create dependency registry with the local package registry
-    let mut registry = DependencyRegistry::with_package_registry(Box::new(local_registry));
+    let mut registry = Registry::with_package_registry(Box::new(local_registry));
 
     // Test basic functionality
     let react_dep = registry.get_or_create("react", "^17.0.0").unwrap();
@@ -62,7 +62,7 @@ fn test_dependency_registry_with_local_registry() {
 /// Test dependency registry without package registry (original behavior)
 #[test]
 fn test_dependency_registry_without_package_registry() {
-    let mut registry = DependencyRegistry::new();
+    let mut registry = Registry::new();
 
     // Test that it doesn't have package registry capabilities
     assert!(!registry.has_package_registry());
@@ -88,7 +88,7 @@ fn test_dependency_registry_without_package_registry() {
 /// Test setting package registry after creation
 #[test]
 fn test_set_package_registry_after_creation() {
-    let mut registry = DependencyRegistry::new();
+    let mut registry = Registry::new();
     assert!(!registry.has_package_registry());
 
     // Create a local registry with test data
@@ -117,11 +117,11 @@ fn test_npm_registry_cloning() {
     let cloned_registry = npm_registry.clone();
 
     // Create dependency registry with npm registry
-    let registry = DependencyRegistry::with_package_registry(Box::new(npm_registry));
+    let registry = Registry::with_package_registry(Box::new(npm_registry));
     assert!(registry.has_package_registry());
 
     // Create another registry with cloned npm registry
-    let registry2 = DependencyRegistry::with_package_registry(Box::new(cloned_registry));
+    let registry2 = Registry::with_package_registry(Box::new(cloned_registry));
     assert!(registry2.has_package_registry());
 }
 
@@ -135,7 +135,7 @@ fn test_version_conflict_resolution_with_registry() {
         .add_package_versions("react", &["16.0.0", "17.0.0", "17.0.2", "18.0.0"])
         .unwrap();
 
-    let mut registry = DependencyRegistry::with_package_registry(Box::new(local_registry));
+    let mut registry = Registry::with_package_registry(Box::new(local_registry));
 
     // Create dependencies with different version requirements
     let _dep1 = registry.get_or_create("react", "^17.0.0").unwrap();
@@ -163,7 +163,7 @@ fn test_version_conflict_resolution_with_registry() {
 fn test_error_handling_with_failed_registry() {
     // Create a registry that will have no packages
     let local_registry = LocalRegistry::default();
-    let registry = DependencyRegistry::with_package_registry(Box::new(local_registry));
+    let registry = Registry::with_package_registry(Box::new(local_registry));
 
     // Test with non-existent package - should not error but return fallback
     let req = VersionReq::parse("^1.0.0").unwrap();
@@ -185,7 +185,7 @@ fn test_complex_version_requirements() {
         .add_package_versions("complex-pkg", &["1.0.0", "1.1.0", "1.2.0", "2.0.0", "2.1.0"])
         .unwrap();
 
-    let registry = DependencyRegistry::with_package_registry(Box::new(local_registry));
+    let registry = Registry::with_package_registry(Box::new(local_registry));
 
     // Test various requirement patterns
     let req1 = VersionReq::parse("^1.0.0").unwrap(); // Should match 1.x versions
