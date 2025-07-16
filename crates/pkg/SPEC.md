@@ -7,19 +7,19 @@ A comprehensive API specification for the sublime_package_tools Rust library.
 - [Overview](#overview)
 - [Package Management](#package-management)
   - [Package](#package)
-  - [PackageInfo](#packageinfo)
+  - [Info](#info)
   - [PackageDiff](#packagediff)
   - [CacheEntry](#cacheentry)
   - [Package Scoping](#package-scoping)
 - [Dependency Management](#dependency-management)
   - [Dependency](#dependency)
-  - [DependencyRegistry](#dependencyregistry)
-  - [DependencyChange](#dependencychange)
-  - [DependencyFilter](#dependencyfilter)
-  - [DependencyUpdate](#dependencyupdate)
+  - [Registry](#registry)
+  - [Change](#change)
+  - [Filter](#filter)
+  - [Update](#update)
   - [ResolutionResult](#resolutionresult)
 - [Dependency Graph](#dependency-graph)
-  - [DependencyGraph](#dependencygraph)
+  - [Graph](#graph)
   - [Node Trait](#node-trait)
   - [Step Enum](#step-enum)
   - [Validation](#validation)
@@ -84,7 +84,7 @@ impl Package {
         name: &str,
         version: &str,
         dependencies: Option<Vec<(&str, &str)>>,
-        registry: &mut DependencyRegistry
+        registry: &mut Registry
     ) -> Result<Self, VersionError>;
     
     // Get the package name
@@ -130,12 +130,12 @@ impl Node for Package {
 }
 ```
 
-### PackageInfo
+### Info
 
 Represents a package along with its JSON data and file paths.
 
 ```rust
-pub struct PackageInfo {
+pub struct Info {
     pub package: Rc<RefCell<Package>>,
     pub package_json_path: String,
     pub package_path: String,
@@ -143,7 +143,7 @@ pub struct PackageInfo {
     pub pkg_json: Rc<RefCell<Value>>,
 }
 
-impl PackageInfo {
+impl Info {
     // Create a new package info
     pub fn new(
         package: Package,
@@ -183,7 +183,7 @@ pub struct PackageDiff {
     pub package_name: String,
     pub previous_version: String,
     pub current_version: String,
-    pub dependency_changes: Vec<DependencyChange>,
+    pub dependency_changes: Vec<Change>,
     pub breaking_change: bool,
 }
 
@@ -279,16 +279,16 @@ impl std::fmt::Display for Dependency {
 }
 ```
 
-### DependencyRegistry
+### Registry
 
 A registry for managing and reusing dependency instances.
 
 ```rust
-pub struct DependencyRegistry {
+pub struct Registry {
     // Private fields
 }
 
-impl DependencyRegistry {
+impl Registry {
     // Creates a new, empty dependency registry
     pub fn new() -> Self;
     
@@ -332,12 +332,12 @@ impl DependencyRegistry {
 }
 ```
 
-### DependencyChange
+### Change
 
 Represents a change to a dependency between package versions.
 
 ```rust
-pub struct DependencyChange {
+pub struct Change {
     pub name: String,
     pub previous_version: Option<String>,
     pub current_version: Option<String>,
@@ -345,7 +345,7 @@ pub struct DependencyChange {
     pub breaking: bool,
 }
 
-impl DependencyChange {
+impl Change {
     // Creates a new dependency change record
     pub fn new(
         name: &str,
@@ -356,12 +356,12 @@ impl DependencyChange {
 }
 ```
 
-### DependencyFilter
+### Filter
 
 Filter to control which types of dependencies are included in operations.
 
 ```rust
-pub enum DependencyFilter {
+pub enum Filter {
     // Include only production dependencies
     ProductionOnly,
     // Include production and development dependencies
@@ -370,17 +370,17 @@ pub enum DependencyFilter {
     AllDependencies,
 }
 
-impl Default for DependencyFilter {
+impl Default for Filter {
     fn default() -> Self;
 }
 ```
 
-### DependencyUpdate
+### Update
 
 Represents a required update to a dependency.
 
 ```rust
-pub struct DependencyUpdate {
+pub struct Update {
     pub package_name: String,
     pub dependency_name: String,
     pub current_version: String,
@@ -395,32 +395,32 @@ Result of a dependency resolution operation.
 ```rust
 pub struct ResolutionResult {
     pub resolved_versions: HashMap<String, String>,
-    pub updates_required: Vec<DependencyUpdate>,
+    pub updates_required: Vec<Update>,
 }
 ```
 
 ## Dependency Graph
 
-### DependencyGraph
+### Graph
 
 A graph representation of dependencies between packages.
 
 ```rust
-pub struct DependencyGraph<'a, N: Node> {
+pub struct Graph<'a, N: Node> {
     pub graph: StableDiGraph<Step<'a, N>, ()>,
     pub node_indices: HashMap<N::Identifier, NodeIndex>,
     pub dependents: HashMap<N::Identifier, Vec<N::Identifier>>,
     pub cycles: Vec<Vec<N::Identifier>>,
 }
 
-impl<'a, N> From<&'a [N]> for DependencyGraph<'a, N>
+impl<'a, N> From<&'a [N]> for Graph<'a, N>
 where
     N: Node,
 {
     fn from(nodes: &'a [N]) -> Self;
 }
 
-impl<'a, N> Iterator for DependencyGraph<'a, N>
+impl<'a, N> Iterator for Graph<'a, N>
 where
     N: Node,
 {
@@ -428,7 +428,7 @@ where
     fn next(&mut self) -> Option<Self::Item>;
 }
 
-impl<'a, N> DependencyGraph<'a, N>
+impl<'a, N> Graph<'a, N>
 where
     N: Node,
 {
@@ -609,7 +609,7 @@ impl Default for DotOptions {
 
 // Generate DOT format representation of a dependency graph
 pub fn generate_dot<N: Node>(
-    graph: &DependencyGraph<N>,
+    graph: &Graph<N>,
     options: &DotOptions,
 ) -> Result<String, std::fmt::Error>;
 
@@ -617,7 +617,7 @@ pub fn generate_dot<N: Node>(
 pub fn save_dot_to_file(dot_content: &str, file_path: &str) -> std::io::Result<()>;
 
 // Generate an ASCII representation of the dependency graph
-pub fn generate_ascii<N: Node>(graph: &DependencyGraph<N>) -> Result<String, std::fmt::Error>;
+pub fn generate_ascii<N: Node>(graph: &Graph<N>) -> Result<String, std::fmt::Error>;
 ```
 
 ### Graph Building
@@ -626,7 +626,7 @@ Utility functions for building dependency graphs.
 
 ```rust
 // Build a dependency graph from packages
-pub fn build_dependency_graph_from_packages(packages: &[Package]) -> DependencyGraph<'_, Package>;
+pub fn build_dependency_graph_from_packages(packages: &[Package]) -> Graph<'_, Package>;
 
 // Build a dependency graph from package infos
 pub fn build_dependency_graph_from_package_infos<'a>(
