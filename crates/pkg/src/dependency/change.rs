@@ -3,7 +3,7 @@
 //! This module provides structures for tracking changes to dependencies.
 //!
 //! When comparing different versions of a package, it's important to track
-//! how dependencies have changed between versions. The `DependencyChange` struct
+//! how dependencies have changed between versions. The `Change` struct
 //! represents such changes, including which dependencies were added, removed,
 //! or updated, and whether these changes are potentially breaking.
 
@@ -24,10 +24,10 @@ use crate::ChangeType;
 /// # Examples
 ///
 /// ```
-/// use sublime_package_tools::{DependencyChange, ChangeType};
+/// use sublime_package_tools::{Change, ChangeType};
 ///
 /// // Represent a dependency being added
-/// let added = DependencyChange::new(
+/// let added = Change::new(
 ///     "react",
 ///     None,
 ///     Some("^17.0.0"),
@@ -35,7 +35,7 @@ use crate::ChangeType;
 /// );
 ///
 /// // Represent a dependency being updated
-/// let updated = DependencyChange::new(
+/// let updated = Change::new(
 ///     "lodash",
 ///     Some("^4.0.0"),
 ///     Some("^4.17.21"),
@@ -82,10 +82,10 @@ impl Change {
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyChange, ChangeType};
+    /// use sublime_package_tools::{Change, ChangeType};
     ///
     /// // New dependency - not breaking
-    /// let added = DependencyChange::new(
+    /// let added = Change::new(
     ///     "express",
     ///     None,
     ///     Some("^4.18.1"),
@@ -94,7 +94,7 @@ impl Change {
     /// assert!(!added.breaking);
     ///
     /// // Removed dependency - breaking
-    /// let removed = DependencyChange::new(
+    /// let removed = Change::new(
     ///     "old-pkg",
     ///     Some("^1.0.0"),
     ///     None,
@@ -103,7 +103,7 @@ impl Change {
     /// assert!(removed.breaking);
     ///
     /// // Minor update - not breaking
-    /// let minor_update = DependencyChange::new(
+    /// let minor_update = Change::new(
     ///     "lodash",
     ///     Some("^4.17.20"),
     ///     Some("^4.17.21"),
@@ -112,7 +112,7 @@ impl Change {
     /// assert!(!minor_update.breaking);
     ///
     /// // Major update - breaking
-    /// let major_update = DependencyChange::new(
+    /// let major_update = Change::new(
     ///     "react",
     ///     Some("^17.0.2"),
     ///     Some("^18.0.0"),
@@ -158,11 +158,3 @@ impl Change {
     }
 }
 
-/// Type alias for backward compatibility
-///
-/// # Deprecation
-///
-/// This alias maintains compatibility with existing code.
-/// Prefer using `Change` directly in new code.
-#[allow(clippy::module_name_repetitions)]
-pub type DependencyChange = Change;

@@ -24,12 +24,12 @@
 //! ## Examples
 //!
 //! ```
-//! use sublime_package_tools::{DependencyGraph, Package, ValidationOptions};
+//! use sublime_package_tools::{Graph, Package, ValidationOptions};
 //!
 //! # fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! # let packages = vec![];
 //! // Create a dependency graph from packages
-//! let graph = DependencyGraph::from(packages.as_slice());
+//! let graph = Graph::from(packages.as_slice());
 //!
 //! // Detect circular dependencies
 //! let graph = graph.detect_circular_dependencies();
@@ -86,12 +86,12 @@ use petgraph::{stable_graph::StableDiGraph, Direction};
 /// # Examples
 ///
 /// ```
-/// use sublime_package_tools::{DependencyGraph, Package};
+/// use sublime_package_tools::{Graph, Package};
 ///
 /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// # let packages = vec![];
 /// // Create a dependency graph from packages
-/// let graph = DependencyGraph::from(packages.as_slice());
+/// let graph = Graph::from(packages.as_slice());
 ///
 /// // Check if all dependencies are resolved within the graph
 /// if graph.is_internally_resolvable() {
@@ -135,11 +135,11 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{Dependency, DependencyGraph, DependencyRegistry, Package};
+    /// use sublime_package_tools::{Dependency, Graph, Registry, Package};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// // Create some packages
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry("pkg-a", "1.0.0", Some(vec![("pkg-b", "^1.0.0")]), &mut registry)?,
     ///     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![]), &mut registry)?,
@@ -272,10 +272,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, Dependency, DependencyRegistry, Package, Step};
+    /// use sublime_package_tools::{Graph, Dependency, Registry, Package, Step};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry("app", "1.0.0", Some(vec![("lib", "^1.0.0")]), &mut registry)?,
     ///     Package::new_with_registry("lib", "1.0.0", Some(vec![]), &mut registry)?,
@@ -320,10 +320,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package};
+    /// use sublime_package_tools::{Graph, Registry, Package};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry("app", "1.0.0", Some(vec![("lib", "^1.0.0")]), &mut registry)?,
     ///     Package::new_with_registry("lib", "1.0.0", Some(vec![]), &mut registry)?,
@@ -357,10 +357,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package};
+    /// use sublime_package_tools::{Graph, Registry, Package};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry(
     ///         "app",
@@ -396,10 +396,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package};
+    /// use sublime_package_tools::{Graph, Registry, Package};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry("app", "1.0.0", Some(vec![("lib", "^1.0.0")]), &mut registry)?,
     ///     Package::new_with_registry("lib", "1.0.0", Some(vec![]), &mut registry)?,
@@ -431,10 +431,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package};
+    /// use sublime_package_tools::{Graph, Registry, Package};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry("app", "1.0.0", Some(vec![]), &mut registry)?,
     /// ];
@@ -467,10 +467,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package, Step};
+    /// use sublime_package_tools::{Graph, Registry, Package, Step};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry("app", "1.0.0", Some(vec![]), &mut registry)?,
     /// ];
@@ -510,10 +510,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package};
+    /// use sublime_package_tools::{Graph, Registry, Package};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry("pkg-a", "1.0.0", Some(vec![("pkg-b", "^1.0.0")]), &mut registry)?,
     ///     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![("pkg-a", "^1.0.0")]), &mut registry)?,
@@ -546,10 +546,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package};
+    /// use sublime_package_tools::{Graph, Registry, Package};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry("pkg-a", "1.0.0", Some(vec![("pkg-b", "^1.0.0")]), &mut registry)?,
     ///     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![("pkg-a", "^1.0.0")]), &mut registry)?,
@@ -578,10 +578,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package};
+    /// use sublime_package_tools::{Graph, Registry, Package};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry("pkg-a", "1.0.0", Some(vec![("pkg-b", "^1.0.0")]), &mut registry)?,
     ///     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![("pkg-c", "^1.0.0")]), &mut registry)?,
@@ -610,10 +610,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package};
+    /// use sublime_package_tools::{Graph, Registry, Package};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry("pkg-a", "1.0.0", Some(vec![("pkg-b", "^1.0.0")]), &mut registry)?,
     ///     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![("pkg-a", "^1.0.0")]), &mut registry)?,
@@ -647,10 +647,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package};
+    /// use sublime_package_tools::{Graph, Registry, Package};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry(
     ///         "app",
@@ -701,10 +701,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package};
+    /// use sublime_package_tools::{Graph, Registry, Package};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry("pkg-a", "1.0.0", Some(vec![("shared", "^1.0.0")]), &mut registry)?,
     ///     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![("shared", "^2.0.0")]), &mut registry)?,
@@ -768,10 +768,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package};
+    /// use sublime_package_tools::{Graph, Registry, Package};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry("pkg-a", "1.0.0", Some(vec![("react", "^16.0.0")]), &mut registry)?,
     ///     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![("react", "^17.0.0")]), &mut registry)?,
@@ -822,10 +822,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package};
+    /// use sublime_package_tools::{Graph, Registry, Package};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry("pkg-a", "1.0.0", Some(vec![("external", "^1.0.0")]), &mut registry)?,
     ///     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![("pkg-a", "^1.0.0")]), &mut registry)?,
@@ -897,10 +897,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package};
+    /// use sublime_package_tools::{Graph, Registry, Package};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry("app", "1.0.0", Some(vec![("lib", "^1.0.0")]), &mut registry)?,
     ///     Package::new_with_registry("lib", "1.0.0", Some(vec![]), &mut registry)?,
@@ -941,10 +941,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package};
+    /// use sublime_package_tools::{Graph, Registry, Package};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry("app", "1.0.0", Some(vec![("react", "^16.0.0")]), &mut registry)?,
     /// ];
@@ -993,10 +993,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyGraph, DependencyRegistry, Package, ValidationOptions};
+    /// use sublime_package_tools::{Graph, Registry, Package, ValidationOptions};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let packages = vec![
     ///     Package::new_with_registry(
     ///         "app",
@@ -1066,10 +1066,3 @@ where
     }
 }
 
-/// Type alias for backward compatibility
-///
-/// # Deprecation
-///
-/// This alias maintains compatibility with existing code.
-/// Prefer using `Graph` directly in new code.
-pub type DependencyGraph<'a, N> = Graph<'a, N>;

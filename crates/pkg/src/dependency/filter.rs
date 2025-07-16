@@ -19,17 +19,17 @@
 /// # Examples
 ///
 /// ```
-/// use sublime_package_tools::{DependencyFilter, UpgradeConfig};
+/// use sublime_package_tools::{Filter, UpgradeConfig};
 ///
 /// // Create a configuration that only includes production dependencies
 /// let config = UpgradeConfig {
-///     dependency_types: DependencyFilter::ProductionOnly,
+///     dependency_types: Filter::ProductionOnly,
 ///     ..UpgradeConfig::default()
 /// };
 ///
 /// // Use default (includes production and development dependencies)
-/// let default_filter = DependencyFilter::default();
-/// assert!(matches!(default_filter, DependencyFilter::WithDevelopment));
+/// let default_filter = Filter::default();
+/// assert!(matches!(default_filter, Filter::WithDevelopment));
 /// ```
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Filter {
@@ -56,11 +56,3 @@ impl Default for Filter {
     }
 }
 
-/// Type alias for backward compatibility
-///
-/// # Deprecation
-///
-/// This alias maintains compatibility with existing code.
-/// Prefer using `Filter` directly in new code.
-#[allow(clippy::module_name_repetitions)]
-pub type DependencyFilter = Filter;

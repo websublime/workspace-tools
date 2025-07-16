@@ -21,10 +21,10 @@
 //!
 //! ```rust
 //! # fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! use sublime_package_tools::{Dependency, DependencyRegistry, Package};
+//! use sublime_package_tools::{Dependency, Registry, Package};
 //!
 //! // Create dependencies using a registry (ensures consistent instances)
-//! let mut registry = DependencyRegistry::new();
+//! let mut registry = Registry::new();
 //! let react_dep = registry.get_or_create("react", "^17.0.2")?;
 //! let router_dep = registry.get_or_create("react-router", "^6.0.0")?;
 //!
@@ -51,8 +51,8 @@
 //!
 //! ```rust
 //! # fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! # use sublime_package_tools::{Package, Dependency, DependencyRegistry};
-//! # let mut registry = DependencyRegistry::new();
+//! # use sublime_package_tools::{Package, Dependency, Registry};
+//! # let mut registry = Registry::new();
 //! # let packages = vec![
 //! #     Package::new_with_registry("pkg-a", "1.0.0", Some(vec![("pkg-b", "^1.0.0")]), &mut registry)?,
 //! #     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![]), &mut registry)?
@@ -182,16 +182,16 @@ pub use package::{
     cache::CacheEntry,
     change::ChangeType,
     diff::PackageDiff,
-    info::PackageInfo,
+    info::Info,
     package::Package,
     registry::{NpmRegistry, PackageRegistry, PackageRegistryClone},
     scope::{package_scope_name_version, PackageScopeMetadata},
 };
 
 pub use dependency::{
-    change::DependencyChange, dependency::Dependency, filter::DependencyFilter,
-    graph::DependencyGraph, registry::DependencyRegistry, resolution::ResolutionResult,
-    update::DependencyUpdate,
+    change::Change, dependency::Dependency, filter::Filter,
+    graph::Graph, registry::Registry, resolution::ResolutionResult,
+    update::Update,
 };
 
 pub use errors::{Error, Result};
