@@ -19,7 +19,7 @@ use super::update::Update as DependencyUpdate;
 /// # Examples
 ///
 /// ```
-/// use sublime_package_tools::{ResolutionResult, DependencyUpdate};
+/// use sublime_package_tools::{ResolutionResult, Update};
 /// use std::collections::HashMap;
 ///
 /// // Create a resolution result
@@ -28,7 +28,7 @@ use super::update::Update as DependencyUpdate;
 /// resolved_versions.insert("lodash".to_string(), "4.17.21".to_string());
 ///
 /// let updates = vec![
-///     DependencyUpdate {
+///     Update {
 ///         package_name: "my-app".to_string(),
 ///         dependency_name: "react".to_string(),
 ///         current_version: "^16.0.0".to_string(),

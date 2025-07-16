@@ -1,15 +1,15 @@
-use crate::{DependencyGraph, Package, PackageInfo};
+use crate::{Graph, Package, Info};
 
 /// Build a dependency graph from packages
-pub fn build_dependency_graph_from_packages(packages: &[Package]) -> DependencyGraph<'_, Package> {
-    DependencyGraph::from(packages)
+pub fn build_dependency_graph_from_packages(packages: &[Package]) -> Graph<'_, Package> {
+    Graph::from(packages)
 }
 
 /// Build a dependency graph from package infos
 pub fn build_dependency_graph_from_package_infos<'a>(
-    package_infos: &[PackageInfo],
+    package_infos: &[Info],
     packages: &'a mut Vec<Package>,
-) -> DependencyGraph<'a, Package> {
+) -> Graph<'a, Package> {
     // Extract packages from package infos
     packages.clear();
     for pkg_info in package_infos {

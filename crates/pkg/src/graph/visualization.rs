@@ -5,7 +5,7 @@ use std::fmt::Write;
 
 use petgraph::{graph::NodeIndex, Direction};
 
-use crate::{DependencyGraph, Node, Step};
+use crate::{Graph, Node, Step};
 
 /// Options for generating DOT graph output
 #[derive(Debug, Clone)]
@@ -50,13 +50,13 @@ impl NodeStyle {
 /// # Examples
 ///
 /// ```
-/// use ws_pkg::graph::DependencyGraph;
+/// use ws_pkg::graph::Graph;
 /// use ws_pkg::types::package::Package;
 /// use ws_pkg::graph::visualization::{generate_dot, DotOptions};
 ///
 /// // Create packages and build a graph
 /// let packages = vec![];  // Add your packages here
-/// let graph: DependencyGraph<'_, Package> = DependencyGraph::from(packages.as_slice());
+/// let graph: Graph<'_, Package> = Graph::from(packages.as_slice());
 ///
 /// // Generate DOT representation with default options
 /// let options = DotOptions::default();
@@ -64,7 +64,7 @@ impl NodeStyle {
 /// ```
 #[allow(clippy::writeln_empty_string)]
 pub fn generate_dot<N: Node>(
-    graph: &DependencyGraph<N>,
+    graph: &Graph<N>,
     options: &DotOptions,
 ) -> Result<String, std::fmt::Error> {
     let mut output = String::new();
@@ -148,7 +148,7 @@ pub fn generate_dot<N: Node>(
 }
 
 /// Check if the graph has any circular dependencies and return the nodes involved
-fn find_nodes_in_cycles<N: Node>(graph: &DependencyGraph<N>) -> HashSet<String> {
+fn find_nodes_in_cycles<N: Node>(graph: &Graph<N>) -> HashSet<String> {
     let mut nodes_in_cycles = HashSet::new();
 
     // Quick check - if there are no cycles, return empty set
@@ -173,13 +173,13 @@ fn find_nodes_in_cycles<N: Node>(graph: &DependencyGraph<N>) -> HashSet<String> 
 /// # Examples
 ///
 /// ```no_run
-/// use ws_pkg::graph::DependencyGraph;
+/// use ws_pkg::graph::Graph;
 /// use ws_pkg::types::package::Package;
 /// use ws_pkg::graph::visualization::{generate_dot, save_dot_to_file, DotOptions};
 ///
 /// // Create packages and build a graph
 /// let packages = vec![];  // Add your packages here
-/// let graph: DependencyGraph<'_, Package> = DependencyGraph::from(packages.as_slice());
+/// let graph: Graph<'_, Package> = Graph::from(packages.as_slice());
 ///
 /// // Generate and save DOT representation
 /// let options = DotOptions::default();
@@ -198,19 +198,19 @@ pub fn save_dot_to_file(dot_content: &str, file_path: &str) -> std::io::Result<(
 /// # Examples
 ///
 /// ```
-/// use ws_pkg::graph::DependencyGraph;
+/// use ws_pkg::graph::Graph;
 /// use ws_pkg::types::package::Package;
 /// use ws_pkg::graph::visualization::generate_ascii;
 ///
 /// // Create packages and build a graph
 /// let packages = vec![];  // Add your packages here
-/// let graph: DependencyGraph<'_, Package> = DependencyGraph::from(packages.as_slice());
+/// let graph: Graph<'_, Package> = Graph::from(packages.as_slice());
 ///
 /// // Generate ASCII representation
 /// let ascii = generate_ascii(&graph).unwrap();
 /// println!("{}", ascii);
 /// ```
-pub fn generate_ascii<N: Node>(graph: &DependencyGraph<N>) -> Result<String, std::fmt::Error> {
+pub fn generate_ascii<N: Node>(graph: &Graph<N>) -> Result<String, std::fmt::Error> {
     let mut output = String::new();
 
     writeln!(output, "Dependency Graph:")?;
@@ -278,7 +278,7 @@ pub fn generate_ascii<N: Node>(graph: &DependencyGraph<N>) -> Result<String, std
 // Helper for the ASCII tree generation
 fn add_ascii_children<N: Node>(
     output: &mut String,
-    graph: &DependencyGraph<N>,
+    graph: &Graph<N>,
     node_idx: NodeIndex,
     prefix: &str,
     _is_last: bool,

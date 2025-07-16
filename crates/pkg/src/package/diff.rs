@@ -17,7 +17,7 @@ use std::{
     fmt,
 };
 
-use crate::{errors::PackageError, ChangeType, DependencyChange, Package};
+use crate::{errors::PackageError, ChangeType, Change, Package};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 
@@ -80,7 +80,7 @@ pub struct PackageDiff {
     /// Version after the change
     pub current_version: String,
     /// Changes to the dependencies
-    pub dependency_changes: Vec<DependencyChange>,
+    pub dependency_changes: Vec<Change>,
     /// Whether the package version change is breaking (major version bump)
     pub breaking_change: bool,
 }
@@ -300,7 +300,7 @@ impl PackageDiff {
 
             // Only include changes (ignore unchanged deps)
             if change_type != ChangeType::Unchanged {
-                dependency_changes.push(DependencyChange::new(
+                dependency_changes.push(Change::new(
                     &name,
                     prev_ver.map(String::as_str),
                     curr_ver.map(String::as_str),

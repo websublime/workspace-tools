@@ -15,11 +15,11 @@
 //! ## Examples
 //!
 //! ```
-//! use sublime_package_tools::{Package, DependencyRegistry};
+//! use sublime_package_tools::{Package, Registry};
 //!
 //! # fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create a package with dependencies using a registry
-//! let mut registry = DependencyRegistry::new();
+//! let mut registry = Registry::new();
 //! let pkg = Package::new_with_registry(
 //!     "my-app",
 //!     "1.0.0",
@@ -44,7 +44,7 @@
 
 use crate::{
     errors::{DependencyResolutionError, VersionError},
-    Dependency, DependencyRegistry, Node, ResolutionResult,
+    Dependency, Registry, Node, ResolutionResult,
 };
 use semver::Version;
 use std::{cell::RefCell, rc::Rc}; // Still needed for version field
@@ -172,10 +172,10 @@ impl Package {
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{Package, DependencyRegistry};
+    /// use sublime_package_tools::{Package, Registry};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     ///
     /// let pkg = Package::new_with_registry(
     ///     "my-package",
@@ -190,7 +190,7 @@ impl Package {
         name: &str,
         version: &str,
         dependencies: Option<Vec<(&str, &str)>>,
-        registry: &mut DependencyRegistry,
+        registry: &mut Registry,
     ) -> Result<Self, VersionError> {
         let deps = if let Some(dep_list) = dependencies {
             let mut deps_vec = Vec::new();
