@@ -1189,7 +1189,6 @@ Errors that can occur during dependency resolution.
 ```rust
 pub enum DependencyResolutionError {
     VersionParseError(String),
-    IncompatibleVersions { name: String, versions: Vec<String>, requirements: Vec<String> },
     NoValidVersion { name: String, requirements: Vec<String> },
     DependencyNotFound { name: String, package: String },
     CircularDependency { path: Vec<String> },
