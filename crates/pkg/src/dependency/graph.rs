@@ -1,6 +1,28 @@
-//! # Dependency Graph Module
+//! # Dependency Graph Core Implementation
 //!
-//! This module provides a graph-based representation of package dependencies.
+//! This module provides the **core implementation** of the dependency graph data structure
+//! specifically designed for package dependency management.
+//!
+//! ## Purpose and Responsibility
+//!
+//! This module contains the **main Graph struct** and its **core methods** that are
+//! specifically designed for package dependency graphs. For generic utilities that work
+//! with graphs, see the `graph/` module instead.
+//!
+//! ### This module (`dependency/graph.rs`) provides:
+//! - **Core Graph struct** - The main dependency graph data structure
+//! - **Graph construction** - Methods for building graphs from packages
+//! - **Dependency analysis** - Core logic for analyzing package dependencies
+//! - **Circular dependency detection** - Algorithms for finding cycles
+//! - **External dependency identification** - Logic for finding unresolved dependencies
+//! - **Version conflict detection** - Methods for identifying version mismatches
+//! - **Graph traversal** - Core iteration and navigation methods
+//!
+//! ### For generic utilities, see `graph/` module:
+//! - **Builder utilities** - Helper functions for constructing graphs
+//! - **Validation utilities** - Generic validation logic and reporting
+//! - **Visualization utilities** - DOT format generation and ASCII art
+//! - **Node utilities** - Generic node-related functionality
 //!
 //! ## Overview
 //!
