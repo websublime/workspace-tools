@@ -7,7 +7,7 @@ use super::super::types::MonorepoPackageInfo;
 use crate::error::{Error, Result};
 use std::path::Path;
 // TODO: These will be needed when reload() method is fully implemented
-// use sublime_package_tools::{DependencyRegistry, Package, PackageInfo};
+// use sublime_package_tools::{Registry, Package, Info};
 
 /// Component for managing package persistence operations
 pub struct PackagePersistence {
@@ -133,7 +133,7 @@ impl PackagePersistence {
             .to_string();
 
         // Create dependency registry for parsing dependencies
-        let mut dependency_registry = sublime_package_tools::DependencyRegistry::new();
+        let mut dependency_registry = sublime_package_tools::Registry::new();
 
         // Parse dependencies
         let mut dependencies = Vec::new();
@@ -154,8 +154,8 @@ impl PackagePersistence {
         )
         .map_err(|e| Error::package(format!("Failed to create package: {e}")))?;
 
-        // Create new PackageInfo
-        let new_package_info = sublime_package_tools::PackageInfo::new(
+        // Create new Info
+        let new_package_info = sublime_package_tools::Info::new(
             new_package,
             package_json_path.to_string_lossy().to_string(),
             self.package.workspace_package.absolute_path.to_string_lossy().to_string(),
@@ -208,7 +208,7 @@ impl PackagePersistence {
 
         // Compare with package info last modified time
         // This is a simplified check - in practice, you might want to store
-        // the last loaded time in the PackageInfo or MonorepoPackageInfo
+        // the last loaded time in the Info or MonorepoPackageInfo
         Ok(modified_time.elapsed().map_or(false, |duration| duration.as_secs() < 60))
     }
 

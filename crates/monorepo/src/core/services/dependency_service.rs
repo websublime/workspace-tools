@@ -8,7 +8,7 @@ use crate::config::MonorepoConfig;
 use crate::core::types::MonorepoPackageInfo;
 use crate::error::Result;
 use std::collections::{HashMap, HashSet};
-use sublime_package_tools::{DependencyRegistry, RegistryManager};
+use sublime_package_tools::{Registry, RegistryManager};
 
 /// Dependency analysis service
 ///
@@ -42,7 +42,7 @@ use sublime_package_tools::{DependencyRegistry, RegistryManager};
 #[derive(Debug)]
 pub(crate) struct DependencyAnalysisService {
     /// Dependency registry for package management
-    dependency_registry: DependencyRegistry,
+    dependency_registry: Registry,
 
     /// Registry manager for package lookups
     registry_manager: RegistryManager,
@@ -122,7 +122,7 @@ impl DependencyAnalysisService {
         _config: &MonorepoConfig,
     ) -> Result<Self> {
         // Initialize dependency registry and registry manager
-        let dependency_registry = DependencyRegistry::new();
+        let dependency_registry = Registry::new();
 
         let registry_manager = RegistryManager::new();
 
@@ -140,7 +140,7 @@ impl DependencyAnalysisService {
     /// # Returns
     ///
     /// Reference to the dependency registry.
-    pub fn registry(&self) -> &DependencyRegistry {
+    pub fn registry(&self) -> &Registry {
         &self.dependency_registry
     }
 

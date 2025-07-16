@@ -53,7 +53,7 @@ impl PackageVersionManager {
             return Err(Error::package("Version cannot be empty"));
         }
 
-        // Update in PackageInfo
+        // Update in Info
         self.package
             .package_info
             .update_version(new_version)

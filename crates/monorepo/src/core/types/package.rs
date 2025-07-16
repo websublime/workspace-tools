@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use sublime_package_tools::PackageInfo;
+use sublime_package_tools::Info;
 use sublime_standard_tools::monorepo::WorkspacePackage;
 
 /// Status of a package version
@@ -28,7 +28,7 @@ pub enum VersionStatus {
 #[derive(Debug, Clone)]
 pub struct MonorepoPackageInfo {
     /// Base package information from package-tools
-    pub package_info: PackageInfo,
+    pub package_info: Info,
 
     /// Workspace package information from standard-tools
     pub workspace_package: WorkspacePackage,

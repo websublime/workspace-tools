@@ -477,7 +477,7 @@ impl PackageDiscoveryService {
             crate::error::Error::package(format!("Failed to create package {name}: {e}"))
         })?;
 
-        let package_info = sublime_package_tools::PackageInfo {
+        let package_info = sublime_package_tools::Info {
             package: std::rc::Rc::new(std::cell::RefCell::new(package)),
             package_json_path: package_dir.join("package.json").to_string_lossy().to_string(),
             package_path: package_dir.to_string_lossy().to_string(),

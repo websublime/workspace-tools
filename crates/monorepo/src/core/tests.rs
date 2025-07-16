@@ -15,7 +15,7 @@ mod tests {
     use crate::analysis::MonorepoAnalyzer;
     use crate::error::Result;
     use std::path::{Path, PathBuf};
-    use sublime_package_tools::{Package, PackageInfo as PkgInfo};
+    use sublime_package_tools::{Package, Info as PkgInfo};
     use sublime_standard_tools::monorepo::WorkspacePackage;
     use tempfile::TempDir;
     use serde_json::json;

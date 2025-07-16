@@ -232,8 +232,8 @@ impl<'a> MonorepoAnalyzer<'a> {
 
         let package_vec = package_objects?;
 
-        // Build dependency graph using DependencyGraph::from
-        let graph = sublime_package_tools::DependencyGraph::from(package_vec.as_slice());
+        // Build dependency graph using Graph::from
+        let graph = sublime_package_tools::Graph::from(package_vec.as_slice());
 
         let node_count = packages.len();
         let edge_count: usize =

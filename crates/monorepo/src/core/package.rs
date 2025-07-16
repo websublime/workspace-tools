@@ -16,7 +16,7 @@ impl MonorepoPackageInfo {
     /// Create a new `MonorepoPackageInfo`
     #[must_use]
     pub fn new(
-        package_info: sublime_package_tools::PackageInfo,
+        package_info: sublime_package_tools::Info,
         workspace_package: &sublime_standard_tools::monorepo::WorkspacePackage,
         is_internal: bool,
     ) -> Self {

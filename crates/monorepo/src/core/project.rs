@@ -83,7 +83,7 @@ impl MonorepoProject {
                             serde_json::Value::Object(serde_json::Map::new())
                         };
                         
-                        let package_info = sublime_package_tools::PackageInfo::new(
+                        let package_info = sublime_package_tools::Info::new(
                             package,
                             package_json_path.to_string_lossy().to_string(),
                             workspace_package.location.to_string_lossy().to_string(),

@@ -13,7 +13,7 @@ use crate::core::{
 use crate::error::Result;
 use semver::Version;
 use std::collections::HashMap;
-use sublime_package_tools::DependencyRegistry;
+use sublime_package_tools::Registry;
 // Import the diff_analyzer types for consistency
 use crate::analysis::ChangeAnalysis;
 use crate::changes::PackageChange;
@@ -97,8 +97,8 @@ impl<'a> VersionManager<'a> {
             PropagationResult::default()
         };
 
-        // Resolve any dependency conflicts using DependencyRegistry
-        let dependency_registry = DependencyRegistry::new();
+        // Resolve any dependency conflicts using Registry
+        let dependency_registry = Registry::new();
         let dependency_updates =
             dependency_registry.resolve_version_conflicts().unwrap_or_else(|_| {
                 sublime_package_tools::ResolutionResult {
@@ -634,8 +634,8 @@ impl<'a> VersionManager<'a> {
             all_conflicts.extend(result.conflicts);
         }
 
-        // Resolve final dependency conflicts using DependencyRegistry
-        let dependency_registry = DependencyRegistry::new();
+        // Resolve final dependency conflicts using Registry
+        let dependency_registry = Registry::new();
         let dependency_updates =
             dependency_registry.resolve_version_conflicts().unwrap_or_else(|_| {
                 sublime_package_tools::ResolutionResult {
@@ -893,7 +893,7 @@ impl<'a> VersionManager<'a> {
 
                     let Ok(dep_version) = Version::parse(dep_package.version()) else { continue };
 
-                    // Use DependencyRegistry for robust version constraint validation
+                    // Use Registry for robust version constraint validation
                     let registry_entry = registry.get(&dependency.name);
 
                     // Perform comprehensive semver compatibility analysis
