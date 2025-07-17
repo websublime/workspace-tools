@@ -45,6 +45,7 @@ use std::path::Path;
 /// // Assume project is created elsewhere
 /// // validator.validate_project(&mut project).unwrap();
 /// ```
+#[derive(Debug)]
 pub struct ProjectValidator<F: FileSystem = FileSystemManager> {
     /// Filesystem implementation for file operations
     fs: F,
@@ -149,7 +150,7 @@ impl<F: FileSystem> ProjectValidator<F> {
                 Ok(())
             }
             ProjectDescriptor::Monorepo(monorepo) => {
-                self.validate_monorepo_project(monorepo);
+                let _validation_status = self.validate_monorepo_project(monorepo);
                 Ok(())
             }
         }
@@ -215,14 +216,69 @@ impl<F: FileSystem> ProjectValidator<F> {
     ///
     /// * `Ok(())` - If validation completed successfully
     /// * `Err(Error)` - If an unexpected error occurred during validation
-    #[allow(clippy::unused_self)]
-    fn validate_monorepo_project(&self, _monorepo: &mut MonorepoDescriptor) {
-        // For monorepos, we currently delegate to the existing validation logic
-        // In the future, we might want to add unified validation here
-        // For now, we just ensure the monorepo has a valid status
-        
-        // Monorepo validation would be handled by the monorepo module
-        // This is a placeholder for future unified validation
+    fn validate_monorepo_project(&self, monorepo: &mut MonorepoDescriptor) -> ProjectValidationStatus {
+        let mut errors = Vec::new();
+        let mut warnings = Vec::new();
+
+        // Validate basic monorepo structure
+        if monorepo.packages().is_empty() {
+            warnings.push("Monorepo detected but no packages found".to_string());
+        }
+
+        // Validate that root directory exists
+        if !self.fs.exists(monorepo.root()) {
+            errors.push("Monorepo root directory does not exist".to_string());
+            return ProjectValidationStatus::Error(errors);
+        }
+
+        // Validate each package
+        for package in monorepo.packages() {
+            if self.fs.exists(&package.absolute_path) {
+                // Check if package has its own package.json
+                let package_json_path = package.absolute_path.join("package.json");
+                if !self.fs.exists(&package_json_path) {
+                    warnings.push(format!(
+                        "Package '{}' is missing package.json",
+                        package.name
+                    ));
+                }
+            } else {
+                errors.push(format!(
+                    "Package '{}' directory does not exist at {}",
+                    package.name, package.absolute_path.display()
+                ));
+            }
+        }
+
+        // Validate workspace dependencies exist
+        for package in monorepo.packages() {
+            for dep_name in &package.workspace_dependencies {
+                if monorepo.get_package(dep_name).is_none() {
+                    errors.push(format!(
+                        "Package '{}' depends on workspace package '{}' which was not found",
+                        package.name, dep_name
+                    ));
+                }
+            }
+
+            for dep_name in &package.workspace_dev_dependencies {
+                if monorepo.get_package(dep_name).is_none() {
+                    warnings.push(format!(
+                        "Package '{}' has dev dependency on workspace package '{}' which was not found",
+                        package.name, dep_name
+                    ));
+                }
+            }
+        }
+
+        // Return validation status
+        if !errors.is_empty() {
+            ProjectValidationStatus::Error(errors)
+        } else if !warnings.is_empty() {
+            ProjectValidationStatus::Warning(warnings)
+        } else {
+            ProjectValidationStatus::Valid
+        }
     }
 
     /// Validates package.json file existence and format.
@@ -385,7 +441,7 @@ impl<F: FileSystem> ProjectValidator<F> {
     fn validate_dependencies(
         &self,
         project: &SimpleProject,
-        errors: &mut Vec<String>,
+        _errors: &mut [String],
         warnings: &mut Vec<String>,
     ) {
         if let Some(package_json) = project.package_json() {
@@ -397,16 +453,14 @@ impl<F: FileSystem> ProjectValidator<F> {
                 let node_modules_path = project.root().join("node_modules");
 
                 if self.fs.exists(&node_modules_path) {
-                    // Check if node_modules is actually a directory
-                    match std::fs::metadata(&node_modules_path) {
-                        Ok(metadata) => {
-                            if !metadata.is_dir() {
-                                errors.push(
-                                    "node_modules exists but is not a directory".to_string(),
-                                );
-                            }
+                    // Check if node_modules is actually a directory by trying to read it
+                    // Using filesystem abstraction instead of direct std::fs for consistency
+                    match self.fs.read_dir(&node_modules_path) {
+                        Ok(_) => {
+                            // Successfully read as directory - it's valid
                         }
                         Err(_) => {
+                            // Could not read as directory - either doesn't exist or is not a directory
                             warnings.push(
                                 "Could not check node_modules directory status".to_string(),
                             );

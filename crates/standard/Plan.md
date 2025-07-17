@@ -73,13 +73,13 @@ Phase 5: Documentation        ━━━━━━━━━━━━━━━━�
 ### Tasks
 
 #### 2.1 Move Core Types
-- [ ] Move `ProjectConfig` from `monorepo/types.rs` to `project/types.rs`
-- [ ] Move `ProjectValidationStatus` from `monorepo/types.rs` to `project/types.rs`
-- [ ] Move `Project` struct from `monorepo/types.rs` to `project/types.rs` (rename to `GenericProject`)
-- [ ] Update imports in monorepo module
+- [x] Move `ProjectConfig` from `monorepo/types.rs` to `project/types.rs`
+- [x] Move `ProjectValidationStatus` from `monorepo/types.rs` to `project/types.rs`
+- [x] Move `Project` struct from `monorepo/types.rs` to `project/types.rs` (rename to `GenericProject`)
+- [x] Update imports in monorepo module
 
 #### 2.2 Move Management Code
-- [ ] Move `ProjectManager` from `monorepo/project.rs` to `project/manager.rs`
+- [x] Move `ProjectManager` from `monorepo/project.rs` to `project/manager.rs`
 - [ ] Extract validation logic from `monorepo/project.rs` to `project/validator.rs`
 - [ ] Update `ProjectManager` to work with `ProjectInfo` trait
 - [ ] Create `SimpleProjectManager` for simple projects

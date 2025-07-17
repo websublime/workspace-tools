@@ -502,3 +502,37 @@ impl ProjectConfig {
         self
     }
 }
+
+/// Represents a detected Node.js project.
+///
+/// This struct contains information about a Node.js project,
+/// including its root directory, package manager, validation status,
+/// and parsed package.json. This is a generic project structure that
+/// can represent both simple and monorepo projects.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::project::{GenericProject, ProjectConfig};
+///
+/// // Create a new project
+/// let config = ProjectConfig::default();
+/// let project = GenericProject::new("/path/to/project", config);
+///
+/// // Access project properties
+/// println!("Project root: {}", project.root().display());
+/// ```
+#[derive(Debug)]
+pub struct GenericProject {
+    /// Root directory of the project
+    pub(crate) root: PathBuf,
+    /// Detected package manager (if any)
+    pub(crate) package_manager: Option<PackageManager>,
+    /// Project configuration
+    pub(crate) config: ProjectConfig,
+    /// Validation status of the project
+    pub(crate) validation: ProjectValidationStatus,
+    /// Parsed package.json (if available)
+    pub(crate) package_json: Option<PackageJson>,
+}
+

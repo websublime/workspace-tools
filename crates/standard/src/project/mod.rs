@@ -30,6 +30,6 @@ pub use detector::ProjectDetector;
 pub use manager::ProjectManager;
 pub use simple::SimpleProject;
 pub use types::{
-    ProjectConfig, ProjectDescriptor, ProjectInfo, ProjectKind, ProjectValidationStatus,
+    GenericProject, ProjectConfig, ProjectDescriptor, ProjectInfo, ProjectKind, ProjectValidationStatus,
 };
 pub use validator::ProjectValidator;

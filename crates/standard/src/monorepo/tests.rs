@@ -664,11 +664,15 @@ mod tests {
 
         // Test with_filesystem
         let fs = FileSystemManager::new();
-        let custom_manager = ProjectManager::with_filesystem(fs);
+        let custom_manager = ProjectManager::with_filesystem(fs.clone());
 
         // Test that both managers exist (basic existence check)
-        assert!(manager.fs.exists(Path::new(".")));
-        assert!(custom_manager.fs.exists(Path::new(".")));
+        // Create a temporary directory with package.json to test with
+        let temp_dir = setup_test_dir();
+        fs.write_file_string(&temp_dir.path().join("package.json"), r#"{"name": "test", "version": "1.0.0"}"#).unwrap();
+        
+        assert!(manager.is_valid_project(temp_dir.path()));
+        assert!(custom_manager.is_valid_project(temp_dir.path()));
     }
 
     #[allow(clippy::panic)]
@@ -681,7 +685,9 @@ mod tests {
         // Create a valid package.json
         let package_json_content = r#"{
             "name": "test-project",
-            "version": "1.0.0",
+            "version": "2.1.0",
+            "description": "A test project for validation",
+            "license": "MIT",
             "dependencies": {
                 "dep1": "^1.0.0"
             }
@@ -699,23 +705,24 @@ mod tests {
 
         // Test with default config
         let config = ProjectConfig::default();
-        let result = project_manager.detect_project(temp_dir.path(), &config);
+        let result = project_manager.create_project(temp_dir.path(), &config);
 
         assert!(result.is_ok());
-        let project = result.unwrap();
+        let project_descriptor = result.unwrap();
+        let project_info = project_descriptor.as_project_info();
 
         // Check project properties
-        assert_eq!(project.root(), temp_dir.path());
-        assert!(project.package_manager().is_some());
-        assert_eq!(project.package_manager().unwrap().kind(), PackageManagerKind::Npm);
+        assert_eq!(project_info.root(), temp_dir.path());
+        assert!(project_info.package_manager().is_some());
+        assert_eq!(project_info.package_manager().unwrap().kind(), PackageManagerKind::Npm);
 
         // Package.json should be parsed
-        let package_json = project.package_json();
+        let package_json = project_info.package_json();
         assert!(package_json.is_some());
         assert_eq!(package_json.unwrap().name, "test-project");
 
         // With proper setup, the project should be validated as Valid
-        match project.validation_status() {
+        match project_info.validation_status() {
             ProjectValidationStatus::Valid => {}
             ProjectValidationStatus::Warning(warnings) => {
                 panic!("Expected Valid status but got Warning with: {warnings:?}");
@@ -732,13 +739,14 @@ mod tests {
         let config =
             ProjectConfig::new().with_validate_structure(false).with_detect_package_manager(false);
 
-        let result = project_manager.detect_project(temp_dir.path(), &config);
+        let result = project_manager.create_project(temp_dir.path(), &config);
         assert!(result.is_ok());
 
-        let project = result.unwrap();
-        assert_eq!(project.root(), temp_dir.path());
-        assert!(project.package_manager().is_none()); // No package manager since detection was disabled
-        assert!(matches!(project.validation_status(), &ProjectValidationStatus::NotValidated));
+        let project_descriptor = result.unwrap();
+        let project_info = project_descriptor.as_project_info();
+        assert_eq!(project_info.root(), temp_dir.path());
+        assert!(project_info.package_manager().is_none()); // No package manager since detection was disabled
+        assert!(matches!(project_info.validation_status(), &ProjectValidationStatus::NotValidated));
     }
 
     #[allow(clippy::panic)]
@@ -754,7 +762,9 @@ mod tests {
 
         let package_json_content = r#"{
             "name": "valid-project",
-            "version": "1.0.0",
+            "version": "2.1.0",
+            "description": "A valid test project",
+            "license": "MIT",
             "dependencies": {
                 "dep1": "^1.0.0"
             }
@@ -765,21 +775,20 @@ mod tests {
         // Create a proper node_modules structure
         fs.create_dir_all(&valid_dir.join("node_modules/dep1")).unwrap();
 
-        let config = ProjectConfig::new().with_validate_structure(false);
-        let mut valid_project = Project::new(&valid_dir, config);
-
-        // Parse package.json manually for the test
-        valid_project.package_json = Some(serde_json::from_str(package_json_content).unwrap());
-        // Set package manager for complete validation
-        valid_project.package_manager =
-            Some(PackageManager::new(PackageManagerKind::Npm, &valid_dir));
+        let config = ProjectConfig::new()
+            .with_validate_structure(true)
+            .with_detect_package_manager(true);
+        let result = project_manager.create_project(&valid_dir, &config);
+        assert!(result.is_ok());
+        
+        let mut project_descriptor = result.unwrap();
 
         // Validate project
-        let result = project_manager.validate_project(&mut valid_project);
+        let result = project_manager.validate_project(&mut project_descriptor);
         assert!(result.is_ok());
 
         // Check validation status - should be Valid now with proper node_modules
-        match valid_project.validation_status() {
+        match project_descriptor.as_project_info().validation_status() {
             ProjectValidationStatus::Valid => {}
             ProjectValidationStatus::Warning(warnings) => {
                 panic!("Expected Valid status but got Warning with: {warnings:?}");
@@ -800,19 +809,19 @@ mod tests {
         fs.write_file_string(&warning_dir.join("package-lock.json"), "{}").unwrap();
         // Deliberately not creating node_modules
 
-        let config = ProjectConfig::new().with_validate_structure(false);
-        let mut warning_project = Project::new(&warning_dir, config);
-
-        // Parse package.json manually for the test
-        warning_project.package_json = Some(serde_json::from_str(package_json_content).unwrap());
-        warning_project.package_manager =
-            Some(PackageManager::new(PackageManagerKind::Npm, &warning_dir));
+        let config = ProjectConfig::new()
+            .with_validate_structure(true)
+            .with_detect_package_manager(true);
+        let result = project_manager.create_project(&warning_dir, &config);
+        assert!(result.is_ok());
+        
+        let mut project_descriptor = result.unwrap();
 
         // Validate project
-        let result = project_manager.validate_project(&mut warning_project);
+        let result = project_manager.validate_project(&mut project_descriptor);
         assert!(result.is_ok());
 
-        match warning_project.validation_status() {
+        match project_descriptor.as_project_info().validation_status() {
             ProjectValidationStatus::Warning(warnings) => {
                 assert!(!warnings.is_empty());
                 assert!(warnings.iter().any(|w| w.contains("node_modules")));
@@ -820,25 +829,22 @@ mod tests {
             _ => panic!("Expected warning validation status"),
         }
 
-        // 3. Create a project with errors (missing package.json)
+        // 3. Create a project with errors (invalid package.json)
         let error_dir = temp_dir.path().join("error");
         fs.create_dir_all(&error_dir).unwrap();
-        // Deliberately not creating package.json
+        
+        // Create invalid package.json that will cause parsing errors
+        fs.write_file_string(&error_dir.join("package.json"), "{ invalid json").unwrap();
 
-        let config = ProjectConfig::new().with_validate_structure(false);
-        let mut error_project = Project::new(&error_dir, config);
-
-        // Validate project
-        let result = project_manager.validate_project(&mut error_project);
-        assert!(result.is_ok());
-
-        match error_project.validation_status() {
-            ProjectValidationStatus::Error(errors) => {
-                assert!(!errors.is_empty());
-                assert!(errors.iter().any(|e| e.contains("package.json")));
-            }
-            _ => panic!("Expected error validation status"),
-        }
+        let config = ProjectConfig::new()
+            .with_validate_structure(true)
+            .with_detect_package_manager(true);
+        let result = project_manager.create_project(&error_dir, &config);
+        
+        // Should fail due to invalid JSON
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("package.json") || error_msg.contains("json"));
     }
 
     #[test]

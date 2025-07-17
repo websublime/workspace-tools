@@ -49,6 +49,7 @@ use std::path::{Path, PathBuf};
 ///     Err(e) => eprintln!("Failed to create project: {}", e),
 /// }
 /// ```
+#[derive(Debug)]
 pub struct ProjectManager<F: FileSystem = FileSystemManager> {
     /// Project detector for identifying project types
     detector: ProjectDetector<F>,

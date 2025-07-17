@@ -52,6 +52,7 @@ use std::path::Path;
 ///     Err(e) => eprintln!("Detection failed: {}", e),
 /// }
 /// ```
+#[derive(Debug)]
 pub struct ProjectDetector<F: FileSystem = FileSystemManager> {
     /// Filesystem implementation for file operations
     fs: F,

@@ -30,6 +30,9 @@ mod tests;
 
 pub use types::{
     ConfigFormat, ConfigManager, ConfigScope, ConfigValue, MonorepoDescriptor, MonorepoDetector,
-    MonorepoKind, PackageManager, PackageManagerKind, PnpmWorkspaceConfig, Project, ProjectConfig,
-    ProjectManager, ProjectValidationStatus, WorkspacePackage,
+    MonorepoKind, PackageManager, PackageManagerKind, PnpmWorkspaceConfig, Project,
+    WorkspacePackage,
 };
+
+// Re-export types from project module for backwards compatibility
+pub use crate::project::{ProjectConfig, ProjectManager, ProjectValidationStatus};
