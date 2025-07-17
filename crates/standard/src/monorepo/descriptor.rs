@@ -14,6 +14,7 @@
 //! efficiently work with these relationships.
 
 use super::{MonorepoDescriptor, MonorepoKind, WorkspacePackage};
+use crate::project::{ProjectInfo, ProjectKind, ProjectValidationStatus};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -367,5 +368,33 @@ impl MonorepoDescriptor {
         let abs_path = if path.is_absolute() { path.to_path_buf() } else { self.root.join(path) };
 
         self.packages.iter().find(|pkg| abs_path.starts_with(&pkg.absolute_path))
+    }
+}
+
+impl ProjectInfo for MonorepoDescriptor {
+    fn root(&self) -> &Path {
+        &self.root
+    }
+
+    fn package_manager(&self) -> Option<&super::PackageManager> {
+        // TODO: MonorepoDescriptor should store package manager information
+        // For now, return None as monorepos don't currently store this information
+        None
+    }
+
+    fn package_json(&self) -> Option<&package_json::PackageJson> {
+        // TODO: MonorepoDescriptor should store root package.json information
+        // For now, return None as monorepos don't currently store this information
+        None
+    }
+
+    fn validation_status(&self) -> &ProjectValidationStatus {
+        // TODO: MonorepoDescriptor should store validation status
+        // For now, return NotValidated as monorepos don't currently store this information
+        &ProjectValidationStatus::NotValidated
+    }
+
+    fn kind(&self) -> ProjectKind {
+        ProjectKind::Monorepo(self.kind.clone())
     }
 }

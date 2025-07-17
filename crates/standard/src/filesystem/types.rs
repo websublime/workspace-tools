@@ -32,7 +32,7 @@ use std::path::{Path, PathBuf};
 ///     println!("Cargo.toml exists");
 /// }
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct FileSystemManager;
 
 /// Trait defining filesystem operations.
