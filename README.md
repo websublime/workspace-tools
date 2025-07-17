@@ -18,6 +18,15 @@ This is a tool to help manage packages in a monorepo style. It can give info abo
   [this](https://www.rust-lang.org/tools/install) guide.
 - run `cargo install workspace-node-tools`
 
+### Claude Tools
+
+- Memory Bank
+  - claude mcp add --scope user memory-bank -e MEMORY_BANK_ROOT=~/.claude/memory-bank -- npx -y @allpepper/memory-bank-mcp
+- Knowledge Graph
+  - claude mcp add --scope user knowledge-graph -e GRAPH_STORAGE_PATH=~/.claude/knowledge-graph -- npx -y mcp-knowledge-graph
+- Context7
+  - claude mcp add --scope user context7 -- npx -y @upstash/context7-mcp
+
 ## License
 
 Licensed under either of

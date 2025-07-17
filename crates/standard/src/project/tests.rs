@@ -205,6 +205,7 @@ mod simple_project_tests {
 #[allow(clippy::match_wildcard_for_single_variants)]
 #[allow(clippy::unwrap_used)]
 #[allow(clippy::panic)]
+#[allow(clippy::assertions_on_constants)]
 #[cfg(test)]
 mod project_detector_tests {
     use super::*;
@@ -286,6 +287,7 @@ mod project_detector_tests {
     }
 }
 
+#[allow(clippy::assertions_on_constants)]
 #[allow(clippy::unwrap_used)]
 #[cfg(test)]
 mod project_manager_tests {
@@ -353,6 +355,7 @@ mod project_manager_tests {
     }
 }
 
+#[allow(clippy::assertions_on_constants)]
 #[allow(clippy::unwrap_used)]
 #[allow(clippy::panic)]
 #[cfg(test)]
