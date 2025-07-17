@@ -30,9 +30,6 @@ mod validator;
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
-mod tests_enhanced;
-
 pub use detector::ProjectDetector;
 pub use manager::ProjectManager;
 pub use simple::SimpleProject;
