@@ -22,7 +22,6 @@ mod descriptor;
 mod detector;
 mod kinds;
 mod manager;
-mod project;
 mod types;
 
 #[cfg(test)]
@@ -30,8 +29,7 @@ mod tests;
 
 pub use types::{
     ConfigFormat, ConfigManager, ConfigScope, ConfigValue, MonorepoDescriptor, MonorepoDetector,
-    MonorepoKind, PackageManager, PackageManagerKind, PnpmWorkspaceConfig, Project,
-    WorkspacePackage,
+    MonorepoKind, PackageManager, PackageManagerKind, PnpmWorkspaceConfig, WorkspacePackage,
 };
 
 // Re-export types from project module for backwards compatibility

@@ -264,8 +264,36 @@ impl<F: FileSystem> MonorepoDetector<F> {
             }
         };
 
-        // Create monorepo info
-        Ok(MonorepoDescriptor::new(kind, root, packages))
+        // Detect package manager
+        let package_manager = super::PackageManager::detect(&root).ok();
+
+        // Load root package.json if it exists
+        let package_json = {
+            let package_json_path = root.join("package.json");
+            if self.fs.exists(&package_json_path) {
+                match self.fs.read_file_string(&package_json_path) {
+                    Ok(content) => {
+                        match serde_json::from_str::<package_json::PackageJson>(&content) {
+                            Ok(pkg_json) => Some(pkg_json),
+                            Err(_) => None, // Invalid package.json, skip it
+                        }
+                    }
+                    Err(_) => None, // Could not read file, skip it
+                }
+            } else {
+                None
+            }
+        };
+
+        // Create monorepo info with full information
+        Ok(MonorepoDescriptor::new(
+            kind,
+            root,
+            packages,
+            package_manager,
+            package_json,
+            crate::project::ProjectValidationStatus::NotValidated,
+        ))
     }
 
     /// Checks if a directory contains multiple packages based on common patterns.

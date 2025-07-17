@@ -150,7 +150,7 @@ impl<F: FileSystem> ProjectValidator<F> {
                 Ok(())
             }
             ProjectDescriptor::Monorepo(monorepo) => {
-                let _validation_status = self.validate_monorepo_project(monorepo);
+                self.validate_monorepo_project(monorepo);
                 Ok(())
             }
         }
@@ -271,14 +271,41 @@ impl<F: FileSystem> ProjectValidator<F> {
             }
         }
 
-        // Return validation status
-        if !errors.is_empty() {
+        // Validate root package.json if present
+        if let Some(package_json) = monorepo.package_json() {
+            self.validate_package_json_content(package_json, &mut warnings);
+        }
+
+        // Validate package manager consistency
+        if let Some(package_manager) = monorepo.package_manager() {
+            let lock_file_path = package_manager.lock_file_path();
+            if !self.fs.exists(&lock_file_path) {
+                warnings.push(format!(
+                    "Detected {} but lock file is missing: {}",
+                    package_manager.kind().command(),
+                    lock_file_path.display()
+                ));
+            }
+
+            // Check for conflicting lock files
+            self.check_conflicting_lock_files(monorepo.root(), package_manager.kind(), &mut warnings);
+        } else if monorepo.package_json().is_some() {
+            warnings.push("Package manager could not be detected".to_string());
+        }
+
+        // Create validation status and update monorepo
+        let validation_status = if !errors.is_empty() {
             ProjectValidationStatus::Error(errors)
         } else if !warnings.is_empty() {
             ProjectValidationStatus::Warning(warnings)
         } else {
             ProjectValidationStatus::Valid
-        }
+        };
+
+        // Update the monorepo's validation status
+        monorepo.set_validation_status(validation_status.clone());
+
+        validation_status
     }
 
     /// Validates package.json file existence and format.

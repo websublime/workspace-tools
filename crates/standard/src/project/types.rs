@@ -536,3 +536,232 @@ pub struct GenericProject {
     pub(crate) package_json: Option<PackageJson>,
 }
 
+impl GenericProject {
+    /// Creates a new GenericProject instance with the specified root and configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `root` - The root directory of the project
+    /// * `config` - Configuration options for the project
+    ///
+    /// # Returns
+    ///
+    /// A new GenericProject instance configured with the provided options.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::Path;
+    /// use sublime_standard_tools::project::{GenericProject, ProjectConfig};
+    ///
+    /// let config = ProjectConfig::default();
+    /// let project = GenericProject::new("/path/to/project", config);
+    /// ```
+    #[must_use]
+    pub fn new(root: impl Into<PathBuf>, config: ProjectConfig) -> Self {
+        Self {
+            root: root.into(),
+            package_manager: None,
+            config,
+            validation: ProjectValidationStatus::NotValidated,
+            package_json: None,
+        }
+    }
+
+    /// Returns the root directory of the project.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the Path of the project's root directory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::path::PathBuf;
+    /// # use sublime_standard_tools::project::{GenericProject, ProjectConfig};
+    /// #
+    /// # let config = ProjectConfig::default();
+    /// # let project = GenericProject::new("/path/to/project", config);
+    /// #
+    /// let root = project.root();
+    /// assert_eq!(root, Path::new("/path/to/project"));
+    /// ```
+    #[must_use]
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// Returns the package manager for the project, if detected.
+    ///
+    /// # Returns
+    ///
+    /// * `Some(&PackageManager)` - If a package manager was detected
+    /// * `None` - If no package manager was detected
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use sublime_standard_tools::project::{GenericProject, ProjectConfig};
+    /// #
+    /// # let config = ProjectConfig::default();
+    /// # let project = GenericProject::new("/path/to/project", config);
+    /// #
+    /// if let Some(manager) = project.package_manager() {
+    ///     println!("Using package manager: {:?}", manager.kind());
+    /// }
+    /// ```
+    #[must_use]
+    pub fn package_manager(&self) -> Option<&PackageManager> {
+        self.package_manager.as_ref()
+    }
+
+    /// Returns the validation status of the project.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the `ProjectValidationStatus` indicating the validation state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use sublime_standard_tools::project::{GenericProject, ProjectConfig};
+    /// #
+    /// # let config = ProjectConfig::default();
+    /// # let project = GenericProject::new("/path/to/project", config);
+    /// #
+    /// match project.validation_status() {
+    ///     sublime_standard_tools::project::ProjectValidationStatus::Valid => println!("Project is valid"),
+    ///     sublime_standard_tools::project::ProjectValidationStatus::Warning(warnings) => {
+    ///         println!("Project has warnings:");
+    ///         for warning in warnings {
+    ///             println!("  - {}", warning);
+    ///         }
+    ///     },
+    ///     sublime_standard_tools::project::ProjectValidationStatus::Error(errors) => {
+    ///         println!("Project has errors:");
+    ///         for error in errors {
+    ///             println!("  - {}", error);
+    ///         }
+    ///     },
+    ///     sublime_standard_tools::project::ProjectValidationStatus::NotValidated => {
+    ///         println!("Project has not been validated");
+    ///     }
+    /// }
+    /// ```
+    #[must_use]
+    pub fn validation_status(&self) -> &ProjectValidationStatus {
+        &self.validation
+    }
+
+    /// Returns the configuration options used for this project.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the `ProjectConfig` used to create this project.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use sublime_standard_tools::project::{GenericProject, ProjectConfig};
+    /// #
+    /// # let config = ProjectConfig::default();
+    /// # let project = GenericProject::new("/path/to/project", config);
+    /// #
+    /// let config = project.config();
+    /// println!("Validate structure: {}", config.validate_structure);
+    /// ```
+    #[must_use]
+    pub fn config(&self) -> &ProjectConfig {
+        &self.config
+    }
+
+    /// Returns the parsed package.json for the project, if available.
+    ///
+    /// # Returns
+    ///
+    /// * `Some(&PackageJson)` - If package.json was successfully parsed
+    /// * `None` - If package.json was not found or could not be parsed
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use sublime_standard_tools::project::{GenericProject, ProjectConfig};
+    /// #
+    /// # let config = ProjectConfig::default();
+    /// # let project = GenericProject::new("/path/to/project", config);
+    /// #
+    /// if let Some(package_json) = project.package_json() {
+    ///     println!("Project name: {}", package_json.name);
+    ///     println!("Project version: {}", package_json.version);
+    /// }
+    /// ```
+    #[must_use]
+    pub fn package_json(&self) -> Option<&PackageJson> {
+        self.package_json.as_ref()
+    }
+
+    /// Sets the package manager for this project.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_manager` - The package manager to set
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use sublime_standard_tools::project::{GenericProject, ProjectConfig};
+    /// # use sublime_standard_tools::monorepo::{PackageManager, PackageManagerKind};
+    /// #
+    /// # let config = ProjectConfig::default();
+    /// # let mut project = GenericProject::new("/path/to/project", config);
+    /// #
+    /// let manager = PackageManager::new(PackageManagerKind::Npm, "/path/to/project");
+    /// project.set_package_manager(Some(manager));
+    /// ```
+    pub fn set_package_manager(&mut self, package_manager: Option<PackageManager>) {
+        self.package_manager = package_manager;
+    }
+
+    /// Sets the package.json content for this project.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_json` - The package.json content to set
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use sublime_standard_tools::project::{GenericProject, ProjectConfig};
+    /// # use package_json::PackageJson;
+    /// #
+    /// # let config = ProjectConfig::default();
+    /// # let mut project = GenericProject::new("/path/to/project", config);
+    /// #
+    /// // Assuming package_json is loaded from file
+    /// // project.set_package_json(Some(package_json));
+    /// ```
+    pub fn set_package_json(&mut self, package_json: Option<PackageJson>) {
+        self.package_json = package_json;
+    }
+
+    /// Sets the validation status for this project.
+    ///
+    /// # Arguments
+    ///
+    /// * `validation` - The validation status to set
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use sublime_standard_tools::project::{GenericProject, ProjectConfig, ProjectValidationStatus};
+    /// #
+    /// # let config = ProjectConfig::default();
+    /// # let mut project = GenericProject::new("/path/to/project", config);
+    /// #
+    /// project.set_validation_status(ProjectValidationStatus::Valid);
+    /// ```
+    pub fn set_validation_status(&mut self, validation: ProjectValidationStatus) {
+        self.validation = validation;
+    }
+}
+

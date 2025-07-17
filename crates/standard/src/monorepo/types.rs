@@ -24,10 +24,6 @@ use std::{
 };
 
 use crate::filesystem::{FileSystem, FileSystemManager};
-use crate::project::GenericProject;
-
-/// Type alias for GenericProject to maintain compatibility
-pub type Project = GenericProject;
 
 /// Represents the type of monorepo system being used.
 ///
@@ -112,6 +108,7 @@ pub struct WorkspacePackage {
 /// ```
 /// use std::path::PathBuf;
 /// use sublime_standard_tools::monorepo::{MonorepoDescriptor, MonorepoKind, WorkspacePackage};
+/// use sublime_standard_tools::project::ProjectValidationStatus;
 ///
 /// // Example of creating a monorepo descriptor
 /// let root = PathBuf::from("/projects/my-monorepo");
@@ -121,10 +118,13 @@ pub struct WorkspacePackage {
 /// let descriptor = MonorepoDescriptor::new(
 ///     MonorepoKind::YarnWorkspaces,
 ///     root,
-///     packages
+///     packages,
+///     None, // package_manager
+///     None, // package_json
+///     ProjectValidationStatus::NotValidated
 /// );
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct MonorepoDescriptor {
     /// Type of monorepo detected
     pub(crate) kind: MonorepoKind,
@@ -134,6 +134,12 @@ pub struct MonorepoDescriptor {
     pub(crate) packages: Vec<WorkspacePackage>,
     /// Map of package names to their locations
     pub(crate) name_to_package: HashMap<String, usize>,
+    /// Package manager detected for this monorepo
+    pub(crate) package_manager: Option<PackageManager>,
+    /// Root package.json content (if available)
+    pub(crate) package_json: Option<package_json::PackageJson>,
+    /// Validation status of the monorepo
+    pub(crate) validation_status: crate::project::ProjectValidationStatus,
 }
 
 /// Represents the type of package manager used in a Node.js project.

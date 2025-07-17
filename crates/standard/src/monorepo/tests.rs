@@ -26,9 +26,10 @@ mod tests {
         MonorepoDescriptor, MonorepoKind, WorkspacePackage,
     };
     use crate::monorepo::{
-        ConfigFormat, ConfigManager, ConfigScope, ConfigValue, MonorepoDetector, Project,
+        ConfigFormat, ConfigManager, ConfigScope, ConfigValue, MonorepoDetector,
         ProjectConfig, ProjectManager, ProjectValidationStatus,
     };
+    use crate::project::GenericProject;
     use std::collections::HashMap;
     use std::f64;
     use std::path::{Path, PathBuf};
@@ -88,7 +89,7 @@ mod tests {
         ];
 
         let descriptor =
-            MonorepoDescriptor::new(MonorepoKind::YarnWorkspaces, root.clone(), packages);
+            MonorepoDescriptor::minimal(MonorepoKind::YarnWorkspaces, root.clone(), packages);
 
         assert_eq!(descriptor.kind().name(), "yarn");
         assert_eq!(descriptor.root(), root.as_path());
@@ -103,7 +104,7 @@ mod tests {
             create_test_package("pkg-b", "1.0.0", "packages/b", &root, vec!["pkg-a"], vec![]),
         ];
 
-        let descriptor = MonorepoDescriptor::new(MonorepoKind::YarnWorkspaces, root, packages);
+        let descriptor = MonorepoDescriptor::minimal(MonorepoKind::YarnWorkspaces, root, packages);
 
         // Test existing package
         let pkg_a = descriptor.get_package("pkg-a");
@@ -131,7 +132,7 @@ mod tests {
             ),
         ];
 
-        let descriptor = MonorepoDescriptor::new(MonorepoKind::YarnWorkspaces, root, packages);
+        let descriptor = MonorepoDescriptor::minimal(MonorepoKind::YarnWorkspaces, root, packages);
 
         let graph = descriptor.get_dependency_graph();
 
@@ -167,7 +168,7 @@ mod tests {
             ),
         ];
 
-        let descriptor = MonorepoDescriptor::new(MonorepoKind::YarnWorkspaces, root, packages);
+        let descriptor = MonorepoDescriptor::minimal(MonorepoKind::YarnWorkspaces, root, packages);
 
         // Test dependencies of pkg-c (should include both pkg-a and pkg-b)
         let deps_c = descriptor.find_dependencies_by_name("pkg-c");
@@ -198,7 +199,7 @@ mod tests {
         ];
 
         let descriptor =
-            MonorepoDescriptor::new(MonorepoKind::YarnWorkspaces, root.clone(), packages);
+            MonorepoDescriptor::minimal(MonorepoKind::YarnWorkspaces, root.clone(), packages);
 
         // Test absolute path in pkg-a
         let pkg_a_file = Path::new("/fake/monorepo/packages/a/src/index.js");
@@ -648,7 +649,7 @@ mod tests {
         let root = temp_dir.path().to_path_buf();
         let config = ProjectConfig::default();
 
-        let project = Project::new(&root, config);
+        let project = GenericProject::new(&root, config);
 
         // Test project properties
         assert_eq!(project.root(), root.as_path());
