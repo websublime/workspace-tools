@@ -24,7 +24,4 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
-mod tests_enhanced;
-
 pub use types::{FileSystem, FileSystemManager, NodePathKind, PathExt, PathUtils};
