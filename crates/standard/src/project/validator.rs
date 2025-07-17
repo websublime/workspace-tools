@@ -108,7 +108,7 @@ impl<F: FileSystem> ProjectValidator<F> {
     ///
     /// # Errors
     ///
-    /// Returns an [`Error`] if:
+    /// Returns an [`crate::error::Error`] if:
     /// - An I/O error occurs while reading project files
     /// - Project files cannot be parsed
     /// - The filesystem cannot be accessed
