@@ -35,6 +35,7 @@ pub mod command;
 pub mod error;
 pub mod filesystem;
 pub mod monorepo;
+pub mod node;
 pub mod project;
 
 /// Version of the crate
