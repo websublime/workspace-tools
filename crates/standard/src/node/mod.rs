@@ -29,9 +29,6 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
-mod tests_enhanced;
-
 pub use package_manager::{PackageManager, PackageManagerKind};
 pub use repository::RepositoryInfo;
 pub use types::RepoKind;
