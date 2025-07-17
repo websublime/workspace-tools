@@ -27,8 +27,7 @@ mod types;
 mod tests;
 
 pub use types::{
-    MonorepoDescriptor, MonorepoDetector, MonorepoKind, PackageManager, PackageManagerKind,
-    PnpmWorkspaceConfig, WorkspacePackage,
+    MonorepoDescriptor, MonorepoDetector, MonorepoKind, PnpmWorkspaceConfig, WorkspacePackage,
 };
 
 // Re-export types from project module for backwards compatibility

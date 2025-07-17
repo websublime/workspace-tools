@@ -21,6 +21,7 @@
 //! and reusability across all project types.
 
 use std::path::{Path, PathBuf};
+use crate::error::{Error, MonorepoError, Result};
 
 /// Represents the type of package manager used in a Node.js project.
 ///
@@ -130,7 +131,7 @@ impl PackageManagerKind {
     /// assert_eq!(PackageManagerKind::Yarn.lock_file(), "yarn.lock");
     /// assert_eq!(PackageManagerKind::Pnpm.lock_file(), "pnpm-lock.yaml");
     /// assert_eq!(PackageManagerKind::Bun.lock_file(), "bun.lockb");
-    /// assert_eq!(PackageManagerKind::Jsr.lock_file(), "jsr.lock");
+    /// assert_eq!(PackageManagerKind::Jsr.lock_file(), "jsr.json");
     /// ```
     #[must_use]
     pub fn lock_file(&self) -> &'static str {
@@ -139,7 +140,7 @@ impl PackageManagerKind {
             Self::Yarn => "yarn.lock",
             Self::Pnpm => "pnpm-lock.yaml",
             Self::Bun => "bun.lockb",
-            Self::Jsr => "jsr.lock",
+            Self::Jsr => "jsr.json",
         }
     }
 
@@ -288,6 +289,67 @@ impl PackageManager {
         }
     }
 
+    /// Detects which package manager is being used in the specified path.
+    ///
+    /// Checks for lock files in order of preference:
+    /// 1. Bun (bun.lockb)
+    /// 2. pnpm (pnpm-lock.yaml)
+    /// 3. Yarn (yarn.lock)
+    /// 4. npm (package-lock.json or npm-shrinkwrap.json)
+    /// 5. JSR (jsr.json)
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The directory path to check for package manager lock files
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`MonorepoError::ManagerNotFound`] if no package manager
+    /// lock files are found in the specified path.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(PackageManager)` - If a package manager is detected
+    /// * `Err(Error)` - If no package manager could be detected
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::Path;
+    /// use sublime_standard_tools::node::PackageManager;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let project_dir = Path::new(".");
+    /// let package_manager = PackageManager::detect(project_dir)?;
+    /// println!("Detected package manager: {:?}", package_manager.kind());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn detect(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref();
+
+        // Check lock files in order of preference
+        if path.join(PackageManagerKind::Bun.lock_file()).exists() {
+            return Ok(Self::new(PackageManagerKind::Bun, path));
+        }
+        if path.join(PackageManagerKind::Pnpm.lock_file()).exists() {
+            return Ok(Self::new(PackageManagerKind::Pnpm, path));
+        }
+        if path.join(PackageManagerKind::Yarn.lock_file()).exists() {
+            return Ok(Self::new(PackageManagerKind::Yarn, path));
+        }
+        if path.join(PackageManagerKind::Npm.lock_file()).exists()
+            || path.join("npm-shrinkwrap.json").exists()
+        {
+            return Ok(Self::new(PackageManagerKind::Npm, path));
+        }
+        if path.join(PackageManagerKind::Jsr.lock_file()).exists() {
+            return Ok(Self::new(PackageManagerKind::Jsr, path));
+        }
+
+        Err(Error::Monorepo(MonorepoError::ManagerNotFound))
+    }
+
     /// Returns the package manager kind.
     ///
     /// # Returns
@@ -372,7 +434,9 @@ impl PackageManager {
     /// Returns the full path to the lock file.
     ///
     /// This combines the root directory with the lock file name to provide
-    /// the complete path where the lock file should be located.
+    /// the complete path where the lock file should be located. For npm,
+    /// this handles the special case where both package-lock.json and
+    /// npm-shrinkwrap.json might exist.
     ///
     /// # Returns
     ///
@@ -390,7 +454,16 @@ impl PackageManager {
     /// ```
     #[must_use]
     pub fn lock_file_path(&self) -> PathBuf {
-        self.root.join(self.kind.lock_file())
+        // Handle npm's alternative lock file if necessary, though detect prioritizes package-lock.json
+        let lock_file = if self.kind == PackageManagerKind::Npm
+            && !self.root.join(PackageManagerKind::Npm.lock_file()).exists()
+            && self.root.join("npm-shrinkwrap.json").exists()
+        {
+            "npm-shrinkwrap.json"
+        } else {
+            self.kind.lock_file()
+        };
+        self.root.join(lock_file)
     }
 
     /// Checks if this package manager supports workspaces.

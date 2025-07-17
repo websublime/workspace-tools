@@ -159,7 +159,7 @@ mod package_manager_kind_tests {
         let jsr = PackageManagerKind::Jsr;
 
         assert_eq!(jsr.command(), "jsr");
-        assert_eq!(jsr.lock_file(), "jsr.lock");
+        assert_eq!(jsr.lock_file(), "jsr.json");
         assert_eq!(jsr.name(), "jsr");
         assert!(!jsr.supports_workspaces());
         assert_eq!(jsr.workspace_config_file(), None);

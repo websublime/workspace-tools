@@ -18,11 +18,12 @@
 use package_json::{PackageJson, PackageJsonManager};
 
 use super::{
-    MonorepoDescriptor, MonorepoDetector, MonorepoKind, PackageManagerKind, PnpmWorkspaceConfig,
+    MonorepoDescriptor, MonorepoDetector, MonorepoKind, PnpmWorkspaceConfig,
     WorkspacePackage,
 };
 use crate::error::{Error, FileSystemError, MonorepoError, Result, WorkspaceError};
 use crate::filesystem::{FileSystem, FileSystemManager};
+use crate::node::{PackageManager, PackageManagerKind};
 use glob::glob;
 use std::collections::HashSet;
 use std::fs;
@@ -265,7 +266,7 @@ impl<F: FileSystem> MonorepoDetector<F> {
         };
 
         // Detect package manager
-        let package_manager = super::PackageManager::detect(&root).ok();
+        let package_manager = PackageManager::detect(&root).ok();
 
         // Load root package.json if it exists
         let package_json = {

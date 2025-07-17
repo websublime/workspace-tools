@@ -428,10 +428,10 @@ impl<F: FileSystem> ProjectValidator<F> {
     fn check_conflicting_lock_files(
         &self,
         root: &Path,
-        detected_kind: crate::monorepo::PackageManagerKind,
+        detected_kind: crate::node::PackageManagerKind,
         warnings: &mut Vec<String>,
     ) {
-        use crate::monorepo::PackageManagerKind;
+        use crate::node::PackageManagerKind;
 
         let lock_files = [
             (PackageManagerKind::Npm, "package-lock.json"),

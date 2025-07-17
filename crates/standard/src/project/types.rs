@@ -14,7 +14,8 @@
 //! consistently and safely throughout the codebase, enabling uniform handling
 //! of different project structures while maintaining type safety.
 
-use crate::monorepo::{MonorepoDescriptor, MonorepoKind, PackageManager};
+use crate::monorepo::{MonorepoDescriptor, MonorepoKind};
+use crate::node::PackageManager;
 use package_json::PackageJson;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -715,7 +716,7 @@ impl GenericProject {
     ///
     /// ```
     /// # use sublime_standard_tools::project::{GenericProject, ProjectConfig};
-    /// # use sublime_standard_tools::monorepo::{PackageManager, PackageManagerKind};
+    /// # use sublime_standard_tools::node::{PackageManager, PackageManagerKind};
     /// #
     /// # let config = ProjectConfig::default();
     /// # let mut project = GenericProject::new("/path/to/project", config);

@@ -23,6 +23,7 @@ use std::{
 };
 
 use crate::filesystem::{FileSystem, FileSystemManager};
+use crate::node::PackageManager;
 
 /// Represents the type of monorepo system being used.
 ///
@@ -141,57 +142,6 @@ pub struct MonorepoDescriptor {
     pub(crate) validation_status: crate::project::ProjectValidationStatus,
 }
 
-/// Represents the type of package manager used in a Node.js project.
-///
-/// Different package managers use different lock files and commands,
-/// and this enum captures those variations to enable manager-specific processing.
-///
-/// # Examples
-///
-/// ```
-/// use sublime_standard_tools::monorepo::types::PackageManagerKind;
-///
-/// let npm = PackageManagerKind::Npm;
-/// assert_eq!(npm.lock_file(), "package-lock.json");
-/// assert_eq!(npm.command(), "npm");
-/// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PackageManagerKind {
-    /// npm package manager (default for Node.js)
-    Npm,
-    /// Yarn package manager
-    Yarn,
-    /// pnpm package manager (performance-oriented)
-    Pnpm,
-    /// Bun package manager and runtime
-    Bun,
-    /// Jsr package manager and runtime
-    Jsr,
-}
-
-/// Represents a package manager detected in a Node.js project.
-///
-/// Contains information about the type of package manager and its
-/// location within the filesystem.
-///
-/// # Examples
-///
-/// ```
-/// use std::path::Path;
-/// use sublime_standard_tools::monorepo::types::{PackageManager, PackageManagerKind};
-///
-/// // Create a package manager representation
-/// let manager = PackageManager::new(PackageManagerKind::Npm, "/project/root");
-/// assert_eq!(manager.kind(), PackageManagerKind::Npm);
-/// assert_eq!(manager.root(), Path::new("/project/root"));
-/// ```
-#[derive(Debug, Clone)]
-pub struct PackageManager {
-    /// The type of package manager
-    pub(crate) kind: PackageManagerKind,
-    /// The root directory of the project
-    pub(crate) root: PathBuf,
-}
 
 /// Detects and analyzes monorepo structures within a filesystem.
 ///

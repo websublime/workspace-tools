@@ -21,7 +21,8 @@ use super::types::{ProjectConfig, ProjectDescriptor, ProjectKind, ProjectValidat
 use super::SimpleProject;
 use crate::error::{Error, Result};
 use crate::filesystem::{FileSystem, FileSystemManager};
-use crate::monorepo::{MonorepoDetector, PackageManager};
+use crate::monorepo::MonorepoDetector;
+use crate::node::PackageManager;
 use package_json::PackageJson;
 use std::path::{Path, PathBuf};
 

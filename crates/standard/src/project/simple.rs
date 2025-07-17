@@ -15,7 +15,7 @@
 //! monorepos to simple projects, ensuring feature parity across project types.
 
 use super::types::{ProjectInfo, ProjectKind, ProjectValidationStatus};
-use crate::monorepo::PackageManager;
+use crate::node::PackageManager;
 use package_json::PackageJson;
 use std::path::{Path, PathBuf};
 
@@ -142,7 +142,7 @@ impl SimpleProject {
     /// ```
     /// use std::path::PathBuf;
     /// use sublime_standard_tools::project::SimpleProject;
-    /// use sublime_standard_tools::monorepo::{PackageManager, PackageManagerKind};
+    /// use sublime_standard_tools::node::{PackageManager, PackageManagerKind};
     ///
     /// let mut project = SimpleProject::new(PathBuf::from("/project"), None, None);
     /// let pm = PackageManager::new(PackageManagerKind::Npm, "/project");

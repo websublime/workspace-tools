@@ -6,7 +6,7 @@
 //!
 //! ## How
 //! Tests are organized into sections covering MonorepoKind, MonorepoDescriptor,
-//! PackageManagerKind, and PackageManager. Each test focuses on a specific
+//! and workspace functionality. Each test focuses on a specific
 //! aspect of functionality with clear assertions.
 //!
 //! ## Why
@@ -22,9 +22,9 @@ mod tests {
     use crate::error::{Error, MonorepoError};
     use crate::filesystem::{FileSystem, FileSystemManager};
     use crate::monorepo::{
-        types::{PackageManager, PackageManagerKind},
         MonorepoDescriptor, MonorepoKind, WorkspacePackage,
     };
+    use crate::node::{PackageManager, PackageManagerKind};
     use crate::monorepo::MonorepoDetector;
     use crate::project::{
         ConfigFormat, ConfigManager, ConfigScope, ConfigValue, ProjectConfig, ProjectManager,

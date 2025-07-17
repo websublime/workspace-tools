@@ -15,7 +15,7 @@
 
 use super::*;
 use crate::filesystem::{FileSystem, FileSystemManager};
-use crate::monorepo::{PackageManager, PackageManagerKind};
+use crate::node::{PackageManager, PackageManagerKind};
 use std::path::Path;
 use tempfile::TempDir;
 
@@ -164,7 +164,6 @@ mod project_config_tests {
 #[cfg(test)]
 mod simple_project_tests {
     use super::*;
-    use crate::monorepo::PackageManager;
 
     #[test]
     fn test_simple_project_creation() {

@@ -14,6 +14,7 @@
 //! efficiently work with these relationships.
 
 use super::{MonorepoDescriptor, MonorepoKind, WorkspacePackage};
+use crate::node::PackageManager;
 use crate::project::{ProjectInfo, ProjectKind, ProjectValidationStatus};
 use std::{
     collections::HashMap,
@@ -62,7 +63,7 @@ impl MonorepoDescriptor {
         kind: MonorepoKind, 
         root: PathBuf, 
         packages: Vec<WorkspacePackage>,
-        package_manager: Option<super::PackageManager>,
+        package_manager: Option<PackageManager>,
         package_json: Option<package_json::PackageJson>,
         validation_status: ProjectValidationStatus,
     ) -> Self {
@@ -442,7 +443,7 @@ impl ProjectInfo for MonorepoDescriptor {
         &self.root
     }
 
-    fn package_manager(&self) -> Option<&super::PackageManager> {
+    fn package_manager(&self) -> Option<&PackageManager> {
         self.package_manager.as_ref()
     }
 
@@ -470,7 +471,8 @@ impl MonorepoDescriptor {
     ///
     /// ```
     /// # use std::path::PathBuf;
-    /// # use sublime_standard_tools::monorepo::{MonorepoDescriptor, MonorepoKind, PackageManager, PackageManagerKind};
+    /// # use sublime_standard_tools::monorepo::{MonorepoDescriptor, MonorepoKind};
+    /// # use sublime_standard_tools::node::{PackageManager, PackageManagerKind};
     /// # use sublime_standard_tools::project::ProjectValidationStatus;
     /// #
     /// # let mut descriptor = MonorepoDescriptor::minimal(
@@ -482,7 +484,7 @@ impl MonorepoDescriptor {
     /// let manager = PackageManager::new(PackageManagerKind::Yarn, "/projects/my-monorepo");
     /// descriptor.set_package_manager(Some(manager));
     /// ```
-    pub fn set_package_manager(&mut self, package_manager: Option<super::PackageManager>) {
+    pub fn set_package_manager(&mut self, package_manager: Option<PackageManager>) {
         self.package_manager = package_manager;
     }
 
