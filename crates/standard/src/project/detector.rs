@@ -1,35 +1,51 @@
 //! # Project Detection Implementation
 //!
 //! ## What
-//! This file implements the `ProjectDetector` struct, which provides methods
-//! to identify and analyze Node.js projects, determining whether they are
-//! simple repositories or monorepos.
+//! This file implements the `ProjectDetector` struct, which provides a truly
+//! unified interface for detecting and analyzing Node.js projects, whether they
+//! are simple repositories or monorepos.
 //!
 //! ## How
-//! The detector uses filesystem analysis to examine project structure,
-//! package.json files, and lock files to determine project type. It leverages
-//! the existing monorepo detection capabilities while adding support for
-//! simple project identification.
+//! The detector uses a unified detection strategy that eliminates code duplication
+//! by centralizing common operations like package.json parsing and package manager
+//! detection. It determines project type through a single analysis pass and
+//! constructs appropriate descriptors based on the results.
 //!
 //! ## Why
-//! Unified project detection is essential for tools that need to work with
-//! any Node.js project type. This detector provides a single entry point
-//! for identifying project characteristics and returning appropriate
-//! representations.
+//! A truly unified detector eliminates maintenance overhead, ensures consistency
+//! across project types, and provides a single source of truth for project
+//! detection logic. This approach follows DRY principles and makes the codebase
+//! more maintainable and robust.
 
-use super::types::{ProjectConfig, ProjectDescriptor, ProjectKind};
+use super::types::{ProjectConfig, ProjectDescriptor, ProjectKind, ProjectValidationStatus};
 use super::SimpleProject;
 use crate::error::{Error, Result};
 use crate::filesystem::{FileSystem, FileSystemManager};
 use crate::monorepo::{MonorepoDetector, PackageManager};
 use package_json::PackageJson;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-/// Detects and analyzes Node.js projects to determine their type and characteristics.
+/// Internal structure to hold unified project metadata.
 ///
-/// This struct provides a unified interface for identifying whether a directory
-/// contains a simple Node.js project or a monorepo, and returns appropriate
-/// descriptors with project information.
+/// This structure centralizes common project information that is used
+/// across both simple and monorepo project types.
+#[derive(Debug)]
+struct ProjectMetadata {
+    /// The root path of the project
+    root: PathBuf,
+    /// Parsed package.json content, if available
+    package_json: Option<PackageJson>,
+    /// Detected package manager, if any
+    package_manager: Option<PackageManager>,
+    /// Validation status for the project structure
+    validation_status: ProjectValidationStatus,
+}
+
+/// Provides unified detection and analysis of Node.js projects.
+///
+/// This detector implements a truly unified approach to project detection,
+/// eliminating code duplication by centralizing common operations and using
+/// a single analysis strategy for all project types.
 ///
 /// # Type Parameters
 ///
@@ -58,6 +74,26 @@ pub struct ProjectDetector<F: FileSystem = FileSystemManager> {
     fs: F,
     /// Monorepo detector for identifying monorepo structures
     monorepo_detector: MonorepoDetector<F>,
+}
+
+impl ProjectMetadata {
+    /// Creates new project metadata with the given root path.
+    ///
+    /// # Arguments
+    ///
+    /// * `root` - The root directory of the project
+    ///
+    /// # Returns
+    ///
+    /// A new `ProjectMetadata` instance with unvalidated status.
+    fn new(root: PathBuf) -> Self {
+        Self {
+            root,
+            package_json: None,
+            package_manager: None,
+            validation_status: ProjectValidationStatus::NotValidated,
+        }
+    }
 }
 
 impl ProjectDetector<FileSystemManager> {
@@ -106,11 +142,58 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
         Self { monorepo_detector: MonorepoDetector::with_filesystem(fs.clone()), fs }
     }
 
-    /// Detects and analyzes a Node.js project at the given path.
+    /// Loads metadata specifically for simple projects.
     ///
-    /// This method examines the directory structure to determine if it contains
-    /// a simple Node.js project or a monorepo, then returns an appropriate
-    /// descriptor with project information.
+    /// This method centralizes metadata loading for simple projects,
+    /// eliminating code duplication from the original detect_simple_project method.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to analyze
+    /// * `config` - Configuration options for detection
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if:
+    /// - The package.json file cannot be read or parsed
+    /// - An I/O error occurs while reading files
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(ProjectMetadata)` - Loaded project metadata
+    /// * `Err(Error)` - If metadata loading failed
+    fn load_simple_project_metadata(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectMetadata> {
+        let mut metadata = ProjectMetadata::new(path.to_path_buf());
+
+        // Load package.json if it exists
+        let package_json_path = path.join("package.json");
+        if self.fs.exists(&package_json_path) {
+            let content = self.fs.read_file_string(&package_json_path)?;
+            metadata.package_json = Some(
+                serde_json::from_str::<PackageJson>(&content)
+                    .map_err(|e| Error::operation(format!("Invalid package.json: {e}")))?,
+            );
+        }
+
+        // Detect package manager if enabled
+        if config.detect_package_manager {
+            if let Ok(pm) = PackageManager::detect(path) {
+                metadata.package_manager = Some(pm);
+            }
+            // Package manager detection failure is not fatal for simple projects
+        }
+
+        // Set validation status - simple projects start as not validated
+        metadata.validation_status = ProjectValidationStatus::NotValidated;
+
+        Ok(metadata)
+    }
+
+    /// Detects and analyzes a Node.js project using unified detection logic.
+    ///
+    /// This method uses a truly unified approach that eliminates code duplication
+    /// by centralizing common operations and determining project type through
+    /// a single analysis pass.
     ///
     /// # Arguments
     ///
@@ -156,32 +239,30 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
     /// ```
     pub fn detect(&self, path: impl AsRef<Path>, config: &ProjectConfig) -> Result<ProjectDescriptor> {
         let path = path.as_ref();
-
-        // Ensure the path exists and is a directory
-        if !self.fs.exists(path) {
-            return Err(Error::operation(format!("Path does not exist: {}", path.display())));
-        }
-
-        // Check if it's a valid Node.js project (must have package.json)
-        let package_json_path = path.join("package.json");
-        if !self.fs.exists(&package_json_path) {
-            return Err(Error::operation(format!(
-                "No package.json found at: {}",
-                package_json_path.display()
-            )));
-        }
-
-        // Try to detect as monorepo first if enabled
+        
+        // First validate basic path requirements
+        self.validate_project_path(path)?;
+        
+        // Try to detect as monorepo first if enabled (preserving original behavior)
         if config.detect_monorepo {
             if let Ok(monorepo) = self.monorepo_detector.detect_monorepo(path) {
                 return Ok(ProjectDescriptor::Monorepo(Box::new(monorepo)));
             }
         }
-
-        // If not a monorepo, treat as simple project
-        self.detect_simple_project(path, config)
+        
+        // If not a monorepo, create simple project with unified metadata loading
+        let metadata = self.load_simple_project_metadata(path, config)?;
+        let simple_project = SimpleProject::with_validation(
+            metadata.root,
+            metadata.package_manager,
+            metadata.package_json,
+            metadata.validation_status,
+        );
+        
+        Ok(ProjectDescriptor::Simple(Box::new(simple_project)))
     }
 
+    
     /// Detects the type of Node.js project without full analysis.
     ///
     /// This method provides a quick way to determine project type without
@@ -226,8 +307,39 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
     /// ```
     pub fn detect_kind(&self, path: impl AsRef<Path>, config: &ProjectConfig) -> Result<ProjectKind> {
         let path = path.as_ref();
+        
+        // Validate path and package.json existence
+        self.validate_project_path(path)?;
+        
+        // Check for monorepo if enabled (same logic as detect())
+        if config.detect_monorepo {
+            if let Some(monorepo_kind) = self.monorepo_detector.is_monorepo_root(path)? {
+                return Ok(ProjectKind::Monorepo(monorepo_kind));
+            }
+        }
+        
+        Ok(ProjectKind::Simple)
+    }
 
-        // Ensure the path exists and has package.json
+    /// Validates that a path contains the basic requirements for a Node.js project.
+    ///
+    /// This method centralizes path validation logic used across detection methods.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to validate
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if:
+    /// - The path does not exist
+    /// - The path does not contain a package.json file
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - If the path is valid
+    /// * `Err(Error)` - If validation failed
+    fn validate_project_path(&self, path: &Path) -> Result<()> {
         if !self.fs.exists(path) {
             return Err(Error::operation(format!("Path does not exist: {}", path.display())));
         }
@@ -239,21 +351,14 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
                 package_json_path.display()
             )));
         }
-
-        // Check for monorepo if enabled
-        if config.detect_monorepo {
-            if let Some(monorepo_kind) = self.monorepo_detector.is_monorepo_root(path)? {
-                return Ok(ProjectKind::Monorepo(monorepo_kind));
-            }
-        }
-
-        Ok(ProjectKind::Simple)
+        
+        Ok(())
     }
-
+    
     /// Determines if a path contains a valid Node.js project.
     ///
-    /// This method performs a basic validation to check if the path
-    /// contains the minimum requirements for a Node.js project.
+    /// This method performs a comprehensive validation to check if the path
+    /// contains all requirements for a valid Node.js project.
     ///
     /// # Arguments
     ///
@@ -277,19 +382,14 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
     #[must_use]
     pub fn is_valid_project(&self, path: impl AsRef<Path>) -> bool {
         let path = path.as_ref();
-
-        // Must be a directory
-        if !self.fs.exists(path) {
+        
+        // Use unified validation logic
+        if self.validate_project_path(path).is_err() {
             return false;
         }
 
-        // Must have package.json
+        // Additional validation: ensure package.json can be parsed
         let package_json_path = path.join("package.json");
-        if !self.fs.exists(&package_json_path) {
-            return false;
-        }
-
-        // Try to parse package.json to ensure it's valid
         if let Ok(content) = self.fs.read_file_string(&package_json_path) {
             serde_json::from_str::<PackageJson>(&content).is_ok()
         } else {
@@ -297,60 +397,6 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
         }
     }
 
-    /// Detects and creates a simple project descriptor.
-    ///
-    /// This method creates a `SimpleProject` with the specified configuration,
-    /// optionally loading package manager and package.json information.
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - The path to the simple project
-    /// * `config` - Configuration options for project detection
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`Error`] if:
-    /// - The package.json file cannot be read or parsed
-    /// - Package manager detection fails when enabled
-    /// - An I/O error occurs while reading files
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(ProjectDescriptor::Simple)` - A descriptor for the simple project
-    /// * `Err(Error)` - If project creation failed
-    fn detect_simple_project(
-        &self,
-        path: &Path,
-        config: &ProjectConfig,
-    ) -> Result<ProjectDescriptor> {
-        let mut package_manager = None;
-        let mut package_json = None;
-
-        // Load package.json if it exists
-        let package_json_path = path.join("package.json");
-        if self.fs.exists(&package_json_path) {
-            let content = self.fs.read_file_string(&package_json_path)?;
-            package_json = Some(
-                serde_json::from_str::<PackageJson>(&content)
-                    .map_err(|e| Error::operation(format!("Invalid package.json: {e}")))?,
-            );
-        }
-
-        // Detect package manager if enabled
-        if config.detect_package_manager {
-            match PackageManager::detect(path) {
-                Ok(pm) => package_manager = Some(pm),
-                Err(_) => {
-                    // Package manager detection failure is not fatal for simple projects
-                    // We'll create the project without a package manager
-                }
-            }
-        }
-
-        let simple_project = SimpleProject::new(path.to_path_buf(), package_manager, package_json);
-
-        Ok(ProjectDescriptor::Simple(Box::new(simple_project)))
-    }
 }
 
 impl<F: FileSystem + Clone> Default for ProjectDetector<F>

@@ -36,7 +36,7 @@ impl ConfigValue {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::ConfigValue;
+    /// # use sublime_standard_tools::project::ConfigValue;
     /// let val = ConfigValue::String("hello".to_string());
     /// assert!(val.is_string());
     ///
@@ -57,7 +57,7 @@ impl ConfigValue {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::ConfigValue;
+    /// # use sublime_standard_tools::project::ConfigValue;
     /// let val = ConfigValue::Integer(42);
     /// assert!(val.is_integer());
     ///
@@ -78,7 +78,7 @@ impl ConfigValue {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::ConfigValue;
+    /// # use sublime_standard_tools::project::ConfigValue;
     /// let val = ConfigValue::Float(3.14);
     /// assert!(val.is_float());
     ///
@@ -99,7 +99,7 @@ impl ConfigValue {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::ConfigValue;
+    /// # use sublime_standard_tools::project::ConfigValue;
     /// let val = ConfigValue::Boolean(true);
     /// assert!(val.is_boolean());
     ///
@@ -120,7 +120,7 @@ impl ConfigValue {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::ConfigValue;
+    /// # use sublime_standard_tools::project::ConfigValue;
     /// let val = ConfigValue::Array(vec![]);
     /// assert!(val.is_array());
     ///
@@ -142,7 +142,7 @@ impl ConfigValue {
     ///
     /// ```
     /// # use std::collections::HashMap;
-    /// # use sublime_standard_tools::monorepo::types::ConfigValue;
+    /// # use sublime_standard_tools::project::ConfigValue;
     /// let val = ConfigValue::Map(HashMap::new());
     /// assert!(val.is_map());
     ///
@@ -163,7 +163,7 @@ impl ConfigValue {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::ConfigValue;
+    /// # use sublime_standard_tools::project::ConfigValue;
     /// let val = ConfigValue::Null;
     /// assert!(val.is_null());
     ///
@@ -185,7 +185,7 @@ impl ConfigValue {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::ConfigValue;
+    /// # use sublime_standard_tools::project::ConfigValue;
     /// let val = ConfigValue::String("hello".to_string());
     /// assert_eq!(val.as_string(), Some("hello"));
     ///
@@ -210,7 +210,7 @@ impl ConfigValue {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::ConfigValue;
+    /// # use sublime_standard_tools::project::ConfigValue;
     /// let val = ConfigValue::Integer(42);
     /// assert_eq!(val.as_integer(), Some(42));
     ///
@@ -237,7 +237,7 @@ impl ConfigValue {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::ConfigValue;
+    /// # use sublime_standard_tools::project::ConfigValue;
     /// let val = ConfigValue::Float(3.14);
     /// assert_eq!(val.as_float(), Some(3.14));
     ///
@@ -268,7 +268,7 @@ impl ConfigValue {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::ConfigValue;
+    /// # use sublime_standard_tools::project::ConfigValue;
     /// let val = ConfigValue::Boolean(true);
     /// assert_eq!(val.as_boolean(), Some(true));
     ///
@@ -293,7 +293,7 @@ impl ConfigValue {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::ConfigValue;
+    /// # use sublime_standard_tools::project::ConfigValue;
     /// let val = ConfigValue::Array(vec![ConfigValue::Integer(1), ConfigValue::Integer(2)]);
     /// assert!(val.as_array().is_some());
     /// assert_eq!(val.as_array().unwrap().len(), 2);
@@ -320,7 +320,7 @@ impl ConfigValue {
     ///
     /// ```
     /// # use std::collections::HashMap;
-    /// # use sublime_standard_tools::monorepo::types::ConfigValue;
+    /// # use sublime_standard_tools::project::ConfigValue;
     /// let mut map = HashMap::new();
     /// map.insert("key".to_string(), ConfigValue::Integer(42));
     /// let val = ConfigValue::Map(map);
@@ -356,7 +356,7 @@ impl ConfigManager {
     /// # Examples
     ///
     /// ```
-    /// use sublime_standard_tools::monorepo::types::ConfigManager;
+    /// use sublime_standard_tools::project::types::ConfigManager;
     ///
     /// let config_manager = ConfigManager::new();
     /// ```
@@ -376,7 +376,7 @@ impl ConfigManager {
     ///
     /// ```
     /// # use std::path::PathBuf;
-    /// # use sublime_standard_tools::monorepo::types::{ConfigManager, ConfigScope};
+    /// # use sublime_standard_tools::project::types::{ConfigManager, ConfigScope};
     /// let mut config_manager = ConfigManager::new();
     ///
     /// // Set the path for the project configuration
@@ -401,7 +401,7 @@ impl ConfigManager {
     ///
     /// ```
     /// # use std::path::PathBuf;
-    /// # use sublime_standard_tools::monorepo::types::{ConfigManager, ConfigScope};
+    /// # use sublime_standard_tools::project::types::{ConfigManager, ConfigScope};
     /// # let mut config_manager = ConfigManager::new();
     /// # config_manager.set_path(ConfigScope::Project, "/path/to/project/config.json");
     /// if let Some(path) = config_manager.get_path(ConfigScope::Project) {
@@ -435,7 +435,7 @@ impl ConfigManager {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::{ConfigManager, ConfigScope};
+    /// # use sublime_standard_tools::project::types::{ConfigManager, ConfigScope};
     /// # use sublime_standard_tools::error::Result;
     /// # fn example() -> Result<()> {
     /// let config_manager = ConfigManager::new();
@@ -480,7 +480,7 @@ impl ConfigManager {
     ///
     /// ```
     /// # use std::path::Path;
-    /// # use sublime_standard_tools::monorepo::types::ConfigManager;
+    /// # use sublime_standard_tools::project::types::ConfigManager;
     /// # use sublime_standard_tools::error::Result;
     /// # fn example() -> Result<()> {
     /// let config_manager = ConfigManager::new();
@@ -536,7 +536,7 @@ impl ConfigManager {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::{ConfigManager, ConfigScope};
+    /// # use sublime_standard_tools::project::types::{ConfigManager, ConfigScope};
     /// # use sublime_standard_tools::error::Result;
     /// # fn example() -> Result<()> {
     /// let config_manager = ConfigManager::new();
@@ -581,7 +581,7 @@ impl ConfigManager {
     ///
     /// ```
     /// # use std::path::Path;
-    /// # use sublime_standard_tools::monorepo::types::ConfigManager;
+    /// # use sublime_standard_tools::project::types::ConfigManager;
     /// # use sublime_standard_tools::error::Result;
     /// # fn example() -> Result<()> {
     /// let config_manager = ConfigManager::new();
@@ -626,7 +626,7 @@ impl ConfigManager {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::{ConfigManager, ConfigValue};
+    /// # use sublime_standard_tools::project::types::{ConfigManager, ConfigValue};
     /// let config_manager = ConfigManager::new();
     /// config_manager.set("version", ConfigValue::String("1.0.0".to_string()));
     ///
@@ -658,7 +658,7 @@ impl ConfigManager {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::{ConfigManager, ConfigValue};
+    /// # use sublime_standard_tools::project::types::{ConfigManager, ConfigValue};
     /// let config_manager = ConfigManager::new();
     /// config_manager.set("version", ConfigValue::String("1.0.0".to_string()));
     /// config_manager.set("debug", ConfigValue::Boolean(true));
@@ -689,7 +689,7 @@ impl ConfigManager {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::{ConfigManager, ConfigValue};
+    /// # use sublime_standard_tools::project::types::{ConfigManager, ConfigValue};
     /// let config_manager = ConfigManager::new();
     /// config_manager.set("temp", ConfigValue::String("temporary value".to_string()));
     ///
@@ -724,7 +724,7 @@ impl ConfigManager {
     ///
     /// ```
     /// # use std::path::Path;
-    /// # use sublime_standard_tools::monorepo::types::{ConfigManager, ConfigFormat};
+    /// # use sublime_standard_tools::project::types::{ConfigManager, ConfigFormat};
     /// let format = ConfigManager::detect_format(Path::new("config.json"));
     /// assert!(matches!(format, ConfigFormat::Json));
     ///
@@ -757,7 +757,7 @@ impl ConfigManager {
     /// # Examples
     ///
     /// ```
-    /// # use sublime_standard_tools::monorepo::types::{ConfigManager, ConfigFormat};
+    /// # use sublime_standard_tools::project::types::{ConfigManager, ConfigFormat};
     /// # use sublime_standard_tools::error::Result;
     /// # fn example() -> Result<()> {
     /// let json_content = r#"{"name": "test", "value": 42}"#;
@@ -792,7 +792,7 @@ impl ConfigManager {
     ///
     /// ```
     /// # use std::collections::HashMap;
-    /// # use sublime_standard_tools::monorepo::types::{ConfigManager, ConfigFormat, ConfigValue};
+    /// # use sublime_standard_tools::project::types::{ConfigManager, ConfigFormat, ConfigValue};
     /// # use sublime_standard_tools::error::Result;
     /// # fn example() -> Result<()> {
     /// let mut map = HashMap::new();

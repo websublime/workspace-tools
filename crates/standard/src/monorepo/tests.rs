@@ -25,9 +25,10 @@ mod tests {
         types::{PackageManager, PackageManagerKind},
         MonorepoDescriptor, MonorepoKind, WorkspacePackage,
     };
-    use crate::monorepo::{
-        ConfigFormat, ConfigManager, ConfigScope, ConfigValue, MonorepoDetector,
-        ProjectConfig, ProjectManager, ProjectValidationStatus,
+    use crate::monorepo::MonorepoDetector;
+    use crate::project::{
+        ConfigFormat, ConfigManager, ConfigScope, ConfigValue, ProjectConfig, ProjectManager,
+        ProjectValidationStatus,
     };
     use crate::project::GenericProject;
     use std::collections::HashMap;

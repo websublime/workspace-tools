@@ -24,6 +24,10 @@ This document provides a comprehensive specification of the public API for the `
   - [Monorepo Descriptor](#monorepo-descriptor)
   - [Package Manager](#package-manager)
   - [Project Management](#project-management)
+- [Project Module](#project-module)
+  - [Project Types](#project-types)
+  - [Project Detection](#project-detection)
+  - [Project Management](#project-management-unified)
   - [Configuration Management](#configuration-management)
 
 ## Overview
@@ -887,6 +891,140 @@ impl<F: FileSystem> ProjectManager<F> {
 }
 ```
 
+#### Example Usage
+
+```rust
+use sublime_standard_tools::monorepo::{MonorepoDetector, PackageManagerKind, ProjectConfig, ProjectManager};
+use std::path::Path;
+
+async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    // Detect a monorepo
+    let detector = MonorepoDetector::new();
+    
+    if let Some(kind) = detector.is_monorepo_root(".")? {
+        println!("This directory is a {} monorepo", kind.name());
+    }
+    
+    // Find the nearest monorepo root
+    if let Some((root, kind)) = detector.find_monorepo_root(".")? {
+        println!("Found {} monorepo at {}", kind.name(), root.display());
+        
+        // Analyze the monorepo
+        let monorepo = detector.detect_monorepo(&root)?;
+        
+        println!("Monorepo contains {} packages:", monorepo.packages().len());
+        for package in monorepo.packages() {
+            println!("- {} v{} at {}", package.name, package.version, package.location.display());
+            
+            // Print dependencies
+            let deps = monorepo.find_dependencies_by_name(&package.name);
+            if !deps.is_empty() {
+                println!("  Dependencies:");
+                for dep in deps {
+                    println!("  - {}", dep.name);
+                }
+            }
+        }
+    }
+    
+    // Project management
+    let project_manager = ProjectManager::new();
+    let config = ProjectConfig::new()
+        .with_detect_package_manager(true)
+        .with_validate_structure(true);
+    
+    let project = project_manager.detect_project(".", &config)?;
+    println!("Project root: {}", project.root().display());
+    
+    if let Some(package_manager) = project.package_manager() {
+        println!("Using package manager: {}", package_manager.kind().command());
+    }
+    
+    match project.validation_status() {
+        sublime_standard_tools::monorepo::ProjectValidationStatus::Valid => {
+            println!("Project structure is valid");
+        }
+        _ => println!("Project structure has issues"),
+    }
+    
+    Ok(())
+}
+```
+
+## Project Module
+
+The project module provides a unified API for detecting, managing, and working with Node.js projects, regardless of whether they are simple repositories or monorepos. It abstracts common functionality and provides a consistent interface for all project types, including configuration management across different scopes.
+
+### Project Types
+
+```rust
+/// Represents the type of Node.js project.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProjectKind {
+    /// A simple Node.js project (single package.json)
+    Simple,
+    /// A monorepo project with specific type
+    Monorepo(MonorepoKind),
+}
+
+/// Common interface for all Node.js project types.
+pub trait ProjectInfo: Send + Sync {
+    fn root(&self) -> &Path;
+    fn package_manager(&self) -> Option<&PackageManager>;
+    fn package_json(&self) -> Option<&PackageJson>;
+    fn validation_status(&self) -> &ProjectValidationStatus;
+    fn kind(&self) -> ProjectKind;
+}
+
+/// Represents different types of Node.js projects with their specific data.
+#[derive(Debug)]
+pub enum ProjectDescriptor {
+    /// A simple Node.js project
+    Simple(Box<SimpleProject>),
+    /// A monorepo project
+    Monorepo(Box<MonorepoDescriptor>),
+}
+```
+
+### Project Detection
+
+```rust
+/// Provides unified detection and analysis of Node.js projects.
+pub struct ProjectDetector<F: FileSystem = FileSystemManager> {
+    // Internal fields
+}
+
+impl ProjectDetector<FileSystemManager> {
+    pub fn new() -> Self;
+}
+
+impl<F: FileSystem + Clone> ProjectDetector<F> {
+    pub fn with_filesystem(fs: F) -> Self;
+    pub fn detect(&self, path: impl AsRef<Path>, config: &ProjectConfig) -> Result<ProjectDescriptor>;
+    pub fn detect_kind(&self, path: impl AsRef<Path>, config: &ProjectConfig) -> Result<ProjectKind>;
+    pub fn is_valid_project(&self, path: impl AsRef<Path>) -> bool;
+}
+```
+
+### Project Management Unified
+
+```rust
+/// Manages Node.js project detection and validation.
+pub struct ProjectManager<F: FileSystem = FileSystemManager> {
+    // Internal fields
+}
+
+impl ProjectManager<FileSystemManager> {
+    pub fn new() -> Self;
+}
+
+impl<F: FileSystem + Clone> ProjectManager<F> {
+    pub fn with_filesystem(fs: F) -> Self;
+    pub fn create_project(&self, path: impl AsRef<Path>, config: &ProjectConfig) -> Result<ProjectDescriptor>;
+    pub fn validate_project(&self, project: &mut ProjectDescriptor) -> Result<()>;
+}
+```
+
 ### Configuration Management
 
 ```rust
@@ -973,57 +1111,36 @@ impl ConfigManager {
 #### Example Usage
 
 ```rust
-use sublime_standard_tools::monorepo::{MonorepoDetector, PackageManagerKind, ProjectConfig, ProjectManager};
+use sublime_standard_tools::project::{
+    ConfigManager, ConfigScope, ConfigValue, ProjectDetector, ProjectConfig
+};
 use std::path::Path;
 
 async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    // Detect a monorepo
-    let detector = MonorepoDetector::new();
+    // Detect any type of Node.js project
+    let detector = ProjectDetector::new();
+    let config = ProjectConfig::new();
     
-    if let Some(kind) = detector.is_monorepo_root(".")? {
-        println!("This directory is a {} monorepo", kind.name());
-    }
-    
-    // Find the nearest monorepo root
-    if let Some((root, kind)) = detector.find_monorepo_root(".")? {
-        println!("Found {} monorepo at {}", kind.name(), root.display());
-        
-        // Analyze the monorepo
-        let monorepo = detector.detect_monorepo(&root)?;
-        
-        println!("Monorepo contains {} packages:", monorepo.packages().len());
-        for package in monorepo.packages() {
-            println!("- {} v{} at {}", package.name, package.version, package.location.display());
-            
-            // Print dependencies
-            let deps = monorepo.find_dependencies_by_name(&package.name);
-            if !deps.is_empty() {
-                println!("  Dependencies:");
-                for dep in deps {
-                    println!("  - {}", dep.name);
-                }
-            }
+    let project = detector.detect(Path::new("."), &config)?;
+    match project {
+        sublime_standard_tools::project::ProjectDescriptor::Simple(simple) => {
+            println!("Found simple project at {}", simple.root().display());
+        }
+        sublime_standard_tools::project::ProjectDescriptor::Monorepo(monorepo) => {
+            println!("Found {} with {} packages", 
+                     monorepo.kind().name(),
+                     monorepo.packages().len());
         }
     }
     
-    // Project management
-    let project_manager = ProjectManager::new();
-    let config = ProjectConfig::new()
-        .with_detect_package_manager(true)
-        .with_validate_structure(true);
+    // Configuration management
+    let mut config_manager = ConfigManager::new();
+    config_manager.set("theme", ConfigValue::String("dark".to_string()));
     
-    let project = project_manager.detect_project(".", &config)?;
-    println!("Project root: {}", project.root().display());
-    
-    if let Some(package_manager) = project.package_manager() {
-        println!("Using package manager: {}", package_manager.kind().command());
-    }
-    
-    match project.validation_status() {
-        sublime_standard_tools::monorepo::ProjectValidationStatus::Valid => {
-            println!("Project structure is valid");
+    if let Some(theme) = config_manager.get("theme") {
+        if let Some(theme_str) = theme.as_string() {
+            println!("Current theme: {}", theme_str);
         }
-        _ => println!("Project structure has issues"),
     }
     
     Ok(())

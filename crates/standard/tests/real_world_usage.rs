@@ -36,9 +36,10 @@ use sublime_standard_tools::{
     },
     error::{Error, Result},
     filesystem::{FileSystem, FileSystemManager, NodePathKind, PathExt, PathUtils},
-    monorepo::{
-        ConfigManager, ConfigScope, ConfigValue, MonorepoDetector, MonorepoKind, PackageManager,
-        ProjectConfig, ProjectManager, ProjectValidationStatus,
+    monorepo::{MonorepoDetector, MonorepoKind, PackageManager},
+    project::{
+        ConfigManager, ConfigScope, ConfigValue, ProjectConfig, ProjectManager,
+        ProjectValidationStatus,
     },
 };
 
