@@ -39,11 +39,5 @@ pub use types::{
     StreamConfig, StreamOutput, SyncCommandExecutor,
 };
 
-// Short aliases to avoid module name repetitions in user code
-pub use types::{
-    CommandBuilder as Builder, CommandOutput as Output, CommandPriority as Priority,
-    CommandQueue as Queue, CommandQueueConfig as QueueConfig, CommandQueueResult as QueueResult,
-    CommandStatus as Status, CommandStream as Stream, DefaultCommandExecutor as DefaultExecutor,
-};
 
 pub use executor::Executor;

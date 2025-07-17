@@ -30,5 +30,3 @@ pub use types::{
     MonorepoDescriptor, MonorepoDetector, MonorepoKind, PnpmWorkspaceConfig, WorkspacePackage,
 };
 
-// Re-export types from project module for backwards compatibility
-pub use crate::project::{ProjectConfig, ProjectManager, ProjectValidationStatus};
