@@ -138,10 +138,10 @@ Phase 5: Documentation ━━━━━━━━━━━━━━━━━━━
 - [x] Update imports in monorepo module to use `crate::node::`
 
 #### 2.2 Repository Kind Implementation
-- [ ] Implement `RepoKind` methods (name, is_monorepo, etc.)
-- [ ] **BREAKING**: Refactor `ProjectKind` to use `RepoKind`
-- [ ] **BREAKING**: Update `ProjectDescriptor` for new hierarchy
-- [ ] Remove old type definitions completely
+- [x] Implement `RepoKind` methods (name, is_monorepo, etc.)
+- [x] **BREAKING**: Refactor `ProjectKind` to use `RepoKind`
+- [x] **BREAKING**: Update `ProjectDescriptor` for new hierarchy
+- [x] Remove old type definitions completely
 
 #### 2.3 Import Updates
 - [x] Update monorepo module imports

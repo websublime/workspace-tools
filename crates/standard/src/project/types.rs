@@ -15,7 +15,7 @@
 //! of different project structures while maintaining type safety.
 
 use crate::monorepo::{MonorepoDescriptor, MonorepoKind};
-use crate::node::PackageManager;
+use crate::node::{PackageManager, RepoKind};
 use package_json::PackageJson;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -26,29 +26,31 @@ use std::{
 
 /// Represents the type of Node.js project.
 ///
-/// This enum differentiates between simple repositories and various
-/// types of monorepo structures, enabling type-specific processing
-/// while maintaining a common interface.
+/// This enum uses the repository-first approach where all projects
+/// are fundamentally repositories with different characteristics.
+/// This creates a cleaner hierarchy and better separation of concerns.
 ///
 /// # Examples
 ///
 /// ```
 /// use sublime_standard_tools::project::ProjectKind;
+/// use sublime_standard_tools::node::RepoKind;
 /// use sublime_standard_tools::monorepo::MonorepoKind;
 ///
-/// let simple = ProjectKind::Simple;
-/// let yarn_mono = ProjectKind::Monorepo(MonorepoKind::YarnWorkspaces);
+/// let simple = ProjectKind::Repository(RepoKind::Simple);
+/// let yarn_mono = ProjectKind::Repository(RepoKind::Monorepo(MonorepoKind::YarnWorkspaces));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProjectKind {
-    /// A simple Node.js project (single package.json)
-    Simple,
-    /// A monorepo project with specific type
-    Monorepo(MonorepoKind),
+    /// A repository-based project (simple or monorepo)
+    Repository(RepoKind),
 }
 
 impl ProjectKind {
     /// Returns a human-readable name for the project kind.
+    ///
+    /// This method delegates to the underlying repository kind for
+    /// consistent naming across the type hierarchy.
     ///
     /// # Returns
     ///
@@ -58,20 +60,23 @@ impl ProjectKind {
     ///
     /// ```
     /// use sublime_standard_tools::project::ProjectKind;
+    /// use sublime_standard_tools::node::RepoKind;
     /// use sublime_standard_tools::monorepo::MonorepoKind;
     ///
-    /// assert_eq!(ProjectKind::Simple.name(), "simple");
-    /// assert_eq!(ProjectKind::Monorepo(MonorepoKind::YarnWorkspaces).name(), "yarn monorepo");
+    /// assert_eq!(ProjectKind::Repository(RepoKind::Simple).name(), "simple");
+    /// assert_eq!(ProjectKind::Repository(RepoKind::Monorepo(MonorepoKind::YarnWorkspaces)).name(), "yarn monorepo");
     /// ```
     #[must_use]
     pub fn name(&self) -> String {
         match self {
-            Self::Simple => "simple".to_string(),
-            Self::Monorepo(kind) => format!("{} monorepo", kind.name()),
+            Self::Repository(repo_kind) => repo_kind.name(),
         }
     }
 
     /// Checks if this is a monorepo project.
+    ///
+    /// This method delegates to the underlying repository kind for
+    /// consistent behavior across the type hierarchy.
     ///
     /// # Returns
     ///
@@ -81,14 +86,76 @@ impl ProjectKind {
     ///
     /// ```
     /// use sublime_standard_tools::project::ProjectKind;
+    /// use sublime_standard_tools::node::RepoKind;
     /// use sublime_standard_tools::monorepo::MonorepoKind;
     ///
-    /// assert!(!ProjectKind::Simple.is_monorepo());
-    /// assert!(ProjectKind::Monorepo(MonorepoKind::NpmWorkSpace).is_monorepo());
+    /// assert!(!ProjectKind::Repository(RepoKind::Simple).is_monorepo());
+    /// assert!(ProjectKind::Repository(RepoKind::Monorepo(MonorepoKind::NpmWorkSpace)).is_monorepo());
     /// ```
     #[must_use]
     pub fn is_monorepo(&self) -> bool {
-        matches!(self, Self::Monorepo(_))
+        match self {
+            Self::Repository(repo_kind) => repo_kind.is_monorepo(),
+        }
+    }
+
+    /// Returns the repository kind for this project.
+    ///
+    /// This provides direct access to the underlying repository type
+    /// for repository-specific operations.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the `RepoKind` representing the repository type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::ProjectKind;
+    /// use sublime_standard_tools::node::RepoKind;
+    /// use sublime_standard_tools::monorepo::MonorepoKind;
+    ///
+    /// let simple = ProjectKind::Repository(RepoKind::Simple);
+    /// assert_eq!(simple.repo_kind(), &RepoKind::Simple);
+    ///
+    /// let yarn_mono = ProjectKind::Repository(RepoKind::Monorepo(MonorepoKind::YarnWorkspaces));
+    /// assert_eq!(yarn_mono.repo_kind(), &RepoKind::Monorepo(MonorepoKind::YarnWorkspaces));
+    /// ```
+    #[must_use]
+    pub fn repo_kind(&self) -> &RepoKind {
+        match self {
+            Self::Repository(repo_kind) => repo_kind,
+        }
+    }
+
+    /// Gets the monorepo kind if this is a monorepo project.
+    ///
+    /// This method delegates to the underlying repository kind for
+    /// consistent behavior across the type hierarchy.
+    ///
+    /// # Returns
+    ///
+    /// * `Some(&MonorepoKind)` - If this is a monorepo project
+    /// * `None` - If this is a simple project
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::project::ProjectKind;
+    /// use sublime_standard_tools::node::RepoKind;
+    /// use sublime_standard_tools::monorepo::MonorepoKind;
+    ///
+    /// let simple = ProjectKind::Repository(RepoKind::Simple);
+    /// assert_eq!(simple.monorepo_kind(), None);
+    ///
+    /// let yarn_mono = ProjectKind::Repository(RepoKind::Monorepo(MonorepoKind::YarnWorkspaces));
+    /// assert_eq!(yarn_mono.monorepo_kind(), Some(&MonorepoKind::YarnWorkspaces));
+    /// ```
+    #[must_use]
+    pub fn monorepo_kind(&self) -> Option<&MonorepoKind> {
+        match self {
+            Self::Repository(repo_kind) => repo_kind.monorepo_kind(),
+        }
     }
 }
 

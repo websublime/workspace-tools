@@ -15,7 +15,7 @@
 
 use super::*;
 use crate::filesystem::{FileSystem, FileSystemManager};
-use crate::node::{PackageManager, PackageManagerKind};
+use crate::node::{PackageManager, PackageManagerKind, RepoKind};
 use std::path::Path;
 use tempfile::TempDir;
 
@@ -61,23 +61,23 @@ mod project_kind_tests {
 
     #[test]
     fn test_project_kind_simple() {
-        let kind = ProjectKind::Simple;
+        let kind = ProjectKind::Repository(RepoKind::Simple);
         assert_eq!(kind.name(), "simple");
         assert!(!kind.is_monorepo());
     }
 
     #[test]
     fn test_project_kind_monorepo() {
-        let kind = ProjectKind::Monorepo(MonorepoKind::YarnWorkspaces);
+        let kind = ProjectKind::Repository(RepoKind::Monorepo(MonorepoKind::YarnWorkspaces));
         assert_eq!(kind.name(), "yarn monorepo");
         assert!(kind.is_monorepo());
     }
 
     #[test]
     fn test_project_kind_equality() {
-        let kind1 = ProjectKind::Simple;
-        let kind2 = ProjectKind::Simple;
-        let kind3 = ProjectKind::Monorepo(MonorepoKind::NpmWorkSpace);
+        let kind1 = ProjectKind::Repository(RepoKind::Simple);
+        let kind2 = ProjectKind::Repository(RepoKind::Simple);
+        let kind3 = ProjectKind::Repository(RepoKind::Monorepo(MonorepoKind::NpmWorkSpace));
 
         assert_eq!(kind1, kind2);
         assert_ne!(kind1, kind3);
@@ -171,7 +171,7 @@ mod simple_project_tests {
         let project = SimpleProject::new(root, None, None);
 
         assert_eq!(project.root(), Path::new("/test/project"));
-        assert_eq!(project.kind(), ProjectKind::Simple);
+        assert_eq!(project.kind(), ProjectKind::Repository(RepoKind::Simple));
         assert!(!project.has_package_json());
         assert!(!project.has_package_manager());
         assert_eq!(project.validation_status(), &ProjectValidationStatus::NotValidated);
@@ -258,7 +258,7 @@ mod project_detector_tests {
         create_package_json(temp_dir.path(), "test-project", "1.0.0");
 
         let kind = detector.detect_kind(temp_dir.path(), &config).unwrap();
-        assert_eq!(kind, ProjectKind::Simple);
+        assert_eq!(kind, ProjectKind::Repository(RepoKind::Simple));
     }
 
     #[test]
@@ -277,7 +277,7 @@ mod project_detector_tests {
         match project {
             ProjectDescriptor::Simple(simple) => {
                 assert_eq!(simple.root(), temp_dir.path());
-                assert_eq!(simple.kind(), ProjectKind::Simple);
+                assert_eq!(simple.kind(), ProjectKind::Repository(RepoKind::Simple));
                 assert!(simple.has_package_json());
                 assert!(simple.has_package_manager());
             }
@@ -323,7 +323,7 @@ mod project_manager_tests {
         let project = result.unwrap();
         let info = project.as_project_info();
         assert_eq!(info.root(), temp_dir.path());
-        assert_eq!(info.kind(), ProjectKind::Simple);
+        assert_eq!(info.kind(), ProjectKind::Repository(RepoKind::Simple));
     }
 
     #[test]

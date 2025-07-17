@@ -22,7 +22,7 @@ use super::SimpleProject;
 use crate::error::{Error, Result};
 use crate::filesystem::{FileSystem, FileSystemManager};
 use crate::monorepo::MonorepoDetector;
-use crate::node::PackageManager;
+use crate::node::{PackageManager, RepoKind};
 use package_json::PackageJson;
 use std::path::{Path, PathBuf};
 
@@ -298,9 +298,12 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
     ///
     /// let kind = detector.detect_kind(Path::new("."), &config)?;
     /// match kind {
-    ///     ProjectKind::Simple => println!("Simple project"),
-    ///     ProjectKind::Monorepo(monorepo_kind) => {
-    ///         println!("Monorepo: {}", monorepo_kind.name());
+    ///     ProjectKind::Repository(repo_kind) => {
+    ///         if let Some(monorepo_kind) = repo_kind.monorepo_kind() {
+    ///             println!("Monorepo: {}", monorepo_kind.name());
+    ///         } else {
+    ///             println!("Simple project");
+    ///         }
     ///     }
     /// }
     /// # Ok(())
@@ -315,11 +318,11 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
         // Check for monorepo if enabled (same logic as detect())
         if config.detect_monorepo {
             if let Some(monorepo_kind) = self.monorepo_detector.is_monorepo_root(path)? {
-                return Ok(ProjectKind::Monorepo(monorepo_kind));
+                return Ok(ProjectKind::Repository(RepoKind::Monorepo(monorepo_kind)));
             }
         }
         
-        Ok(ProjectKind::Simple)
+        Ok(ProjectKind::Repository(RepoKind::Simple))
     }
 
     /// Validates that a path contains the basic requirements for a Node.js project.

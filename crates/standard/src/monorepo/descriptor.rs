@@ -14,7 +14,7 @@
 //! efficiently work with these relationships.
 
 use super::{MonorepoDescriptor, MonorepoKind, WorkspacePackage};
-use crate::node::PackageManager;
+use crate::node::{PackageManager, RepoKind};
 use crate::project::{ProjectInfo, ProjectKind, ProjectValidationStatus};
 use std::{
     collections::HashMap,
@@ -456,7 +456,7 @@ impl ProjectInfo for MonorepoDescriptor {
     }
 
     fn kind(&self) -> ProjectKind {
-        ProjectKind::Monorepo(self.kind.clone())
+        ProjectKind::Repository(RepoKind::Monorepo(self.kind.clone()))
     }
 }
 

@@ -171,6 +171,7 @@ mod package_manager_kind_tests {
         assert_ne!(PackageManagerKind::Npm, PackageManagerKind::Yarn);
     }
 
+    #[allow(clippy::clone_on_copy)]
     #[test]
     fn test_package_manager_kind_clone_copy() {
         let npm1 = PackageManagerKind::Npm;

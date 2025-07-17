@@ -15,7 +15,7 @@
 //! monorepos to simple projects, ensuring feature parity across project types.
 
 use super::types::{ProjectInfo, ProjectKind, ProjectValidationStatus};
-use crate::node::PackageManager;
+use crate::node::{PackageManager, RepoKind};
 use package_json::PackageJson;
 use std::path::{Path, PathBuf};
 
@@ -273,6 +273,6 @@ impl ProjectInfo for SimpleProject {
     }
 
     fn kind(&self) -> ProjectKind {
-        ProjectKind::Simple
+        ProjectKind::Repository(RepoKind::Simple)
     }
 }
