@@ -17,12 +17,8 @@
 //! analysis and project structure navigation.
 
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-};
+use std::{collections::HashMap, path::PathBuf};
 
-use crate::filesystem::{FileSystem, FileSystemManager};
 use crate::node::PackageManager;
 
 /// Represents the type of monorepo system being used.
@@ -142,49 +138,6 @@ pub struct MonorepoDescriptor {
     pub(crate) validation_status: crate::project::ProjectValidationStatus,
 }
 
-
-/// Detects and analyzes monorepo structures within a filesystem.
-///
-/// This struct provides functionality to scan a directory structure,
-/// identify the type of monorepo being used, and gather information about
-/// its workspace packages and relationships.
-///
-/// # Type Parameters
-///
-/// * `F` - A filesystem implementation that satisfies the `FileSystem` trait.
-///   Defaults to `FileSystemManager` for standard operations.
-///
-/// # Examples
-///
-/// ```
-/// use std::path::Path;
-/// use sublime_standard_tools::monorepo::types::{MonorepoDetector, MonorepoKind};
-/// use sublime_standard_tools::filesystem::FileSystemManager;
-///
-/// // Create a detector with the default filesystem implementation
-/// let fs = FileSystemManager::new();
-/// let detector = MonorepoDetector::new(fs);
-///
-/// // Detect a monorepo at a specific path
-/// let path = Path::new("/path/to/project");
-/// match detector.detect(path) {
-///     Ok(descriptor) => {
-///         println!("Detected monorepo: {:?}", descriptor.kind());
-///         println!("Found {} packages", descriptor.packages().len());
-///     },
-///     Err(e) => println!("No monorepo detected: {}", e)
-/// }
-/// ```
-///
-/// The detector uses heuristics based on configuration files and directory
-/// structures to identify different types of monorepos (Yarn, pnpm, npm, etc.)
-/// and builds a comprehensive description of the workspace structure.
-#[derive(Debug, Clone)]
-pub struct MonorepoDetector<F: FileSystem = FileSystemManager> {
-    /// File system interface for filesystem operations
-    pub(crate) fs: F,
-}
-
 /// Configuration structure for PNPM workspaces.
 ///
 /// This struct represents the parsed content of a pnpm-workspace.yaml file,
@@ -213,6 +166,7 @@ pub struct MonorepoDetector<F: FileSystem = FileSystemManager> {
 /// The `packages` field contains glob patterns that define which directories
 /// contain packages in the monorepo, including negative patterns (prefixed with `!`)
 /// which exclude matching directories.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct PnpmWorkspaceConfig {
     /// Package locations (glob patterns)

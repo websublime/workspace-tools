@@ -84,7 +84,7 @@ This document outlines the complete refactoring plan for the `standard` crate, a
 
 ### 1.2 Begin Async Migration Foundation
 
-**Goal**: Lay groundwork for async filesystem operations without breaking existing code.
+**Goal**: Lay groundwork for async filesystem operations removing all the sync operations. If necessary maintain same names and transform to async.
 
 #### Tasks:
 
@@ -105,7 +105,7 @@ This document outlines the complete refactoring plan for the `standard` crate, a
 
 - [ ] **Implement `AsyncFileSystemManager`**
   ```rust
-  // Location: src/filesystem/async_manager.rs
+  // Location: src/filesystem/manager.rs
   pub struct AsyncFileSystemManager {
       runtime: Handle,  // Tokio runtime handle
   }

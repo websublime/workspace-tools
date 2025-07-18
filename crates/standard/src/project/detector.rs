@@ -1,28 +1,27 @@
-//! # Project Detection Implementation
+//! # Project Detection Implementation - Async Only
 //!
 //! ## What
-//! This file implements the `ProjectDetector` struct, which provides a truly
-//! unified interface for detecting and analyzing Node.js projects, whether they
-//! are simple repositories or monorepos.
+//! This file implements async project detection, providing a unified interface
+//! for detecting and analyzing Node.js projects using async I/O operations.
+//! All sync operations have been removed for architectural clarity.
 //!
 //! ## How
-//! The detector uses a unified detection strategy that eliminates code duplication
-//! by centralizing common operations like package.json parsing and package manager
-//! detection. It determines project type through a single analysis pass and
-//! constructs appropriate descriptors based on the results.
+//! The detector uses async filesystem operations to analyze project structures,
+//! eliminating code duplication by centralizing common operations like package.json
+//! parsing and package manager detection.
 //!
 //! ## Why
-//! A truly unified detector eliminates maintenance overhead, ensures consistency
-//! across project types, and provides a single source of truth for project
-//! detection logic. This approach follows DRY principles and makes the codebase
-//! more maintainable and robust.
+//! Async project detection is essential for performance when dealing with large
+//! monorepos where multiple projects need to be detected concurrently. This unified
+//! async-only approach eliminates confusion and provides consistent API.
 
 use super::types::{ProjectConfig, ProjectDescriptor, ProjectKind, ProjectValidationStatus};
 use super::Project;
 use crate::error::{Error, Result};
-use crate::filesystem::{FileSystem, FileSystemManager};
-use crate::monorepo::MonorepoDetector;
+use crate::filesystem::{AsyncFileSystem, FileSystemManager};
+use crate::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
 use crate::node::{PackageManager, RepoKind};
+use async_trait::async_trait;
 use package_json::PackageJson;
 use std::path::{Path, PathBuf};
 
@@ -40,41 +39,6 @@ struct ProjectMetadata {
     package_manager: Option<PackageManager>,
     /// Validation status for the project structure
     validation_status: ProjectValidationStatus,
-}
-
-/// Provides unified detection and analysis of Node.js projects.
-///
-/// This detector implements a truly unified approach to project detection,
-/// eliminating code duplication by centralizing common operations and using
-/// a single analysis strategy for all project types.
-///
-/// # Type Parameters
-///
-/// * `F` - A filesystem implementation that satisfies the `FileSystem` trait.
-///   Defaults to `FileSystemManager` for standard operations.
-///
-/// # Examples
-///
-/// ```
-/// use sublime_standard_tools::project::{ProjectDetector, ProjectConfig};
-/// use std::path::Path;
-///
-/// let detector = ProjectDetector::new();
-/// let config = ProjectConfig::new();
-///
-/// match detector.detect(Path::new("."), &config) {
-///     Ok(project) => {
-///         println!("Detected {} project", project.as_project_info().kind().name());
-///     }
-///     Err(e) => eprintln!("Detection failed: {}", e),
-/// }
-/// ```
-#[derive(Debug)]
-pub struct ProjectDetector<F: FileSystem = FileSystemManager> {
-    /// Filesystem implementation for file operations
-    fs: F,
-    /// Monorepo detector for identifying monorepo structures
-    monorepo_detector: MonorepoDetector<F>,
 }
 
 impl ProjectMetadata {
@@ -97,8 +61,254 @@ impl ProjectMetadata {
     }
 }
 
+/// Async trait for project detection.
+///
+/// This trait provides async methods for detecting and analyzing Node.js projects
+/// in a non-blocking manner, allowing for concurrent detection operations.
+///
+/// # Examples
+///
+/// ```rust
+/// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorTrait, ProjectConfig};
+/// use std::path::Path;
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let detector = ProjectDetector::new();
+/// let config = ProjectConfig::new();
+/// let project = detector.detect_async(Path::new("."), &config).await?;
+/// println!("Found project: {:?}", project.as_project_info().kind());
+/// # Ok(())
+/// # }
+/// ```
+#[async_trait]
+pub trait ProjectDetectorTrait: Send + Sync {
+    /// Asynchronously detects and analyzes a project at the given path.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to analyze for project detection
+    /// * `config` - Configuration options for project detection
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(ProjectDescriptor)` - The detected project descriptor
+    /// * `Err(Error)` - If detection fails or no project is found
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorTrait, ProjectConfig};
+    /// use std::path::Path;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let detector = ProjectDetector::new();
+    /// let config = ProjectConfig::new();
+    /// let project = detector.detect_async(Path::new("."), &config).await?;
+    /// println!("Detected project kind: {:?}", project.as_project_info().kind());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The path does not exist
+    /// - No valid project is found at the path
+    /// - Filesystem operations fail
+    /// - Project structure is invalid
+    async fn detect_async(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectDescriptor>;
+
+    /// Asynchronously detects only the project kind without full analysis.
+    ///
+    /// This method is faster than full detection as it only determines the project
+    /// type without analyzing the complete project structure.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to analyze for project kind detection
+    /// * `config` - Configuration options for project detection
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(ProjectKind)` - The detected project kind
+    /// * `Err(Error)` - If detection fails or no project is found
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorTrait, ProjectConfig};
+    /// use std::path::Path;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let detector = ProjectDetector::new();
+    /// let config = ProjectConfig::new();
+    /// let kind = detector.detect_kind_async(Path::new("."), &config).await?;
+    /// println!("Project kind: {:?}", kind);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The path does not exist
+    /// - No valid project is found at the path
+    /// - Filesystem operations fail
+    async fn detect_kind_async(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectKind>;
+
+    /// Asynchronously checks if the path contains a valid Node.js project.
+    ///
+    /// This method performs a quick check to determine if a path contains a
+    /// valid Node.js project without full analysis.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to check for project validity
+    ///
+    /// # Returns
+    ///
+    /// * `true` - If the path contains a valid Node.js project
+    /// * `false` - If the path does not contain a valid Node.js project
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorTrait};
+    /// use std::path::Path;
+    ///
+    /// # async fn example() {
+    /// let detector = ProjectDetector::new();
+    /// if detector.is_valid_project_async(Path::new(".")).await {
+    ///     println!("This is a valid Node.js project");
+    /// } else {
+    ///     println!("This is not a valid Node.js project");
+    /// }
+    /// # }
+    /// ```
+    async fn is_valid_project_async(&self, path: &Path) -> bool;
+}
+
+/// Async trait for project detection with custom filesystem.
+///
+/// This trait extends `ProjectDetectorTrait` to allow custom filesystem implementations
+/// for testing or specialized use cases.
+///
+/// # Type Parameters
+///
+/// * `F` - The filesystem implementation type
+///
+/// # Examples
+///
+/// ```rust
+/// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorWithFs, ProjectConfig};
+/// use sublime_standard_tools::filesystem::FileSystemManager;
+/// use std::path::Path;
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let fs = FileSystemManager::new();
+/// let detector = ProjectDetector::with_filesystem(fs);
+/// let config = ProjectConfig::new();
+/// let project = detector.detect_async(Path::new("."), &config).await?;
+/// println!("Found project: {:?}", project.as_project_info().kind());
+/// # Ok(())
+/// # }
+/// ```
+#[async_trait]
+pub trait ProjectDetectorWithFs<F: AsyncFileSystem>: ProjectDetectorTrait {
+    /// Gets a reference to the filesystem implementation.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the filesystem implementation.
+    fn filesystem(&self) -> &F;
+
+    /// Asynchronously detects projects in multiple paths concurrently.
+    ///
+    /// This method processes multiple paths in parallel for improved performance
+    /// when analyzing multiple project directories.
+    ///
+    /// # Arguments
+    ///
+    /// * `paths` - A slice of paths to analyze for projects
+    /// * `config` - Configuration options for project detection
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<Result<ProjectDescriptor>>)` - Results for each path
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorWithFs, ProjectConfig};
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// use std::path::Path;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = FileSystemManager::new();
+    /// let detector = ProjectDetector::with_filesystem(fs);
+    /// let config = ProjectConfig::new();
+    /// let paths = vec![Path::new("."), Path::new("../other-project")];
+    /// let results = detector.detect_multiple_async(&paths, &config).await;
+    /// for (i, result) in results.iter().enumerate() {
+    ///     match result {
+    ///         Ok(project) => println!("Path {}: {:?}", i, project.as_project_info().kind()),
+    ///         Err(e) => println!("Path {}: Error - {}", i, e),
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Each result in the vector may contain an error if detection fails for that path.
+    async fn detect_multiple_async(
+        &self,
+        paths: &[&Path],
+        config: &ProjectConfig,
+    ) -> Vec<Result<ProjectDescriptor>>;
+}
+
+/// Provides unified detection and analysis of Node.js projects.
+///
+/// This detector implements a truly unified approach to project detection,
+/// eliminating code duplication by centralizing common operations and using
+/// async I/O operations for maximum performance.
+///
+/// # Type Parameters
+///
+/// * `F` - An async filesystem implementation that satisfies the `AsyncFileSystem` trait.
+///   Defaults to `FileSystemManager` for standard operations.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::project::{ProjectDetector, ProjectConfig};
+/// use std::path::Path;
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let detector = ProjectDetector::new();
+/// let config = ProjectConfig::new();
+///
+/// match detector.detect_async(Path::new("."), &config).await {
+///     Ok(project) => {
+///         println!("Detected {} project", project.as_project_info().kind().name());
+///     }
+///     Err(e) => eprintln!("Detection failed: {}", e),
+/// }
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug)]
+pub struct ProjectDetector<F: AsyncFileSystem = FileSystemManager> {
+    /// Async filesystem implementation for file operations
+    fs: F,
+    /// Monorepo detector for identifying monorepo structures
+    monorepo_detector: MonorepoDetector<F>,
+}
+
 impl ProjectDetector<FileSystemManager> {
-    /// Creates a new `ProjectDetector` with the default filesystem implementation.
+    /// Creates a new `ProjectDetector` with the default async filesystem implementation.
     ///
     /// # Returns
     ///
@@ -118,12 +328,12 @@ impl ProjectDetector<FileSystemManager> {
     }
 }
 
-impl<F: FileSystem + Clone> ProjectDetector<F> {
-    /// Creates a new `ProjectDetector` with a custom filesystem implementation.
+impl<F: AsyncFileSystem + Clone> ProjectDetector<F> {
+    /// Creates a new `ProjectDetector` with a custom async filesystem implementation.
     ///
     /// # Arguments
     ///
-    /// * `fs` - The filesystem implementation to use
+    /// * `fs` - The async filesystem implementation to use
     ///
     /// # Returns
     ///
@@ -163,13 +373,13 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
     ///
     /// * `Ok(ProjectMetadata)` - Loaded project metadata
     /// * `Err(Error)` - If metadata loading failed
-    fn load_simple_project_metadata(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectMetadata> {
+    async fn load_simple_project_metadata(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectMetadata> {
         let mut metadata = ProjectMetadata::new(path.to_path_buf());
 
         // Load package.json if it exists
         let package_json_path = path.join("package.json");
-        if self.fs.exists(&package_json_path) {
-            let content = self.fs.read_file_string(&package_json_path)?;
+        if self.fs.exists(&package_json_path).await {
+            let content = self.fs.read_file_string(&package_json_path).await?;
             metadata.package_json = Some(
                 serde_json::from_str::<PackageJson>(&content)
                     .map_err(|e| Error::operation(format!("Invalid package.json: {e}")))?,
@@ -194,7 +404,7 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
     ///
     /// This method uses a truly unified approach that eliminates code duplication
     /// by centralizing common operations and determining project type through
-    /// a single analysis pass.
+    /// async analysis.
     ///
     /// # Arguments
     ///
@@ -213,43 +423,18 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
     ///
     /// * `Ok(ProjectDescriptor)` - A descriptor containing all project information
     /// * `Err(Error)` - If the path is not a valid project or an error occurred
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use sublime_standard_tools::project::{ProjectDetector, ProjectConfig};
-    /// use std::path::Path;
-    ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let detector = ProjectDetector::new();
-    /// let config = ProjectConfig::new();
-    ///
-    /// let project = detector.detect(Path::new("."), &config)?;
-    /// match project {
-    ///     sublime_standard_tools::project::ProjectDescriptor::Simple(simple) => {
-    ///         println!("Found simple project at {}", simple.root().display());
-    ///     }
-    ///     sublime_standard_tools::project::ProjectDescriptor::Monorepo(monorepo) => {
-    ///         println!("Found {} with {} packages", 
-    ///                  monorepo.kind().name(),
-    ///                  monorepo.packages().len());
-    ///     }
-    /// }
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn detect(&self, path: impl AsRef<Path>, config: &ProjectConfig) -> Result<ProjectDescriptor> {
+    pub async fn detect(&self, path: impl AsRef<Path>, config: &ProjectConfig) -> Result<ProjectDescriptor> {
         let path = path.as_ref();
         
         // First validate basic path requirements
-        self.validate_project_path(path)?;
+        self.validate_project_path(path).await?;
         
         // Create a unified project structure
-        let metadata = self.load_simple_project_metadata(path, config)?;
+        let metadata = self.load_simple_project_metadata(path, config).await?;
         
         // Determine project kind based on monorepo detection
         let project_kind = if config.detect_monorepo {
-            if let Ok(monorepo) = self.monorepo_detector.detect_monorepo(path) {
+            if let Ok(monorepo) = self.monorepo_detector.detect_monorepo_async(path).await {
                 // It's a monorepo, use the detected monorepo kind
                 ProjectKind::Repository(RepoKind::Monorepo(monorepo.kind))
             } else {
@@ -275,7 +460,7 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
         
         // If it's a monorepo, populate internal dependencies
         if project.is_monorepo() {
-            if let Ok(monorepo) = self.monorepo_detector.detect_monorepo(path) {
+            if let Ok(monorepo) = self.monorepo_detector.detect_monorepo_async(path).await {
                 project.internal_dependencies = monorepo.packages;
             }
         }
@@ -283,7 +468,6 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
         Ok(ProjectDescriptor::NodeJs(project))
     }
 
-    
     /// Detects the type of Node.js project without full analysis.
     ///
     /// This method provides a quick way to determine project type without
@@ -305,39 +489,15 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
     ///
     /// * `Ok(ProjectKind)` - The type of project detected
     /// * `Err(Error)` - If detection failed
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use sublime_standard_tools::project::{ProjectDetector, ProjectConfig, ProjectKind};
-    /// use std::path::Path;
-    ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let detector = ProjectDetector::new();
-    /// let config = ProjectConfig::new();
-    ///
-    /// let kind = detector.detect_kind(Path::new("."), &config)?;
-    /// match kind {
-    ///     ProjectKind::Repository(repo_kind) => {
-    ///         if let Some(monorepo_kind) = repo_kind.monorepo_kind() {
-    ///             println!("Monorepo: {}", monorepo_kind.name());
-    ///         } else {
-    ///             println!("Simple project");
-    ///         }
-    ///     }
-    /// }
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn detect_kind(&self, path: impl AsRef<Path>, config: &ProjectConfig) -> Result<ProjectKind> {
+    pub async fn detect_kind(&self, path: impl AsRef<Path>, config: &ProjectConfig) -> Result<ProjectKind> {
         let path = path.as_ref();
         
         // Validate path and package.json existence
-        self.validate_project_path(path)?;
+        self.validate_project_path(path).await?;
         
         // Check for monorepo if enabled (same logic as detect())
         if config.detect_monorepo {
-            if let Some(monorepo_kind) = self.monorepo_detector.is_monorepo_root(path)? {
+            if let Some(monorepo_kind) = self.monorepo_detector.is_monorepo_root_async(path).await? {
                 return Ok(ProjectKind::Repository(RepoKind::Monorepo(monorepo_kind)));
             }
         }
@@ -363,13 +523,13 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
     ///
     /// * `Ok(())` - If the path is valid
     /// * `Err(Error)` - If validation failed
-    fn validate_project_path(&self, path: &Path) -> Result<()> {
-        if !self.fs.exists(path) {
+    async fn validate_project_path(&self, path: &Path) -> Result<()> {
+        if !self.fs.exists(path).await {
             return Err(Error::operation(format!("Path does not exist: {}", path.display())));
         }
 
         let package_json_path = path.join("package.json");
-        if !self.fs.exists(&package_json_path) {
+        if !self.fs.exists(&package_json_path).await {
             return Err(Error::operation(format!(
                 "No package.json found at: {}",
                 package_json_path.display()
@@ -398,32 +558,73 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
     /// use sublime_standard_tools::project::ProjectDetector;
     /// use std::path::Path;
     ///
+    /// # async fn example() {
     /// let detector = ProjectDetector::new();
-    /// if detector.is_valid_project(Path::new(".")) {
+    /// if detector.is_valid_project(Path::new(".")).await {
     ///     println!("Current directory is a valid Node.js project");
     /// }
+    /// # }
     /// ```
     #[must_use]
-    pub fn is_valid_project(&self, path: impl AsRef<Path>) -> bool {
+    pub async fn is_valid_project(&self, path: impl AsRef<Path>) -> bool {
         let path = path.as_ref();
         
         // Use unified validation logic
-        if self.validate_project_path(path).is_err() {
+        if self.validate_project_path(path).await.is_err() {
             return false;
         }
 
         // Additional validation: ensure package.json can be parsed
         let package_json_path = path.join("package.json");
-        if let Ok(content) = self.fs.read_file_string(&package_json_path) {
+        if let Ok(content) = self.fs.read_file_string(&package_json_path).await {
             serde_json::from_str::<PackageJson>(&content).is_ok()
         } else {
             false
         }
     }
-
 }
 
-impl<F: FileSystem + Clone> Default for ProjectDetector<F>
+#[async_trait]
+impl<F: AsyncFileSystem + Clone> ProjectDetectorTrait for ProjectDetector<F> {
+    async fn detect_async(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectDescriptor> {
+        self.detect(path, config).await
+    }
+
+    async fn detect_kind_async(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectKind> {
+        self.detect_kind(path, config).await
+    }
+
+    async fn is_valid_project_async(&self, path: &Path) -> bool {
+        self.is_valid_project(path).await
+    }
+}
+
+#[async_trait]
+impl<F: AsyncFileSystem + Clone> ProjectDetectorWithFs<F> for ProjectDetector<F> {
+    fn filesystem(&self) -> &F {
+        &self.fs
+    }
+
+    async fn detect_multiple_async(
+        &self,
+        paths: &[&Path],
+        config: &ProjectConfig,
+    ) -> Vec<Result<ProjectDescriptor>> {
+        let mut results = Vec::with_capacity(paths.len());
+        
+        // Process all paths concurrently
+        let futures = paths.iter().map(|path| self.detect_async(path, config));
+        
+        // Collect all results
+        for future in futures {
+            results.push(future.await);
+        }
+        
+        results
+    }
+}
+
+impl<F: AsyncFileSystem + Clone> Default for ProjectDetector<F>
 where
     F: Default,
 {

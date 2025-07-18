@@ -35,8 +35,8 @@ use sublime_standard_tools::{
         Executor, StreamConfig,
     },
     error::{Error, Result},
-    filesystem::{FileSystem, FileSystemManager, NodePathKind, PathExt, PathUtils},
-    monorepo::{MonorepoDetector, MonorepoKind},
+    filesystem::{AsyncFileSystem, FileSystemManager, NodePathKind, PathExt, PathUtils},
+    monorepo::{MonorepoDetector, MonorepoDetectorTrait, MonorepoKind},
     node::PackageManager,
     project::{
         ConfigManager, ConfigScope, ConfigValue, ProjectConfig, ProjectManager,
@@ -178,7 +178,7 @@ impl MonorepoAnalyzer {
     async fn analyze_monorepo(&mut self, path: &Path) -> Result<AnalysisReport> {
         // Step 1: Basic path validation and normalization
         let normalized_path = path.normalize();
-        if !self.fs.exists(&normalized_path) {
+        if !self.fs.exists(&normalized_path).await {
             return Err(Error::operation(format!(
                 "Path does not exist: {}",
                 normalized_path.display()
@@ -186,7 +186,7 @@ impl MonorepoAnalyzer {
         }
 
         // Step 2: Detect monorepo structure
-        let monorepo_descriptor = self.detector.detect_monorepo(&normalized_path)?;
+        let monorepo_descriptor = self.detector.detect_monorepo_async(&normalized_path).await?;
         let monorepo_kind = monorepo_descriptor.kind().clone();
         let packages = monorepo_descriptor.packages();
 
@@ -205,11 +205,11 @@ impl MonorepoAnalyzer {
 
         for workspace_package in packages {
             // Extract package information
-            let package_info = self.extract_package_info(workspace_package, &normalized_path)?;
+            let package_info = self.extract_package_info(workspace_package, &normalized_path).await?;
             package_infos.push(package_info.clone());
 
             // Validate package structure
-            let validation = self.validate_package(&workspace_package.absolute_path)?;
+            let validation = self.validate_package(&workspace_package.absolute_path).await?;
             validations.push(ValidationResult {
                 package_name: package_info.name.clone(),
                 status: validation.status,
@@ -262,13 +262,13 @@ impl MonorepoAnalyzer {
     }
 
     /// Extracts detailed information about a package
-    fn extract_package_info(
+    async fn extract_package_info(
         &self,
         workspace_package: &sublime_standard_tools::monorepo::WorkspacePackage,
         _root: &Path,
     ) -> Result<PackageInfo> {
         let package_json_path = workspace_package.absolute_path.join("package.json");
-        let package_json_content = self.fs.read_file_string(&package_json_path)?;
+        let package_json_content = self.fs.read_file_string(&package_json_path).await?;
 
         // Parse package.json to check for build scripts
         let package_json: serde_json::Value =
@@ -292,11 +292,11 @@ impl MonorepoAnalyzer {
     }
 
     /// Validates a package structure and configuration
-    fn validate_package(&self, package_path: &Path) -> Result<DetailedValidation> {
+    async fn validate_package(&self, package_path: &Path) -> Result<DetailedValidation> {
         let config =
             ProjectConfig::new().with_detect_package_manager(true).with_validate_structure(true);
 
-        let project_descriptor = self.project_manager.create_project(package_path, &config)?;
+        let project_descriptor = self.project_manager.create_project(package_path, &config).await?;
         let project = project_descriptor.as_project_info();
         let mut checks = Vec::new();
 
@@ -304,21 +304,21 @@ impl MonorepoAnalyzer {
         checks.push("package.json format".to_string());
 
         // Check for common Node.js directories
-        if self.fs.exists(&package_path.node_path(NodePathKind::Src)) {
+        if self.fs.exists(&package_path.node_path(NodePathKind::Src)).await {
             checks.push("src directory exists".to_string());
         }
 
-        if self.fs.exists(&package_path.node_path(NodePathKind::Test)) {
+        if self.fs.exists(&package_path.node_path(NodePathKind::Test)).await {
             checks.push("test directory exists".to_string());
         }
 
         // Check for TypeScript configuration
-        if self.fs.exists(&package_path.join("tsconfig.json")) {
+        if self.fs.exists(&package_path.join("tsconfig.json")).await {
             checks.push("TypeScript configuration".to_string());
         }
 
         // Check for documentation
-        if self.fs.exists(&package_path.join("README.md")) {
+        if self.fs.exists(&package_path.join("README.md")).await {
             checks.push("README documentation".to_string());
         }
 
@@ -474,7 +474,7 @@ fn truncate_string(s: &str, max_len: usize) -> String {
 }
 
 /// Sets up a realistic test monorepo structure
-fn setup_test_monorepo(temp_dir: &TempDir) -> Result<PathBuf> {
+async fn setup_test_monorepo(temp_dir: &TempDir) -> Result<PathBuf> {
     let fs = FileSystemManager::new();
     let root = temp_dir.path().to_path_buf();
 
@@ -497,22 +497,22 @@ fn setup_test_monorepo(temp_dir: &TempDir) -> Result<PathBuf> {
         &root.join("package.json"),
         &serde_json::to_string_pretty(&root_package_json)
             .map_err(|e| Error::operation(format!("Failed to serialize JSON: {e}")))?,
-    )?;
+    ).await?;
 
     // Create yarn.lock to make it a Yarn workspace
-    fs.write_file_string(&root.join("yarn.lock"), "")?;
+    fs.write_file_string(&root.join("yarn.lock"), "").await?;
 
     // Create packages directory structure
     let packages_dir = root.join("packages");
     let apps_dir = root.join("apps");
-    fs.create_dir_all(&packages_dir)?;
-    fs.create_dir_all(&apps_dir)?;
+    fs.create_dir_all(&packages_dir).await?;
+    fs.create_dir_all(&apps_dir).await?;
 
     // Create shared library package
     let shared_lib_dir = packages_dir.join("shared");
-    fs.create_dir_all(&shared_lib_dir)?;
-    fs.create_dir_all(&shared_lib_dir.join("src"))?;
-    fs.create_dir_all(&shared_lib_dir.join("test"))?;
+    fs.create_dir_all(&shared_lib_dir).await?;
+    fs.create_dir_all(&shared_lib_dir.join("src")).await?;
+    fs.create_dir_all(&shared_lib_dir.join("test")).await?;
 
     let shared_package_json = serde_json::json!({
         "name": "@myorg/shared",
@@ -531,27 +531,27 @@ fn setup_test_monorepo(temp_dir: &TempDir) -> Result<PathBuf> {
         &shared_lib_dir.join("package.json"),
         &serde_json::to_string_pretty(&shared_package_json)
             .map_err(|e| Error::operation(format!("Failed to serialize JSON: {e}")))?,
-    )?;
+    ).await?;
 
     fs.write_file_string(
         &shared_lib_dir.join("tsconfig.json"),
         r#"{"compilerOptions": {"target": "es2020", "outDir": "dist"}}"#,
-    )?;
+    ).await?;
 
     fs.write_file_string(
         &shared_lib_dir.join("README.md"),
         "# Shared Library\n\nCommon utilities.",
-    )?;
+    ).await?;
 
     fs.write_file_string(
         &shared_lib_dir.join("src").join("index.ts"),
         "export const greet = (name: string) => `Hello, ${name}!`;",
-    )?;
+    ).await?;
 
     // Create UI components package
     let ui_dir = packages_dir.join("ui");
-    fs.create_dir_all(&ui_dir)?;
-    fs.create_dir_all(&ui_dir.join("src"))?;
+    fs.create_dir_all(&ui_dir).await?;
+    fs.create_dir_all(&ui_dir.join("src")).await?;
 
     let ui_package_json = serde_json::json!({
         "name": "@myorg/ui",
@@ -573,14 +573,14 @@ fn setup_test_monorepo(temp_dir: &TempDir) -> Result<PathBuf> {
         &ui_dir.join("package.json"),
         &serde_json::to_string_pretty(&ui_package_json)
             .map_err(|e| Error::operation(format!("Failed to serialize JSON: {e}")))?,
-    )?;
+    ).await?;
 
-    fs.write_file_string(&ui_dir.join("README.md"), "# UI Components\n\nReusable UI components.")?;
+    fs.write_file_string(&ui_dir.join("README.md"), "# UI Components\n\nReusable UI components.").await?;
 
     // Create web application
     let web_app_dir = apps_dir.join("web");
-    fs.create_dir_all(&web_app_dir)?;
-    fs.create_dir_all(&web_app_dir.join("src"))?;
+    fs.create_dir_all(&web_app_dir).await?;
+    fs.create_dir_all(&web_app_dir.join("src")).await?;
 
     let web_package_json = serde_json::json!({
         "name": "@myorg/web",
@@ -604,16 +604,16 @@ fn setup_test_monorepo(temp_dir: &TempDir) -> Result<PathBuf> {
         &web_app_dir.join("package.json"),
         &serde_json::to_string_pretty(&web_package_json)
             .map_err(|e| Error::operation(format!("Failed to serialize JSON: {e}")))?,
-    )?;
+    ).await?;
 
     fs.write_file_string(
         &web_app_dir.join("README.md"),
         "# Web Application\n\nMain web application.",
-    )?;
+    ).await?;
 
     // Create a package without build script
     let docs_dir = packages_dir.join("docs");
-    fs.create_dir_all(&docs_dir)?;
+    fs.create_dir_all(&docs_dir).await?;
 
     let docs_package_json = serde_json::json!({
         "name": "@myorg/docs",
@@ -627,7 +627,7 @@ fn setup_test_monorepo(temp_dir: &TempDir) -> Result<PathBuf> {
         &docs_dir.join("package.json"),
         &serde_json::to_string_pretty(&docs_package_json)
             .map_err(|e| Error::operation(format!("Failed to serialize JSON: {e}")))?,
-    )?;
+    ).await?;
 
     Ok(root)
 }
@@ -638,7 +638,7 @@ async fn test_comprehensive_monorepo_analysis() -> Result<()> {
     let temp_dir = tempfile::tempdir()
         .map_err(|e| Error::operation(format!("Failed to create temp dir: {e}")))?;
 
-    let monorepo_root = setup_test_monorepo(&temp_dir)?;
+    let monorepo_root = setup_test_monorepo(&temp_dir).await?;
     println!("Created test monorepo at: {}", monorepo_root.display());
 
     // Create and configure analyzer
@@ -720,7 +720,7 @@ async fn test_comprehensive_monorepo_analysis() -> Result<()> {
 
     // Test path extensions
     let ui_src_path = monorepo_root.join("packages/ui").node_path(NodePathKind::Src);
-    assert!(fs.exists(&ui_src_path));
+    assert!(fs.exists(&ui_src_path).await);
     println!("✓ Path extensions working correctly");
 
     // Test path utilities
@@ -785,7 +785,7 @@ async fn test_error_handling_scenarios() -> Result<()> {
         &temp_dir.path().join("package.json"),
         &serde_json::to_string_pretty(&single_project_json)
             .map_err(|e| Error::operation(format!("Failed to serialize JSON: {e}")))?,
-    )?;
+    ).await?;
 
     let result = analyzer.analyze_monorepo(temp_dir.path()).await;
     assert!(result.is_err());
@@ -849,7 +849,7 @@ async fn test_common_usage_patterns() -> Result<()> {
     // For the test, we'll just verify the API works
     let current_dir = PathUtils::current_dir()?;
     if current_dir.join("package.json").exists() {
-        let _project = project_manager.create_project(&current_dir, &config)?;
+        let _project = project_manager.create_project(&current_dir, &config).await?;
         println!("✓ Project detection API working");
     }
 
@@ -868,9 +868,9 @@ async fn test_common_usage_patterns() -> Result<()> {
         .map_err(|e| Error::operation(format!("Failed to create temp dir: {e}")))?;
 
     let test_file = temp_dir.path().join("test.txt");
-    fs.write_file_string(&test_file, "Test content")?;
+    fs.write_file_string(&test_file, "Test content").await?;
 
-    let content = fs.read_file_string(&test_file)?;
+    let content = fs.read_file_string(&test_file).await?;
     assert_eq!(content, "Test content");
     println!("✓ Filesystem operations working");
 

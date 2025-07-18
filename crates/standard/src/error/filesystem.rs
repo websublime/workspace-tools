@@ -45,6 +45,7 @@ impl AsRef<str> for FileSystemError {
             FileSystemError::NotAFile { path: _ } => "FileSystemError::NotAFile",
             FileSystemError::Utf8Decode { path: _, message: _ } => "FileSystemError::Utf8Decode",
             FileSystemError::Validation { path: _, reason: _ } => "FileSystemError::Validation",
+            FileSystemError::Operation(_) => "FileSystemError::Operation",
         }
     }
 }

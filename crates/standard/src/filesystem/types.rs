@@ -1,49 +1,50 @@
-//! # Filesystem Types
+//! # Filesystem Types - Async Only
 //!
 //! ## What
-//! This file defines the core types for filesystem operations, including the
-//! `FileSystem` trait and the concrete `FileSystemManager` implementation.
+//! This file defines the core types for async filesystem operations, including the
+//! `AsyncFileSystem` trait and related types. All sync operations have been removed
+//! to maintain a clean, async-only architecture.
 //!
 //! ## How
-//! The `FileSystem` trait defines a comprehensive set of operations for file
-//! and directory manipulation, while `FileSystemManager` provides a real
-//! implementation using standard library functions.
+//! The `AsyncFileSystem` trait defines a comprehensive set of async operations for file
+//! and directory manipulation, providing non-blocking I/O operations using async/await.
 //!
 //! ## Why
-//! Separating the trait from the implementation allows for better testability
-//! through mocking and provides a clear contract for filesystem operations.
+//! A unified async-only approach eliminates confusion between sync and async operations,
+//! provides better performance for large repositories, and maintains architectural clarity.
 
 use crate::error::Result;
-use std::path::{Path, PathBuf};
+use async_trait::async_trait;
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
-/// A manager for filesystem operations.
+/// Async trait defining filesystem operations.
 ///
-/// This struct provides a concrete implementation of the `FileSystem` trait
-/// using the standard library and additional crates for enhanced functionality.
-///
-/// # Examples
-///
-/// ```
-/// use std::path::Path;
-/// use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
-///
-/// let fs = FileSystemManager::new();
-/// if fs.exists(Path::new("Cargo.toml")) {
-///     println!("Cargo.toml exists");
-/// }
-/// ```
-#[derive(Debug, Default, Clone)]
-pub struct FileSystemManager;
-
-/// Trait defining filesystem operations.
-///
-/// This trait provides a comprehensive set of operations for interacting with
+/// This trait provides a comprehensive set of async operations for interacting with
 /// the filesystem, including reading and writing files, creating and removing
 /// directories, and traversing directory structures.
 ///
-/// Implementations must ensure thread safety through the `Send` and `Sync` bounds.
-pub trait FileSystem: Send + Sync {
-    /// Reads a file and returns its contents as a byte vector.
+/// All operations are non-blocking and can be executed concurrently for maximum
+/// performance when dealing with large repositories.
+///
+/// # Examples
+///
+/// ```rust
+/// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
+/// use std::path::Path;
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let fs = AsyncFileSystemManager::new();
+/// let contents = fs.read_file_string(Path::new("Cargo.toml")).await?;
+/// println!("Cargo.toml contents: {}", contents);
+/// # Ok(())
+/// # }
+/// ```
+#[async_trait]
+pub trait AsyncFileSystem: Send + Sync {
+    /// Asynchronously reads a file and returns its contents as a byte vector.
     ///
     /// # Arguments
     ///
@@ -56,23 +57,24 @@ pub trait FileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
     /// use std::path::Path;
-    /// use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = FileSystemManager::new();
-    /// let contents = fs.read_file(Path::new("Cargo.toml"))?;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = AsyncFileSystemManager::new();
+    /// let contents = fs.read_file(Path::new("Cargo.toml")).await?;
     /// println!("Read {} bytes", contents.len());
     /// # Ok(())
     /// # }
     /// ```
+    ///
     /// # Errors
     ///
     /// Returns an error if the file cannot be read or does not exist.
-    fn read_file(&self, path: &Path) -> Result<Vec<u8>>;
+    async fn read_file(&self, path: &Path) -> Result<Vec<u8>>;
 
-    /// Writes data to a file, creating the file and any parent directories if they don't exist.
+    /// Asynchronously writes data to a file, creating the file and any parent directories if they don't exist.
     ///
     /// # Arguments
     ///
@@ -86,23 +88,24 @@ pub trait FileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
     /// use std::path::Path;
-    /// use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = FileSystemManager::new();
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = AsyncFileSystemManager::new();
     /// let data = b"Hello, world!";
-    /// fs.write_file(Path::new("example.txt"), data)?;
+    /// fs.write_file(Path::new("example.txt"), data).await?;
     /// # Ok(())
     /// # }
     /// ```
+    ///
     /// # Errors
     ///
     /// Returns an error if the file cannot be written.
-    fn write_file(&self, path: &Path, contents: &[u8]) -> Result<()>;
+    async fn write_file(&self, path: &Path, contents: &[u8]) -> Result<()>;
 
-    /// Reads a file and returns its contents as a UTF-8 encoded string.
+    /// Asynchronously reads a file and returns its contents as a UTF-8 encoded string.
     ///
     /// # Arguments
     ///
@@ -115,23 +118,24 @@ pub trait FileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
     /// use std::path::Path;
-    /// use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = FileSystemManager::new();
-    /// let contents = fs.read_file_string(Path::new("Cargo.toml"))?;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = AsyncFileSystemManager::new();
+    /// let contents = fs.read_file_string(Path::new("Cargo.toml")).await?;
     /// println!("First line: {}", contents.lines().next().unwrap_or_default());
     /// # Ok(())
     /// # }
     /// ```
+    ///
     /// # Errors
     ///
     /// Returns an error if the file cannot be read, does not exist, or contains invalid UTF-8.
-    fn read_file_string(&self, path: &Path) -> Result<String>;
+    async fn read_file_string(&self, path: &Path) -> Result<String>;
 
-    /// Writes a string to a file, creating the file and any parent directories if they don't exist.
+    /// Asynchronously writes a string to a file, creating the file and any parent directories if they don't exist.
     ///
     /// # Arguments
     ///
@@ -145,22 +149,23 @@ pub trait FileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
     /// use std::path::Path;
-    /// use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = FileSystemManager::new();
-    /// fs.write_file_string(Path::new("example.txt"), "Hello, world!")?;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = AsyncFileSystemManager::new();
+    /// fs.write_file_string(Path::new("example.txt"), "Hello, world!").await?;
     /// # Ok(())
     /// # }
     /// ```
+    ///
     /// # Errors
     ///
     /// Returns an error if the file cannot be written.
-    fn write_file_string(&self, path: &Path, contents: &str) -> Result<()>;
+    async fn write_file_string(&self, path: &Path, contents: &str) -> Result<()>;
 
-    /// Creates a directory and all of its parent directories if they don't exist.
+    /// Asynchronously creates a directory and all of its parent directories if they don't exist.
     ///
     /// # Arguments
     ///
@@ -173,22 +178,23 @@ pub trait FileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
     /// use std::path::Path;
-    /// use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = FileSystemManager::new();
-    /// fs.create_dir_all(Path::new("nested/directory/structure"))?;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = AsyncFileSystemManager::new();
+    /// fs.create_dir_all(Path::new("nested/directory/structure")).await?;
     /// # Ok(())
     /// # }
     /// ```
+    ///
     /// # Errors
     ///
     /// Returns an error if the directory cannot be created.
-    fn create_dir_all(&self, path: &Path) -> Result<()>;
+    async fn create_dir_all(&self, path: &Path) -> Result<()>;
 
-    /// Removes a file or directory (recursively if it's a directory).
+    /// Asynchronously removes a file or directory (recursively if it's a directory).
     ///
     /// # Arguments
     ///
@@ -201,24 +207,25 @@ pub trait FileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
     /// use std::path::Path;
-    /// use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = FileSystemManager::new();
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = AsyncFileSystemManager::new();
     /// // Create a file, then remove it
-    /// fs.write_file_string(Path::new("temp.txt"), "temporary content")?;
-    /// fs.remove(Path::new("temp.txt"))?;
+    /// fs.write_file_string(Path::new("temp.txt"), "temporary content").await?;
+    /// fs.remove(Path::new("temp.txt")).await?;
     /// # Ok(())
     /// # }
     /// ```
+    ///
     /// # Errors
     ///
     /// Returns an error if the path cannot be removed.
-    fn remove(&self, path: &Path) -> Result<()>;
+    async fn remove(&self, path: &Path) -> Result<()>;
 
-    /// Checks if a path exists.
+    /// Asynchronously checks if a path exists.
     ///
     /// # Arguments
     ///
@@ -231,20 +238,22 @@ pub trait FileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
     /// use std::path::Path;
-    /// use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
     ///
-    /// let fs = FileSystemManager::new();
-    /// if fs.exists(Path::new("Cargo.toml")) {
+    /// # async fn example() {
+    /// let fs = AsyncFileSystemManager::new();
+    /// if fs.exists(Path::new("Cargo.toml")).await {
     ///     println!("Cargo.toml exists");
     /// } else {
     ///     println!("Cargo.toml does not exist");
     /// }
+    /// # }
     /// ```
-    fn exists(&self, path: &Path) -> bool;
+    async fn exists(&self, path: &Path) -> bool;
 
-    /// Lists the contents of a directory.
+    /// Asynchronously lists the contents of a directory.
     ///
     /// # Arguments
     ///
@@ -257,25 +266,26 @@ pub trait FileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
     /// use std::path::Path;
-    /// use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = FileSystemManager::new();
-    /// let entries = fs.read_dir(Path::new("src"))?;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = AsyncFileSystemManager::new();
+    /// let entries = fs.read_dir(Path::new("src")).await?;
     /// for entry in entries {
     ///     println!("Found: {}", entry.display());
     /// }
     /// # Ok(())
     /// # }
     /// ```
+    ///
     /// # Errors
     ///
     /// Returns an error if the directory cannot be read or does not exist.
-    fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>>;
+    async fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>>;
 
-    /// Walks a directory recursively, listing all files and directories.
+    /// Asynchronously walks a directory recursively, listing all files and directories.
     ///
     /// # Arguments
     ///
@@ -288,21 +298,210 @@ pub trait FileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
     /// use std::path::Path;
-    /// use sublime_standard_tools::filesystem::{FileSystem, FileSystemManager};
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = FileSystemManager::new();
-    /// let all_entries = fs.walk_dir(Path::new("src"))?;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = AsyncFileSystemManager::new();
+    /// let all_entries = fs.walk_dir(Path::new("src")).await?;
     /// println!("Found {} total entries", all_entries.len());
     /// # Ok(())
     /// # }
     /// ```
+    ///
     /// # Errors
     ///
     /// Returns an error if the directory cannot be read or does not exist.
-    fn walk_dir(&self, path: &Path) -> Result<Vec<PathBuf>>;
+    async fn walk_dir(&self, path: &Path) -> Result<Vec<PathBuf>>;
+
+    /// Asynchronously gets metadata for a path.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to get metadata for
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(std::fs::Metadata)` - The metadata for the path
+    /// * `Err(FileSystemError)` - If the metadata cannot be read
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
+    /// use std::path::Path;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = AsyncFileSystemManager::new();
+    /// let metadata = fs.metadata(Path::new("Cargo.toml")).await?;
+    /// println!("File size: {} bytes", metadata.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the metadata cannot be read.
+    async fn metadata(&self, path: &Path) -> Result<std::fs::Metadata>;
+}
+
+/// Configuration for async filesystem operations.
+///
+/// This struct provides configuration options for async filesystem operations,
+/// including timeout settings and concurrency limits.
+///
+/// # Examples
+///
+/// ```rust
+/// use sublime_standard_tools::filesystem::AsyncFileSystemConfig;
+/// use std::time::Duration;
+///
+/// let config = AsyncFileSystemConfig::new()
+///     .with_operation_timeout(Duration::from_secs(30))
+///     .with_read_timeout(Duration::from_secs(10))
+///     .with_write_timeout(Duration::from_secs(20));
+/// ```
+#[derive(Debug, Clone)]
+pub struct AsyncFileSystemConfig {
+    /// Timeout for general operations
+    pub operation_timeout: Duration,
+    /// Timeout for read operations
+    pub read_timeout: Duration,
+    /// Timeout for write operations
+    pub write_timeout: Duration,
+    /// Maximum number of concurrent operations
+    pub max_concurrent_operations: usize,
+}
+
+impl Default for AsyncFileSystemConfig {
+    fn default() -> Self {
+        Self {
+            operation_timeout: Duration::from_secs(30),
+            read_timeout: Duration::from_secs(10),
+            write_timeout: Duration::from_secs(20),
+            max_concurrent_operations: 10,
+        }
+    }
+}
+
+impl AsyncFileSystemConfig {
+    /// Creates a new configuration with default values.
+    ///
+    /// # Returns
+    ///
+    /// A new `AsyncFileSystemConfig` with default timeout and concurrency settings.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::AsyncFileSystemConfig;
+    ///
+    /// let config = AsyncFileSystemConfig::new();
+    /// ```
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sets the timeout for general operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout` - The timeout duration for operations
+    ///
+    /// # Returns
+    ///
+    /// The modified configuration for method chaining.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::AsyncFileSystemConfig;
+    /// use std::time::Duration;
+    ///
+    /// let config = AsyncFileSystemConfig::new()
+    ///     .with_operation_timeout(Duration::from_secs(60));
+    /// ```
+    #[must_use]
+    pub fn with_operation_timeout(mut self, timeout: Duration) -> Self {
+        self.operation_timeout = timeout;
+        self
+    }
+
+    /// Sets the timeout for read operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout` - The timeout duration for read operations
+    ///
+    /// # Returns
+    ///
+    /// The modified configuration for method chaining.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::AsyncFileSystemConfig;
+    /// use std::time::Duration;
+    ///
+    /// let config = AsyncFileSystemConfig::new()
+    ///     .with_read_timeout(Duration::from_secs(5));
+    /// ```
+    #[must_use]
+    pub fn with_read_timeout(mut self, timeout: Duration) -> Self {
+        self.read_timeout = timeout;
+        self
+    }
+
+    /// Sets the timeout for write operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout` - The timeout duration for write operations
+    ///
+    /// # Returns
+    ///
+    /// The modified configuration for method chaining.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::AsyncFileSystemConfig;
+    /// use std::time::Duration;
+    ///
+    /// let config = AsyncFileSystemConfig::new()
+    ///     .with_write_timeout(Duration::from_secs(15));
+    /// ```
+    #[must_use]
+    pub fn with_write_timeout(mut self, timeout: Duration) -> Self {
+        self.write_timeout = timeout;
+        self
+    }
+
+    /// Sets the maximum number of concurrent operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_concurrent` - The maximum number of concurrent operations
+    ///
+    /// # Returns
+    ///
+    /// The modified configuration for method chaining.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::AsyncFileSystemConfig;
+    ///
+    /// let config = AsyncFileSystemConfig::new()
+    ///     .with_max_concurrent_operations(20);
+    /// ```
+    #[must_use]
+    pub fn with_max_concurrent_operations(mut self, max_concurrent: usize) -> Self {
+        self.max_concurrent_operations = max_concurrent;
+        self
+    }
 }
 
 /// Represents common directory and file types in Node.js projects.

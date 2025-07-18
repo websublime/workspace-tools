@@ -75,11 +75,12 @@ impl PathUtils {
 
         // Lock files that indicate project root
         let lock_files = [
-            "package-lock.json", // npm
-            "yarn.lock",         // yarn
-            "pnpm-lock.yaml",    // pnpm
-            "bun.lockb",         // bun
-            "jsr.json",          // JSR
+            "package-lock.json",   // npm
+            "npm-shrinkwrap.json", // npm
+            "yarn.lock",           // yarn
+            "pnpm-lock.yaml",      // pnpm
+            "bun.lockb",           // bun
+            "jsr.json",            // JSR
         ];
 
         while let Some(path) = current {

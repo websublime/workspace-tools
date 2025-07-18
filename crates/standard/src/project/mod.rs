@@ -30,7 +30,7 @@ mod validator;
 #[cfg(test)]
 mod tests;
 
-pub use detector::ProjectDetector;
+pub use detector::{ProjectDetector, ProjectDetectorTrait, ProjectDetectorWithFs};
 pub use manager::ProjectManager;
 pub use project::{Dependencies, Project};
 pub use types::{

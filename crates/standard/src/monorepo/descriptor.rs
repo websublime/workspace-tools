@@ -16,6 +16,7 @@
 use super::{MonorepoDescriptor, MonorepoKind, WorkspacePackage};
 use crate::node::{PackageManager, RepoKind};
 use crate::project::{ProjectInfo, ProjectKind, ProjectValidationStatus};
+
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -60,8 +61,8 @@ impl MonorepoDescriptor {
     /// ```
     #[must_use]
     pub fn new(
-        kind: MonorepoKind, 
-        root: PathBuf, 
+        kind: MonorepoKind,
+        root: PathBuf,
         packages: Vec<WorkspacePackage>,
         package_manager: Option<PackageManager>,
         package_json: Option<package_json::PackageJson>,
@@ -74,10 +75,10 @@ impl MonorepoDescriptor {
             name_to_package.insert(package.name.clone(), i);
         }
 
-        Self { 
-            kind, 
-            root, 
-            packages, 
+        Self {
+            kind,
+            root,
+            packages,
             name_to_package,
             package_manager,
             package_json,
@@ -119,14 +120,7 @@ impl MonorepoDescriptor {
     /// ```
     #[must_use]
     pub fn minimal(kind: MonorepoKind, root: PathBuf, packages: Vec<WorkspacePackage>) -> Self {
-        Self::new(
-            kind, 
-            root, 
-            packages, 
-            None, 
-            None, 
-            ProjectValidationStatus::NotValidated
-        )
+        Self::new(kind, root, packages, None, None, ProjectValidationStatus::NotValidated)
     }
 
     /// Returns the kind of monorepo.
@@ -569,14 +563,27 @@ impl MonorepoDescriptor {
 
 impl Clone for MonorepoDescriptor {
     fn clone(&self) -> Self {
+        let json: Option<package_json::PackageJson> = {
+            let root_path = self.root.clone();
+            let pkg_json_path = root_path.join("package.json");
+            let mut pkg_json =
+                package_json::PackageJsonManager::with_file_path(pkg_json_path.as_path());
+
+            if pkg_json.read_ref().is_ok() {
+                let json_ref = pkg_json.as_ref();
+                serde_json::to_value(json_ref).and_then(serde_json::from_value).ok()
+            } else {
+                None
+            }
+        };
+
         Self {
             kind: self.kind.clone(),
             root: self.root.clone(),
             packages: self.packages.clone(),
             name_to_package: self.name_to_package.clone(),
             package_manager: self.package_manager.clone(),
-            // PackageJson doesn't implement Clone, so we omit it in clones
-            package_json: None,
+            package_json: json,
             validation_status: self.validation_status.clone(),
         }
     }

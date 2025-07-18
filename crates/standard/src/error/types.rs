@@ -90,6 +90,10 @@ pub enum FileSystemError {
         /// The reason why validation failed
         reason: String,
     },
+
+    /// Operation failed (e.g., timeout, concurrency limit exceeded).
+    #[error("Operation failed: {0}")]
+    Operation(String),
 }
 
 /// Result type for filesystem operations.

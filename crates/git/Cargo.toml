@@ -43,3 +43,4 @@ dirs = { workspace = true }
 [dev-dependencies]
 tempfile = "3.19.1"
 sublime_standard_tools = { workspace = true }
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }

@@ -18,10 +18,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::thread;
 use tempfile::TempDir;
 
-use crate::filesystem::{FileSystem, FileSystemManager, NodePathKind, PathExt, PathUtils};
+use crate::filesystem::{AsyncFileSystem, FileSystemManager, NodePathKind, PathExt, PathUtils};
 
 #[allow(clippy::expect_used)]
 #[allow(clippy::unwrap_used)]
@@ -54,8 +53,8 @@ mod tests {
     // BASIC FILE OPERATIONS
     // =============================================================================
 
-    #[test]
-    fn test_read_write_file() {
+    #[tokio::test]
+    async fn test_read_write_file() {
         let temp_dir = setup_test_dir();
         let fs = FileSystemManager::new();
 
@@ -63,25 +62,25 @@ mod tests {
         let test_content = b"Hello, filesystem!";
 
         // Test write_file
-        let write_result = fs.write_file(&test_path, test_content);
+        let write_result = fs.write_file(&test_path, test_content).await;
         assert!(write_result.is_ok());
 
         // Test read_file
-        let read_result = fs.read_file(&test_path);
+        let read_result = fs.read_file(&test_path).await;
         assert!(read_result.is_ok());
         assert_eq!(read_result.unwrap(), test_content);
 
         // Test exists
-        assert!(fs.exists(&test_path));
+        assert!(fs.exists(&test_path).await);
 
         // Test remove
-        let remove_result = fs.remove(&test_path);
+        let remove_result = fs.remove(&test_path).await;
         assert!(remove_result.is_ok());
-        assert!(!fs.exists(&test_path));
+        assert!(!fs.exists(&test_path).await);
     }
 
-    #[test]
-    fn test_read_write_string() {
+    #[tokio::test]
+    async fn test_read_write_string() {
         let temp_dir = setup_test_dir();
         let fs = FileSystemManager::new();
 
@@ -89,17 +88,17 @@ mod tests {
         let test_content = "Hello, string content!";
 
         // Test write_file_string
-        let write_result = fs.write_file_string(&test_path, test_content);
+        let write_result = fs.write_file_string(&test_path, test_content).await;
         assert!(write_result.is_ok());
 
         // Test read_file_string
-        let read_result = fs.read_file_string(&test_path);
+        let read_result = fs.read_file_string(&test_path).await;
         assert!(read_result.is_ok());
         assert_eq!(read_result.unwrap(), test_content);
     }
 
-    #[test]
-    fn test_filesystem_manager_comprehensive() {
+    #[tokio::test]
+    async fn test_filesystem_manager_comprehensive() {
         let fs = FileSystemManager::new();
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
@@ -108,31 +107,31 @@ mod tests {
         let file_path = path.join("test.txt");
         let content = "Hello, World!";
 
-        assert!(fs.write_file_string(&file_path, content).is_ok());
-        assert!(fs.exists(&file_path));
+        assert!(fs.write_file_string(&file_path, content).await.is_ok());
+        assert!(fs.exists(&file_path).await);
 
-        let read_content = fs.read_file_string(&file_path).unwrap();
+        let read_content = fs.read_file_string(&file_path).await.unwrap();
         assert_eq!(read_content, content);
 
         // Test binary operations
         let binary_content = b"Binary content";
-        assert!(fs.write_file(&file_path, binary_content).is_ok());
-        let read_binary = fs.read_file(&file_path).unwrap();
+        assert!(fs.write_file(&file_path, binary_content).await.is_ok());
+        let read_binary = fs.read_file(&file_path).await.unwrap();
         assert_eq!(read_binary, binary_content);
     }
 
-    #[test]
-    fn test_filesystem_empty_files() {
+    #[tokio::test]
+    async fn test_filesystem_empty_files() {
         let fs = FileSystemManager::new();
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
 
         // Test with empty file
         let empty_file = path.join("empty.txt");
-        assert!(fs.write_file_string(&empty_file, "").is_ok());
-        assert!(fs.exists(&empty_file));
+        assert!(fs.write_file_string(&empty_file, "").await.is_ok());
+        assert!(fs.exists(&empty_file).await);
 
-        let content = fs.read_file_string(&empty_file).unwrap();
+        let content = fs.read_file_string(&empty_file).await.unwrap();
         assert_eq!(content, "");
     }
 
@@ -140,8 +139,8 @@ mod tests {
     // DIRECTORY OPERATIONS
     // =============================================================================
 
-    #[test]
-    fn test_directory_operations() {
+    #[tokio::test]
+    async fn test_directory_operations() {
         let temp_dir = setup_test_dir();
         let fs = FileSystemManager::new();
 
@@ -149,43 +148,43 @@ mod tests {
         let nested_dir = test_dir.join("nested");
 
         // Test create_dir_all
-        let create_result = fs.create_dir_all(&nested_dir);
+        let create_result = fs.create_dir_all(&nested_dir).await;
         assert!(create_result.is_ok());
-        assert!(fs.exists(&nested_dir));
+        assert!(fs.exists(&nested_dir).await);
 
         // Create a file in the nested directory
         let test_file = nested_dir.join("test.txt");
-        let write_result = fs.write_file_string(&test_file, "Test content");
+        let write_result = fs.write_file_string(&test_file, "Test content").await;
         assert!(write_result.is_ok());
 
         // Test read_dir
-        let read_dir_result = fs.read_dir(&test_dir);
+        let read_dir_result = fs.read_dir(&test_dir).await;
         assert!(read_dir_result.is_ok());
         let entries = read_dir_result.unwrap();
         assert_eq!(entries.len(), 1); // Should contain just the nested directory
 
         // Test walk_dir
-        let walk_result = fs.walk_dir(&test_dir);
+        let walk_result = fs.walk_dir(&test_dir).await;
         assert!(walk_result.is_ok());
         let all_entries = walk_result.unwrap();
-        assert_eq!(all_entries.len(), 3); // test_dir, nested, and test.txt
+        assert_eq!(all_entries.len(), 2); // nested directory and test.txt file
 
         // Test remove on directory (recursive)
-        let remove_result = fs.remove(&test_dir);
+        let remove_result = fs.remove(&test_dir).await;
         assert!(remove_result.is_ok());
-        assert!(!fs.exists(&test_dir));
+        assert!(!fs.exists(&test_dir).await);
     }
 
-    #[test]
-    fn test_filesystem_directory_operations() {
+    #[tokio::test]
+    async fn test_filesystem_directory_operations() {
         let fs = FileSystemManager::new();
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
 
         // Create directory structure
         let nested_dir = path.join("nested").join("deep").join("structure");
-        assert!(fs.create_dir_all(&nested_dir).is_ok());
-        assert!(fs.exists(&nested_dir));
+        assert!(fs.create_dir_all(&nested_dir).await.is_ok());
+        assert!(fs.exists(&nested_dir).await);
 
         // Create files in nested structure
         let file1 = nested_dir.join("file1.txt");
@@ -197,19 +196,19 @@ mod tests {
         create_file(&file3, "content3");
 
         // Test directory listing
-        let entries = fs.read_dir(&nested_dir).unwrap();
+        let entries = fs.read_dir(&nested_dir).await.unwrap();
         assert_eq!(entries.len(), 2);
         assert!(entries.contains(&file1));
         assert!(entries.contains(&file2));
 
         // Test recursive walking
-        let all_files = fs.walk_dir(path).unwrap();
+        let all_files = fs.walk_dir(path).await.unwrap();
         let file_count = all_files.iter().filter(|p| p.is_file()).count();
         assert!(file_count >= 3);
     }
 
-    #[test]
-    fn test_filesystem_remove_operations() {
+    #[tokio::test]
+    async fn test_filesystem_remove_operations() {
         let fs = FileSystemManager::new();
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
@@ -222,84 +221,84 @@ mod tests {
         create_dir(&dir_path);
 
         // Test file removal
-        assert!(fs.exists(&file_path));
-        assert!(fs.remove(&file_path).is_ok());
-        assert!(!fs.exists(&file_path));
+        assert!(fs.exists(&file_path).await);
+        assert!(fs.remove(&file_path).await.is_ok());
+        assert!(!fs.exists(&file_path).await);
 
         // Test directory removal
-        assert!(fs.exists(&dir_path));
-        assert!(fs.remove(&dir_path).is_ok());
-        assert!(!fs.exists(&dir_path));
+        assert!(fs.exists(&dir_path).await);
+        assert!(fs.remove(&dir_path).await.is_ok());
+        assert!(!fs.exists(&dir_path).await);
     }
 
     // =============================================================================
     // ERROR CONDITIONS
     // =============================================================================
 
-    #[test]
-    fn test_error_cases() {
+    #[tokio::test]
+    async fn test_error_cases() {
         let fs = FileSystemManager::new();
 
         // Test reading a non-existent file
-        let result = fs.read_file(Path::new("/non/existent/file.txt"));
+        let result = fs.read_file(Path::new("/non/existent/file.txt")).await;
         assert!(result.is_err());
 
         // Test reading a directory as a file
         let temp_dir = setup_test_dir();
-        let result = fs.read_file(temp_dir.path());
+        let result = fs.read_file(temp_dir.path()).await;
         assert!(result.is_err());
 
         // Test reading a non-directory as a directory
         let test_file = temp_dir.path().join("not_a_dir.txt");
-        let _ = fs.write_file_string(&test_file, "content");
-        let result = fs.read_dir(&test_file);
+        let _ = fs.write_file_string(&test_file, "content").await;
+        let result = fs.read_dir(&test_file).await;
         assert!(result.is_err());
 
         // Test walking a non-directory
-        let result = fs.walk_dir(&test_file);
+        let result = fs.walk_dir(&test_file).await;
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_filesystem_error_conditions() {
+    #[tokio::test]
+    async fn test_filesystem_error_conditions() {
         let fs = FileSystemManager::new();
 
         // Test reading non-existent file
         let non_existent = PathBuf::from("/non/existent/file.txt");
-        assert!(fs.read_file(&non_existent).is_err());
-        assert!(fs.read_file_string(&non_existent).is_err());
+        assert!(fs.read_file(&non_existent).await.is_err());
+        assert!(fs.read_file_string(&non_existent).await.is_err());
 
         // Test writing to an invalid path that ensures failure on all platforms
         let temp_dir = setup_test_dir();
         let test_dir = temp_dir.path().join("test_directory");
-        fs.create_dir_all(&test_dir).unwrap();
+        fs.create_dir_all(&test_dir).await.unwrap();
         
         // Try to write a file with the same name as an existing directory
         // This will always fail on all platforms because you cannot overwrite
         // a directory with a file
-        assert!(fs.write_file_string(&test_dir, "content").is_err());
+        assert!(fs.write_file_string(&test_dir, "content").await.is_err());
     }
 
-    #[test]
-    fn test_filesystem_path_validation() {
+    #[tokio::test]
+    async fn test_filesystem_path_validation() {
         let fs = FileSystemManager::new();
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
 
         // Test validation with existing path through exists method
-        assert!(fs.exists(path));
+        assert!(fs.exists(path).await);
 
         // Test validation with non-existent path
         let non_existent = path.join("non_existent");
-        assert!(!fs.exists(&non_existent));
+        assert!(!fs.exists(&non_existent).await);
     }
 
     // =============================================================================
     // PATH UTILITIES
     // =============================================================================
 
-    #[test]
-    fn test_path_ext_methods() {
+    #[tokio::test]
+    async fn test_path_ext_methods() {
         let temp_dir = setup_test_dir();
         let fs = FileSystemManager::new();
 
@@ -308,9 +307,9 @@ mod tests {
         let src_dir = project_root.join("src");
         let nested_dir = src_dir.join("nested");
 
-        fs.create_dir_all(&nested_dir).unwrap();
+        fs.create_dir_all(&nested_dir).await.unwrap();
         fs.write_file_string(&project_root.join("package.json"), "{\"name\": \"test-project\"}")
-            .unwrap();
+            .await.unwrap();
 
         // Test normalize
         let path = Path::new("/a/b/../c/./d");
@@ -334,21 +333,21 @@ mod tests {
         assert_eq!(package_json, project_root.join("package.json"));
     }
 
-    #[test]
-    fn test_path_utils() {
+    #[tokio::test]
+    async fn test_path_utils() {
         let temp_dir = setup_test_dir();
         let fs = FileSystemManager::new();
 
         // Create a mock project structure
         let project_root = temp_dir.path();
         fs.write_file_string(&project_root.join("package.json"), "{\"name\": \"test-project\"}")
-            .unwrap();
+            .await.unwrap();
         fs.write_file_string(&project_root.join("pnpm-lock.yaml"), "lockfileVersion: '9.0'")
-            .unwrap();
+            .await.unwrap();
 
         // Test find_project_root
         let nested_path = project_root.join("a/b/c");
-        fs.create_dir_all(&nested_path).unwrap();
+        fs.create_dir_all(&nested_path).await.unwrap();
 
         let found_root = PathUtils::find_project_root(&nested_path);
         assert!(found_root.is_some());
@@ -364,8 +363,8 @@ mod tests {
         assert!(current.is_ok());
     }
 
-    #[test]
-    fn test_path_extensions_comprehensive() {
+    #[tokio::test]
+    async fn test_path_extensions_comprehensive() {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
 
@@ -388,8 +387,8 @@ mod tests {
         assert_eq!(src_path, path.join("src"));
     }
 
-    #[test]
-    fn test_path_utils_comprehensive() {
+    #[tokio::test]
+    async fn test_path_utils_comprehensive() {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
 
@@ -419,8 +418,8 @@ mod tests {
         assert!(current.unwrap().is_absolute());
     }
 
-    #[test]
-    fn test_path_utils_edge_cases() {
+    #[tokio::test]
+    async fn test_path_utils_edge_cases() {
         // Test with non-existent directory
         let non_existent = PathBuf::from("/non/existent/path");
         let result = PathUtils::find_project_root(&non_existent);
@@ -432,8 +431,8 @@ mod tests {
         assert_eq!(result, None);
     }
 
-    #[test]
-    fn test_path_utils_make_relative() {
+    #[tokio::test]
+    async fn test_path_utils_make_relative() {
         let temp_dir = setup_test_dir();
         let base = temp_dir.path();
         let target = base.join("sub").join("path").join("file.txt");
@@ -446,8 +445,8 @@ mod tests {
         assert_eq!(relative, PathBuf::from("sub").join("path").join("file.txt"));
     }
 
-    #[test]
-    fn test_path_canonicalization() {
+    #[tokio::test]
+    async fn test_path_canonicalization() {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
 
@@ -466,8 +465,8 @@ mod tests {
     // NODE PATH KIND TESTS
     // =============================================================================
 
-    #[test]
-    fn test_node_path_kind() {
+    #[tokio::test]
+    async fn test_node_path_kind() {
         assert_eq!(NodePathKind::NodeModules.default_path(), "node_modules");
         assert_eq!(NodePathKind::PackageJson.default_path(), "package.json");
         assert_eq!(NodePathKind::Src.default_path(), "src");
@@ -475,8 +474,8 @@ mod tests {
         assert_eq!(NodePathKind::Test.default_path(), "test");
     }
 
-    #[test]
-    fn test_node_path_kind_comprehensive() {
+    #[tokio::test]
+    async fn test_node_path_kind_comprehensive() {
         let test_cases = vec![
             (NodePathKind::NodeModules, "node_modules"),
             (NodePathKind::PackageJson, "package.json"),
@@ -497,8 +496,8 @@ mod tests {
     // ENHANCED EDGE CASES
     // =============================================================================
 
-    #[test]
-    fn test_filesystem_large_file_handling() {
+    #[tokio::test]
+    async fn test_filesystem_large_file_handling() {
         let fs = FileSystemManager::new();
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
@@ -507,13 +506,13 @@ mod tests {
         let large_content = "X".repeat(1024 * 1024);
         let large_file = path.join("large_file.txt");
 
-        assert!(fs.write_file_string(&large_file, &large_content).is_ok());
-        let read_content = fs.read_file_string(&large_file).unwrap();
+        assert!(fs.write_file_string(&large_file, &large_content).await.is_ok());
+        let read_content = fs.read_file_string(&large_file).await.unwrap();
         assert_eq!(read_content.len(), large_content.len());
     }
 
-    #[test]
-    fn test_filesystem_unicode_handling() {
+    #[tokio::test]
+    async fn test_filesystem_unicode_handling() {
         let fs = FileSystemManager::new();
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
@@ -522,18 +521,18 @@ mod tests {
         let unicode_content = "Hello 世界! 🌍 Здравствуй мир! مرحبا بالعالم!";
         let unicode_file = path.join("unicode.txt");
 
-        assert!(fs.write_file_string(&unicode_file, unicode_content).is_ok());
-        let read_content = fs.read_file_string(&unicode_file).unwrap();
+        assert!(fs.write_file_string(&unicode_file, unicode_content).await.is_ok());
+        let read_content = fs.read_file_string(&unicode_file).await.unwrap();
         assert_eq!(read_content, unicode_content);
 
         // Test with unicode filename
         let unicode_filename = path.join("файл_测试_🌍.txt");
-        assert!(fs.write_file_string(&unicode_filename, "content").is_ok());
-        assert!(fs.exists(&unicode_filename));
+        assert!(fs.write_file_string(&unicode_filename, "content").await.is_ok());
+        assert!(fs.exists(&unicode_filename).await);
     }
 
-    #[test]
-    fn test_filesystem_special_characters() {
+    #[tokio::test]
+    async fn test_filesystem_special_characters() {
         let fs = FileSystemManager::new();
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
@@ -542,13 +541,13 @@ mod tests {
         let special_content = r#"{"key": "value", "array": [1, 2, 3], "nested": {"inner": true}}"#;
         let special_file = path.join("special.json");
 
-        assert!(fs.write_file_string(&special_file, special_content).is_ok());
-        let read_content = fs.read_file_string(&special_file).unwrap();
+        assert!(fs.write_file_string(&special_file, special_content).await.is_ok());
+        let read_content = fs.read_file_string(&special_file).await.unwrap();
         assert_eq!(read_content, special_content);
     }
 
-    #[test]
-    fn test_filesystem_cross_platform_paths() {
+    #[tokio::test]
+    async fn test_filesystem_cross_platform_paths() {
         let fs = FileSystemManager::new();
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
@@ -556,7 +555,7 @@ mod tests {
         // Test with different path separators
         let unix_style = path.join("unix/style/path");
         create_dir(&unix_style);
-        assert!(fs.exists(&unix_style));
+        assert!(fs.exists(&unix_style).await);
 
         // Test with various filename patterns
         let filenames = vec![
@@ -570,8 +569,8 @@ mod tests {
 
         for filename in filenames {
             let file_path = path.join(filename);
-            assert!(fs.write_file_string(&file_path, "content").is_ok());
-            assert!(fs.exists(&file_path));
+            assert!(fs.write_file_string(&file_path, "content").await.is_ok());
+            assert!(fs.exists(&file_path).await);
         }
     }
 
@@ -579,8 +578,8 @@ mod tests {
     // CONCURRENT OPERATIONS
     // =============================================================================
 
-    #[test]
-    fn test_filesystem_concurrent_operations() {
+    #[tokio::test]
+    async fn test_filesystem_concurrent_operations() {
         let fs = Arc::new(FileSystemManager::new());
         let temp_dir = setup_test_dir();
         let path = Arc::new(temp_dir.path().to_path_buf());
@@ -591,12 +590,12 @@ mod tests {
             let fs_clone = Arc::clone(&fs);
             let path_clone = Arc::clone(&path);
 
-            let handle = thread::spawn(move || {
+            let handle = tokio::spawn(async move {
                 let file_path = path_clone.join(format!("file_{i}.txt"));
                 let content = format!("Content for file {i}");
 
-                fs_clone.write_file_string(&file_path, &content).unwrap();
-                let read_content = fs_clone.read_file_string(&file_path).unwrap();
+                fs_clone.write_file_string(&file_path, &content).await.unwrap();
+                let read_content = fs_clone.read_file_string(&file_path).await.unwrap();
                 assert_eq!(read_content, content);
             });
             handles.push(handle);
@@ -604,7 +603,7 @@ mod tests {
 
         // All operations should complete successfully
         for handle in handles {
-            handle.join().unwrap();
+            handle.await.unwrap();
         }
     }
 
@@ -612,8 +611,8 @@ mod tests {
     // STRESS TESTING
     // =============================================================================
 
-    #[test]
-    fn test_filesystem_stress_test() {
+    #[tokio::test]
+    async fn test_filesystem_stress_test() {
         let fs = FileSystemManager::new();
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
@@ -622,15 +621,15 @@ mod tests {
         for i in 0..100 {
             let file_path = path.join(format!("file_{i:03}.txt"));
             let content = format!("Content for file {i}");
-            assert!(fs.write_file_string(&file_path, &content).is_ok());
+            assert!(fs.write_file_string(&file_path, &content).await.is_ok());
         }
 
         // Read all files
-        let entries = fs.read_dir(path).unwrap();
+        let entries = fs.read_dir(path).await.unwrap();
         assert_eq!(entries.len(), 100);
 
         // Walk directory
-        let all_files = fs.walk_dir(path).unwrap();
+        let all_files = fs.walk_dir(path).await.unwrap();
         let file_count = all_files.iter().filter(|p| p.is_file()).count();
         assert_eq!(file_count, 100);
     }
