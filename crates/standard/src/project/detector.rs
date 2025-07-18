@@ -75,7 +75,7 @@ impl ProjectMetadata {
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let detector = ProjectDetector::new();
 /// let config = ProjectConfig::new();
-/// let project = detector.detect_async(Path::new("."), &config).await?;
+/// let project = detector.detect(Path::new("."), &config).await?;
 /// println!("Found project: {:?}", project.as_project_info().kind());
 /// # Ok(())
 /// # }
@@ -103,7 +103,7 @@ pub trait ProjectDetectorTrait: Send + Sync {
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let detector = ProjectDetector::new();
     /// let config = ProjectConfig::new();
-    /// let project = detector.detect_async(Path::new("."), &config).await?;
+    /// let project = detector.detect(Path::new("."), &config).await?;
     /// println!("Detected project kind: {:?}", project.as_project_info().kind());
     /// # Ok(())
     /// # }
@@ -116,7 +116,7 @@ pub trait ProjectDetectorTrait: Send + Sync {
     /// - No valid project is found at the path
     /// - Filesystem operations fail
     /// - Project structure is invalid
-    async fn detect_async(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectDescriptor>;
+    async fn detect(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectDescriptor>;
 
     /// Asynchronously detects only the project kind without full analysis.
     ///
@@ -142,7 +142,7 @@ pub trait ProjectDetectorTrait: Send + Sync {
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let detector = ProjectDetector::new();
     /// let config = ProjectConfig::new();
-    /// let kind = detector.detect_kind_async(Path::new("."), &config).await?;
+    /// let kind = detector.detect_kind(Path::new("."), &config).await?;
     /// println!("Project kind: {:?}", kind);
     /// # Ok(())
     /// # }
@@ -154,7 +154,7 @@ pub trait ProjectDetectorTrait: Send + Sync {
     /// - The path does not exist
     /// - No valid project is found at the path
     /// - Filesystem operations fail
-    async fn detect_kind_async(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectKind>;
+    async fn detect_kind(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectKind>;
 
     /// Asynchronously checks if the path contains a valid Node.js project.
     ///
@@ -178,14 +178,14 @@ pub trait ProjectDetectorTrait: Send + Sync {
     ///
     /// # async fn example() {
     /// let detector = ProjectDetector::new();
-    /// if detector.is_valid_project_async(Path::new(".")).await {
+    /// if detector.is_valid_project(Path::new(".")).await {
     ///     println!("This is a valid Node.js project");
     /// } else {
     ///     println!("This is not a valid Node.js project");
     /// }
     /// # }
     /// ```
-    async fn is_valid_project_async(&self, path: &Path) -> bool;
+    async fn is_valid_project(&self, path: &Path) -> bool;
 }
 
 /// Async trait for project detection with custom filesystem.
@@ -208,7 +208,7 @@ pub trait ProjectDetectorTrait: Send + Sync {
 /// let fs = FileSystemManager::new();
 /// let detector = ProjectDetector::with_filesystem(fs);
 /// let config = ProjectConfig::new();
-/// let project = detector.detect_async(Path::new("."), &config).await?;
+/// let project = detector.detect(Path::new("."), &config).await?;
 /// println!("Found project: {:?}", project.as_project_info().kind());
 /// # Ok(())
 /// # }
@@ -248,7 +248,7 @@ pub trait ProjectDetectorWithFs<F: AsyncFileSystem>: ProjectDetectorTrait {
     /// let detector = ProjectDetector::with_filesystem(fs);
     /// let config = ProjectConfig::new();
     /// let paths = vec![Path::new("."), Path::new("../other-project")];
-    /// let results = detector.detect_multiple_async(&paths, &config).await;
+    /// let results = detector.detect_multiple(&paths, &config).await;
     /// for (i, result) in results.iter().enumerate() {
     ///     match result {
     ///         Ok(project) => println!("Path {}: {:?}", i, project.as_project_info().kind()),
@@ -262,7 +262,7 @@ pub trait ProjectDetectorWithFs<F: AsyncFileSystem>: ProjectDetectorTrait {
     /// # Errors
     ///
     /// Each result in the vector may contain an error if detection fails for that path.
-    async fn detect_multiple_async(
+    async fn detect_multiple(
         &self,
         paths: &[&Path],
         config: &ProjectConfig,
@@ -290,7 +290,7 @@ pub trait ProjectDetectorWithFs<F: AsyncFileSystem>: ProjectDetectorTrait {
 /// let detector = ProjectDetector::new();
 /// let config = ProjectConfig::new();
 ///
-/// match detector.detect_async(Path::new("."), &config).await {
+/// match detector.detect(Path::new("."), &config).await {
 ///     Ok(project) => {
 ///         println!("Detected {} project", project.as_project_info().kind().name());
 ///     }
@@ -434,7 +434,7 @@ impl<F: AsyncFileSystem + Clone> ProjectDetector<F> {
         
         // Determine project kind based on monorepo detection
         let project_kind = if config.detect_monorepo {
-            if let Ok(monorepo) = self.monorepo_detector.detect_monorepo_async(path).await {
+            if let Ok(monorepo) = self.monorepo_detector.detect_monorepo(path).await {
                 // It's a monorepo, use the detected monorepo kind
                 ProjectKind::Repository(RepoKind::Monorepo(monorepo.kind))
             } else {
@@ -460,7 +460,7 @@ impl<F: AsyncFileSystem + Clone> ProjectDetector<F> {
         
         // If it's a monorepo, populate internal dependencies
         if project.is_monorepo() {
-            if let Ok(monorepo) = self.monorepo_detector.detect_monorepo_async(path).await {
+            if let Ok(monorepo) = self.monorepo_detector.detect_monorepo(path).await {
                 project.internal_dependencies = monorepo.packages;
             }
         }
@@ -497,7 +497,7 @@ impl<F: AsyncFileSystem + Clone> ProjectDetector<F> {
         
         // Check for monorepo if enabled (same logic as detect())
         if config.detect_monorepo {
-            if let Some(monorepo_kind) = self.monorepo_detector.is_monorepo_root_async(path).await? {
+            if let Some(monorepo_kind) = self.monorepo_detector.is_monorepo_root(path).await? {
                 return Ok(ProjectKind::Repository(RepoKind::Monorepo(monorepo_kind)));
             }
         }
@@ -586,15 +586,15 @@ impl<F: AsyncFileSystem + Clone> ProjectDetector<F> {
 
 #[async_trait]
 impl<F: AsyncFileSystem + Clone> ProjectDetectorTrait for ProjectDetector<F> {
-    async fn detect_async(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectDescriptor> {
+    async fn detect(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectDescriptor> {
         self.detect(path, config).await
     }
 
-    async fn detect_kind_async(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectKind> {
+    async fn detect_kind(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectKind> {
         self.detect_kind(path, config).await
     }
 
-    async fn is_valid_project_async(&self, path: &Path) -> bool {
+    async fn is_valid_project(&self, path: &Path) -> bool {
         self.is_valid_project(path).await
     }
 }
@@ -605,7 +605,7 @@ impl<F: AsyncFileSystem + Clone> ProjectDetectorWithFs<F> for ProjectDetector<F>
         &self.fs
     }
 
-    async fn detect_multiple_async(
+    async fn detect_multiple(
         &self,
         paths: &[&Path],
         config: &ProjectConfig,
@@ -613,7 +613,7 @@ impl<F: AsyncFileSystem + Clone> ProjectDetectorWithFs<F> for ProjectDetector<F>
         let mut results = Vec::with_capacity(paths.len());
         
         // Process all paths concurrently
-        let futures = paths.iter().map(|path| self.detect_async(path, config));
+        let futures = paths.iter().map(|path| self.detect(path, config));
         
         // Collect all results
         for future in futures {

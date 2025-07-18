@@ -186,7 +186,7 @@ impl MonorepoAnalyzer {
         }
 
         // Step 2: Detect monorepo structure
-        let monorepo_descriptor = self.detector.detect_monorepo_async(&normalized_path).await?;
+        let monorepo_descriptor = self.detector.detect_monorepo(&normalized_path).await?;
         let monorepo_kind = monorepo_descriptor.kind().clone();
         let packages = monorepo_descriptor.packages();
 
@@ -730,7 +730,7 @@ async fn test_comprehensive_monorepo_analysis() -> Result<()> {
     }
 
     // Test configuration management in detail
-    let test_config = ConfigManager::new();
+    let mut test_config = ConfigManager::new();
     test_config.set("test_setting", ConfigValue::String("test_value".to_string()));
     assert_eq!(
         test_config.get("test_setting").and_then(|v| v.as_string().map(ToString::to_string)),
@@ -875,7 +875,7 @@ async fn test_common_usage_patterns() -> Result<()> {
     println!("✓ Filesystem operations working");
 
     // Pattern 4: Configuration management
-    let config_manager = ConfigManager::new();
+    let mut config_manager = ConfigManager::new();
     config_manager.set("app_name", ConfigValue::String("MyApp".to_string()));
     config_manager.set("debug_mode", ConfigValue::Boolean(true));
     config_manager.set("max_connections", ConfigValue::Integer(100));

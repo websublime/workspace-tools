@@ -768,25 +768,24 @@ mod tests {
     async fn test_generic_project_comprehensive() {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path().to_path_buf();
-        let config = ProjectConfig::new();
+        let _config = ProjectConfig::new();
 
-        let mut generic = GenericProject::new(path.clone(), config.clone());
+        let mut project = Project::new(path.clone(), ProjectKind::Repository(RepoKind::Simple));
 
         // Test all methods
-        assert_eq!(generic.root(), path);
-        assert!(generic.package_manager().is_none());
-        assert!(generic.package_json().is_none());
-        assert!(!generic.validation_status().is_valid());
-        assert_eq!(generic.config().detect_package_manager, config.detect_package_manager);
+        assert_eq!(project.root, path);
+        assert!(project.package_manager.is_none());
+        assert!(project.package_json.is_none());
+        assert!(!project.validation_status.is_valid());
 
         // Test mutations
         create_lock_file(&path, PackageManagerKind::Yarn).await;
         let pm = PackageManager::detect(&path).unwrap();
-        generic.set_package_manager(Some(pm));
-        assert!(generic.package_manager().is_some());
+        project.package_manager = Some(pm);
+        assert!(project.package_manager.is_some());
 
-        generic.set_validation_status(ProjectValidationStatus::Valid);
-        assert!(generic.validation_status().is_valid());
+        project.validation_status = ProjectValidationStatus::Valid;
+        assert!(project.validation_status.is_valid());
     }
 
     // =============================================================================

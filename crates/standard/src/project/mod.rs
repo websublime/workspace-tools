@@ -34,7 +34,7 @@ pub use detector::{ProjectDetector, ProjectDetectorTrait, ProjectDetectorWithFs}
 pub use manager::ProjectManager;
 pub use project::{Dependencies, Project};
 pub use types::{
-    ConfigFormat, ConfigManager, ConfigScope, ConfigValue, GenericProject, ProjectConfig,
+    ConfigFormat, ConfigManager, ConfigScope, ConfigValue, ProjectConfig,
     ProjectDescriptor, ProjectInfo, ProjectKind, ProjectValidationStatus,
 };
 pub use validator::ProjectValidator;

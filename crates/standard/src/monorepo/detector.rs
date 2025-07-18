@@ -36,7 +36,7 @@ use std::path::{Path, PathBuf};
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let detector = MonorepoDetector::new();
-/// if let Some(kind) = detector.is_monorepo_root_async(Path::new(".")).await? {
+/// if let Some(kind) = detector.is_monorepo_root(Path::new(".")).await? {
 ///     println!("Found {} monorepo", kind.name());
 /// }
 /// # Ok(())
@@ -64,7 +64,7 @@ pub trait MonorepoDetectorTrait: Send + Sync {
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let detector = MonorepoDetector::new();
-    /// match detector.is_monorepo_root_async(Path::new(".")).await? {
+    /// match detector.is_monorepo_root(Path::new(".")).await? {
     ///     Some(kind) => println!("This is a {} monorepo", kind.name()),
     ///     None => println!("This is not a monorepo root"),
     /// }
@@ -78,7 +78,7 @@ pub trait MonorepoDetectorTrait: Send + Sync {
     /// - The path does not exist
     /// - Filesystem operations fail
     /// - Configuration files are corrupted
-    async fn is_monorepo_root_async(&self, path: &Path) -> Result<Option<MonorepoKind>>;
+    async fn is_monorepo_root(&self, path: &Path) -> Result<Option<MonorepoKind>>;
 
     /// Asynchronously finds the nearest monorepo root by walking up from the given path.
     ///
@@ -100,7 +100,7 @@ pub trait MonorepoDetectorTrait: Send + Sync {
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let detector = MonorepoDetector::new();
-    /// match detector.find_monorepo_root_async(Path::new(".")).await? {
+    /// match detector.find_monorepo_root(Path::new(".")).await? {
     ///     Some((root, kind)) => println!("Found {} monorepo at {}", kind.name(), root.display()),
     ///     None => println!("No monorepo root found"),
     /// }
@@ -114,7 +114,7 @@ pub trait MonorepoDetectorTrait: Send + Sync {
     /// - The start path does not exist
     /// - Filesystem operations fail
     /// - Configuration files are corrupted
-    async fn find_monorepo_root_async(
+    async fn find_monorepo_root(
         &self,
         start_path: &Path,
     ) -> Result<Option<(PathBuf, MonorepoKind)>>;
@@ -138,7 +138,7 @@ pub trait MonorepoDetectorTrait: Send + Sync {
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let detector = MonorepoDetector::new();
-    /// let monorepo = detector.detect_monorepo_async(Path::new(".")).await?;
+    /// let monorepo = detector.detect_monorepo(Path::new(".")).await?;
     /// println!("Found {} with {} packages",
     ///          monorepo.kind().name(),
     ///          monorepo.packages().len());
@@ -153,7 +153,7 @@ pub trait MonorepoDetectorTrait: Send + Sync {
     /// - The path is not a monorepo root
     /// - Package discovery fails
     /// - Dependency analysis fails
-    async fn detect_monorepo_async(&self, path: &Path) -> Result<MonorepoDescriptor>;
+    async fn detect_monorepo(&self, path: &Path) -> Result<MonorepoDescriptor>;
 
     /// Asynchronously detects packages in a monorepo.
     ///
@@ -177,7 +177,7 @@ pub trait MonorepoDetectorTrait: Send + Sync {
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let detector = MonorepoDetector::new();
-    /// let packages = detector.detect_packages_async(Path::new(".")).await?;
+    /// let packages = detector.detect_packages(Path::new(".")).await?;
     /// println!("Found {} packages", packages.len());
     /// for package in packages {
     ///     println!("- {} v{} at {}", package.name, package.version, package.location.display());
@@ -193,7 +193,7 @@ pub trait MonorepoDetectorTrait: Send + Sync {
     /// - Workspace configuration is invalid
     /// - Package.json files are corrupted
     /// - Filesystem operations fail
-    async fn detect_packages_async(&self, root: &Path) -> Result<Vec<WorkspacePackage>>;
+    async fn detect_packages(&self, root: &Path) -> Result<Vec<WorkspacePackage>>;
 
     /// Asynchronously checks if a directory contains multiple packages.
     ///
@@ -217,14 +217,14 @@ pub trait MonorepoDetectorTrait: Send + Sync {
     ///
     /// # async fn example() {
     /// let detector = MonorepoDetector::new();
-    /// if detector.has_multiple_packages_async(Path::new(".")).await {
+    /// if detector.has_multiple_packages(Path::new(".")).await {
     ///     println!("This directory contains multiple packages");
     /// } else {
     ///     println!("This directory does not contain multiple packages");
     /// }
     /// # }
     /// ```
-    async fn has_multiple_packages_async(&self, path: &Path) -> bool;
+    async fn has_multiple_packages(&self, path: &Path) -> bool;
 }
 
 /// Async trait for monorepo detection with custom filesystem.
@@ -246,7 +246,7 @@ pub trait MonorepoDetectorTrait: Send + Sync {
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let fs = FileSystemManager::new();
 /// let detector = MonorepoDetector::with_filesystem(fs);
-/// let monorepo = detector.detect_monorepo_async(Path::new(".")).await?;
+/// let monorepo = detector.detect_monorepo(Path::new(".")).await?;
 /// println!("Found monorepo: {:?}", monorepo.kind());
 /// # Ok(())
 /// # }
@@ -284,7 +284,7 @@ pub trait MonorepoDetectorWithFs<F: AsyncFileSystem>: MonorepoDetectorTrait {
     /// let fs = FileSystemManager::new();
     /// let detector = MonorepoDetector::with_filesystem(fs);
     /// let roots = vec![Path::new("."), Path::new("../other-monorepo")];
-    /// let results = detector.detect_packages_multiple_async(&roots).await;
+    /// let results = detector.detect_packages_multiple(&roots).await;
     /// for (i, result) in results.iter().enumerate() {
     ///     match result {
     ///         Ok(packages) => println!("Root {}: Found {} packages", i, packages.len()),
@@ -298,7 +298,7 @@ pub trait MonorepoDetectorWithFs<F: AsyncFileSystem>: MonorepoDetectorTrait {
     /// # Errors
     ///
     /// Each result in the vector may contain an error if detection fails for that root.
-    async fn detect_packages_multiple_async(
+    async fn detect_packages_multiple(
         &self,
         roots: &[&Path],
     ) -> Vec<Result<Vec<WorkspacePackage>>>;
@@ -328,7 +328,7 @@ pub trait MonorepoDetectorWithFs<F: AsyncFileSystem>: MonorepoDetectorTrait {
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let fs = FileSystemManager::new();
     /// let detector = MonorepoDetector::with_filesystem(fs);
-    /// let packages = detector.detect_packages_parallel_async(Path::new("."), 50).await?;
+    /// let packages = detector.detect_packages_parallel(Path::new("."), 50).await?;
     /// println!("Found {} packages using parallel detection", packages.len());
     /// # Ok(())
     /// # }
@@ -340,7 +340,7 @@ pub trait MonorepoDetectorWithFs<F: AsyncFileSystem>: MonorepoDetectorTrait {
     /// - The root path does not exist
     /// - Parallel processing fails
     /// - Package analysis fails
-    async fn detect_packages_parallel_async(
+    async fn detect_packages_parallel(
         &self,
         root: &Path,
         max_concurrent: usize,
@@ -365,7 +365,7 @@ pub trait MonorepoDetectorWithFs<F: AsyncFileSystem>: MonorepoDetectorTrait {
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let detector = MonorepoDetector::new();
-/// if let Some(kind) = detector.is_monorepo_root_async(Path::new(".")).await? {
+/// if let Some(kind) = detector.is_monorepo_root(Path::new(".")).await? {
 ///     println!("Found {} monorepo", kind.name());
 /// }
 /// # Ok(())
@@ -425,7 +425,7 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
 
 #[async_trait]
 impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
-    async fn is_monorepo_root_async(&self, path: &Path) -> Result<Option<MonorepoKind>> {
+    async fn is_monorepo_root(&self, path: &Path) -> Result<Option<MonorepoKind>> {
         // Check for different monorepo configuration files in priority order
         // Priority: specific lock files first, then package.json, then config files
 
@@ -503,14 +503,14 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
         Ok(None)
     }
 
-    async fn find_monorepo_root_async(
+    async fn find_monorepo_root(
         &self,
         start_path: &Path,
     ) -> Result<Option<(PathBuf, MonorepoKind)>> {
         let mut current_path = start_path.to_path_buf();
 
         loop {
-            if let Some(kind) = self.is_monorepo_root_async(&current_path).await? {
+            if let Some(kind) = self.is_monorepo_root(&current_path).await? {
                 return Ok(Some((current_path, kind)));
             }
 
@@ -526,9 +526,9 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
         Ok(None)
     }
 
-    async fn detect_monorepo_async(&self, path: &Path) -> Result<MonorepoDescriptor> {
+    async fn detect_monorepo(&self, path: &Path) -> Result<MonorepoDescriptor> {
         // First, determine if this is a monorepo root
-        let kind = self.is_monorepo_root_async(path).await?.ok_or_else(|| {
+        let kind = self.is_monorepo_root(path).await?.ok_or_else(|| {
             use crate::error::{FileSystemError, MonorepoError};
             Error::Monorepo(MonorepoError::Detection {
                 source: FileSystemError::NotFound { path: path.to_path_buf() },
@@ -536,7 +536,7 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
         })?;
 
         // Detect packages within the monorepo
-        let packages = self.detect_packages_async(path).await?;
+        let packages = self.detect_packages(path).await?;
 
         Ok(MonorepoDescriptor::new(
             kind,
@@ -548,7 +548,7 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
         ))
     }
 
-    async fn detect_packages_async(&self, root: &Path) -> Result<Vec<WorkspacePackage>> {
+    async fn detect_packages(&self, root: &Path) -> Result<Vec<WorkspacePackage>> {
         let mut packages = Vec::new();
 
         // Get workspace patterns from package.json
@@ -605,8 +605,8 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
         Ok(packages)
     }
 
-    async fn has_multiple_packages_async(&self, path: &Path) -> bool {
-        if let Ok(packages) = self.detect_packages_async(path).await {
+    async fn has_multiple_packages(&self, path: &Path) -> bool {
+        if let Ok(packages) = self.detect_packages(path).await {
             packages.len() > 1
         } else {
             false
@@ -620,14 +620,14 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorWithFs<F> for MonorepoDetector<
         &self.fs
     }
 
-    async fn detect_packages_multiple_async(
+    async fn detect_packages_multiple(
         &self,
         roots: &[&Path],
     ) -> Vec<Result<Vec<WorkspacePackage>>> {
         let mut results = Vec::with_capacity(roots.len());
 
         // Process all roots concurrently
-        let futures = roots.iter().map(|root| self.detect_packages_async(root));
+        let futures = roots.iter().map(|root| self.detect_packages(root));
 
         // Collect all results
         for future in futures {
@@ -637,15 +637,15 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorWithFs<F> for MonorepoDetector<
         results
     }
 
-    async fn detect_packages_parallel_async(
+    async fn detect_packages_parallel(
         &self,
         root: &Path,
         _max_concurrent: usize,
     ) -> Result<Vec<WorkspacePackage>> {
-        // For now, use the standard detect_packages_async
+        // For now, use the standard detect_packages
         // In a more sophisticated implementation, we would use semaphores
         // to limit concurrency
-        self.detect_packages_async(root).await
+        self.detect_packages(root).await
     }
 }
 

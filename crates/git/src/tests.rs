@@ -74,7 +74,7 @@ mod tests {
     async fn test_repo_open() -> Result<(), RepoError> {
         let current_dir = std::env::current_dir().unwrap();
         let detector = MonorepoDetector::new();
-        let monorepo = detector.find_monorepo_root_async(current_dir.as_path()).await.unwrap();
+        let monorepo = detector.find_monorepo_root(current_dir.as_path()).await.unwrap();
         let (project_root, _) = monorepo.unwrap();
 
         let repo = Repo::open(project_root.display().to_string().as_str())?;
