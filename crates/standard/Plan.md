@@ -88,7 +88,7 @@ This document outlines the complete refactoring plan for the `standard` crate, a
 
 #### Tasks:
 
-- [ ] **Create `AsyncFileSystem` trait**
+- [x] **Create `AsyncFileSystem` trait**
   ```rust
   // Location: src/filesystem/async_trait.rs
   #[async_trait]
@@ -103,18 +103,18 @@ This document outlines the complete refactoring plan for the `standard` crate, a
   }
   ```
 
-- [ ] **Implement `AsyncFileSystemManager`**
+- [x] **Implement `AsyncFileSystemManager`**
   ```rust
   // Location: src/filesystem/manager.rs
   pub struct AsyncFileSystemManager {
       runtime: Handle,  // Tokio runtime handle
   }
   ```
-  - [ ] Implement all `AsyncFileSystem` methods using `tokio::fs`
-  - [ ] Add proper error handling and conversion
-  - [ ] Include timeout configuration per operation
+  - [x] Implement all `AsyncFileSystem` methods using `tokio::fs`
+  - [x] Add proper error handling and conversion
+  - [x] Include timeout configuration per operation
 
-- [ ] **Create async detection traits**
+- [x] **Create async detection traits**
   ```rust
   #[async_trait]
   pub trait AsyncProjectDetector {
@@ -128,11 +128,86 @@ This document outlines the complete refactoring plan for the `standard` crate, a
   ```
 
 #### Success Criteria:
-- ✅ Async filesystem trait defined and implemented
-- ✅ Async detection traits ready for use
-- ✅ Foundation laid for Phase 2 performance work
+- ✅ Async filesystem trait defined and implemented - **COMPLETED**
+- ✅ Async detection traits ready for use - **COMPLETED**
+- ✅ Foundation laid for Phase 2 performance work - **COMPLETED**
 
-### 1.3 Extract Configuration Module
+### 1.3 Architectural Cleanup & Code Quality (HIGH PRIORITY)
+
+**Goal**: Address critical architectural issues identified in senior developer review: async method naming, large files, and type organization.
+
+#### Tasks:
+
+- [ ] **Remove unnecessary async suffixes from method names**
+  ```rust
+  // ❌ BEFORE: Redundant and verbose
+  async fn detect_async(&self, path: &Path) -> Result<Project>;
+  async fn detect_monorepo_async(&self, path: &Path) -> Result<MonorepoDescriptor>;
+  async fn find_packages_async(&self, root: &Path) -> Result<Vec<WorkspacePackage>>;
+  
+  // ✅ AFTER: Clean and idiomatic
+  async fn detect(&self, path: &Path) -> Result<Project>;
+  async fn detect_monorepo(&self, path: &Path) -> Result<MonorepoDescriptor>;
+  async fn find_packages(&self, root: &Path) -> Result<Vec<WorkspacePackage>>;
+  ```
+
+- [ ] **Systematic removal of async suffixes**
+  - [ ] Update `src/project/detector.rs` - 11 methods affected
+  - [ ] Update `src/monorepo/detector.rs` - 16 methods affected
+  - [ ] Update all trait definitions and implementations
+  - [ ] Update all call sites throughout the codebase
+  - [ ] Update tests to use new method names
+
+- [ ] **Modularize oversized type files**
+  
+  **Target: `src/project/types.rs` (978 lines) → multiple focused files**
+  ```rust
+  // New structure:
+  src/project/types/
+  ├── mod.rs          // Public re-exports
+  ├── project.rs      // ProjectKind, ProjectInfo trait
+  ├── config.rs       // ConfigManager, ConfigValue, ConfigFormat
+  ├── validation.rs   // ProjectValidationStatus, validation types
+  └── descriptor.rs   // ProjectDescriptor enum
+  ```
+
+- [ ] **Break down large files**
+  - [ ] Split `src/project/types.rs` (978 lines) into focused modules
+  - [ ] Split `src/command/types.rs` (522 lines) into logical groups
+  - [ ] Split `src/filesystem/types.rs` (707 lines) by functionality
+  - [ ] Split `src/command/queue.rs` (1067 lines) into executor + queue
+  - [ ] Split `src/monorepo/tests.rs` (1049 lines) by test categories
+
+- [ ] **Establish file size limits**
+  - [ ] Maximum 400 lines per file (exception: integration tests)
+  - [ ] No single responsibility file should exceed 300 lines
+  - [ ] Document rationale for any files exceeding limits
+
+- [ ] **Standardize visibility patterns**
+  ```rust
+  // Establish consistent patterns:
+  pub                    // Public API only
+  pub(crate)            // Internal crate API
+  pub(super)            // Parent module access
+  // Private by default
+  ```
+
+- [ ] **Clean up API boundaries**
+  - [ ] Review all `pub` vs `pub(crate)` usage
+  - [ ] Document public API surface clearly
+  - [ ] Remove any unnecessary public exports
+  - [ ] Ensure internal APIs are properly encapsulated
+
+#### Success Criteria:
+- ✅ All async method names cleaned (no redundant suffixes)
+- ✅ No file exceeds 400 lines (except documented exceptions)
+- ✅ Type organization follows clear module boundaries
+- ✅ Public API clearly documented and minimal
+- ✅ All tests pass after refactoring
+- ✅ 0 clippy warnings maintained
+- ✅ Code coverage remains above 60%
+
+### 1.4 Extract Configuration Module
 
 **Goal**: Separate configuration functionality from project module for better architecture.
 
@@ -212,7 +287,7 @@ This document outlines the complete refactoring plan for the `standard` crate, a
 - ✅ No configuration code remains in project module
 - ✅ StandardConfig uses new abstractions
 
-### 1.4 Complete ConfigManager Implementation
+### 1.5 Complete ConfigManager Implementation
 
 **Goal**: Implement the missing configuration management functionality using new abstractions.
 
@@ -268,7 +343,7 @@ This document outlines the complete refactoring plan for the `standard` crate, a
 - ✅ ConfigManager fully implemented with new abstractions
 - ✅ Configuration validation prevents invalid states
 
-### 1.5 Fix Error Handling Patterns
+### 1.6 Fix Error Handling Patterns
 
 **Goal**: Eliminate silent failures and establish consistent error handling.
 
@@ -312,7 +387,8 @@ This document outlines the complete refactoring plan for the `standard` crate, a
 - [x] All `GenericProject` code removed
 - [x] All `SimpleProject` code removed
 - [x] Unified `Project` type fully implemented
-- [ ] Async filesystem foundation ready
+- [x] Async filesystem foundation ready
+- [ ] **Architectural cleanup completed (HIGH PRIORITY)**
 - [ ] Configuration module extracted and independent
 - [ ] Generic configuration framework implemented
 - [ ] ConfigManager fully functional with new abstractions
@@ -1329,15 +1405,16 @@ gantt
 
 ## Progress Tracking
 
-### Overall Progress: 25% Complete
+### Overall Progress: 33% Complete
 
 - [x] Planning Complete
-- [x] Phase 1: Critical Fixes (60%) - **IN PROGRESS**
+- [x] Phase 1: Critical Fixes (67%) - **IN PROGRESS**
   - [x] 1.1 Unify Project Types - **COMPLETED**
-  - [ ] 1.2 Begin Async Migration Foundation
-  - [ ] 1.3 Extract Configuration Module
-  - [ ] 1.4 Complete ConfigManager Implementation
-  - [ ] 1.5 Fix Error Handling Patterns
+  - [x] 1.2 Begin Async Migration Foundation - **COMPLETED**
+  - [ ] 1.3 Architectural Cleanup & Code Quality (HIGH PRIORITY) - **NEXT**
+  - [ ] 1.4 Extract Configuration Module
+  - [ ] 1.5 Complete ConfigManager Implementation
+  - [ ] 1.6 Fix Error Handling Patterns
 - [ ] Phase 2: Performance (0%)
 - [ ] Phase 3: Configuration (0%)
 - [ ] Phase 4: Quality (0%)
@@ -1345,8 +1422,8 @@ gantt
 - [ ] Phase 6: Production (0%)
 
 ### Current Status: Phase 1 - In Progress
-**Completed**: Phase 1.1 - Unified Project Types ✅
-**Next Action**: Begin Phase 1.2 - Async Migration Foundation
+**Completed**: Phase 1.1 - Unified Project Types ✅, Phase 1.2 - Async Migration Foundation ✅
+**Next Action**: Begin Phase 1.3 - Architectural Cleanup & Code Quality (HIGH PRIORITY)
 
 ### Risk Register
 
@@ -1365,7 +1442,9 @@ gantt
 | Performance (1k packages) | 50s | 5s | 🔴 |
 | Code Duplication | 15% | 5% | 🔴 |
 | Hardcoded Values | 100+ | 0 | 🔴 |
-| API Stability | 25% | 100% | 🟡 |
+| API Stability | 33% | 100% | 🟡 |
+| File Size Compliance | 50% | 100% | 🔴 |
+| Async Method Naming | 0% | 100% | 🔴 |
 
 ---
 
@@ -1378,7 +1457,7 @@ gantt
 5. **Document Always**: Documentation is part of the implementation
 
 **Last Updated**: 2025-07-18  
-**Next Review**: End of Phase 1 (Week 2)
+**Next Review**: End of Phase 1.3 (Week 2)
 
 ## Recent Accomplishments (2025-07-18)
 
@@ -1410,3 +1489,44 @@ gantt
 - `src/project/tests.rs` - Migrated all tests
 - `src/project/mod.rs` - Updated exports
 - Removed `src/project/simple.rs` - No longer needed
+
+### ✅ Phase 1.2 - Async Migration Foundation - COMPLETED
+
+**Major Achievement**: Successfully implemented async filesystem operations foundation, enabling all future performance improvements through non-blocking I/O operations.
+
+**Key Results**:
+- **AsyncFileSystem trait** - Complete async filesystem abstraction
+- **AsyncFileSystemManager** - Tokio-based implementation with proper error handling
+- **Async detection traits** - Foundation for async project and monorepo detection
+- **Performance ready** - All building blocks in place for high-performance operations
+
+**Technical Details**:
+- Implemented `AsyncFileSystem` trait with all essential filesystem operations
+- Created `AsyncFileSystemManager` using `tokio::fs` for non-blocking operations
+- Added proper timeout configuration and error handling for all async operations
+- Defined async detection traits for project and monorepo detection
+- Maintained backward compatibility during transition period
+
+**Impact**: This foundation enables the major performance improvements planned for Phase 2, allowing concurrent filesystem operations and eliminating I/O blocking bottlenecks.
+
+**Files Modified**:
+- `src/filesystem/types.rs` - Added AsyncFileSystem trait
+- `src/filesystem/manager.rs` - Implemented AsyncFileSystemManager
+- `src/project/detector.rs` - Added async detection traits
+- `src/monorepo/detector.rs` - Added async detection traits
+
+## 🎯 Next Priority: Phase 1.3 - Architectural Cleanup (HIGH PRIORITY)
+
+**Critical Issues Identified in Senior Developer Review**:
+1. **Async method naming redundancy** - 27 methods with unnecessary `_async` suffixes
+2. **Oversized files** - 5 files exceeding 500 lines, with `project/types.rs` at 978 lines
+3. **Type organization** - Poor separation of concerns in type definitions
+4. **API boundaries** - Inconsistent public/private API patterns
+
+**Expected Impact**:
+- **Improved code readability** - Clean, idiomatic async method names
+- **Better maintainability** - Smaller, focused files with clear responsibilities
+- **Clearer architecture** - Well-organized type definitions and API boundaries
+- **Enhanced developer experience** - Easier navigation and understanding of codebase
+
+**Timeline**: 1 week intensive cleanup before proceeding to configuration extraction
