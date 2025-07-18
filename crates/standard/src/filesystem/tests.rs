@@ -269,8 +269,17 @@ mod tests {
         assert!(fs.read_file(&non_existent).is_err());
         assert!(fs.read_file_string(&non_existent).is_err());
 
-        // Test writing to non-existent directory
-        let bad_path = PathBuf::from("/non/existent/dir/file.txt");
+        // Test writing to a protected/read-only location
+        // This ensures the write operation fails on all platforms
+        let bad_path = if cfg!(windows) {
+            // Windows system directory is typically read-only
+            PathBuf::from("C:\\Windows\\System32\\test_file_that_should_fail.txt")
+        } else {
+            // Root directory is read-only for normal users
+            PathBuf::from("/test_file_that_should_fail.txt")
+        };
+        
+        // This should fail due to permission issues on all platforms
         assert!(fs.write_file_string(&bad_path, "content").is_err());
     }
 
