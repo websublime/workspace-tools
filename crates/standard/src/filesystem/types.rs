@@ -32,7 +32,7 @@ use std::path::{Path, PathBuf};
 ///     println!("Cargo.toml exists");
 /// }
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct FileSystemManager;
 
 /// Trait defining filesystem operations.
@@ -480,7 +480,7 @@ pub trait PathExt {
     ///
     /// # Errors
     ///
-    /// Returns a [`FileSystemError`] if:
+    /// Returns a [`crate::error::FileSystemError`] if:
     /// - The path does not exist
     /// - Insufficient permissions to access the path
     /// - The path contains invalid characters for the current platform

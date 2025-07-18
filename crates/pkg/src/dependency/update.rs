@@ -14,10 +14,10 @@
 /// # Examples
 ///
 /// ```
-/// use sublime_package_tools::DependencyUpdate;
+/// use sublime_package_tools::Update;
 ///
 /// // Define an update that needs to be applied
-/// let update = DependencyUpdate {
+/// let update = Update {
 ///     package_name: "my-app".to_string(),
 ///     dependency_name: "react".to_string(),
 ///     current_version: "^16.0.0".to_string(),
@@ -53,10 +53,3 @@ pub struct Update {
     pub new_version: String,
 }
 
-/// Type alias for backward compatibility
-///
-/// # Deprecation
-///
-/// This alias maintains compatibility with existing code.
-/// Prefer using `Update` directly in new code.
-pub type DependencyUpdate = Update;

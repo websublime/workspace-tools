@@ -17,11 +17,11 @@
 //! ## Examples
 //!
 //! ```
-//! use sublime_package_tools::{Dependency, DependencyRegistry, Package};
+//! use sublime_package_tools::{Dependency, Registry, Package};
 //!
 //! # fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create a registry
-//! let mut registry = DependencyRegistry::new();
+//! let mut registry = Registry::new();
 //!
 //! // Get dependencies from the registry
 //! let react_dep = registry.get_or_create("react", "^17.0.2")?;
@@ -51,7 +51,7 @@ use std::collections::HashMap;
 
 /// A registry for managing and reusing dependency instances.
 ///
-/// The `DependencyRegistry` maintains a collection of dependencies, ensuring that
+/// The `Registry` maintains a collection of dependencies, ensuring that
 /// the same dependency (by name) is consistently represented throughout the system.
 /// It also provides functionality for resolving version conflicts between dependencies.
 ///
@@ -61,10 +61,10 @@ use std::collections::HashMap;
 /// # Examples
 ///
 /// ```
-/// use sublime_package_tools::{DependencyRegistry, Package};
+/// use sublime_package_tools::{Registry, Package};
 ///
 /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let mut registry = DependencyRegistry::new();
+/// let mut registry = Registry::new();
 ///
 /// // When we create packages with the same dependencies
 /// let pkg1 = Package::new_with_registry(
@@ -90,12 +90,12 @@ use std::collections::HashMap;
 /// ## With Package Registry
 ///
 /// ```
-/// use sublime_package_tools::{DependencyRegistry, NpmRegistry};
+/// use sublime_package_tools::{Registry, NpmRegistry};
 ///
 /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// // Create registry with npm package registry for enhanced version resolution
 /// let npm_registry = NpmRegistry::new("https://registry.npmjs.org".to_string());
-/// let mut dependency_registry = DependencyRegistry::with_package_registry(
+/// let mut dependency_registry = Registry::with_package_registry(
 ///     Box::new(npm_registry)
 /// );
 ///
@@ -136,9 +136,9 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::DependencyRegistry;
+    /// use sublime_package_tools::Registry;
     ///
-    /// let registry = DependencyRegistry::new();
+    /// let registry = Registry::new();
     /// ```
     pub fn new() -> Self {
         Self { dependencies: HashMap::new(), package_registry: None }
@@ -156,11 +156,11 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyRegistry, NpmRegistry};
+    /// use sublime_package_tools::{Registry, NpmRegistry};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let npm_registry = NpmRegistry::new("https://registry.npmjs.org".to_string());
-    /// let registry = DependencyRegistry::with_package_registry(Box::new(npm_registry));
+    /// let registry = Registry::with_package_registry(Box::new(npm_registry));
     /// # Ok(())
     /// # }
     /// ```
@@ -179,10 +179,10 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyRegistry, NpmRegistry};
+    /// use sublime_package_tools::{Registry, NpmRegistry};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// let npm_registry = NpmRegistry::new("https://registry.npmjs.org".to_string());
     /// registry.set_package_registry(Box::new(npm_registry));
     /// # Ok(())
@@ -217,10 +217,10 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::DependencyRegistry;
+    /// use sublime_package_tools::Registry;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     ///
     /// // First call creates a new dependency
     /// let dep1 = registry.get_or_create("react", "^17.0.2")?;
@@ -283,10 +283,10 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::DependencyRegistry;
+    /// use sublime_package_tools::Registry;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     ///
     /// // Add a dependency
     /// registry.get_or_create("react", "^17.0.2")?;
@@ -325,10 +325,10 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::DependencyRegistry;
+    /// use sublime_package_tools::Registry;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     ///
     /// // Add two dependencies with the same name but different versions
     /// registry.get_or_create("lodash", "^4.17.0")?;
@@ -423,11 +423,11 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyRegistry, NpmRegistry};
+    /// use sublime_package_tools::{Registry, NpmRegistry};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let npm_registry = NpmRegistry::new("https://registry.npmjs.org".to_string());
-    /// let registry = DependencyRegistry::with_package_registry(Box::new(npm_registry));
+    /// let registry = Registry::with_package_registry(Box::new(npm_registry));
     ///
     /// if let Ok(versions) = registry.get_package_versions("react") {
     ///     println!("Found {} versions of react", versions.len());
@@ -455,10 +455,10 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyRegistry, NpmRegistry};
+    /// use sublime_package_tools::{Registry, NpmRegistry};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// assert!(!registry.has_package_registry());
     ///
     /// let npm_registry = NpmRegistry::new("https://registry.npmjs.org".to_string());
@@ -494,11 +494,11 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyRegistry, Dependency};
+    /// use sublime_package_tools::{Registry, Dependency};
     /// use semver::VersionReq;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// registry.get_or_create("react", "^17.0.0")?;
     ///
     /// // Find a version compatible with both requirements
@@ -518,13 +518,13 @@ impl Registry {
     /// ## With Package Registry
     ///
     /// ```no_run
-    /// use sublime_package_tools::{DependencyRegistry, NpmRegistry};
+    /// use sublime_package_tools::{Registry, NpmRegistry};
     /// use semver::VersionReq;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// // Create registry with npm for enhanced resolution
     /// let npm_registry = NpmRegistry::new("https://registry.npmjs.org".to_string());
-    /// let registry = DependencyRegistry::with_package_registry(Box::new(npm_registry));
+    /// let registry = Registry::with_package_registry(Box::new(npm_registry));
     ///
     /// let req = VersionReq::parse("^17.0.0")?;
     ///
@@ -614,11 +614,11 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// use sublime_package_tools::{DependencyRegistry, DependencyUpdate, ResolutionResult};
+    /// use sublime_package_tools::{Registry, Update, ResolutionResult};
     /// use std::collections::HashMap;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut registry = DependencyRegistry::new();
+    /// let mut registry = Registry::new();
     /// registry.get_or_create("react", "^16.0.0")?;
     ///
     /// // Create a resolution result
@@ -626,7 +626,7 @@ impl Registry {
     /// resolved_versions.insert("react".to_string(), "17.0.0".to_string());
     ///
     /// let updates = vec![
-    ///     DependencyUpdate {
+    ///     Update {
     ///         package_name: "test-app".to_string(),
     ///         dependency_name: "react".to_string(),
     ///         current_version: "^16.0.0".to_string(),
@@ -661,10 +661,3 @@ impl Registry {
     }
 }
 
-/// Type alias for backward compatibility
-///
-/// # Deprecation
-///
-/// This alias maintains compatibility with existing code.
-/// Prefer using `Registry` directly in new code.
-pub type DependencyRegistry = Registry;

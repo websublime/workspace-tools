@@ -17,19 +17,16 @@
 //! structures by providing a unified API regardless of the underlying
 //! monorepo implementation.
 
-mod configuration;
 mod descriptor;
 mod detector;
 mod kinds;
 mod manager;
-mod project;
 mod types;
 
 #[cfg(test)]
 mod tests;
 
 pub use types::{
-    ConfigFormat, ConfigManager, ConfigScope, ConfigValue, MonorepoDescriptor, MonorepoDetector,
-    MonorepoKind, PackageManager, PackageManagerKind, PnpmWorkspaceConfig, Project, ProjectConfig,
-    ProjectManager, ProjectValidationStatus, WorkspacePackage,
+    MonorepoDescriptor, MonorepoDetector, MonorepoKind, PnpmWorkspaceConfig, WorkspacePackage,
 };
+

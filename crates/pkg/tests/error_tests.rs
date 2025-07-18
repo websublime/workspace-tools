@@ -11,11 +11,6 @@ mod error_tests {
         // Test creating different error types
         let parse_error =
             DependencyResolutionError::VersionParseError("Invalid version".to_string());
-        let _incompatible = DependencyResolutionError::IncompatibleVersions {
-            name: "react".to_string(),
-            versions: vec!["16.0.0".to_string(), "17.0.0".to_string()],
-            requirements: vec!["^16.0.0".to_string(), "^17.0.0".to_string()],
-        };
         let _no_valid = DependencyResolutionError::NoValidVersion {
             name: "lodash".to_string(),
             requirements: vec!["^3.0.0".to_string(), "^4.0.0".to_string()],
@@ -188,9 +183,8 @@ mod error_tests {
 
         // Test AsRef<str> for DependencyResolutionError
         let dre1 = DependencyResolutionError::VersionParseError("Invalid version".to_string());
-        let dre2 = DependencyResolutionError::IncompatibleVersions {
+        let dre2 = DependencyResolutionError::NoValidVersion {
             name: "pkg".to_string(),
-            versions: vec!["1.0.0".to_string()],
             requirements: vec!["^1.0.0".to_string()],
         };
         let dre3 = DependencyResolutionError::NoValidVersion {
@@ -206,7 +200,7 @@ mod error_tests {
         };
 
         assert_eq!(dre1.as_ref(), "VersionParseError");
-        assert_eq!(dre2.as_ref(), "IncompatibleVersions");
+        assert_eq!(dre2.as_ref(), "NoValidVersion");
         assert_eq!(dre3.as_ref(), "NoValidVersion");
         assert_eq!(dre4.as_ref(), "DependencyNotFound");
         assert_eq!(dre5.as_ref(), "CircularDependency");

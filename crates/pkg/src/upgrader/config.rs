@@ -3,7 +3,7 @@
 //! Defines configuration options that control how dependency upgrades are
 //! discovered and applied.
 
-use crate::{DependencyFilter, VersionStability, VersionUpdateStrategy};
+use crate::{Filter, VersionStability, VersionUpdateStrategy};
 use serde::{Deserialize, Serialize};
 
 /// Execution mode
@@ -35,12 +35,12 @@ impl Default for ExecutionMode {
 ///
 /// ```
 /// use sublime_package_tools::{
-///     UpgradeConfig, DependencyFilter, VersionUpdateStrategy,
+///     UpgradeConfig, Filter, VersionUpdateStrategy,
 ///     VersionStability, ExecutionMode
 /// };
 ///
 /// let config = UpgradeConfig {
-///     dependency_types: DependencyFilter::WithDevelopment,
+///     dependency_types: Filter::WithDevelopment,
 ///     update_strategy: VersionUpdateStrategy::MinorAndPatch,
 ///     version_stability: VersionStability::StableOnly,
 ///     target_packages: vec!["specific-package".to_string()],
@@ -52,7 +52,7 @@ impl Default for ExecutionMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpgradeConfig {
     /// Which types of dependencies to include
-    pub dependency_types: DependencyFilter,
+    pub dependency_types: Filter,
     /// Which types of version updates to include
     pub update_strategy: VersionUpdateStrategy,
     /// Whether to include prerelease versions
@@ -73,7 +73,7 @@ pub struct UpgradeConfig {
 impl From<&VersionUpdateStrategy> for UpgradeConfig {
     fn from(update_strategy: &VersionUpdateStrategy) -> Self {
         Self {
-            dependency_types: DependencyFilter::WithDevelopment,
+            dependency_types: Filter::WithDevelopment,
             update_strategy: update_strategy.clone(),
             version_stability: VersionStability::StableOnly,
             target_packages: Vec::new(),
@@ -96,7 +96,7 @@ impl From<&VersionUpdateStrategy> for UpgradeConfig {
 impl Default for UpgradeConfig {
     fn default() -> Self {
         Self {
-            dependency_types: DependencyFilter::WithDevelopment,
+            dependency_types: Filter::WithDevelopment,
             update_strategy: VersionUpdateStrategy::MinorAndPatch,
             version_stability: VersionStability::StableOnly,
             target_packages: Vec::new(),
@@ -131,7 +131,7 @@ impl UpgradeConfig {
     #[must_use]
     pub fn with_registries(registries: Vec<String>) -> Self {
         Self {
-            dependency_types: DependencyFilter::WithDevelopment,
+            dependency_types: Filter::WithDevelopment,
             update_strategy: VersionUpdateStrategy::MinorAndPatch,
             version_stability: VersionStability::StableOnly,
             target_packages: Vec::new(),

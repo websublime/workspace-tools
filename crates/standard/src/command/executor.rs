@@ -73,7 +73,7 @@ use super::types::{
 /// println!("Command output: {}", output.stdout());
 /// # Ok(())
 /// # }
-/// ``
+/// ```
 #[async_trait::async_trait]
 pub trait Executor: Send + Sync {
     /// Executes a command and returns its output.

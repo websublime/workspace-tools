@@ -14,6 +14,8 @@
 //! efficiently work with these relationships.
 
 use super::{MonorepoDescriptor, MonorepoKind, WorkspacePackage};
+use crate::node::{PackageManager, RepoKind};
+use crate::project::{ProjectInfo, ProjectKind, ProjectValidationStatus};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -27,10 +29,76 @@ impl MonorepoDescriptor {
     /// * `kind` - The kind of monorepo (npm, yarn, pnpm, etc.)
     /// * `root` - The root directory of the monorepo
     /// * `packages` - A vector of packages found in the monorepo
+    /// * `package_manager` - Optional package manager for this monorepo
+    /// * `package_json` - Optional root package.json content
+    /// * `validation_status` - Validation status of the monorepo
     ///
     /// # Returns
     ///
     /// A new `MonorepoDescriptor` instance with the provided properties.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::PathBuf;
+    /// use sublime_standard_tools::monorepo::{MonorepoDescriptor, MonorepoKind, WorkspacePackage};
+    /// use sublime_standard_tools::project::ProjectValidationStatus;
+    ///
+    /// let root = PathBuf::from("/projects/my-monorepo");
+    /// let packages = vec![
+    ///     // Package definitions would go here
+    /// ];
+    ///
+    /// let descriptor = MonorepoDescriptor::new(
+    ///     MonorepoKind::YarnWorkspaces,
+    ///     root,
+    ///     packages,
+    ///     None, // package_manager
+    ///     None, // package_json
+    ///     ProjectValidationStatus::NotValidated
+    /// );
+    /// ```
+    #[must_use]
+    pub fn new(
+        kind: MonorepoKind, 
+        root: PathBuf, 
+        packages: Vec<WorkspacePackage>,
+        package_manager: Option<PackageManager>,
+        package_json: Option<package_json::PackageJson>,
+        validation_status: ProjectValidationStatus,
+    ) -> Self {
+        // Build name-to-package map for quick lookups
+        let mut name_to_package = HashMap::new();
+
+        for (i, package) in packages.iter().enumerate() {
+            name_to_package.insert(package.name.clone(), i);
+        }
+
+        Self { 
+            kind, 
+            root, 
+            packages, 
+            name_to_package,
+            package_manager,
+            package_json,
+            validation_status,
+        }
+    }
+
+    /// Creates a new `MonorepoDescriptor` instance with minimal information.
+    ///
+    /// This is a convenience constructor for cases where only basic information
+    /// is available during initial detection.
+    ///
+    /// # Arguments
+    ///
+    /// * `kind` - The kind of monorepo (npm, yarn, pnpm, etc.)
+    /// * `root` - The root directory of the monorepo
+    /// * `packages` - A vector of packages found in the monorepo
+    ///
+    /// # Returns
+    ///
+    /// A new `MonorepoDescriptor` instance with validation status set to `NotValidated`.
     ///
     /// # Examples
     ///
@@ -43,22 +111,22 @@ impl MonorepoDescriptor {
     ///     // Package definitions would go here
     /// ];
     ///
-    /// let descriptor = MonorepoDescriptor::new(
+    /// let descriptor = MonorepoDescriptor::minimal(
     ///     MonorepoKind::YarnWorkspaces,
     ///     root,
     ///     packages
     /// );
     /// ```
     #[must_use]
-    pub fn new(kind: MonorepoKind, root: PathBuf, packages: Vec<WorkspacePackage>) -> Self {
-        // Build name-to-package map for quick lookups
-        let mut name_to_package = HashMap::new();
-
-        for (i, package) in packages.iter().enumerate() {
-            name_to_package.insert(package.name.clone(), i);
-        }
-
-        Self { kind, root, packages, name_to_package }
+    pub fn minimal(kind: MonorepoKind, root: PathBuf, packages: Vec<WorkspacePackage>) -> Self {
+        Self::new(
+            kind, 
+            root, 
+            packages, 
+            None, 
+            None, 
+            ProjectValidationStatus::NotValidated
+        )
     }
 
     /// Returns the kind of monorepo.
@@ -367,5 +435,149 @@ impl MonorepoDescriptor {
         let abs_path = if path.is_absolute() { path.to_path_buf() } else { self.root.join(path) };
 
         self.packages.iter().find(|pkg| abs_path.starts_with(&pkg.absolute_path))
+    }
+}
+
+impl ProjectInfo for MonorepoDescriptor {
+    fn root(&self) -> &Path {
+        &self.root
+    }
+
+    fn package_manager(&self) -> Option<&PackageManager> {
+        self.package_manager.as_ref()
+    }
+
+    fn package_json(&self) -> Option<&package_json::PackageJson> {
+        self.package_json.as_ref()
+    }
+
+    fn validation_status(&self) -> &ProjectValidationStatus {
+        &self.validation_status
+    }
+
+    fn kind(&self) -> ProjectKind {
+        ProjectKind::Repository(RepoKind::Monorepo(self.kind.clone()))
+    }
+}
+
+impl MonorepoDescriptor {
+    /// Sets the package manager for this monorepo.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_manager` - The package manager to set
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::path::PathBuf;
+    /// # use sublime_standard_tools::monorepo::{MonorepoDescriptor, MonorepoKind};
+    /// # use sublime_standard_tools::node::{PackageManager, PackageManagerKind};
+    /// # use sublime_standard_tools::project::ProjectValidationStatus;
+    /// #
+    /// # let mut descriptor = MonorepoDescriptor::minimal(
+    /// #     MonorepoKind::YarnWorkspaces,
+    /// #     PathBuf::from("/projects/my-monorepo"),
+    /// #     vec![]
+    /// # );
+    /// #
+    /// let manager = PackageManager::new(PackageManagerKind::Yarn, "/projects/my-monorepo");
+    /// descriptor.set_package_manager(Some(manager));
+    /// ```
+    pub fn set_package_manager(&mut self, package_manager: Option<PackageManager>) {
+        self.package_manager = package_manager;
+    }
+
+    /// Sets the root package.json content for this monorepo.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_json` - The root package.json content to set
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::path::PathBuf;
+    /// # use sublime_standard_tools::monorepo::{MonorepoDescriptor, MonorepoKind};
+    /// # use package_json::PackageJson;
+    /// #
+    /// # let mut descriptor = MonorepoDescriptor::minimal(
+    /// #     MonorepoKind::YarnWorkspaces,
+    /// #     PathBuf::from("/projects/my-monorepo"),
+    /// #     vec![]
+    /// # );
+    /// #
+    /// // Assuming package_json is loaded from file
+    /// // descriptor.set_package_json(Some(package_json));
+    /// ```
+    pub fn set_package_json(&mut self, package_json: Option<package_json::PackageJson>) {
+        self.package_json = package_json;
+    }
+
+    /// Sets the validation status for this monorepo.
+    ///
+    /// # Arguments
+    ///
+    /// * `validation_status` - The validation status to set
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::path::PathBuf;
+    /// # use sublime_standard_tools::monorepo::{MonorepoDescriptor, MonorepoKind};
+    /// # use sublime_standard_tools::project::ProjectValidationStatus;
+    /// #
+    /// # let mut descriptor = MonorepoDescriptor::minimal(
+    /// #     MonorepoKind::YarnWorkspaces,
+    /// #     PathBuf::from("/projects/my-monorepo"),
+    /// #     vec![]
+    /// # );
+    /// #
+    /// descriptor.set_validation_status(ProjectValidationStatus::Valid);
+    /// ```
+    pub fn set_validation_status(&mut self, validation_status: ProjectValidationStatus) {
+        self.validation_status = validation_status;
+    }
+
+    /// Gets a mutable reference to the validation status.
+    ///
+    /// This is useful for validators that need to update the status in place.
+    ///
+    /// # Returns
+    ///
+    /// A mutable reference to the monorepo's validation status.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::path::PathBuf;
+    /// # use sublime_standard_tools::monorepo::{MonorepoDescriptor, MonorepoKind};
+    /// # use sublime_standard_tools::project::ProjectValidationStatus;
+    /// #
+    /// # let mut descriptor = MonorepoDescriptor::minimal(
+    /// #     MonorepoKind::YarnWorkspaces,
+    /// #     PathBuf::from("/projects/my-monorepo"),
+    /// #     vec![]
+    /// # );
+    /// #
+    /// *descriptor.validation_status_mut() = ProjectValidationStatus::Valid;
+    /// ```
+    pub fn validation_status_mut(&mut self) -> &mut ProjectValidationStatus {
+        &mut self.validation_status
+    }
+}
+
+impl Clone for MonorepoDescriptor {
+    fn clone(&self) -> Self {
+        Self {
+            kind: self.kind.clone(),
+            root: self.root.clone(),
+            packages: self.packages.clone(),
+            name_to_package: self.name_to_package.clone(),
+            package_manager: self.package_manager.clone(),
+            // PackageJson doesn't implement Clone, so we omit it in clones
+            package_json: None,
+            validation_status: self.validation_status.clone(),
+        }
     }
 }

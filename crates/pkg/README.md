@@ -19,10 +19,10 @@ This library is designed for Rust applications that interact with Node.js packag
 ### Package and Dependency Management
 
 ```rust
-use sublime_package_tools::{Dependency, DependencyRegistry, Package};
+use sublime_package_tools::{Dependency, Registry, Package};
 
 // Create dependencies using a registry (ensures consistent instances)
-let mut registry = DependencyRegistry::new();
+let mut registry = Registry::new();
 let react_dep = registry.get_or_create("react", "^17.0.2")?;
 let router_dep = registry.get_or_create("react-router", "^6.0.0")?;
 

@@ -59,6 +59,12 @@ Should I proceed? (yes/no)
 
 When creating a compact or summary for a new session, **ALWAYS include this approval mode configuration** in the summary so that the new session continues with the same controlled workflow.
 
+## TOOLS
+
+- **EXTERNAL INFO**: use context7 mcp to retrieve external information about any package, crate, or api. If not founded search the web for the latest documentation.
+- **KNOWLEDGE**: use knowledge-graph mcp to persistent memory using a local knowledge graph.
+- **MEMORY**: use memory-bank mcp to store and retrieve information from the session memory.
+
 ## ⚠️ MANDATORY RULES
 
 1. **ZERO PROGRESSION**: DO NOT advance to next task until current one is 100% complete

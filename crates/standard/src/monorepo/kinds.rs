@@ -13,7 +13,7 @@
 //! This implementation encapsulates those differences to provide a consistent
 //! interface for working with any supported monorepo type.
 
-use super::{types::PackageManagerKind, MonorepoKind};
+use super::MonorepoKind;
 
 impl MonorepoKind {
     /// Returns the name of the monorepo kind as a string.
@@ -109,66 +109,5 @@ impl MonorepoKind {
     #[must_use]
     pub fn set_custom(&self, name: String, config_file: String) -> Self {
         MonorepoKind::Custom { name, config_file }
-    }
-}
-
-impl PackageManagerKind {
-    /// Returns the name of the lock file used by this package manager.
-    ///
-    /// Each package manager uses a specific lock file to record exact versions
-    /// of dependencies. This method returns the filename of that lock file.
-    ///
-    /// # Returns
-    ///
-    /// A string slice with the name of the lock file.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use sublime_standard_tools::monorepo::types::PackageManagerKind;
-    ///
-    /// assert_eq!(PackageManagerKind::Npm.lock_file(), "package-lock.json");
-    /// assert_eq!(PackageManagerKind::Yarn.lock_file(), "yarn.lock");
-    /// assert_eq!(PackageManagerKind::Pnpm.lock_file(), "pnpm-lock.yaml");
-    /// ```
-    #[must_use]
-    pub fn lock_file(self) -> &'static str {
-        match self {
-            Self::Npm => "package-lock.json", // or npm-shrinkwrap.json
-            Self::Yarn => "yarn.lock",
-            Self::Pnpm => "pnpm-lock.yaml",
-            Self::Bun => "bun.lockb",
-            Self::Jsr => "jsr.json",
-        }
-    }
-
-    /// Returns the command used to invoke this package manager.
-    ///
-    /// Each package manager has a specific command line tool used to
-    /// perform operations like install, update, etc. This method returns
-    /// the name of that command.
-    ///
-    /// # Returns
-    ///
-    /// A string slice with the command name.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use sublime_standard_tools::monorepo::types::PackageManagerKind;
-    ///
-    /// assert_eq!(PackageManagerKind::Npm.command(), "npm");
-    /// assert_eq!(PackageManagerKind::Yarn.command(), "yarn");
-    /// assert_eq!(PackageManagerKind::Pnpm.command(), "pnpm");
-    /// ```
-    #[must_use]
-    pub fn command(self) -> &'static str {
-        match self {
-            Self::Npm => "npm",
-            Self::Yarn => "yarn",
-            Self::Pnpm => "pnpm",
-            Self::Bun => "bun",
-            Self::Jsr => "jsr",
-        }
     }
 }

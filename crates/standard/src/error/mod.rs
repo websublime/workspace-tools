@@ -27,9 +27,3 @@ pub use types::{
     MonorepoResult, Result, WorkspaceError, WorkspaceResult,
 };
 
-// Short aliases to avoid module name repetitions in user code
-pub use types::{
-    CommandError as CmdError, CommandResult as CmdResult, FileSystemError as FsError,
-    FileSystemResult as FsResult, MonorepoError as RepoError, MonorepoResult as RepoResult,
-    WorkspaceError as WsError, WorkspaceResult as WsResult,
-};

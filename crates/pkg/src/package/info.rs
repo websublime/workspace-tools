@@ -26,7 +26,7 @@ use std::{cell::RefCell, rc::Rc};
 /// # Examples
 ///
 /// ```no_run
-/// use sublime_package_tools::{Package, PackageInfo, Dependency};
+/// use sublime_package_tools::{Package, Info, Dependency};
 /// use serde_json::{json, Value};
 /// use std::cell::RefCell;
 /// use std::rc::Rc;
@@ -50,8 +50,8 @@ use std::{cell::RefCell, rc::Rc};
 ///     }
 /// });
 ///
-/// // Create PackageInfo
-/// let pkg_info = PackageInfo::new(
+/// // Create Info
+/// let pkg_info = Info::new(
 ///     pkg,
 ///     "/path/to/package.json",
 ///     "/path/to/package",
@@ -94,20 +94,20 @@ impl Info {
     ///
     /// # Returns
     ///
-    /// A new `PackageInfo` instance.
+    /// A new `Info` instance.
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use sublime_package_tools::{Package, PackageInfo};
+    /// use sublime_package_tools::{Package, Info};
     /// use serde_json::json;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// // Create a package
     /// let pkg = Package::new("test-pkg", "1.0.0", None)?;
     ///
-    /// // Create a PackageInfo
-    /// let pkg_info = PackageInfo::new(
+    /// // Create a Info
+    /// let pkg_info = Info::new(
     ///     pkg,
     ///     "/path/to/package.json",
     ///     "/path/to/package",
@@ -152,12 +152,12 @@ impl Info {
     /// # Examples
     ///
     /// ```no_run
-    /// use sublime_package_tools::{Package, PackageInfo};
+    /// use sublime_package_tools::{Package, Info};
     /// use serde_json::json;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let pkg = Package::new("test-pkg", "1.0.0", None)?;
-    /// let pkg_info = PackageInfo::new(
+    /// let pkg_info = Info::new(
     ///     pkg,
     ///     "package.json".to_string(),
     ///     ".".to_string(),
@@ -204,12 +204,12 @@ impl Info {
     /// # Examples
     ///
     /// ```no_run
-    /// use sublime_package_tools::{Package, PackageInfo};
+    /// use sublime_package_tools::{Package, Info};
     /// use serde_json::json;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// # let pkg = Package::new("test-pkg", "1.0.0", None)?;
-    /// # let pkg_info = PackageInfo::new(
+    /// # let pkg_info = Info::new(
     /// #     pkg,
     /// #     "package.json".to_string(),
     /// #     ".".to_string(),
@@ -289,13 +289,13 @@ impl Info {
     /// # Examples
     ///
     /// ```no_run
-    /// use sublime_package_tools::{Package, PackageInfo, ResolutionResult};
+    /// use sublime_package_tools::{Package, Info, ResolutionResult};
     /// use serde_json::json;
     /// use std::collections::HashMap;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// # let pkg = Package::new("test-pkg", "1.0.0", None)?;
-    /// # let pkg_info = PackageInfo::new(
+    /// # let pkg_info = Info::new(
     /// #     pkg,
     /// #     "package.json".to_string(),
     /// #     ".".to_string(),
@@ -368,12 +368,12 @@ impl Info {
     /// # Examples
     ///
     /// ```no_run
-    /// use sublime_package_tools::{Package, PackageInfo};
+    /// use sublime_package_tools::{Package, Info};
     /// use serde_json::json;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// # let pkg = Package::new("test-pkg", "1.0.0", None)?;
-    /// # let pkg_info = PackageInfo::new(
+    /// # let pkg_info = Info::new(
     /// #     pkg,
     /// #     "package.json".to_string(),
     /// #     ".".to_string(),
@@ -400,10 +400,3 @@ impl Info {
     }
 }
 
-/// Type alias for backward compatibility
-///
-/// # Deprecation
-///
-/// This alias maintains compatibility with existing code.
-/// Prefer using `Info` directly in new code.
-pub type PackageInfo = Info;

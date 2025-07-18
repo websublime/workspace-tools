@@ -36,9 +36,11 @@ use sublime_standard_tools::{
     },
     error::{Error, Result},
     filesystem::{FileSystem, FileSystemManager, NodePathKind, PathExt, PathUtils},
-    monorepo::{
-        ConfigManager, ConfigScope, ConfigValue, MonorepoDetector, MonorepoKind, PackageManager,
-        ProjectConfig, ProjectManager, ProjectValidationStatus,
+    monorepo::{MonorepoDetector, MonorepoKind},
+    node::PackageManager,
+    project::{
+        ConfigManager, ConfigScope, ConfigValue, ProjectConfig, ProjectManager,
+        ProjectValidationStatus,
     },
 };
 
@@ -294,7 +296,8 @@ impl MonorepoAnalyzer {
         let config =
             ProjectConfig::new().with_detect_package_manager(true).with_validate_structure(true);
 
-        let project = self.project_manager.detect_project(package_path, &config)?;
+        let project_descriptor = self.project_manager.create_project(package_path, &config)?;
+        let project = project_descriptor.as_project_info();
         let mut checks = Vec::new();
 
         // Custom validation checks
@@ -846,7 +849,7 @@ async fn test_common_usage_patterns() -> Result<()> {
     // For the test, we'll just verify the API works
     let current_dir = PathUtils::current_dir()?;
     if current_dir.join("package.json").exists() {
-        let _project = project_manager.detect_project(&current_dir, &config)?;
+        let _project = project_manager.create_project(&current_dir, &config)?;
         println!("✓ Project detection API working");
     }
 

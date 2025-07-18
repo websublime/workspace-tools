@@ -4,13 +4,13 @@ mod registry_tests {
     use serde_json::{json, Value};
     use std::any::Any;
     use sublime_package_tools::{
-        errors::PackageRegistryError, DependencyRegistry, LocalRegistry, NpmRegistry,
+        errors::PackageRegistryError, Registry, LocalRegistry, NpmRegistry,
         PackageRegistry, RegistryAuth, RegistryManager, RegistryType,
     };
 
     #[test]
     fn test_dependency_registry() {
-        let mut registry = DependencyRegistry::new();
+        let mut registry = Registry::new();
 
         // Get or create dependencies
         let dep1 = registry.get_or_create("react", "^17.0.0").unwrap();
@@ -34,7 +34,7 @@ mod registry_tests {
 
     #[test]
     fn test_resolve_version_conflicts() {
-        let mut registry = DependencyRegistry::new();
+        let mut registry = Registry::new();
 
         // Create definitely conflicting dependencies with exact versions
         // First package requires exactly 1.0.0

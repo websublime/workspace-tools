@@ -19,8 +19,8 @@
 use serde_json::{json, Value};
 use sublime_package_tools::{
     build_dependency_graph_from_packages, generate_ascii, generate_dot, AvailableUpgrade,
-    ChangeType, Dependency, DependencyGraph, DependencyRegistry, DotOptions, ExecutionMode,
-    LocalRegistry, Package, PackageDiff, PackageInfo, RegistryAuth, RegistryManager, RegistryType,
+    ChangeType, Dependency, Graph, Registry, DotOptions, ExecutionMode,
+    LocalRegistry, Package, PackageDiff, Info, RegistryAuth, RegistryManager, RegistryType,
     UpgradeConfig, UpgradeStatus, Upgrader, ValidationOptions, Version, VersionStability,
     VersionUpdateStrategy,
 };
@@ -40,7 +40,7 @@ fn test_comprehensive_monorepo_workflow() -> Result<(), Box<dyn std::error::Erro
 
     // === Phase 2: Create Package Dependencies ===
     println!("\n🔧 Phase 2: Creating package dependencies");
-    let mut dependency_registry = DependencyRegistry::new();
+    let mut dependency_registry = Registry::new();
     let packages = create_monorepo_packages(&mut dependency_registry)?;
 
     // === Phase 3: Build and Analyze Dependency Graph ===
@@ -114,7 +114,7 @@ fn setup_registry_manager() -> Result<RegistryManager, Box<dyn std::error::Error
 
 /// Create a realistic monorepo with multiple packages and complex dependencies
 fn create_monorepo_packages(
-    registry: &mut DependencyRegistry,
+    registry: &mut Registry,
 ) -> Result<Vec<Package>, Box<dyn std::error::Error>> {
     let mut packages = Vec::new();
 
@@ -242,7 +242,7 @@ fn create_monorepo_packages(
 
 /// Analyze the dependency graph for various properties
 fn analyze_dependency_graph(
-    graph: &DependencyGraph<Package>,
+    graph: &Graph<Package>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("  📊 Analyzing dependency graph:");
 
@@ -289,7 +289,7 @@ fn analyze_dependency_graph(
 
 /// Validate dependencies with custom options
 fn validate_dependencies(
-    graph: &DependencyGraph<Package>,
+    graph: &Graph<Package>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Validate with default options
     let basic_report = graph.validate_package_dependencies()?;
@@ -332,7 +332,7 @@ fn print_validation_report(report: &sublime_package_tools::ValidationReport) {
 
 /// Resolve version conflicts in the dependency registry
 fn resolve_version_conflicts(
-    registry: &mut DependencyRegistry,
+    registry: &mut Registry,
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("  🔧 Resolving version conflicts:");
 
@@ -366,11 +366,11 @@ fn resolve_version_conflicts(
     Ok(())
 }
 
-/// Create PackageInfo objects and demonstrate their functionality
+/// Create Info objects and demonstrate their functionality
 fn create_package_infos(
     packages: &[Package],
-) -> Result<Vec<PackageInfo>, Box<dyn std::error::Error>> {
-    println!("  📄 Creating PackageInfo objects:");
+) -> Result<Vec<Info>, Box<dyn std::error::Error>> {
+    println!("  📄 Creating Info objects:");
 
     let mut package_infos = Vec::new();
 
@@ -393,7 +393,7 @@ fn create_package_infos(
             }
         }
 
-        let package_info = PackageInfo::new(
+        let package_info = Info::new(
             package.clone(),
             format!("/workspace/packages/package-{i}/package.json"),
             format!("/workspace/packages/package-{i}"),
@@ -404,7 +404,7 @@ fn create_package_infos(
         package_infos.push(package_info);
     }
 
-    println!("    ✓ Created {} PackageInfo objects", package_infos.len());
+    println!("    ✓ Created {} Info objects", package_infos.len());
 
     // Demonstrate updating a dependency version
     if !package_infos.is_empty() {
@@ -450,7 +450,7 @@ fn track_package_changes(packages: &[Package]) -> Result<(), Box<dyn std::error:
     // Create a modified version of the first package
     let original = &packages[0];
     // Create modified version using registry approach
-    let mut temp_registry = DependencyRegistry::new();
+    let mut temp_registry = Registry::new();
     let modified = Package::new_with_registry(
         original.name(),
         "2.2.0", // Bumped version
@@ -655,7 +655,7 @@ fn demonstrate_version_management() -> Result<(), Box<dyn std::error::Error>> {
 #[allow(clippy::comparison_chain)]
 /// Visualize the dependency graph in multiple formats
 fn visualize_dependency_graph(
-    graph: &DependencyGraph<Package>,
+    graph: &Graph<Package>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("  🎨 Visualizing dependency graph:");
 
@@ -700,7 +700,7 @@ fn visualize_dependency_graph(
 
 /// Test advanced scenarios and edge cases
 fn test_advanced_scenarios(
-    registry: &mut DependencyRegistry,
+    registry: &mut Registry,
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("  🚀 Testing advanced scenarios:");
 
@@ -754,7 +754,7 @@ fn test_advanced_scenarios(
 
     // Test resolution with no conflicts
     println!("    ✅ Testing clean resolution:");
-    let clean_registry = DependencyRegistry::new();
+    let clean_registry = Registry::new();
     let clean_resolution = clean_registry.resolve_version_conflicts()?;
     println!(
         "      - Clean resolution: {} versions, {} updates",
