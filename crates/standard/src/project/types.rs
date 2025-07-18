@@ -14,7 +14,7 @@
 //! consistently and safely throughout the codebase, enabling uniform handling
 //! of different project structures while maintaining type safety.
 
-use crate::monorepo::{MonorepoDescriptor, MonorepoKind};
+use crate::monorepo::MonorepoKind;
 use crate::node::{PackageManager, RepoKind};
 use package_json::PackageJson;
 use serde::{Deserialize, Serialize};
@@ -232,23 +232,21 @@ pub trait ProjectInfo: Send + Sync {
 ///
 /// fn process_project(descriptor: ProjectDescriptor) {
 ///     match descriptor {
-///         ProjectDescriptor::Simple(simple) => {
-///             println!("Processing simple project at {}", simple.root().display());
-///         }
-///         ProjectDescriptor::Monorepo(monorepo) => {
-///             println!("Processing {} with {} packages", 
-///                      monorepo.kind().name(),
-///                      monorepo.packages().len());
+///         ProjectDescriptor::NodeJs(project) => {
+///             println!("Processing project at {}", project.root().display());
+///             if project.is_monorepo() {
+///                 println!("Type: Monorepo with {} packages", project.internal_dependencies.len());
+///             } else {
+///                 println!("Type: Simple project");
+///             }
 ///         }
 ///     }
 /// }
 /// ```
 #[derive(Debug)]
 pub enum ProjectDescriptor {
-    /// A simple Node.js project
-    Simple(Box<super::SimpleProject>),
-    /// A monorepo project
-    Monorepo(Box<MonorepoDescriptor>),
+    /// A Node.js project (simple or monorepo)
+    NodeJs(super::Project),
 }
 
 impl ProjectDescriptor {
@@ -273,8 +271,7 @@ impl ProjectDescriptor {
     #[must_use]
     pub fn as_project_info(&self) -> &dyn ProjectInfo {
         match self {
-            Self::Simple(project) => project.as_ref(),
-            Self::Monorepo(monorepo) => monorepo.as_ref(),
+            Self::NodeJs(project) => project,
         }
     }
 }

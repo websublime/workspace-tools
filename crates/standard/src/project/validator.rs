@@ -17,10 +17,9 @@
 //! helps identify issues early and provides actionable feedback.
 
 use super::types::{ProjectDescriptor, ProjectInfo, ProjectValidationStatus};
-use super::SimpleProject;
+use super::Project;
 use crate::error::Result;
 use crate::filesystem::{FileSystem, FileSystemManager};
-use crate::monorepo::MonorepoDescriptor;
 use package_json::PackageJson;
 use std::path::Path;
 
@@ -145,12 +144,12 @@ impl<F: FileSystem> ProjectValidator<F> {
     /// ```
     pub fn validate_project(&self, project: &mut ProjectDescriptor) -> Result<()> {
         match project {
-            ProjectDescriptor::Simple(simple_project) => {
-                self.validate_simple_project(simple_project);
-                Ok(())
-            }
-            ProjectDescriptor::Monorepo(monorepo) => {
-                self.validate_monorepo_project(monorepo);
+            ProjectDescriptor::NodeJs(project) => {
+                if project.is_monorepo() {
+                    self.validate_monorepo_project(project);
+                } else {
+                    self.validate_simple_project(project);
+                }
                 Ok(())
             }
         }
@@ -177,7 +176,7 @@ impl<F: FileSystem> ProjectValidator<F> {
     ///
     /// * `Ok(())` - If validation completed successfully
     /// * `Err(Error)` - If an unexpected error occurred during validation
-    fn validate_simple_project(&self, project: &mut SimpleProject) {
+    fn validate_simple_project(&self, project: &mut Project) {
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
 
@@ -216,23 +215,24 @@ impl<F: FileSystem> ProjectValidator<F> {
     ///
     /// * `Ok(())` - If validation completed successfully
     /// * `Err(Error)` - If an unexpected error occurred during validation
-    fn validate_monorepo_project(&self, monorepo: &mut MonorepoDescriptor) -> ProjectValidationStatus {
+    fn validate_monorepo_project(&self, project: &mut Project) {
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
 
         // Validate basic monorepo structure
-        if monorepo.packages().is_empty() {
+        if project.internal_dependencies.is_empty() {
             warnings.push("Monorepo detected but no packages found".to_string());
         }
 
         // Validate that root directory exists
-        if !self.fs.exists(monorepo.root()) {
+        if !self.fs.exists(project.root()) {
             errors.push("Monorepo root directory does not exist".to_string());
-            return ProjectValidationStatus::Error(errors);
+            project.set_validation_status(ProjectValidationStatus::Error(errors));
+            return;
         }
 
         // Validate each package
-        for package in monorepo.packages() {
+        for package in &project.internal_dependencies {
             if self.fs.exists(&package.absolute_path) {
                 // Check if package has its own package.json
                 let package_json_path = package.absolute_path.join("package.json");
@@ -251,9 +251,9 @@ impl<F: FileSystem> ProjectValidator<F> {
         }
 
         // Validate workspace dependencies exist
-        for package in monorepo.packages() {
+        for package in &project.internal_dependencies {
             for dep_name in &package.workspace_dependencies {
-                if monorepo.get_package(dep_name).is_none() {
+                if !project.internal_dependencies.iter().any(|p| p.name == *dep_name) {
                     errors.push(format!(
                         "Package '{}' depends on workspace package '{}' which was not found",
                         package.name, dep_name
@@ -262,7 +262,7 @@ impl<F: FileSystem> ProjectValidator<F> {
             }
 
             for dep_name in &package.workspace_dev_dependencies {
-                if monorepo.get_package(dep_name).is_none() {
+                if !project.internal_dependencies.iter().any(|p| p.name == *dep_name) {
                     warnings.push(format!(
                         "Package '{}' has dev dependency on workspace package '{}' which was not found",
                         package.name, dep_name
@@ -272,12 +272,12 @@ impl<F: FileSystem> ProjectValidator<F> {
         }
 
         // Validate root package.json if present
-        if let Some(package_json) = monorepo.package_json() {
+        if let Some(package_json) = project.package_json() {
             self.validate_package_json_content(package_json, &mut warnings);
         }
 
         // Validate package manager consistency
-        if let Some(package_manager) = monorepo.package_manager() {
+        if let Some(package_manager) = project.package_manager() {
             let lock_file_path = package_manager.lock_file_path();
             if !self.fs.exists(&lock_file_path) {
                 warnings.push(format!(
@@ -288,12 +288,12 @@ impl<F: FileSystem> ProjectValidator<F> {
             }
 
             // Check for conflicting lock files
-            self.check_conflicting_lock_files(monorepo.root(), package_manager.kind(), &mut warnings);
-        } else if monorepo.package_json().is_some() {
+            self.check_conflicting_lock_files(project.root(), package_manager.kind(), &mut warnings);
+        } else if project.package_json().is_some() {
             warnings.push("Package manager could not be detected".to_string());
         }
 
-        // Create validation status and update monorepo
+        // Create validation status and update project
         let validation_status = if !errors.is_empty() {
             ProjectValidationStatus::Error(errors)
         } else if !warnings.is_empty() {
@@ -302,10 +302,8 @@ impl<F: FileSystem> ProjectValidator<F> {
             ProjectValidationStatus::Valid
         };
 
-        // Update the monorepo's validation status
-        monorepo.set_validation_status(validation_status.clone());
-
-        validation_status
+        // Update the project's validation status
+        project.set_validation_status(validation_status);
     }
 
     /// Validates package.json file existence and format.
@@ -392,7 +390,7 @@ impl<F: FileSystem> ProjectValidator<F> {
     /// Returns an [`Error`] if filesystem operations fail.
     fn validate_package_manager_consistency(
         &self,
-        project: &SimpleProject,
+        project: &Project,
         _errors: &mut [String],
         warnings: &mut Vec<String>,
     ) {
@@ -409,7 +407,7 @@ impl<F: FileSystem> ProjectValidator<F> {
 
             // Check for conflicting lock files
             self.check_conflicting_lock_files(project.root(), package_manager.kind(), warnings);
-        } else if project.has_package_json() {
+        } else if project.package_json().is_some() {
             warnings.push("Package manager could not be detected".to_string());
         }
     }
@@ -467,7 +465,7 @@ impl<F: FileSystem> ProjectValidator<F> {
     /// Returns an [`Error`] if filesystem operations fail.
     fn validate_dependencies(
         &self,
-        project: &SimpleProject,
+        project: &Project,
         _errors: &mut [String],
         warnings: &mut Vec<String>,
     ) {

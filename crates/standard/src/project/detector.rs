@@ -18,7 +18,7 @@
 //! more maintainable and robust.
 
 use super::types::{ProjectConfig, ProjectDescriptor, ProjectKind, ProjectValidationStatus};
-use super::SimpleProject;
+use super::Project;
 use crate::error::{Error, Result};
 use crate::filesystem::{FileSystem, FileSystemManager};
 use crate::monorepo::MonorepoDetector;
@@ -244,23 +244,43 @@ impl<F: FileSystem + Clone> ProjectDetector<F> {
         // First validate basic path requirements
         self.validate_project_path(path)?;
         
-        // Try to detect as monorepo first if enabled (preserving original behavior)
-        if config.detect_monorepo {
+        // Create a unified project structure
+        let metadata = self.load_simple_project_metadata(path, config)?;
+        
+        // Determine project kind based on monorepo detection
+        let project_kind = if config.detect_monorepo {
             if let Ok(monorepo) = self.monorepo_detector.detect_monorepo(path) {
-                return Ok(ProjectDescriptor::Monorepo(Box::new(monorepo)));
+                // It's a monorepo, use the detected monorepo kind
+                ProjectKind::Repository(RepoKind::Monorepo(monorepo.kind))
+            } else {
+                // Not a monorepo, it's a simple project
+                ProjectKind::Repository(RepoKind::Simple)
+            }
+        } else {
+            // Monorepo detection disabled, treat as simple project
+            ProjectKind::Repository(RepoKind::Simple)
+        };
+        
+        // Create unified Project with detected metadata
+        let mut project = Project::with_config(
+            metadata.root,
+            project_kind,
+            config.clone(),
+        );
+        
+        // Set detected metadata
+        project.package_manager = metadata.package_manager;
+        project.package_json = metadata.package_json;
+        project.validation_status = metadata.validation_status;
+        
+        // If it's a monorepo, populate internal dependencies
+        if project.is_monorepo() {
+            if let Ok(monorepo) = self.monorepo_detector.detect_monorepo(path) {
+                project.internal_dependencies = monorepo.packages;
             }
         }
         
-        // If not a monorepo, create simple project with unified metadata loading
-        let metadata = self.load_simple_project_metadata(path, config)?;
-        let simple_project = SimpleProject::with_validation(
-            metadata.root,
-            metadata.package_manager,
-            metadata.package_json,
-            metadata.validation_status,
-        );
-        
-        Ok(ProjectDescriptor::Simple(Box::new(simple_project)))
+        Ok(ProjectDescriptor::NodeJs(project))
     }
 
     

@@ -321,12 +321,12 @@ mod tests {
     #[test]
     fn test_simple_project_creation() {
         let root = "/test/project".into();
-        let project = SimpleProject::new(root, None, None);
+        let project = Project::new(root, ProjectKind::Repository(RepoKind::Simple));
 
         assert_eq!(project.root(), Path::new("/test/project"));
         assert_eq!(project.kind(), ProjectKind::Repository(RepoKind::Simple));
-        assert!(!project.has_package_json());
-        assert!(!project.has_package_manager());
+        assert!(project.package_json().is_none());
+        assert!(project.package_manager().is_none());
         assert_eq!(project.validation_status(), &ProjectValidationStatus::NotValidated);
     }
 
@@ -334,7 +334,8 @@ mod tests {
     fn test_simple_project_with_validation() {
         let root = "/test/project".into();
         let status = ProjectValidationStatus::Valid;
-        let project = SimpleProject::with_validation(root, None, None, status);
+        let mut project = Project::new(root, ProjectKind::Repository(RepoKind::Simple));
+        project.set_validation_status(status);
 
         assert_eq!(project.root(), Path::new("/test/project"));
         assert!(project.validation_status().is_valid());
@@ -343,11 +344,11 @@ mod tests {
     #[test]
     fn test_simple_project_setters() {
         let root = "/test/project".into();
-        let mut project = SimpleProject::new(root, None, None);
+        let mut project = Project::new(root, ProjectKind::Repository(RepoKind::Simple));
 
         let package_manager = PackageManager::new(PackageManagerKind::Npm, "/test/project");
-        project.set_package_manager(Some(package_manager));
-        assert!(project.has_package_manager());
+        project.package_manager = Some(package_manager);
+        assert!(project.package_manager().is_some());
 
         project.set_validation_status(ProjectValidationStatus::Valid);
         assert!(project.validation_status().is_valid());
@@ -359,19 +360,15 @@ mod tests {
         let path = temp_dir.path().to_path_buf();
 
         // Test all constructors
-        let simple1 = SimpleProject::new(path.clone(), None, None);
-        let simple2 = SimpleProject::with_validation(
-            path.clone(),
-            None,
-            None,
-            ProjectValidationStatus::Valid,
-        );
+        let simple1 = Project::new(path.clone(), ProjectKind::Repository(RepoKind::Simple));
+        let mut simple2 = Project::new(path.clone(), ProjectKind::Repository(RepoKind::Simple));
+        simple2.set_validation_status(ProjectValidationStatus::Valid);
 
         // Test all methods
         assert_eq!(simple1.root(), path);
         assert_eq!(simple2.root(), path);
-        assert!(!simple1.has_package_manager());
-        assert!(!simple1.has_package_json());
+        assert!(simple1.package_manager().is_none());
+        assert!(simple1.package_json().is_none());
         assert!(!simple1.validation_status().is_valid());
         assert!(simple2.validation_status().is_valid());
 
@@ -387,21 +384,20 @@ mod tests {
     fn test_simple_project_mutations() {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path().to_path_buf();
-        let mut simple = SimpleProject::new(path.clone(), None, None);
+        let mut simple = Project::new(path.clone(), ProjectKind::Repository(RepoKind::Simple));
 
         // Test package manager mutation
         create_lock_file(&path, PackageManagerKind::Npm);
         let pm = PackageManager::detect(&path).unwrap();
-        simple.set_package_manager(Some(pm));
-        assert!(simple.has_package_manager());
+        simple.package_manager = Some(pm);
+        assert!(simple.package_manager().is_some());
 
         // Test validation status mutation
         simple.set_validation_status(ProjectValidationStatus::Valid);
         assert!(simple.validation_status().is_valid());
 
-        // Test mutable reference
-        *simple.validation_status_mut() =
-            ProjectValidationStatus::Error(vec!["Test error".to_string()]);
+        // Test direct status mutation
+        simple.set_validation_status(ProjectValidationStatus::Error(vec!["Test error".to_string()]));
         assert!(simple.validation_status().has_errors());
     }
 
@@ -410,8 +406,8 @@ mod tests {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path().to_path_buf();
 
-        let simple = SimpleProject::new(path.clone(), None, None);
-        let descriptor = ProjectDescriptor::Simple(Box::new(simple));
+        let project = Project::new(path.clone(), ProjectKind::Repository(RepoKind::Simple));
+        let descriptor = ProjectDescriptor::NodeJs(project);
 
         // Test trait object access
         let info = descriptor.as_project_info();
@@ -489,13 +485,12 @@ mod tests {
 
         let project = result.unwrap();
         match project {
-            ProjectDescriptor::Simple(simple) => {
-                assert_eq!(simple.root(), temp_dir.path());
-                assert_eq!(simple.kind(), ProjectKind::Repository(RepoKind::Simple));
-                assert!(simple.has_package_json());
-                assert!(simple.has_package_manager());
+            ProjectDescriptor::NodeJs(project) => {
+                assert_eq!(project.root(), temp_dir.path());
+                assert_eq!(project.kind(), ProjectKind::Repository(RepoKind::Simple));
+                assert!(project.package_json().is_some());
+                assert!(project.package_manager().is_some());
             }
-            _ => panic!("Expected simple project"),
         }
     }
 
@@ -704,13 +699,14 @@ mod tests {
         let content = fs.read_file_string(&temp_dir.path().join("package.json")).unwrap();
         let package_json = serde_json::from_str(&content).unwrap();
 
-        let simple_project = SimpleProject::new(
+        let mut unified_project = Project::new(
             temp_dir.path().to_path_buf(),
-            Some(package_manager),
-            Some(package_json),
+            ProjectKind::Repository(RepoKind::Simple),
         );
+        unified_project.package_manager = Some(package_manager);
+        unified_project.package_json = Some(package_json);
 
-        let mut project = ProjectDescriptor::Simple(Box::new(simple_project));
+        let mut project = ProjectDescriptor::NodeJs(unified_project);
 
         let result = validator.validate_project(&mut project);
         assert!(result.is_ok());
@@ -728,8 +724,8 @@ mod tests {
         let validator = ProjectValidator::new();
 
         // No package.json created
-        let simple_project = SimpleProject::new(temp_dir.path().to_path_buf(), None, None);
-        let mut project = ProjectDescriptor::Simple(Box::new(simple_project));
+        let unified_project = Project::new(temp_dir.path().to_path_buf(), ProjectKind::Repository(RepoKind::Simple));
+        let mut project = ProjectDescriptor::NodeJs(unified_project);
 
         let result = validator.validate_project(&mut project);
         assert!(result.is_ok());
@@ -753,10 +749,10 @@ mod tests {
         fs.write_file_string(&package_json_path, content).unwrap();
 
         let package_json = serde_json::from_str(content).unwrap();
-        let simple_project =
-            SimpleProject::new(temp_dir.path().to_path_buf(), None, Some(package_json));
+        let mut unified_project = Project::new(temp_dir.path().to_path_buf(), ProjectKind::Repository(RepoKind::Simple));
+        unified_project.package_json = Some(package_json);
 
-        let mut project = ProjectDescriptor::Simple(Box::new(simple_project));
+        let mut project = ProjectDescriptor::NodeJs(unified_project);
 
         let result = validator.validate_project(&mut project);
         assert!(result.is_ok());

@@ -23,7 +23,7 @@
 mod configuration;
 mod detector;
 mod manager;
-mod simple;
+pub mod project;
 mod types;
 mod validator;
 
@@ -32,7 +32,7 @@ mod tests;
 
 pub use detector::ProjectDetector;
 pub use manager::ProjectManager;
-pub use simple::SimpleProject;
+pub use project::{Dependencies, Project};
 pub use types::{
     ConfigFormat, ConfigManager, ConfigScope, ConfigValue, GenericProject, ProjectConfig,
     ProjectDescriptor, ProjectInfo, ProjectKind, ProjectValidationStatus,
