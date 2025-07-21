@@ -14,7 +14,7 @@ use package_json::PackageJson;
 use crate::monorepo::WorkspacePackage;
 use crate::node::PackageManager;
 
-use super::{ProjectConfig, ProjectInfo, ProjectKind, ProjectValidationStatus};
+use super::{ProjectInfo, ProjectKind, ProjectValidationStatus};
 
 /// Organized representation of a project's dependencies.
 ///
@@ -105,7 +105,7 @@ impl Dependencies {
     ///
     /// let mut deps = Dependencies::new();
     /// deps.prod.insert("express".to_string(), "4.18.0".to_string());
-    /// 
+    ///
     /// for (name, version, dep_type) in deps.all_dependencies() {
     ///     println!("{} @ {} ({})", name, version, dep_type);
     /// }
@@ -130,7 +130,7 @@ impl Dependencies {
 ///
 /// ```
 /// use sublime_standard_tools::project::project::Project;
-/// use sublime_standard_tools::project::{ProjectKind, ProjectConfig};
+/// use sublime_standard_tools::project::ProjectKind;
 /// use sublime_standard_tools::node::RepoKind;
 /// use std::path::PathBuf;
 ///
@@ -159,8 +159,6 @@ pub struct Project {
     pub internal_dependencies: Vec<WorkspacePackage>,
     /// Validation status
     pub validation_status: ProjectValidationStatus,
-    /// Configuration
-    pub config: ProjectConfig,
 }
 
 impl Project {
@@ -186,48 +184,17 @@ impl Project {
     /// ```
     #[must_use]
     pub fn new(root: PathBuf, kind: ProjectKind) -> Self {
-        Self::with_config(root, kind, ProjectConfig::default())
-    }
-
-    /// Creates a new Project instance with specific configuration.
-    ///
-    /// # Arguments
-    ///
-    /// * `root` - Root directory of the project
-    /// * `kind` - The type of project (simple or monorepo variant)
-    /// * `config` - Project configuration options
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use sublime_standard_tools::project::project::Project;
-    /// use sublime_standard_tools::project::{ProjectKind, ProjectConfig};
-    /// use sublime_standard_tools::node::RepoKind;
-    /// use std::path::PathBuf;
-    ///
-    /// let config = ProjectConfig::new()
-    ///     .with_validate_structure(true)
-    ///     .with_detect_package_manager(true);
-    ///
-    /// let project = Project::with_config(
-    ///     PathBuf::from("/my/project"),
-    ///     ProjectKind::Repository(RepoKind::Simple),
-    ///     config,
-    /// );
-    /// ```
-    #[must_use]
-    pub fn with_config(root: PathBuf, kind: ProjectKind, config: ProjectConfig) -> Self {
         Self {
             root,
             kind,
             package_manager: None,
             package_json: None,
-            external_dependencies: Dependencies::new(),
+            external_dependencies: Dependencies::default(),
             internal_dependencies: Vec::new(),
             validation_status: ProjectValidationStatus::NotValidated,
-            config,
         }
     }
+
 
     /// Checks if this is a monorepo project.
     ///

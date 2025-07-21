@@ -44,11 +44,42 @@ pub struct AsyncFileSystemConfig {
 
 impl Default for AsyncFileSystemConfig {
     fn default() -> Self {
+        let fs_config = crate::config::FilesystemConfig::default();
         Self {
-            operation_timeout: Duration::from_secs(30),
-            read_timeout: Duration::from_secs(10),
-            write_timeout: Duration::from_secs(20),
-            max_concurrent_operations: 10,
+            operation_timeout: fs_config.async_io.operation_timeout,
+            read_timeout: fs_config.async_io.operation_timeout, // Use operation_timeout for read by default
+            write_timeout: fs_config.async_io.operation_timeout, // Use operation_timeout for write by default
+            max_concurrent_operations: fs_config.async_io.max_concurrent_operations,
+        }
+    }
+}
+
+impl From<&crate::config::FilesystemConfig> for AsyncFileSystemConfig {
+    /// Creates an AsyncFileSystemConfig from a FilesystemConfig.
+    ///
+    /// This allows the filesystem manager to use configuration settings
+    /// from the global configuration.
+    fn from(config: &crate::config::FilesystemConfig) -> Self {
+        Self {
+            operation_timeout: config.async_io.operation_timeout,
+            read_timeout: config.async_io.operation_timeout, // Use operation_timeout for read
+            write_timeout: config.async_io.operation_timeout, // Use operation_timeout for write
+            max_concurrent_operations: config.async_io.max_concurrent_operations,
+        }
+    }
+}
+
+impl From<&crate::config::standard::AsyncIoConfig> for AsyncFileSystemConfig {
+    /// Creates an AsyncFileSystemConfig from an AsyncIoConfig.
+    ///
+    /// This provides a direct conversion from the async I/O configuration
+    /// section of the global configuration.
+    fn from(config: &crate::config::standard::AsyncIoConfig) -> Self {
+        Self {
+            operation_timeout: config.operation_timeout,
+            read_timeout: config.operation_timeout, // Use operation_timeout for read
+            write_timeout: config.operation_timeout, // Use operation_timeout for write
+            max_concurrent_operations: config.max_concurrent_operations,
         }
     }
 }

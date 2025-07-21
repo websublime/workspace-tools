@@ -40,4 +40,3 @@ pub enum NodePathKind {
     /// Test directory
     Test,
 }
-

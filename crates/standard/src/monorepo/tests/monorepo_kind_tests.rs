@@ -22,10 +22,8 @@ async fn test_monorepo_kind_names() {
     assert_eq!(MonorepoKind::BunWorkspaces.name(), "bun");
     assert_eq!(MonorepoKind::DenoWorkspaces.name(), "deno");
 
-    let custom = MonorepoKind::Custom {
-        name: "turbo".to_string(),
-        config_file: "turbo.json".to_string(),
-    };
+    let custom =
+        MonorepoKind::Custom { name: "turbo".to_string(), config_file: "turbo.json".to_string() };
     assert_eq!(custom.name(), "turbo");
 }
 

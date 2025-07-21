@@ -11,7 +11,7 @@
 //! - `types`: Core repository types and enums (`RepoKind`, etc.)
 //! - `package_manager`: Package manager abstractions and detection
 //! - `repository`: Repository trait definitions and implementations
-//! 
+//!
 //! Each sub-module focuses on a specific aspect of Node.js project management
 //! while maintaining clean separation of concerns and proper module boundaries.
 //!

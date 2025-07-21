@@ -12,7 +12,10 @@
 //! Structured queue management enables sophisticated command execution
 //! workflows with proper resource management and result collection.
 
-use super::{command::CommandOutput, priority::{CommandPriority, CommandStatus}};
+use super::{
+    command::CommandOutput,
+    priority::{CommandPriority, CommandStatus},
+};
 use std::time::{Duration, Instant};
 
 /// Result of a queued command execution.
@@ -65,6 +68,9 @@ pub struct CommandQueueResult {
 ///     rate_limit: Some(Duration::from_millis(100)),
 ///     default_timeout: Duration::from_secs(60),
 ///     shutdown_timeout: Duration::from_secs(10),
+///     collection_window_ms: 5,
+///     collection_sleep_us: 100,
+///     idle_sleep_ms: 10,
 /// };
 ///
 /// let queue = CommandQueue::with_config(config);
@@ -79,6 +85,12 @@ pub struct CommandQueueConfig {
     pub default_timeout: Duration,
     /// Timeout when shutting down the queue
     pub shutdown_timeout: Duration,
+    /// Collection window duration for incoming commands (milliseconds)
+    pub collection_window_ms: u64,
+    /// Sleep duration during command collection to prevent CPU spin (microseconds)
+    pub collection_sleep_us: u64,
+    /// Sleep duration when queue is idle (milliseconds)
+    pub idle_sleep_ms: u64,
 }
 
 /// Internal structure representing a queued command.
@@ -127,11 +139,33 @@ impl Ord for QueuedCommand {
 
 impl Default for CommandQueueConfig {
     fn default() -> Self {
+        let command_config = crate::config::CommandConfig::default();
         Self {
-            max_concurrent_commands: 4,
-            rate_limit: None,
-            default_timeout: Duration::from_secs(60),
-            shutdown_timeout: Duration::from_secs(10),
+            max_concurrent_commands: command_config.max_concurrent_commands,
+            rate_limit: None, // CommandConfig doesn't have queue-specific rate limiting yet
+            default_timeout: command_config.default_timeout,
+            shutdown_timeout: command_config.default_timeout, // Use same timeout for shutdown by default
+            collection_window_ms: command_config.queue_collection_window_ms,
+            collection_sleep_us: command_config.queue_collection_sleep_us,
+            idle_sleep_ms: command_config.queue_idle_sleep_ms,
+        }
+    }
+}
+
+impl From<&crate::config::CommandConfig> for CommandQueueConfig {
+    /// Creates a CommandQueueConfig from a CommandConfig.
+    ///
+    /// This allows the queue to use the same timeout and concurrency settings
+    /// as the general command configuration.
+    fn from(config: &crate::config::CommandConfig) -> Self {
+        Self {
+            max_concurrent_commands: config.max_concurrent_commands,
+            rate_limit: None, // Queue-specific rate limiting not implemented in CommandConfig yet
+            default_timeout: config.default_timeout,
+            shutdown_timeout: config.default_timeout, // Use same timeout for shutdown
+            collection_window_ms: config.queue_collection_window_ms,
+            collection_sleep_us: config.queue_collection_sleep_us,
+            idle_sleep_ms: config.queue_idle_sleep_ms,
         }
     }
 }

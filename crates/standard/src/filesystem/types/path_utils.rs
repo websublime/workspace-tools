@@ -12,9 +12,9 @@
 //! Centralized path utilities make it easier to work with Node.js project
 //! structures and provide consistent path handling across the codebase.
 
+use super::path_types::NodePathKind;
 use crate::error::Result;
 use std::path::PathBuf;
-use super::path_types::NodePathKind;
 
 /// Utility struct for file system path operations.
 ///

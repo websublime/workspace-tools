@@ -27,6 +27,4 @@ mod types;
 mod tests;
 
 pub use detector::{MonorepoDetector, MonorepoDetectorTrait, MonorepoDetectorWithFs};
-pub use types::{
-    MonorepoDescriptor, MonorepoKind, PnpmWorkspaceConfig, WorkspacePackage,
-};
+pub use types::{MonorepoDescriptor, MonorepoKind, PnpmWorkspaceConfig, WorkspacePackage};

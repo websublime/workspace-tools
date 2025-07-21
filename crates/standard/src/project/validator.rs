@@ -237,15 +237,13 @@ impl<F: AsyncFileSystem> ProjectValidator<F> {
                 // Check if package has its own package.json
                 let package_json_path = package.absolute_path.join("package.json");
                 if !self.fs.exists(&package_json_path).await {
-                    warnings.push(format!(
-                        "Package '{}' is missing package.json",
-                        package.name
-                    ));
+                    warnings.push(format!("Package '{}' is missing package.json", package.name));
                 }
             } else {
                 errors.push(format!(
                     "Package '{}' directory does not exist at {}",
-                    package.name, package.absolute_path.display()
+                    package.name,
+                    package.absolute_path.display()
                 ));
             }
         }
@@ -288,7 +286,12 @@ impl<F: AsyncFileSystem> ProjectValidator<F> {
             }
 
             // Check for conflicting lock files
-            self.check_conflicting_lock_files(project.root(), package_manager.kind(), &mut warnings).await;
+            self.check_conflicting_lock_files(
+                project.root(),
+                package_manager.kind(),
+                &mut warnings,
+            )
+            .await;
         } else if project.package_json().is_some() {
             warnings.push("Package manager could not be detected".to_string());
         }
@@ -355,7 +358,11 @@ impl<F: AsyncFileSystem> ProjectValidator<F> {
     /// * `package_json` - The parsed package.json content
     /// * `warnings` - Vector to collect validation warnings
     #[allow(clippy::unused_self)]
-    fn validate_package_json_content(&self, package_json: &PackageJson, warnings: &mut Vec<String>) {
+    fn validate_package_json_content(
+        &self,
+        package_json: &PackageJson,
+        warnings: &mut Vec<String>,
+    ) {
         // Check for empty or default name
         if package_json.name.is_empty() {
             warnings.push("Package name is empty".to_string());
@@ -406,7 +413,8 @@ impl<F: AsyncFileSystem> ProjectValidator<F> {
             }
 
             // Check for conflicting lock files
-            self.check_conflicting_lock_files(project.root(), package_manager.kind(), warnings).await;
+            self.check_conflicting_lock_files(project.root(), package_manager.kind(), warnings)
+                .await;
         } else if project.package_json().is_some() {
             warnings.push("Package manager could not be detected".to_string());
         }
@@ -470,8 +478,8 @@ impl<F: AsyncFileSystem> ProjectValidator<F> {
         warnings: &mut Vec<String>,
     ) {
         if let Some(package_json) = project.package_json() {
-            let has_dependencies = package_json.dependencies.is_some() 
-                || package_json.dev_dependencies.is_some() 
+            let has_dependencies = package_json.dependencies.is_some()
+                || package_json.dev_dependencies.is_some()
                 || package_json.peer_dependencies.is_some();
 
             if has_dependencies {
@@ -486,9 +494,8 @@ impl<F: AsyncFileSystem> ProjectValidator<F> {
                         }
                         Err(_) => {
                             // Could not read as directory - either doesn't exist or is not a directory
-                            warnings.push(
-                                "Could not check node_modules directory status".to_string(),
-                            );
+                            warnings
+                                .push("Could not check node_modules directory status".to_string());
                         }
                     }
                 } else {

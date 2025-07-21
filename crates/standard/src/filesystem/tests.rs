@@ -272,7 +272,7 @@ mod tests {
         let temp_dir = setup_test_dir();
         let test_dir = temp_dir.path().join("test_directory");
         fs.create_dir_all(&test_dir).await.unwrap();
-        
+
         // Try to write a file with the same name as an existing directory
         // This will always fail on all platforms because you cannot overwrite
         // a directory with a file
@@ -309,7 +309,8 @@ mod tests {
 
         fs.create_dir_all(&nested_dir).await.unwrap();
         fs.write_file_string(&project_root.join("package.json"), "{\"name\": \"test-project\"}")
-            .await.unwrap();
+            .await
+            .unwrap();
 
         // Test normalize
         let path = Path::new("/a/b/../c/./d");
@@ -341,9 +342,11 @@ mod tests {
         // Create a mock project structure
         let project_root = temp_dir.path();
         fs.write_file_string(&project_root.join("package.json"), "{\"name\": \"test-project\"}")
-            .await.unwrap();
+            .await
+            .unwrap();
         fs.write_file_string(&project_root.join("pnpm-lock.yaml"), "lockfileVersion: '9.0'")
-            .await.unwrap();
+            .await
+            .unwrap();
 
         // Test find_project_root
         let nested_path = project_root.join("a/b/c");

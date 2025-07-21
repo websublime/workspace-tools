@@ -237,81 +237,9 @@ mod tests {
     // PROJECT CONFIG TESTS
     // =============================================================================
 
-    #[tokio::test]
-    async fn test_project_config_default() {
-        let config = ProjectConfig::new();
-        assert!(config.detect_package_manager);
-        assert!(config.validate_structure);
-        assert!(config.detect_monorepo);
-        assert!(config.root.is_none());
-    }
+    // Note: ProjectConfig tests removed as configuration is now handled by StandardConfig
 
-    #[tokio::test]
-    async fn test_project_config_builder() {
-        let config = ProjectConfig::new()
-            .with_root("/test/path")
-            .with_detect_package_manager(false)
-            .with_validate_structure(false)
-            .with_detect_monorepo(false);
-
-        assert!(!config.detect_package_manager);
-        assert!(!config.validate_structure);
-        assert!(!config.detect_monorepo);
-        assert_eq!(config.root, Some("/test/path".into()));
-    }
-
-    #[tokio::test]
-    async fn test_project_config_edge_cases() {
-        let temp_dir = setup_test_dir();
-        let path = temp_dir.path();
-
-        // Test with all flags disabled
-        let config = ProjectConfig::new()
-            .with_detect_package_manager(false)
-            .with_validate_structure(false)
-            .with_detect_monorepo(false);
-
-        create_package_json(path, "test", "1.0.0").await;
-
-        let detector = ProjectDetector::new();
-        let result = detector.detect(path, &config).await;
-        assert!(result.is_ok());
-
-        // Test with all flags enabled (default)
-        let config = ProjectConfig::new()
-            .with_detect_package_manager(true)
-            .with_validate_structure(true)
-            .with_detect_monorepo(true);
-
-        let result = detector.detect(path, &config).await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_project_config_builder_pattern() {
-        let temp_dir = setup_test_dir();
-        let path = temp_dir.path();
-
-        // Test builder pattern with all options
-        let config = ProjectConfig::new()
-            .with_root(path)
-            .with_detect_package_manager(true)
-            .with_validate_structure(true)
-            .with_detect_monorepo(true);
-
-        // Test that all options are set
-        assert_eq!(config.root, Some(path.to_path_buf()));
-        assert!(config.detect_package_manager);
-        assert!(config.validate_structure);
-        assert!(config.detect_monorepo);
-
-        // Test default values
-        let default_config = ProjectConfig::new();
-        assert_eq!(default_config.root, None);
-        assert!(default_config.detect_package_manager);
-        assert!(default_config.validate_structure);
-        assert!(default_config.detect_monorepo);
-    }
+    // Configuration tests removed - now handled by StandardConfig system
 
     // =============================================================================
     // SIMPLE PROJECT TESTS
@@ -396,7 +324,8 @@ mod tests {
         assert!(simple.validation_status().is_valid());
 
         // Test direct status mutation
-        simple.set_validation_status(ProjectValidationStatus::Error(vec!["Test error".to_string()]));
+        simple
+            .set_validation_status(ProjectValidationStatus::Error(vec!["Test error".to_string()]));
         assert!(simple.validation_status().has_errors());
     }
 
@@ -462,11 +391,10 @@ mod tests {
     async fn test_detect_kind_simple_project() {
         let temp_dir = setup_test_dir();
         let detector = ProjectDetector::new();
-        let config = ProjectConfig::new().with_detect_monorepo(false);
 
         create_package_json(temp_dir.path(), "test-project", "1.0.0").await;
 
-        let kind = detector.detect_kind(temp_dir.path(), &config).await.unwrap();
+        let kind = detector.detect_kind(temp_dir.path()).await.unwrap();
         assert_eq!(kind, ProjectKind::Repository(RepoKind::Simple));
     }
 
@@ -474,12 +402,11 @@ mod tests {
     async fn test_detect_simple_project() {
         let temp_dir = setup_test_dir();
         let detector = ProjectDetector::new();
-        let config = ProjectConfig::new().with_detect_monorepo(false);
 
         create_package_json(temp_dir.path(), "test-project", "1.0.0").await;
         create_lock_file(temp_dir.path(), PackageManagerKind::Npm).await;
 
-        let result = detector.detect(temp_dir.path(), &config).await;
+        let result = detector.detect(temp_dir.path(), None).await;
         assert!(result.is_ok());
 
         let project = result.unwrap();
@@ -496,29 +423,29 @@ mod tests {
     #[tokio::test]
     async fn test_project_detector_error_conditions() {
         let detector = ProjectDetector::new();
-        let config = ProjectConfig::new();
+        let config: Option<&crate::config::StandardConfig> = None;
 
         // Test with non-existent path
         let non_existent = "/non/existent/path/to/project";
-        let result = detector.detect(non_existent, &config).await;
+        let result = detector.detect(non_existent, config).await;
         assert!(result.is_err());
 
         // Test with path without package.json
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
-        let result = detector.detect(path, &config).await;
+        let result = detector.detect(path, config).await;
         assert!(result.is_err());
 
         // Test with invalid package.json
         create_package_json_with_content(path, "invalid json content").await;
-        let result = detector.detect(path, &config).await;
+        let result = detector.detect(path, config).await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_project_detector_with_malformed_json() {
         let detector = ProjectDetector::new();
-        let config = ProjectConfig::new();
+        let config: Option<&crate::config::StandardConfig> = None;
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
 
@@ -536,7 +463,7 @@ mod tests {
 
         for malformed in malformed_json_cases {
             create_package_json_with_content(path, malformed).await;
-            let result = detector.detect(path, &config).await;
+            let result = detector.detect(path, config).await;
             assert!(result.is_err(), "Should fail for malformed JSON: {malformed}");
         }
     }
@@ -565,25 +492,23 @@ mod tests {
     #[tokio::test]
     async fn test_project_detector_detect_kind_comprehensive() {
         let detector = ProjectDetector::new();
-        let config = ProjectConfig::new();
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
 
         // Test with simple project
         create_package_json_with_content(path, r#"{"name": "test", "version": "1.0.0"}"#).await;
-        let kind = detector.detect_kind(path, &config).await.unwrap();
+        let kind = detector.detect_kind(path).await.unwrap();
         assert_eq!(kind, ProjectKind::Repository(RepoKind::Simple));
 
         // Test with monorepo detection disabled
-        let config_no_monorepo = ProjectConfig::new().with_detect_monorepo(false);
-        let kind = detector.detect_kind(path, &config_no_monorepo).await.unwrap();
+        let kind = detector.detect_kind(path).await.unwrap();
         assert_eq!(kind, ProjectKind::Repository(RepoKind::Simple));
     }
 
     #[tokio::test]
     async fn test_project_detector_concurrent_access() {
         let detector = Arc::new(ProjectDetector::new());
-        let config = ProjectConfig::new();
+        let config: Option<&crate::config::StandardConfig> = None;
         let temp_dir = setup_test_dir();
         let path = Arc::new(temp_dir.path().to_path_buf());
 
@@ -596,8 +521,8 @@ mod tests {
             let handle = tokio::spawn({
                 let detector_clone = Arc::clone(&detector);
                 let path_clone = Arc::clone(&path);
-                let config_clone = config.clone();
-                async move { detector_clone.detect(path_clone.as_ref(), &config_clone).await }
+                let config_clone = config;
+                async move { detector_clone.detect(path_clone.as_ref(), config_clone).await }
             });
             handles.push(handle);
         }
@@ -633,12 +558,11 @@ mod tests {
     async fn test_create_project() {
         let temp_dir = setup_test_dir();
         let manager = ProjectManager::new();
-        let config = ProjectConfig::new().with_detect_monorepo(false);
 
         create_package_json(temp_dir.path(), "test-project", "1.0.0").await;
         create_lock_file(temp_dir.path(), PackageManagerKind::Npm).await;
 
-        let result = manager.create_project(temp_dir.path(), &config).await;
+        let result = manager.create_project(temp_dir.path(), None).await;
         assert!(result.is_ok());
 
         let project = result.unwrap();
@@ -698,10 +622,8 @@ mod tests {
         let content = fs.read_file_string(&temp_dir.path().join("package.json")).await.unwrap();
         let package_json = serde_json::from_str(&content).unwrap();
 
-        let mut unified_project = Project::new(
-            temp_dir.path().to_path_buf(),
-            ProjectKind::Repository(RepoKind::Simple),
-        );
+        let mut unified_project =
+            Project::new(temp_dir.path().to_path_buf(), ProjectKind::Repository(RepoKind::Simple));
         unified_project.package_manager = Some(package_manager);
         unified_project.package_json = Some(package_json);
 
@@ -723,7 +645,8 @@ mod tests {
         let validator = ProjectValidator::new();
 
         // No package.json created
-        let unified_project = Project::new(temp_dir.path().to_path_buf(), ProjectKind::Repository(RepoKind::Simple));
+        let unified_project =
+            Project::new(temp_dir.path().to_path_buf(), ProjectKind::Repository(RepoKind::Simple));
         let mut project = ProjectDescriptor::NodeJs(unified_project);
 
         let result = validator.validate_project(&mut project).await;
@@ -748,7 +671,8 @@ mod tests {
         fs.write_file_string(&package_json_path, content).await.unwrap();
 
         let package_json = serde_json::from_str(content).unwrap();
-        let mut unified_project = Project::new(temp_dir.path().to_path_buf(), ProjectKind::Repository(RepoKind::Simple));
+        let mut unified_project =
+            Project::new(temp_dir.path().to_path_buf(), ProjectKind::Repository(RepoKind::Simple));
         unified_project.package_json = Some(package_json);
 
         let mut project = ProjectDescriptor::NodeJs(unified_project);
@@ -768,7 +692,7 @@ mod tests {
     async fn test_generic_project_comprehensive() {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path().to_path_buf();
-        let _config = ProjectConfig::new();
+        //let _config: Option<&crate::config::StandardConfig> = None;
 
         let mut project = Project::new(path.clone(), ProjectKind::Repository(RepoKind::Simple));
 
@@ -795,16 +719,20 @@ mod tests {
     #[tokio::test]
     async fn test_project_stress_testing() {
         let detector = ProjectDetector::new();
-        let config = ProjectConfig::new();
+        let config: Option<&crate::config::StandardConfig> = None;
 
         // Test with many sequential detections
         for i in 0..50 {
             let temp_dir = setup_test_dir();
             let path = temp_dir.path();
 
-            create_package_json_with_content(path, &format!(r#"{{"name": "test-{i}", "version": "1.0.0"}}"#)).await;
+            create_package_json_with_content(
+                path,
+                &format!(r#"{{"name": "test-{i}", "version": "1.0.0"}}"#),
+            )
+            .await;
 
-            let result = detector.detect(path, &config).await;
+            let result = detector.detect(path, config).await;
             assert!(result.is_ok());
         }
     }
@@ -812,7 +740,7 @@ mod tests {
     #[tokio::test]
     async fn test_project_deep_nesting() {
         let detector = ProjectDetector::new();
-        let config = ProjectConfig::new();
+        let config: Option<&crate::config::StandardConfig> = None;
         let temp_dir = setup_test_dir();
         let mut path = temp_dir.path().to_path_buf();
 
@@ -822,9 +750,10 @@ mod tests {
             std::fs::create_dir_all(&path).unwrap();
         }
 
-        create_package_json_with_content(&path, r#"{"name": "deeply-nested", "version": "1.0.0"}"#).await;
+        create_package_json_with_content(&path, r#"{"name": "deeply-nested", "version": "1.0.0"}"#)
+            .await;
 
-        let result = detector.detect(&path, &config).await;
+        let result = detector.detect(&path, config).await;
         assert!(result.is_ok());
     }
 }

@@ -100,4 +100,3 @@ pub struct CommandStream {
     /// Flag for cancellation
     pub(crate) cancel: Arc<AtomicBool>,
 }
-

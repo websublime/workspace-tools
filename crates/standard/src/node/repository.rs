@@ -83,7 +83,7 @@ pub trait RepositoryInfo: Send + Sync {
     /// # fn example(repo: &impl RepositoryInfo) {
     /// let root = repo.root();
     /// println!("Repository located at: {}", root.display());
-    /// 
+    ///
     /// // Use root to construct paths to repository files
     /// let package_json = root.join("package.json");
     /// # }

@@ -16,6 +16,7 @@
 //! confusion and provides the foundation for concurrent operations.
 
 use super::types::{AsyncFileSystem, AsyncFileSystemConfig};
+use crate::config::{ConfigManager, StandardConfig, traits::Configurable};
 use crate::error::{Error, FileSystemError, Result};
 use async_trait::async_trait;
 use std::{
@@ -70,16 +71,14 @@ impl FileSystemManager {
     /// ```
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            config: AsyncFileSystemConfig::default(),
-        }
+        Self { config: AsyncFileSystemConfig::default() }
     }
 
-    /// Creates a new `FileSystemManager` instance with custom configuration.
+    /// Creates a new `FileSystemManager` instance with custom async filesystem configuration.
     ///
     /// # Arguments
     ///
-    /// * `config` - The configuration to use for filesystem operations
+    /// * `config` - The async filesystem configuration to use for filesystem operations
     ///
     /// # Returns
     ///
@@ -98,6 +97,165 @@ impl FileSystemManager {
     #[must_use]
     pub fn with_config(config: AsyncFileSystemConfig) -> Self {
         Self { config }
+    }
+
+    /// Creates a new `FileSystemManager` instance with configuration from StandardConfig.
+    ///
+    /// This method creates a filesystem manager using the filesystem configuration
+    /// settings from the global configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `fs_config` - The filesystem configuration from StandardConfig
+    ///
+    /// # Returns
+    ///
+    /// A new `FileSystemManager` instance using the provided configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// use sublime_standard_tools::config::{StandardConfig, FilesystemConfig};
+    ///
+    /// let standard_config = StandardConfig::default();
+    /// let fs_manager = FileSystemManager::with_standard_config(&standard_config.filesystem);
+    /// ```
+    #[must_use]
+    pub fn with_standard_config(fs_config: &crate::config::FilesystemConfig) -> Self {
+        Self { 
+            config: AsyncFileSystemConfig::from(fs_config)
+        }
+    }
+
+    /// Creates a new `FileSystemManager` instance with async I/O configuration.
+    ///
+    /// This method creates a filesystem manager using the async I/O configuration
+    /// settings directly.
+    ///
+    /// # Arguments
+    ///
+    /// * `async_io_config` - The async I/O configuration
+    ///
+    /// # Returns
+    ///
+    /// A new `FileSystemManager` instance using the provided configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// use sublime_standard_tools::config::StandardConfig;
+    ///
+    /// let standard_config = StandardConfig::default();
+    /// let fs_manager = FileSystemManager::with_async_io_config(&standard_config.filesystem.async_io);
+    /// ```
+    #[must_use]
+    pub fn with_async_io_config(async_io_config: &crate::config::standard::AsyncIoConfig) -> Self {
+        Self { 
+            config: AsyncFileSystemConfig::from(async_io_config)
+        }
+    }
+
+    /// Creates a new `FileSystemManager` that automatically loads configuration from project files.
+    ///
+    /// This method searches for configuration files (repo.config.*) in the specified path and
+    /// loads the filesystem configuration from them. If no config files are found, it uses
+    /// default configuration with environment variable overrides.
+    ///
+    /// # Arguments
+    ///
+    /// * `project_root` - The path to search for configuration files
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(FileSystemManager)` - A filesystem manager with loaded configuration
+    /// * `Err(Error)` - If configuration loading fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// use std::path::Path;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs_manager = FileSystemManager::new_with_project_config(Path::new(".")).await?;
+    /// // Configuration loaded from repo.config.toml/yml/json or defaults + env vars
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if configuration files exist but cannot be parsed.
+    pub async fn new_with_project_config(project_root: &Path) -> Result<Self> {
+        let temp_fs = Self::new(); // Temporary instance for loading config
+        let config = Self::load_project_config(&temp_fs, project_root, None).await?;
+        
+        Ok(Self {
+            config: AsyncFileSystemConfig::from(&config.filesystem),
+        })
+    }
+
+    /// Loads configuration from project files in the specified directory.
+    ///
+    /// This method searches for configuration files in the following order:
+    /// - repo.config.toml
+    /// - repo.config.yml/yaml  
+    /// - repo.config.json
+    ///
+    /// # Arguments
+    ///
+    /// * `fs` - The filesystem implementation to use
+    /// * `project_root` - The directory to search for configuration files
+    /// * `base_config` - Optional base configuration to merge with
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(StandardConfig)` - The loaded and merged configuration
+    /// * `Err(Error)` - If configuration loading fails
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if configuration files exist but cannot be parsed.
+    async fn load_project_config(
+        fs: &Self,
+        project_root: &Path,
+        base_config: Option<StandardConfig>,
+    ) -> Result<StandardConfig> {
+        let mut builder = ConfigManager::<StandardConfig>::builder().with_defaults();
+
+        // Check for repo.config.* files in order of preference
+        let config_files = [
+            project_root.join("repo.config.toml"),
+            project_root.join("repo.config.yml"), 
+            project_root.join("repo.config.yaml"),
+            project_root.join("repo.config.json"),
+        ];
+
+        // Add existing config files to the builder
+        for config_file in &config_files {
+            if fs.exists(config_file).await {
+                builder = builder.with_file(config_file);
+            }
+        }
+
+        let manager = builder.build(fs.clone()).map_err(|e| {
+            Error::operation(format!("Failed to create config manager: {e}"))
+        })?;
+
+        let mut config = manager.load().await.map_err(|e| {
+            Error::operation(format!("Failed to load configuration: {e}"))
+        })?;
+
+        // Merge with base config if provided
+        if let Some(base) = base_config {
+            config.merge_with(base).map_err(|e| {
+                Error::operation(format!("Failed to merge configurations: {e}"))
+            })?;
+        }
+
+        Ok(config)
     }
 
     /// Gets the current configuration.
@@ -149,9 +307,7 @@ impl FileSystemManager {
     /// Returns an error if the path does not exist.
     async fn validate_path(&self, path: &Path) -> Result<()> {
         if !self.exists(path).await {
-            return Err(Error::FileSystem(FileSystemError::NotFound {
-                path: path.to_path_buf(),
-            }));
+            return Err(Error::FileSystem(FileSystemError::NotFound { path: path.to_path_buf() }));
         }
         Ok(())
     }
@@ -188,9 +344,7 @@ impl AsyncFileSystem for FileSystemManager {
     async fn read_file(&self, path: &Path) -> Result<Vec<u8>> {
         let operation = async {
             self.validate_path(path).await?;
-            fs::read(path)
-                .await
-                .map_err(|e| Error::FileSystem(FileSystemError::from_io(e, path)))
+            fs::read(path).await.map_err(|e| Error::FileSystem(FileSystemError::from_io(e, path)))
         };
 
         self.with_timeout(operation, self.config.read_timeout).await
@@ -260,7 +414,7 @@ impl AsyncFileSystem for FileSystemManager {
     async fn remove(&self, path: &Path) -> Result<()> {
         let operation = async {
             self.validate_path(path).await?;
-            
+
             let metadata = fs::metadata(path)
                 .await
                 .map_err(|e| Error::FileSystem(FileSystemError::from_io(e, path)))?;

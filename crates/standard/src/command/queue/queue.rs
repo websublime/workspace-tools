@@ -28,8 +28,8 @@ use crate::error::{Error, Result};
 use super::super::{
     executor::Executor,
     types::{
-        CommandPriority, CommandQueue, CommandQueueConfig, CommandQueueResult,
-        CommandStatus, DefaultCommandExecutor, QueueMessage, QueueProcessor, QueuedCommand,
+        CommandPriority, CommandQueue, CommandQueueConfig, CommandQueueResult, CommandStatus,
+        DefaultCommandExecutor, QueueMessage, QueueProcessor, QueuedCommand,
     },
     Command,
 };

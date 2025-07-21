@@ -19,15 +19,15 @@
 
 pub mod command;
 pub mod executor;
+pub mod internal;
 pub mod priority;
 pub mod queue;
-pub mod internal;
 pub mod stream;
 
 // Re-export all public types for backward compatibility
 pub use command::*;
 pub use executor::*;
+pub use internal::*;
 pub use priority::*;
 pub use queue::*;
-pub use internal::*;
 pub use stream::*;

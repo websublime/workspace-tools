@@ -13,8 +13,8 @@
 //! with proper separation between public and internal APIs.
 
 use super::{
-    queue::{CommandQueueConfig, CommandQueueResult, QueuedCommand, QueueMessage},
     priority::CommandStatus,
+    queue::{CommandQueueConfig, CommandQueueResult, QueueMessage, QueuedCommand},
 };
 use crate::command::executor::Executor;
 use std::{

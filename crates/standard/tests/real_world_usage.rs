@@ -34,14 +34,12 @@ use sublime_standard_tools::{
         CommandBuilder, CommandPriority, CommandQueue, CommandQueueConfig, DefaultCommandExecutor,
         Executor, StreamConfig,
     },
+    config::{ConfigValue, StandardConfig},
     error::{Error, Result},
     filesystem::{AsyncFileSystem, FileSystemManager, NodePathKind, PathExt, PathUtils},
     monorepo::{MonorepoDetector, MonorepoDetectorTrait, MonorepoKind},
-    node::PackageManager,
-    project::{
-        ConfigManager, ConfigScope, ConfigValue, ProjectConfig, ProjectManager,
-        ProjectValidationStatus,
-    },
+    node::{PackageManager, PackageManagerKind},
+    project::{ProjectManager, ProjectValidationStatus},
 };
 
 use tempfile::TempDir;
@@ -56,7 +54,7 @@ struct MonorepoAnalyzer {
     /// Command queue for managing concurrent builds
     queue: Option<CommandQueue>,
     /// Configuration manager
-    config: ConfigManager,
+    config: StandardConfig,
     /// Project manager for validation
     project_manager: ProjectManager,
     /// Monorepo detector for structure analysis
@@ -124,24 +122,16 @@ struct BuildResult {
 impl MonorepoAnalyzer {
     /// Creates a new monorepo analyzer with default configuration
     fn new() -> Result<Self> {
-        let mut config = ConfigManager::new();
+        // Use the StandardConfig with customized settings
+        let mut config = StandardConfig::default();
 
-        // Set up configuration paths for different scopes
-        let user_config_path = PathUtils::current_dir()?.join(".monorepo-analyzer-user.json");
-        config.set_path(ConfigScope::User, user_config_path);
+        // Configure command execution for build analysis
+        config.commands.max_concurrent_commands = 4;
+        config.commands.default_timeout = Duration::from_secs(300);
 
-        // Set default configuration values
-        config.set("max_concurrent_builds", ConfigValue::Integer(4));
-        config.set("build_timeout_seconds", ConfigValue::Integer(300));
-        config.set("enable_detailed_logging", ConfigValue::Boolean(true));
-        config.set(
-            "supported_package_managers",
-            ConfigValue::Array(vec![
-                ConfigValue::String("npm".to_string()),
-                ConfigValue::String("yarn".to_string()),
-                ConfigValue::String("pnpm".to_string()),
-            ]),
-        );
+        // Configure package manager detection order for analysis
+        config.package_managers.detection_order =
+            vec![PackageManagerKind::Npm, PackageManagerKind::Yarn, PackageManagerKind::Pnpm];
 
         Ok(Self {
             fs: FileSystemManager::new(),
@@ -155,19 +145,17 @@ impl MonorepoAnalyzer {
 
     /// Initializes the command queue with configuration
     fn initialize_queue(&mut self) -> Result<()> {
-        let max_concurrent =
-            self.config.get("max_concurrent_builds").and_then(|v| v.as_integer()).unwrap_or(4)
-                as usize;
-
-        let timeout_secs =
-            self.config.get("build_timeout_seconds").and_then(|v| v.as_integer()).unwrap_or(300)
-                as u64;
+        let max_concurrent = self.config.commands.max_concurrent_commands;
+        let timeout_secs = self.config.commands.default_timeout.as_secs();
 
         let queue_config = CommandQueueConfig {
             max_concurrent_commands: max_concurrent,
             rate_limit: Some(Duration::from_millis(100)), // Prevent overwhelming the system
             default_timeout: Duration::from_secs(timeout_secs),
             shutdown_timeout: Duration::from_secs(30),
+            collection_window_ms: self.config.commands.queue_collection_window_ms,
+            collection_sleep_us: self.config.commands.queue_collection_sleep_us,
+            idle_sleep_ms: self.config.commands.queue_idle_sleep_ms,
         };
 
         self.queue = Some(CommandQueue::with_config(queue_config).start()?);
@@ -205,7 +193,8 @@ impl MonorepoAnalyzer {
 
         for workspace_package in packages {
             // Extract package information
-            let package_info = self.extract_package_info(workspace_package, &normalized_path).await?;
+            let package_info =
+                self.extract_package_info(workspace_package, &normalized_path).await?;
             package_infos.push(package_info.clone());
 
             // Validate package structure
@@ -294,9 +283,9 @@ impl MonorepoAnalyzer {
     /// Validates a package structure and configuration
     async fn validate_package(&self, package_path: &Path) -> Result<DetailedValidation> {
         let config =
-            ProjectConfig::new().with_detect_package_manager(true).with_validate_structure(true);
+            None;
 
-        let project_descriptor = self.project_manager.create_project(package_path, &config).await?;
+        let project_descriptor = self.project_manager.create_project(package_path, config).await?;
         let project = project_descriptor.as_project_info();
         let mut checks = Vec::new();
 
@@ -326,6 +315,7 @@ impl MonorepoAnalyzer {
     }
 
     /// Executes build commands for packages that have build scripts
+
     async fn execute_builds(
         &mut self,
         packages: &[PackageInfo],
@@ -433,17 +423,30 @@ impl MonorepoAnalyzer {
     }
 
     /// Gathers configuration summary for reporting
+    #[allow(clippy::cast_possible_wrap)]
     fn gather_config_summary(&self) -> HashMap<String, ConfigValue> {
         let mut summary = HashMap::new();
 
-        // Get known configuration keys
-        let keys = ["max_concurrent_builds", "build_timeout_seconds", "enable_detailed_logging"];
-
-        for key in &keys {
-            if let Some(value) = self.config.get(key) {
-                summary.insert((*key).to_string(), value);
-            }
-        }
+        // Build configuration summary from StandardConfig
+        summary.insert(
+            "max_concurrent_builds".to_string(),
+            ConfigValue::Integer(self.config.commands.max_concurrent_commands as i64),
+        );
+        summary.insert(
+            "build_timeout_seconds".to_string(),
+            ConfigValue::Integer(self.config.commands.default_timeout.as_secs() as i64),
+        );
+        summary.insert(
+            "package_manager_detection_order".to_string(),
+            ConfigValue::Array(
+                self.config
+                    .package_managers
+                    .detection_order
+                    .iter()
+                    .map(|pm| ConfigValue::String(format!("{pm:?}")))
+                    .collect(),
+            ),
+        );
 
         summary
     }
@@ -497,7 +500,8 @@ async fn setup_test_monorepo(temp_dir: &TempDir) -> Result<PathBuf> {
         &root.join("package.json"),
         &serde_json::to_string_pretty(&root_package_json)
             .map_err(|e| Error::operation(format!("Failed to serialize JSON: {e}")))?,
-    ).await?;
+    )
+    .await?;
 
     // Create yarn.lock to make it a Yarn workspace
     fs.write_file_string(&root.join("yarn.lock"), "").await?;
@@ -531,22 +535,26 @@ async fn setup_test_monorepo(temp_dir: &TempDir) -> Result<PathBuf> {
         &shared_lib_dir.join("package.json"),
         &serde_json::to_string_pretty(&shared_package_json)
             .map_err(|e| Error::operation(format!("Failed to serialize JSON: {e}")))?,
-    ).await?;
+    )
+    .await?;
 
     fs.write_file_string(
         &shared_lib_dir.join("tsconfig.json"),
         r#"{"compilerOptions": {"target": "es2020", "outDir": "dist"}}"#,
-    ).await?;
+    )
+    .await?;
 
     fs.write_file_string(
         &shared_lib_dir.join("README.md"),
         "# Shared Library\n\nCommon utilities.",
-    ).await?;
+    )
+    .await?;
 
     fs.write_file_string(
         &shared_lib_dir.join("src").join("index.ts"),
         "export const greet = (name: string) => `Hello, ${name}!`;",
-    ).await?;
+    )
+    .await?;
 
     // Create UI components package
     let ui_dir = packages_dir.join("ui");
@@ -573,9 +581,11 @@ async fn setup_test_monorepo(temp_dir: &TempDir) -> Result<PathBuf> {
         &ui_dir.join("package.json"),
         &serde_json::to_string_pretty(&ui_package_json)
             .map_err(|e| Error::operation(format!("Failed to serialize JSON: {e}")))?,
-    ).await?;
+    )
+    .await?;
 
-    fs.write_file_string(&ui_dir.join("README.md"), "# UI Components\n\nReusable UI components.").await?;
+    fs.write_file_string(&ui_dir.join("README.md"), "# UI Components\n\nReusable UI components.")
+        .await?;
 
     // Create web application
     let web_app_dir = apps_dir.join("web");
@@ -604,12 +614,14 @@ async fn setup_test_monorepo(temp_dir: &TempDir) -> Result<PathBuf> {
         &web_app_dir.join("package.json"),
         &serde_json::to_string_pretty(&web_package_json)
             .map_err(|e| Error::operation(format!("Failed to serialize JSON: {e}")))?,
-    ).await?;
+    )
+    .await?;
 
     fs.write_file_string(
         &web_app_dir.join("README.md"),
         "# Web Application\n\nMain web application.",
-    ).await?;
+    )
+    .await?;
 
     // Create a package without build script
     let docs_dir = packages_dir.join("docs");
@@ -627,7 +639,8 @@ async fn setup_test_monorepo(temp_dir: &TempDir) -> Result<PathBuf> {
         &docs_dir.join("package.json"),
         &serde_json::to_string_pretty(&docs_package_json)
             .map_err(|e| Error::operation(format!("Failed to serialize JSON: {e}")))?,
-    ).await?;
+    )
+    .await?;
 
     Ok(root)
 }
@@ -664,6 +677,7 @@ async fn test_comprehensive_monorepo_analysis() -> Result<()> {
     println!("✓ Correctly detected Yarn package manager");
 
     // Check package discovery
+    println!("Discovered packages: {:?}", analysis_report.packages.iter().map(|p| &p.name).collect::<Vec<_>>());
     assert_eq!(analysis_report.packages.len(), 4); // shared, ui, web, docs
     println!("✓ Discovered {} packages", analysis_report.packages.len());
 
@@ -729,13 +743,13 @@ async fn test_comprehensive_monorepo_analysis() -> Result<()> {
         println!("✓ Project root detection working");
     }
 
-    // Test configuration management in detail
-    let mut test_config = ConfigManager::new();
-    test_config.set("test_setting", ConfigValue::String("test_value".to_string()));
-    assert_eq!(
-        test_config.get("test_setting").and_then(|v| v.as_string().map(ToString::to_string)),
-        Some("test_value".to_string())
-    );
+    // Test configuration management with new system
+    let mut test_config = StandardConfig::default();
+    test_config.commands.max_concurrent_commands = 8;
+    test_config.commands.default_timeout = Duration::from_secs(600);
+
+    assert_eq!(test_config.commands.max_concurrent_commands, 8);
+    assert_eq!(test_config.commands.default_timeout, Duration::from_secs(600));
     println!("✓ Configuration management working correctly");
 
     // Clean up
@@ -785,7 +799,8 @@ async fn test_error_handling_scenarios() -> Result<()> {
         &temp_dir.path().join("package.json"),
         &serde_json::to_string_pretty(&single_project_json)
             .map_err(|e| Error::operation(format!("Failed to serialize JSON: {e}")))?,
-    ).await?;
+    )
+    .await?;
 
     let result = analyzer.analyze_monorepo(temp_dir.path()).await;
     assert!(result.is_err());
@@ -843,13 +858,13 @@ async fn test_common_usage_patterns() -> Result<()> {
     // Pattern 1: Quick project validation
     let project_manager = ProjectManager::new();
     let config =
-        ProjectConfig::new().with_detect_package_manager(true).with_validate_structure(true);
+        None;
 
     // This would typically be used on an existing project
     // For the test, we'll just verify the API works
     let current_dir = PathUtils::current_dir()?;
     if current_dir.join("package.json").exists() {
-        let _project = project_manager.create_project(&current_dir, &config).await?;
+        let _project = project_manager.create_project(&current_dir, config).await?;
         println!("✓ Project detection API working");
     }
 
@@ -874,18 +889,15 @@ async fn test_common_usage_patterns() -> Result<()> {
     assert_eq!(content, "Test content");
     println!("✓ Filesystem operations working");
 
-    // Pattern 4: Configuration management
-    let mut config_manager = ConfigManager::new();
-    config_manager.set("app_name", ConfigValue::String("MyApp".to_string()));
-    config_manager.set("debug_mode", ConfigValue::Boolean(true));
-    config_manager.set("max_connections", ConfigValue::Integer(100));
+    // Pattern 4: Configuration management with StandardConfig
+    let mut config = StandardConfig::default();
+    config.commands.max_concurrent_commands = 100;
+    config.package_managers.detect_from_env = true;
 
-    assert_eq!(
-        config_manager.get("app_name").and_then(|v| v.as_string().map(ToString::to_string)),
-        Some("MyApp".to_string())
-    );
-    assert_eq!(config_manager.get("debug_mode").and_then(|v| v.as_boolean()), Some(true));
-    assert_eq!(config_manager.get("max_connections").and_then(|v| v.as_integer()), Some(100));
+    // Test configuration values
+    assert_eq!(config.commands.max_concurrent_commands, 100);
+    assert!(config.package_managers.detect_from_env);
+    assert!(!config.package_managers.detection_order.is_empty());
     println!("✓ Configuration management working");
 
     println!("🎉 All common usage patterns working correctly!");

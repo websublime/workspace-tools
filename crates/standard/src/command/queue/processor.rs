@@ -19,19 +19,13 @@ use std::{
 };
 
 use tokio::{
-    sync::{
-        mpsc::Receiver,
-        Semaphore,
-    },
+    sync::{mpsc::Receiver, Semaphore},
     time::sleep,
 };
 
 use super::super::{
     executor::Executor,
-    types::{
-        CommandQueueConfig, CommandQueueResult, CommandStatus, QueueMessage,
-        QueueProcessor,
-    },
+    types::{CommandQueueConfig, CommandQueueResult, CommandStatus, QueueMessage, QueueProcessor},
 };
 
 impl QueueProcessor {
@@ -102,9 +96,9 @@ impl QueueProcessor {
             // First, collect any pending commands
             let mut collected_commands = false;
 
-            // Try to collect messages for a short window (5ms)
+            // Try to collect messages for a configured window
             let collect_deadline =
-                tokio::time::Instant::now() + tokio::time::Duration::from_millis(5);
+                tokio::time::Instant::now() + tokio::time::Duration::from_millis(self.config.collection_window_ms);
 
             while tokio::time::Instant::now() < collect_deadline {
                 // Poll for messages (non-blocking)
@@ -139,7 +133,7 @@ impl QueueProcessor {
                 }
 
                 // Small sleep to prevent CPU spin while still collecting rapidly
-                tokio::time::sleep(tokio::time::Duration::from_micros(100)).await;
+                tokio::time::sleep(tokio::time::Duration::from_micros(self.config.collection_sleep_us)).await;
             }
 
             // If we collected any commands or already had some, process the highest priority one
@@ -147,8 +141,8 @@ impl QueueProcessor {
                 self.process_next_command().await;
             } else if self.running {
                 // No commands in queue and channel empty, wait a bit to avoid CPU spin
-                // We wait for a slightly longer time here since we're idle
-                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                // We wait for a configured time here since we're idle
+                tokio::time::sleep(tokio::time::Duration::from_millis(self.config.idle_sleep_ms)).await;
             }
         }
 

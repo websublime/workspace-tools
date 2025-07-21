@@ -16,6 +16,7 @@
 //! approach eliminates confusion and provides consistent API across all operations.
 
 use super::{MonorepoDescriptor, MonorepoKind, WorkspacePackage};
+use crate::config::{traits::Configurable, ConfigManager, StandardConfig};
 use crate::error::{Error, Result};
 use crate::filesystem::{AsyncFileSystem, FileSystemManager};
 use crate::project::ProjectValidationStatus;
@@ -298,10 +299,8 @@ pub trait MonorepoDetectorWithFs<F: AsyncFileSystem>: MonorepoDetectorTrait {
     /// # Errors
     ///
     /// Each result in the vector may contain an error if detection fails for that root.
-    async fn detect_packages_multiple(
-        &self,
-        roots: &[&Path],
-    ) -> Vec<Result<Vec<WorkspacePackage>>>;
+    async fn detect_packages_multiple(&self, roots: &[&Path])
+        -> Vec<Result<Vec<WorkspacePackage>>>;
 
     /// Asynchronously performs parallel package discovery with concurrency control.
     ///
@@ -375,14 +374,17 @@ pub trait MonorepoDetectorWithFs<F: AsyncFileSystem>: MonorepoDetectorTrait {
 pub struct MonorepoDetector<F: AsyncFileSystem = FileSystemManager> {
     /// Async filesystem implementation for file operations
     fs: F,
+    /// Configuration for monorepo detection and analysis
+    config: crate::config::MonorepoConfig,
 }
 
 impl MonorepoDetector<FileSystemManager> {
-    /// Creates a new `MonorepoDetector` with the default async filesystem implementation.
+    /// Creates a new `MonorepoDetector` with the default async filesystem implementation
+    /// and default monorepo configuration.
     ///
     /// # Returns
     ///
-    /// A new `MonorepoDetector` instance using the `FileSystemManager`.
+    /// A new `MonorepoDetector` instance using the `FileSystemManager` and default configuration.
     ///
     /// # Examples
     ///
@@ -393,12 +395,140 @@ impl MonorepoDetector<FileSystemManager> {
     /// ```
     #[must_use]
     pub fn new() -> Self {
-        Self { fs: FileSystemManager::new() }
+        Self { fs: FileSystemManager::new(), config: crate::config::MonorepoConfig::default() }
+    }
+
+    /// Creates a new `MonorepoDetector` with the default filesystem and custom monorepo configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The monorepo configuration to use
+    ///
+    /// # Returns
+    ///
+    /// A new `MonorepoDetector` instance using the provided configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::monorepo::MonorepoDetector;
+    /// use sublime_standard_tools::config::MonorepoConfig;
+    ///
+    /// let config = MonorepoConfig {
+    ///     max_search_depth: 10,
+    ///     ..MonorepoConfig::default()
+    /// };
+    /// let detector = MonorepoDetector::new_with_config(config);
+    /// ```
+    #[must_use]
+    pub fn new_with_config(config: crate::config::MonorepoConfig) -> Self {
+        Self { fs: FileSystemManager::new(), config }
+    }
+
+    /// Creates a new `MonorepoDetector` that automatically loads configuration from project files.
+    ///
+    /// This method searches for configuration files (repo.config.*) in the specified path and
+    /// loads the monorepo configuration from them. If no config files are found, it uses
+    /// default configuration with environment variable overrides.
+    ///
+    /// # Arguments
+    ///
+    /// * `project_root` - The path to search for configuration files
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(MonorepoDetector)` - A detector with loaded configuration
+    /// * `Err(Error)` - If configuration loading fails
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::monorepo::MonorepoDetector;
+    /// use std::path::Path;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let detector = MonorepoDetector::new_with_project_config(Path::new(".")).await?;
+    /// // Configuration loaded from repo.config.toml/yml/json or defaults + env vars
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if configuration files exist but cannot be parsed.
+    pub async fn new_with_project_config(project_root: &Path) -> Result<Self> {
+        let fs = FileSystemManager::new();
+        let config = Self::load_project_config(&fs, project_root, None).await?;
+
+        Ok(Self { fs, config: config.monorepo })
+    }
+
+    /// Loads configuration from project files in the specified directory.
+    ///
+    /// This method searches for configuration files in the following order:
+    /// - repo.config.toml
+    /// - repo.config.yml/yaml
+    /// - repo.config.json
+    ///
+    /// # Arguments
+    ///
+    /// * `fs` - The filesystem implementation to use
+    /// * `project_root` - The directory to search for configuration files
+    /// * `base_config` - Optional base configuration to merge with
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(StandardConfig)` - The loaded and merged configuration
+    /// * `Err(Error)` - If configuration loading fails
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if configuration files exist but cannot be parsed.
+    async fn load_project_config(
+        fs: &FileSystemManager,
+        project_root: &Path,
+        base_config: Option<StandardConfig>,
+    ) -> Result<StandardConfig> {
+        let mut builder = ConfigManager::<StandardConfig>::builder().with_defaults();
+
+        // Check for repo.config.* files in order of preference
+        let config_files = [
+            project_root.join("repo.config.toml"),
+            project_root.join("repo.config.yml"),
+            project_root.join("repo.config.yaml"),
+            project_root.join("repo.config.json"),
+        ];
+
+        // Add existing config files to the builder
+        for config_file in &config_files {
+            if fs.exists(config_file).await {
+                builder = builder.with_file(config_file);
+            }
+        }
+
+        let manager = builder
+            .build(fs.clone())
+            .map_err(|e| Error::operation(format!("Failed to create config manager: {e}")))?;
+
+        let mut config = manager
+            .load()
+            .await
+            .map_err(|e| Error::operation(format!("Failed to load configuration: {e}")))?;
+
+        // Merge with base config if provided
+        if let Some(base) = base_config {
+            config
+                .merge_with(base)
+                .map_err(|e| Error::operation(format!("Failed to merge configurations: {e}")))?;
+        }
+
+        Ok(config)
     }
 }
 
 impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
-    /// Creates a new `MonorepoDetector` with a custom async filesystem implementation.
+    /// Creates a new `MonorepoDetector` with a custom async filesystem implementation
+    /// and default monorepo configuration.
     ///
     /// # Arguments
     ///
@@ -406,7 +536,7 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
     ///
     /// # Returns
     ///
-    /// A new `MonorepoDetector` instance using the provided async filesystem.
+    /// A new `MonorepoDetector` instance using the provided async filesystem and default configuration.
     ///
     /// # Examples
     ///
@@ -419,7 +549,38 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
     /// ```
     #[must_use]
     pub fn with_filesystem(fs: F) -> Self {
-        Self { fs }
+        Self { fs, config: crate::config::MonorepoConfig::default() }
+    }
+
+    /// Creates a new `MonorepoDetector` with a custom async filesystem implementation
+    /// and custom monorepo configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `fs` - The async filesystem implementation to use
+    /// * `config` - The monorepo configuration to use
+    ///
+    /// # Returns
+    ///
+    /// A new `MonorepoDetector` instance using the provided filesystem and configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// use sublime_standard_tools::monorepo::MonorepoDetector;
+    /// use sublime_standard_tools::config::MonorepoConfig;
+    ///
+    /// let fs = FileSystemManager::new();
+    /// let config = MonorepoConfig {
+    ///     max_search_depth: 8,
+    ///     ..MonorepoConfig::default()
+    /// };
+    /// let detector = MonorepoDetector::with_filesystem_and_config(fs, config);
+    /// ```
+    #[must_use]
+    pub fn with_filesystem_and_config(fs: F, config: crate::config::MonorepoConfig) -> Self {
+        Self { fs, config }
     }
 }
 
@@ -548,6 +709,7 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
         ))
     }
 
+    #[allow(clippy::assigning_clones)]
     async fn detect_packages(&self, root: &Path) -> Result<Vec<WorkspacePackage>> {
         let mut packages = Vec::new();
 
@@ -566,8 +728,8 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
         let json_value: serde_json::Value = serde_json::from_str(&content)
             .map_err(|e| Error::operation(format!("Invalid package.json: {e}")))?;
 
-        // Extract workspace patterns
-        let workspace_patterns = if let Some(workspaces) = json_value.get("workspaces") {
+        // Extract workspace patterns from package.json
+        let mut workspace_patterns = if let Some(workspaces) = json_value.get("workspaces") {
             if let Some(array) = workspaces.as_array() {
                 array
                     .iter()
@@ -575,17 +737,48 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
                     .map(std::string::ToString::to_string)
                     .collect::<Vec<String>>()
             } else {
-                return Ok(packages); // No workspaces array
+                Vec::new() // No workspaces array
             }
         } else {
-            return Ok(packages); // No workspaces defined
+            Vec::new() // No workspaces defined
         };
+
+        // If no patterns from package.json, use config patterns
+        if workspace_patterns.is_empty() {
+            workspace_patterns = self.config.workspace_patterns.clone();
+        } else {
+            // Use a HashSet to merge patterns without duplicates
+            let mut unique_patterns = std::collections::HashSet::new();
+
+            // Add package.json patterns
+            for pattern in &workspace_patterns {
+                unique_patterns.insert(pattern.clone());
+            }
+
+            // Add config patterns
+            for pattern in &self.config.workspace_patterns {
+                unique_patterns.insert(pattern.clone());
+            }
+
+            // Convert back to Vec
+            workspace_patterns = unique_patterns.into_iter().collect();
+        }
+
+        // Early return if still no patterns
+        if workspace_patterns.is_empty() {
+            return Ok(packages);
+        }
 
         // Find all package.json files in workspace directories
         for pattern in workspace_patterns {
             let full_pattern = root.join(&pattern).to_string_lossy().to_string();
             if let Ok(paths) = glob::glob(&full_pattern) {
                 for dir_path in paths.flatten() {
+                    // Check if the path should be excluded based on config
+                    if self.should_exclude_path(&dir_path) {
+                        continue;
+                    }
+
                     if let Ok(metadata) = self.fs.metadata(&dir_path).await {
                         if metadata.is_dir() {
                             let package_json_path = dir_path.join("package.json");
@@ -650,6 +843,117 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorWithFs<F> for MonorepoDetector<
 }
 
 impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
+    /// Determines if a path should be excluded from package detection.
+    ///
+    /// This method uses the monorepo configuration exclude patterns to determine
+    /// if a path should be ignored during package discovery.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to check against exclude patterns
+    ///
+    /// # Returns
+    ///
+    /// `true` if the path should be excluded, `false` otherwise.
+    fn should_exclude_path(&self, path: &Path) -> bool {
+        let path_str = path.to_string_lossy();
+
+        // Check against configured exclude patterns
+        for exclude_pattern in &self.config.exclude_patterns {
+            // Simple pattern matching - in a real implementation this would use glob patterns
+            if path_str.contains(exclude_pattern) {
+                return true;
+            }
+
+            // Check if any component of the path matches the exclude pattern
+            for component in path.components() {
+                if let Some(component_str) = component.as_os_str().to_str() {
+                    if component_str == exclude_pattern {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Determines if a dependency name represents a workspace dependency.
+    ///
+    /// This method uses the monorepo configuration to determine if a dependency
+    /// is an internal workspace dependency based on configured patterns.
+    ///
+    /// # Arguments
+    ///
+    /// * `dep_name` - The dependency name to check
+    ///
+    /// # Returns
+    ///
+    /// `true` if the dependency is a workspace dependency, `false` otherwise.
+    fn is_workspace_dependency(&self, dep_name: &str) -> bool {
+        // Check against configured custom workspace fields/patterns
+        for field in &self.config.custom_workspace_fields {
+            if dep_name.starts_with(field) {
+                return true;
+            }
+        }
+
+        // Default heuristics for detecting workspace dependencies:
+        // 1. Scoped packages that start with common workspace prefixes
+        // 2. Packages that match workspace patterns
+        // 3. Local/file references
+
+        // Check for scoped packages with common workspace patterns
+        if dep_name.starts_with('@') {
+            // Common scoped package patterns that often indicate workspace dependencies
+            let scoped_patterns = [
+                "@workspace/",
+                "@internal/",
+                "@company/",
+                "@org/",
+                "@app/",
+                "@shared/",
+                "@common/",
+                "@core/",
+                "@utils/",
+                "@lib/",
+                "@libs/",
+                "@packages/",
+                "@components/",
+                "@services/",
+                "@tools/",
+                "@monorepo/",
+            ];
+
+            for pattern in &scoped_patterns {
+                if dep_name.starts_with(pattern) {
+                    return true;
+                }
+            }
+        }
+
+        // Check for local file references
+        if dep_name.starts_with("file:")
+            || dep_name.starts_with("./")
+            || dep_name.starts_with("../")
+        {
+            return true;
+        }
+
+        // Check against workspace directory patterns from config
+        for pattern in &self.config.workspace_patterns {
+            // Simple pattern matching - in a real implementation this would use glob patterns
+            if let Some(prefix) = pattern.strip_suffix("/*") {
+                let workspace_scope = format!("@{prefix}/");
+                if dep_name.starts_with(&workspace_scope) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
     /// Asynchronously loads a workspace package from a package.json file.
     ///
     /// # Arguments
@@ -683,22 +987,22 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
         let mut workspace_dependencies = Vec::new();
         let mut workspace_dev_dependencies = Vec::new();
 
-        // Check regular dependencies
+        // Check regular dependencies - use custom workspace fields or detect by name patterns
         if let Some(deps) = json_value.get("dependencies") {
             if let Some(deps_obj) = deps.as_object() {
                 for (dep_name, _) in deps_obj {
-                    if dep_name.starts_with("@myorg/") {
+                    if self.is_workspace_dependency(dep_name) {
                         workspace_dependencies.push(dep_name.clone());
                     }
                 }
             }
         }
 
-        // Check dev dependencies
+        // Check dev dependencies - use custom workspace fields or detect by name patterns
         if let Some(dev_deps) = json_value.get("devDependencies") {
             if let Some(dev_deps_obj) = dev_deps.as_object() {
                 for (dep_name, _) in dev_deps_obj {
-                    if dep_name.starts_with("@myorg/") {
+                    if self.is_workspace_dependency(dep_name) {
                         workspace_dev_dependencies.push(dep_name.clone());
                     }
                 }

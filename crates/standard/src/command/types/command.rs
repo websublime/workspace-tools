@@ -12,11 +12,7 @@
 //! Centralized command types ensure consistency across the command execution
 //! system and provide a clear API for command configuration and result handling.
 
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    time::Duration,
-};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 /// Result of executing a command.
 ///

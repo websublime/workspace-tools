@@ -14,8 +14,8 @@
 //! Breaking down the large queue implementation into focused modules
 //! improves code organization and makes it easier to maintain and test.
 
-pub mod result;
-pub mod queue;
 pub mod processor;
+pub mod queue;
+pub mod result;
 
 // No re-exports needed - implementations are for internal types

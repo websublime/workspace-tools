@@ -16,20 +16,31 @@ use std::sync::Arc;
 
 /// Default implementation of the `CommandExecutor` trait.
 ///
-/// Provides a standard implementation for executing commands directly without
-/// any custom behavior.
+/// Provides a standard implementation for executing commands using configuration
+/// settings for timeouts and other command execution parameters.
 ///
 /// # Examples
 ///
 /// ```
 /// use sublime_standard_tools::command::types::{DefaultCommandExecutor, CommandExecutor};
 /// use sublime_standard_tools::command::types::Command;
+/// use sublime_standard_tools::config::CommandConfig;
 ///
-/// let executor = DefaultCommandExecutor::default();
-/// // Use the executor to run commands
+/// let config = CommandConfig::default();
+/// let executor = DefaultCommandExecutor::new_with_config(config);
+/// // Use the executor to run commands with configuration
 /// ```
-#[derive(Debug, Default)]
-pub struct DefaultCommandExecutor;
+#[derive(Debug, Clone)]
+pub struct DefaultCommandExecutor {
+    /// Configuration for command execution behavior
+    pub(crate) config: crate::config::CommandConfig,
+}
+
+impl Default for DefaultCommandExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Synchronous command executor that wraps async execution
 ///
@@ -41,10 +52,12 @@ pub struct DefaultCommandExecutor;
 ///
 /// ```rust
 /// use sublime_standard_tools::command::{SyncCommandExecutor, CommandBuilder};
+/// use sublime_standard_tools::config::CommandConfig;
 /// use sublime_standard_tools::error::Result;
 ///
 /// # fn example() -> Result<()> {
-/// let executor = SyncCommandExecutor::new()?;
+/// let config = CommandConfig::default();
+/// let executor = SyncCommandExecutor::new_with_config(config)?;
 /// let command = CommandBuilder::new("echo").arg("hello").build();
 /// let output = executor.execute_sync(command)?;
 /// println!("Output: {}", output.stdout());
@@ -55,7 +68,7 @@ pub struct DefaultCommandExecutor;
 pub struct SyncCommandExecutor {
     /// Dedicated runtime for async operations
     pub(crate) runtime: tokio::runtime::Runtime,
-    /// Underlying async executor
+    /// Underlying async executor with configuration
     pub(crate) executor: DefaultCommandExecutor,
 }
 

@@ -15,13 +15,13 @@
 //! Modular organization improves maintainability, reduces cognitive load,
 //! and enables better testing and documentation of individual components.
 
-pub mod traits;
 pub mod config;
 pub mod path_types;
 pub mod path_utils;
+pub mod traits;
 
 // Re-export all public types for backward compatibility
-pub use traits::*;
 pub use config::*;
 pub use path_types::*;
 pub use path_utils::*;
+pub use traits::*;

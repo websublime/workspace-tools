@@ -15,8 +15,9 @@
 //! monorepos where multiple projects need to be detected concurrently. This unified
 //! async-only approach eliminates confusion and provides consistent API.
 
-use super::types::{ProjectConfig, ProjectDescriptor, ProjectKind, ProjectValidationStatus};
+use super::types::{ProjectDescriptor, ProjectKind, ProjectValidationStatus};
 use super::Project;
+use crate::config::{ConfigManager, StandardConfig, Configurable};
 use crate::error::{Error, Result};
 use crate::filesystem::{AsyncFileSystem, FileSystemManager};
 use crate::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
@@ -116,7 +117,7 @@ pub trait ProjectDetectorTrait: Send + Sync {
     /// - No valid project is found at the path
     /// - Filesystem operations fail
     /// - Project structure is invalid
-    async fn detect(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectDescriptor>;
+    async fn detect(&self, path: &Path, config: Option<&StandardConfig>) -> Result<ProjectDescriptor>;
 
     /// Asynchronously detects only the project kind without full analysis.
     ///
@@ -126,7 +127,6 @@ pub trait ProjectDetectorTrait: Send + Sync {
     /// # Arguments
     ///
     /// * `path` - The path to analyze for project kind detection
-    /// * `config` - Configuration options for project detection
     ///
     /// # Returns
     ///
@@ -136,13 +136,12 @@ pub trait ProjectDetectorTrait: Send + Sync {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorTrait, ProjectConfig};
+    /// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorTrait};
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let detector = ProjectDetector::new();
-    /// let config = ProjectConfig::new();
-    /// let kind = detector.detect_kind(Path::new("."), &config).await?;
+    /// let kind = detector.detect_kind(Path::new(".")).await?;
     /// println!("Project kind: {:?}", kind);
     /// # Ok(())
     /// # }
@@ -154,7 +153,7 @@ pub trait ProjectDetectorTrait: Send + Sync {
     /// - The path does not exist
     /// - No valid project is found at the path
     /// - Filesystem operations fail
-    async fn detect_kind(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectKind>;
+    async fn detect_kind(&self, path: &Path) -> Result<ProjectKind>;
 
     /// Asynchronously checks if the path contains a valid Node.js project.
     ///
@@ -265,7 +264,7 @@ pub trait ProjectDetectorWithFs<F: AsyncFileSystem>: ProjectDetectorTrait {
     async fn detect_multiple(
         &self,
         paths: &[&Path],
-        config: &ProjectConfig,
+        config: Option<&StandardConfig>,
     ) -> Vec<Result<ProjectDescriptor>>;
 }
 
@@ -303,8 +302,6 @@ pub trait ProjectDetectorWithFs<F: AsyncFileSystem>: ProjectDetectorTrait {
 pub struct ProjectDetector<F: AsyncFileSystem = FileSystemManager> {
     /// Async filesystem implementation for file operations
     fs: F,
-    /// Monorepo detector for identifying monorepo structures
-    monorepo_detector: MonorepoDetector<F>,
 }
 
 impl ProjectDetector<FileSystemManager> {
@@ -324,11 +321,11 @@ impl ProjectDetector<FileSystemManager> {
     #[must_use]
     pub fn new() -> Self {
         let fs = FileSystemManager::new();
-        Self { monorepo_detector: MonorepoDetector::with_filesystem(fs.clone()), fs }
+        Self { fs }
     }
 }
 
-impl<F: AsyncFileSystem + Clone> ProjectDetector<F> {
+impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
     /// Creates a new `ProjectDetector` with a custom async filesystem implementation.
     ///
     /// # Arguments
@@ -350,30 +347,106 @@ impl<F: AsyncFileSystem + Clone> ProjectDetector<F> {
     /// ```
     #[must_use]
     pub fn with_filesystem(fs: F) -> Self {
-        Self { monorepo_detector: MonorepoDetector::with_filesystem(fs.clone()), fs }
+        Self { fs }
     }
 
-    /// Loads metadata specifically for simple projects.
+    /// Loads or creates project configuration by checking for repo.config.* files.
     ///
-    /// This method centralizes metadata loading for simple projects,
-    /// eliminating code duplication from the original detect_simple_project method.
+    /// This method automatically detects and loads configuration from project-specific
+    /// files (repo.config.toml, repo.config.yml, repo.config.json) and merges them
+    /// with default configuration values.
+    ///
+    /// # Arguments
+    ///
+    /// * `project_root` - The project root directory to search for config files
+    /// * `base_config` - Optional base configuration to use, defaults to StandardConfig::default()
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(StandardConfig)` - The merged configuration
+    /// * `Err(Error)` - If configuration loading or merging fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use sublime_standard_tools::project::ProjectDetector;
+    /// # use std::path::Path;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let detector = ProjectDetector::new();
+    /// let config = detector.load_project_config(Path::new("."), None).await?;
+    /// println!("Loaded configuration version: {}", config.version);
+    /// # Ok(())
+    /// # }
+    /// ```
+    async fn load_project_config(
+        &self,
+        project_root: &Path,
+        base_config: Option<StandardConfig>,
+    ) -> Result<StandardConfig> 
+    where 
+        F: 'static,
+    {
+        let mut builder = ConfigManager::<StandardConfig>::builder().with_defaults();
+
+        // Check for repo.config.* files in order of preference
+        let config_files = [
+            project_root.join("repo.config.toml"),
+            project_root.join("repo.config.yml"), 
+            project_root.join("repo.config.yaml"),
+            project_root.join("repo.config.json"),
+        ];
+
+        // Add existing config files to the builder
+        for config_file in &config_files {
+            if self.fs.exists(config_file).await {
+                builder = builder.with_file(config_file);
+            }
+        }
+
+        let manager = builder.build(self.fs.clone()).map_err(|e| {
+            Error::operation(format!("Failed to create config manager: {e}"))
+        })?;
+
+        let mut config = manager.load().await.map_err(|e| {
+            Error::operation(format!("Failed to load configuration: {e}"))
+        })?;
+
+        // Merge with base config if provided
+        if let Some(base) = base_config {
+            config.merge_with(base).map_err(|e| {
+                Error::operation(format!("Failed to merge configurations: {e}"))
+            })?;
+        }
+
+        Ok(config)
+    }
+
+    /// Loads project metadata using configuration settings.
+    ///
+    /// This method loads project metadata taking into account configuration
+    /// settings for package manager detection, validation, and other options.
     ///
     /// # Arguments
     ///
     /// * `path` - The path to analyze
-    /// * `config` - Configuration options for detection
+    /// * `config` - Configuration settings to control behavior
     ///
     /// # Errors
     ///
     /// Returns an [`Error`] if:
     /// - The package.json file cannot be read or parsed
     /// - An I/O error occurs while reading files
+    /// - Configuration validation fails
     ///
     /// # Returns
     ///
     /// * `Ok(ProjectMetadata)` - Loaded project metadata
     /// * `Err(Error)` - If metadata loading failed
-    async fn load_simple_project_metadata(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectMetadata> {
+    async fn load_project_metadata(
+        &self,
+        path: &Path,
+        config: &StandardConfig,
+    ) -> Result<ProjectMetadata> {
         let mut metadata = ProjectMetadata::new(path.to_path_buf());
 
         // Load package.json if it exists
@@ -386,18 +459,85 @@ impl<F: AsyncFileSystem + Clone> ProjectDetector<F> {
             );
         }
 
-        // Detect package manager if enabled
-        if config.detect_package_manager {
-            if let Ok(pm) = PackageManager::detect(path) {
-                metadata.package_manager = Some(pm);
-            }
-            // Package manager detection failure is not fatal for simple projects
+        // Detect package manager using configuration
+        log::debug!(
+            "Package manager detection with config: detection_order={:?}, detect_from_env={}",
+            config.package_managers.detection_order,
+            config.package_managers.detect_from_env
+        );
+        
+        if let Ok(pm) = PackageManager::detect_with_config(path, &config.package_managers) {
+            metadata.package_manager = Some(pm);
+        }
+        // Package manager detection failure is not fatal for simple projects
+
+        // Set validation status based on configuration requirements
+        if config.validation.require_package_json && metadata.package_json.is_none() {
+            metadata.validation_status = ProjectValidationStatus::Error(vec![
+                "package.json is required by configuration".to_string(),
+            ]);
+        } else {
+            // Simple projects start as not validated - will be validated later if needed
+            metadata.validation_status = ProjectValidationStatus::NotValidated;
         }
 
-        // Set validation status - simple projects start as not validated
-        metadata.validation_status = ProjectValidationStatus::NotValidated;
-
         Ok(metadata)
+    }
+
+    /// Determines if monorepo detection should be performed based on configuration.
+    ///
+    /// This method checks the StandardConfig to determine if monorepo detection
+    /// is enabled and should be performed for the current project.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The effective configuration to check
+    ///
+    /// # Returns
+    ///
+    /// `true` if monorepo detection should be performed, `false` otherwise.
+    fn should_detect_monorepo(config: &StandardConfig) -> bool {
+        // Check if monorepo detection is enabled via configuration
+        // For now, we always enable it unless explicitly disabled in future config versions
+        // This can be extended to check specific config flags when added
+        !config.monorepo.workspace_patterns.is_empty() && config.monorepo.max_search_depth > 0
+    }
+
+    /// Detects monorepo structure using configuration settings.
+    ///
+    /// This method performs monorepo detection while respecting the configuration
+    /// settings for workspace patterns, search depth, and other monorepo-specific options.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to analyze for monorepo structure
+    /// * `config` - Configuration settings to control detection behavior
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(MonorepoDescriptor)` - If a monorepo is detected
+    /// * `Err(Error)` - If no monorepo is found or detection fails
+    async fn detect_monorepo_with_config(
+        &self,
+        path: &Path,
+        config: &StandardConfig,
+    ) -> Result<crate::monorepo::MonorepoDescriptor> {
+        // Log configuration being used for transparency
+        log::debug!(
+            "Detecting monorepo with config: max_depth={}, patterns={:?}, exclude={:?}",
+            config.monorepo.max_search_depth,
+            config.monorepo.workspace_patterns,
+            config.monorepo.exclude_patterns
+        );
+
+        // Create a config-aware monorepo detector for this specific operation
+        let config_aware_detector = MonorepoDetector::with_filesystem_and_config(
+            self.fs.clone(),
+            config.monorepo.clone(),
+        );
+
+        // Use the config-aware detector
+        config_aware_detector.detect_monorepo(path).await
     }
 
     /// Detects and analyzes a Node.js project using unified detection logic.
@@ -409,7 +549,7 @@ impl<F: AsyncFileSystem + Clone> ProjectDetector<F> {
     /// # Arguments
     ///
     /// * `path` - The path to analyze for a Node.js project
-    /// * `config` - Configuration options for project detection
+    /// * `config` - Optional configuration (if None, auto-loads from repo.config.* files)
     ///
     /// # Errors
     ///
@@ -423,52 +563,58 @@ impl<F: AsyncFileSystem + Clone> ProjectDetector<F> {
     ///
     /// * `Ok(ProjectDescriptor)` - A descriptor containing all project information
     /// * `Err(Error)` - If the path is not a valid project or an error occurred
-    pub async fn detect(&self, path: impl AsRef<Path>, config: &ProjectConfig) -> Result<ProjectDescriptor> {
+    pub async fn detect(
+        &self,
+        path: impl AsRef<Path>,
+        config: Option<&StandardConfig>,
+    ) -> Result<ProjectDescriptor> {
         let path = path.as_ref();
-        
+
         // First validate basic path requirements
         self.validate_project_path(path).await?;
-        
-        // Create a unified project structure
-        let metadata = self.load_simple_project_metadata(path, config).await?;
-        
-        // Determine project kind based on monorepo detection
-        let project_kind = if config.detect_monorepo {
-            if let Ok(monorepo) = self.monorepo_detector.detect_monorepo(path).await {
+
+        // Load or use provided configuration 
+        let effective_config = match config {
+            Some(cfg) => cfg.clone(),
+            None => self.load_project_config(path, None).await?,
+        };
+
+        // Create a unified project structure using configuration
+        let metadata = self.load_project_metadata(path, &effective_config).await?;
+
+        // Determine project kind based on configuration-controlled monorepo detection
+        let project_kind = if Self::should_detect_monorepo(&effective_config) {
+            if let Ok(monorepo) = self.detect_monorepo_with_config(path, &effective_config).await {
                 // It's a monorepo, use the detected monorepo kind
-                ProjectKind::Repository(RepoKind::Monorepo(monorepo.kind))
+                ProjectKind::Repository(RepoKind::Monorepo(monorepo.kind().clone()))
             } else {
                 // Not a monorepo, it's a simple project
                 ProjectKind::Repository(RepoKind::Simple)
             }
         } else {
-            // Monorepo detection disabled, treat as simple project
+            // Monorepo detection disabled by configuration
             ProjectKind::Repository(RepoKind::Simple)
         };
-        
+
         // Create unified Project with detected metadata
-        let mut project = Project::with_config(
-            metadata.root,
-            project_kind,
-            config.clone(),
-        );
-        
+        let mut project = Project::new(metadata.root, project_kind);
+
         // Set detected metadata
         project.package_manager = metadata.package_manager;
         project.package_json = metadata.package_json;
         project.validation_status = metadata.validation_status;
-        
-        // If it's a monorepo, populate internal dependencies
+
+        // If it's a monorepo, populate internal dependencies using config-aware detection
         if project.is_monorepo() {
-            if let Ok(monorepo) = self.monorepo_detector.detect_monorepo(path).await {
-                project.internal_dependencies = monorepo.packages;
+            if let Ok(monorepo) = self.detect_monorepo_with_config(path, &effective_config).await {
+                project.internal_dependencies = monorepo.packages().to_vec();
             }
         }
-        
+
         Ok(ProjectDescriptor::NodeJs(project))
     }
 
-    /// Detects the type of Node.js project without full analysis.
+    /// Detects the type of Node.js project without full analysis using default configuration.
     ///
     /// This method provides a quick way to determine project type without
     /// loading all project data, useful for lightweight operations.
@@ -476,7 +622,6 @@ impl<F: AsyncFileSystem + Clone> ProjectDetector<F> {
     /// # Arguments
     ///
     /// * `path` - The path to analyze
-    /// * `config` - Configuration options for detection
     ///
     /// # Errors
     ///
@@ -489,19 +634,57 @@ impl<F: AsyncFileSystem + Clone> ProjectDetector<F> {
     ///
     /// * `Ok(ProjectKind)` - The type of project detected
     /// * `Err(Error)` - If detection failed
-    pub async fn detect_kind(&self, path: impl AsRef<Path>, config: &ProjectConfig) -> Result<ProjectKind> {
+    pub async fn detect_kind(
+        &self,
+        path: impl AsRef<Path>,
+    ) -> Result<ProjectKind> {
+        let default_config = StandardConfig::default();
+        self.detect_kind_with_config(path, &default_config).await
+    }
+
+    /// Detects the type of Node.js project without full analysis using custom configuration.
+    ///
+    /// This method provides a quick way to determine project type without
+    /// loading all project data, using the provided configuration for monorepo detection.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to analyze
+    /// * `config` - Configuration to control detection behavior
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if:
+    /// - The path does not exist or cannot be accessed
+    /// - The path does not contain a package.json file
+    /// - An I/O error occurs while reading files
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(ProjectKind)` - The type of project detected
+    /// * `Err(Error)` - If detection failed
+    pub async fn detect_kind_with_config(
+        &self,
+        path: impl AsRef<Path>,
+        config: &StandardConfig,
+    ) -> Result<ProjectKind> {
         let path = path.as_ref();
-        
+
         // Validate path and package.json existence
         self.validate_project_path(path).await?;
-        
-        // Check for monorepo if enabled (same logic as detect())
-        if config.detect_monorepo {
-            if let Some(monorepo_kind) = self.monorepo_detector.is_monorepo_root(path).await? {
+
+        // Check for monorepo using configuration
+        if Self::should_detect_monorepo(config) {
+            let config_aware_detector = MonorepoDetector::with_filesystem_and_config(
+                self.fs.clone(),
+                config.monorepo.clone(),
+            );
+
+            if let Some(monorepo_kind) = config_aware_detector.is_monorepo_root(path).await? {
                 return Ok(ProjectKind::Repository(RepoKind::Monorepo(monorepo_kind)));
             }
         }
-        
+
         Ok(ProjectKind::Repository(RepoKind::Simple))
     }
 
@@ -535,10 +718,10 @@ impl<F: AsyncFileSystem + Clone> ProjectDetector<F> {
                 package_json_path.display()
             )));
         }
-        
+
         Ok(())
     }
-    
+
     /// Determines if a path contains a valid Node.js project.
     ///
     /// This method performs a comprehensive validation to check if the path
@@ -568,7 +751,7 @@ impl<F: AsyncFileSystem + Clone> ProjectDetector<F> {
     #[must_use]
     pub async fn is_valid_project(&self, path: impl AsRef<Path>) -> bool {
         let path = path.as_ref();
-        
+
         // Use unified validation logic
         if self.validate_project_path(path).await.is_err() {
             return false;
@@ -585,13 +768,13 @@ impl<F: AsyncFileSystem + Clone> ProjectDetector<F> {
 }
 
 #[async_trait]
-impl<F: AsyncFileSystem + Clone> ProjectDetectorTrait for ProjectDetector<F> {
-    async fn detect(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectDescriptor> {
+impl<F: AsyncFileSystem + Clone + 'static> ProjectDetectorTrait for ProjectDetector<F> {
+    async fn detect(&self, path: &Path, config: Option<&StandardConfig>) -> Result<ProjectDescriptor> {
         self.detect(path, config).await
     }
 
-    async fn detect_kind(&self, path: &Path, config: &ProjectConfig) -> Result<ProjectKind> {
-        self.detect_kind(path, config).await
+    async fn detect_kind(&self, path: &Path) -> Result<ProjectKind> {
+        self.detect_kind(path).await
     }
 
     async fn is_valid_project(&self, path: &Path) -> bool {
@@ -600,7 +783,7 @@ impl<F: AsyncFileSystem + Clone> ProjectDetectorTrait for ProjectDetector<F> {
 }
 
 #[async_trait]
-impl<F: AsyncFileSystem + Clone> ProjectDetectorWithFs<F> for ProjectDetector<F> {
+impl<F: AsyncFileSystem + Clone + 'static> ProjectDetectorWithFs<F> for ProjectDetector<F> {
     fn filesystem(&self) -> &F {
         &self.fs
     }
@@ -608,18 +791,18 @@ impl<F: AsyncFileSystem + Clone> ProjectDetectorWithFs<F> for ProjectDetector<F>
     async fn detect_multiple(
         &self,
         paths: &[&Path],
-        config: &ProjectConfig,
+        config: Option<&StandardConfig>,
     ) -> Vec<Result<ProjectDescriptor>> {
         let mut results = Vec::with_capacity(paths.len());
-        
+
         // Process all paths concurrently
         let futures = paths.iter().map(|path| self.detect(path, config));
-        
+
         // Collect all results
         for future in futures {
             results.push(future.await);
         }
-        
+
         results
     }
 }
@@ -630,6 +813,6 @@ where
 {
     fn default() -> Self {
         let fs = F::default();
-        Self { monorepo_detector: MonorepoDetector::with_filesystem(fs.clone()), fs }
+        Self { fs }
     }
 }

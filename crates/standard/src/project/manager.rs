@@ -16,8 +16,9 @@
 //! leveraging the specialized functionality of different project types.
 
 use super::detector::ProjectDetector;
-use super::types::{ProjectConfig, ProjectDescriptor};
+use super::types::ProjectDescriptor;
 use super::validator::ProjectValidator;
+use crate::config::StandardConfig;
 use crate::error::{Error, Result};
 use crate::filesystem::{AsyncFileSystem, FileSystemManager};
 use std::path::{Path, PathBuf};
@@ -36,14 +37,14 @@ use std::path::{Path, PathBuf};
 /// # Examples
 ///
 /// ```
-/// use sublime_standard_tools::project::{ProjectManager, ProjectConfig};
+/// use sublime_standard_tools::project::ProjectManager;
 /// use std::path::Path;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let manager = ProjectManager::new();
-/// let config = ProjectConfig::new();
+/// // Configuration is auto-detected from repo.config.* files;
 ///
-/// match manager.create_project(Path::new("."), &config).await {
+/// match manager.create_project(Path::new("."), None).await {
 ///     Ok(project) => {
 ///         println!("Created {} project", project.as_project_info().kind().name());
 ///     }
@@ -82,7 +83,7 @@ impl ProjectManager<FileSystemManager> {
     }
 }
 
-impl<F: AsyncFileSystem + Clone> ProjectManager<F> {
+impl<F: AsyncFileSystem + Clone + 'static> ProjectManager<F> {
     /// Creates a new `ProjectManager` with a custom filesystem implementation.
     ///
     /// # Arguments
@@ -136,15 +137,15 @@ impl<F: AsyncFileSystem + Clone> ProjectManager<F> {
     /// # Examples
     ///
     /// ```
-    /// use sublime_standard_tools::project::{ProjectManager, ProjectConfig};
+    /// use sublime_standard_tools::project::ProjectManager;
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let manager = ProjectManager::new();
-    /// let config = ProjectConfig::new()
+    /// // Configuration is auto-detected from repo.config.* files
     ///     .with_validate_structure(true);
     ///
-    /// let project = manager.create_project(Path::new("."), &config).await?;
+    /// let project = manager.create_project(Path::new("."), None).await?;
     /// println!("Created project: {}", project.as_project_info().kind().name());
     /// # Ok(())
     /// # }
@@ -152,17 +153,15 @@ impl<F: AsyncFileSystem + Clone> ProjectManager<F> {
     pub async fn create_project(
         &self,
         path: impl AsRef<Path>,
-        config: &ProjectConfig,
+        config: Option<&StandardConfig>,
     ) -> Result<ProjectDescriptor> {
         let path = path.as_ref();
 
         // Detect the project type and create descriptor
         let mut project = self.detector.detect(path, config).await?;
 
-        // Validate if requested
-        if config.validate_structure {
-            self.validator.validate_project(&mut project).await?;
-        }
+        // Always validate (StandardConfig controls validation behavior)
+        self.validator.validate_project(&mut project).await?;
 
         Ok(project)
     }
@@ -192,14 +191,14 @@ impl<F: AsyncFileSystem + Clone> ProjectManager<F> {
     /// # Examples
     ///
     /// ```
-    /// use sublime_standard_tools::project::{ProjectManager, ProjectConfig};
+    /// use sublime_standard_tools::project::ProjectManager;
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let manager = ProjectManager::new();
-    /// let config = ProjectConfig::new();
+    /// // Configuration is auto-detected from repo.config.* files;
     ///
-    /// let mut project = manager.create_project(Path::new("."), &config).await?;
+    /// let mut project = manager.create_project(Path::new("."), None).await?;
     /// manager.validate_project(&mut project).await?;
     ///
     /// let info = project.as_project_info();
@@ -312,14 +311,14 @@ impl<F: AsyncFileSystem + Clone> ProjectManager<F> {
     /// # Examples
     ///
     /// ```
-    /// use sublime_standard_tools::project::{ProjectManager, ProjectConfig};
+    /// use sublime_standard_tools::project::ProjectManager;
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let manager = ProjectManager::new();
-    /// let config = ProjectConfig::new();
+    /// // Configuration is auto-detected from repo.config.* files;
     ///
-    /// let project = manager.create_project_from_root(Path::new("/my/project"), &config).await?;
+    /// let project = manager.create_project_from_root(Path::new("/my/project"), None).await?;
     /// println!("Created project from root: {}", project.as_project_info().root().display());
     /// # Ok(())
     /// # }
@@ -327,7 +326,7 @@ impl<F: AsyncFileSystem + Clone> ProjectManager<F> {
     pub async fn create_project_from_root(
         &self,
         root: impl AsRef<Path>,
-        config: &ProjectConfig,
+        config: Option<&StandardConfig>,
     ) -> Result<ProjectDescriptor> {
         let root = root.as_ref();
 
@@ -354,15 +353,15 @@ impl<F: AsyncFileSystem + Clone> ProjectManager<F> {
     /// # Examples
     ///
     /// ```
-    /// use sublime_standard_tools::project::{ProjectManager, ProjectConfig};
+    /// use sublime_standard_tools::project::ProjectManager;
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let manager = ProjectManager::new();
-    /// let config = ProjectConfig::new();
+    /// // Configuration is auto-detected from repo.config.* files;
     ///
     /// let detector = manager.detector();
-    /// if let Ok(kind) = detector.detect_kind(Path::new("."), &config).await {
+    /// if let Ok(kind) = detector.detect_kind(Path::new("."), None).await {
     ///     println!("Project kind: {}", kind.name());
     /// }
     /// # Ok(())
