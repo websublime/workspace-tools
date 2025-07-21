@@ -185,8 +185,15 @@ impl QueueProcessor {
         let id = cmd.id.clone();
 
         // Update status to running - do this before we try to acquire the semaphore
-        if let Ok(mut statuses) = self.statuses.lock() {
-            statuses.insert(id.clone(), CommandStatus::Running);
+        match self.statuses.lock() {
+            Ok(mut statuses) => {
+                statuses.insert(id.clone(), CommandStatus::Running);
+            }
+            Err(e) => {
+                log::error!("Failed to acquire status lock for command {}: {:?}", id, e);
+                // Cannot proceed without status tracking
+                return;
+            }
         }
 
         let executor = Arc::clone(&self.executor);
@@ -197,24 +204,37 @@ impl QueueProcessor {
         // Launch the command execution in a separate task
         tokio::spawn(async move {
             // Acquire a permit from the semaphore
-            let permit = if let Ok(permit) = semaphore.acquire().await {
-                permit
-            } else {
-                // Semaphore was closed
-                if let Ok(mut statuses) = statuses.lock() {
-                    statuses.insert(id.clone(), CommandStatus::Failed);
-                }
+            let permit = match semaphore.acquire().await {
+                Ok(permit) => permit,
+                Err(e) => {
+                    log::error!("Failed to acquire semaphore permit for command {}: {:?}", id, e);
+                    
+                    // Update status with proper error handling
+                    match statuses.lock() {
+                        Ok(mut statuses) => {
+                            statuses.insert(id.clone(), CommandStatus::Failed);
+                        }
+                        Err(lock_err) => {
+                            log::error!("Failed to acquire status lock while handling semaphore error for command {}: {:?}", id, lock_err);
+                        }
+                    }
 
-                if let Ok(mut results_map) = results.lock() {
-                    results_map.insert(
-                        id.clone(),
-                        CommandQueueResult::failure(
-                            id,
-                            "Failed to acquire execution permit".to_string(),
-                        ),
-                    );
+                    match results.lock() {
+                        Ok(mut results_map) => {
+                            results_map.insert(
+                                id.clone(),
+                                CommandQueueResult::failure(
+                                    id,
+                                    format!("Failed to acquire execution permit: {e:?}"),
+                                ),
+                            );
+                        }
+                        Err(lock_err) => {
+                            log::error!("Failed to acquire results lock while handling semaphore error for command {}: {:?}", id, lock_err);
+                        }
+                    }
+                    return;
                 }
-                return;
             };
 
             // Execute the command and hold the permit until completion
@@ -234,13 +254,23 @@ impl QueueProcessor {
                 }
             };
 
-            // Update status and result
-            if let Ok(mut statuses) = statuses.lock() {
-                statuses.insert(id.clone(), status);
+            // Update status and result with proper error handling
+            match statuses.lock() {
+                Ok(mut statuses) => {
+                    statuses.insert(id.clone(), status);
+                }
+                Err(e) => {
+                    log::error!("Failed to acquire status lock for final status update of command {}: {:?}", id, e);
+                }
             }
 
-            if let Ok(mut results_map) = results.lock() {
-                results_map.insert(id, queue_result);
+            match results.lock() {
+                Ok(mut results_map) => {
+                    results_map.insert(id.clone(), queue_result);
+                }
+                Err(e) => {
+                    log::error!("Failed to acquire results lock for final result storage of command {}: {:?}", id, e);
+                }
             }
 
             // Explicitly drop the permit to release the semaphore

@@ -35,7 +35,6 @@
 
 #![warn(missing_docs)]
 
-pub mod error;
 pub mod format;
 pub mod manager;
 pub mod source;
@@ -44,7 +43,7 @@ pub mod traits;
 pub mod value;
 
 // Re-export main types for convenience
-pub use error::{ConfigError, ConfigResult};
+pub use crate::error::{ConfigError, ConfigResult};
 pub use format::ConfigFormat;
 pub use manager::{ConfigBuilder, ConfigManager};
 pub use source::{ConfigSource, ConfigSourcePriority};

@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::filesystem::AsyncFileSystem;
+use crate::error::{ConfigError, ConfigResult};
 
-use super::error::{ConfigError, ConfigResult};
 use super::format::ConfigFormat;
 use super::traits::ConfigProvider;
 use super::value::ConfigValue;
@@ -217,7 +217,7 @@ impl<FS: AsyncFileSystem> ConfigProvider for FileProvider<FS> {
         let content =
             self.fs.read_file_string(&self.path).await.map_err(|e| ConfigError::FileReadError {
                 path: self.path.clone(),
-                source: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+                message: e.to_string(),
             })?;
 
         self.format.parse(&content)
@@ -228,7 +228,7 @@ impl<FS: AsyncFileSystem> ConfigProvider for FileProvider<FS> {
         self.fs.write_file(&self.path, content.as_bytes()).await.map_err(|e| {
             ConfigError::FileWriteError {
                 path: self.path.clone(),
-                source: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+                message: e.to_string(),
             }
         })
     }

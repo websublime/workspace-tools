@@ -613,14 +613,23 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
         if self.fs.exists(&pnpm_lock_path).await {
             let package_json_path = path.join("package.json");
             if self.fs.exists(&package_json_path).await {
-                if let Ok(content) = self.fs.read_file_string(&package_json_path).await {
-                    // Try raw JSON parsing to check for workspaces field
-                    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&content) {
-                        if let Some(workspaces) = json_value.get("workspaces") {
-                            if !workspaces.is_null() {
-                                return Ok(Some(MonorepoKind::PnpmWorkspaces));
+                match self.fs.read_file_string(&package_json_path).await {
+                    Ok(content) => {
+                        match serde_json::from_str::<serde_json::Value>(&content) {
+                            Ok(json_value) => {
+                                if let Some(workspaces) = json_value.get("workspaces") {
+                                    if !workspaces.is_null() {
+                                        return Ok(Some(MonorepoKind::PnpmWorkspaces));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!("Failed to parse package.json for pnpm workspace detection at {}: {}", package_json_path.display(), e);
                             }
                         }
+                    }
+                    Err(e) => {
+                        log::debug!("Could not read package.json for pnpm workspace detection at {}: {}", package_json_path.display(), e);
                     }
                 }
             }
@@ -649,14 +658,23 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
         let package_json_path = path.join("package.json");
         let npm_lock_path = path.join("package-lock.json");
         if self.fs.exists(&package_json_path).await && self.fs.exists(&npm_lock_path).await {
-            if let Ok(content) = self.fs.read_file_string(&package_json_path).await {
-                // Try raw JSON parsing to check for workspaces field
-                if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(workspaces) = json_value.get("workspaces") {
-                        if !workspaces.is_null() {
-                            return Ok(Some(MonorepoKind::NpmWorkSpace));
+            match self.fs.read_file_string(&package_json_path).await {
+                Ok(content) => {
+                    match serde_json::from_str::<serde_json::Value>(&content) {
+                        Ok(json_value) => {
+                            if let Some(workspaces) = json_value.get("workspaces") {
+                                if !workspaces.is_null() {
+                                    return Ok(Some(MonorepoKind::NpmWorkSpace));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to parse package.json for npm workspace detection at {}: {}", package_json_path.display(), e);
                         }
                     }
+                }
+                Err(e) => {
+                    log::debug!("Could not read package.json for npm workspace detection at {}: {}", package_json_path.display(), e);
                 }
             }
         }
@@ -976,7 +994,13 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
             .ok_or_else(|| Error::operation("Invalid package.json path"))?
             .to_path_buf();
 
-        let absolute_path = location.canonicalize().unwrap_or_else(|_| location.clone());
+        let absolute_path = match location.canonicalize() {
+            Ok(canonical) => canonical,
+            Err(e) => {
+                log::debug!("Failed to canonicalize path {}: {}. Using original path.", location.display(), e);
+                location.clone()
+            }
+        };
 
         let name = json_value.get("name").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
 

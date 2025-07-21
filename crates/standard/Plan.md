@@ -405,6 +405,7 @@ This document outlines the complete refactoring plan for the `standard` crate, a
   - [ ] Find all `if let Ok(_)` patterns that ignore errors
   - [ ] Find all `match` with `Err(_) => None` patterns
   - [ ] Document each location requiring fix
+  - [ ] All errors need to implement `impl AsRef<str>` for Napi Compatibility
 
 - [ ] **Implement proper error context**
   ```rust
@@ -416,6 +417,7 @@ This document outlines the complete refactoring plan for the `standard` crate, a
 
 - [ ] **Add structured logging**
   - [ ] Replace silent failures with `log::warn!` or `log::debug!`
+  - [ ] Use structured logging with context
   - [ ] Add operation context to all errors
   - [ ] Include file paths in filesystem errors
 

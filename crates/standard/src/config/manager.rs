@@ -14,8 +14,8 @@ use serde::Serialize;
 use tokio::sync::RwLock;
 
 use crate::filesystem::AsyncFileSystem;
+use crate::error::{ConfigError, ConfigResult};
 
-use super::error::{ConfigError, ConfigResult};
 use super::format::ConfigFormat;
 use super::source::{
     ConfigSource, ConfigSourcePriority, DefaultProvider, EnvironmentProvider, FileProvider,
@@ -396,10 +396,21 @@ impl<T: Configurable + Clone> ConfigBuilder<T> {
         T: Default,
     {
         if let Some(defaults) = T::default_values() {
-            let value = serde_json::to_value(defaults)
-                .ok()
-                .and_then(|v| serde_json::from_value(v).ok())
-                .unwrap_or(ConfigValue::Map(HashMap::default()));
+            let value = match serde_json::to_value(defaults) {
+                Ok(serialized) => {
+                    match serde_json::from_value(serialized) {
+                        Ok(config_value) => config_value,
+                        Err(e) => {
+                            log::warn!("Failed to deserialize default configuration values: {}. Using empty defaults.", e);
+                            ConfigValue::Map(HashMap::default())
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to serialize default configuration values: {}. Using empty defaults.", e);
+                    ConfigValue::Map(HashMap::default())
+                }
+            };
 
             self.sources.push(ConfigSource::defaults(value));
         }

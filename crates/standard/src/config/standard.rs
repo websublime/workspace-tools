@@ -40,8 +40,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::node::PackageManagerKind;
+use crate::error::ConfigResult;
 
-use super::error::ConfigResult;
 use super::traits::Configurable;
 
 /// The standard configuration for sublime-standard-tools.

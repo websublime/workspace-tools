@@ -437,7 +437,13 @@ impl AsyncFileSystem for FileSystemManager {
 
     async fn exists(&self, path: &Path) -> bool {
         // tokio::fs doesn't have an exists method, so we use try_exists or metadata
-        fs::try_exists(path).await.unwrap_or(false)
+        match fs::try_exists(path).await {
+            Ok(exists) => exists,
+            Err(e) => {
+                log::warn!("Failed to check existence of path {}: {}. Treating as non-existent.", path.display(), e);
+                false
+            }
+        }
     }
 
     async fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>> {

@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use super::error::{ConfigError, ConfigResult};
+use crate::error::{ConfigError, ConfigResult};
 
 /// Represents a configuration value.
 ///

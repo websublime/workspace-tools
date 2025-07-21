@@ -14,6 +14,8 @@
 //! possible error conditions and ensures consistency in error handling.
 
 use core::result::Result as CoreResult;
+use std::collections::HashMap;
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::time::Duration;
 use thiserror::Error as ThisError;
@@ -360,6 +362,207 @@ pub enum CommandError {
 /// ```
 pub type CommandResult<T> = CoreResult<T, CommandError>;
 
+/// Errors that can occur during configuration operations.
+#[derive(ThisError, Debug, Clone)]
+pub enum ConfigError {
+    /// File not found error.
+    #[error("Configuration file not found: {path}")]
+    FileNotFound {
+        /// The path that was not found.
+        path: PathBuf,
+    },
+
+    /// File read error.
+    #[error("Failed to read configuration file '{path}': {message}")]
+    FileReadError {
+        /// The path that could not be read.
+        path: PathBuf,
+        /// The error message.
+        message: String,
+    },
+
+    /// File write error.
+    #[error("Failed to write configuration file '{path}': {message}")]
+    FileWriteError {
+        /// The path that could not be written.
+        path: PathBuf,
+        /// The error message.
+        message: String,
+    },
+
+    /// Parse error for a specific format.
+    #[error("Failed to parse {format} configuration: {message}")]
+    ParseError {
+        /// The format that failed to parse.
+        format: String,
+        /// Error message.
+        message: String,
+    },
+
+    /// Serialization error.
+    #[error("Failed to serialize configuration as {format}: {message}")]
+    SerializeError {
+        /// The format that failed to serialize.
+        format: String,
+        /// Error message.
+        message: String,
+    },
+
+    /// Validation error.
+    #[error("Configuration validation failed: {message}")]
+    ValidationError {
+        /// Validation error message.
+        message: String,
+    },
+
+    /// Environment variable error.
+    #[error("Environment variable error: {message}")]
+    EnvironmentError {
+        /// Error message.
+        message: String,
+    },
+
+    /// Type conversion error.
+    #[error("Type conversion error: expected {expected}, got {actual}")]
+    TypeError {
+        /// The expected type.
+        expected: String,
+        /// The actual type.
+        actual: String,
+    },
+
+    /// Key not found error.
+    #[error("Configuration key not found: {key}")]
+    KeyNotFound {
+        /// The key that was not found.
+        key: String,
+    },
+
+    /// Merge conflict error.
+    #[error("Configuration merge conflict: {message}")]
+    MergeConflict {
+        /// Conflict description.
+        message: String,
+    },
+
+    /// Provider error.
+    #[error("Configuration provider '{provider}' error: {message}")]
+    ProviderError {
+        /// Provider name.
+        provider: String,
+        /// Error message.
+        message: String,
+    },
+
+    /// Generic configuration error.
+    #[error("Configuration error: {0}")]
+    Other(String),
+}
+
+impl ConfigError {
+    /// Creates a validation error with the given message.
+    pub fn validation(message: impl Into<String>) -> Self {
+        Self::ValidationError { message: message.into() }
+    }
+
+    /// Creates a parse error for the given format.
+    pub fn parse(format: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::ParseError { format: format.into(), message: message.into() }
+    }
+
+    /// Creates a serialization error for the given format.
+    pub fn serialize(format: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::SerializeError { format: format.into(), message: message.into() }
+    }
+
+    /// Creates a type error.
+    pub fn type_error(expected: impl Into<String>, actual: impl Into<String>) -> Self {
+        Self::TypeError { expected: expected.into(), actual: actual.into() }
+    }
+
+    /// Creates a provider error.
+    pub fn provider(provider: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::ProviderError { provider: provider.into(), message: message.into() }
+    }
+
+    /// Creates a generic configuration error.
+    pub fn other(message: impl Into<String>) -> Self {
+        Self::Other(message.into())
+    }
+}
+
+impl From<std::io::Error> for ConfigError {
+    fn from(err: std::io::Error) -> Self {
+        Self::Other(err.to_string())
+    }
+}
+
+impl From<String> for ConfigError {
+    fn from(s: String) -> Self {
+        Self::Other(s)
+    }
+}
+
+impl From<&str> for ConfigError {
+    fn from(s: &str) -> Self {
+        Self::Other(s.to_string())
+    }
+}
+
+impl From<serde_json::Error> for ConfigError {
+    fn from(err: serde_json::Error) -> Self {
+        Self::ParseError { format: "JSON".to_string(), message: err.to_string() }
+    }
+}
+
+/// Result type for configuration operations.
+pub type ConfigResult<T> = CoreResult<T, ConfigError>;
+
+/// Error context trait for adding contextual information to errors.
+///
+/// This trait provides methods to add context to any error that can be converted
+/// to our standard Error type, making debugging easier by providing operation context.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::error::{ErrorContext, FileSystemError, Result};
+/// use std::path::PathBuf;
+///
+/// fn read_project_config() -> Result<String> {
+///     let error = FileSystemError::NotFound { path: PathBuf::from("/missing/config.toml") };
+///     Err(error)
+///         .context("Failed to load project configuration")
+/// }
+/// ```
+pub trait ErrorContext<T> {
+    /// Adds static context to an error.
+    fn context<C: Display>(self, context: C) -> Result<T>;
+    
+    /// Adds dynamic context to an error using a closure.
+    fn with_context<F: FnOnce() -> String>(self, f: F) -> Result<T>;
+}
+
+impl<T, E> ErrorContext<T> for CoreResult<T, E>
+where
+    E: Into<Error>,
+{
+    fn context<C: Display>(self, context: C) -> Result<T> {
+        self.map_err(|e| {
+            let base_error = e.into();
+            Error::operation(format!("{context}: {base_error}"))
+        })
+    }
+    
+    fn with_context<F: FnOnce() -> String>(self, f: F) -> Result<T> {
+        self.map_err(|e| {
+            let base_error = e.into();
+            let context = f();
+            Error::operation(format!("{context}: {base_error}"))
+        })
+    }
+}
+
 /// General error type for the standard tools library.
 ///
 /// This enum serves as a composite error type that aggregates all domain-specific
@@ -401,6 +604,9 @@ pub enum Error {
     /// Command-related error.
     #[error("Command execution error")]
     Command(#[from] CommandError),
+    /// Configuration-related error.
+    #[error("Configuration error")]
+    Config(#[from] ConfigError),
     /// General purpose errors with a custom message.
     #[error("Operation error: {0}")]
     Operation(String),
@@ -436,3 +642,253 @@ impl Error {
 /// }
 /// ```
 pub type Result<T> = CoreResult<T, Error>;
+
+/// Recovery strategies for error handling.
+///
+/// This enum defines different approaches to handling errors, allowing for
+/// configurable behavior based on the error type and context.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::error::{RecoveryStrategy, LogLevel};
+///
+/// // Fail-fast strategy for critical errors
+/// let critical = RecoveryStrategy::Fail;
+///
+/// // Log and continue for non-critical warnings
+/// let warning = RecoveryStrategy::LogAndContinue(LogLevel::Warn);
+///
+/// // Retry transient failures
+/// let retry = RecoveryStrategy::Retry { max_attempts: 3, backoff_ms: 100 };
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub enum RecoveryStrategy {
+    /// Propagate error up (fail-fast approach).
+    Fail,
+    
+    /// Log the error at specified level and continue operation.
+    LogAndContinue(LogLevel),
+    
+    /// Use a default value with explanation.
+    UseDefault(String),
+    
+    /// Retry the operation with exponential backoff.
+    Retry {
+        /// Maximum number of retry attempts
+        max_attempts: usize,
+        /// Initial backoff in milliseconds
+        backoff_ms: u64,
+    },
+    
+    /// Graceful degradation with explanation.
+    Graceful(String),
+}
+
+/// Log level for structured logging.
+///
+/// Used with `RecoveryStrategy::LogAndContinue` to specify the severity
+/// of the logged error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum LogLevel {
+    /// Debug level logging for detailed diagnostics.
+    Debug,
+    /// Informational messages.
+    Info,
+    /// Warning messages for recoverable issues.
+    Warn,
+    /// Error messages for serious issues.
+    Error,
+}
+
+/// Recovery result after applying a recovery strategy.
+///
+/// This enum represents the outcome of applying a recovery strategy to an error,
+/// providing information about whether the operation succeeded, failed, or was
+/// recovered through an alternative approach.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::error::RecoveryResult;
+///
+/// fn handle_operation() -> RecoveryResult<String> {
+///     // On success
+///     RecoveryResult::Success("operation completed".to_string())
+///     
+///     // On recovery with default
+///     // RecoveryResult::Recovered { 
+///     //     value: Some("default value".to_string()),
+///     //     reason: "Using default due to config error".to_string()
+///     // }
+/// }
+/// ```
+#[derive(Debug)]
+pub enum RecoveryResult<T> {
+    /// Operation succeeded without error.
+    Success(T),
+    
+    /// Operation failed and error was propagated.
+    Failed(Error),
+    
+    /// Operation recovered using alternative approach.
+    Recovered {
+        /// The recovered value (if any)
+        value: Option<T>,
+        /// Explanation of the recovery
+        reason: String,
+    },
+    
+    /// Operation will be retried.
+    Retrying {
+        /// Current attempt number
+        attempt: usize,
+        /// Time until next retry
+        next_backoff: Duration,
+    },
+}
+
+/// Manager for applying error recovery strategies.
+///
+/// The `ErrorRecoveryManager` provides a centralized way to configure and apply
+/// recovery strategies based on error types. It supports default strategies and
+/// specific strategies for different error categories.
+///
+/// # Examples
+///
+/// ```
+/// use sublime_standard_tools::error::{ErrorRecoveryManager, RecoveryStrategy, LogLevel};
+///
+/// let manager = ErrorRecoveryManager::new()
+///     .with_strategy("filesystem_error", RecoveryStrategy::Retry { 
+///         max_attempts: 3, 
+///         backoff_ms: 100 
+///     })
+///     .with_strategy("config_error", RecoveryStrategy::LogAndContinue(LogLevel::Warn))
+///     .set_default(RecoveryStrategy::Fail);
+/// ```
+#[derive(Debug, Clone)]
+pub struct ErrorRecoveryManager {
+    /// Strategies mapped by error type
+    strategies: HashMap<String, RecoveryStrategy>,
+    /// Default strategy when no specific strategy is found
+    default_strategy: RecoveryStrategy,
+}
+
+impl Default for ErrorRecoveryManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ErrorRecoveryManager {
+    /// Creates a new error recovery manager with fail-fast default.
+    pub fn new() -> Self {
+        Self {
+            strategies: HashMap::new(),
+            default_strategy: RecoveryStrategy::Fail,
+        }
+    }
+    
+    /// Adds a recovery strategy for a specific error type.
+    ///
+    /// # Arguments
+    ///
+    /// * `error_type` - The error type identifier (e.g., "filesystem_error")
+    /// * `strategy` - The recovery strategy to apply
+    #[must_use]
+    pub fn with_strategy(mut self, error_type: &str, strategy: RecoveryStrategy) -> Self {
+        self.strategies.insert(error_type.to_string(), strategy);
+        self
+    }
+    
+    /// Sets the default recovery strategy.
+    ///
+    /// # Arguments
+    ///
+    /// * `strategy` - The default strategy to use when no specific strategy is found
+    #[must_use]
+    pub fn set_default(mut self, strategy: RecoveryStrategy) -> Self {
+        self.default_strategy = strategy;
+        self
+    }
+    
+    /// Gets the recovery strategy for a given error type.
+    ///
+    /// # Arguments
+    ///
+    /// * `error_type` - The error type identifier
+    ///
+    /// # Returns
+    ///
+    /// The configured strategy for the error type, or the default strategy
+    pub fn get_strategy(&self, error_type: &str) -> &RecoveryStrategy {
+        self.strategies.get(error_type).unwrap_or(&self.default_strategy)
+    }
+    
+    /// Handles an error result by applying the appropriate recovery strategy.
+    ///
+    /// # Arguments
+    ///
+    /// * `result` - The result to handle
+    /// * `context` - Context information for logging
+    ///
+    /// # Returns
+    ///
+    /// A `RecoveryResult` indicating the outcome of applying the recovery strategy
+    pub fn handle<T, E>(
+        &self,
+        result: CoreResult<T, E>,
+        context: &str,
+    ) -> RecoveryResult<T>
+    where
+        E: AsRef<str> + std::fmt::Debug + Clone + Into<Error>,
+    {
+        match result {
+            Ok(value) => RecoveryResult::Success(value),
+            Err(error) => {
+                let error_type = error.as_ref();
+                let strategy = self.get_strategy(error_type);
+                
+                match strategy {
+                    RecoveryStrategy::Fail => {
+                        RecoveryResult::Failed(error.into())
+                    }
+                    RecoveryStrategy::LogAndContinue(level) => {
+                        // In real implementation, this would use the logging framework
+                        match level {
+                            LogLevel::Debug => log::debug!("{}: {:?}", context, error),
+                            LogLevel::Info => log::info!("{}: {:?}", context, error),
+                            LogLevel::Warn => log::warn!("{}: {:?}", context, error),
+                            LogLevel::Error => log::error!("{}: {:?}", context, error),
+                        }
+                        RecoveryResult::Recovered {
+                            value: None,
+                            reason: format!("Logged and continued after error: {error:?}"),
+                        }
+                    }
+                    RecoveryStrategy::UseDefault(reason) => {
+                        RecoveryResult::Recovered {
+                            value: None,
+                            reason: reason.clone(),
+                        }
+                    }
+                    RecoveryStrategy::Retry { max_attempts: _, backoff_ms } => {
+                        // This is a simplified version - real implementation would 
+                        // need to track attempt count and handle actual retries
+                        RecoveryResult::Retrying {
+                            attempt: 1,
+                            next_backoff: Duration::from_millis(*backoff_ms),
+                        }
+                    }
+                    RecoveryStrategy::Graceful(message) => {
+                        RecoveryResult::Recovered {
+                            value: None,
+                            reason: message.clone(),
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

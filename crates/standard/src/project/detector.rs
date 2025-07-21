@@ -759,10 +759,20 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
 
         // Additional validation: ensure package.json can be parsed
         let package_json_path = path.join("package.json");
-        if let Ok(content) = self.fs.read_file_string(&package_json_path).await {
-            serde_json::from_str::<PackageJson>(&content).is_ok()
-        } else {
-            false
+        match self.fs.read_file_string(&package_json_path).await {
+            Ok(content) => {
+                match serde_json::from_str::<PackageJson>(&content) {
+                    Ok(_) => true,
+                    Err(e) => {
+                        log::warn!("Failed to parse package.json at {}: {}", package_json_path.display(), e);
+                        false
+                    }
+                }
+            }
+            Err(e) => {
+                log::debug!("Could not read package.json at {} for validation: {}", package_json_path.display(), e);
+                false
+            }
         }
     }
 }

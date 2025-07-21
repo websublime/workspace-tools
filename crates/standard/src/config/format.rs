@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use super::error::{ConfigError, ConfigResult};
+use crate::error::{ConfigError, ConfigResult};
 use super::value::ConfigValue;
 
 /// Supported configuration file formats.

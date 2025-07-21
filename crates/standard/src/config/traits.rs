@@ -7,7 +7,7 @@
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 
-use super::error::ConfigResult;
+use crate::error::ConfigResult;
 use super::value::ConfigValue;
 
 /// Trait for types that can be configured.

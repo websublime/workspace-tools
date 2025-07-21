@@ -571,7 +571,13 @@ impl Clone for MonorepoDescriptor {
 
             if pkg_json.read_ref().is_ok() {
                 let json_ref = pkg_json.as_ref();
-                serde_json::to_value(json_ref).and_then(serde_json::from_value).ok()
+                match serde_json::to_value(json_ref).and_then(serde_json::from_value) {
+                    Ok(value) => Some(value),
+                    Err(e) => {
+                        log::warn!("Failed to serialize/deserialize package.json at {}: {}", pkg_json_path.display(), e);
+                        None
+                    }
+                }
             } else {
                 None
             }
