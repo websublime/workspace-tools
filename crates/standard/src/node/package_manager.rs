@@ -43,7 +43,7 @@ use std::path::{Path, PathBuf};
 /// assert_eq!(yarn.command(), "yarn");
 /// assert_eq!(yarn.lock_file(), "yarn.lock");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
 pub enum PackageManagerKind {
     /// npm package manager (default for Node.js)
     ///
@@ -230,6 +230,27 @@ impl PackageManagerKind {
         match self {
             Self::Npm | Self::Yarn | Self::Bun | Self::Jsr => None, // Uses package.json workspaces field or doesn't support workspaces
             Self::Pnpm => Some("pnpm-workspace.yaml"),
+        }
+    }
+}
+
+// Custom deserialization implementation for case-insensitive parsing
+impl<'de> serde::Deserialize<'de> for PackageManagerKind {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.to_lowercase().as_str() {
+            "npm" => Ok(PackageManagerKind::Npm),
+            "yarn" => Ok(PackageManagerKind::Yarn),
+            "pnpm" => Ok(PackageManagerKind::Pnpm),
+            "bun" => Ok(PackageManagerKind::Bun),
+            "jsr" => Ok(PackageManagerKind::Jsr),
+            _ => Err(serde::de::Error::unknown_variant(
+                &s,
+                &["npm", "yarn", "pnpm", "bun", "jsr"],
+            )),
         }
     }
 }

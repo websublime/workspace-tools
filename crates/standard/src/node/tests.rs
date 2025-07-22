@@ -737,4 +737,36 @@ mod tests {
             assert_eq!(result.unwrap().kind(), PackageManagerKind::Npm);
         }
     }
+
+    #[test]
+    fn test_package_manager_kind_case_insensitive_deserialization() {
+        // Test different case variations
+        let test_cases = vec![
+            (r#""npm""#, PackageManagerKind::Npm),
+            (r#""Npm""#, PackageManagerKind::Npm),
+            (r#""NPM""#, PackageManagerKind::Npm),
+            (r#""yarn""#, PackageManagerKind::Yarn),
+            (r#""Yarn""#, PackageManagerKind::Yarn),
+            (r#""YARN""#, PackageManagerKind::Yarn),
+            (r#""pnpm""#, PackageManagerKind::Pnpm),
+            (r#""Pnpm""#, PackageManagerKind::Pnpm),
+            (r#""PNPM""#, PackageManagerKind::Pnpm),
+            (r#""bun""#, PackageManagerKind::Bun),
+            (r#""Bun""#, PackageManagerKind::Bun),
+            (r#""BUN""#, PackageManagerKind::Bun),
+            (r#""jsr""#, PackageManagerKind::Jsr),
+            (r#""Jsr""#, PackageManagerKind::Jsr),
+            (r#""JSR""#, PackageManagerKind::Jsr),
+        ];
+
+        for (input, expected) in test_cases {
+            let result: Result<PackageManagerKind, _> = serde_json::from_str(input);
+            assert!(result.is_ok(), "Failed to deserialize: {}", input);
+            assert_eq!(result.unwrap(), expected, "Unexpected result for: {}", input);
+        }
+        
+        // Test invalid case
+        let result: Result<PackageManagerKind, _> = serde_json::from_str(r#""invalid""#);
+        assert!(result.is_err(), "Should have failed for invalid input");
+    }
 }

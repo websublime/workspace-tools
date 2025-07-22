@@ -252,7 +252,9 @@ impl MonorepoConfig {
             self.max_search_depth = other.max_search_depth;
         }
         self.follow_symlinks = other.follow_symlinks;
-        self.custom_workspace_fields.extend(other.custom_workspace_fields);
+        if !other.custom_workspace_fields.is_empty() {
+            self.custom_workspace_fields = other.custom_workspace_fields;
+        }
         Ok(())
     }
 }
