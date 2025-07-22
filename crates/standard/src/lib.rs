@@ -138,6 +138,7 @@
 //! ```
 
 #![doc = include_str!("../SPEC.md")]
+#![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 #![warn(rustdoc::missing_crate_level_docs)]
 #![deny(unused_must_use)]
