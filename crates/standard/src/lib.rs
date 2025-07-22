@@ -61,13 +61,13 @@
 //!
 //! ### Detect any Node.js project
 //! ```rust
-//! use sublime_standard_tools::project::{ProjectDetector, ProjectConfig};
+//! use sublime_standard_tools::project::ProjectDetector;
 //! use std::path::Path;
 //!
 //! let detector = ProjectDetector::new();
-//! let config = ProjectConfig::new();
+//! // Configuration auto-detected from repo.config.* files
 //!
-//! match detector.detect(Path::new("."), &config) {
+//! match detector.detect(Path::new("."), None) {
 //!     Ok(project) => {
 //!         let info = project.as_project_info();
 //!         println!("Found {} project", info.kind().name());
@@ -78,6 +78,27 @@
 //!     }
 //!     Err(e) => eprintln!("Detection failed: {}", e),
 //! }
+//! ```
+//!
+//! ### Auto-load configuration from project files
+//! All major components support automatic configuration loading:
+//! ```rust
+//! use sublime_standard_tools::{
+//!     project::ProjectDetector,
+//!     monorepo::MonorepoDetector,
+//!     filesystem::FileSystemManager,
+//!     command::DefaultCommandExecutor,
+//! };
+//! use std::path::Path;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! // Each component can auto-load from repo.config.* files
+//! let project_detector = ProjectDetector::new(); // Auto-loads config during detection
+//! let monorepo_detector = MonorepoDetector::new_with_project_config(Path::new(".")).await?;
+//! let filesystem = FileSystemManager::new_with_project_config(Path::new(".")).await?;
+//! let executor = DefaultCommandExecutor::new_with_project_config(Path::new(".")).await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ### Work with package managers
@@ -104,7 +125,7 @@
 //! if let Some(kind) = detector.is_monorepo_root(".")? {
 //!     let monorepo = detector.detect_monorepo(".")?;
 //!     
-//!     println!("Found {} with {} packages", 
+//!     println!("Found {} with {} packages",
 //!              monorepo.kind().name(),
 //!              monorepo.packages().len());
 //!              
@@ -117,6 +138,7 @@
 //! ```
 
 #![doc = include_str!("../SPEC.md")]
+#![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 #![warn(rustdoc::missing_crate_level_docs)]
 #![deny(unused_must_use)]
@@ -127,6 +149,7 @@
 #![deny(clippy::panic)]
 
 pub mod command;
+pub mod config;
 pub mod error;
 pub mod filesystem;
 pub mod monorepo;

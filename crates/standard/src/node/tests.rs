@@ -21,10 +21,9 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::thread;
 use tempfile::TempDir;
 
-use crate::filesystem::{FileSystem, FileSystemManager};
+use crate::filesystem::{AsyncFileSystem, FileSystemManager};
 use crate::monorepo::MonorepoKind;
 
 use super::{PackageManager, PackageManagerKind, RepoKind, RepositoryInfo};
@@ -46,26 +45,26 @@ mod tests {
 
     /// Helper to create a package.json with specific content
     #[allow(clippy::unwrap_used)]
-    fn create_package_json(dir: &Path, content: &str) {
+    async fn create_package_json(dir: &Path, content: &str) {
         let fs = FileSystemManager::new();
         let package_json_path = dir.join("package.json");
-        fs.write_file_string(&package_json_path, content).unwrap();
+        fs.write_file_string(&package_json_path, content).await.unwrap();
     }
 
     /// Helper to create a lock file for a specific package manager
     #[allow(clippy::unwrap_used)]
-    fn create_lock_file(dir: &Path, kind: PackageManagerKind) {
+    async fn create_lock_file(dir: &Path, kind: PackageManagerKind) {
         let fs = FileSystemManager::new();
         let lock_path = dir.join(kind.lock_file());
-        fs.write_file_string(&lock_path, "# Lock file content").unwrap();
+        fs.write_file_string(&lock_path, "# Lock file content").await.unwrap();
     }
 
     // =============================================================================
     // REPOSITORY KIND TESTS
     // =============================================================================
 
-    #[test]
-    fn test_simple_repo_kind() {
+    #[tokio::test]
+    async fn test_simple_repo_kind() {
         let simple = RepoKind::Simple;
 
         assert_eq!(simple.name(), "simple");
@@ -74,8 +73,8 @@ mod tests {
         assert!(!simple.is_monorepo_kind(&MonorepoKind::YarnWorkspaces));
     }
 
-    #[test]
-    fn test_monorepo_kind_yarn() {
+    #[tokio::test]
+    async fn test_monorepo_kind_yarn() {
         let yarn_mono = RepoKind::Monorepo(MonorepoKind::YarnWorkspaces);
 
         assert_eq!(yarn_mono.name(), "yarn monorepo");
@@ -85,8 +84,8 @@ mod tests {
         assert!(!yarn_mono.is_monorepo_kind(&MonorepoKind::PnpmWorkspaces));
     }
 
-    #[test]
-    fn test_monorepo_kind_pnpm() {
+    #[tokio::test]
+    async fn test_monorepo_kind_pnpm() {
         let pnpm_mono = RepoKind::Monorepo(MonorepoKind::PnpmWorkspaces);
 
         assert_eq!(pnpm_mono.name(), "pnpm monorepo");
@@ -96,8 +95,8 @@ mod tests {
         assert!(!pnpm_mono.is_monorepo_kind(&MonorepoKind::YarnWorkspaces));
     }
 
-    #[test]
-    fn test_monorepo_kind_npm() {
+    #[tokio::test]
+    async fn test_monorepo_kind_npm() {
         let npm_mono = RepoKind::Monorepo(MonorepoKind::NpmWorkSpace);
 
         assert_eq!(npm_mono.name(), "npm monorepo");
@@ -106,8 +105,8 @@ mod tests {
         assert!(npm_mono.is_monorepo_kind(&MonorepoKind::NpmWorkSpace));
     }
 
-    #[test]
-    fn test_repo_kind_equality() {
+    #[tokio::test]
+    async fn test_repo_kind_equality() {
         let simple1 = RepoKind::Simple;
         let simple2 = RepoKind::Simple;
         assert_eq!(simple1, simple2);
@@ -122,15 +121,15 @@ mod tests {
         assert_ne!(simple1, yarn);
     }
 
-    #[test]
-    fn test_repo_kind_clone() {
+    #[tokio::test]
+    async fn test_repo_kind_clone() {
         let original = RepoKind::Monorepo(MonorepoKind::BunWorkspaces);
         let cloned = original.clone();
         assert_eq!(original, cloned);
     }
 
-    #[test]
-    fn test_repo_kind_debug() {
+    #[tokio::test]
+    async fn test_repo_kind_debug() {
         let simple = RepoKind::Simple;
         let debug_str = format!("{simple:?}");
         assert!(debug_str.contains("Simple"));
@@ -141,8 +140,8 @@ mod tests {
         assert!(debug_str.contains("YarnWorkspaces"));
     }
 
-    #[test]
-    fn test_repo_kind_comprehensive_equality() {
+    #[tokio::test]
+    async fn test_repo_kind_comprehensive_equality() {
         let simple1 = RepoKind::Simple;
         let simple2 = RepoKind::Simple;
         let yarn_mono1 = RepoKind::Monorepo(MonorepoKind::YarnWorkspaces);
@@ -160,8 +159,8 @@ mod tests {
         assert!(!format!("{yarn_mono1:?}").is_empty());
     }
 
-    #[test]
-    fn test_repo_kind_all_monorepo_kinds() {
+    #[tokio::test]
+    async fn test_repo_kind_all_monorepo_kinds() {
         let monorepo_kinds = vec![
             MonorepoKind::NpmWorkSpace,
             MonorepoKind::YarnWorkspaces,
@@ -188,8 +187,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_repo_kind_boundary_conditions() {
+    #[tokio::test]
+    async fn test_repo_kind_boundary_conditions() {
         // Test custom monorepo with edge case names
         let edge_cases = vec![
             ("", ""),
@@ -219,8 +218,8 @@ mod tests {
     // PACKAGE MANAGER KIND TESTS
     // =============================================================================
 
-    #[test]
-    fn test_npm_package_manager() {
+    #[tokio::test]
+    async fn test_npm_package_manager() {
         let npm = PackageManagerKind::Npm;
 
         assert_eq!(npm.command(), "npm");
@@ -230,8 +229,8 @@ mod tests {
         assert_eq!(npm.workspace_config_file(), None);
     }
 
-    #[test]
-    fn test_yarn_package_manager() {
+    #[tokio::test]
+    async fn test_yarn_package_manager() {
         let yarn = PackageManagerKind::Yarn;
 
         assert_eq!(yarn.command(), "yarn");
@@ -241,8 +240,8 @@ mod tests {
         assert_eq!(yarn.workspace_config_file(), None);
     }
 
-    #[test]
-    fn test_pnpm_package_manager() {
+    #[tokio::test]
+    async fn test_pnpm_package_manager() {
         let pnpm = PackageManagerKind::Pnpm;
 
         assert_eq!(pnpm.command(), "pnpm");
@@ -252,8 +251,8 @@ mod tests {
         assert_eq!(pnpm.workspace_config_file(), Some("pnpm-workspace.yaml"));
     }
 
-    #[test]
-    fn test_bun_package_manager() {
+    #[tokio::test]
+    async fn test_bun_package_manager() {
         let bun = PackageManagerKind::Bun;
 
         assert_eq!(bun.command(), "bun");
@@ -263,8 +262,8 @@ mod tests {
         assert_eq!(bun.workspace_config_file(), None);
     }
 
-    #[test]
-    fn test_jsr_package_manager() {
+    #[tokio::test]
+    async fn test_jsr_package_manager() {
         let jsr = PackageManagerKind::Jsr;
 
         assert_eq!(jsr.command(), "jsr");
@@ -274,15 +273,15 @@ mod tests {
         assert_eq!(jsr.workspace_config_file(), None);
     }
 
-    #[test]
-    fn test_package_manager_kind_equality() {
+    #[tokio::test]
+    async fn test_package_manager_kind_equality() {
         assert_eq!(PackageManagerKind::Npm, PackageManagerKind::Npm);
         assert_ne!(PackageManagerKind::Npm, PackageManagerKind::Yarn);
     }
 
     #[allow(clippy::clone_on_copy)]
-    #[test]
-    fn test_package_manager_kind_clone_copy() {
+    #[tokio::test]
+    async fn test_package_manager_kind_clone_copy() {
         let npm1 = PackageManagerKind::Npm;
         let npm2 = npm1; // Should copy, not move
         assert_eq!(npm1, npm2);
@@ -292,15 +291,15 @@ mod tests {
         assert_eq!(yarn, yarn_cloned);
     }
 
-    #[test]
-    fn test_package_manager_kind_debug() {
+    #[tokio::test]
+    async fn test_package_manager_kind_debug() {
         let npm = PackageManagerKind::Npm;
         let debug_str = format!("{npm:?}");
         assert!(debug_str.contains("Npm"));
     }
 
-    #[test]
-    fn test_package_manager_kind_exhaustiveness() {
+    #[tokio::test]
+    async fn test_package_manager_kind_exhaustiveness() {
         // Ensure all PackageManagerKind variants are tested
         let all_kinds = vec![
             PackageManagerKind::Npm,
@@ -325,8 +324,8 @@ mod tests {
     // PACKAGE MANAGER TESTS
     // =============================================================================
 
-    #[test]
-    fn test_package_manager_creation() {
+    #[tokio::test]
+    async fn test_package_manager_creation() {
         let manager = PackageManager::new(PackageManagerKind::Npm, "/project/root");
 
         assert_eq!(manager.kind(), PackageManagerKind::Npm);
@@ -335,8 +334,8 @@ mod tests {
         assert_eq!(manager.lock_file(), "package-lock.json");
     }
 
-    #[test]
-    fn test_package_manager_with_pathbuf() {
+    #[tokio::test]
+    async fn test_package_manager_with_pathbuf() {
         let root = PathBuf::from("/project/path");
         let manager = PackageManager::new(PackageManagerKind::Yarn, root);
 
@@ -344,16 +343,16 @@ mod tests {
         assert_eq!(manager.root(), Path::new("/project/path"));
     }
 
-    #[test]
-    fn test_package_manager_lock_file_path() {
+    #[tokio::test]
+    async fn test_package_manager_lock_file_path() {
         let manager = PackageManager::new(PackageManagerKind::Pnpm, "/test/project");
         let lock_path = manager.lock_file_path();
 
         assert_eq!(lock_path, PathBuf::from("/test/project/pnpm-lock.yaml"));
     }
 
-    #[test]
-    fn test_package_manager_workspace_support() {
+    #[tokio::test]
+    async fn test_package_manager_workspace_support() {
         let npm_manager = PackageManager::new(PackageManagerKind::Npm, "/project");
         assert!(npm_manager.supports_workspaces());
 
@@ -361,8 +360,8 @@ mod tests {
         assert!(!jsr_manager.supports_workspaces());
     }
 
-    #[test]
-    fn test_package_manager_workspace_config_path() {
+    #[tokio::test]
+    async fn test_package_manager_workspace_config_path() {
         let npm_manager = PackageManager::new(PackageManagerKind::Npm, "/project");
         assert_eq!(npm_manager.workspace_config_path(), None);
 
@@ -371,16 +370,16 @@ mod tests {
         assert_eq!(pnpm_manager.workspace_config_path(), expected);
     }
 
-    #[test]
-    fn test_package_manager_debug() {
+    #[tokio::test]
+    async fn test_package_manager_debug() {
         let manager = PackageManager::new(PackageManagerKind::Yarn, "/project");
         let debug_str = format!("{manager:?}");
         assert!(debug_str.contains("PackageManager"));
         assert!(debug_str.contains("Yarn"));
     }
 
-    #[test]
-    fn test_package_manager_clone() {
+    #[tokio::test]
+    async fn test_package_manager_clone() {
         let original = PackageManager::new(PackageManagerKind::Bun, "/original/path");
         let cloned = original.clone();
 
@@ -388,12 +387,12 @@ mod tests {
         assert_eq!(original.root(), cloned.root());
     }
 
-    #[test]
-    fn test_package_manager_clone_and_debug() {
+    #[tokio::test]
+    async fn test_package_manager_clone_and_debug() {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
 
-        create_lock_file(path, PackageManagerKind::Npm);
+        create_lock_file(path, PackageManagerKind::Npm).await;
         let pm = PackageManager::detect(path).unwrap();
 
         // Test Clone trait
@@ -411,8 +410,8 @@ mod tests {
     // PACKAGE MANAGER DETECTION TESTS
     // =============================================================================
 
-    #[test]
-    fn test_package_manager_detection_edge_cases() {
+    #[tokio::test]
+    async fn test_package_manager_detection_edge_cases() {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
 
@@ -421,8 +420,8 @@ mod tests {
         assert!(result.is_err());
 
         // Test with multiple lock files (should detect the first one found)
-        create_lock_file(path, PackageManagerKind::Npm);
-        create_lock_file(path, PackageManagerKind::Yarn);
+        create_lock_file(path, PackageManagerKind::Npm).await;
+        create_lock_file(path, PackageManagerKind::Yarn).await;
 
         let result = PackageManager::detect(path);
         assert!(result.is_ok());
@@ -431,8 +430,8 @@ mod tests {
         assert!(matches!(pm.kind(), PackageManagerKind::Npm | PackageManagerKind::Yarn));
     }
 
-    #[test]
-    fn test_package_manager_all_kinds() {
+    #[tokio::test]
+    async fn test_package_manager_all_kinds() {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
 
@@ -450,7 +449,7 @@ mod tests {
             std::fs::create_dir_all(path).unwrap();
 
             // Create lock file for this kind
-            create_lock_file(path, kind);
+            create_lock_file(path, kind).await;
 
             // Test detection
             let result = PackageManager::detect(path);
@@ -467,8 +466,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_package_manager_workspace_support_detection() {
+    #[tokio::test]
+    async fn test_package_manager_workspace_support_detection() {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
 
@@ -482,7 +481,7 @@ mod tests {
         ];
 
         for kind in workspace_supporting_kinds {
-            create_lock_file(path, kind);
+            create_lock_file(path, kind).await;
             let pm = PackageManager::detect(path).unwrap();
 
             // All should support workspace functionality
@@ -499,8 +498,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_package_manager_error_conditions() {
+    #[tokio::test]
+    async fn test_package_manager_error_conditions() {
         // Test with non-existent directory
         let non_existent = PathBuf::from("/non/existent/path");
         let result = PackageManager::detect(&non_existent);
@@ -513,8 +512,8 @@ mod tests {
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_package_manager_with_complex_paths() {
+    #[tokio::test]
+    async fn test_package_manager_with_complex_paths() {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
 
@@ -522,8 +521,8 @@ mod tests {
         let nested_path = path.join("deeply").join("nested").join("structure");
         std::fs::create_dir_all(&nested_path).unwrap();
 
-        create_lock_file(&nested_path, PackageManagerKind::Npm);
-        create_package_json(&nested_path, r#"{"name": "test", "version": "1.0.0"}"#);
+        create_lock_file(&nested_path, PackageManagerKind::Npm).await;
+        create_package_json(&nested_path, r#"{"name": "test", "version": "1.0.0"}"#).await;
 
         let pm = PackageManager::detect(&nested_path).unwrap();
         assert_eq!(pm.kind(), PackageManagerKind::Npm);
@@ -566,8 +565,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_repository_info_simple() {
+    #[tokio::test]
+    async fn test_repository_info_simple() {
         let repo = MockRepository::new("/simple/project", RepoKind::Simple);
 
         assert_eq!(repo.root(), Path::new("/simple/project"));
@@ -577,8 +576,8 @@ mod tests {
         assert_eq!(repo.display_name(), "simple");
     }
 
-    #[test]
-    fn test_repository_info_monorepo() {
+    #[tokio::test]
+    async fn test_repository_info_monorepo() {
         let repo =
             MockRepository::new("/yarn/monorepo", RepoKind::Monorepo(MonorepoKind::YarnWorkspaces));
 
@@ -588,8 +587,8 @@ mod tests {
         assert_eq!(repo.display_name(), "yarn monorepo");
     }
 
-    #[test]
-    fn test_repository_info_with_package_manager() {
+    #[tokio::test]
+    async fn test_repository_info_with_package_manager() {
         let manager = PackageManager::new(PackageManagerKind::Npm, "/project");
         let repo = MockRepository::new("/project", RepoKind::Simple).with_package_manager(manager);
 
@@ -597,8 +596,8 @@ mod tests {
         assert_eq!(repo.package_manager().unwrap().kind(), PackageManagerKind::Npm);
     }
 
-    #[test]
-    fn test_repository_info_trait_object() {
+    #[tokio::test]
+    async fn test_repository_info_trait_object() {
         let repos: Vec<Box<dyn RepositoryInfo>> = vec![
             Box::new(MockRepository::new("/simple", RepoKind::Simple)),
             Box::new(MockRepository::new(
@@ -613,15 +612,15 @@ mod tests {
         assert!(repos[1].is_monorepo());
     }
 
-    #[test]
-    fn test_repository_info_send_sync() {
+    #[tokio::test]
+    async fn test_repository_info_send_sync() {
         // This test ensures that RepositoryInfo is Send + Sync
         fn require_send_sync<T: Send + Sync>() {}
         require_send_sync::<MockRepository>();
     }
 
-    #[test]
-    fn test_repository_info_trait_comprehensive() {
+    #[tokio::test]
+    async fn test_repository_info_trait_comprehensive() {
         // Test that RepoKind implements RepositoryInfo methods
         let simple_repo = RepoKind::Simple;
         let monorepo = RepoKind::Monorepo(MonorepoKind::YarnWorkspaces);
@@ -641,8 +640,8 @@ mod tests {
     // INTEGRATION TESTS
     // =============================================================================
 
-    #[test]
-    fn test_repo_kind_with_package_manager_integration() {
+    #[tokio::test]
+    async fn test_repo_kind_with_package_manager_integration() {
         let repo_kind = RepoKind::Monorepo(MonorepoKind::YarnWorkspaces);
         let package_manager = PackageManager::new(PackageManagerKind::Yarn, "/project");
 
@@ -652,8 +651,8 @@ mod tests {
         assert_eq!(package_manager.command(), "yarn");
     }
 
-    #[test]
-    fn test_pnpm_specific_integration() {
+    #[tokio::test]
+    async fn test_pnpm_specific_integration() {
         let repo_kind = RepoKind::Monorepo(MonorepoKind::PnpmWorkspaces);
         let package_manager = PackageManager::new(PackageManagerKind::Pnpm, "/pnpm-project");
 
@@ -665,8 +664,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_simple_repo_with_npm() {
+    #[tokio::test]
+    async fn test_simple_repo_with_npm() {
         let repo_kind = RepoKind::Simple;
         let package_manager = PackageManager::new(PackageManagerKind::Npm, "/simple-project");
 
@@ -677,8 +676,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_all_monorepo_kinds_have_workspace_support() {
+    #[tokio::test]
+    async fn test_all_monorepo_kinds_have_workspace_support() {
         let monorepo_kinds = vec![
             MonorepoKind::NpmWorkSpace,
             MonorepoKind::YarnWorkspaces,
@@ -693,8 +692,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_package_manager_kinds_coverage() {
+    #[tokio::test]
+    async fn test_package_manager_kinds_coverage() {
         // Ensure all package manager kinds are tested
         let kinds = vec![
             PackageManagerKind::Npm,
@@ -715,27 +714,59 @@ mod tests {
     // CONCURRENT OPERATIONS
     // =============================================================================
 
-    #[test]
-    fn test_concurrent_package_manager_detection() {
+    #[tokio::test]
+    async fn test_concurrent_package_manager_detection() {
         let temp_dir = setup_test_dir();
         let path = Arc::new(temp_dir.path().to_path_buf());
 
         // Create lock file
-        create_lock_file(&path, PackageManagerKind::Npm);
+        create_lock_file(&path, PackageManagerKind::Npm).await;
 
-        // Run detection from multiple threads
+        // Run detection from multiple async tasks
         let mut handles = vec![];
         for _ in 0..10 {
             let path_clone = Arc::clone(&path);
-            let handle = thread::spawn(move || PackageManager::detect(path_clone.as_ref()));
+            let handle = tokio::spawn(async move { PackageManager::detect(path_clone.as_ref()) });
             handles.push(handle);
         }
 
         // All should succeed
         for handle in handles {
-            let result = handle.join().unwrap();
+            let result = handle.await.unwrap();
             assert!(result.is_ok());
             assert_eq!(result.unwrap().kind(), PackageManagerKind::Npm);
         }
+    }
+
+    #[test]
+    fn test_package_manager_kind_case_insensitive_deserialization() {
+        // Test different case variations
+        let test_cases = vec![
+            (r#""npm""#, PackageManagerKind::Npm),
+            (r#""Npm""#, PackageManagerKind::Npm),
+            (r#""NPM""#, PackageManagerKind::Npm),
+            (r#""yarn""#, PackageManagerKind::Yarn),
+            (r#""Yarn""#, PackageManagerKind::Yarn),
+            (r#""YARN""#, PackageManagerKind::Yarn),
+            (r#""pnpm""#, PackageManagerKind::Pnpm),
+            (r#""Pnpm""#, PackageManagerKind::Pnpm),
+            (r#""PNPM""#, PackageManagerKind::Pnpm),
+            (r#""bun""#, PackageManagerKind::Bun),
+            (r#""Bun""#, PackageManagerKind::Bun),
+            (r#""BUN""#, PackageManagerKind::Bun),
+            (r#""jsr""#, PackageManagerKind::Jsr),
+            (r#""Jsr""#, PackageManagerKind::Jsr),
+            (r#""JSR""#, PackageManagerKind::Jsr),
+        ];
+
+        for (input, expected) in test_cases {
+            let result: Result<PackageManagerKind, _> = serde_json::from_str(input);
+            assert!(result.is_ok(), "Failed to deserialize: {}", input);
+            assert_eq!(result.unwrap(), expected, "Unexpected result for: {}", input);
+        }
+        
+        // Test invalid case
+        let result: Result<PackageManagerKind, _> = serde_json::from_str(r#""invalid""#);
+        assert!(result.is_err(), "Should have failed for invalid input");
     }
 }

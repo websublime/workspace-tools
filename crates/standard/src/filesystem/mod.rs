@@ -1,21 +1,18 @@
-//! # Filesystem Operations Module
+//! # Filesystem Operations Module - Async Only
 //!
 //! ## What
-//! This module provides abstractions for interacting with the filesystem in a safe
-//! and consistent manner. It offers a trait-based approach to file operations that
-//! can be implemented by different providers or mocked for testing.
+//! This module provides abstractions for interacting with the filesystem using async operations.
+//! It offers a trait-based approach to file operations with a unified async-only architecture.
 //!
 //! ## How
-//! The module exposes a `FileSystem` trait that defines standard filesystem operations
+//! The module exposes an `AsyncFileSystem` trait that defines async filesystem operations
 //! and a concrete `FileSystemManager` implementation that performs real filesystem
-//! operations using standard library functions and the `walkdir` crate for directory
-//! traversal.
+//! operations using tokio::fs for maximum performance.
 //!
 //! ## Why
-//! Filesystem operations are error-prone and platform-dependent. This module
-//! provides a consistent API with robust error handling to simplify working with
-//! files and directories across different platforms while maintaining proper
-//! error context and type safety.
+//! Async filesystem operations are essential for performance in large repositories.
+//! This unified async-only approach eliminates confusion between sync and async operations
+//! and provides a consistent API with robust error handling across all platforms.
 
 mod manager;
 mod paths;
@@ -24,4 +21,5 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub use types::{FileSystem, FileSystemManager, NodePathKind, PathExt, PathUtils};
+pub use manager::FileSystemManager;
+pub use types::{AsyncFileSystem, AsyncFileSystemConfig, NodePathKind, PathExt, PathUtils};

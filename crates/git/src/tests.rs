@@ -3,7 +3,7 @@
 #[allow(clippy::expect_used)]
 #[cfg(test)]
 mod tests {
-    use sublime_standard_tools::monorepo::MonorepoDetector;
+    use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
 
     use crate::{GitFileStatus, Repo, RepoError};
     use std::{
@@ -70,11 +70,11 @@ mod tests {
         Ok(root)
     }
 
-    #[test]
-    fn test_repo_open() -> Result<(), RepoError> {
+    #[tokio::test]
+    async fn test_repo_open() -> Result<(), RepoError> {
         let current_dir = std::env::current_dir().unwrap();
         let detector = MonorepoDetector::new();
-        let monorepo = detector.find_monorepo_root(current_dir.as_path()).unwrap();
+        let monorepo = detector.find_monorepo_root(current_dir.as_path()).await.unwrap();
         let (project_root, _) = monorepo.unwrap();
 
         let repo = Repo::open(project_root.display().to_string().as_str())?;

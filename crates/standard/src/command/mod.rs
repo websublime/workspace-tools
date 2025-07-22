@@ -39,5 +39,4 @@ pub use types::{
     StreamConfig, StreamOutput, SyncCommandExecutor,
 };
 
-
 pub use executor::Executor;

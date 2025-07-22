@@ -19,10 +19,9 @@
 
 use std::path::Path;
 use std::sync::Arc;
-use std::thread;
 use tempfile::TempDir;
 
-use crate::filesystem::{FileSystem, FileSystemManager};
+use crate::filesystem::{AsyncFileSystem, FileSystemManager};
 use crate::monorepo::MonorepoKind;
 use crate::node::{PackageManager, PackageManagerKind, RepoKind};
 
@@ -47,7 +46,7 @@ mod tests {
     }
 
     /// Creates a basic package.json file in the given directory
-    fn create_package_json(dir: &Path, name: &str, version: &str) {
+    async fn create_package_json(dir: &Path, name: &str, version: &str) {
         let fs = FileSystemManager::new();
         let package_json_path = dir.join("package.json");
         let content = format!(
@@ -62,44 +61,44 @@ mod tests {
 }}"#,
             name, version
         );
-        fs.write_file_string(&package_json_path, &content).unwrap();
+        fs.write_file_string(&package_json_path, &content).await.unwrap();
     }
 
     /// Creates a package.json with specific content
     #[allow(clippy::unwrap_used)]
-    fn create_package_json_with_content(dir: &Path, content: &str) {
+    async fn create_package_json_with_content(dir: &Path, content: &str) {
         let fs = FileSystemManager::new();
         let package_json_path = dir.join("package.json");
-        fs.write_file_string(&package_json_path, content).unwrap();
+        fs.write_file_string(&package_json_path, content).await.unwrap();
     }
 
     /// Creates a package manager lock file in the given directory
-    fn create_lock_file(dir: &Path, kind: PackageManagerKind) {
+    async fn create_lock_file(dir: &Path, kind: PackageManagerKind) {
         let fs = FileSystemManager::new();
         let lock_path = dir.join(kind.lock_file());
-        fs.write_file_string(&lock_path, "# Lock file content").unwrap();
+        fs.write_file_string(&lock_path, "# Lock file content").await.unwrap();
     }
 
     // =============================================================================
     // PROJECT KIND TESTS
     // =============================================================================
 
-    #[test]
-    fn test_project_kind_simple() {
+    #[tokio::test]
+    async fn test_project_kind_simple() {
         let kind = ProjectKind::Repository(RepoKind::Simple);
         assert_eq!(kind.name(), "simple");
         assert!(!kind.is_monorepo());
     }
 
-    #[test]
-    fn test_project_kind_monorepo() {
+    #[tokio::test]
+    async fn test_project_kind_monorepo() {
         let kind = ProjectKind::Repository(RepoKind::Monorepo(MonorepoKind::YarnWorkspaces));
         assert_eq!(kind.name(), "yarn monorepo");
         assert!(kind.is_monorepo());
     }
 
-    #[test]
-    fn test_project_kind_equality() {
+    #[tokio::test]
+    async fn test_project_kind_equality() {
         let kind1 = ProjectKind::Repository(RepoKind::Simple);
         let kind2 = ProjectKind::Repository(RepoKind::Simple);
         let kind3 = ProjectKind::Repository(RepoKind::Monorepo(MonorepoKind::NpmWorkSpace));
@@ -108,8 +107,8 @@ mod tests {
         assert_ne!(kind1, kind3);
     }
 
-    #[test]
-    fn test_project_kind_comprehensive_scenarios() {
+    #[tokio::test]
+    async fn test_project_kind_comprehensive_scenarios() {
         // Test all possible ProjectKind variants
         let test_cases = vec![
             ProjectKind::Repository(RepoKind::Simple),
@@ -143,8 +142,8 @@ mod tests {
     // PROJECT VALIDATION STATUS TESTS
     // =============================================================================
 
-    #[test]
-    fn test_validation_status_valid() {
+    #[tokio::test]
+    async fn test_validation_status_valid() {
         let status = ProjectValidationStatus::Valid;
         assert!(status.is_valid());
         assert!(!status.has_warnings());
@@ -153,8 +152,8 @@ mod tests {
         assert!(status.errors().is_none());
     }
 
-    #[test]
-    fn test_validation_status_warning() {
+    #[tokio::test]
+    async fn test_validation_status_warning() {
         let warnings = vec!["Missing LICENSE".to_string()];
         let status = ProjectValidationStatus::Warning(warnings.clone());
 
@@ -165,8 +164,8 @@ mod tests {
         assert!(status.errors().is_none());
     }
 
-    #[test]
-    fn test_validation_status_error() {
+    #[tokio::test]
+    async fn test_validation_status_error() {
         let errors = vec!["Invalid package.json".to_string()];
         let status = ProjectValidationStatus::Error(errors.clone());
 
@@ -177,8 +176,8 @@ mod tests {
         assert_eq!(status.errors(), Some(errors.as_slice()));
     }
 
-    #[test]
-    fn test_validation_status_not_validated() {
+    #[tokio::test]
+    async fn test_validation_status_not_validated() {
         let status = ProjectValidationStatus::NotValidated;
         assert!(!status.is_valid());
         assert!(!status.has_warnings());
@@ -187,8 +186,8 @@ mod tests {
         assert!(status.errors().is_none());
     }
 
-    #[test]
-    fn test_project_validation_status_comprehensive() {
+    #[tokio::test]
+    async fn test_project_validation_status_comprehensive() {
         // Test all validation status variants
         let statuses = vec![
             ProjectValidationStatus::Valid,
@@ -238,140 +237,65 @@ mod tests {
     // PROJECT CONFIG TESTS
     // =============================================================================
 
-    #[test]
-    fn test_project_config_default() {
-        let config = ProjectConfig::new();
-        assert!(config.detect_package_manager);
-        assert!(config.validate_structure);
-        assert!(config.detect_monorepo);
-        assert!(config.root.is_none());
-    }
+    // Note: ProjectConfig tests removed as configuration is now handled by StandardConfig
 
-    #[test]
-    fn test_project_config_builder() {
-        let config = ProjectConfig::new()
-            .with_root("/test/path")
-            .with_detect_package_manager(false)
-            .with_validate_structure(false)
-            .with_detect_monorepo(false);
-
-        assert!(!config.detect_package_manager);
-        assert!(!config.validate_structure);
-        assert!(!config.detect_monorepo);
-        assert_eq!(config.root, Some("/test/path".into()));
-    }
-
-    #[test]
-    fn test_project_config_edge_cases() {
-        let temp_dir = setup_test_dir();
-        let path = temp_dir.path();
-
-        // Test with all flags disabled
-        let config = ProjectConfig::new()
-            .with_detect_package_manager(false)
-            .with_validate_structure(false)
-            .with_detect_monorepo(false);
-
-        create_package_json(path, "test", "1.0.0");
-
-        let detector = ProjectDetector::new();
-        let result = detector.detect(path, &config);
-        assert!(result.is_ok());
-
-        // Test with all flags enabled (default)
-        let config = ProjectConfig::new()
-            .with_detect_package_manager(true)
-            .with_validate_structure(true)
-            .with_detect_monorepo(true);
-
-        let result = detector.detect(path, &config);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_project_config_builder_pattern() {
-        let temp_dir = setup_test_dir();
-        let path = temp_dir.path();
-
-        // Test builder pattern with all options
-        let config = ProjectConfig::new()
-            .with_root(path)
-            .with_detect_package_manager(true)
-            .with_validate_structure(true)
-            .with_detect_monorepo(true);
-
-        // Test that all options are set
-        assert_eq!(config.root, Some(path.to_path_buf()));
-        assert!(config.detect_package_manager);
-        assert!(config.validate_structure);
-        assert!(config.detect_monorepo);
-
-        // Test default values
-        let default_config = ProjectConfig::new();
-        assert_eq!(default_config.root, None);
-        assert!(default_config.detect_package_manager);
-        assert!(default_config.validate_structure);
-        assert!(default_config.detect_monorepo);
-    }
+    // Configuration tests removed - now handled by StandardConfig system
 
     // =============================================================================
     // SIMPLE PROJECT TESTS
     // =============================================================================
 
-    #[test]
-    fn test_simple_project_creation() {
+    #[tokio::test]
+    async fn test_simple_project_creation() {
         let root = "/test/project".into();
-        let project = SimpleProject::new(root, None, None);
+        let project = Project::new(root, ProjectKind::Repository(RepoKind::Simple));
 
         assert_eq!(project.root(), Path::new("/test/project"));
         assert_eq!(project.kind(), ProjectKind::Repository(RepoKind::Simple));
-        assert!(!project.has_package_json());
-        assert!(!project.has_package_manager());
+        assert!(project.package_json().is_none());
+        assert!(project.package_manager().is_none());
         assert_eq!(project.validation_status(), &ProjectValidationStatus::NotValidated);
     }
 
-    #[test]
-    fn test_simple_project_with_validation() {
+    #[tokio::test]
+    async fn test_simple_project_with_validation() {
         let root = "/test/project".into();
         let status = ProjectValidationStatus::Valid;
-        let project = SimpleProject::with_validation(root, None, None, status);
+        let mut project = Project::new(root, ProjectKind::Repository(RepoKind::Simple));
+        project.set_validation_status(status);
 
         assert_eq!(project.root(), Path::new("/test/project"));
         assert!(project.validation_status().is_valid());
     }
 
-    #[test]
-    fn test_simple_project_setters() {
+    #[tokio::test]
+    async fn test_simple_project_setters() {
         let root = "/test/project".into();
-        let mut project = SimpleProject::new(root, None, None);
+        let mut project = Project::new(root, ProjectKind::Repository(RepoKind::Simple));
 
         let package_manager = PackageManager::new(PackageManagerKind::Npm, "/test/project");
-        project.set_package_manager(Some(package_manager));
-        assert!(project.has_package_manager());
+        project.package_manager = Some(package_manager);
+        assert!(project.package_manager().is_some());
 
         project.set_validation_status(ProjectValidationStatus::Valid);
         assert!(project.validation_status().is_valid());
     }
 
-    #[test]
-    fn test_simple_project_comprehensive() {
+    #[tokio::test]
+    async fn test_simple_project_comprehensive() {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path().to_path_buf();
 
         // Test all constructors
-        let simple1 = SimpleProject::new(path.clone(), None, None);
-        let simple2 = SimpleProject::with_validation(
-            path.clone(),
-            None,
-            None,
-            ProjectValidationStatus::Valid,
-        );
+        let simple1 = Project::new(path.clone(), ProjectKind::Repository(RepoKind::Simple));
+        let mut simple2 = Project::new(path.clone(), ProjectKind::Repository(RepoKind::Simple));
+        simple2.set_validation_status(ProjectValidationStatus::Valid);
 
         // Test all methods
         assert_eq!(simple1.root(), path);
         assert_eq!(simple2.root(), path);
-        assert!(!simple1.has_package_manager());
-        assert!(!simple1.has_package_json());
+        assert!(simple1.package_manager().is_none());
+        assert!(simple1.package_json().is_none());
         assert!(!simple1.validation_status().is_valid());
         assert!(simple2.validation_status().is_valid());
 
@@ -383,35 +307,35 @@ mod tests {
         assert!(info.package_json().is_none());
     }
 
-    #[test]
-    fn test_simple_project_mutations() {
+    #[tokio::test]
+    async fn test_simple_project_mutations() {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path().to_path_buf();
-        let mut simple = SimpleProject::new(path.clone(), None, None);
+        let mut simple = Project::new(path.clone(), ProjectKind::Repository(RepoKind::Simple));
 
         // Test package manager mutation
-        create_lock_file(&path, PackageManagerKind::Npm);
+        create_lock_file(&path, PackageManagerKind::Npm).await;
         let pm = PackageManager::detect(&path).unwrap();
-        simple.set_package_manager(Some(pm));
-        assert!(simple.has_package_manager());
+        simple.package_manager = Some(pm);
+        assert!(simple.package_manager().is_some());
 
         // Test validation status mutation
         simple.set_validation_status(ProjectValidationStatus::Valid);
         assert!(simple.validation_status().is_valid());
 
-        // Test mutable reference
-        *simple.validation_status_mut() =
-            ProjectValidationStatus::Error(vec!["Test error".to_string()]);
+        // Test direct status mutation
+        simple
+            .set_validation_status(ProjectValidationStatus::Error(vec!["Test error".to_string()]));
         assert!(simple.validation_status().has_errors());
     }
 
-    #[test]
-    fn test_project_descriptor_trait_object() {
+    #[tokio::test]
+    async fn test_project_descriptor_trait_object() {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path().to_path_buf();
 
-        let simple = SimpleProject::new(path.clone(), None, None);
-        let descriptor = ProjectDescriptor::Simple(Box::new(simple));
+        let project = Project::new(path.clone(), ProjectKind::Repository(RepoKind::Simple));
+        let descriptor = ProjectDescriptor::NodeJs(project);
 
         // Test trait object access
         let info = descriptor.as_project_info();
@@ -423,108 +347,105 @@ mod tests {
     // PROJECT DETECTOR TESTS
     // =============================================================================
 
-    #[test]
-    fn test_detector_creation() {
+    #[tokio::test]
+    async fn test_detector_creation() {
         let _detector = ProjectDetector::new();
         // Just ensure it can be created without panicking
         assert!(true);
     }
 
-    #[test]
-    fn test_is_valid_project_with_valid_project() {
+    #[tokio::test]
+    async fn test_is_valid_project_with_valid_project() {
         let temp_dir = setup_test_dir();
         let detector = ProjectDetector::new();
 
         // Create a valid project
-        create_package_json(temp_dir.path(), "test-project", "1.0.0");
+        create_package_json(temp_dir.path(), "test-project", "1.0.0").await;
 
-        assert!(detector.is_valid_project(temp_dir.path()));
+        assert!(detector.is_valid_project(temp_dir.path()).await);
     }
 
-    #[test]
-    fn test_is_valid_project_without_package_json() {
+    #[tokio::test]
+    async fn test_is_valid_project_without_package_json() {
         let temp_dir = setup_test_dir();
         let detector = ProjectDetector::new();
 
         // Directory exists but no package.json
-        assert!(!detector.is_valid_project(temp_dir.path()));
+        assert!(!detector.is_valid_project(temp_dir.path()).await);
     }
 
-    #[test]
-    fn test_is_valid_project_with_invalid_package_json() {
+    #[tokio::test]
+    async fn test_is_valid_project_with_invalid_package_json() {
         let temp_dir = setup_test_dir();
         let detector = ProjectDetector::new();
         let fs = FileSystemManager::new();
 
         // Create invalid package.json
         let package_json_path = temp_dir.path().join("package.json");
-        fs.write_file_string(&package_json_path, "invalid json content").unwrap();
+        fs.write_file_string(&package_json_path, "invalid json content").await.unwrap();
 
-        assert!(!detector.is_valid_project(temp_dir.path()));
+        assert!(!detector.is_valid_project(temp_dir.path()).await);
     }
 
-    #[test]
-    fn test_detect_kind_simple_project() {
+    #[tokio::test]
+    async fn test_detect_kind_simple_project() {
         let temp_dir = setup_test_dir();
         let detector = ProjectDetector::new();
-        let config = ProjectConfig::new().with_detect_monorepo(false);
 
-        create_package_json(temp_dir.path(), "test-project", "1.0.0");
+        create_package_json(temp_dir.path(), "test-project", "1.0.0").await;
 
-        let kind = detector.detect_kind(temp_dir.path(), &config).unwrap();
+        let kind = detector.detect_kind(temp_dir.path()).await.unwrap();
         assert_eq!(kind, ProjectKind::Repository(RepoKind::Simple));
     }
 
-    #[test]
-    fn test_detect_simple_project() {
+    #[tokio::test]
+    async fn test_detect_simple_project() {
         let temp_dir = setup_test_dir();
         let detector = ProjectDetector::new();
-        let config = ProjectConfig::new().with_detect_monorepo(false);
 
-        create_package_json(temp_dir.path(), "test-project", "1.0.0");
-        create_lock_file(temp_dir.path(), PackageManagerKind::Npm);
+        create_package_json(temp_dir.path(), "test-project", "1.0.0").await;
+        create_lock_file(temp_dir.path(), PackageManagerKind::Npm).await;
 
-        let result = detector.detect(temp_dir.path(), &config);
+        let result = detector.detect(temp_dir.path(), None).await;
         assert!(result.is_ok());
 
         let project = result.unwrap();
         match project {
-            ProjectDescriptor::Simple(simple) => {
-                assert_eq!(simple.root(), temp_dir.path());
-                assert_eq!(simple.kind(), ProjectKind::Repository(RepoKind::Simple));
-                assert!(simple.has_package_json());
-                assert!(simple.has_package_manager());
+            ProjectDescriptor::NodeJs(project) => {
+                assert_eq!(project.root(), temp_dir.path());
+                assert_eq!(project.kind(), ProjectKind::Repository(RepoKind::Simple));
+                assert!(project.package_json().is_some());
+                assert!(project.package_manager().is_some());
             }
-            _ => panic!("Expected simple project"),
         }
     }
 
-    #[test]
-    fn test_project_detector_error_conditions() {
+    #[tokio::test]
+    async fn test_project_detector_error_conditions() {
         let detector = ProjectDetector::new();
-        let config = ProjectConfig::new();
+        let config: Option<&crate::config::StandardConfig> = None;
 
         // Test with non-existent path
         let non_existent = "/non/existent/path/to/project";
-        let result = detector.detect(non_existent, &config);
+        let result = detector.detect(non_existent, config).await;
         assert!(result.is_err());
 
         // Test with path without package.json
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
-        let result = detector.detect(path, &config);
+        let result = detector.detect(path, config).await;
         assert!(result.is_err());
 
         // Test with invalid package.json
-        create_package_json_with_content(path, "invalid json content");
-        let result = detector.detect(path, &config);
+        create_package_json_with_content(path, "invalid json content").await;
+        let result = detector.detect(path, config).await;
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_project_detector_with_malformed_json() {
+    #[tokio::test]
+    async fn test_project_detector_with_malformed_json() {
         let detector = ProjectDetector::new();
-        let config = ProjectConfig::new();
+        let config: Option<&crate::config::StandardConfig> = None;
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
 
@@ -541,76 +462,74 @@ mod tests {
         ];
 
         for malformed in malformed_json_cases {
-            create_package_json_with_content(path, malformed);
-            let result = detector.detect(path, &config);
+            create_package_json_with_content(path, malformed).await;
+            let result = detector.detect(path, config).await;
             assert!(result.is_err(), "Should fail for malformed JSON: {malformed}");
         }
     }
 
-    #[test]
-    fn test_project_detector_is_valid_project_edge_cases() {
+    #[tokio::test]
+    async fn test_project_detector_is_valid_project_edge_cases() {
         let detector = ProjectDetector::new();
 
         // Test with non-existent path
-        assert!(!detector.is_valid_project("/non/existent/path"));
+        assert!(!detector.is_valid_project("/non/existent/path").await);
 
         // Test with directory but no package.json
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
-        assert!(!detector.is_valid_project(path));
+        assert!(!detector.is_valid_project(path).await);
 
         // Test with invalid package.json
-        create_package_json_with_content(path, "invalid json");
-        assert!(!detector.is_valid_project(path));
+        create_package_json_with_content(path, "invalid json").await;
+        assert!(!detector.is_valid_project(path).await);
 
         // Test with valid package.json
-        create_package_json_with_content(path, r#"{"name": "test", "version": "1.0.0"}"#);
-        assert!(detector.is_valid_project(path));
+        create_package_json_with_content(path, r#"{"name": "test", "version": "1.0.0"}"#).await;
+        assert!(detector.is_valid_project(path).await);
     }
 
-    #[test]
-    fn test_project_detector_detect_kind_comprehensive() {
+    #[tokio::test]
+    async fn test_project_detector_detect_kind_comprehensive() {
         let detector = ProjectDetector::new();
-        let config = ProjectConfig::new();
         let temp_dir = setup_test_dir();
         let path = temp_dir.path();
 
         // Test with simple project
-        create_package_json_with_content(path, r#"{"name": "test", "version": "1.0.0"}"#);
-        let kind = detector.detect_kind(path, &config).unwrap();
+        create_package_json_with_content(path, r#"{"name": "test", "version": "1.0.0"}"#).await;
+        let kind = detector.detect_kind(path).await.unwrap();
         assert_eq!(kind, ProjectKind::Repository(RepoKind::Simple));
 
         // Test with monorepo detection disabled
-        let config_no_monorepo = ProjectConfig::new().with_detect_monorepo(false);
-        let kind = detector.detect_kind(path, &config_no_monorepo).unwrap();
+        let kind = detector.detect_kind(path).await.unwrap();
         assert_eq!(kind, ProjectKind::Repository(RepoKind::Simple));
     }
 
-    #[test]
-    fn test_project_detector_concurrent_access() {
+    #[tokio::test]
+    async fn test_project_detector_concurrent_access() {
         let detector = Arc::new(ProjectDetector::new());
-        let config = ProjectConfig::new();
+        let config: Option<&crate::config::StandardConfig> = None;
         let temp_dir = setup_test_dir();
         let path = Arc::new(temp_dir.path().to_path_buf());
 
         // Create a valid project
-        create_package_json_with_content(&path, r#"{"name": "test", "version": "1.0.0"}"#);
+        create_package_json_with_content(&path, r#"{"name": "test", "version": "1.0.0"}"#).await;
 
-        // Run detection from multiple threads
+        // Run detection from multiple async tasks
         let mut handles = vec![];
         for _ in 0..10 {
-            let detector_clone = Arc::clone(&detector);
-            let path_clone = Arc::clone(&path);
-            let config_clone = config.clone();
-
-            let handle =
-                thread::spawn(move || detector_clone.detect(path_clone.as_ref(), &config_clone));
+            let handle = tokio::spawn({
+                let detector_clone = Arc::clone(&detector);
+                let path_clone = Arc::clone(&path);
+                let config_clone = config;
+                async move { detector_clone.detect(path_clone.as_ref(), config_clone).await }
+            });
             handles.push(handle);
         }
 
         // All should succeed
         for handle in handles {
-            let result = handle.join().unwrap();
+            let result = handle.await.unwrap();
             assert!(result.is_ok());
         }
     }
@@ -619,32 +538,31 @@ mod tests {
     // PROJECT MANAGER TESTS
     // =============================================================================
 
-    #[test]
-    fn test_manager_creation() {
+    #[tokio::test]
+    async fn test_manager_creation() {
         let _manager = ProjectManager::new();
         // Just ensure it can be created without panicking
         assert!(true);
     }
 
-    #[test]
-    fn test_is_valid_project() {
+    #[tokio::test]
+    async fn test_is_valid_project() {
         let temp_dir = setup_test_dir();
         let manager = ProjectManager::new();
 
-        create_package_json(temp_dir.path(), "test-project", "1.0.0");
-        assert!(manager.is_valid_project(temp_dir.path()));
+        create_package_json(temp_dir.path(), "test-project", "1.0.0").await;
+        assert!(manager.is_valid_project(temp_dir.path()).await);
     }
 
-    #[test]
-    fn test_create_project() {
+    #[tokio::test]
+    async fn test_create_project() {
         let temp_dir = setup_test_dir();
         let manager = ProjectManager::new();
-        let config = ProjectConfig::new().with_detect_monorepo(false);
 
-        create_package_json(temp_dir.path(), "test-project", "1.0.0");
-        create_lock_file(temp_dir.path(), PackageManagerKind::Npm);
+        create_package_json(temp_dir.path(), "test-project", "1.0.0").await;
+        create_lock_file(temp_dir.path(), PackageManagerKind::Npm).await;
 
-        let result = manager.create_project(temp_dir.path(), &config);
+        let result = manager.create_project(temp_dir.path(), None).await;
         assert!(result.is_ok());
 
         let project = result.unwrap();
@@ -653,8 +571,8 @@ mod tests {
         assert_eq!(info.kind(), ProjectKind::Repository(RepoKind::Simple));
     }
 
-    #[test]
-    fn test_find_project_root() {
+    #[tokio::test]
+    async fn test_find_project_root() {
         let temp_dir = setup_test_dir();
         let manager = ProjectManager::new();
 
@@ -663,20 +581,20 @@ mod tests {
         std::fs::create_dir_all(&nested_dir).unwrap();
 
         // Create package.json at root
-        create_package_json(temp_dir.path(), "test-project", "1.0.0");
+        create_package_json(temp_dir.path(), "test-project", "1.0.0").await;
 
         // Should find root from nested path
-        let root = manager.find_project_root(&nested_dir);
+        let root = manager.find_project_root(&nested_dir).await;
         assert_eq!(root, Some(temp_dir.path().to_path_buf()));
     }
 
-    #[test]
-    fn test_find_project_root_not_found() {
+    #[tokio::test]
+    async fn test_find_project_root_not_found() {
         let temp_dir = setup_test_dir();
         let manager = ProjectManager::new();
 
         // No package.json anywhere
-        let root = manager.find_project_root(temp_dir.path());
+        let root = manager.find_project_root(temp_dir.path()).await;
         assert!(root.is_none());
     }
 
@@ -684,35 +602,34 @@ mod tests {
     // PROJECT VALIDATOR TESTS
     // =============================================================================
 
-    #[test]
-    fn test_validator_creation() {
+    #[tokio::test]
+    async fn test_validator_creation() {
         let _validator = ProjectValidator::new();
         // Just ensure it can be created without panicking
         assert!(true);
     }
 
-    #[test]
-    fn test_validate_project_descriptor_valid() {
+    #[tokio::test]
+    async fn test_validate_project_descriptor_valid() {
         let temp_dir = setup_test_dir();
         let validator = ProjectValidator::new();
 
-        create_package_json(temp_dir.path(), "test-project", "1.0.0");
-        create_lock_file(temp_dir.path(), PackageManagerKind::Npm);
+        create_package_json(temp_dir.path(), "test-project", "1.0.0").await;
+        create_lock_file(temp_dir.path(), PackageManagerKind::Npm).await;
 
         let package_manager = PackageManager::new(PackageManagerKind::Npm, temp_dir.path());
         let fs = FileSystemManager::new();
-        let content = fs.read_file_string(&temp_dir.path().join("package.json")).unwrap();
+        let content = fs.read_file_string(&temp_dir.path().join("package.json")).await.unwrap();
         let package_json = serde_json::from_str(&content).unwrap();
 
-        let simple_project = SimpleProject::new(
-            temp_dir.path().to_path_buf(),
-            Some(package_manager),
-            Some(package_json),
-        );
+        let mut unified_project =
+            Project::new(temp_dir.path().to_path_buf(), ProjectKind::Repository(RepoKind::Simple));
+        unified_project.package_manager = Some(package_manager);
+        unified_project.package_json = Some(package_json);
 
-        let mut project = ProjectDescriptor::Simple(Box::new(simple_project));
+        let mut project = ProjectDescriptor::NodeJs(unified_project);
 
-        let result = validator.validate_project(&mut project);
+        let result = validator.validate_project(&mut project).await;
         assert!(result.is_ok());
 
         // The project should have some validation status (not NotValidated)
@@ -722,24 +639,25 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_validate_project_descriptor_missing_package_json() {
+    #[tokio::test]
+    async fn test_validate_project_descriptor_missing_package_json() {
         let temp_dir = setup_test_dir();
         let validator = ProjectValidator::new();
 
         // No package.json created
-        let simple_project = SimpleProject::new(temp_dir.path().to_path_buf(), None, None);
-        let mut project = ProjectDescriptor::Simple(Box::new(simple_project));
+        let unified_project =
+            Project::new(temp_dir.path().to_path_buf(), ProjectKind::Repository(RepoKind::Simple));
+        let mut project = ProjectDescriptor::NodeJs(unified_project);
 
-        let result = validator.validate_project(&mut project);
+        let result = validator.validate_project(&mut project).await;
         assert!(result.is_ok());
 
         // Should have errors
         assert!(project.as_project_info().validation_status().has_errors());
     }
 
-    #[test]
-    fn test_validate_project_descriptor_with_warnings() {
+    #[tokio::test]
+    async fn test_validate_project_descriptor_with_warnings() {
         let temp_dir = setup_test_dir();
         let validator = ProjectValidator::new();
 
@@ -750,15 +668,16 @@ mod tests {
   "name": "test-project",
   "version": "1.0.0"
 }"#;
-        fs.write_file_string(&package_json_path, content).unwrap();
+        fs.write_file_string(&package_json_path, content).await.unwrap();
 
         let package_json = serde_json::from_str(content).unwrap();
-        let simple_project =
-            SimpleProject::new(temp_dir.path().to_path_buf(), None, Some(package_json));
+        let mut unified_project =
+            Project::new(temp_dir.path().to_path_buf(), ProjectKind::Repository(RepoKind::Simple));
+        unified_project.package_json = Some(package_json);
 
-        let mut project = ProjectDescriptor::Simple(Box::new(simple_project));
+        let mut project = ProjectDescriptor::NodeJs(unified_project);
 
-        let result = validator.validate_project(&mut project);
+        let result = validator.validate_project(&mut project).await;
         assert!(result.is_ok());
 
         // Should have warnings (missing description, license, etc.)
@@ -769,56 +688,59 @@ mod tests {
     // GENERIC PROJECT TESTS
     // =============================================================================
 
-    #[test]
-    fn test_generic_project_comprehensive() {
+    #[tokio::test]
+    async fn test_generic_project_comprehensive() {
         let temp_dir = setup_test_dir();
         let path = temp_dir.path().to_path_buf();
-        let config = ProjectConfig::new();
+        //let _config: Option<&crate::config::StandardConfig> = None;
 
-        let mut generic = GenericProject::new(path.clone(), config.clone());
+        let mut project = Project::new(path.clone(), ProjectKind::Repository(RepoKind::Simple));
 
         // Test all methods
-        assert_eq!(generic.root(), path);
-        assert!(generic.package_manager().is_none());
-        assert!(generic.package_json().is_none());
-        assert!(!generic.validation_status().is_valid());
-        assert_eq!(generic.config().detect_package_manager, config.detect_package_manager);
+        assert_eq!(project.root, path);
+        assert!(project.package_manager.is_none());
+        assert!(project.package_json.is_none());
+        assert!(!project.validation_status.is_valid());
 
         // Test mutations
-        create_lock_file(&path, PackageManagerKind::Yarn);
+        create_lock_file(&path, PackageManagerKind::Yarn).await;
         let pm = PackageManager::detect(&path).unwrap();
-        generic.set_package_manager(Some(pm));
-        assert!(generic.package_manager().is_some());
+        project.package_manager = Some(pm);
+        assert!(project.package_manager.is_some());
 
-        generic.set_validation_status(ProjectValidationStatus::Valid);
-        assert!(generic.validation_status().is_valid());
+        project.validation_status = ProjectValidationStatus::Valid;
+        assert!(project.validation_status.is_valid());
     }
 
     // =============================================================================
     // STRESS TESTING AND EDGE CASES
     // =============================================================================
 
-    #[test]
-    fn test_project_stress_testing() {
+    #[tokio::test]
+    async fn test_project_stress_testing() {
         let detector = ProjectDetector::new();
-        let config = ProjectConfig::new();
+        let config: Option<&crate::config::StandardConfig> = None;
 
         // Test with many sequential detections
         for i in 0..50 {
             let temp_dir = setup_test_dir();
             let path = temp_dir.path();
 
-            create_package_json_with_content(path, &format!(r#"{{"name": "test-{i}", "version": "1.0.0"}}"#));
+            create_package_json_with_content(
+                path,
+                &format!(r#"{{"name": "test-{i}", "version": "1.0.0"}}"#),
+            )
+            .await;
 
-            let result = detector.detect(path, &config);
+            let result = detector.detect(path, config).await;
             assert!(result.is_ok());
         }
     }
 
-    #[test]
-    fn test_project_deep_nesting() {
+    #[tokio::test]
+    async fn test_project_deep_nesting() {
         let detector = ProjectDetector::new();
-        let config = ProjectConfig::new();
+        let config: Option<&crate::config::StandardConfig> = None;
         let temp_dir = setup_test_dir();
         let mut path = temp_dir.path().to_path_buf();
 
@@ -828,9 +750,10 @@ mod tests {
             std::fs::create_dir_all(&path).unwrap();
         }
 
-        create_package_json_with_content(&path, r#"{"name": "deeply-nested", "version": "1.0.0"}"#);
+        create_package_json_with_content(&path, r#"{"name": "deeply-nested", "version": "1.0.0"}"#)
+            .await;
 
-        let result = detector.detect(&path, &config);
+        let result = detector.detect(&path, config).await;
         assert!(result.is_ok());
     }
 }

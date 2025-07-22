@@ -129,6 +129,9 @@ mod tests {
                 rate_limit: Some(Duration::from_millis(10)),
                 default_timeout: Duration::from_secs(1),
                 shutdown_timeout: Duration::from_secs(1),
+                collection_window_ms: 5,
+                collection_sleep_us: 100,
+                idle_sleep_ms: 10,
             },
             executor: Arc::new(MockCommandExecutor),
             queue_sender: None,
@@ -421,6 +424,9 @@ mod tests {
             rate_limit: Some(Duration::from_millis(50)),
             default_timeout: Duration::from_secs(5),
             shutdown_timeout: Duration::from_secs(5),
+            collection_window_ms: 5,
+            collection_sleep_us: 100,
+            idle_sleep_ms: 10,
         };
 
         let queue = CommandQueue {

@@ -20,8 +20,8 @@
 //! for these fundamental Node.js concepts, enabling clean separation of concerns
 //! and reusability across all project types.
 
-use std::path::{Path, PathBuf};
 use crate::error::{Error, MonorepoError, Result};
+use std::path::{Path, PathBuf};
 
 /// Represents the type of package manager used in a Node.js project.
 ///
@@ -43,7 +43,7 @@ use crate::error::{Error, MonorepoError, Result};
 /// assert_eq!(yarn.command(), "yarn");
 /// assert_eq!(yarn.lock_file(), "yarn.lock");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
 pub enum PackageManagerKind {
     /// npm package manager (default for Node.js)
     ///
@@ -234,6 +234,27 @@ impl PackageManagerKind {
     }
 }
 
+// Custom deserialization implementation for case-insensitive parsing
+impl<'de> serde::Deserialize<'de> for PackageManagerKind {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.to_lowercase().as_str() {
+            "npm" => Ok(PackageManagerKind::Npm),
+            "yarn" => Ok(PackageManagerKind::Yarn),
+            "pnpm" => Ok(PackageManagerKind::Pnpm),
+            "bun" => Ok(PackageManagerKind::Bun),
+            "jsr" => Ok(PackageManagerKind::Jsr),
+            _ => Err(serde::de::Error::unknown_variant(
+                &s,
+                &["npm", "yarn", "pnpm", "bun", "jsr"],
+            )),
+        }
+    }
+}
+
 /// Represents a package manager detected in a Node.js project.
 ///
 /// This struct encapsulates information about a detected package manager
@@ -283,20 +304,12 @@ impl PackageManager {
     /// ```
     #[must_use]
     pub fn new(kind: PackageManagerKind, root: impl Into<PathBuf>) -> Self {
-        Self {
-            kind,
-            root: root.into(),
-        }
+        Self { kind, root: root.into() }
     }
 
-    /// Detects which package manager is being used in the specified path.
+    /// Detects which package manager is being used in the specified path using default configuration.
     ///
-    /// Checks for lock files in order of preference:
-    /// 1. Bun (bun.lockb)
-    /// 2. pnpm (pnpm-lock.yaml)
-    /// 3. Yarn (yarn.lock)
-    /// 4. npm (package-lock.json or npm-shrinkwrap.json)
-    /// 5. JSR (jsr.json)
+    /// Uses the default detection order: Bun, pnpm, Yarn, npm, JSR.
     ///
     /// # Arguments
     ///
@@ -326,25 +339,106 @@ impl PackageManager {
     /// # }
     /// ```
     pub fn detect(path: impl AsRef<Path>) -> Result<Self> {
+        let default_config = crate::config::PackageManagerConfig::default();
+        Self::detect_with_config(path, &default_config)
+    }
+
+    /// Detects which package manager is being used in the specified path using custom configuration.
+    ///
+    /// Uses the detection order and settings specified in the configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The directory path to check for package manager lock files
+    /// * `config` - The package manager configuration specifying detection order and settings
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`MonorepoError::ManagerNotFound`] if no package manager
+    /// lock files are found in the specified path.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(PackageManager)` - If a package manager is detected
+    /// * `Err(Error)` - If no package manager could be detected
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::Path;
+    /// use sublime_standard_tools::node::{PackageManager, PackageManagerKind};
+    /// use sublime_standard_tools::config::PackageManagerConfig;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let project_dir = Path::new(".");
+    /// let config = PackageManagerConfig {
+    ///     detection_order: vec![PackageManagerKind::Npm, PackageManagerKind::Yarn],
+    ///     ..PackageManagerConfig::default()
+    /// };
+    /// let package_manager = PackageManager::detect_with_config(project_dir, &config)?;
+    /// println!("Detected package manager: {:?}", package_manager.kind());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn detect_with_config(path: impl AsRef<Path>, config: &crate::config::PackageManagerConfig) -> Result<Self> {
         let path = path.as_ref();
 
-        // Check lock files in order of preference
-        if path.join(PackageManagerKind::Bun.lock_file()).exists() {
-            return Ok(Self::new(PackageManagerKind::Bun, path));
+        // Check for environment variable preference if configured
+        if config.detect_from_env {
+            if let Ok(env_manager) = std::env::var(&config.env_var_name) {
+                let kind = match env_manager.to_lowercase().as_str() {
+                    "npm" => Some(PackageManagerKind::Npm),
+                    "yarn" => Some(PackageManagerKind::Yarn),
+                    "pnpm" => Some(PackageManagerKind::Pnpm),
+                    "bun" => Some(PackageManagerKind::Bun),
+                    "jsr" => Some(PackageManagerKind::Jsr),
+                    _ => None,
+                };
+
+                if let Some(kind) = kind {
+                    // Verify the preferred manager actually has a lock file
+                    let lock_file = if let Some(custom_lock) = config.custom_lock_files.get(&kind) {
+                        custom_lock.as_str()
+                    } else {
+                        kind.lock_file()
+                    };
+
+                    if path.join(lock_file).exists() {
+                        return Ok(Self::new(kind, path));
+                    }
+                }
+            }
         }
-        if path.join(PackageManagerKind::Pnpm.lock_file()).exists() {
-            return Ok(Self::new(PackageManagerKind::Pnpm, path));
+
+        // Check lock files in configured order
+        for &kind in &config.detection_order {
+            let lock_file = if let Some(custom_lock) = config.custom_lock_files.get(&kind) {
+                custom_lock.as_str()
+            } else {
+                kind.lock_file()
+            };
+
+            // Handle npm's special case with npm-shrinkwrap.json
+            if kind == PackageManagerKind::Npm {
+                if path.join(lock_file).exists() || path.join("npm-shrinkwrap.json").exists() {
+                    return Ok(Self::new(kind, path));
+                }
+            } else if path.join(lock_file).exists() {
+                return Ok(Self::new(kind, path));
+            }
         }
-        if path.join(PackageManagerKind::Yarn.lock_file()).exists() {
-            return Ok(Self::new(PackageManagerKind::Yarn, path));
-        }
-        if path.join(PackageManagerKind::Npm.lock_file()).exists()
-            || path.join("npm-shrinkwrap.json").exists()
-        {
-            return Ok(Self::new(PackageManagerKind::Npm, path));
-        }
-        if path.join(PackageManagerKind::Jsr.lock_file()).exists() {
-            return Ok(Self::new(PackageManagerKind::Jsr, path));
+
+        // Try fallback if configured
+        if let Some(fallback_kind) = config.fallback {
+            let fallback_lock = if let Some(custom_lock) = config.custom_lock_files.get(&fallback_kind) {
+                custom_lock.as_str()
+            } else {
+                fallback_kind.lock_file()
+            };
+
+            if path.join(fallback_lock).exists() {
+                return Ok(Self::new(fallback_kind, path));
+            }
         }
 
         Err(Error::Monorepo(MonorepoError::ManagerNotFound))
@@ -517,8 +611,6 @@ impl PackageManager {
     /// ```
     #[must_use]
     pub fn workspace_config_path(&self) -> Option<PathBuf> {
-        self.kind
-            .workspace_config_file()
-            .map(|file| self.root.join(file))
+        self.kind.workspace_config_file().map(|file| self.root.join(file))
     }
 }
