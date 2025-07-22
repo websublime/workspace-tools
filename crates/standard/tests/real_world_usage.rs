@@ -14,8 +14,6 @@
 //! These examples serve as practical guidance for developers using the crate, showing clear patterns
 //! for project detection, monorepo analysis, command execution, and error handling in real scenarios.
 
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
 #![allow(clippy::print_stdout)]
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::cast_possible_truncation)]
@@ -143,7 +141,7 @@ impl SimpleRepoAnalyzer {
         let project_descriptor = self.project_manager.create_project(path, validation_config).await?;
         let validation_status = project_descriptor.as_project_info().validation_status();
         
-        println!("✅ Project validation status: {:?}", validation_status);
+        println!("✅ Project validation status: {validation_status:?}");
 
         // Step 3: Read and parse package.json
         let package_json_path = path.join("package.json");
@@ -153,7 +151,7 @@ impl SimpleRepoAnalyzer {
 
         let package_content = self.fs.read_file_string(&package_json_path).await?;
         let package_json: serde_json::Value = serde_json::from_str(&package_content)
-            .map_err(|e| Error::operation(format!("Invalid package.json: {}", e)))?;
+            .map_err(|e| Error::operation(format!("Invalid package.json: {e}")))?;
 
         // Step 4: Extract package information
         let name = package_json.get("name")
@@ -212,8 +210,8 @@ impl SimpleRepoAnalyzer {
         let mut results = Vec::new();
 
         for script_name in scripts_to_run {
-            if repo_info.scripts.contains(&script_name.to_string()) {
-                println!("  Running script: {}", script_name);
+            if repo_info.scripts.contains(&(*script_name).to_string()) {
+                println!("  Running script: {script_name}");
                 
                 let command = CommandBuilder::new(repo_info.package_manager.kind().command())
                     .arg("run")
@@ -224,27 +222,27 @@ impl SimpleRepoAnalyzer {
 
                 // On Windows CI, mock successful execution to avoid environment issues
                 if is_windows_ci() {
-                    println!("    ✅ Script '{}' simulated (Windows CI mode)", script_name);
-                    results.push((script_name.to_string(), true));
+                    println!("    ✅ Script '{script_name}' simulated (Windows CI mode)");
+                    results.push(((*script_name).to_string(), true));
                 } else {
                     match self.executor.execute(command).await {
                         Ok(output) => {
                             let success = output.success();
-                            println!("    ✅ Script '{}' completed (success: {})", script_name, success);
+                            println!("    ✅ Script '{script_name}' completed (success: {success})");
                             if !success {
                                 println!("    Output: {}", output.stderr().trim());
                             }
-                            results.push((script_name.to_string(), success));
+                            results.push(((*script_name).to_string(), success));
                         }
                         Err(e) => {
-                            println!("    ❌ Script '{}' failed: {}", script_name, e);
-                            results.push((script_name.to_string(), false));
+                            println!("    ❌ Script '{script_name}' failed: {e}");
+                            results.push(((*script_name).to_string(), false));
                         }
                     }
                 }
             } else {
-                println!("  ⚠️ Script '{}' not found", script_name);
-                results.push((script_name.to_string(), false));
+                println!("  ⚠️ Script '{script_name}' not found");
+                results.push(((*script_name).to_string(), false));
             }
         }
 
@@ -304,7 +302,7 @@ impl MonorepoAnalyzer {
         let root_package_path = path.join("package.json");
         let root_package_content = self.fs.read_file_string(&root_package_path).await?;
         let root_package_json: serde_json::Value = serde_json::from_str(&root_package_content)
-            .map_err(|e| Error::operation(format!("Invalid root package.json: {}", e)))?;
+            .map_err(|e| Error::operation(format!("Invalid root package.json: {e}")))?;
 
         let monorepo_name = root_package_json.get("name")
             .and_then(|v| v.as_str())
@@ -367,7 +365,7 @@ impl MonorepoAnalyzer {
 
     /// Demonstrates running scripts across monorepo packages
     async fn run_workspace_scripts(&self, monorepo_info: &MonorepoInfo, script_name: &str) -> Result<Vec<(String, bool)>> {
-        println!("🚀 Running '{}' script across workspace packages...", script_name);
+        println!("🚀 Running '{script_name}' script across workspace packages...");
 
         let mut results = Vec::new();
 
@@ -378,7 +376,7 @@ impl MonorepoAnalyzer {
                 let command = CommandBuilder::new(monorepo_info.package_manager.kind().command())
                     .arg("run")
                     .arg(script_name)
-                    .current_dir(&monorepo_info.root_path.join(&package.path))
+                    .current_dir(monorepo_info.root_path.join(&package.path))
                     .timeout(Duration::from_secs(60))
                     .build();
 
@@ -428,7 +426,7 @@ impl MonorepoAnalyzer {
                 println!("  ✅ Package manager detection still works: {}", pm.kind().command());
             }
             Err(e) => {
-                println!("  ⚠️ Package manager detection affected by missing lock file: {}", e);
+                println!("  ⚠️ Package manager detection affected by missing lock file: {e}");
             }
         }
 
@@ -438,7 +436,7 @@ impl MonorepoAnalyzer {
                 println!("  ✅ Monorepo analysis works even without lock file");
             }
             Err(e) => {
-                println!("  ⚠️ Monorepo analysis affected: {}", e);
+                println!("  ⚠️ Monorepo analysis affected: {e}");
             }
         }
 
@@ -467,7 +465,7 @@ impl MonorepoAnalyzer {
                     println!("  ✅ Lock file recreated");
                 }
                 Err(e) => {
-                    println!("  ❌ Install simulation failed: {}", e);
+                    println!("  ❌ Install simulation failed: {e}");
                 }
             }
         }
@@ -478,7 +476,7 @@ impl MonorepoAnalyzer {
                 println!("  ✅ Recovery successful! Monorepo analysis working with {} packages", info.workspace_packages.len());
             }
             Err(e) => {
-                println!("  ❌ Recovery failed: {}", e);
+                println!("  ❌ Recovery failed: {e}");
             }
         }
 
@@ -487,6 +485,7 @@ impl MonorepoAnalyzer {
 }
 
 /// Sets up a realistic simple repository structure (@scope/simple v0.4.0)
+#[allow(clippy::too_many_lines)] // Test setup function requires comprehensive file structure creation
 async fn setup_simple_repo(temp_dir: &TempDir) -> Result<PathBuf> {
     let fs = FileSystemManager::new();
     let root = temp_dir.path().to_path_buf();
@@ -517,7 +516,7 @@ async fn setup_simple_repo(temp_dir: &TempDir) -> Result<PathBuf> {
     fs.write_file_string(
         &root.join("package.json"),
         &serde_json::to_string_pretty(&package_json)
-            .map_err(|e| Error::operation(format!("Failed to serialize package.json: {}", e)))?,
+            .map_err(|e| Error::operation(format!("Failed to serialize package.json: {e}")))?,
     ).await?;
 
     // Create TypeScript config
@@ -539,14 +538,14 @@ async fn setup_simple_repo(temp_dir: &TempDir) -> Result<PathBuf> {
     fs.write_file_string(
         &root.join("tsconfig.json"),
         &serde_json::to_string_pretty(&tsconfig)
-            .map_err(|e| Error::operation(format!("Failed to serialize tsconfig.json: {}", e)))?,
+            .map_err(|e| Error::operation(format!("Failed to serialize tsconfig.json: {e}")))?,
     ).await?;
 
     // Create src directory and main file
     let src_dir = root.node_path(NodePathKind::Src);
     fs.create_dir_all(&src_dir).await?;
 
-    let main_code = r#"import fetch from 'node-fetch';
+    let main_code = r"import fetch from 'node-fetch';
 
 /**
  * Simple API client for demonstration purposes
@@ -592,12 +591,12 @@ export const apiClient = new ApiClient('https://api.example.com');
 export async function fetchFromApi(endpoint: string): Promise<any> {
     return apiClient.fetchData(endpoint);
 }
-"#;
+";
 
     fs.write_file_string(&src_dir.join("index.ts"), main_code).await?;
 
     // Create README
-    let readme = r#"# @scope/simple
+    let readme = r"# @scope/simple
 
 A simple TypeScript project demonstrating API fetch functionality.
 
@@ -625,7 +624,7 @@ const result = await client.fetchData('/posts');
 - `npm run build` - Build the project
 - `npm run lint` - Lint the code
 - `npm run dev` - Start development server
-"#;
+";
 
     fs.write_file_string(&root.join("README.md"), readme).await?;
 
@@ -693,23 +692,23 @@ async fn setup_monorepo(temp_dir: &TempDir) -> Result<PathBuf> {
     fs.write_file_string(
         &root.join("package.json"),
         &serde_json::to_string_pretty(&root_package_json)
-            .map_err(|e| Error::operation(format!("Failed to serialize root package.json: {}", e)))?,
+            .map_err(|e| Error::operation(format!("Failed to serialize root package.json: {e}")))?,
     ).await?;
 
     // Create pnpm-workspace.yaml
-    let pnpm_workspace = r#"packages:
+    let pnpm_workspace = r"packages:
   - 'packages/*'
   - 'apps/*'
-"#;
+";
 
     fs.write_file_string(&root.join("pnpm-workspace.yaml"), pnpm_workspace).await?;
 
     // Create .npmrc with custom pnpm config
-    let npmrc = r#"# Custom pnpm configuration
+    let npmrc = r"# Custom pnpm configuration
 auto-install-peers=true
 shamefully-hoist=false
 strict-peer-dependencies=true
-"#;
+";
 
     fs.write_file_string(&root.join(".npmrc"), npmrc).await?;
 
@@ -745,13 +744,13 @@ strict-peer-dependencies=true
     fs.write_file_string(
         &lib_dir.join("package.json"),
         &serde_json::to_string_pretty(&lib_package_json)
-            .map_err(|e| Error::operation(format!("Failed to serialize lib package.json: {}", e)))?,
+            .map_err(|e| Error::operation(format!("Failed to serialize lib package.json: {e}")))?,
     ).await?;
 
-    fs.write_file_string(&lib_dir.join("src/index.ts"), r#"// Library functionality using signals
+    fs.write_file_string(&lib_dir.join("src/index.ts"), r"// Library functionality using signals
 export * from './signals';
 export * from './utils';
-"#).await?;
+").await?;
 
     // Create @scope/ui package
     let ui_dir = packages_dir.join("ui");
@@ -779,13 +778,13 @@ export * from './utils';
     fs.write_file_string(
         &ui_dir.join("package.json"),
         &serde_json::to_string_pretty(&ui_package_json)
-            .map_err(|e| Error::operation(format!("Failed to serialize ui package.json: {}", e)))?,
+            .map_err(|e| Error::operation(format!("Failed to serialize ui package.json: {e}")))?,
     ).await?;
 
-    fs.write_file_string(&ui_dir.join("src/index.ts"), r#"// UI components using zag-js
+    fs.write_file_string(&ui_dir.join("src/index.ts"), r"// UI components using zag-js
 export * from './components';
 export * from './hooks';
-"#).await?;
+").await?;
 
     // Create @scope/app package
     let app_dir = apps_dir.join("app");
@@ -814,18 +813,18 @@ export * from './hooks';
     fs.write_file_string(
         &app_dir.join("package.json"),
         &serde_json::to_string_pretty(&app_package_json)
-            .map_err(|e| Error::operation(format!("Failed to serialize app package.json: {}", e)))?,
+            .map_err(|e| Error::operation(format!("Failed to serialize app package.json: {e}")))?,
     ).await?;
 
-    fs.write_file_string(&app_dir.join("src/index.ts"), r#"// Main application using lib and ui packages
+    fs.write_file_string(&app_dir.join("src/index.ts"), r"// Main application using lib and ui packages
 import { someFunction } from '@scope/lib';
 import { SomeComponent } from '@scope/ui';
 
 console.log('Application started');
-"#).await?;
+").await?;
 
     // Create pnpm-lock.yaml (will be removed/recreated in error recovery test)
-    fs.write_file_string(&root.join("pnpm-lock.yaml"), r#"lockfileVersion: 5.4
+    fs.write_file_string(&root.join("pnpm-lock.yaml"), r"lockfileVersion: 5.4
 
 specifiers:
   '@scope/app': workspace:*
@@ -835,7 +834,7 @@ specifiers:
 
 devDependencies:
   typescript: 4.9.5
-"#).await?;
+").await?;
 
     // Create repo.config.toml with monorepo-specific configuration
     let repo_config = r#"# Configuration for @scope/monorepo project
@@ -921,7 +920,7 @@ async fn test_simple_repository_analysis() -> Result<()> {
 
     // Setup
     let temp_dir = tempfile::tempdir()
-        .map_err(|e| Error::operation(format!("Failed to create temp dir: {}", e)))?;
+        .map_err(|e| Error::operation(format!("Failed to create temp dir: {e}")))?;
     
     let repo_path = setup_simple_repo(&temp_dir).await?;
     
@@ -979,7 +978,7 @@ async fn test_monorepo_analysis() -> Result<()> {
 
     // Setup
     let temp_dir = tempfile::tempdir()
-        .map_err(|e| Error::operation(format!("Failed to create temp dir: {}", e)))?;
+        .map_err(|e| Error::operation(format!("Failed to create temp dir: {e}")))?;
     
     let monorepo_path = setup_monorepo(&temp_dir).await?;
     let analyzer = MonorepoAnalyzer::new();
@@ -1005,9 +1004,9 @@ async fn test_monorepo_analysis() -> Result<()> {
     println!("\n🔗 Dependency Graph:");
     for (package, deps) in &monorepo_info.dependency_graph {
         if !deps.is_empty() {
-            println!("  {} depends on:", package);
+            println!("  {package} depends on:");
             for dep in deps {
-                println!("    - {}", dep);
+                println!("    - {dep}");
             }
         }
     }
@@ -1024,20 +1023,20 @@ async fn test_monorepo_analysis() -> Result<()> {
     // Verify dependencies
     let app_package = monorepo_info.workspace_packages.iter()
         .find(|p| p.name == "@scope/app")
-        .expect("@scope/app package should exist");
+        .ok_or_else(|| Error::operation("@scope/app package should exist"))?;
     
     assert!(app_package.workspace_dependencies.contains(&"@scope/lib".to_string()));
     assert!(app_package.workspace_dependencies.contains(&"@scope/ui".to_string()));
 
     let lib_package = monorepo_info.workspace_packages.iter()
         .find(|p| p.name == "@scope/lib")
-        .expect("@scope/lib package should exist");
+        .ok_or_else(|| Error::operation("@scope/lib package should exist"))?;
     
     assert!(lib_package.dependencies.contains(&"signals".to_string()));
 
     let ui_package = monorepo_info.workspace_packages.iter()
         .find(|p| p.name == "@scope/ui")
-        .expect("@scope/ui package should exist");
+        .ok_or_else(|| Error::operation("@scope/ui package should exist"))?;
     
     assert!(ui_package.dependencies.contains(&"zag-js".to_string()));
 
@@ -1064,7 +1063,7 @@ async fn test_error_recovery_missing_lock_file() -> Result<()> {
 
     // Setup
     let temp_dir = tempfile::tempdir()
-        .map_err(|e| Error::operation(format!("Failed to create temp dir: {}", e)))?;
+        .map_err(|e| Error::operation(format!("Failed to create temp dir: {e}")))?;
     
     let monorepo_path = setup_monorepo(&temp_dir).await?;
     let analyzer = MonorepoAnalyzer::new();
@@ -1083,9 +1082,9 @@ async fn test_project_type_detection() -> Result<()> {
 
     // Setup both project types
     let simple_temp = tempfile::tempdir()
-        .map_err(|e| Error::operation(format!("Failed to create temp dir: {}", e)))?;
+        .map_err(|e| Error::operation(format!("Failed to create temp dir: {e}")))?;
     let monorepo_temp = tempfile::tempdir()
-        .map_err(|e| Error::operation(format!("Failed to create temp dir: {}", e)))?;
+        .map_err(|e| Error::operation(format!("Failed to create temp dir: {e}")))?;
 
     let simple_path = setup_simple_repo(&simple_temp).await?;
     let monorepo_path = setup_monorepo(&monorepo_temp).await?;
@@ -1106,7 +1105,7 @@ async fn test_project_type_detection() -> Result<()> {
     println!("  Simple project type: {}", simple_info.kind().name());
     
     let is_simple_monorepo = monorepo_detector.is_monorepo_root(&simple_path).await?;
-    println!("  Is simple repo a monorepo: {:?}", is_simple_monorepo);
+    println!("  Is simple repo a monorepo: {is_simple_monorepo:?}");
     
     assert!(is_simple_monorepo.is_none()); // Should not be detected as monorepo
 
@@ -1117,7 +1116,7 @@ async fn test_project_type_detection() -> Result<()> {
     println!("  Monorepo project type: {}", monorepo_project_info.kind().name());
     
     let monorepo_kind = monorepo_detector.is_monorepo_root(&monorepo_path).await?;
-    println!("  Monorepo type: {:?}", monorepo_kind);
+    println!("  Monorepo type: {monorepo_kind:?}");
     
     assert!(monorepo_kind.is_some()); // Should be detected as monorepo
     if let Some(kind) = monorepo_kind {
@@ -1139,9 +1138,9 @@ async fn test_comprehensive_real_world_scenario() -> Result<()> {
     println!("\n📁 Step 1: Setting up test projects...");
     
     let simple_temp = tempfile::tempdir()
-        .map_err(|e| Error::operation(format!("Failed to create temp dir: {}", e)))?;
+        .map_err(|e| Error::operation(format!("Failed to create temp dir: {e}")))?;
     let monorepo_temp = tempfile::tempdir()
-        .map_err(|e| Error::operation(format!("Failed to create temp dir: {}", e)))?;
+        .map_err(|e| Error::operation(format!("Failed to create temp dir: {e}")))?;
 
     let simple_path = setup_simple_repo(&simple_temp).await?;
     let monorepo_path = setup_monorepo(&monorepo_temp).await?;
@@ -1198,7 +1197,7 @@ async fn test_comprehensive_real_world_scenario() -> Result<()> {
     // Monorepo workspace dependencies
     let app_package = monorepo_info.workspace_packages.iter()
         .find(|p| p.name == "@scope/app")
-        .expect("App package should exist");
+        .ok_or_else(|| Error::operation("App package should exist"))?;
     
     println!("  App workspace dependencies: {:?}", app_package.workspace_dependencies);
     assert!(app_package.workspace_dependencies.contains(&"@scope/lib".to_string()));
