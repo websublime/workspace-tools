@@ -5,7 +5,7 @@ This rules are mandatory to apply to any answer given by AI.
 - Language is english
 - Assumptions (MANDATORY), cannot be used. Always check apis and source code available. In case they are missing ask to the user to provide it.
 - Problem resolution shouldn't be take simplistic. If we need to support all operating systems let's evaluate and create the solution for them.
-- Robust code, no simplistic approaches
+- Robust code, no simplistic approaches, no placeholders, no "in a real case we would do this or that", no "this is just an example", no "this is a placeholder", no "this is not implemented yet". Always provide a complete solution and the goal is enterprise level.
 - Consistency in code. Let's produce always the same patterns used between crates/packages.
 - Documentation should be in English, applied in module level, structs, properties and methods/functions. Provide always detail documentation for all and include examples on it. Code blocks in files should describe initial the overall of the file and anwser these three topics: What, How and why.
 - Clippy rules that are mandatory to use:
@@ -41,6 +41,8 @@ This rules are mandatory to apply to any answer given by AI.
   - sublime-git-tools:
     - directory: crates/git
     - spec: crates/git/SPEC.md
-  - sublime-monorepo-tools:
-    - directory: crates/monorepo
-    - spec: crates/monorepo/SPEC.md (In progress)
+  - sublime-workspace-tools: (To be done)
+    - directory: crates/workspace
+    - spec: crates/workspace/SPEC.md
+    
+- Clippy always 100% and tests 100% coverage
