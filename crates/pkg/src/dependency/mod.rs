@@ -12,15 +12,19 @@
 //! - **Dependency Graph**: Graph-based representation of package dependencies
 //! - **Dependency Registry**: Managing collections of dependencies
 //! - **Dependency Resolution**: Resolving version conflicts between dependencies
+//! - **Dependency Storage**: Thread-safe storage service for dependency data
 //! - **Dependency Updates**: Applying version updates to dependencies
 //!
 //! These components work together to provide a comprehensive system for managing
 //! package dependencies in JavaScript/TypeScript projects.
 
 pub mod change;
+pub mod conflict_resolver;
 pub mod dependency;
 pub mod filter;
 pub mod graph;
 pub mod registry;
+pub mod registry_client;
 pub mod resolution;
+pub mod storage;
 pub mod update;
