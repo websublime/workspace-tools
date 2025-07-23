@@ -14,7 +14,6 @@ use crate::{
     Package, ResolutionResult,
 };
 use serde_json::Value;
-use std::{cell::RefCell, rc::Rc};
 
 /// Represents a package along with its JSON data and file paths.
 ///
@@ -70,7 +69,7 @@ use std::{cell::RefCell, rc::Rc};
 #[derive(Debug, Clone)]
 pub struct Info {
     /// The parsed package structure
-    pub package: Rc<RefCell<Package>>,
+    pub package: Package,
     /// Absolute path to the package.json file
     pub package_json_path: String,
     /// Absolute path to the package directory
@@ -78,7 +77,7 @@ pub struct Info {
     /// Relative path to the package directory from the workspace root
     pub package_relative_path: String,
     /// Raw package.json content as JSON
-    pub pkg_json: Rc<RefCell<Value>>,
+    pub pkg_json: Value,
 }
 
 impl Info {
@@ -128,11 +127,11 @@ impl Info {
         pkg_json: Value,
     ) -> Self {
         Self {
-            package: Rc::new(RefCell::new(package)),
+            package,
             package_json_path,
             package_path,
             package_relative_path,
-            pkg_json: Rc::new(RefCell::new(pkg_json)),
+            pkg_json,
         }
     }
 
@@ -157,7 +156,7 @@ impl Info {
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let pkg = Package::new("test-pkg", "1.0.0", None)?;
-    /// let pkg_info = Info::new(
+    /// let mut pkg_info = Info::new(
     ///     pkg,
     ///     "package.json".to_string(),
     ///     ".".to_string(),
@@ -169,17 +168,17 @@ impl Info {
     /// pkg_info.update_version("2.0.0")?;
     ///
     /// // Verify both are updated
-    /// assert_eq!(pkg_info.package.borrow().version_str(), "2.0.0");
-    /// assert_eq!(pkg_info.pkg_json.borrow()["version"], "2.0.0");
+    /// assert_eq!(pkg_info.package.version_str(), "2.0.0");
+    /// assert_eq!(pkg_info.pkg_json["version"], "2.0.0");
     /// # Ok(())
     /// # }
     /// ```
-    pub fn update_version(&self, new_version: &str) -> Result<(), VersionError> {
+    pub fn update_version(&mut self, new_version: &str) -> Result<(), VersionError> {
         // Update Package version
-        self.package.borrow().update_version(new_version)?;
+        self.package.update_version(new_version)?;
 
         // Update JSON
-        if let Some(obj) = self.pkg_json.borrow_mut().as_object_mut() {
+        if let Some(obj) = self.pkg_json.as_object_mut() {
             obj.insert("version".to_string(), Value::String(new_version.to_string()));
         }
 
@@ -223,26 +222,20 @@ impl Info {
     /// # }
     /// ```
     pub fn update_dependency_version(
-        &self,
+        &mut self,
         dep_name: &str,
         new_version: &str,
     ) -> Result<(), DependencyResolutionError> {
-        // First, modify the package dependency separately from JSON
-        {
-            let update_result =
-                self.package.borrow_mut().update_dependency_version(dep_name, new_version);
-            if let Err(DependencyResolutionError::DependencyNotFound { .. }) = update_result {
-                // If not found in regular dependencies, that's ok - it might be in devDependencies only
-            } else if let Err(e) = update_result {
-                // For any other error, return it
-                return Err(e);
-            }
-        } // Package borrow is dropped here
+        // First, try to update the package dependency
+        let mut package_updated = false;
+        if let Ok(()) = self.package.update_dependency_version(dep_name, new_version) {
+            package_updated = true;
+        }
 
-        // Now update the JSON, after the package borrow is dropped
+        // Now update the JSON
         let mut json_updated = false;
 
-        if let Some(obj) = self.pkg_json.borrow_mut().as_object_mut() {
+        if let Some(obj) = self.pkg_json.as_object_mut() {
             // Try updating in dependencies
             if let Some(deps) = obj.get_mut("dependencies").and_then(|v| v.as_object_mut()) {
                 if deps.contains_key(dep_name) {
@@ -260,13 +253,11 @@ impl Info {
             }
         }
 
-        // If we didn't update JSON but also didn't find it in package, it's a genuine "not found"
-        if !json_updated
-            && self.package.borrow_mut().update_dependency_version(dep_name, new_version).is_err()
-        {
+        // If we didn't update either package or JSON, it's a genuine "not found"
+        if !package_updated && !json_updated {
             return Err(DependencyResolutionError::DependencyNotFound {
                 name: dep_name.to_string(),
-                package: self.package.borrow().name().to_string(),
+                package: self.package.name().to_string(),
             });
         }
 
@@ -318,14 +309,14 @@ impl Info {
     /// # }
     /// ```
     pub fn apply_dependency_resolution(
-        &self,
+        &mut self,
         resolution: &ResolutionResult,
     ) -> Result<(), VersionError> {
         // First, update the package's dependencies (handles regular dependencies)
-        let _ = { self.package.borrow_mut().update_dependencies_from_resolution(resolution)? }; // Package borrow is dropped here
+        let _ = self.package.update_dependencies_from_resolution(resolution)?;
 
         // Now update package.json for both dependencies and devDependencies
-        if let Some(pkg_json_obj) = self.pkg_json.borrow_mut().as_object_mut() {
+        if let Some(pkg_json_obj) = self.pkg_json.as_object_mut() {
             // Update all dependencies in the resolved versions map
             for (dep_name, new_version) in &resolution.resolved_versions {
                 // Check and update in dependencies section
@@ -390,7 +381,7 @@ impl Info {
     /// # }
     /// ```
     pub fn write_package_json(&self) -> Result<(), PackageError> {
-        let json_content = serde_json::to_string_pretty(&*self.pkg_json.borrow())
+        let json_content = serde_json::to_string_pretty(&self.pkg_json)
             .map_err(|e| PackageError::into_parse_error(e, self.package_json_path.clone()))?;
 
         std::fs::write(&self.package_json_path, json_content)

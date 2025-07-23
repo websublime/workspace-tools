@@ -408,17 +408,17 @@ fn create_package_infos(
 
     // Demonstrate updating a dependency version
     if !package_infos.is_empty() {
-        let first_info = &package_infos[0];
+        let first_info = &mut package_infos[0];
         println!("    🔄 Testing dependency update:");
-        println!("      - Before: {}", first_info.package.borrow().version_str());
+        println!("      - Before: {}", first_info.package.version_str());
 
         first_info.update_version("2.1.1")?;
-        println!("      - After: {}", first_info.package.borrow().version_str());
+        println!("      - After: {}", first_info.package.version_str());
 
         // Test dependency version update
-        if !first_info.package.borrow().dependencies().is_empty() {
+        if !first_info.package.dependencies().is_empty() {
             let (dep_name, old_version) = {
-                let package = first_info.package.borrow();
+                let package = &first_info.package;
                 let first_dep = &package.dependencies()[0];
                 (first_dep.name().to_string(), first_dep.version().to_string())
             };
@@ -426,7 +426,7 @@ fn create_package_infos(
             first_info.update_dependency_version(&dep_name, "^99.0.0")?;
 
             let new_version = {
-                let package = first_info.package.borrow();
+                let package = &first_info.package;
                 let first_dep = &package.dependencies()[0];
                 first_dep.version().to_string()
             };

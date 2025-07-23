@@ -64,7 +64,7 @@ mod package_tests {
 
     #[test]
     fn test_update_package_version() {
-        let pkg = Package::new("test-pkg", "1.0.0", None).unwrap();
+        let mut pkg = Package::new("test-pkg", "1.0.0", None).unwrap();
 
         // Valid update
         assert!(pkg.update_version("2.0.0").is_ok());
@@ -183,7 +183,7 @@ mod package_tests {
         let pkg = Package::new("test-pkg", "1.0.0", None).unwrap();
 
         // Create package info
-        let pkg_info = Info::new(
+        let mut pkg_info = Info::new(
             pkg,
             "/path/to/package.json".to_string(),
             "/path/to".to_string(),
@@ -202,7 +202,7 @@ mod package_tests {
 
         // Test update version
         assert!(pkg_info.update_version("1.1.0").is_ok());
-        assert_eq!(pkg_info.package.borrow().version_str(), "1.1.0");
+        assert_eq!(pkg_info.package.version_str(), "1.1.0");
 
         // Test dependency update
         let mut registry = Registry::new();
@@ -214,7 +214,7 @@ mod package_tests {
         )
         .unwrap();
 
-        let pkg_info_with_deps = Info::new(
+        let mut pkg_info_with_deps = Info::new(
             pkg_with_deps,
             "/path/to/package.json".to_string(),
             "/path/to".to_string(),
@@ -359,7 +359,7 @@ mod package_tests {
         .unwrap();
 
         // Create package info with JSON
-        let pkg_info = Info::new(
+        let mut pkg_info = Info::new(
             pkg,
             "/path/to/package.json".to_string(),
             "/path/to".to_string(),
@@ -388,7 +388,7 @@ mod package_tests {
         assert!(pkg_info.apply_dependency_resolution(&resolution).is_ok());
 
         // Check package was updated
-        let pkg_ref = pkg_info.package.borrow();
+        let pkg_ref = &pkg_info.package;
 
         // Check both react and lodash were updated in the package
         for dep in pkg_ref.dependencies() {
@@ -400,7 +400,7 @@ mod package_tests {
         }
 
         // Also check the JSON was updated
-        let json_ref = pkg_info.pkg_json.borrow();
+        let json_ref = &pkg_info.pkg_json;
         let deps = &json_ref["dependencies"];
         assert_eq!(deps["react"], "^18.0.0");
         assert_eq!(deps["lodash"], "^4.17.21");

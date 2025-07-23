@@ -46,8 +46,6 @@ use crate::{
     errors::{DependencyResolutionError, VersionError},
     Dependency, Registry, Node, ResolutionResult,
 };
-use semver::Version;
-use std::{cell::RefCell, rc::Rc}; // Still needed for version field
 
 /// A package with its dependencies and version information
 ///
@@ -78,7 +76,7 @@ use std::{cell::RefCell, rc::Rc}; // Still needed for version field
 #[derive(Debug, Clone)]
 pub struct Package {
     name: String,
-    version: Rc<RefCell<Version>>,
+    version: String,
     dependencies: Vec<Dependency>,
 }
 
@@ -95,7 +93,7 @@ impl Node for Package {
     }
 
     fn matches(&self, dependency: &Self::DependencyType) -> bool {
-        self.name() == dependency.name() && dependency.version().matches(&self.version())
+        self.name() == dependency.name() && dependency.version().matches(&semver::Version::parse(&self.version).unwrap_or_else(|_| semver::Version::new(0, 0, 0)))
     }
 
     fn identifier(&self) -> Self::Identifier {
@@ -138,11 +136,12 @@ impl Package {
         version: &str,
         dependencies: Option<Vec<Dependency>>,
     ) -> Result<Self, VersionError> {
-        let parsed_version = version.parse()?;
+        // Validate version string by parsing it
+        let _ = semver::Version::parse(version)?;
 
         Ok(Self {
             name: name.to_string(),
-            version: Rc::new(RefCell::new(parsed_version)),
+            version: version.to_string(),
             dependencies: dependencies.unwrap_or_default(),
         })
     }
@@ -220,10 +219,10 @@ impl Package {
     ///
     /// # Returns
     ///
-    /// A clone of the package's semantic version
+    /// The package version as a string
     #[must_use]
-    pub fn version(&self) -> Version {
-        self.version.borrow().clone()
+    pub fn version(&self) -> &str {
+        &self.version
     }
 
     /// Get the package version as a string
@@ -233,7 +232,7 @@ impl Package {
     /// The package version formatted as a string
     #[must_use]
     pub fn version_str(&self) -> String {
-        self.version.borrow().to_string()
+        self.version.clone()
     }
 
     /// Update the package version
@@ -264,9 +263,10 @@ impl Package {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn update_version(&self, new_version: &str) -> Result<(), VersionError> {
-        let parsed_version = new_version.parse()?;
-        *self.version.borrow_mut() = parsed_version;
+    pub fn update_version(&mut self, new_version: &str) -> Result<(), VersionError> {
+        // Validate version string by parsing it
+        let _ = semver::Version::parse(new_version)?;
+        self.version = new_version.to_string();
         Ok(())
     }
 

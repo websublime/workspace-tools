@@ -68,6 +68,21 @@ impl Error {
     }
 }
 
+impl AsRef<str> for Error {
+    fn as_ref(&self) -> &str {
+        match self {
+            Error::Version(_) => "VersionError",
+            Error::DependencyResolution(_) => "DependencyResolutionError",
+            Error::Package(_) => "PackageError",
+            Error::PackageRegistry(_) => "PackageRegistryError",
+            Error::Registry(_) => "RegistryError",
+            Error::Io(_) => "IoError",
+            Error::Json(_) => "JsonError",
+            Error::Generic(_) => "GenericError",
+        }
+    }
+}
+
 /// Result type alias for package tools operations
 ///
 /// This is a convenience type alias for Results with the unified Error type.

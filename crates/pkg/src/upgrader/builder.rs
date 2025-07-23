@@ -9,7 +9,7 @@ use crate::{
     UpgradeStatus, VersionStability, VersionUpdateStrategy,
 };
 use semver::{Version, VersionReq};
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 /// Package dependency upgrader
 ///
@@ -436,8 +436,6 @@ impl Upgrader {
     ///
     /// ```no_run
     /// use sublime_package_tools::{Upgrader, Dependency, Package};
-    /// use std::cell::RefCell;
-    /// use std::rc::Rc;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut upgrader = Upgrader::new();
@@ -531,15 +529,13 @@ impl Upgrader {
     ///
     /// ```no_run
     /// use sublime_package_tools::{Upgrader, Package, Dependency};
-    /// use std::cell::RefCell;
-    /// use std::rc::Rc;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut upgrader = Upgrader::new();
     ///
     /// // Create a package with dependencies
-    /// let dep1 = Rc::new(RefCell::new(Dependency::new("react", "^16.0.0")?));
-    /// let dep2 = Rc::new(RefCell::new(Dependency::new("lodash", "^4.0.0")?));
+    /// let dep1 = Dependency::new("react", "^16.0.0")?;
+    /// let dep2 = Dependency::new("lodash", "^4.0.0")?;
     /// let package = Package::new("my-app", "1.0.0", Some(vec![dep1, dep2]))?;
     ///
     /// // Check for upgrades
@@ -672,21 +668,21 @@ impl Upgrader {
     /// };
     /// let upgrader = Upgrader::with_config(config);
     ///
-    /// // Prepare packages (as Rc<RefCell<>> for mutability)
-    /// let packages = vec![]; // Add your Rc<RefCell<Package>> references here
+    /// // Prepare packages
+    /// let mut packages = vec![]; // Add your Package instances here
     ///
     /// // Find upgrades
     /// let upgrades = vec![]; // From check_all_upgrades or similar
     ///
     /// // Apply upgrades
-    /// let applied = upgrader.apply_upgrades(&packages, &upgrades)?;
+    /// let applied = upgrader.apply_upgrades(&mut packages, &upgrades)?;
     /// println!("Applied {} upgrades", applied.len());
     /// # Ok(())
     /// # }
     /// ```
     pub fn apply_upgrades(
         &self,
-        packages: &[Rc<RefCell<Package>>],
+        packages: &mut [Package],
         upgrades: &[AvailableUpgrade],
     ) -> Result<Vec<AvailableUpgrade>, DependencyResolutionError> {
         // Skip actually applying anything if this is a dry run
@@ -699,11 +695,9 @@ impl Upgrader {
         for upgrade in upgrades {
             if let Some(new_version) = &upgrade.compatible_version {
                 // Find the package this upgrade applies to
-                if let Some(package_rc) =
-                    packages.iter().find(|p| p.borrow().name() == upgrade.package_name)
+                if let Some(package) =
+                    packages.iter_mut().find(|p| p.name() == upgrade.package_name)
                 {
-                    let mut package = package_rc.borrow_mut();
-
                     // Apply the upgrade
                     package.update_dependency_version(&upgrade.dependency_name, new_version)?;
 

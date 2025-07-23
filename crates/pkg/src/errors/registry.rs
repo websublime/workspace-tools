@@ -35,6 +35,12 @@ impl AsRef<str> for RegistryError {
 impl Clone for RegistryError {
     fn clone(&self) -> Self {
         match self {
+            RegistryError::UrlNotSupported(url) => {
+                RegistryError::UrlNotSupported(url.clone())
+            }
+            RegistryError::UrlNotFound(url) => {
+                RegistryError::UrlNotFound(url.clone())
+            }
             RegistryError::NpmRcFailure { path, error } => {
                 RegistryError::NpmRcFailure {
                     path: path.clone(),
@@ -42,7 +48,6 @@ impl Clone for RegistryError {
                     error: io::Error::new(error.kind(), error.to_string()),
                 }
             }
-            _ => self.clone(),
         }
     }
 }

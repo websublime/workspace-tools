@@ -13,7 +13,7 @@ pub fn build_dependency_graph_from_package_infos<'a>(
     // Extract packages from package infos
     packages.clear();
     for pkg_info in package_infos {
-        packages.push(pkg_info.package.borrow().clone());
+        packages.push(pkg_info.package.clone());
     }
 
     // Build dependency graph

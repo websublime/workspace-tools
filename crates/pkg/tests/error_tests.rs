@@ -225,4 +225,57 @@ mod error_tests {
         assert_eq!(pe3.as_ref(), "PackageBetweenFailure");
         assert_eq!(pe4.as_ref(), "PackageNotFound");
     }
+
+    #[test]
+    fn test_registry_error_clone() {
+        // Test cloning all variants of RegistryError
+        let url_not_supported = RegistryError::UrlNotSupported("https://example.com".to_string());
+        let url_not_found = RegistryError::UrlNotFound("https://registry.com".to_string());
+        let npmrc_failure = RegistryError::NpmRcFailure {
+            path: "/path/to/.npmrc".to_string(),
+            error: io::Error::new(io::ErrorKind::NotFound, "File not found"),
+        };
+
+        // Clone each variant
+        let cloned_url_not_supported = url_not_supported.clone();
+        let cloned_url_not_found = url_not_found.clone();
+        let cloned_npmrc_failure = npmrc_failure.clone();
+
+        // Verify the clones match the originals
+        assert_eq!(url_not_supported.to_string(), cloned_url_not_supported.to_string());
+        assert_eq!(url_not_found.to_string(), cloned_url_not_found.to_string());
+        assert_eq!(npmrc_failure.to_string(), cloned_npmrc_failure.to_string());
+
+        // Verify AsRef<str> works on clones
+        assert_eq!(cloned_url_not_supported.as_ref(), "UrlNotSupported");
+        assert_eq!(cloned_url_not_found.as_ref(), "UrlNotFound");
+        assert_eq!(cloned_npmrc_failure.as_ref(), "NpmRcFailure");
+    }
+
+    #[test]
+    fn test_main_error_as_ref() {
+        use sublime_package_tools::Error;
+        
+        // Test AsRef<str> for main Error enum
+        let version_err: Error = VersionError::InvalidVersion("bad".to_string()).into();
+        assert_eq!(version_err.as_ref(), "VersionError");
+        
+        let dep_err: Error = DependencyResolutionError::VersionParseError("invalid".to_string()).into();
+        assert_eq!(dep_err.as_ref(), "DependencyResolutionError");
+        
+        let pkg_err: Error = PackageError::PackageNotFound("missing".to_string()).into();
+        assert_eq!(pkg_err.as_ref(), "PackageError");
+        
+        let registry_err: Error = RegistryError::UrlNotFound("https://test.com".to_string()).into();
+        assert_eq!(registry_err.as_ref(), "RegistryError");
+        
+        let io_err: Error = io::Error::new(io::ErrorKind::NotFound, "file not found").into();
+        assert_eq!(io_err.as_ref(), "IoError");
+        
+        let json_err: Error = serde_json::from_str::<serde_json::Value>("bad json").unwrap_err().into();
+        assert_eq!(json_err.as_ref(), "JsonError");
+        
+        let generic_err = Error::generic("custom error message");
+        assert_eq!(generic_err.as_ref(), "GenericError");
+    }
 }
