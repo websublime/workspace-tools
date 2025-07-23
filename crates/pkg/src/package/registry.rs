@@ -4,18 +4,20 @@
 //! retrieving package metadata, and managing version information.
 
 use crate::{errors::PackageRegistryError, CacheEntry};
+use async_trait::async_trait;
 use flate2::read::GzDecoder;
-use reqwest::blocking::{Client, RequestBuilder};
+use reqwest::{Client, RequestBuilder};
 use serde_json::Value;
 use std::{
     any::Any,
     collections::HashMap,
-    fs, io,
+    io,
     path::Path,
     sync::{Arc, Mutex},
     time::Duration,
 };
 use tar::Archive;
+use tokio::fs;
 
 /// Interface for package registry operations
 ///
@@ -23,7 +25,9 @@ use tar::Archive;
 /// such as retrieving version information and package metadata.
 ///
 /// Implementors should provide efficient caching and appropriate error handling.
-pub trait PackageRegistry {
+/// All implementations must be Send + Sync for thread safety.
+#[async_trait]
+pub trait PackageRegistry: Send + Sync {
     /// Get the latest version of a package
     ///
     /// # Arguments
@@ -40,7 +44,7 @@ pub trait PackageRegistry {
     /// This function will return an error if:
     /// - Network request to the registry fails
     /// - The response cannot be parsed as JSON
-    fn get_latest_version(
+    async fn get_latest_version(
         &self,
         package_name: &str,
     ) -> Result<Option<String>, PackageRegistryError>;
@@ -60,7 +64,7 @@ pub trait PackageRegistry {
     /// This function will return an error if:
     /// - Network request to the registry fails
     /// - The response cannot be parsed as JSON
-    fn get_all_versions(&self, package_name: &str) -> Result<Vec<String>, PackageRegistryError>;
+    async fn get_all_versions(&self, package_name: &str) -> Result<Vec<String>, PackageRegistryError>;
 
     /// Get metadata about a package
     ///
@@ -79,7 +83,7 @@ pub trait PackageRegistry {
     /// - Network request to the registry fails
     /// - The specified package or version is not found
     /// - The response cannot be parsed as JSON
-    fn get_package_info(
+    async fn get_package_info(
         &self,
         package_name: &str,
         version: &str,
@@ -114,12 +118,15 @@ pub trait PackageRegistry {
     /// ```no_run
     /// use sublime_package_tools::{NpmRegistry, PackageRegistry};
     ///
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), sublime_package_tools::PackageRegistryError> {
     /// let registry = NpmRegistry::default();
-    /// let tarball_bytes = registry.download_package("lodash", "4.17.21")?;
+    /// let tarball_bytes = registry.download_package("lodash", "4.17.21").await?;
     /// println!("Downloaded {} bytes", tarball_bytes.len());
-    /// # Ok::<(), sublime_package_tools::PackageRegistryError>(())
+    /// # Ok(())
+    /// # }
     /// ```
-    fn download_package(
+    async fn download_package(
         &self,
         package_name: &str,
         version: &str,
@@ -155,12 +162,15 @@ pub trait PackageRegistry {
     /// use sublime_package_tools::{NpmRegistry, PackageRegistry};
     /// use std::path::Path;
     ///
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), sublime_package_tools::PackageRegistryError> {
     /// let registry = NpmRegistry::default();
     /// let dest = Path::new("./packages/lodash");
-    /// registry.download_and_extract_package("lodash", "4.17.21", dest)?;
-    /// # Ok::<(), sublime_package_tools::PackageRegistryError>(())
+    /// registry.download_and_extract_package("lodash", "4.17.21", dest).await?;
+    /// # Ok(())
+    /// # }
     /// ```
-    fn download_and_extract_package(
+    async fn download_and_extract_package(
         &self,
         package_name: &str,
         version: &str,
@@ -201,8 +211,9 @@ impl Default for NpmRegistry {
     }
 }
 
+#[async_trait]
 impl PackageRegistry for NpmRegistry {
-    fn get_latest_version(
+    async fn get_latest_version(
         &self,
         package_name: &str,
     ) -> Result<Option<String>, PackageRegistryError> {
@@ -219,14 +230,20 @@ impl PackageRegistry for NpmRegistry {
 
         let url = format!("{}/latest", self.package_url(package_name));
 
-        let response =
-            self.build_request(&url).send().map_err(PackageRegistryError::FetchFailure)?;
+        let response = self
+            .build_request(&url)
+            .send()
+            .await
+            .map_err(PackageRegistryError::FetchFailure)?;
 
         if response.status() == reqwest::StatusCode::NOT_FOUND {
             return Ok(None);
         }
 
-        let data: Value = response.json().map_err(PackageRegistryError::FetchFailure)?;
+        let data: Value = response
+            .json()
+            .await
+            .map_err(PackageRegistryError::FetchFailure)?;
 
         let version = data.get("version").and_then(|v| v.as_str()).map(ToString::to_string);
 
@@ -238,7 +255,7 @@ impl PackageRegistry for NpmRegistry {
         Ok(version)
     }
 
-    fn get_all_versions(&self, package_name: &str) -> Result<Vec<String>, PackageRegistryError> {
+    async fn get_all_versions(&self, package_name: &str) -> Result<Vec<String>, PackageRegistryError> {
         // Check cache first
         {
             if let Ok(cache) = self.versions_cache.lock() {
@@ -252,14 +269,20 @@ impl PackageRegistry for NpmRegistry {
 
         let url = self.package_url(package_name);
 
-        let response =
-            self.build_request(&url).send().map_err(PackageRegistryError::FetchFailure)?;
+        let response = self
+            .build_request(&url)
+            .send()
+            .await
+            .map_err(PackageRegistryError::FetchFailure)?;
 
         if response.status() == reqwest::StatusCode::NOT_FOUND {
             return Ok(Vec::new());
         }
 
-        let data: Value = response.json().map_err(PackageRegistryError::JsonParseFailure)?;
+        let data: Value = response
+            .json()
+            .await
+            .map_err(PackageRegistryError::JsonParseFailure)?;
 
         let versions = data
             .get("versions")
@@ -275,15 +298,18 @@ impl PackageRegistry for NpmRegistry {
         Ok(versions)
     }
 
-    fn get_package_info(
+    async fn get_package_info(
         &self,
         package_name: &str,
         version: &str,
     ) -> Result<Value, PackageRegistryError> {
         let url = format!("{}/{}", self.package_url(package_name), version);
 
-        let response =
-            self.build_request(&url).send().map_err(PackageRegistryError::FetchFailure)?;
+        let response = self
+            .build_request(&url)
+            .send()
+            .await
+            .map_err(PackageRegistryError::FetchFailure)?;
 
         if response.status() == reqwest::StatusCode::NOT_FOUND {
             return Err(PackageRegistryError::NotFound {
@@ -292,7 +318,10 @@ impl PackageRegistry for NpmRegistry {
             });
         }
 
-        response.json().map_err(PackageRegistryError::JsonParseFailure)
+        response
+            .json()
+            .await
+            .map_err(PackageRegistryError::JsonParseFailure)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -303,20 +332,22 @@ impl PackageRegistry for NpmRegistry {
         self
     }
 
-    fn download_package(
+    async fn download_package(
         &self,
         package_name: &str,
         version: &str,
     ) -> Result<Vec<u8>, PackageRegistryError> {
         let download_url = self.get_download_url(package_name, version);
 
-        let response = self.build_request(&download_url).send().map_err(|e| {
-            PackageRegistryError::DownloadFailure {
+        let response = self
+            .build_request(&download_url)
+            .send()
+            .await
+            .map_err(|e| PackageRegistryError::DownloadFailure {
                 package_name: package_name.to_string(),
                 version: version.to_string(),
                 source: e,
-            }
-        })?;
+            })?;
 
         if response.status() == reqwest::StatusCode::NOT_FOUND {
             return Err(PackageRegistryError::NotFound {
@@ -325,23 +356,26 @@ impl PackageRegistry for NpmRegistry {
             });
         }
 
-        let bytes = response.bytes().map_err(|e| PackageRegistryError::DownloadFailure {
-            package_name: package_name.to_string(),
-            version: version.to_string(),
-            source: e,
-        })?;
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| PackageRegistryError::DownloadFailure {
+                package_name: package_name.to_string(),
+                version: version.to_string(),
+                source: e,
+            })?;
 
         Ok(bytes.to_vec())
     }
 
-    fn download_and_extract_package(
+    async fn download_and_extract_package(
         &self,
         package_name: &str,
         version: &str,
         destination: &Path,
     ) -> Result<(), PackageRegistryError> {
         // Create destination directory if it doesn't exist
-        if let Err(e) = fs::create_dir_all(destination) {
+        if let Err(e) = fs::create_dir_all(destination).await {
             return Err(PackageRegistryError::DirectoryCreationFailure {
                 path: destination.display().to_string(),
                 source: e,
@@ -349,7 +383,7 @@ impl PackageRegistry for NpmRegistry {
         }
 
         // Download the package tarball
-        let tarball_bytes = self.download_package(package_name, version)?;
+        let tarball_bytes = self.download_package(package_name, version).await?;
 
         // Create a cursor from the bytes for reading
         let cursor = io::Cursor::new(tarball_bytes);
@@ -543,7 +577,10 @@ impl Clone for NpmRegistry {
 }
 
 /// Trait for package registries that can be cloned
-pub trait PackageRegistryClone: PackageRegistry {
+/// 
+/// This trait extends PackageRegistry with the ability to clone the registry.
+/// All implementations must be Send + Sync for thread safety.
+pub trait PackageRegistryClone: PackageRegistry + Send + Sync {
     /// Clone the package registry implementation
     fn clone_box(&self) -> Box<dyn PackageRegistryClone>;
 }

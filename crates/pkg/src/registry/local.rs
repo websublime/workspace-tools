@@ -3,6 +3,7 @@
 //! This module provides a local in-memory package registry implementation, primarily
 //! useful for testing and simulating registry behavior without network calls.
 
+use async_trait::async_trait;
 use crate::package::registry::PackageRegistryClone;
 use crate::{errors::PackageRegistryError, PackageRegistry};
 use semver::Version;
@@ -43,8 +44,9 @@ impl Default for LocalRegistry {
     }
 }
 
+#[async_trait]
 impl PackageRegistry for LocalRegistry {
-    fn get_latest_version(
+    async fn get_latest_version(
         &self,
         package_name: &str,
     ) -> Result<Option<String>, PackageRegistryError> {
@@ -78,7 +80,7 @@ impl PackageRegistry for LocalRegistry {
         }
     }
 
-    fn get_all_versions(&self, package_name: &str) -> Result<Vec<String>, PackageRegistryError> {
+    async fn get_all_versions(&self, package_name: &str) -> Result<Vec<String>, PackageRegistryError> {
         let packages = self.packages.lock()?;
 
         if let Some(versions) = packages.get(package_name) {
@@ -88,7 +90,7 @@ impl PackageRegistry for LocalRegistry {
         }
     }
 
-    fn get_package_info(
+    async fn get_package_info(
         &self,
         package_name: &str,
         version: &str,
@@ -120,7 +122,7 @@ impl PackageRegistry for LocalRegistry {
         self
     }
 
-    fn download_package(
+    async fn download_package(
         &self,
         package_name: &str,
         version: &str,
@@ -156,33 +158,43 @@ impl PackageRegistry for LocalRegistry {
         }
     }
 
-    fn download_and_extract_package(
+    async fn download_and_extract_package(
         &self,
         package_name: &str,
         version: &str,
         destination: &Path,
     ) -> Result<(), PackageRegistryError> {
         // For LocalRegistry, we simulate extraction by creating a basic directory structure
-        use std::fs;
+        use tokio::fs;
 
-        // Check if package exists
-        let packages = self.packages.lock()?;
-        if let Some(versions) = packages.get(package_name) {
-            if !versions.contains_key(version) {
+        // Check if package exists and get package info (drop lock before async operations)
+        let package_info = {
+            let packages = self.packages.lock()?;
+            if let Some(versions) = packages.get(package_name) {
+                if !versions.contains_key(version) {
+                    return Err(PackageRegistryError::NotFound {
+                        package_name: package_name.to_string(),
+                        version: version.to_string(),
+                    });
+                }
+                // Get the package info while we have the lock
+                versions.get(version).cloned().unwrap_or_else(|| {
+                    json!({
+                        "name": package_name,
+                        "version": version,
+                        "_note": "Mock package created by LocalRegistry"
+                    })
+                })
+            } else {
                 return Err(PackageRegistryError::NotFound {
                     package_name: package_name.to_string(),
                     version: version.to_string(),
                 });
             }
-        } else {
-            return Err(PackageRegistryError::NotFound {
-                package_name: package_name.to_string(),
-                version: version.to_string(),
-            });
-        }
+        }; // Lock is dropped here
 
         // Create destination directory
-        if let Err(e) = fs::create_dir_all(destination) {
+        if let Err(e) = fs::create_dir_all(destination).await {
             return Err(PackageRegistryError::DirectoryCreationFailure {
                 path: destination.display().to_string(),
                 source: e,
@@ -191,7 +203,7 @@ impl PackageRegistry for LocalRegistry {
 
         // Create package subdirectory (npm packages are extracted to package/ subdirectory)
         let package_dir = destination.join("package");
-        if let Err(e) = fs::create_dir_all(&package_dir) {
+        if let Err(e) = fs::create_dir_all(&package_dir).await {
             return Err(PackageRegistryError::DirectoryCreationFailure {
                 path: package_dir.display().to_string(),
                 source: e,
@@ -199,18 +211,6 @@ impl PackageRegistry for LocalRegistry {
         }
 
         // Create a mock package.json file
-        let package_info = packages
-            .get(package_name)
-            .and_then(|versions| versions.get(version))
-            .cloned()
-            .unwrap_or_else(|| {
-                json!({
-                    "name": package_name,
-                    "version": version,
-                    "_note": "Mock package created by LocalRegistry"
-                })
-            });
-
         let package_json_path = package_dir.join("package.json");
         let package_json_content = serde_json::to_string_pretty(&package_info).map_err(|e| {
             PackageRegistryError::ExtractionFailure {
@@ -221,7 +221,7 @@ impl PackageRegistry for LocalRegistry {
             }
         })?;
 
-        fs::write(&package_json_path, package_json_content).map_err(|e| {
+        fs::write(&package_json_path, package_json_content).await.map_err(|e| {
             PackageRegistryError::ExtractionFailure {
                 package_name: package_name.to_string(),
                 version: version.to_string(),

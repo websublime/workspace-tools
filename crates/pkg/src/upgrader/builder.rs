@@ -182,12 +182,12 @@ impl Upgrader {
     /// This function will return an error if:
     /// - Network request to the registry fails
     /// - The response cannot be parsed as JSON
-    fn get_cached_versions(
+    async fn get_cached_versions(
         &mut self,
         package_name: &str,
     ) -> Result<Vec<String>, PackageRegistryError> {
         if !self.cache.contains_key(package_name) {
-            let versions = self.registry_manager.get_all_versions(package_name)?;
+            let versions = self.registry_manager.get_all_versions(package_name).await?;
             self.cache.insert(package_name.to_string(), versions);
         }
 
@@ -212,13 +212,13 @@ impl Upgrader {
     /// This function will return an error if:
     /// - Network request to the registry fails
     /// - The response cannot be parsed as JSON
-    fn find_highest_satisfying_version(
+    async fn find_highest_satisfying_version(
         &mut self,
         package_name: &str,
         requirement: &VersionReq,
         include_prereleases: bool,
     ) -> Result<Option<String>, PackageRegistryError> {
-        let all_versions = self.get_cached_versions(package_name)?;
+        let all_versions = self.get_cached_versions(package_name).await?;
 
         if all_versions.is_empty() {
             return Ok(None);
@@ -296,12 +296,12 @@ impl Upgrader {
     /// This function will return an error if:
     /// - Network request to the registry fails
     /// - The response cannot be parsed as JSON
-    fn find_latest_version(
+    async fn find_latest_version(
         &mut self,
         package_name: &str,
         include_prereleases: bool,
     ) -> Result<Option<String>, PackageRegistryError> {
-        let all_versions = self.get_cached_versions(package_name)?;
+        let all_versions = self.get_cached_versions(package_name).await?;
 
         if all_versions.is_empty() {
             return Ok(None);
@@ -450,7 +450,7 @@ impl Upgrader {
     /// # }
     /// ```
     #[allow(clippy::needless_borrow)]
-    pub fn check_dependency_upgrade(
+    pub async fn check_dependency_upgrade(
         &mut self,
         package_name: &str,
         dependency: &Dependency,
@@ -483,10 +483,10 @@ impl Upgrader {
             dependency_name,
             &version_req,
             include_prereleases,
-        )?;
+        ).await?;
 
         // Find the latest version overall (this will include major versions)
-        let latest_version = self.find_latest_version(dependency_name, include_prereleases)?;
+        let latest_version = self.find_latest_version(dependency_name, include_prereleases).await?;
 
         // Clean the current version for comparison
         let clean_version = current_version.trim_start_matches('^').trim_start_matches('~');
@@ -545,7 +545,7 @@ impl Upgrader {
     /// # }
     /// ```
     #[allow(clippy::needless_borrow)]
-    pub fn check_package_upgrades(
+    pub async fn check_package_upgrades(
         &mut self,
         package: &Package,
     ) -> Result<Vec<AvailableUpgrade>, PackageRegistryError> {
@@ -568,7 +568,7 @@ impl Upgrader {
                 continue;
             }
 
-            let upgrade = self.check_dependency_upgrade(package.name(), &dep)?;
+            let upgrade = self.check_dependency_upgrade(package.name(), &dep).await?;
 
             // Only include upgrades where there's an actual upgrade available
             match &upgrade.status {
@@ -622,14 +622,14 @@ impl Upgrader {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn check_all_upgrades(
+    pub async fn check_all_upgrades(
         &mut self,
         packages: &[Package],
     ) -> Result<Vec<AvailableUpgrade>, PackageRegistryError> {
         let mut all_upgrades = Vec::new();
 
         for package in packages {
-            let package_upgrades = self.check_package_upgrades(package)?;
+            let package_upgrades = self.check_package_upgrades(package).await?;
             all_upgrades.extend(package_upgrades);
         }
 

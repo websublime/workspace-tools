@@ -425,22 +425,23 @@ impl Registry {
     /// ```
     /// use sublime_package_tools::{Registry, NpmRegistry};
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let npm_registry = NpmRegistry::new("https://registry.npmjs.org".to_string());
     /// let registry = Registry::with_package_registry(Box::new(npm_registry));
     ///
-    /// if let Ok(versions) = registry.get_package_versions("react") {
+    /// if let Ok(versions) = registry.get_package_versions("react").await {
     ///     println!("Found {} versions of react", versions.len());
     /// }
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_package_versions(
+    pub async fn get_package_versions(
         &self,
         package_name: &str,
     ) -> Result<Vec<String>, PackageRegistryError> {
         if let Some(ref registry) = self.package_registry {
-            registry.get_all_versions(package_name)
+            registry.get_all_versions(package_name).await
         } else {
             Ok(Vec::new())
         }
@@ -535,13 +536,13 @@ impl Registry {
     /// # }
     /// ```
     #[allow(clippy::unnecessary_wraps)]
-    pub fn find_highest_compatible_version(
+    pub async fn find_highest_compatible_version(
         &self,
         name: &str,
         requirements: &[&VersionReq],
     ) -> Result<String, PackageRegistryError> {
         // First priority: Query package registry for all available versions
-        match self.get_package_versions(name) {
+        match self.get_package_versions(name).await {
             Ok(available_versions) => {
                 if !available_versions.is_empty() {
                     // Parse and filter versions that satisfy all requirements

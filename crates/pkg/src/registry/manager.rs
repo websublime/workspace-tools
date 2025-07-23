@@ -333,12 +333,12 @@ impl RegistryManager {
     /// This function will return an error if:
     /// - Network request to the registry fails
     /// - The response cannot be parsed as JSON
-    pub fn get_latest_version(
+    pub async fn get_latest_version(
         &self,
         package_name: &str,
     ) -> Result<Option<String>, PackageRegistryError> {
         let registry = self.get_registry_for_package(package_name);
-        registry.get_latest_version(package_name)
+        registry.get_latest_version(package_name).await
     }
 
     /// Get all available versions of a package
@@ -356,12 +356,12 @@ impl RegistryManager {
     /// This function will return an error if:
     /// - Network request to the registry fails
     /// - The response cannot be parsed as JSON
-    pub fn get_all_versions(
+    pub async fn get_all_versions(
         &self,
         package_name: &str,
     ) -> Result<Vec<String>, PackageRegistryError> {
         let registry = self.get_registry_for_package(package_name);
-        registry.get_all_versions(package_name)
+        registry.get_all_versions(package_name).await
     }
 
     /// Get metadata about a package
@@ -381,13 +381,13 @@ impl RegistryManager {
     /// - Network request to the registry fails
     /// - The specified package or version is not found
     /// - The response cannot be parsed as JSON
-    pub fn get_package_info(
+    pub async fn get_package_info(
         &self,
         package_name: &str,
         version: &str,
     ) -> Result<serde_json::Value, PackageRegistryError> {
         let registry = self.get_registry_for_package(package_name);
-        registry.get_package_info(package_name, version)
+        registry.get_package_info(package_name, version).await
     }
 
     /// Load configuration from .npmrc file
@@ -406,7 +406,7 @@ impl RegistryManager {
     /// # Errors
     ///
     /// Returns `RegistryError::NpmRcFailure` if reading the .npmrc file fails
-    pub fn load_from_npmrc(&mut self, npmrc_path: Option<&str>) -> Result<&Self, RegistryError> {
+    pub async fn load_from_npmrc(&mut self, npmrc_path: Option<&str>) -> Result<&Self, RegistryError> {
         let path = if let Some(path_str) = npmrc_path {
             std::path::PathBuf::from(path_str)
         } else {
@@ -425,7 +425,7 @@ impl RegistryManager {
             return Ok(self);
         }
 
-        let content = std::fs::read_to_string(&path).map_err(|e| RegistryError::NpmRcFailure {
+        let content = tokio::fs::read_to_string(&path).await.map_err(|e| RegistryError::NpmRcFailure {
             path: path.display().to_string(),
             error: e,
         })?;

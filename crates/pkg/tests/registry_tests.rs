@@ -136,15 +136,15 @@ mod registry_tests {
         // Create and test the registry
         let test_registry = TestNpmRegistry;
 
-        let latest = test_registry.get_latest_version("react");
+        let latest = test_registry.get_latest_version("react").await;
         assert!(latest.is_ok());
         assert_eq!(latest.unwrap(), Some("17.0.2".to_string()));
 
-        let versions = test_registry.get_all_versions("react");
+        let versions = test_registry.get_all_versions("react").await;
         assert!(versions.is_ok());
         assert_eq!(versions.unwrap().len(), 3);
 
-        let info = test_registry.get_package_info("react", "17.0.1");
+        let info = test_registry.get_package_info("react", "17.0.1").await;
         assert!(info.is_ok());
         assert_eq!(info.unwrap()["version"], "17.0.1");
 
@@ -195,14 +195,14 @@ mod registry_tests {
         let registry = LocalRegistry::default();
 
         // Initially should be empty
-        let versions = registry.get_all_versions("test-package").unwrap();
+        let versions = registry.get_all_versions("test-package").await.unwrap();
         assert!(versions.is_empty());
 
-        let latest = registry.get_latest_version("test-package").unwrap();
+        let latest = registry.get_latest_version("test-package").await.unwrap();
         assert!(latest.is_none());
 
         // Should return error for non-existent package
-        let result = registry.get_package_info("test-package", "1.0.0");
+        let result = registry.get_package_info("test-package", "1.0.0").await;
         assert!(result.is_err());
 
         // Unfortunately we can't populate the registry in the test as it uses private methods
@@ -306,7 +306,7 @@ mod registry_tests {
         let mut manager = RegistryManager::new();
 
         // Load from npmrc
-        let result = manager.load_from_npmrc(Some(&npmrc_path));
+        let result = manager.load_from_npmrc(Some(&npmrc_path)).await;
         assert!(result.is_ok());
 
         // Now check that everything is set correctly
@@ -365,7 +365,7 @@ mod registry_tests {
         assert_eq!(manager.get_registry_for_scope("@org"), Some("https://org-npm.example.com"));
 
         // Optional: Try loading from npmrc just to see if it completes without error
-        let result = manager.load_from_npmrc(Some(&npmrc_path));
+        let result = manager.load_from_npmrc(Some(&npmrc_path)).await;
         assert!(result.is_ok(), "load_from_npmrc failed with: {:?}", result.err());
     }
 
@@ -413,22 +413,23 @@ mod registry_tests {
         // Create a test registry implementation to verify the trait methods exist
         struct TestDownloadRegistry;
 
+        #[async_trait]
         impl PackageRegistry for TestDownloadRegistry {
-            fn get_latest_version(
+            async fn get_latest_version(
                 &self,
                 _package_name: &str,
             ) -> Result<Option<String>, PackageRegistryError> {
                 Ok(Some("1.0.0".to_string()))
             }
 
-            fn get_all_versions(
+            async fn get_all_versions(
                 &self,
                 _package_name: &str,
             ) -> Result<Vec<String>, PackageRegistryError> {
                 Ok(vec!["1.0.0".to_string()])
             }
 
-            fn get_package_info(
+            async fn get_package_info(
                 &self,
                 package_name: &str,
                 version: &str,
@@ -447,7 +448,7 @@ mod registry_tests {
                 self
             }
 
-            fn download_package(
+            async fn download_package(
                 &self,
                 _package_name: &str,
                 _version: &str,
@@ -456,7 +457,7 @@ mod registry_tests {
                 Ok(vec![0x1f, 0x8b, 0x08, 0x00]) // gzip magic bytes
             }
 
-            fn download_and_extract_package(
+            async fn download_and_extract_package(
                 &self,
                 _package_name: &str,
                 _version: &str,
@@ -470,14 +471,14 @@ mod registry_tests {
         let registry = TestDownloadRegistry;
 
         // Test that download_package method exists and can be called
-        let result = registry.download_package("test-package", "1.0.0");
+        let result = registry.download_package("test-package", "1.0.0").await;
         assert!(result.is_ok());
         let bytes = result.unwrap();
         assert_eq!(bytes, vec![0x1f, 0x8b, 0x08, 0x00]);
 
         // Test that download_and_extract_package method exists and can be called
         let extract_result =
-            registry.download_and_extract_package("test-package", "1.0.0", Path::new("/tmp/test"));
+            registry.download_and_extract_package("test-package", "1.0.0", Path::new("/tmp/test")).await;
         assert!(extract_result.is_ok());
     }
 
