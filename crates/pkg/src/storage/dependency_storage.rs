@@ -46,15 +46,17 @@
 //! # }
 //! ```
 
-use super::{
-    storage::DependencyStorage,
-    registry_client::PackageRegistryClient,
-    conflict_resolver::ConflictResolver,
-    resolution::ResolutionResult,
-};
 use crate::{
+    dependency::{
+        storage::DependencyStorage,
+        conflict_resolver::ConflictResolver,
+        resolution::ResolutionResult,
+    },
+    external::{
+        package_registry_client::PackageRegistryClient,
+        npm_client::PackageRegistryClone,
+    },
     errors::{PackageRegistryError, VersionError},
-    package::registry::PackageRegistryClone,
     Dependency,
 };
 use semver::VersionReq;

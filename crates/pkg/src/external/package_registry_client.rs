@@ -27,7 +27,7 @@
 //! ## Examples
 //!
 //! ```rust
-//! use sublime_package_tools::dependency::registry_client::PackageRegistryClient;
+//! use sublime_package_tools::external::package_registry_client::PackageRegistryClient;
 //!
 //! // Create client without registry
 //! let client = PackageRegistryClient::new();
@@ -38,7 +38,7 @@
 //! let versions = client.get_package_versions("react").await.unwrap();
 //! ```
 
-use crate::package::registry::PackageRegistryClone;
+use crate::external::npm_client::PackageRegistryClone;
 use crate::errors::PackageRegistryError;
 use std::sync::Arc;
 
@@ -64,7 +64,7 @@ impl std::fmt::Debug for dyn PackageRegistryClone {
 /// # Examples
 ///
 /// ```rust
-/// use sublime_package_tools::dependency::registry_client::PackageRegistryClient;
+/// use sublime_package_tools::external::package_registry_client::PackageRegistryClient;
 ///
 /// let client = PackageRegistryClient::new();
 /// 
@@ -99,7 +99,7 @@ impl PackageRegistryClient {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_package_tools::dependency::registry_client::PackageRegistryClient;
+    /// use sublime_package_tools::external::package_registry_client::PackageRegistryClient;
     ///
     /// let client = PackageRegistryClient::new();
     /// assert!(!client.has_registry());
@@ -129,7 +129,7 @@ impl PackageRegistryClient {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_package_tools::dependency::registry_client::PackageRegistryClient;
+    /// use sublime_package_tools::external::package_registry_client::PackageRegistryClient;
     ///
     /// let npm_registry = NpmRegistry::new("https://registry.npmjs.org");
     /// let client = PackageRegistryClient::with_registry(Box::new(npm_registry));
@@ -154,7 +154,7 @@ impl PackageRegistryClient {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_package_tools::dependency::registry_client::PackageRegistryClient;
+    /// use sublime_package_tools::external::package_registry_client::PackageRegistryClient;
     ///
     /// let mut client = PackageRegistryClient::new();
     /// assert!(!client.has_registry());
@@ -176,7 +176,7 @@ impl PackageRegistryClient {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_package_tools::dependency::registry_client::PackageRegistryClient;
+    /// use sublime_package_tools::external::package_registry_client::PackageRegistryClient;
     ///
     /// let client = PackageRegistryClient::new();
     /// assert!(!client.has_registry());
@@ -212,7 +212,7 @@ impl PackageRegistryClient {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_package_tools::dependency::registry_client::PackageRegistryClient;
+    /// use sublime_package_tools::external::package_registry_client::PackageRegistryClient;
     ///
     /// # async fn example() -> Result<(), PackageRegistryError> {
     /// let client = PackageRegistryClient::with_registry(Box::new(npm_registry));
@@ -254,7 +254,7 @@ impl PackageRegistryClient {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_package_tools::dependency::registry_client::PackageRegistryClient;
+    /// use sublime_package_tools::external::package_registry_client::PackageRegistryClient;
     ///
     /// # async fn example() -> Result<(), PackageRegistryError> {
     /// let client = PackageRegistryClient::with_registry(Box::new(npm_registry));
@@ -321,7 +321,7 @@ impl PackageRegistryClient {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_package_tools::dependency::registry_client::PackageRegistryClient;
+    /// use sublime_package_tools::external::package_registry_client::PackageRegistryClient;
     ///
     /// # async fn example() -> Result<(), PackageRegistryError> {
     /// let client = PackageRegistryClient::with_registry(Box::new(npm_registry));
@@ -368,7 +368,7 @@ impl PackageRegistryClient {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_package_tools::dependency::registry_client::PackageRegistryClient;
+    /// use sublime_package_tools::external::package_registry_client::PackageRegistryClient;
     ///
     /// let client = PackageRegistryClient::with_registry(Box::new(npm_registry));
     /// let client_clone = client.clone_client();
@@ -397,7 +397,7 @@ impl Clone for PackageRegistryClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::package::registry::{PackageRegistry, PackageRegistryClone};
+    use crate::external::npm_client::{PackageRegistry, PackageRegistryClone};
     use crate::errors::PackageRegistryError;
     use async_trait::async_trait;
     use std::collections::HashMap;

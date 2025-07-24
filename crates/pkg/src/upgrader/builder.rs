@@ -698,8 +698,11 @@ impl Upgrader {
                 if let Some(package) =
                     packages.iter_mut().find(|p| p.name() == upgrade.package_name)
                 {
-                    // Apply the upgrade
-                    package.update_dependency_version(&upgrade.dependency_name, new_version)?;
+                    // Apply the upgrade by finding and updating the dependency directly
+                    if let Some(dependency) = package.dependencies.iter_mut().find(|d| d.name() == upgrade.dependency_name) {
+                        dependency.update_version(new_version)
+                            .map_err(|e| DependencyResolutionError::VersionParseError(e.to_string()))?;
+                    }
 
                     applied_upgrades.push(upgrade.clone());
                 }

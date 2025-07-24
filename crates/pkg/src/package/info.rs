@@ -174,8 +174,11 @@ impl Info {
     /// # }
     /// ```
     pub fn update_version(&mut self, new_version: &str) -> Result<(), VersionError> {
-        // Update Package version
-        self.package.update_version(new_version)?;
+        // Validate version string by parsing it
+        let _ = semver::Version::parse(new_version)?;
+        
+        // Update Package version directly (since Package is now pure data)
+        self.package.version = new_version.to_string();
 
         // Update JSON
         if let Some(obj) = self.pkg_json.as_object_mut() {
@@ -226,10 +229,12 @@ impl Info {
         dep_name: &str,
         new_version: &str,
     ) -> Result<(), DependencyResolutionError> {
-        // First, try to update the package dependency
+        // First, try to update the package dependency directly
         let mut package_updated = false;
-        if let Ok(()) = self.package.update_dependency_version(dep_name, new_version) {
-            package_updated = true;
+        if let Some(dependency) = self.package.dependencies.iter_mut().find(|d| d.name() == dep_name) {
+            if let Ok(()) = dependency.update_version(new_version) {
+                package_updated = true;
+            }
         }
 
         // Now update the JSON
@@ -312,8 +317,13 @@ impl Info {
         &mut self,
         resolution: &ResolutionResult,
     ) -> Result<(), VersionError> {
-        // First, update the package's dependencies (handles regular dependencies)
-        let _ = self.package.update_dependencies_from_resolution(resolution)?;
+        // First, update the package's dependencies directly (handles regular dependencies)
+        for dependency in &mut self.package.dependencies {
+            let name = dependency.name();
+            if let Some(resolved_version) = resolution.resolved_versions.get(name) {
+                let _ = dependency.update_version(resolved_version);
+            }
+        }
 
         // Now update package.json for both dependencies and devDependencies
         if let Some(pkg_json_obj) = self.pkg_json.as_object_mut() {

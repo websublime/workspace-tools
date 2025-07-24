@@ -181,11 +181,14 @@
 #![deny(clippy::panic)]
 
 pub mod config;
+pub mod context;
 mod dependency;
 pub mod errors;
+mod external;
 mod graph;
 mod package;
-mod registry;
+mod services;
+mod storage;
 mod upgrader;
 mod version;
 
@@ -201,18 +204,29 @@ pub use package::{
 
 pub use dependency::{
     change::Change, dependency::Dependency, filter::Filter,
-    graph::Graph, registry::Registry, resolution::ResolutionResult,
+    graph::Graph, resolution::ResolutionResult,
     update::Update,
+};
+
+pub use storage::{
+    dependency_storage::Registry,
 };
 
 pub use errors::{Error, Result};
 
-pub use registry::{
-    local::LocalRegistry,
-    manager::{RegistryAuth, RegistryManager, RegistryType},
+pub use external::{
+    local_registry::LocalRegistry,
+    registry_manager::{RegistryAuth, RegistryManager, RegistryType},
 };
 
-pub use version::version::{Version, VersionRelationship, VersionStability, VersionUpdateStrategy};
+pub use version::version::{
+    Version, VersionRelationship, VersionStability, VersionUpdateStrategy,
+    BumpStrategy, VersionManager, VersionBumpReport, DependencyReferenceUpdate, ReferenceUpdateType
+};
+
+pub use services::{
+    PackageService, PackageInfo, ValidationResult,
+};
 
 pub use graph::{
     builder::{build_dependency_graph_from_package_infos, build_dependency_graph_from_packages},
@@ -232,4 +246,11 @@ pub use config::{
     CircularDependencyConfig, ContextAwareConfig, PerformanceConfig, CacheConfig,
     VersionBumpStrategy, AffectedDetectionStrategy, DependencyProtocol,
     CircularDependencyHandling, ProjectContextType, MemoryOptimizationLevel,
+};
+
+pub use context::{
+    ProjectContext, SingleRepositoryContext, MonorepoContext,
+    SingleRepoFeatures, MonorepoFeatures, ContextDetector,
+    DependencyClassifier, DependencyClass, InternalClassification,
+    protocols::{DependencyProtocol as ContextDependencyProtocol, ProtocolSupport},
 };

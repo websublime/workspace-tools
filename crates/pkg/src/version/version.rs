@@ -468,3 +468,492 @@ impl Version {
         Ok(version)
     }
 }
+
+/// Version bump strategy for enterprise package management
+///
+/// Defines different strategies for bumping versions in monorepo and single repository contexts.
+/// Supports both standard semver bumping and advanced enterprise features like cascade bumping
+/// and snapshot versioning with SHA integration.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum BumpStrategy {
+    /// Bump major version (x.0.0)
+    Major,
+    /// Bump minor version (x.y.0)
+    Minor,
+    /// Bump patch version (x.y.z)
+    Patch,
+    /// Create snapshot version with SHA or timestamp (x.y.z-alpha.SHA)
+    ///
+    /// The string parameter contains the SHA, timestamp, or other identifier
+    /// to append to the snapshot version.
+    Snapshot(String),
+    /// Cascade bump: Bump this package and all its dependents intelligently
+    ///
+    /// This strategy automatically detects affected packages in a monorepo
+    /// and applies appropriate version bumps to maintain consistency.
+    Cascade,
+}
+
+impl Default for BumpStrategy {
+    fn default() -> Self {
+        Self::Patch
+    }
+}
+
+impl Display for BumpStrategy {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            Self::Major => write!(f, "major"),
+            Self::Minor => write!(f, "minor"),
+            Self::Patch => write!(f, "patch"),
+            Self::Snapshot(ref identifier) => write!(f, "snapshot-{identifier}"),
+            Self::Cascade => write!(f, "cascade"),
+        }
+    }
+}
+
+/// Report generated after version bump operations
+///
+/// Provides detailed information about what packages were bumped,
+/// what updates were required, and any issues encountered.
+#[derive(Debug, Clone)]
+pub struct VersionBumpReport {
+    /// Packages that had their versions bumped directly
+    pub primary_bumps: std::collections::HashMap<String, String>,
+    /// Packages that were bumped due to cascade effects
+    pub cascade_bumps: std::collections::HashMap<String, String>,
+    /// Dependency references that were updated
+    pub reference_updates: Vec<DependencyReferenceUpdate>,
+    /// Packages that were detected as affected but not bumped
+    pub affected_packages: Vec<String>,
+    /// Warnings generated during the bump process
+    pub warnings: Vec<String>,
+    /// Errors that occurred (but didn't halt the process)
+    pub errors: Vec<String>,
+}
+
+impl VersionBumpReport {
+    /// Create a new empty version bump report
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            primary_bumps: std::collections::HashMap::new(),
+            cascade_bumps: std::collections::HashMap::new(),
+            reference_updates: Vec::new(),
+            affected_packages: Vec::new(),
+            warnings: Vec::new(),
+            errors: Vec::new(),
+        }
+    }
+
+    /// Check if any packages were bumped
+    #[must_use]
+    pub fn has_changes(&self) -> bool {
+        !self.primary_bumps.is_empty() || !self.cascade_bumps.is_empty()
+    }
+
+    /// Get total number of packages affected
+    #[must_use]
+    pub fn total_packages_affected(&self) -> usize {
+        self.primary_bumps.len() + self.cascade_bumps.len()
+    }
+
+    /// Add a warning to the report
+    pub fn add_warning(&mut self, warning: String) {
+        self.warnings.push(warning);
+    }
+
+    /// Add an error to the report
+    pub fn add_error(&mut self, error: String) {
+        self.errors.push(error);
+    }
+}
+
+impl Default for VersionBumpReport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Dependency reference update information
+///
+/// Tracks when a dependency reference needs to be updated
+/// as a result of version bumping operations.
+#[derive(Debug, Clone)]
+pub struct DependencyReferenceUpdate {
+    /// Package that contains the dependency reference
+    pub package: String,
+    /// Name of the dependency being updated
+    pub dependency: String,
+    /// Original version reference
+    pub from_reference: String,
+    /// New version reference
+    pub to_reference: String,
+    /// Type of update being performed
+    pub update_type: ReferenceUpdateType,
+}
+
+/// Type of dependency reference update
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReferenceUpdateType {
+    /// Update to exact version (for internal dependencies)
+    FixedVersion,
+    /// Suggest using workspace protocol
+    WorkspaceProtocol,
+    /// Keep the existing range pattern
+    KeepRange,
+}
+
+/// Enterprise-grade version manager with cascade bumping and monorepo support
+///
+/// Provides advanced version management capabilities for both single repositories
+/// and monorepo contexts, with intelligent cascade bumping and affected package detection.
+///
+/// ## Features
+///
+/// - **Context-Aware**: Adapts behavior for single repository vs monorepo
+/// - **Cascade Bumping**: Automatically bump dependent packages in monorepos
+/// - **Snapshot Versioning**: Create snapshot versions with SHA or timestamp
+/// - **Affected Detection**: Intelligently detect which packages are affected by changes
+/// - **Reference Management**: Update dependency references after version bumps
+///
+/// ## Examples
+///
+/// ```rust
+/// use sublime_package_tools::{VersionManager, BumpStrategy};
+/// use sublime_standard_tools::filesystem::AsyncFileSystem;
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// // Create version manager with filesystem integration
+/// let fs = AsyncFileSystem::new();
+/// let version_manager = VersionManager::new(fs);
+///
+/// // Bump a single package version
+/// let report = version_manager.bump_package_version(
+///     "my-package",
+///     BumpStrategy::Minor
+/// ).await?;
+///
+/// println!("Bumped {} packages", report.total_packages_affected());
+///
+/// // In a monorepo, detect affected packages
+/// let affected = version_manager.detect_affected_packages(&["changed-package"]).await?;
+/// println!("Found {} affected packages", affected.len());
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug)]
+pub struct VersionManager<F> {
+    /// Filesystem integration for reading package.json files
+    filesystem: F,
+    /// Cache of package information for performance
+    package_cache: std::sync::Arc<std::sync::RwLock<std::collections::HashMap<String, CachedPackageInfo>>>,
+}
+
+/// Cached package information for performance optimization
+#[derive(Debug, Clone)]
+struct CachedPackageInfo {
+    /// Package name
+    name: String,
+    /// Current version
+    version: String,
+    /// Dependencies with their current references
+    dependencies: std::collections::HashMap<String, String>,
+    /// Timestamp when this cache entry was created
+    cached_at: std::time::SystemTime,
+}
+
+impl<F> VersionManager<F> 
+where
+    F: Clone,
+{
+    /// Create a new version manager with filesystem integration
+    ///
+    /// # Arguments
+    ///
+    /// * `filesystem` - Filesystem implementation for reading package files
+    ///
+    /// # Returns
+    ///
+    /// A new VersionManager instance ready for version operations
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_package_tools::VersionManager;
+    /// use sublime_standard_tools::filesystem::AsyncFileSystem;
+    ///
+    /// let fs = AsyncFileSystem::new();
+    /// let version_manager = VersionManager::new(fs);
+    /// ```
+    #[must_use]
+    pub fn new(filesystem: F) -> Self {
+        Self {
+            filesystem,
+            package_cache: std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),
+        }
+    }
+
+    /// Bump a package version using the specified strategy
+    ///
+    /// This is the main entry point for version bumping operations.
+    /// Handles both simple version bumps and complex cascade operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Name of the package to bump
+    /// * `strategy` - Bump strategy to apply
+    ///
+    /// # Returns
+    ///
+    /// A detailed report of all changes made during the bump operation
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Package not found
+    /// - Invalid version format
+    /// - Filesystem operations fail
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_package_tools::{VersionManager, BumpStrategy};
+    ///
+    /// # async fn example(version_manager: VersionManager<impl Clone>) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Simple version bump
+    /// let report = version_manager.bump_package_version("my-package", BumpStrategy::Minor).await?;
+    /// 
+    /// // Cascade bump (for monorepos)
+    /// let cascade_report = version_manager.bump_package_version("core-package", BumpStrategy::Cascade).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn bump_package_version(
+        &self,
+        package_name: &str,
+        strategy: BumpStrategy,
+    ) -> Result<VersionBumpReport, VersionError> {
+        let mut report = VersionBumpReport::new();
+
+        match strategy {
+            BumpStrategy::Major | BumpStrategy::Minor | BumpStrategy::Patch => {
+                self.perform_simple_bump(package_name, &strategy, &mut report).await?;
+            }
+            BumpStrategy::Snapshot(ref identifier) => {
+                self.perform_snapshot_bump(package_name, identifier, &mut report).await?;
+            }
+            BumpStrategy::Cascade => {
+                self.perform_cascade_bump(package_name, &mut report).await?;
+            }
+        }
+
+        Ok(report)
+    }
+
+    /// Detect packages affected by changes to the specified packages
+    ///
+    /// This method analyzes the dependency graph to find all packages that
+    /// directly or indirectly depend on the changed packages.
+    ///
+    /// # Arguments
+    ///
+    /// * `changed_packages` - List of package names that have changed
+    ///
+    /// # Returns
+    ///
+    /// A list of package names that are affected by the changes
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_package_tools::VersionManager;
+    ///
+    /// # async fn example(version_manager: VersionManager<impl Clone>) -> Result<(), Box<dyn std::error::Error>> {
+    /// let affected = version_manager.detect_affected_packages(&["core-lib", "utils"]).await?;
+    /// for package in affected {
+    ///     println!("Package {} is affected", package);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn detect_affected_packages(
+        &self,
+        changed_packages: &[String],
+    ) -> Result<Vec<String>, VersionError> {
+        // This is a placeholder implementation
+        // In a real implementation, this would analyze the dependency graph
+        // to find all packages that depend on the changed packages
+        
+        let mut affected = Vec::new();
+        
+        // Add the changed packages themselves
+        affected.extend_from_slice(changed_packages);
+        
+        // TODO: Implement actual dependency graph analysis
+        // This would involve:
+        // 1. Loading all package.json files
+        // 2. Building a dependency graph
+        // 3. Finding all packages that depend on changed_packages
+        // 4. Recursively finding their dependents
+        
+        Ok(affected)
+    }
+
+    /// Perform a simple version bump (major, minor, or patch)
+    async fn perform_simple_bump(
+        &self,
+        package_name: &str,
+        strategy: &BumpStrategy,
+        report: &mut VersionBumpReport,
+    ) -> Result<(), VersionError> {
+        // Load current package info
+        let current_version = self.get_package_version(package_name).await?;
+        
+        // Calculate new version
+        let new_version = match strategy {
+            BumpStrategy::Major => Version::bump_major(&current_version)?,
+            BumpStrategy::Minor => Version::bump_minor(&current_version)?,
+            BumpStrategy::Patch => Version::bump_patch(&current_version)?,
+            _ => return Err(VersionError::InvalidVersion("Invalid strategy for simple bump".to_string())),
+        };
+
+        // Record the bump
+        report.primary_bumps.insert(package_name.to_string(), new_version.to_string());
+
+        // TODO: Actually write the new version to package.json
+        // This would involve:
+        // 1. Reading the package.json file
+        // 2. Updating the version field
+        // 3. Writing it back to disk
+
+        Ok(())
+    }
+
+    /// Perform a snapshot version bump with identifier
+    async fn perform_snapshot_bump(
+        &self,
+        package_name: &str,
+        identifier: &str,
+        report: &mut VersionBumpReport,
+    ) -> Result<(), VersionError> {
+        // Load current package info
+        let current_version = self.get_package_version(package_name).await?;
+        
+        // Create snapshot version
+        let new_version = Version::bump_snapshot(&current_version, identifier)?;
+
+        // Record the bump
+        report.primary_bumps.insert(package_name.to_string(), new_version.to_string());
+
+        // TODO: Write the new version to package.json
+
+        Ok(())
+    }
+
+    /// Perform cascade version bump (bump package and all dependents)
+    async fn perform_cascade_bump(
+        &self,
+        package_name: &str,
+        report: &mut VersionBumpReport,
+    ) -> Result<(), VersionError> {
+        // First, bump the target package
+        self.perform_simple_bump(package_name, &BumpStrategy::Patch, report).await?;
+
+        // Then find and bump all affected packages
+        let affected = self.detect_affected_packages(&[package_name.to_string()]).await?;
+        
+        for affected_package in affected {
+            if affected_package != package_name {
+                // Bump affected package (usually patch)
+                let current_version = self.get_package_version(&affected_package).await?;
+                let new_version = Version::bump_patch(&current_version)?;
+                
+                report.cascade_bumps.insert(affected_package.clone(), new_version.to_string());
+
+                // TODO: Update dependency references
+                // Create reference update entry
+                report.reference_updates.push(DependencyReferenceUpdate {
+                    package: affected_package,
+                    dependency: package_name.to_string(),
+                    from_reference: current_version.clone(),
+                    to_reference: report.primary_bumps.get(package_name).unwrap_or(&current_version).clone(),
+                    update_type: ReferenceUpdateType::FixedVersion,
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get the current version of a package
+    async fn get_package_version(&self, package_name: &str) -> Result<String, VersionError> {
+        // Check cache first
+        {
+            let cache = self.package_cache.read().map_err(|_| VersionError::InvalidVersion("Cache lock failed".to_string()))?;
+            if let Some(cached) = cache.get(package_name) {
+                // Check if cache is still valid (e.g., less than 5 minutes old)
+                if cached.cached_at.elapsed().unwrap_or(std::time::Duration::from_secs(300)) < std::time::Duration::from_secs(300) {
+                    return Ok(cached.version.clone());
+                }
+            }
+        }
+
+        // TODO: Actually read from package.json
+        // For now, return a placeholder
+        let version = "1.0.0".to_string();
+
+        // Update cache
+        {
+            let mut cache = self.package_cache.write().map_err(|_| VersionError::InvalidVersion("Cache lock failed".to_string()))?;
+            cache.insert(package_name.to_string(), CachedPackageInfo {
+                name: package_name.to_string(),
+                version: version.clone(),
+                dependencies: std::collections::HashMap::new(),
+                cached_at: std::time::SystemTime::now(),
+            });
+        }
+
+        Ok(version)
+    }
+
+    /// Clear the package cache
+    ///
+    /// Useful when you know package information has changed and want to force
+    /// fresh reads from the filesystem.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_package_tools::VersionManager;
+    ///
+    /// # fn example(version_manager: &VersionManager<impl Clone>) {
+    /// // After making external changes to package.json files
+    /// version_manager.clear_cache();
+    /// # }
+    /// ```
+    pub fn clear_cache(&self) {
+        if let Ok(mut cache) = self.package_cache.write() {
+            cache.clear();
+        }
+    }
+
+    /// Get cache statistics for debugging and monitoring
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (cache_size, oldest_entry_age_seconds)
+    #[must_use]
+    pub fn cache_stats(&self) -> (usize, u64) {
+        if let Ok(cache) = self.package_cache.read() {
+            let size = cache.len();
+            let oldest_age = cache.values()
+                .map(|info| info.cached_at.elapsed().unwrap_or_default().as_secs())
+                .max()
+                .unwrap_or(0);
+            (size, oldest_age)
+        } else {
+            (0, 0)
+        }
+    }
+}

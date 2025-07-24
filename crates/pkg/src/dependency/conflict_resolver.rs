@@ -30,7 +30,7 @@
 //! ```rust
 //! use sublime_package_tools::dependency::{
 //!     storage::DependencyStorage,
-//!     registry_client::PackageRegistryClient,
+//!     package_registry_client::PackageRegistryClient,
 //!     conflict_resolver::ConflictResolver
 //! };
 //!
@@ -50,7 +50,8 @@
 //! # }
 //! ```
 
-use super::{storage::DependencyStorage, registry_client::PackageRegistryClient};
+use super::storage::DependencyStorage;
+use crate::external::package_registry_client::PackageRegistryClient;
 use crate::{
     dependency::{resolution::ResolutionResult, update::Update as DependencyUpdate},
     errors::{VersionError, PackageRegistryError},
@@ -134,7 +135,7 @@ impl ConflictResolver {
     /// ```rust
     /// use sublime_package_tools::dependency::{
     ///     storage::DependencyStorage,
-    ///     registry_client::PackageRegistryClient,
+    ///     package_registry_client::PackageRegistryClient,
     ///     conflict_resolver::ConflictResolver
     /// };
     ///

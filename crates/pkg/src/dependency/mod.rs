@@ -23,8 +23,6 @@ pub mod conflict_resolver;
 pub mod dependency;
 pub mod filter;
 pub mod graph;
-pub mod registry;
-pub mod registry_client;
 pub mod resolution;
 pub mod storage;
 pub mod update;

@@ -4,8 +4,9 @@
 //! useful for testing and simulating registry behavior without network calls.
 
 use async_trait::async_trait;
-use crate::package::registry::PackageRegistryClone;
-use crate::{errors::PackageRegistryError, PackageRegistry};
+use crate::external::npm_client::PackageRegistryClone;
+use crate::errors::PackageRegistryError;
+use super::npm_client::PackageRegistry;
 use semver::Version;
 use serde_json::{json, Value};
 use std::{
