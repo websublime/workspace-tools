@@ -224,9 +224,16 @@ pub use external::{
     registry_manager::{RegistryAuth, RegistryManager, RegistryType},
 };
 
-pub use version::version::{
-    Version, VersionRelationship, VersionStability, VersionUpdateStrategy,
-    BumpStrategy, VersionManager, VersionBumpReport, DependencyReferenceUpdate, ReferenceUpdateType
+pub use version::{
+    // Core version types
+    version::{
+        Version, VersionRelationship, VersionStability, VersionUpdateStrategy,
+        BumpStrategy, VersionManager, VersionBumpReport, DependencyReferenceUpdate, ReferenceUpdateType
+    },
+    // Phase 4.2: Context-aware cascade bumping
+    CascadeBumper, CascadeBumpAnalysis, CascadeContextInfo,
+    ChangeSet, BumpExecutionMode,
+    MonorepoVersionBumpConfig, MonorepoVersioningStrategy,
 };
 
 pub use services::{
