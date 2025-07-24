@@ -1634,6 +1634,7 @@ dependencies = [
  "mockito",
  "num_cpus",
  "petgraph",
+ "regex",
  "reqwest",
  "semver",
  "serde",
