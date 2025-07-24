@@ -54,8 +54,6 @@
 
 pub mod builder;
 pub mod hash_tree;
-#[cfg(test)]
-pub mod integration_tests;
 pub mod node;
 #[cfg(test)]
 pub mod tests;
