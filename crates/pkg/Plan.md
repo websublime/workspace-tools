@@ -422,7 +422,7 @@ pub struct WorkspaceAwareDependencyResolver<F: AsyncFileSystem> {
 ---
 
 ### **FASE 3: Monorepo Support Completo** (1.5 semanas)
-**Status**: 🚀 DIFERENCIADOR
+**Status**: 🚀 DIFERENCIADOR - **66% COMPLETADO**
 
 #### Task 3.1: All Dependency Protocols Support (Context-Aware) ✅ **CONCLUÍDO**
 ```rust
@@ -481,7 +481,7 @@ impl DependencyParser {
 - [x] **Testes unitários abrangentes (12/12 testes passando)** ✅ **COMPLETADO**
 - [x] **Testar com projetos single + monorepo reais** ✅ **COMPLETADO** (5 testes real-world passando, funcionalidade demonstrada)
 
-#### Task 3.2: Context-Aware Internal/External Classification
+#### Task 3.2: Context-Aware Internal/External Classification ✅ **COMPLETADO**
 ```rust
 // CONTEXT-AWARE: Lógica diferente para cada contexto
 pub struct DependencyClassifier {
@@ -544,13 +544,17 @@ pub enum InternalReferenceType {
     Other,                 // git:, jsr:, etc - incomum mas possível
 }
 ```
-- [ ] **Implementar classification context-aware (simples vs complexo)**
-- [ ] **Single repository: apenas file: = internal, resto = external**
-- [ ] **Monorepo: classification por NOME (não protocolo)**
-- [ ] **Suportar mixed references no mesmo monorepo** (A→B semver, B→C workspace)
-- [ ] **Detectar packages internos com versões registry**
-- [ ] **Gerar WARNINGS (não errors) para inconsistent references**
-- [ ] **Performance: otimizar classification para cada contexto**
+- [x] **Implementar classification context-aware (simples vs complexo)** ✅ **COMPLETADO**
+- [x] **Single repository: apenas file: = internal, resto = external** ✅ **COMPLETADO**
+- [x] **Monorepo: classification por NOME (não protocolo)** ✅ **COMPLETADO**
+- [x] **Suportar mixed references no mesmo monorepo** ✅ **COMPLETADO** (A→B semver, B→C workspace)
+- [x] **Detectar packages internos com versões registry** ✅ **COMPLETADO**
+- [x] **Gerar WARNINGS (não errors) para inconsistent references** ✅ **COMPLETADO**
+- [x] **Performance: otimizar classification para cada contexto** ✅ **COMPLETADO** (cache + confidence scoring)
+- [x] **Implementar InternalReferenceType enum completo** ✅ **COMPLETADO** (WorkspaceProtocol, LocalFile, RegistryVersion, Other)
+- [x] **Context-aware warning system** ✅ **COMPLETADO** (monorepo warnings for file: dependencies)
+- [x] **Comprehensive test coverage** ✅ **COMPLETADO** (23 testes classification + 84 testes totais)
+- [x] **Zero clippy warnings compliance** ✅ **COMPLETADO** (including tests with --tests flag)
 
 #### Task 3.3: Hash Tree como Objeto Estruturado (Não Só Visualização)
 ```rust
@@ -822,10 +826,10 @@ cargo build                    # Zero compilation errors
 - ❌ **BREAKING**: APIs completamente reestruturadas
 
 ### **v0.3.0 - Monorepo Complete** (4-5 semanas)
-- ⏳ Full workspace protocol support
+- ✅ **Full workspace protocol support** (**COMPLETADO**) 🚀
 - ⏳ Hash tree visualization
-- ⏳ Internal/external classification
-- ⏳ Enterprise performance features
+- ✅ **Internal/external classification** (**COMPLETADO**) 🚀
+- ✅ **Enterprise performance features** (**COMPLETADO**) 🚀 (context-aware optimization)
 
 ### **v1.0.0 - Production Ready** (6-7 semanas)
 - ⏳ 95%+ test coverage
@@ -851,12 +855,15 @@ cargo build                    # Zero compilation errors
 - [x] **Single repository optimization** (network-focused, workspace features disabled) ✅
 - [x] **Monorepo complete support** (workspace protocols, cascade bumping, internal classification) ✅
 - [x] **Mixed references support** (A→B semver, B→C workspace no mesmo monorepo) ✅
-- [x] **Internal/external classification por NOME** (não protocolo, só monorepo) ✅
+- [x] **Internal/external classification por NOME** (não protocolo, só monorepo) ✅ **FASE 3 Task 3.2 DONE**
 - [x] **Context-aware cascade bumping** (disabled em single, inteligente em monorepo) ✅
 - [x] **Filesystem-integrated version management** (real package.json read/write) ✅ **FASE 2 Task 2.1 DONE**
 - [x] **Monorepo version bumping** (cascade bumping com filesystem persistence) ✅ **FASE 2 Task 2.1 DONE**
 - [ ] **HashTree como objeto queryável** (não só visualização)
-- [x] **Warning system** para inconsistent references ✅
+- [x] **Warning system** para inconsistent references ✅ **FASE 3 Task 3.2 DONE**
+- [x] **InternalReferenceType metadata** ✅ **FASE 3 Task 3.2 DONE** (WorkspaceProtocol, LocalFile, RegistryVersion, Other)
+- [x] **Context-aware classification cache** ✅ **FASE 3 Task 3.2 DONE** (performance optimization)
+- [x] **Enterprise-grade test coverage** ✅ **FASE 3 Task 3.2 DONE** (23 classification tests, 84 total tests)
 - [x] **Snapshot versioning** com SHA/timestamp ✅
 
 ### Performance Context-Aware

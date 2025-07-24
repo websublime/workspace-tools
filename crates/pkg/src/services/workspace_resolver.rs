@@ -411,7 +411,7 @@ where
             let classification = self.classify_dependency(dep_string, context).await?;
             
             match classification.class {
-                DependencyClass::Internal => {
+                DependencyClass::Internal { .. } => {
                     // For internal dependencies, resolve using workspace information
                     match context {
                         ProjectContext::Monorepo(monorepo_context) => {

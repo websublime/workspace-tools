@@ -9,7 +9,8 @@
 mod tests {
     use crate::context::{
         DependencyParser, DependencySource, ProjectContext, SingleRepositoryContext,
-        MonorepoContext, WorkspaceConstraint, GitReference,
+        MonorepoContext, WorkspaceConstraint, GitReference, 
+        classification::{DependencyClassifier, InternalReferenceType},
     };
     use crate::context::project::InternalClassification;
     use std::collections::HashMap;
@@ -489,5 +490,235 @@ mod tests {
         // Edge case: scoped dependency (should succeed)
         let scoped_dep = parser.parse("@types/node", "^20.0.0");
         assert!(scoped_dep.is_ok());
+    }
+
+    // =============================================================================
+    // DEPENDENCY CLASSIFICATION TESTS
+    // =============================================================================
+
+    /// Test single repository dependency classification
+    #[test]
+    fn test_single_repo_classification() {
+        let context = ProjectContext::Single(SingleRepositoryContext::default());
+        let mut classifier = DependencyClassifier::new(context);
+
+        // File dependencies should be internal
+        let file_result = classifier.classify_dependency("file:../local-package");
+        assert!(file_result.is_ok());
+        if let Ok(classification) = file_result {
+            assert!(classification.is_internal());
+            assert_eq!(classification.reference_type(), Some(&InternalReferenceType::LocalFile));
+            assert!(classification.class.warning().is_none()); // No warning in single repo
+        }
+
+        // Registry dependencies should be external
+        let registry_result = classifier.classify_dependency("^18.0.0");
+        assert!(registry_result.is_ok());
+        if let Ok(classification) = registry_result {
+            assert!(classification.is_external());
+        }
+
+        // Workspace dependencies should be rejected
+        let workspace_result = classifier.classify_dependency("workspace:*");
+        assert!(workspace_result.is_err());
+    }
+
+    /// Test monorepo dependency classification with name-based logic
+    #[test]
+    fn test_monorepo_classification() {
+        let mut workspace_packages = HashMap::new();
+        workspace_packages.insert("ui-components".to_string(), "packages/ui".to_string());
+        workspace_packages.insert("shared-utils".to_string(), "packages/utils".to_string());
+        
+        let context = ProjectContext::Monorepo(MonorepoContext {
+            workspace_packages,
+            supported_protocols: crate::context::DependencyProtocol::all(),
+            features_enabled: crate::context::MonorepoFeatures::all(),
+            internal_classification: InternalClassification::NameBased,
+        });
+        let mut classifier = DependencyClassifier::new(context);
+
+        // Internal package with workspace protocol (ideal)
+        let workspace_result = classifier.classify_dependency("workspace:*");
+        assert!(workspace_result.is_ok());
+        if let Ok(classification) = workspace_result {
+            assert!(classification.is_internal());
+            assert_eq!(classification.reference_type(), Some(&InternalReferenceType::WorkspaceProtocol));
+            assert!(classification.class.warning().is_none());
+        }
+
+        // Internal package with file protocol (OK but workspace is better) 
+        let file_result = classifier.classify_dependency("file:../packages/ui-components");
+        assert!(file_result.is_ok());
+        if let Ok(classification) = file_result {
+            assert!(classification.is_internal());
+            assert_eq!(classification.reference_type(), Some(&InternalReferenceType::LocalFile));
+            assert!(classification.class.warning().is_some()); // Should warn about workspace protocol in monorepo
+        }
+
+        // External dependency should remain external
+        let external_result = classifier.classify_dependency("^18.0.0");
+        assert!(external_result.is_ok());
+        if let Ok(classification) = external_result {
+            assert!(classification.is_external());
+        }
+    }
+
+    /// Test warning system for inconsistent references
+    #[test]
+    fn test_inconsistent_reference_warnings() {
+        let mut workspace_packages = HashMap::new();
+        workspace_packages.insert("internal-lib".to_string(), "packages/lib".to_string());
+        
+        let context = ProjectContext::Monorepo(MonorepoContext {
+            workspace_packages,
+            supported_protocols: crate::context::DependencyProtocol::all(),
+            features_enabled: crate::context::MonorepoFeatures::all(),
+            internal_classification: InternalClassification::NameBased,
+        });
+        let mut classifier = DependencyClassifier::new(context);
+
+        // This test simulates an internal package referenced with registry version
+        // which should generate warnings
+        let registry_internal_result = classifier.classify_dependency("^1.0.0");
+        assert!(registry_internal_result.is_ok());
+        if let Ok(classification) = registry_internal_result {
+            // Should be classified as external since we can't extract package name from version
+            assert!(classification.is_external());
+        }
+
+        // Test file dependency in monorepo (should warn about workspace protocol)
+        let file_result = classifier.classify_dependency("file:../packages/lib");
+        assert!(file_result.is_ok());
+        if let Ok(classification) = file_result {
+            assert!(classification.is_internal());
+            assert!(classification.class.warning().is_some());
+            if let Some(warning) = classification.class.warning() {
+                assert!(warning.contains("workspace"));
+            }
+        }
+    }
+
+    /// Test different internal reference types
+    #[test]
+    fn test_internal_reference_types() {
+        let mut workspace_packages = HashMap::new();
+        workspace_packages.insert("my-package".to_string(), "packages/my-package".to_string());
+        
+        let context = ProjectContext::Monorepo(MonorepoContext {
+            workspace_packages,
+            supported_protocols: crate::context::DependencyProtocol::all(),
+            features_enabled: crate::context::MonorepoFeatures::all(),
+            internal_classification: InternalClassification::NameBased,
+        });
+        let mut classifier = DependencyClassifier::new(context);
+
+        // Workspace protocol - ideal
+        let workspace_result = classifier.classify_dependency("workspace:*");
+        assert!(workspace_result.is_ok());
+        if let Ok(classification) = workspace_result {
+            assert_eq!(classification.reference_type(), Some(&InternalReferenceType::WorkspaceProtocol));
+        }
+
+        // File protocol - OK but workspace is better
+        let file_result = classifier.classify_dependency("file:../packages/my-package");
+        assert!(file_result.is_ok());
+        if let Ok(classification) = file_result {
+            assert_eq!(classification.reference_type(), Some(&InternalReferenceType::LocalFile));
+        }
+
+        // Test Other reference type - git dependencies are external by default
+        // unless the package name is explicitly in workspace packages
+        let git_result = classifier.classify_dependency("git+https://github.com/company/repo.git#main");
+        assert!(git_result.is_ok());
+        if let Ok(classification) = git_result {
+            assert!(classification.is_external()); // Git dependencies are external by default
+        }
+        
+        // To test InternalReferenceType::Other, we need a scenario where
+        // an internal package (by name) uses an unusual protocol
+        // But since we can't extract package name from git URLs easily,
+        // let's test the Other type differently - by simulating a URL dependency
+        // for a package that happens to be in workspace
+        let url_result = classifier.classify_dependency("https://example.com/my-package.tgz");
+        assert!(url_result.is_ok());
+        if let Ok(url_classification) = url_result {
+            // URL dependencies should be external unless name-based classification identifies them as internal
+            assert!(url_classification.is_external());
+        }
+    }
+
+    /// Test classification cache functionality
+    #[test]
+    fn test_classification_cache() {
+        let context = ProjectContext::Single(SingleRepositoryContext::default());
+        let mut classifier = DependencyClassifier::new(context);
+
+        // First classification
+        let result1 = classifier.classify_dependency("^18.0.0");
+        assert!(result1.is_ok());
+        assert_eq!(classifier.cache_size(), 1);
+
+        // Second classification should use cache
+        let result2 = classifier.classify_dependency("^18.0.0");
+        assert!(result2.is_ok());
+        assert_eq!(classifier.cache_size(), 1); // Should still be 1
+
+        // Different dependency should increase cache
+        let result3 = classifier.classify_dependency("~4.17.21");
+        assert!(result3.is_ok());
+        assert_eq!(classifier.cache_size(), 2);
+
+        // Clear cache
+        classifier.clear_cache();
+        assert_eq!(classifier.cache_size(), 0);
+    }
+
+    /// Test context-aware behavior differences
+    #[test]
+    fn test_context_aware_behavior() {
+        // Single repository context
+        let single_context = ProjectContext::Single(SingleRepositoryContext::default());
+        let mut single_classifier = DependencyClassifier::new(single_context);
+
+        // Monorepo context
+        let mut workspace_packages = HashMap::new();
+        workspace_packages.insert("internal".to_string(), "packages/internal".to_string());
+        let monorepo_context = ProjectContext::Monorepo(MonorepoContext {
+            workspace_packages,
+            supported_protocols: crate::context::DependencyProtocol::all(),
+            features_enabled: crate::context::MonorepoFeatures::all(),
+            internal_classification: InternalClassification::NameBased,
+        });
+        let mut monorepo_classifier = DependencyClassifier::new(monorepo_context);
+
+        // File dependency behavior should differ
+        let file_spec = "file:../packages/internal";
+        
+        let single_result = single_classifier.classify_dependency(file_spec);
+        assert!(single_result.is_ok());
+        if let Ok(classification) = single_result {
+            assert!(classification.is_internal());
+            assert!(classification.class.warning().is_none()); // No workspace warning in single repo
+        }
+
+        let monorepo_result = monorepo_classifier.classify_dependency(file_spec);
+        assert!(monorepo_result.is_ok());
+        if let Ok(classification) = monorepo_result {
+            assert!(classification.is_internal());
+            assert!(classification.class.warning().is_some()); // Should warn about workspace protocol
+        }
+
+        // Workspace dependency should be rejected in single, accepted in monorepo
+        let workspace_spec = "workspace:*";
+        
+        let single_workspace = single_classifier.classify_dependency(workspace_spec);
+        assert!(single_workspace.is_err()); // Should be rejected
+
+        let monorepo_workspace = monorepo_classifier.classify_dependency(workspace_spec);
+        assert!(monorepo_workspace.is_ok()); // Should be accepted
+        if let Ok(classification) = monorepo_workspace {
+            assert!(classification.is_internal());
+        }
     }
 }

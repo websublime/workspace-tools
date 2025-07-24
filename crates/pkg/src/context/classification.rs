@@ -27,7 +27,7 @@
 //! // In single repository, only file: is internal
 //! let dep_string = "file:../local-package";
 //! let classification = classifier.classify_dependency(dep_string)?;
-//! assert_eq!(classification.class, DependencyClass::Internal);
+//! assert!(classification.class.is_internal());
 //!
 //! // Registry dependencies are external in single repo
 //! let dep_string = "^1.0.0";
@@ -272,7 +272,10 @@ impl DependencyClassifier {
 
         // Simple classification: only file: = internal
         let class = match protocol {
-            DependencyProtocol::File => DependencyClass::Internal,
+            DependencyProtocol::File => DependencyClass::Internal {
+                reference_type: InternalReferenceType::LocalFile,
+                warning: None,
+            },
             _ => DependencyClass::External,
         };
 
@@ -303,21 +306,42 @@ impl DependencyClassifier {
         let package_name_present = package_name.is_some();
         let class = if let Some(pkg_name) = package_name {
             if config.workspace_packages.contains_key(&pkg_name) {
-                // Warn about inconsistent references
+                // This is an internal package - determine reference type and warnings
+                let (reference_type, warning) = self.analyze_internal_reference(dep_string, &protocol);
+                
+                // Add protocol-specific warnings
                 if !protocol.is_filesystem_based() && !protocol.is_workspace_only() {
                     warnings.push(format!(
                         "Package '{}' is internal but uses '{}' protocol. Consider using 'workspace:' for consistency.",
                         pkg_name, protocol
                     ));
                 }
-                DependencyClass::Internal
+                
+                DependencyClass::Internal {
+                    reference_type,
+                    warning,
+                }
             } else {
                 DependencyClass::External
             }
         } else {
-            // Fallback to protocol-based classification
+            // Fallback to protocol-based classification with context-aware warnings
             match protocol {
-                DependencyProtocol::File | DependencyProtocol::Workspace => DependencyClass::Internal,
+                DependencyProtocol::File => {
+                    let warning = if self.context.is_monorepo() {
+                        Some("Consider using workspace: protocol for better consistency in monorepo".to_string())
+                    } else {
+                        None
+                    };
+                    DependencyClass::Internal {
+                        reference_type: InternalReferenceType::LocalFile,
+                        warning,
+                    }
+                }
+                DependencyProtocol::Workspace => DependencyClass::Internal {
+                    reference_type: InternalReferenceType::WorkspaceProtocol,
+                    warning: None,
+                },
                 _ => DependencyClass::External,
             }
         };
@@ -330,6 +354,58 @@ impl DependencyClassifier {
             warnings,
             errors,
         })
+    }
+
+    /// Analyze internal reference to determine type and warnings
+    fn analyze_internal_reference(&self, dep_string: &str, protocol: &DependencyProtocol) -> (InternalReferenceType, Option<String>) {
+        match protocol {
+            DependencyProtocol::Workspace => {
+                (InternalReferenceType::WorkspaceProtocol, None)
+            }
+            DependencyProtocol::File => {
+                let warning = if self.context.is_monorepo() {
+                    Some("Consider using workspace: protocol for better consistency in monorepo".to_string())
+                } else {
+                    None
+                };
+                (InternalReferenceType::LocalFile, warning)
+            }
+            DependencyProtocol::Registry | DependencyProtocol::Scoped => {
+                // Extract version from dependency string
+                let version = self.extract_version_from_dep_string(dep_string)
+                    .unwrap_or_else(|| "unknown".to_string());
+                
+                let warning = if self.context.is_monorepo() {
+                    Some("Consider using workspace: protocol for internal dependencies".to_string())
+                } else {
+                    None
+                };
+                
+                (InternalReferenceType::RegistryVersion(version), warning)
+            }
+            _ => {
+                let warning = Some("Unusual reference type for internal package".to_string());
+                (InternalReferenceType::Other, warning)
+            }
+        }
+    }
+
+    /// Extract version from dependency string
+    fn extract_version_from_dep_string(&self, dep_string: &str) -> Option<String> {
+        if let Some(at_pos) = dep_string.rfind('@') {
+            // Handle scoped packages: @scope/package@version
+            if dep_string.starts_with('@') && dep_string[1..at_pos].contains('/') {
+                Some(dep_string[at_pos + 1..].to_string())
+            } else if !dep_string.starts_with('@') {
+                // Regular package@version
+                Some(dep_string[at_pos + 1..].to_string())
+            } else {
+                None
+            }
+        } else {
+            // Assume this is just a version spec
+            Some(dep_string.to_string())
+        }
     }
 
     /// Extract package name from dependency string
@@ -428,7 +504,7 @@ impl ClassificationResult {
     /// `true` if classified as internal, `false` otherwise
     #[must_use]
     pub fn is_internal(&self) -> bool {
-        self.class == DependencyClass::Internal
+        self.class.is_internal()
     }
 
     /// Check if the dependency is external
@@ -438,18 +514,44 @@ impl ClassificationResult {
     /// `true` if classified as external, `false` otherwise
     #[must_use]
     pub fn is_external(&self) -> bool {
-        self.class == DependencyClass::External
+        self.class.is_external()
+    }
+
+    /// Get the reference type for internal dependencies
+    ///
+    /// # Returns
+    ///
+    /// Optional reference type if this is an internal dependency
+    #[must_use]
+    pub fn reference_type(&self) -> Option<&InternalReferenceType> {
+        self.class.reference_type()
+    }
+
+    /// Get all warnings including both classification warnings and class warnings
+    ///
+    /// # Returns
+    ///
+    /// Iterator over all warning messages
+    pub fn all_warnings(&self) -> impl Iterator<Item = &str> {
+        self.warnings.iter().map(|s| s.as_str())
+            .chain(self.class.warning())
     }
 }
 
-/// Dependency classification types
+/// Dependency classification types with detailed metadata
 ///
 /// Represents whether a dependency is internal to the project/workspace
-/// or external from a registry or other source.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// or external from a registry or other source, including detailed
+/// information about the reference type and any warnings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DependencyClass {
     /// Internal dependency (part of the same project/workspace)
-    Internal,
+    Internal {
+        /// Type of reference used for this internal dependency
+        reference_type: InternalReferenceType,
+        /// Optional warning about the reference type
+        warning: Option<String>,
+    },
     /// External dependency (from registry, git, URL, etc.)
     External,
 }
@@ -461,8 +563,8 @@ impl DependencyClass {
     ///
     /// `true` if this is an internal dependency, `false` otherwise
     #[must_use]
-    pub fn is_internal(self) -> bool {
-        matches!(self, Self::Internal)
+    pub fn is_internal(&self) -> bool {
+        matches!(self, Self::Internal { .. })
     }
 
     /// Check if this is an external dependency
@@ -471,15 +573,41 @@ impl DependencyClass {
     ///
     /// `true` if this is an external dependency, `false` otherwise
     #[must_use]
-    pub fn is_external(self) -> bool {
+    pub fn is_external(&self) -> bool {
         matches!(self, Self::External)
+    }
+
+    /// Get the warning message for internal dependencies
+    ///
+    /// # Returns
+    ///
+    /// Optional warning message for internal dependencies
+    #[must_use]
+    pub fn warning(&self) -> Option<&str> {
+        match self {
+            Self::Internal { warning, .. } => warning.as_deref(),
+            Self::External => None,
+        }
+    }
+
+    /// Get the reference type for internal dependencies
+    ///
+    /// # Returns
+    ///
+    /// Optional reference type for internal dependencies
+    #[must_use]
+    pub fn reference_type(&self) -> Option<&InternalReferenceType> {
+        match self {
+            Self::Internal { reference_type, .. } => Some(reference_type),
+            Self::External => None,
+        }
     }
 }
 
 impl std::fmt::Display for DependencyClass {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Internal => write!(f, "internal"),
+            Self::Internal { reference_type, .. } => write!(f, "internal({})", reference_type),
             Self::External => write!(f, "external"),
         }
     }
@@ -502,6 +630,51 @@ impl std::fmt::Display for ClassificationStrategy {
             Self::ProtocolBased => write!(f, "protocol-based"),
             Self::NameBased => write!(f, "name-based"),
             Self::Hybrid => write!(f, "hybrid"),
+        }
+    }
+}
+
+/// Types of internal dependency references
+///
+/// Represents different ways internal dependencies can be referenced
+/// within a project or workspace, with implications for consistency
+/// and maintainability.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum InternalReferenceType {
+    /// Workspace protocol reference (`workspace:*`, `workspace:^`)
+    ///
+    /// This is the ideal way to reference internal dependencies in monorepos.
+    /// Provides automatic version resolution and workspace-aware handling.
+    WorkspaceProtocol,
+    
+    /// Local file path reference (`file:../local-package`)
+    ///
+    /// Direct file system reference to a local package. Works in both
+    /// single repositories and monorepos, but workspace protocol is
+    /// preferred in monorepos for better consistency.
+    LocalFile,
+    
+    /// Registry version reference (`^1.0.0`, `~2.1.0`)
+    ///
+    /// Standard semver reference that happens to point to an internal
+    /// package. Works but can be inconsistent in monorepos where
+    /// workspace protocol would be more appropriate.
+    RegistryVersion(String),
+    
+    /// Other reference types (git, jsr, URL, etc.)
+    ///
+    /// Uncommon but possible ways to reference internal packages,
+    /// such as git repositories or alternative registries.
+    Other,
+}
+
+impl std::fmt::Display for InternalReferenceType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::WorkspaceProtocol => write!(f, "workspace"),
+            Self::LocalFile => write!(f, "file"),
+            Self::RegistryVersion(version) => write!(f, "registry:{}", version),
+            Self::Other => write!(f, "other"),
         }
     }
 }
