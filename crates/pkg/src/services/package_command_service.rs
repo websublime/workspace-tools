@@ -22,6 +22,8 @@
 use crate::{
     config::PackageToolsConfig,
     errors::PackageError,
+    services::{PerformanceOptimizer, ConcurrentProcessor, OptimizationStrategy},
+    context::ProjectContext,
 };
 use sublime_standard_tools::{
     command::{CommandBuilder, Executor},
@@ -103,6 +105,10 @@ where
     working_directory: PathBuf,
     /// Cached package manager for performance optimization
     cached_package_manager: Option<PackageManager>,
+    /// Performance optimizer for context-aware optimizations (optional)
+    performance_optimizer: Option<PerformanceOptimizer>,
+    /// Concurrent processor for parallel operations (optional)
+    concurrent_processor: Option<ConcurrentProcessor>,
 }
 
 impl<E, F> PackageCommandService<E, F>
@@ -140,6 +146,8 @@ where
             standard_config: StandardConfig::default(),
             working_directory: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             cached_package_manager: None,
+            performance_optimizer: None,
+            concurrent_processor: None,
         }
     }
 
@@ -175,6 +183,8 @@ where
             standard_config: StandardConfig::default(),
             working_directory: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             cached_package_manager: None,
+            performance_optimizer: None,
+            concurrent_processor: None,
         }
     }
 
@@ -211,6 +221,103 @@ where
             standard_config: StandardConfig::default(),
             working_directory,
             cached_package_manager: None,
+            performance_optimizer: None,
+            concurrent_processor: None,
+        }
+    }
+
+    /// Create a new package command service with performance optimizations enabled
+    ///
+    /// This factory method creates a PackageCommandService with context-aware performance
+    /// optimizations enabled, providing enterprise-grade performance tuning for command operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `executor` - Command executor implementation for running commands
+    /// * `filesystem` - Filesystem implementation for file operations
+    /// * `context` - Project context for optimization strategy
+    ///
+    /// # Returns
+    ///
+    /// A new PackageCommandService instance with performance optimizations enabled
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_package_tools::{services::PackageCommandService, context::ProjectContext};
+    /// use sublime_standard_tools::{command::DefaultCommandExecutor, filesystem::AsyncFileSystem};
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = AsyncFileSystem::new();
+    /// let executor = DefaultCommandExecutor::new();
+    /// let context = ProjectContext::Single(Default::default());
+    /// let service = PackageCommandService::with_performance_optimization(executor, fs, context).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn with_performance_optimization(
+        executor: E, 
+        filesystem: F, 
+        context: ProjectContext
+    ) -> Result<Self, crate::errors::Error> {
+        let optimizer = PerformanceOptimizer::new(context);
+        let strategy = optimizer.optimize_for_context().await?;
+        let concurrent_processor = ConcurrentProcessor::new(strategy);
+        
+        Ok(Self {
+            executor,
+            filesystem,
+            config: PackageToolsConfig::default(),
+            standard_config: StandardConfig::default(),
+            working_directory: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            cached_package_manager: None,
+            performance_optimizer: Some(optimizer),
+            concurrent_processor: Some(concurrent_processor),
+        })
+    }
+
+    /// Create a new package command service with custom optimization strategy
+    ///
+    /// This factory method allows fine-grained control over performance optimization
+    /// settings by providing a custom optimization strategy for command operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `executor` - Command executor implementation for running commands
+    /// * `filesystem` - Filesystem implementation for file operations
+    /// * `strategy` - Custom optimization strategy
+    ///
+    /// # Returns
+    ///
+    /// A new PackageCommandService instance with custom performance optimizations
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_package_tools::{services::{PackageCommandService, OptimizationStrategy}};
+    /// use sublime_standard_tools::{command::DefaultCommandExecutor, filesystem::AsyncFileSystem};
+    ///
+    /// let fs = AsyncFileSystem::new();
+    /// let executor = DefaultCommandExecutor::new();
+    /// let strategy = OptimizationStrategy {
+    ///     concurrent_downloads: 15,
+    ///     ..Default::default()
+    /// };
+    /// let service = PackageCommandService::with_custom_strategy(executor, fs, strategy);
+    /// ```
+    #[must_use]
+    pub fn with_custom_strategy(executor: E, filesystem: F, strategy: OptimizationStrategy) -> Self {
+        let concurrent_processor = ConcurrentProcessor::new(strategy);
+        
+        Self {
+            executor,
+            filesystem,
+            config: PackageToolsConfig::default(),
+            standard_config: StandardConfig::default(),
+            working_directory: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            cached_package_manager: None,
+            performance_optimizer: None, // No optimizer since strategy is provided directly
+            concurrent_processor: Some(concurrent_processor),
         }
     }
 

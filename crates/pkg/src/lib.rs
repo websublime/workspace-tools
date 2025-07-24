@@ -230,6 +230,10 @@ pub use version::version::{
 
 pub use services::{
     PackageService, PackageInfo, ValidationResult,
+    PerformanceOptimizer, OptimizationStrategy, OptimizationOverrides,
+    CacheStrategy, MemoryOptimizationLevel as ServiceMemoryOptimizationLevel,
+    IoStrategy, TimeoutStrategy, RetryStrategy, ResourceLimits, PerformanceMetrics,
+    ConcurrentProcessor, specialized,
 };
 
 pub use graph::{
