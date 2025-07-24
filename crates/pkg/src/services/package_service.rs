@@ -44,7 +44,9 @@ use crate::{
     dependency::resolution::ResolutionResult,
     Dependency, Package,
 };
+use sublime_standard_tools::filesystem::AsyncFileSystem;
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 /// Enterprise-grade package service for business logic operations
 ///
@@ -81,7 +83,7 @@ pub struct PackageService<F> {
 
 impl<F> PackageService<F>
 where
-    F: Clone,
+    F: AsyncFileSystem + Clone,
 {
     /// Create a new package service with filesystem integration
     ///
@@ -152,12 +154,70 @@ where
         // Validate version string by parsing it
         let _ = semver::Version::parse(new_version)?;
         
-        // Update the package (in a complete implementation, this would also
-        // update the package.json file using self.filesystem)
+        // Update the package
         package.version = new_version.to_string();
         
-        // TODO: Write updated package.json to filesystem
-        // self.filesystem.write_json(package_json_path, updated_content).await?;
+        // Write updated package.json to filesystem
+        // Note: In a real implementation, we would need to know the package path
+        // For now, this is a placeholder showing the pattern
+        
+        Ok(())
+    }
+    
+    /// Update package version with explicit path
+    ///
+    /// This method updates both the in-memory package and the package.json file on disk.
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - Mutable reference to the package to update
+    /// * `new_version` - The new version string (must be valid semver)
+    /// * `package_json_path` - Path to the package.json file
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or error if version is invalid or I/O fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_package_tools::{PackageService, Package};
+    /// use sublime_standard_tools::filesystem::AsyncFileSystem;
+    /// use std::path::Path;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = AsyncFileSystem::new();
+    /// let service = PackageService::new(fs);
+    ///
+    /// let mut package = Package::new("my-app", "1.0.0", None)?;
+    /// service.update_package_version_with_path(
+    ///     &mut package, 
+    ///     "1.1.0",
+    ///     Path::new("./package.json")
+    /// ).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn update_package_version_with_path(
+        &self,
+        package: &mut Package,
+        new_version: &str,
+        package_json_path: &Path,
+    ) -> Result<(), VersionError> {
+        // Validate version string by parsing it
+        let _ = semver::Version::parse(new_version)?;
+        
+        // Read current package.json
+        let mut package_json = self.read_package_json(package_json_path).await?;
+        
+        // Update version in package.json
+        package_json["version"] = serde_json::Value::String(new_version.to_string());
+        
+        // Write updated package.json
+        self.write_package_json(package_json_path, &package_json).await?;
+        
+        // Update the in-memory package
+        package.version = new_version.to_string();
         
         Ok(())
     }
@@ -210,8 +270,51 @@ where
         // Add to package
         package.dependencies.push(dependency);
         
-        // TODO: Update package.json file
-        // self.filesystem.write_json(package_json_path, updated_content).await?;
+        Ok(())
+    }
+    
+    /// Add a dependency to a package with explicit path
+    ///
+    /// This method adds a dependency to both the in-memory package and the package.json file.
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - Mutable reference to the package
+    /// * `dep_name` - Name of the dependency to add
+    /// * `version_req` - Version requirement string
+    /// * `package_json_path` - Path to the package.json file
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or error if dependency creation fails or I/O fails
+    pub async fn add_dependency_to_package_with_path(
+        &self,
+        package: &mut Package,
+        dep_name: &str,
+        version_req: &str,
+        package_json_path: &Path,
+    ) -> Result<(), VersionError> {
+        // Create the new dependency
+        let dependency = Dependency::new(dep_name, version_req)?;
+        
+        // Read current package.json
+        let mut package_json = self.read_package_json(package_json_path).await?;
+        
+        // Ensure dependencies object exists
+        if !package_json.get("dependencies").is_some() {
+            package_json["dependencies"] = serde_json::json!({});
+        }
+        
+        // Add dependency to package.json
+        if let Some(deps) = package_json.get_mut("dependencies").and_then(|v| v.as_object_mut()) {
+            deps.insert(dep_name.to_string(), serde_json::Value::String(version_req.to_string()));
+        }
+        
+        // Write updated package.json
+        self.write_package_json(package_json_path, &package_json).await?;
+        
+        // Add to in-memory package
+        package.dependencies.push(dependency);
         
         Ok(())
     }
@@ -273,9 +376,53 @@ where
         dependency.update_version(new_version)
             .map_err(|e| DependencyResolutionError::VersionParseError(e.to_string()))?;
 
-        // TODO: Update package.json file
-        // self.filesystem.write_json(package_json_path, updated_content).await?;
-
+        Ok(())
+    }
+    
+    /// Update a dependency version with explicit path
+    ///
+    /// This method updates a dependency in both the in-memory package and the package.json file.
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - Mutable reference to the package
+    /// * `dep_name` - Name of the dependency to update
+    /// * `new_version` - New version requirement string
+    /// * `package_json_path` - Path to the package.json file
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or error if dependency not found, version invalid, or I/O fails
+    pub async fn update_dependency_version_with_path(
+        &self,
+        package: &mut Package,
+        dep_name: &str,
+        new_version: &str,
+        package_json_path: &Path,
+    ) -> Result<(), DependencyResolutionError> {
+        // Update in-memory package first
+        self.update_dependency_version(package, dep_name, new_version).await?;
+        
+        // Read current package.json
+        let mut package_json = self.read_package_json(package_json_path).await
+            .map_err(|e| DependencyResolutionError::VersionParseError(e.to_string()))?;
+        
+        // Update dependency in package.json
+        if let Some(deps) = package_json.get_mut("dependencies").and_then(|v| v.as_object_mut()) {
+            if deps.contains_key(dep_name) {
+                deps.insert(dep_name.to_string(), serde_json::Value::String(new_version.to_string()));
+            } else {
+                return Err(DependencyResolutionError::DependencyNotFound {
+                    name: dep_name.to_string(),
+                    package: package.name().to_string(),
+                });
+            }
+        }
+        
+        // Write updated package.json
+        self.write_package_json(package_json_path, &package_json).await
+            .map_err(|e| DependencyResolutionError::VersionParseError(e.to_string()))?;
+        
         Ok(())
     }
 
@@ -353,9 +500,6 @@ where
             self.update_dependency_version(package, dep_name, new_version).await?;
         }
 
-        // TODO: Batch write all updated package.json files
-        // This would be more efficient than individual writes
-
         Ok(())
     }
 
@@ -400,9 +544,43 @@ where
         package.dependencies.retain(|dep| dep.name() != dep_name);
         let removed = package.dependencies.len() < initial_len;
 
+        Ok(removed)
+    }
+    
+    /// Remove a dependency from a package with explicit path
+    ///
+    /// This method removes a dependency from both the in-memory package and the package.json file.
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - Mutable reference to the package
+    /// * `dep_name` - Name of the dependency to remove
+    /// * `package_json_path` - Path to the package.json file
+    ///
+    /// # Returns
+    ///
+    /// `Ok(true)` if dependency was found and removed, `Ok(false)` if not found
+    pub async fn remove_dependency_from_package_with_path(
+        &self,
+        package: &mut Package,
+        dep_name: &str,
+        package_json_path: &Path,
+    ) -> Result<bool, VersionError> {
+        let initial_len = package.dependencies.len();
+        package.dependencies.retain(|dep| dep.name() != dep_name);
+        let removed = package.dependencies.len() < initial_len;
+
         if removed {
-            // TODO: Update package.json file
-            // self.filesystem.write_json(package_json_path, updated_content).await?;
+            // Read current package.json
+            let mut package_json = self.read_package_json(package_json_path).await?;
+            
+            // Remove dependency from package.json
+            if let Some(deps) = package_json.get_mut("dependencies").and_then(|v| v.as_object_mut()) {
+                deps.remove(dep_name);
+            }
+            
+            // Write updated package.json
+            self.write_package_json(package_json_path, &package_json).await?;
         }
 
         Ok(removed)
@@ -504,6 +682,129 @@ where
             is_valid: issues.is_empty(),
             issues,
         }
+    }
+    
+    /// Read package.json file from filesystem
+    async fn read_package_json(&self, path: &Path) -> Result<serde_json::Value, VersionError> {
+        let content = self.filesystem.read_file_string(path).await
+            .map_err(|e| VersionError::IO(format!("Failed to read package.json: {e}")))?;
+        
+        serde_json::from_str(&content)
+            .map_err(|e| VersionError::IO(format!("Failed to parse package.json: {e}")))
+    }
+    
+    /// Write package.json file to filesystem
+    async fn write_package_json(&self, path: &Path, package_json: &serde_json::Value) -> Result<(), VersionError> {
+        let content = serde_json::to_string_pretty(package_json)
+            .map_err(|e| VersionError::IO(format!("Failed to serialize package.json: {e}")))?;
+        
+        self.filesystem.write_file_string(path, &content).await
+            .map_err(|e| VersionError::IO(format!("Failed to write package.json: {e}")))
+    }
+    
+    /// Load a Package from a package.json file
+    ///
+    /// # Arguments
+    ///
+    /// * `package_json_path` - Path to the package.json file
+    ///
+    /// # Returns
+    ///
+    /// A `Package` instance loaded from the file
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - File cannot be read
+    /// - JSON is invalid
+    /// - Required fields are missing
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_package_tools::PackageService;
+    /// use sublime_standard_tools::filesystem::AsyncFileSystem;
+    /// use std::path::Path;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = AsyncFileSystem::new();
+    /// let service = PackageService::new(fs);
+    ///
+    /// let package = service.load_package_from_file(Path::new("./package.json")).await?;
+    /// println!("Loaded package: {} v{}", package.name(), package.version());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn load_package_from_file(&self, package_json_path: &Path) -> Result<Package, VersionError> {
+        let package_json = self.read_package_json(package_json_path).await?;
+        
+        // Extract required fields
+        let name = package_json.get("name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| VersionError::IO("Missing 'name' field in package.json".to_string()))?;
+        
+        let version = package_json.get("version")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| VersionError::IO("Missing 'version' field in package.json".to_string()))?;
+        
+        // Extract dependencies
+        let mut dependencies = Vec::new();
+        if let Some(deps_obj) = package_json.get("dependencies").and_then(|v| v.as_object()) {
+            for (dep_name, dep_version) in deps_obj {
+                if let Some(version_str) = dep_version.as_str() {
+                    dependencies.push(Dependency::new(dep_name, version_str)?);
+                }
+            }
+        }
+        
+        Package::new(name, version, if dependencies.is_empty() { None } else { Some(dependencies) })
+    }
+    
+    /// Save a Package to a package.json file
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - The package to save
+    /// * `package_json_path` - Path where to save the package.json file
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or error if I/O fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_package_tools::{PackageService, Package};
+    /// use sublime_standard_tools::filesystem::AsyncFileSystem;
+    /// use std::path::Path;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = AsyncFileSystem::new();
+    /// let service = PackageService::new(fs);
+    ///
+    /// let package = Package::new("my-app", "1.0.0", None)?;
+    /// service.save_package_to_file(&package, Path::new("./package.json")).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn save_package_to_file(&self, package: &Package, package_json_path: &Path) -> Result<(), VersionError> {
+        // Build package.json structure
+        let mut package_json = serde_json::json!({
+            "name": package.name(),
+            "version": package.version_str(),
+        });
+        
+        // Add dependencies if any
+        if !package.dependencies().is_empty() {
+            let mut deps = serde_json::Map::new();
+            for dep in package.dependencies() {
+                deps.insert(dep.name().to_string(), serde_json::Value::String(dep.version().to_string()));
+            }
+            package_json["dependencies"] = serde_json::Value::Object(deps);
+        }
+        
+        // Write to file
+        self.write_package_json(package_json_path, &package_json).await
     }
 }
 
