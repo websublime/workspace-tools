@@ -46,7 +46,7 @@ use crate::{
 };
 use sublime_standard_tools::filesystem::AsyncFileSystem;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Enterprise-grade package service for business logic operations
 ///

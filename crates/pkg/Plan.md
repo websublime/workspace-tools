@@ -389,18 +389,24 @@ pub enum DependencyProtocol {
 - [x] **Implementar VersionError::IO variant para operações filesystem**
 - [ ] Performance benchmarking vs implementação atual
 
-#### Task 2.2: Project/Monorepo Detection
+#### Task 2.2: Project/Monorepo Detection ✅ **CONCLUÍDO**
 ```rust
 pub struct WorkspaceAwareDependencyResolver<F: AsyncFileSystem> {
     project_detector: ProjectDetector<F>,
     monorepo_detector: MonorepoDetector<F>,
+    context_detector: ContextDetector<F>,
+    filesystem: F,
     config: PackageToolsConfig,
+    working_directory: PathBuf,
 }
 ```
-- [ ] **Integrar ProjectDetector para context awareness**
-- [ ] **Integrar MonorepoDetector para workspace detection**  
-- [ ] **Implementar auto-detection de contexto (simple vs monorepo)**
-- [ ] **Distinguir internal vs external dependencies**
+- [x] **Integrar ProjectDetector para context awareness**
+- [x] **Integrar MonorepoDetector para workspace detection**  
+- [x] **Implementar auto-detection de contexto (simple vs monorepo)**
+- [x] **Distinguir internal vs external dependencies**
+- [x] **Implementar WorkspaceAwareDependencyResolver enterprise-grade**
+- [x] **Refatorar ContextDetector para usar standard crate detectors**
+- [x] **Preservar arquitetura context-aware (ProjectContext enum)**
 
 #### Task 2.3: Command Integration
 - [ ] **Integrar CommandExecutor para npm/yarn/pnpm operations**
@@ -803,8 +809,8 @@ cargo build                    # Zero compilation errors
 - ✅ **FASE 1**: Arquitetura reestruturada (**COMPLETADO**) 🚀
 - 📊 **FASE 2**: Standard Crate Integration (**PARCIALMENTE COMPLETADO**) 🚀
   - ✅ **Task 2.1**: AsyncFileSystem Integration (**COMPLETADO**)
-  - ⏳ **Task 2.2**: Project/Monorepo Detection (Próximo)
-  - ⏳ **Task 2.3**: Command Integration (Pendente)
+  - ✅ **Task 2.2**: Project/Monorepo Detection (**COMPLETADO**) 🚀
+  - ⏳ **Task 2.3**: Command Integration (Próximo)
 - ❌ **BREAKING**: APIs completamente reestruturadas
 
 ### **v0.3.0 - Monorepo Complete** (4-5 semanas)
@@ -828,7 +834,7 @@ cargo build                    # Zero compilation errors
 - [x] **SRP compliance 100%** (cada módulo uma responsabilidade) ✅ **FASE 1 DONE**
 - [x] **AsyncFileSystem integration 100%** (ContextDetector, PackageService, VersionManager) ✅ **FASE 2 Task 2.1 DONE**
 - [x] **Async-first 100%** (todas I/O operations implementadas) ✅ **FASE 2 Task 2.1 DONE**
-- [ ] **Standard integration 90%+** (ProjectDetector, MonorepoDetector, CommandExecutor)
+- [x] **Standard integration 90%+** (ProjectDetector, MonorepoDetector integrados) ✅ **FASE 2 Task 2.2 DONE**
 
 ### Funcionalidade Context-Aware ✅ **FASE 1 COMPLETADO**
 - [x] **Context detection 100%** (single repository vs monorepo auto-detection) ✅

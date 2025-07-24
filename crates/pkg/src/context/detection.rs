@@ -32,9 +32,14 @@ use crate::{
     context::{ProjectContext, SingleRepositoryContext, MonorepoContext},
     errors::VersionError,
 };
-use sublime_standard_tools::filesystem::AsyncFileSystem;
+use sublime_standard_tools::{
+    filesystem::AsyncFileSystem,
+    project::{ProjectDetector, ProjectKind},
+    monorepo::{MonorepoDetector, MonorepoDetectorTrait},
+    config::StandardConfig,
+};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Context detector for automatically determining project type
 ///
@@ -70,18 +75,22 @@ use std::path::{Path, PathBuf};
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct ContextDetector<F> {
-    /// Filesystem implementation for reading project files
-    filesystem: F,
+pub struct ContextDetector<F: AsyncFileSystem> {
+    /// Standard crate project detector for unified project detection
+    project_detector: ProjectDetector<F>,
+    /// Standard crate monorepo detector for workspace detection  
+    monorepo_detector: MonorepoDetector<F>,
     /// Current working directory for detection
     working_directory: PathBuf,
     /// Whether to use strict detection (require explicit workspace config)
     strict_mode: bool,
+    /// Configuration for detection behavior
+    config: Option<StandardConfig>,
 }
 
 impl<F> ContextDetector<F>
 where
-    F: AsyncFileSystem + Clone,
+    F: AsyncFileSystem + Clone + 'static,
 {
     /// Create a new context detector
     ///
@@ -104,10 +113,15 @@ where
     /// ```
     #[must_use]
     pub fn new(filesystem: F) -> Self {
+        let project_detector = ProjectDetector::with_filesystem(filesystem.clone());
+        let monorepo_detector = MonorepoDetector::with_filesystem(filesystem.clone());
+        
         Self {
-            filesystem,
+            project_detector,
+            monorepo_detector,
             working_directory: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             strict_mode: false,
+            config: None,
         }
     }
 
@@ -136,10 +150,50 @@ where
     /// ```
     #[must_use]
     pub fn with_directory(filesystem: F, working_directory: PathBuf) -> Self {
+        let project_detector = ProjectDetector::with_filesystem(filesystem.clone());
+        let monorepo_detector = MonorepoDetector::with_filesystem(filesystem.clone());
+        
         Self {
-            filesystem,
+            project_detector,
+            monorepo_detector,
             working_directory,
             strict_mode: false,
+            config: None,
+        }
+    }
+
+    /// Create a context detector with custom configuration
+    ///
+    /// # Arguments
+    ///
+    /// * `filesystem` - Filesystem implementation for reading files
+    /// * `config` - Standard configuration for detection behavior
+    ///
+    /// # Returns
+    ///
+    /// A new context detector instance with configuration
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_package_tools::context::ContextDetector;
+    /// use sublime_standard_tools::config::StandardConfig;
+    ///
+    /// # let filesystem = ();
+    /// # let config = StandardConfig::default();
+    /// let detector = ContextDetector::with_config(filesystem, config);
+    /// ```
+    #[must_use]
+    pub fn with_config(filesystem: F, config: StandardConfig) -> Self {
+        let project_detector = ProjectDetector::with_filesystem(filesystem.clone());
+        let monorepo_detector = MonorepoDetector::with_filesystem(filesystem.clone());
+        
+        Self {
+            project_detector,
+            monorepo_detector,
+            working_directory: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            strict_mode: false,
+            config: Some(config),
         }
     }
 
@@ -195,23 +249,41 @@ where
     /// # }
     /// ```
     pub async fn detect_context(&self) -> Result<ProjectContext, VersionError> {
-        // Step 1: Check for explicit workspace configuration
-        if self.has_workspace_config().await? {
-            return Ok(ProjectContext::Monorepo(self.build_monorepo_context().await?));
-        }
+        // Use standard crate MonorepoDetector for robust detection
+        let monorepo_result = self.monorepo_detector
+            .is_monorepo_root(&self.working_directory)
+            .await
+            .map_err(|e| VersionError::IO(format!("Failed to detect monorepo: {e}")))?;
 
-        // Step 2: Check for monorepo tool configurations
-        if self.has_monorepo_tools().await? {
-            return Ok(ProjectContext::Monorepo(self.build_monorepo_context().await?));
+        match monorepo_result {
+            Some(_monorepo_kind) => {
+                // Detected as monorepo - build monorepo context
+                Ok(ProjectContext::Monorepo(self.build_monorepo_context().await?))
+            }
+            None => {
+                // In strict mode, ensure explicit workspace detection
+                if self.strict_mode {
+                    // Use project detector to verify it's a valid single repo
+                    let project_kind = self.project_detector
+                        .detect_kind(&self.working_directory)
+                        .await
+                        .map_err(|e| VersionError::IO(format!("Failed to detect project kind: {e}")))?;
+                    
+                    match project_kind {
+                        ProjectKind::Repository(repo_kind) => {
+                            if repo_kind.is_monorepo() {
+                                Ok(ProjectContext::Monorepo(self.build_monorepo_context().await?))
+                            } else {
+                                Ok(ProjectContext::Single(self.build_single_context().await?))
+                            }
+                        }
+                    }
+                } else {
+                    // Non-strict mode: default to single repository
+                    Ok(ProjectContext::Single(self.build_single_context().await?))
+                }
+            }
         }
-
-        // Step 3: Check for multiple packages (if not in strict mode)
-        if !self.strict_mode && self.has_multiple_packages().await? {
-            return Ok(ProjectContext::Monorepo(self.build_monorepo_context().await?));
-        }
-
-        // Default: Single repository
-        Ok(ProjectContext::Single(self.build_single_context().await?))
     }
 
     /// Force detection as a monorepo
@@ -271,57 +343,21 @@ where
         Ok(ProjectContext::Single(self.build_single_context().await?))
     }
 
-    /// Check if the project has explicit workspace configuration
-    async fn has_workspace_config(&self) -> Result<bool, VersionError> {
-        let package_json_path = self.working_directory.join("package.json");
-        
-        // Check if package.json exists
-        if !self.filesystem.exists(&package_json_path).await {
-            return Ok(false);
-        }
-        
-        // Read and parse package.json
-        let content = self.filesystem.read_file_string(&package_json_path).await
-            .map_err(|e| VersionError::IO(format!("Failed to read package.json: {e}")))?
-;
-        
-        let package_json: serde_json::Value = serde_json::from_str(&content)
-            .map_err(|e| VersionError::IO(format!("Failed to parse package.json: {e}")))?
-;
-        
-        // Check for workspaces field (can be array or object)
-        Ok(package_json.get("workspaces").is_some())
-    }
-
-    /// Check if the project has monorepo tool configurations
-    async fn has_monorepo_tools(&self) -> Result<bool, VersionError> {
-        let monorepo_files = &[
-            "lerna.json",
-            "nx.json", 
-            "rush.json",
-            "pnpm-workspace.yaml",
-            "yarn.lock",
-        ];
-
-        for file in monorepo_files {
-            let file_path = self.working_directory.join(file);
-            if self.filesystem.exists(&file_path).await {
-                return Ok(true);
-            }
-        }
-
-        Ok(false)
-    }
-
-    /// Check if the project has multiple package.json files
-    async fn has_multiple_packages(&self) -> Result<bool, VersionError> {
-        let package_files = self.find_package_files().await?;
-        Ok(package_files.len() > 1)
-    }
 
     /// Build a monorepo context configuration
     async fn build_monorepo_context(&self) -> Result<MonorepoContext, VersionError> {
-        let workspace_packages = self.discover_workspace_packages().await?;
+        // Use standard crate MonorepoDetector to get full monorepo analysis
+        let monorepo_descriptor = self.monorepo_detector
+            .detect_monorepo(&self.working_directory)
+            .await
+            .map_err(|e| VersionError::IO(format!("Failed to analyze monorepo: {e}")))?;
+        
+        // Convert MonorepoDescriptor to workspace_packages map
+        let workspace_packages: HashMap<String, String> = monorepo_descriptor
+            .packages()
+            .iter()
+            .map(|pkg| (pkg.name.clone(), pkg.location.to_string_lossy().to_string()))
+            .collect();
         
         Ok(MonorepoContext {
             workspace_packages,
@@ -334,142 +370,6 @@ where
         Ok(SingleRepositoryContext::default())
     }
 
-    /// Discover workspace packages in a monorepo
-    async fn discover_workspace_packages(&self) -> Result<HashMap<String, String>, VersionError> {
-        let mut packages = HashMap::new();
-        
-        // First, try to read workspace configuration from package.json
-        let package_json_path = self.working_directory.join("package.json");
-        if self.filesystem.exists(&package_json_path).await {
-            if let Ok(content) = self.filesystem.read_file_string(&package_json_path).await {
-                if let Ok(package_json) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(workspaces) = package_json.get("workspaces") {
-                        // Handle workspaces as array or as object with "packages" field
-                        let workspace_patterns = match workspaces {
-                            serde_json::Value::Array(arr) => {
-                                arr.iter()
-                                    .filter_map(|v| v.as_str())
-                                    .map(|s| s.to_string())
-                                    .collect::<Vec<_>>()
-                            }
-                            serde_json::Value::Object(obj) => {
-                                if let Some(serde_json::Value::Array(arr)) = obj.get("packages") {
-                                    arr.iter()
-                                        .filter_map(|v| v.as_str())
-                                        .map(|s| s.to_string())
-                                        .collect::<Vec<_>>()
-                                } else {
-                                    Vec::new()
-                                }
-                            }
-                            _ => Vec::new(),
-                        };
-                        
-                        // For each workspace pattern, find matching package.json files
-                        for pattern in workspace_patterns {
-                            if let Ok(pattern_packages) = self.find_packages_by_pattern(&pattern).await {
-                                packages.extend(pattern_packages);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        // If no workspace config found, fallback to scanning for package.json files
-        if packages.is_empty() {
-            let all_package_files = self.find_package_files().await?;
-            for package_path in all_package_files {
-                // Skip root package.json
-                if package_path == self.working_directory.join("package.json") {
-                    continue;
-                }
-                
-                if let Ok(content) = self.filesystem.read_file_string(&package_path).await {
-                    if let Ok(package_json) = serde_json::from_str::<serde_json::Value>(&content) {
-                        if let Some(name) = package_json.get("name").and_then(|n| n.as_str()) {
-                            let relative_path = package_path
-                                .parent()
-                                .and_then(|p| p.strip_prefix(&self.working_directory).ok())
-                                .map(|p| p.to_string_lossy().to_string())
-                                .unwrap_or_else(|| ".".to_string());
-                            packages.insert(name.to_string(), relative_path);
-                        }
-                    }
-                }
-            }
-        }
-        
-        Ok(packages)
-    }
-
-    /// Find all package.json files in the project
-    async fn find_package_files(&self) -> Result<Vec<PathBuf>, VersionError> {
-        let mut packages = Vec::new();
-        
-        // Walk directory recursively to find package.json files
-        let all_files = self.filesystem.walk_dir(&self.working_directory).await
-            .map_err(|e| VersionError::IO(format!("Failed to walk directory: {e}")))?
-;
-        
-        for file_path in all_files {
-            // Skip node_modules, .git, and other excluded directories
-            let path_str = file_path.to_string_lossy();
-            if path_str.contains("node_modules") || 
-               path_str.contains(".git") || 
-               path_str.contains("target") || 
-               path_str.contains(".next") || 
-               path_str.contains("dist") {
-                continue;
-            }
-            
-            // Check if it's a package.json file
-            if file_path.file_name() == Some(std::ffi::OsStr::new("package.json")) {
-                packages.push(file_path);
-            }
-        }
-        
-        Ok(packages)
-    }
-    
-    /// Find packages matching a workspace pattern (e.g., "packages/*", "apps/*")
-    async fn find_packages_by_pattern(&self, pattern: &str) -> Result<HashMap<String, String>, VersionError> {
-        let mut packages = HashMap::new();
-        
-        // Simple glob-like pattern matching for workspace patterns
-        let pattern_path = self.working_directory.join(pattern);
-        let parent_dir = if pattern.ends_with("/*") {
-            // Handle patterns like "packages/*"
-            let parent_pattern = pattern.trim_end_matches("/*");
-            self.working_directory.join(parent_pattern)
-        } else {
-            // Handle direct paths
-            pattern_path.parent().unwrap_or(&self.working_directory).to_path_buf()
-        };
-        
-        if self.filesystem.exists(&parent_dir).await {
-            if let Ok(entries) = self.filesystem.read_dir(&parent_dir).await {
-                for entry in entries {
-                    let package_json_path = entry.join("package.json");
-                    if self.filesystem.exists(&package_json_path).await {
-                        if let Ok(content) = self.filesystem.read_file_string(&package_json_path).await {
-                            if let Ok(package_json) = serde_json::from_str::<serde_json::Value>(&content) {
-                                if let Some(name) = package_json.get("name").and_then(|n| n.as_str()) {
-                                    let relative_path = entry
-                                        .strip_prefix(&self.working_directory)
-                                        .map(|p| p.to_string_lossy().to_string())
-                                        .unwrap_or_else(|_| ".".to_string());
-                                    packages.insert(name.to_string(), relative_path);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        Ok(packages)
-    }
 }
 
 /// Detection result with additional metadata

@@ -258,7 +258,7 @@ impl DependencyClassifier {
         _config: &SingleRepositoryContext
     ) -> Result<ClassificationResult, VersionError> {
         let protocol = DependencyProtocol::parse(dep_string);
-        let mut warnings = Vec::new();
+        let warnings = Vec::new();
         let mut errors = Vec::new();
 
         // In single repositories, reject workspace protocols
@@ -266,9 +266,8 @@ impl DependencyClassifier {
             let error = "Workspace protocols are not supported in single repository contexts".to_string();
             if self.strict_mode {
                 return Err(VersionError::InvalidVersion(error));
-            } else {
-                errors.push(error);
             }
+            errors.push(error);
         }
 
         // Simple classification: only file: = internal

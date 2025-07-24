@@ -8,6 +8,7 @@ pub mod registry_manager;
 pub mod package_registry_client;
 pub mod local_registry;
 
-pub use npm_client::{NpmRegistry, PackageRegistry, PackageRegistryClone};
-pub use registry_manager::{RegistryAuth, RegistryManager, RegistryType};
-pub use local_registry::LocalRegistry;
+// TODO: Re-enable when integrated with Package service
+// pub use npm_client::{NpmRegistry, PackageRegistry, PackageRegistryClone};
+// pub use registry_manager::{RegistryAuth, RegistryManager, RegistryType};
+// pub use local_registry::LocalRegistry;

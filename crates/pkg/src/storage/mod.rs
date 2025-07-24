@@ -5,4 +5,5 @@
 
 pub mod dependency_storage;
 
-pub use dependency_storage::Registry;
+// TODO: Re-enable when refactored to use standard crate patterns
+// pub use dependency_storage::Registry;
