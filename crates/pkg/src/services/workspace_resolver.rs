@@ -551,9 +551,9 @@ where
     fn extract_package_name(&self, dep_string: &str) -> Option<String> {
         // Simple extraction logic - can be enhanced with proper parsing
         if let Some(at_pos) = dep_string.find('@') {
-            if dep_string.starts_with('@') {
+            if let Some(stripped) = dep_string.strip_prefix('@') {
                 // Scoped package like "@org/package@version"
-                if let Some(second_at) = dep_string[1..].find('@') {
+                if let Some(second_at) = stripped.find('@') {
                     Some(dep_string[..second_at + 1].to_string())
                 } else {
                     Some(dep_string.to_string())

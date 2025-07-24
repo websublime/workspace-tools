@@ -51,7 +51,7 @@ pub mod dependency_source;
 pub mod dependency_parser;
 
 #[cfg(test)]
-mod test_parsing;
+mod tests;
 
 pub use project::{
     ProjectContext, 

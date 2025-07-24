@@ -535,8 +535,7 @@ impl FromStr for GitReference {
     type Err = PackageError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.starts_with("semver:") {
-            let version_str = &s[7..]; // Remove "semver:" prefix
+        if let Some(version_str) = s.strip_prefix("semver:") {
             let version_req = VersionReq::parse(version_str)
                 .map_err(|e| PackageError::Configuration(format!("Invalid git semver reference '{}': {}", s, e)))?;
             Ok(Self::Semver(version_req))

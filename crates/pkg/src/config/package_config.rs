@@ -749,7 +749,7 @@ fn default_context_cache_duration() -> Duration {
 }
 
 fn default_max_workers() -> usize {
-    num_cpus::get().max(1).min(16)
+    num_cpus::get().clamp(1, 16)
 }
 
 fn default_memory_optimization() -> MemoryOptimizationLevel {

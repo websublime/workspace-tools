@@ -479,7 +479,7 @@ impl DependencyParser {
 - [x] **Implementar DependencySource enum com todas variantes** ✅ **COMPLETADO**
 - [x] **Implementar DependencyParser com context-aware logic** ✅ **COMPLETADO**
 - [x] **Testes unitários abrangentes (12/12 testes passando)** ✅ **COMPLETADO**
-- [ ] **Testar com projetos single + monorepo reais**
+- [x] **Testar com projetos single + monorepo reais** ✅ **COMPLETADO** (5 testes real-world passando, funcionalidade demonstrada)
 
 #### Task 3.2: Context-Aware Internal/External Classification
 ```rust

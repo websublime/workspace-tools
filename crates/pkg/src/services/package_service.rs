@@ -301,7 +301,7 @@ where
         let mut package_json = self.read_package_json(package_json_path).await?;
         
         // Ensure dependencies object exists
-        if !package_json.get("dependencies").is_some() {
+        if package_json.get("dependencies").is_none() {
             package_json["dependencies"] = serde_json::json!({});
         }
         
@@ -668,7 +668,7 @@ where
 
         // Validate dependency versions
         for dep in package.dependencies() {
-            if let Err(_) = semver::VersionReq::parse(&dep.version().to_string()) {
+            if semver::VersionReq::parse(&dep.version().to_string()).is_err() {
                 issues.push(format!("Invalid dependency version for {}: {}", dep.name(), dep.version()));
             }
         }

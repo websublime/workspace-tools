@@ -36,12 +36,15 @@ use std::{
 use tokio::time::{sleep, timeout};
 
 /// Maximum number of retry attempts for network operations
+#[allow(dead_code)]
 const MAX_RETRY_ATTEMPTS: u32 = 3;
 
 /// Default timeout for package manager operations (5 minutes)
+#[allow(dead_code)]
 const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// Base delay between retry attempts
+#[allow(dead_code)]
 const BASE_RETRY_DELAY: Duration = Duration::from_millis(1000);
 
 /// Enterprise-grade package command service for package manager operations
@@ -82,6 +85,7 @@ const BASE_RETRY_DELAY: Duration = Duration::from_millis(1000);
 /// # }
 /// ```
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct PackageCommandService<E, F> 
 where
     E: Executor + Clone,
@@ -252,7 +256,7 @@ where
             self.cached_package_manager = Some(package_manager);
         }
         
-        Ok(self.cached_package_manager.as_ref().unwrap())
+        self.cached_package_manager.as_ref().ok_or_else(|| PackageError::Configuration("Package manager detection failed".to_string()))
     }
 
     /// Install all dependencies in the current project

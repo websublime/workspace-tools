@@ -26,3 +26,6 @@ pub mod graph;
 pub mod resolution;
 pub mod storage;
 pub mod update;
+
+#[cfg(test)]
+mod tests;

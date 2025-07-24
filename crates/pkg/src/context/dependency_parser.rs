@@ -220,7 +220,7 @@ impl DependencyParser {
     }
 
     /// Parse explicit npm dependency
-    fn parse_npm_dependency(&self, name: &str, spec: &str) -> Result<DependencySource, PackageError> {
+    fn parse_npm_dependency(&self, _name: &str, spec: &str) -> Result<DependencySource, PackageError> {
         // Format: npm:package@version or npm:@scope/package@version
         if !spec.starts_with("npm:") {
             return Err(PackageError::Configuration(format!(
@@ -242,7 +242,7 @@ impl DependencyParser {
     }
 
     /// Parse JSR dependency
-    fn parse_jsr_dependency(&self, name: &str, spec: &str) -> Result<DependencySource, PackageError> {
+    fn parse_jsr_dependency(&self, _name: &str, spec: &str) -> Result<DependencySource, PackageError> {
         // Format: jsr:@scope/package@version
         if !spec.starts_with("jsr:@") {
             return Err(PackageError::Configuration(format!(
@@ -365,8 +365,8 @@ impl DependencyParser {
     /// Parse GitHub dependency
     fn parse_github_dependency(&self, name: &str, spec: &str) -> Result<DependencySource, PackageError> {
         // Formats: user/repo, user/repo#reference, github:user/repo, github:user/repo#reference
-        let github_spec = if spec.starts_with("github:") {
-            &spec[7..] // Remove "github:" prefix
+        let github_spec = if let Some(stripped) = spec.strip_prefix("github:") {
+            stripped // Remove "github:" prefix
         } else {
             spec
         };
@@ -442,11 +442,14 @@ impl DependencyParser {
     }
 
     /// Get compiled git regex
+    #[allow(clippy::unwrap_used)] // Static regex is guaranteed to be valid
     fn git_regex() -> &'static Regex {
         static GIT_REGEX: OnceLock<Regex> = OnceLock::new();
         GIT_REGEX.get_or_init(|| {
+            // This regex is guaranteed to be valid
             Regex::new(r"^git\+(.+?)(?:#(.+))?$")
-                .expect("Invalid git regex pattern")
+                .map_err(|_| "Invalid git regex pattern")
+                .unwrap()
         })
     }
 
@@ -522,7 +525,7 @@ impl DependencyParser {
     /// assert!(!parser.validate("internal", "workspace:*"));
     /// ```
     #[must_use]
-    pub fn validate(&self, name: &str, spec: &str) -> bool {
+    pub fn validate(&self, _name: &str, spec: &str) -> bool {
         let protocol = DependencyProtocol::parse(spec);
         self.context.supported_protocols().contains(&protocol)
     }

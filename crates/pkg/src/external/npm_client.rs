@@ -446,6 +446,7 @@ impl NpmRegistry {
     /// # Returns
     ///
     /// Mutable reference to self for method chaining
+    #[allow(dead_code)]
     pub fn set_user_agent(&mut self, user_agent: &str) -> &mut Self {
         self.user_agent = user_agent.to_string();
         self
@@ -461,6 +462,7 @@ impl NpmRegistry {
     /// # Returns
     ///
     /// Mutable reference to self for method chaining
+    #[allow(dead_code)]
     pub fn set_auth(&mut self, token: &str, auth_type: &str) -> &mut Self {
         self.auth_token = Some(token.to_string());
         self.auth_type = Some(auth_type.to_string());
@@ -476,12 +478,14 @@ impl NpmRegistry {
     /// # Returns
     ///
     /// Mutable reference to self for method chaining
+    #[allow(dead_code)]
     pub fn set_cache_ttl(&mut self, ttl: Duration) -> &mut Self {
         self.cache_ttl = ttl;
         self
     }
 
     /// Clear all caches
+    #[allow(dead_code)]
     pub fn clear_cache(&mut self) {
         self.versions_cache = Arc::new(Mutex::new(HashMap::new()));
         self.latest_version_cache = Arc::new(Mutex::new(HashMap::new()));

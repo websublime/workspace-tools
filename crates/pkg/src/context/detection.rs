@@ -85,6 +85,7 @@ pub struct ContextDetector<F: AsyncFileSystem> {
     /// Whether to use strict detection (require explicit workspace config)
     strict_mode: bool,
     /// Configuration for detection behavior
+    #[allow(dead_code)]
     config: Option<StandardConfig>,
 }
 
@@ -442,6 +443,6 @@ impl DetectionResult {
     /// The evidence with the highest weight, if any
     #[must_use]
     pub fn strongest_evidence(&self) -> Option<&DetectionEvidence> {
-        self.evidence.iter().max_by(|a, b| a.weight.partial_cmp(&b.weight).unwrap())
+        self.evidence.iter().max_by(|a, b| a.weight.partial_cmp(&b.weight).unwrap_or(std::cmp::Ordering::Equal))
     }
 }
