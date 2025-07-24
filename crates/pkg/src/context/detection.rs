@@ -32,6 +32,7 @@ use crate::{
     context::{ProjectContext, SingleRepositoryContext, MonorepoContext},
     errors::VersionError,
 };
+use sublime_standard_tools::filesystem::AsyncFileSystem;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -80,7 +81,7 @@ pub struct ContextDetector<F> {
 
 impl<F> ContextDetector<F>
 where
-    F: Clone,
+    F: AsyncFileSystem + Clone,
 {
     /// Create a new context detector
     ///
@@ -274,17 +275,22 @@ where
     async fn has_workspace_config(&self) -> Result<bool, VersionError> {
         let package_json_path = self.working_directory.join("package.json");
         
-        // TODO: Implement actual file reading with self.filesystem
-        // For now, simulate the check
-        let _exists = true; // self.filesystem.exists(&package_json_path).await?;
+        // Check if package.json exists
+        if !self.filesystem.exists(&package_json_path).await {
+            return Ok(false);
+        }
         
-        // TODO: Parse package.json and check for workspaces field
-        // let content = self.filesystem.read_to_string(&package_json_path).await?;
-        // let package_json: serde_json::Value = serde_json::from_str(&content)?;
-        // Ok(package_json.get("workspaces").is_some())
+        // Read and parse package.json
+        let content = self.filesystem.read_file_string(&package_json_path).await
+            .map_err(|e| VersionError::IO(format!("Failed to read package.json: {e}")))?
+;
         
-        // Placeholder implementation
-        Ok(false)
+        let package_json: serde_json::Value = serde_json::from_str(&content)
+            .map_err(|e| VersionError::IO(format!("Failed to parse package.json: {e}")))?
+;
+        
+        // Check for workspaces field (can be array or object)
+        Ok(package_json.get("workspaces").is_some())
     }
 
     /// Check if the project has monorepo tool configurations
@@ -299,23 +305,18 @@ where
 
         for file in monorepo_files {
             let file_path = self.working_directory.join(file);
-            // TODO: Check if file exists using self.filesystem
-            // if self.filesystem.exists(&file_path).await? {
-            //     return Ok(true);
-            // }
-            let _file_path = file_path; // Suppress unused variable warning
+            if self.filesystem.exists(&file_path).await {
+                return Ok(true);
+            }
         }
 
-        Ok(false) // Placeholder implementation
+        Ok(false)
     }
 
     /// Check if the project has multiple package.json files
     async fn has_multiple_packages(&self) -> Result<bool, VersionError> {
-        // TODO: Implement directory traversal to find package.json files
-        // let package_files = self.find_package_files().await?;
-        // Ok(package_files.len() > 1)
-        
-        Ok(false) // Placeholder implementation
+        let package_files = self.find_package_files().await?;
+        Ok(package_files.len() > 1)
     }
 
     /// Build a monorepo context configuration
@@ -337,26 +338,135 @@ where
     async fn discover_workspace_packages(&self) -> Result<HashMap<String, String>, VersionError> {
         let mut packages = HashMap::new();
         
-        // TODO: Implement actual package discovery
-        // This would involve:
-        // 1. Reading workspace configuration from package.json
-        // 2. Scanning directory patterns for package.json files
-        // 3. Reading package names from each package.json
-        // 4. Building a map of package name -> relative path
+        // First, try to read workspace configuration from package.json
+        let package_json_path = self.working_directory.join("package.json");
+        if self.filesystem.exists(&package_json_path).await {
+            if let Ok(content) = self.filesystem.read_file_string(&package_json_path).await {
+                if let Ok(package_json) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(workspaces) = package_json.get("workspaces") {
+                        // Handle workspaces as array or as object with "packages" field
+                        let workspace_patterns = match workspaces {
+                            serde_json::Value::Array(arr) => {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str())
+                                    .map(|s| s.to_string())
+                                    .collect::<Vec<_>>()
+                            }
+                            serde_json::Value::Object(obj) => {
+                                if let Some(serde_json::Value::Array(arr)) = obj.get("packages") {
+                                    arr.iter()
+                                        .filter_map(|v| v.as_str())
+                                        .map(|s| s.to_string())
+                                        .collect::<Vec<_>>()
+                                } else {
+                                    Vec::new()
+                                }
+                            }
+                            _ => Vec::new(),
+                        };
+                        
+                        // For each workspace pattern, find matching package.json files
+                        for pattern in workspace_patterns {
+                            if let Ok(pattern_packages) = self.find_packages_by_pattern(&pattern).await {
+                                packages.extend(pattern_packages);
+                            }
+                        }
+                    }
+                }
+            }
+        }
         
-        // For now, return empty map
+        // If no workspace config found, fallback to scanning for package.json files
+        if packages.is_empty() {
+            let all_package_files = self.find_package_files().await?;
+            for package_path in all_package_files {
+                // Skip root package.json
+                if package_path == self.working_directory.join("package.json") {
+                    continue;
+                }
+                
+                if let Ok(content) = self.filesystem.read_file_string(&package_path).await {
+                    if let Ok(package_json) = serde_json::from_str::<serde_json::Value>(&content) {
+                        if let Some(name) = package_json.get("name").and_then(|n| n.as_str()) {
+                            let relative_path = package_path
+                                .parent()
+                                .and_then(|p| p.strip_prefix(&self.working_directory).ok())
+                                .map(|p| p.to_string_lossy().to_string())
+                                .unwrap_or_else(|| ".".to_string());
+                            packages.insert(name.to_string(), relative_path);
+                        }
+                    }
+                }
+            }
+        }
+        
         Ok(packages)
     }
 
     /// Find all package.json files in the project
-    async fn _find_package_files(&self) -> Result<Vec<PathBuf>, VersionError> {
+    async fn find_package_files(&self) -> Result<Vec<PathBuf>, VersionError> {
         let mut packages = Vec::new();
         
-        // TODO: Implement recursive directory traversal
-        // This would use self.filesystem to:
-        // 1. Recursively scan directories
-        // 2. Find all package.json files
-        // 3. Filter out node_modules and other excluded directories
+        // Walk directory recursively to find package.json files
+        let all_files = self.filesystem.walk_dir(&self.working_directory).await
+            .map_err(|e| VersionError::IO(format!("Failed to walk directory: {e}")))?
+;
+        
+        for file_path in all_files {
+            // Skip node_modules, .git, and other excluded directories
+            let path_str = file_path.to_string_lossy();
+            if path_str.contains("node_modules") || 
+               path_str.contains(".git") || 
+               path_str.contains("target") || 
+               path_str.contains(".next") || 
+               path_str.contains("dist") {
+                continue;
+            }
+            
+            // Check if it's a package.json file
+            if file_path.file_name() == Some(std::ffi::OsStr::new("package.json")) {
+                packages.push(file_path);
+            }
+        }
+        
+        Ok(packages)
+    }
+    
+    /// Find packages matching a workspace pattern (e.g., "packages/*", "apps/*")
+    async fn find_packages_by_pattern(&self, pattern: &str) -> Result<HashMap<String, String>, VersionError> {
+        let mut packages = HashMap::new();
+        
+        // Simple glob-like pattern matching for workspace patterns
+        let pattern_path = self.working_directory.join(pattern);
+        let parent_dir = if pattern.ends_with("/*") {
+            // Handle patterns like "packages/*"
+            let parent_pattern = pattern.trim_end_matches("/*");
+            self.working_directory.join(parent_pattern)
+        } else {
+            // Handle direct paths
+            pattern_path.parent().unwrap_or(&self.working_directory).to_path_buf()
+        };
+        
+        if self.filesystem.exists(&parent_dir).await {
+            if let Ok(entries) = self.filesystem.read_dir(&parent_dir).await {
+                for entry in entries {
+                    let package_json_path = entry.join("package.json");
+                    if self.filesystem.exists(&package_json_path).await {
+                        if let Ok(content) = self.filesystem.read_file_string(&package_json_path).await {
+                            if let Ok(package_json) = serde_json::from_str::<serde_json::Value>(&content) {
+                                if let Some(name) = package_json.get("name").and_then(|n| n.as_str()) {
+                                    let relative_path = entry
+                                        .strip_prefix(&self.working_directory)
+                                        .map(|p| p.to_string_lossy().to_string())
+                                        .unwrap_or_else(|_| ".".to_string());
+                                    packages.insert(name.to_string(), relative_path);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         
         Ok(packages)
     }
