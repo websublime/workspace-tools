@@ -42,9 +42,11 @@
 //! ```
 
 use crate::errors::VersionError;
+use sublime_standard_tools::filesystem::AsyncFileSystem;
 use semver::{BuildMetadata, Prerelease, Version as SemVersion};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::path::{Path, PathBuf};
 
 /// Version update strategy
 ///
@@ -665,7 +667,7 @@ struct CachedPackageInfo {
 
 impl<F> VersionManager<F> 
 where
-    F: Clone,
+    F: AsyncFileSystem + Clone,
 {
     /// Create a new version manager with filesystem integration
     ///
@@ -790,12 +792,19 @@ where
         // Add the changed packages themselves
         affected.extend_from_slice(changed_packages);
         
-        // TODO: Implement actual dependency graph analysis
-        // This would involve:
-        // 1. Loading all package.json files
-        // 2. Building a dependency graph
-        // 3. Finding all packages that depend on changed_packages
-        // 4. Recursively finding their dependents
+        // Build dependency graph by scanning all package.json files
+        let all_packages = self.discover_all_packages().await?;
+        let dependency_graph = self.build_dependency_graph(&all_packages).await?;
+        
+        // Find all packages that depend on the changed packages
+        for changed_package in changed_packages {
+            let dependents = self.find_dependents(changed_package, &dependency_graph)?;
+            for dependent in dependents {
+                if !affected.contains(&dependent) {
+                    affected.push(dependent);
+                }
+            }
+        }
         
         Ok(affected)
     }
@@ -821,11 +830,12 @@ where
         // Record the bump
         report.primary_bumps.insert(package_name.to_string(), new_version.to_string());
 
-        // TODO: Actually write the new version to package.json
-        // This would involve:
-        // 1. Reading the package.json file
-        // 2. Updating the version field
-        // 3. Writing it back to disk
+        // Write the new version to package.json
+        let package_json_path = self.find_package_json(package_name).await?;
+        self.update_package_version_in_file(&package_json_path, &new_version.to_string()).await?;
+        
+        // Clear cache for this package
+        self.clear_package_cache(package_name);
 
         Ok(())
     }
@@ -846,7 +856,12 @@ where
         // Record the bump
         report.primary_bumps.insert(package_name.to_string(), new_version.to_string());
 
-        // TODO: Write the new version to package.json
+        // Write the new version to package.json
+        let package_json_path = self.find_package_json(package_name).await?;
+        self.update_package_version_in_file(&package_json_path, &new_version.to_string()).await?;
+        
+        // Clear cache for this package
+        self.clear_package_cache(package_name);
 
         Ok(())
     }
@@ -871,13 +886,23 @@ where
                 
                 report.cascade_bumps.insert(affected_package.clone(), new_version.to_string());
 
-                // TODO: Update dependency references
+                // Update dependency references in affected package
+                let affected_package_path = self.find_package_json(&affected_package).await?;
+                let primary_new_version = report.primary_bumps.get(package_name).unwrap_or(&current_version);
+                self.update_dependency_reference(&affected_package_path, package_name, primary_new_version).await?;
+                
+                // Update the affected package version
+                self.update_package_version_in_file(&affected_package_path, &new_version.to_string()).await?;
+                
+                // Clear cache for affected package
+                self.clear_package_cache(&affected_package);
+                
                 // Create reference update entry
                 report.reference_updates.push(DependencyReferenceUpdate {
                     package: affected_package,
                     dependency: package_name.to_string(),
                     from_reference: current_version.clone(),
-                    to_reference: report.primary_bumps.get(package_name).unwrap_or(&current_version).clone(),
+                    to_reference: primary_new_version.clone(),
                     update_type: ReferenceUpdateType::FixedVersion,
                 });
             }
@@ -899,9 +924,25 @@ where
             }
         }
 
-        // TODO: Actually read from package.json
-        // For now, return a placeholder
-        let version = "1.0.0".to_string();
+        // Find and read package.json file
+        let package_json_path = self.find_package_json(package_name).await?;
+        let package_json = self.read_package_json(&package_json_path).await?;
+        
+        // Extract version
+        let version = package_json.get("version")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| VersionError::InvalidVersion(format!("No version found in package.json for {}", package_name)))?
+            .to_string();
+        
+        // Extract dependencies for cache
+        let mut dependencies = std::collections::HashMap::new();
+        if let Some(deps_obj) = package_json.get("dependencies").and_then(|v| v.as_object()) {
+            for (dep_name, dep_version) in deps_obj {
+                if let Some(version_str) = dep_version.as_str() {
+                    dependencies.insert(dep_name.clone(), version_str.to_string());
+                }
+            }
+        }
 
         // Update cache
         {
@@ -909,7 +950,7 @@ where
             cache.insert(package_name.to_string(), CachedPackageInfo {
                 name: package_name.to_string(),
                 version: version.clone(),
-                dependencies: std::collections::HashMap::new(),
+                dependencies,
                 cached_at: std::time::SystemTime::now(),
             });
         }
@@ -955,5 +996,190 @@ where
         } else {
             (0, 0)
         }
+    }
+    
+    /// Find package.json file for a given package name
+    async fn find_package_json(&self, package_name: &str) -> Result<PathBuf, VersionError> {
+        // Start with current directory
+        let current_dir = std::env::current_dir()
+            .map_err(|e| VersionError::IO(format!("Failed to get current directory: {e}")))?
+;
+        
+        // Look for package.json in current directory first
+        let package_json_path = current_dir.join("package.json");
+        if self.filesystem.exists(&package_json_path).await {
+            // Check if this is the package we're looking for
+            if let Ok(package_json) = self.read_package_json(&package_json_path).await {
+                if let Some(name) = package_json.get("name").and_then(|v| v.as_str()) {
+                    if name == package_name {
+                        return Ok(package_json_path);
+                    }
+                }
+            }
+        }
+        
+        // Search in subdirectories (for monorepos)
+        let all_files = self.filesystem.walk_dir(&current_dir).await
+            .map_err(|e| VersionError::IO(format!("Failed to walk directory: {e}")))?
+;
+        
+        for file_path in all_files {
+            if file_path.file_name() == Some(std::ffi::OsStr::new("package.json")) {
+                // Skip node_modules and other excluded directories
+                let path_str = file_path.to_string_lossy();
+                if path_str.contains("node_modules") || 
+                   path_str.contains(".git") || 
+                   path_str.contains("target") {
+                    continue;
+                }
+                
+                if let Ok(package_json) = self.read_package_json(&file_path).await {
+                    if let Some(name) = package_json.get("name").and_then(|v| v.as_str()) {
+                        if name == package_name {
+                            return Ok(file_path);
+                        }
+                    }
+                }
+            }
+        }
+        
+        Err(VersionError::InvalidVersion(format!("Package '{}' not found", package_name)))
+    }
+    
+    /// Read package.json file from filesystem
+    async fn read_package_json(&self, path: &Path) -> Result<serde_json::Value, VersionError> {
+        let content = self.filesystem.read_file_string(path).await
+            .map_err(|e| VersionError::IO(format!("Failed to read {}: {e}", path.display())))?
+;
+        
+        serde_json::from_str(&content)
+            .map_err(|e| VersionError::IO(format!("Failed to parse {}: {e}", path.display())))
+    }
+    
+    /// Write package.json file to filesystem
+    async fn write_package_json(&self, path: &Path, package_json: &serde_json::Value) -> Result<(), VersionError> {
+        let content = serde_json::to_string_pretty(package_json)
+            .map_err(|e| VersionError::IO(format!("Failed to serialize package.json: {e}")))?
+;
+        
+        self.filesystem.write_file_string(path, &content).await
+            .map_err(|e| VersionError::IO(format!("Failed to write {}: {e}", path.display())))
+    }
+    
+    /// Update package version in a package.json file
+    async fn update_package_version_in_file(&self, path: &Path, new_version: &str) -> Result<(), VersionError> {
+        let mut package_json = self.read_package_json(path).await?;
+        package_json["version"] = serde_json::Value::String(new_version.to_string());
+        self.write_package_json(path, &package_json).await
+    }
+    
+    /// Update a dependency reference in a package.json file
+    async fn update_dependency_reference(&self, path: &Path, dep_name: &str, new_version: &str) -> Result<(), VersionError> {
+        let mut package_json = self.read_package_json(path).await?;
+        
+        // Update in dependencies section
+        if let Some(deps) = package_json.get_mut("dependencies").and_then(|v| v.as_object_mut()) {
+            if deps.contains_key(dep_name) {
+                deps.insert(dep_name.to_string(), serde_json::Value::String(new_version.to_string()));
+            }
+        }
+        
+        // Update in devDependencies section if present
+        if let Some(dev_deps) = package_json.get_mut("devDependencies").and_then(|v| v.as_object_mut()) {
+            if dev_deps.contains_key(dep_name) {
+                dev_deps.insert(dep_name.to_string(), serde_json::Value::String(new_version.to_string()));
+            }
+        }
+        
+        // Update in peerDependencies section if present
+        if let Some(peer_deps) = package_json.get_mut("peerDependencies").and_then(|v| v.as_object_mut()) {
+            if peer_deps.contains_key(dep_name) {
+                peer_deps.insert(dep_name.to_string(), serde_json::Value::String(new_version.to_string()));
+            }
+        }
+        
+        self.write_package_json(path, &package_json).await
+    }
+    
+    /// Clear cache for a specific package
+    fn clear_package_cache(&self, package_name: &str) {
+        if let Ok(mut cache) = self.package_cache.write() {
+            cache.remove(package_name);
+        }
+    }
+    
+    /// Discover all packages in the current workspace
+    async fn discover_all_packages(&self) -> Result<Vec<(String, PathBuf)>, VersionError> {
+        let mut packages = Vec::new();
+        let current_dir = std::env::current_dir()
+            .map_err(|e| VersionError::IO(format!("Failed to get current directory: {e}")))?
+;
+        
+        let all_files = self.filesystem.walk_dir(&current_dir).await
+            .map_err(|e| VersionError::IO(format!("Failed to walk directory: {e}")))?
+;
+        
+        for file_path in all_files {
+            if file_path.file_name() == Some(std::ffi::OsStr::new("package.json")) {
+                // Skip excluded directories
+                let path_str = file_path.to_string_lossy();
+                if path_str.contains("node_modules") || 
+                   path_str.contains(".git") || 
+                   path_str.contains("target") {
+                    continue;
+                }
+                
+                if let Ok(package_json) = self.read_package_json(&file_path).await {
+                    if let Some(name) = package_json.get("name").and_then(|v| v.as_str()) {
+                        packages.push((name.to_string(), file_path));
+                    }
+                }
+            }
+        }
+        
+        Ok(packages)
+    }
+    
+    /// Build dependency graph from discovered packages
+    async fn build_dependency_graph(&self, packages: &[(String, PathBuf)]) -> Result<std::collections::HashMap<String, Vec<String>>, VersionError> {
+        let mut graph = std::collections::HashMap::new();
+        
+        for (package_name, package_path) in packages {
+            let package_json = self.read_package_json(package_path).await?;
+            let mut dependencies = Vec::new();
+            
+            // Collect all types of dependencies
+            for dep_type in &["dependencies", "devDependencies", "peerDependencies"] {
+                if let Some(deps) = package_json.get(dep_type).and_then(|v| v.as_object()) {
+                    for dep_name in deps.keys() {
+                        dependencies.push(dep_name.clone());
+                    }
+                }
+            }
+            
+            graph.insert(package_name.clone(), dependencies);
+        }
+        
+        Ok(graph)
+    }
+    
+    /// Find all packages that depend on the given package
+    fn find_dependents(&self, package_name: &str, dependency_graph: &std::collections::HashMap<String, Vec<String>>) -> Result<Vec<String>, VersionError> {
+        let mut dependents = Vec::new();
+        
+        for (pkg_name, dependencies) in dependency_graph {
+            if dependencies.contains(&package_name.to_string()) {
+                dependents.push(pkg_name.clone());
+                // Recursively find dependents of dependents
+                let recursive_dependents = self.find_dependents(pkg_name, dependency_graph)?;
+                for dep in recursive_dependents {
+                    if !dependents.contains(&dep) {
+                        dependents.push(dep);
+                    }
+                }
+            }
+        }
+        
+        Ok(dependents)
     }
 }
