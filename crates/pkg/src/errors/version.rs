@@ -95,6 +95,22 @@ pub enum VersionError {
     /// ```
     #[error("Invalid version: {0}")]
     InvalidVersion(String),
+
+    /// Indicates that an I/O operation failed during version processing.
+    ///
+    /// This error variant is used when filesystem operations fail during
+    /// context detection, package discovery, or other I/O-related tasks.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_package_tools::VersionError;
+    ///
+    /// let error = VersionError::IO("Failed to read package.json".to_string());
+    /// assert!(error.to_string().contains("I/O operation failed"));
+    /// ```
+    #[error("I/O operation failed: {0}")]
+    IO(String),
 }
 
 impl From<semver::Error> for VersionError {
@@ -136,6 +152,7 @@ impl Clone for VersionError {
                 VersionError::Parse { error, message: message.clone() }
             }
             VersionError::InvalidVersion(message) => VersionError::InvalidVersion(message.clone()),
+            VersionError::IO(message) => VersionError::IO(message.clone()),
         }
     }
 }
@@ -162,6 +179,7 @@ impl AsRef<str> for VersionError {
         match self {
             VersionError::Parse { error: _, message: _ } => "VersionErrorParse",
             VersionError::InvalidVersion(_) => "VersionErrorInvalidVersion",
+            VersionError::IO(_) => "VersionErrorIO",
         }
     }
 }
