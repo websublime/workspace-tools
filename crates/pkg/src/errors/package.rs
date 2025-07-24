@@ -20,6 +20,12 @@ pub enum PackageError {
     PackageBetweenFailure(String),
     #[error("Failed to found package: {0}")]
     PackageNotFound(String),
+    #[error("Configuration error: {0}")]
+    Configuration(String),
+    #[error("Command execution failed: {0}")]
+    CommandExecution(String),
+    #[error("Unsupported operation: {0}")]
+    UnsupportedOperation(String),
 }
 
 impl From<serde_json::Error> for PackageError {
@@ -43,6 +49,9 @@ impl AsRef<str> for PackageError {
             PackageError::PackageJsonIoFailure { path: _, error: _ } => "PackageJsonIoFailure",
             PackageError::PackageBetweenFailure(_) => "PackageBetweenFailure",
             PackageError::PackageNotFound(_) => "PackageNotFound",
+            PackageError::Configuration(_) => "Configuration",
+            PackageError::CommandExecution(_) => "CommandExecution",
+            PackageError::UnsupportedOperation(_) => "UnsupportedOperation",
         }
     }
 }
@@ -68,6 +77,9 @@ impl Clone for PackageError {
                 PackageError::PackageBetweenFailure(msg.clone())
             }
             PackageError::PackageNotFound(msg) => PackageError::PackageNotFound(msg.clone()),
+            PackageError::Configuration(msg) => PackageError::Configuration(msg.clone()),
+            PackageError::CommandExecution(msg) => PackageError::CommandExecution(msg.clone()),
+            PackageError::UnsupportedOperation(msg) => PackageError::UnsupportedOperation(msg.clone()),
         }
     }
 }
