@@ -11,7 +11,10 @@ pub mod local_registry;
 #[cfg(test)]
 mod tests;
 
-// TODO: Re-enable when integrated with Package service
-// pub use npm_client::{NpmRegistry, PackageRegistry, PackageRegistryClone};
-// pub use registry_manager::{RegistryAuth, RegistryManager, RegistryType};
-// pub use local_registry::LocalRegistry;
+// Phase 4.2 integration pending - External API re-exports for full integration
+#[allow(unused_imports)]
+pub use npm_client::{NpmRegistry, PackageRegistry, PackageRegistryClone};
+#[allow(unused_imports)]
+pub use registry_manager::{RegistryAuth, RegistryManager, RegistryType};
+#[allow(unused_imports)]
+pub use local_registry::LocalRegistry;

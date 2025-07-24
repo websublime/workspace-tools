@@ -5,5 +5,6 @@
 
 pub mod dependency_storage;
 
-// TODO: Re-enable when refactored to use standard crate patterns
-// pub use dependency_storage::Registry;
+// Phase 4.2 integration pending - Storage API re-export for full integration
+#[allow(unused_imports)]
+pub use dependency_storage::Registry;

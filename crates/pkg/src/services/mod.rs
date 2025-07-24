@@ -13,5 +13,8 @@ pub mod workspace_resolver;
 mod tests;
 
 pub use concurrent_processor::*;
+// Phase 4.2 integration pending - PackageCommandService API for full integration
+#[allow(unused_imports)]
+pub use package_command_service::*;
 pub use package_service::*;
 pub use performance_optimizer::*;
