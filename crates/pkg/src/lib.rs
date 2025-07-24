@@ -234,6 +234,10 @@ pub use services::{
 
 pub use graph::{
     builder::{build_dependency_graph_from_package_infos, build_dependency_graph_from_packages},
+    hash_tree::{
+        DependencyHashTree, PackageNode, DependencyReference, PackageLocation,
+        CircularDependency, CircularDependencyType, CycleSeverity,
+    },
     node::{Node, Step},
     validation::{ValidationIssue, ValidationOptions, ValidationReport},
     visualization::{generate_ascii, generate_dot, save_dot_to_file, DotOptions},
@@ -257,4 +261,5 @@ pub use context::{
     SingleRepoFeatures, MonorepoFeatures, ContextDetector,
     DependencyClassifier, DependencyClass, InternalClassification,
     protocols::{DependencyProtocol as ContextDependencyProtocol, ProtocolSupport},
+    dependency_source::{DependencySource, WorkspaceConstraint, GitReference},
 };

@@ -1086,5 +1086,80 @@ where
 
         Ok(report)
     }
+
+    /// Converts this graph to a queryable DependencyHashTree
+    ///
+    /// This method transforms the traditional graph representation into a structured
+    /// hash tree that provides efficient querying capabilities for dependency analysis.
+    ///
+    /// # Returns
+    ///
+    /// A `DependencyHashTree` instance with all packages and dependencies from this graph
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_package_tools::{Graph, Registry, Package};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut registry = Registry::new();
+    /// let packages = vec![
+    ///     Package::new_with_registry("app", "1.0.0", Some(vec![("utils", "^1.0.0")]), &mut registry)?,
+    ///     Package::new_with_registry("utils", "1.0.0", Some(vec![]), &mut registry)?,
+    /// ];
+    ///
+    /// let graph = Graph::from(packages.as_slice());
+    /// let hash_tree = graph.to_hash_tree();
+    ///
+    /// // Now you can use the queryable interface
+    /// let dependents = hash_tree.find_dependents("utils");
+    /// assert_eq!(dependents.len(), 1);
+    /// assert_eq!(dependents[0].name, "app");
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn to_hash_tree(&self) -> crate::graph::hash_tree::DependencyHashTree
+    where
+        N: Node<DependencyType = Dependency>,
+    {
+        use crate::graph::hash_tree::{
+            DependencyHashTree, DependencyReference, PackageLocation,
+        };
+        use crate::context::dependency_source::DependencySource;
+
+        let mut hash_tree = DependencyHashTree::new();
+
+        // Add all resolved packages to the hash tree
+        for node in self.resolved_dependencies() {
+            let dependencies: Vec<DependencyReference> = node
+                .dependencies()
+                .iter()
+                .map(|dep| {
+                    // Convert Dependency to DependencyReference
+                    // For now, we'll treat all as registry dependencies
+                    // In a real implementation, this would analyze the actual dependency source
+                    DependencyReference::new(
+                        dep.name().to_string(),
+                        DependencySource::Registry {
+                            name: dep.name().to_string(),
+                            version_req: dep.version().clone(),
+                        },
+                    )
+                })
+                .collect();
+
+            // For now, treat all packages as internal
+            // In a real implementation, this would use context-aware classification
+            hash_tree.add_package(
+                node.identifier().to_string(),
+                "unknown".to_string(), // Node trait doesn't have version method
+                PackageLocation::Internal,
+                dependencies,
+            );
+        }
+
+        hash_tree
+    }
 }
 

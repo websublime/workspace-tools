@@ -13,6 +13,7 @@
 //! - **Validation utilities** (`validation.rs`) - Generic validation logic and reporting
 //! - **Visualization utilities** (`visualization.rs`) - DOT format generation and ASCII art
 //! - **Node utilities** (`node.rs`) - Generic node-related functionality
+//! - **Hash Tree utilities** (`hash_tree.rs`) - Structured queryable dependency model
 //!
 //! ### The main graph module (`dependency/graph.rs`) provides:
 //! - **Core Graph struct** - The main dependency graph data structure
@@ -52,6 +53,11 @@
 //! ```
 
 pub mod builder;
+pub mod hash_tree;
+#[cfg(test)]
+pub mod integration_tests;
 pub mod node;
+#[cfg(test)]
+pub mod tests;
 pub mod validation;
 pub mod visualization;
