@@ -1,494 +1,773 @@
-# Plano de Refatoração Rust Idiomático - sublime_package_tools
+# Plano de Refatoração Rust Idiomático - sublime_package_tools (CONTEXT-AWARE)
 
-## Sumário Executivo
+## 🎯 Visão Executiva
 
-### Objetivos Estratégicos
-- **Transformar** o crate pkg numa solução enterprise-ready seguindo padrões Rust idiomáticos
-- **Simplificar** arquitetura removendo abstrações desnecessárias (Java-like patterns)
-- **Integrar** completamente com os crates base (standard e git)
-- **Implementar** suporte robusto para monorepos mantendo simplicidade
-- **Estabelecer** fundação sólida usando princípios Rust: ownership, borrowing, e zero-cost abstractions
+### Problemas Críticos Identificados
+1. **Confusão massiva de responsabilidades**: 3 módulos diferentes chamados "registry"
+2. **Zero integração com standard crate**: Filesystem, config, monorepo não utilizados
+3. **Arquitetura Java-like**: Facades desnecessários, over-engineering
+4. **Ausência de suporte monorepo**: Workspace protocols não reconhecidos
+5. **APIs inconsistentes**: Mix de sync/async sem padrão claro
+6. **❌ CRÍTICO: Não é context-aware**: Não adapta funcionalidades para single repository vs monorepo
 
-### Princípios Rust Idiomáticos
-- **Simplicidade sobre abstração**: Evitar over-engineering
-- **Composição sobre herança**: Usar traits apenas quando necessário
-- **Zero-cost abstractions**: Performance sem overhead
-- **Explicit over implicit**: Clareza no comportamento
-- **Type safety**: Usar o type system para garantir correção
-- **Modularidade**: Separação clara mas sem excesso de indireção
+### Objetivos da Refatoração
+- **REESTRUTURAR** arquitetura eliminando duplicações e confusões
+- **INTEGRAR** profundamente com crate standard (90%+ das funcionalidades)
+- **SIMPLIFICAR** usando princípios Rust idiomáticos (composition over abstraction)
+- **IMPLEMENTAR** suporte completo para monorepos e workspace protocols
+- **ESTABELECER** async-first architecture consistente
+- **🆕 IMPLEMENTAR** context-aware architecture (single repository vs monorepo)
+- **🆕 SUPORTAR** todos os dependency protocols do ecossistema JS (npm, jsr, git, file, workspace)
 
-### Escopo do Projeto
-- **6 fases** de refatoração pragmática
-- **Prazo estimado**: 8-10 semanas
-- **Foco**: Qualidade enterprise com simplicidade Rust
+### ⚠️ **BREAKING CHANGES NECESSÁRIOS - REESCRITA COMPLETA**
 
----
+**🚨 ATENÇÃO: Esta é uma REESCRITA, NÃO uma refatoração incremental.**
 
-## 📊 Tracking de Progresso Global
+#### **💀 O QUE VAI SER REMOVIDO/MORRER:**
 
-### Fases Completadas
-- [x] **FASE 1**: Foundation & Critical Bug Fixes ✅
-- [ ] **FASE 2**: Core Simplification (75% completo)
-- [ ] **FASE 3**: Standard Crate Integration
-- [ ] **FASE 4**: Monorepo Support
-- [ ] **FASE 5**: Performance & Resilience
-- [ ] **FASE 6**: Testing & Documentation
-
----
-
-## FASE 1: Foundation & Critical Bug Fixes ✅ COMPLETA
-**Status**: 100% | **Duração Real**: 1 semana
-
-### Realizações
-- [x] Bug de recursão infinita em RegistryError corrigido
-- [x] AsRef<str> implementado para Error principal
-- [x] Rc<RefCell<>> removido (migrado para Arc<RwLock<>>)
-- [x] Clippy rules configuradas e 100% compliance
-- [x] CI/CD pipeline configurado
-
-### Métricas Alcançadas
-- Zero bugs críticos
-- Thread-safety implementada
-- 100% clippy compliance
-
----
-
-## FASE 2: Core Simplification (Rust Idiomático)
-**Status**: 75% | **Duração Estimada**: 2 semanas | **Prioridade**: ALTA
-
-### Objetivos
-- Simplificar estruturas mantendo funcionalidade
-- Remover padrões Java-like desnecessários
-- Usar padrões Rust idiomáticos
-
-### Task 2.1: Registry System Refactoring ✅ COMPLETA
-**Status**: Implementado com sucesso
-
-Arquitetura implementada:
+**APIs Públicas (100% Breaking)**
 ```rust
-// Facade pattern simples e eficiente
-pub struct Registry {
-    storage: Arc<RwLock<DependencyStorage>>,
-    client: Arc<PackageRegistryClient>,
-    resolver: Arc<ConflictResolver>,
+// ❌ ESTAS APIs VÃO DESAPARECER PARA SEMPRE:
+Package::new_with_registry()     // Registry pattern eliminado
+Registry::new()                  // Classe Registry removida
+Registry::get_or_create()        // Over-engineering removido  
+Package::update_dependency_version() // Business logic extraído
+Package::update_dependencies_from_resolution() // Simplificado
+```
+
+**Módulos Atuais (Renomeação Forçada)**
+```bash
+❌ ESTES ARQUIVOS VÃO SER DELETADOS/RENOMEADOS:
+src/dependency/registry.rs    → storage/dependency_storage.rs
+src/package/registry.rs       → external/npm_client.rs
+src/registry/manager.rs       → external/registry_manager.rs
+
+❌ TODOS os imports atuais vão quebrar:
+use sublime_package_tools::{Registry, Package}; // ❌ NÃO VAI FUNCIONAR
+```
+
+**Arquitetura Sync (Morte Completa)**
+```rust
+// ❌ TODAS as funções síncronas vão MORRER:
+fn read_package_json() → async fn read_package_json()
+fn resolve_dependencies() → async fn resolve_dependencies()
+fn update_version() → async fn update_version()
+
+// ❌ Padrões Java-like vão ser ELIMINADOS:
+ConflictResolver, PackageRegistryClient, DependencyStorage facades
+```
+
+#### **🔄 O QUE VAI SER MANTIDO (Mas Refatorado)**
+
+**Core Concepts (Simplificados)**
+```rust
+// ✅ MANTIDOS mas SIMPLIFICADOS:
+Package struct               // Vira pure data (sem business logic)
+Dependency struct             // Mantido mas expandido com DependencySource
+Graph utilities              // Mantidos (já são bons)
+Upgrader utilities           // Mantidos (já são bons)
+```
+
+**Tests (Migração Necessária)**
+```rust
+// ✅ Lógica de testes mantida, mas SINTAXE vai mudar:
+assert_eq!(package.name(), "test"); // ✅ Continua funcionando
+// Mas setup vai mudar completamente devido a async
+```
+
+#### **🎯 Resultado Final**
+
+**ANTES (Current)**
+```rust
+let mut registry = Registry::new();
+let pkg = Package::new_with_registry("app", "1.0.0", Some(deps), &mut registry)?;
+pkg.update_dependency_version("react", "^18.0.0")?;
+```
+
+**DEPOIS (New)**
+```rust
+let context = PackageToolsService::auto_detect_context().await?;
+let pkg = Package::new("app", "1.0.0", deps)?;
+let updated = context.package_service().update_dependency(&pkg, "react", "^18.0.0").await?;
+```
+
+**📋 Migration Strategy: ZERO compatibilidade mantida intencionalmente para forçar adoção de patterns melhores.**
+
+---
+
+## 🧠 Context-Aware Architecture (NOVA ABORDAGEM)
+
+### **Cenários de Contexto Suportados**
+
+#### **📁 Single Repository Context**
+```rust
+// Detectado via ProjectDetector - NÃO tem workspace/monorepo
+pub struct SingleRepositoryContext {
+    pub supported_protocols: Vec<DependencyProtocol>, // Todos EXCETO workspace:
+    pub internal_classification: InternalClassification, // Apenas file: dependencies
+    pub features_enabled: SingleRepoFeatures,
+}
+
+pub enum SingleRepoFeatures {
+    DependencyResolution,     // ✅ Sempre ativo
+    VersionUpgrades,          // ✅ Sempre ativo  
+    ConflictDetection,        // ✅ Sempre ativo
+    CascadeBumping,           // ❌ Desnecessário (sem internals)
+    WorkspaceProtocols,       // ❌ Não suportado
+    InternalClassification,   // ❌ Simplificado (só file:)
 }
 ```
 
-**Checklist**:
-- [x] Registry separado em 3 serviços especializados
-- [x] Thread-safety com Arc<RwLock<>>
-- [x] Async/await para operações de rede
-- [x] Zero breaking changes via facade
-- [x] Testes abrangentes
-
-### Task 2.2: Package Struct Simplification 🚧 EM PROGRESSO
-**Status**: Análise em andamento | **Estimativa**: 4 horas
-
-**Abordagem Rust Idiomática**:
+#### **🏢 Monorepo/Workspace Context**
 ```rust
-// Package mantém métodos que fazem sentido
-impl Package {
-    pub fn new(...) -> Result<Self, VersionError>;
-    pub fn update_version(&mut self, version: &str) -> Result<()>;
-    pub fn add_dependency(&mut self, dep: Dependency);
+// Detectado via MonorepoDetector - TEM workspace packages
+pub struct MonorepoContext {
+    pub workspace_packages: HashSet<String>,        // Nomes dos packages internos
+    pub supported_protocols: Vec<DependencyProtocol>, // TODOS incluindo workspace:
+    pub internal_classification: InternalClassification, // Complexo (nome-based)
+    pub features_enabled: MonorepoFeatures,
 }
 
-// Lógica complexa em módulo separado
-pub mod analysis {
-    pub fn analyze_dependencies(pkg: &Package) -> Analysis;
-    pub fn apply_resolution(pkg: &mut Package, res: &Resolution) -> Vec<Change>;
+pub enum MonorepoFeatures {
+    DependencyResolution,     // ✅ Sempre ativo
+    VersionUpgrades,          // ✅ Sempre ativo
+    ConflictDetection,        // ✅ Sempre ativo
+    CascadeBumping,          // ✅ CRÍTICO para monorepo
+    WorkspaceProtocols,      // ✅ workspace:*, workspace:../
+    InternalClassification,  // ✅ Nome-based + mixed references
+    CircularDepWarnings,     // ✅ Dev/optional cycles OK
 }
 ```
 
-**Checklist**:
-- [ ] Identificar métodos que devem permanecer no Package
-- [ ] Criar módulo `analysis` para lógica complexa
-- [ ] Remover abstrações desnecessárias
-- [ ] Manter API pública compatível
-- [ ] Adicionar testes para nova estrutura
+### **🔗 Todos os Dependency Protocols Suportados (2024)**
 
-### Task 2.3: Graph Module Assessment 📋 PENDENTE
-**Status**: Análise necessária | **Estimativa**: 2 horas
-
-**Estrutura atual já é razoavelmente idiomática**:
-- `dependency/graph.rs` - Core implementation
-- `graph/` - Utilities separadas
-
-**Checklist**:
-- [ ] Avaliar se separação atual é suficiente
-- [ ] Verificar oportunidades de simplificação
-- [ ] Documentar decisão (manter ou refatorar)
-
-### Task 2.4: Cleanup & Consolidation 🧹 PENDENTE
-**Status**: Pendente | **Estimativa**: 3 horas
-
-**Checklist**:
-- [ ] Remover código morto identificado
-- [ ] Consolidar módulos relacionados
-- [ ] Atualizar documentação inline
-- [ ] Verificar consistência de APIs
-
----
-
-## FASE 3: Standard Crate Integration
-**Status**: 0% | **Duração Estimada**: 2 semanas | **Prioridade**: ALTA
-
-### Objetivos
-- Integrar com sublime_standard_tools
-- Usar componentes existentes ao invés de reimplementar
-- Manter compatibilidade e performance
-
-### Task 3.1: Configuration System
-**Estimativa**: 6 horas
-
-**Implementação**:
 ```rust
-use sublime_standard_tools::{Config, ConfigBuilder};
-
-pub struct PackageConfig {
-    pub registries: Vec<String>,
-    pub cache: CacheConfig,
-    pub network: NetworkConfig,
-}
-
-impl From<Config> for PackageConfig {
-    // Conversão do config padrão
-}
-```
-
-**Checklist**:
-- [ ] Definir PackageConfig struct
-- [ ] Integrar com StandardConfig
-- [ ] Implementar environment overrides
-- [ ] Remover hardcoded values
-- [ ] Adicionar validação
-- [ ] Testes de configuração
-
-### Task 3.2: Async FileSystem Integration
-**Estimativa**: 8 horas
-
-**Checklist**:
-- [ ] Identificar todas operações de I/O síncronas
-- [ ] Migrar para AsyncFileSystem trait
-- [ ] Implementar error handling apropriado
-- [ ] Manter compatibilidade via adaptors
-- [ ] Performance benchmarks
-- [ ] Testes de integração
-
-### Task 3.3: Project Detection Integration
-**Estimativa**: 6 horas
-
-**Checklist**:
-- [ ] Integrar ProjectDetector
-- [ ] Implementar auto-detection de package managers
-- [ ] Context-aware dependency resolution
-- [ ] Suporte para diferentes project types
-- [ ] Testes com projetos reais
-
-### Task 3.4: Command Execution Integration
-**Estimativa**: 4 horas
-
-**Checklist**:
-- [ ] Usar CommandExecutor para npm/yarn/pnpm
-- [ ] Implementar retry logic
-- [ ] Error handling robusto
-- [ ] Logging estruturado
-- [ ] Testes de comandos
-
----
-
-## FASE 4: Monorepo Support (Pragmático)
-**Status**: 0% | **Duração Estimada**: 2-3 semanas | **Prioridade**: MÉDIA
-
-### Objetivos
-- Suporte completo para monorepos
-- Distinção clara entre deps internas/externas
-- Performance em monorepos grandes
-
-### Task 4.1: Workspace Protocol Support
-**Estimativa**: 8 horas
-
-**Implementação Rust idiomática**:
-```rust
+#[derive(Debug, Clone, PartialEq)]
 pub enum DependencySource {
-    Registry(String),      // "^1.2.3"
-    Workspace(String),     // "workspace:*"
-    Path(PathBuf),        // "file:../lib"
-    Git(String, String),  // repo, ref
+    // Registry/Standard (ambos contextos)
+    Registry { name: String, version_req: VersionReq },
+    Scoped { scope: String, name: String, version_req: VersionReq },
+    
+    // Cross-Registry Protocols (ambos contextos)
+    Npm { name: String, version_req: VersionReq },          // "npm:@mui/styled-engine-sc@5.3.0"
+    Jsr { scope: String, name: String, version_req: VersionReq }, // "jsr:@luca/cases@^1.0.1"
+    
+    // Workspace Protocol (SÓ monorepo)
+    Workspace { name: String, constraint: WorkspaceConstraint }, // "workspace:*", "workspace:^" 
+    WorkspacePath { name: String, path: PathBuf },               // "workspace:../pkg"
+    WorkspaceAlias { alias: String, name: String, constraint: WorkspaceConstraint }, // "workspace:foo@*"
+    
+    // Local File (ambos contextos)
+    File { name: String, path: PathBuf },                   // "file:../local-package"
+    
+    // Git Sources (ambos contextos)
+    Git { name: String, repo: String, reference: GitReference }, // "git+https://github.com/user/repo.git#branch"
+    GitHub { name: String, user: String, repo: String, reference: Option<String> }, // "user/repo", "github:user/repo"
+    GitHubPrivate { name: String, token: String, user: String, repo: String }, // com token
+    
+    // URL/Tarball (ambos contextos)
+    Url { name: String, url: String },                     // "https://example.com/package.tgz"
 }
 
-impl FromStr for DependencySource {
-    // Parse simples e direto
+pub enum WorkspaceConstraint {
+    Any,                    // "workspace:*"
+    Compatible,             // "workspace:^"
+    Patch,                  // "workspace:~"
+    Exact(VersionReq),      // "workspace:^1.0.0"
+}
+
+pub enum GitReference {
+    Branch(String),
+    Tag(String),
+    Commit(String),
+    Semver(VersionReq),     // "#semver:^1.0.0"
 }
 ```
 
-**Checklist**:
-- [ ] Enum para tipos de dependência
-- [ ] Parser robusto com error handling
-- [ ] Integração com Dependency struct
-- [ ] Suporte para todos os protocolos
-- [ ] Testes edge cases
+### **🎯 Context-Aware Service Resolution**
 
-### Task 4.2: Workspace-Aware Resolution
-**Estimativa**: 10 horas
-
-**Checklist**:
-- [ ] Detectar contexto monorepo
-- [ ] Resolver deps internas primeiro
-- [ ] Fallback para registry externo
-- [ ] Cache de resoluções
-- [ ] Performance optimization
-- [ ] Testes com monorepos reais
-
-### Task 4.3: Internal/External Classification
-**Estimativa**: 6 horas
-
-**Implementação**:
 ```rust
-// Função simples, sem over-abstraction
-pub fn classify_dependencies(
-    deps: &[Dependency],
-    workspace: &WorkspaceInfo,
-) -> (Vec<&Dependency>, Vec<&Dependency>) {
-    deps.iter().partition(|d| workspace.contains(d.name()))
+pub struct PackageToolsService<F: AsyncFileSystem> {
+    context: ProjectContext,
+    standard_integration: StandardIntegration<F>,
+}
+
+pub enum ProjectContext {
+    Single(SingleRepositoryContext),
+    Monorepo(MonorepoContext),
+}
+
+impl<F: AsyncFileSystem> PackageToolsService<F> {
+    pub async fn auto_detect_context(&self) -> Result<ProjectContext> {
+        if self.standard_integration.monorepo_detector.is_monorepo().await? {
+            let workspace_packages = self.detect_workspace_packages().await?;
+            Ok(ProjectContext::Monorepo(MonorepoContext {
+                workspace_packages,
+                supported_protocols: ALL_PROTOCOLS,
+                features_enabled: MonorepoFeatures::all(),
+            }))
+        } else {
+            Ok(ProjectContext::Single(SingleRepositoryContext {
+                supported_protocols: ALL_PROTOCOLS_EXCEPT_WORKSPACE,
+                features_enabled: SingleRepoFeatures::basic(),
+            }))
+        }
+    }
+    
+    // APIs que se adaptam ao contexto
+    pub async fn classify_dependency(&self, dep: &Dependency) -> DependencyClass {
+        match &self.context {
+            ProjectContext::Single(_) => {
+                // Simples: apenas file: = internal
+                match &dep.source {
+                    DependencySource::File { .. } => DependencyClass::Internal,
+                    _ => DependencyClass::External,
+                }
+            }
+            ProjectContext::Monorepo(ctx) => {
+                // Complexo: nome-based + mixed references
+                self.classify_monorepo_dependency(dep, ctx).await
+            }
+        }
+    }
 }
 ```
 
-**Checklist**:
-- [ ] Função de classificação simples
-- [ ] Integração com graph builder
-- [ ] Visualização diferenciada
-- [ ] Performance com muitas deps
-- [ ] Testes unitários
+---
+
+## 🏗️ Nova Arquitetura Proposta
+
+### Estrutura de Módulos (Renomeações Críticas)
+```
+src/
+├── core/                    # Core domain types
+│   ├── dependency.rs        # Dependency struct (simplificado)
+│   ├── package.rs          # Package struct (pure data)
+│   └── version.rs          # Version utilities + VersionManager
+├── storage/                 # Data persistence
+│   └── dependency_storage.rs  # Ex: dependency/registry.rs
+├── external/                # External service clients
+│   ├── npm_client.rs       # Ex: package/registry.rs
+│   ├── registry_manager.rs # Ex: registry/manager.rs
+│   └── mod.rs
+├── services/               # Business logic services
+│   ├── package_service.rs  # Package operations
+│   ├── resolution_service.rs # Dependency resolution
+│   └── workspace_service.rs  # Monorepo operations
+├── config/                 # Configuration integration
+│   └── package_config.rs   # StandardConfig integration
+├── graph/                  # Graph utilities (mantém)
+└── upgrader/              # Upgrader utilities (mantém)
+```
+
+### Integração com Standard Crate
+- **AsyncFileSystem**: Todas operações I/O
+- **StandardConfig**: Configuração unificada
+- **ProjectDetector**: Context-aware operations
+- **MonorepoDetector**: Workspace detection
+- **CommandExecutor**: Package manager operations
 
 ---
 
-## FASE 5: Performance & Resilience
-**Status**: 0% | **Duração Estimada**: 2 semanas | **Prioridade**: MÉDIA
+## 📋 Fases de Refatoração
 
-### Objetivos
-- Otimizar para monorepos grandes (>100 packages)
-- Implementar resilience patterns
-- Observability e monitoring
+### **FASE 0: Preparação** (3 dias)
+**Status**: 🚧 CRÍTICA
 
-### Task 5.1: Caching Strategy
-**Estimativa**: 8 horas
-
-**Implementação pragmática**:
+#### Task 0.1: Configuração via repo.config (Standard Integration)
 ```rust
-// LRU cache simples e eficiente
-pub struct PackageCache {
-    inner: lru::LruCache<String, Package>,
-    ttl: Duration,
+// INTEGRAÇÃO: Usar repo.config.{toml,yml,json} do standard crate
+// Extender StandardConfig com PackageToolsConfig
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackageToolsConfig {
+    pub version_bumping: VersionBumpConfig,
+    pub dependency_resolution: ResolutionConfig,
+    pub monorepo_settings: MonorepoConfig,  // Reusar do standard
+    pub circular_dependency_handling: CircularDependencyConfig,
+}
+
+impl Configurable for PackageToolsConfig {
+    fn validate(&self) -> ConfigResult<()>;
+    fn merge_with(&mut self, other: Self) -> ConfigResult<()>;
 }
 ```
+- [ ] **Integrar com repo.config.{toml,yml,json} do standard crate**
+- [ ] **Extender StandardConfig com PackageToolsConfig section**
+- [ ] Configurar loading via env vars (SUBLIME_PKG_*)
+- [ ] Criar configs padrão para npm/yarn/pnpm/bun
+- [ ] Implementar validação de configuração
 
-**Checklist**:
-- [ ] Implementar LRU cache
-- [ ] TTL configuration
-- [ ] Memory bounds
-- [ ] Cache invalidation
-- [ ] Metrics collection
-- [ ] Benchmarks
+#### Task 0.2: Análise de Breaking Changes
+- [ ] Mapear APIs públicas atuais
+- [ ] Identificar dependências internas
+- [ ] Criar migration guide detalhado
+- [ ] Setup feature flags para transição
 
-### Task 5.2: Parallel Processing
-**Estimativa**: 10 horas
+---
 
-**Checklist**:
-- [ ] Identificar operações paralelizáveis
-- [ ] Usar rayon para CPU-bound tasks
-- [ ] Tokio para I/O concurrent
-- [ ] Backpressure handling
-- [ ] Progress reporting
-- [ ] Performance tests
+### **FASE 1: Reestruturação de Módulos** (1 semana)
+**Status**: 🔥 ALTA PRIORIDADE
 
-### Task 5.3: Network Resilience
-**Estimativa**: 8 horas
+#### Task 1.1: Eliminação de Confusão "Registry"
+- [ ] Renomear `dependency/registry.rs` → `storage/dependency_storage.rs`
+- [ ] Renomear `package/registry.rs` → `external/npm_client.rs`
+- [ ] Renomear `registry/manager.rs` → `external/registry_manager.rs`
+- [ ] Atualizar imports e exports em toda codebase
 
-**Implementação**:
+#### Task 1.2: Simplificação Package Struct + Version Manager
 ```rust
-// Retry com exponential backoff
-pub async fn with_retry<F, T>(
-    operation: F,
-    max_retries: u32,
-) -> Result<T>
-where
-    F: Fn() -> Future<Output = Result<T>>,
+// NOVA ARQUITETURA
+#[derive(Debug, Clone)]
+pub struct Package {
+    pub name: String,
+    pub version: String,
+    pub dependencies: Vec<Dependency>,
+}
+
+// EXPANDIR: Version Manager com cascade bumping
+pub struct VersionManager<F: AsyncFileSystem> {
+    pub async fn bump_workspace_versions(&self, strategy: BumpStrategy) -> Result<VersionBumpReport>;
+    pub async fn detect_affected_packages(&self, changed: &[String]) -> Result<Vec<String>>;
+}
+
+pub enum BumpStrategy {
+    Major, Minor, Patch, 
+    Snapshot(String),  // Snapshot com SHA append: "1.2.3-alpha.abc123"
+    Cascade,           // Bump dependents automatically
+}
 ```
-
-**Checklist**:
-- [ ] Retry logic com backoff
-- [ ] Timeout configuration
-- [ ] Circuit breaker simples
-- [ ] Rate limiting
-- [ ] Error categorization
-- [ ] Integration tests
-
-### Task 5.4: Observability
-**Estimativa**: 6 horas
-
-**Checklist**:
-- [ ] Structured logging com tracing
-- [ ] Key metrics identification
-- [ ] Performance counters
-- [ ] Error tracking
-- [ ] Debug helpers
-- [ ] Documentation
+- [ ] Extrair business logic para `PackageService`
+- [ ] Simplificar Package para pure data struct
+- [ ] **EXPANDIR version.rs com VersionManager**
+- [ ] **Implementar cascade version bumping inteligente**
+- [ ] **Adicionar snapshot versioning com SHA**
+- [ ] Implementar async operations com AsyncFileSystem
+- [ ] Migrar testes para nova arquitetura
 
 ---
 
-## FASE 6: Testing & Documentation
-**Status**: 0% | **Duração Estimada**: 1-2 semanas | **Prioridade**: ALTA
+### **FASE 2: Standard Crate Integration** (1 semana)
+**Status**: 🎯 ESSENCIAL
 
-### Objetivos
-- Coverage > 90%
-- Documentação completa
-- Exemplos práticos
+#### Task 2.1: AsyncFileSystem Integration
+- [ ] Refatorar todas operações I/O para async
+- [ ] Implementar `PackageJsonReader<F: AsyncFileSystem>`
+- [ ] Substituir operações síncronas por async equivalentes
+- [ ] Performance benchmarking vs implementação atual
 
-### Task 6.1: Test Coverage
-**Estimativa**: 12 horas
-
-**Checklist**:
-- [ ] Unit tests para todos os módulos
-- [ ] Integration tests end-to-end
-- [ ] Property-based tests para parsers
-- [ ] Benchmarks para hot paths
-- [ ] Fuzzing para robustez
-- [ ] Coverage report > 90%
-
-### Task 6.2: Documentation
-**Estimativa**: 8 horas
-
-**Checklist**:
-- [ ] Rustdoc para todas APIs públicas
-- [ ] Guia de arquitetura
-- [ ] Migration guide da v0.1
-- [ ] Exemplos práticos
-- [ ] Troubleshooting guide
-- [ ] Performance tuning guide
-
-### Task 6.3: Examples
-**Estimativa**: 6 horas
-
-**Estrutura**:
+#### Task 2.2: Project/Monorepo Detection
+```rust
+pub struct WorkspaceAwareDependencyResolver<F: AsyncFileSystem> {
+    project_detector: ProjectDetector<F>,
+    monorepo_detector: MonorepoDetector<F>,
+    config: PackageToolsConfig,
+}
 ```
-examples/
-├── basic_usage.rs         # Getting started
-├── monorepo_analysis.rs   # Monorepo workflows  
-├── custom_cache.rs        # Extension points
-└── cli_tool.rs           # Building a CLI
-```
+- [ ] Integrar ProjectDetector para context awareness
+- [ ] Integrar MonorepoDetector para workspace detection  
+- [ ] Implementar auto-detection de contexto (simple vs monorepo)
+- [ ] Distinguir internal vs external dependencies
 
-**Checklist**:
-- [ ] Exemplo básico funcional
-- [ ] Exemplo monorepo completo
-- [ ] Exemplo de extensão
-- [ ] Exemplo de CLI tool
-- [ ] README para examples
-- [ ] CI para examples
+#### Task 2.3: Command Integration
+- [ ] Integrar CommandExecutor para npm/yarn/pnpm operations
+- [ ] Usar PackageManager::detect_with_config
+- [ ] Implementar timeout configuration
+- [ ] Adicionar retry logic para network operations
 
 ---
 
-## Roadmap de Releases
+### **FASE 3: Monorepo Support Completo** (1.5 semanas)
+**Status**: 🚀 DIFERENCIADOR
 
-### v0.2.0 - Foundation Release (Fase 1-2)
-**Target**: 2 semanas
-- [x] Bugs críticos corrigidos
-- [ ] Core simplification completo
-- [ ] Breaking changes mínimos
-- [ ] Migration guide
+#### Task 3.1: All Dependency Protocols Support (Context-Aware)
+```rust
+// ✅ COMPLETO: Todos os protocolos identificados no research
+#[derive(Debug, Clone, PartialEq)]
+pub enum DependencySource {
+    // Registry/Standard (ambos contextos)
+    Registry { name: String, version_req: VersionReq },
+    Scoped { scope: String, name: String, version_req: VersionReq },
+    
+    // Cross-Registry (ambos contextos) 
+    Npm { name: String, version_req: VersionReq },
+    Jsr { scope: String, name: String, version_req: VersionReq },
+    
+    // Workspace (SÓ monorepo context)
+    Workspace { name: String, constraint: WorkspaceConstraint },
+    WorkspacePath { name: String, path: PathBuf },
+    WorkspaceAlias { alias: String, name: String, constraint: WorkspaceConstraint },
+    
+    // Local/Git/URL (ambos contextos)
+    File { name: String, path: PathBuf },
+    Git { name: String, repo: String, reference: GitReference },
+    GitHub { name: String, user: String, repo: String, reference: Option<String> },
+    Url { name: String, url: String },
+}
 
-### v0.3.0 - Integration Release (Fase 3)
-**Target**: 4 semanas
-- [ ] Standard crate integration
-- [ ] Async I/O completo
-- [ ] Configuration system
-- [ ] Performance melhorada
+// Context-aware parsing
+pub struct DependencyParser {
+    context: ProjectContext,
+}
 
-### v0.4.0 - Monorepo Release (Fase 4)
-**Target**: 6-7 semanas
-- [ ] Full monorepo support
-- [ ] Workspace protocols
-- [ ] Internal/external deps
-- [ ] Examples completos
+impl DependencyParser {
+    pub fn parse(&self, dep_string: &str) -> Result<DependencySource> {
+        match &self.context {
+            ProjectContext::Single(_) => {
+                // Rejeita workspace: protocols
+                if dep_string.starts_with("workspace:") {
+                    return Err("workspace: protocol not supported in single repository");
+                }
+                self.parse_non_workspace_dependency(dep_string)
+            }
+            ProjectContext::Monorepo(_) => {
+                // Suporta TODOS os protocolos
+                self.parse_all_protocols(dep_string)
+            }
+        }
+    }
+}
+```
+- [ ] **Implementar parsing context-aware de TODOS os protocolos**
+- [ ] **Single repository: rejeitar workspace: protocols gracefully**
+- [ ] **Monorepo: suportar todos incluindo workspace: variants**
+- [ ] **Implementar GitReference e WorkspaceConstraint parsing**
+- [ ] **Testar com projetos single + monorepo reais**
 
-### v1.0.0 - Production Release (Fase 5-6)
-**Target**: 10 semanas
-- [ ] Performance otimizada
-- [ ] Resilience patterns
-- [ ] >90% test coverage
-- [ ] Documentação completa
+#### Task 3.2: Context-Aware Internal/External Classification
+```rust
+// CONTEXT-AWARE: Lógica diferente para cada contexto
+pub struct DependencyClassifier {
+    context: ProjectContext,
+}
+
+impl DependencyClassifier {
+    pub fn classify(&self, dep: &Dependency) -> DependencyClass {
+        match &self.context {
+            ProjectContext::Single(_) => {
+                // SINGLE REPOSITORY: Simples - apenas file: = internal
+                match &dep.source {
+                    DependencySource::File { .. } => DependencyClass::Internal {
+                        reference_type: InternalReferenceType::LocalFile,
+                        warning: None,
+                    },
+                    _ => DependencyClass::External,
+                }
+            }
+            ProjectContext::Monorepo(ctx) => {
+                // MONOREPO: Complexo - nome-based + mixed references
+                self.classify_monorepo(dep, ctx)
+            }
+        }
+    }
+    
+    fn classify_monorepo(&self, dep: &Dependency, ctx: &MonorepoContext) -> DependencyClass {
+        // ✅ REGRA: Se nome existe no workspace = INTERNAL (independente do protocolo)
+        if ctx.workspace_packages.contains(&dep.name) {
+            match &dep.source {
+                DependencySource::Registry { version, .. } => {
+                    DependencyClass::Internal { 
+                        reference_type: InternalReferenceType::RegistryVersion(version.clone()),
+                        warning: Some("Consider using workspace: protocol".to_string())
+                    }
+                }
+                DependencySource::Workspace { .. } => DependencyClass::Internal { 
+                    reference_type: InternalReferenceType::WorkspaceProtocol,
+                    warning: None,
+                },
+                DependencySource::File { .. } => DependencyClass::Internal {
+                    reference_type: InternalReferenceType::LocalFile,
+                    warning: Some("Consider using workspace: protocol".to_string())
+                },
+                _ => DependencyClass::Internal {
+                    reference_type: InternalReferenceType::Other,
+                    warning: Some("Unusual reference type for internal package".to_string())
+                }
+            }
+        } else {
+            DependencyClass::External
+        }
+    }
+}
+
+pub enum InternalReferenceType {
+    WorkspaceProtocol,     // "workspace:*" - ideal
+    LocalFile,             // "file:../" - OK mas workspace: melhor
+    RegistryVersion(String), // "^1.0.0" - funciona mas inconsistente  
+    Other,                 // git:, jsr:, etc - incomum mas possível
+}
+```
+- [ ] **Implementar classification context-aware (simples vs complexo)**
+- [ ] **Single repository: apenas file: = internal, resto = external**
+- [ ] **Monorepo: classification por NOME (não protocolo)**
+- [ ] **Suportar mixed references no mesmo monorepo** (A→B semver, B→C workspace)
+- [ ] **Detectar packages internos com versões registry**
+- [ ] **Gerar WARNINGS (não errors) para inconsistent references**
+- [ ] **Performance: otimizar classification para cada contexto**
+
+#### Task 3.3: Hash Tree como Objeto Estruturado (Não Só Visualização)
+```rust
+// CORREÇÃO CRÍTICA: HashTree como modelo de dados queryável (tipo JSON melhorado)
+pub struct DependencyHashTree {
+    pub packages: HashMap<String, PackageNode>,           // Todos os packages
+    pub dependency_graph: HashMap<String, Vec<String>>,   // quem depende de quem
+    pub dependent_graph: HashMap<String, Vec<String>>,    // quem é dependência de quem
+}
+
+pub struct PackageNode {
+    pub name: String,
+    pub version: String,
+    pub depends_on: Vec<DependencyReference>,      // suas dependencies
+    pub dependency_of: Vec<String>,                // packages que dependem deste
+    pub location: PackageLocation,                 // Internal vs External
+}
+
+impl DependencyHashTree {
+    // INTERFACE QUERYÁVEL
+    pub fn find_dependents(&self, package: &str) -> Vec<&PackageNode>;
+    pub fn find_dependency_path(&self, from: &str, to: &str) -> Option<Vec<String>>;
+    pub fn affected_by_change(&self, changed_packages: &[String]) -> Vec<String>;
+    pub fn detect_circular_deps(&self) -> Vec<CircularDependency>;
+    
+    // ASCII/DOT são outputs deste modelo, não o modelo em si
+    pub fn render_ascii_tree(&self) -> String;
+    pub fn render_dot_graph(&self) -> String;
+}
+
+// IMPORTANTE: Ciclos são WARNINGS não ERRORS (alguns são elegíveis)
+pub struct CircularDependency {
+    pub path: Vec<String>,
+    pub cycle_type: CircularDependencyType,
+    pub severity: CycleSeverity,
+}
+
+pub enum CircularDependencyType {
+    DevDependencies,     // Ciclos em dev dependencies (geralmente OK)
+    OptionalDependencies, // Ciclos em optional (pode ser elegível)
+    ProductionDependencies, // Ciclos em production (warning sério)
+}
+
+pub enum CycleSeverity {
+    Warning,    // Elegível, não bloqueia
+    Error,      // Problemático mas não fatal
+}
+```
+- [ ] **Implementar HashTree como objeto estruturado queryável**
+- [ ] **Criar interface de queries (dependents, paths, affected packages)**
+- [ ] **ASCII/DOT são outputs do modelo, não o modelo**
+- [ ] **Modelar relações bidirecionais (depends_on + dependency_of)**
+- [ ] Integrar com Graph existente
 
 ---
 
-## Métricas de Sucesso
+### **FASE 4: Performance & Enterprise Features** (1 semana)
+**Status**: ⚡ PERFORMANCE
 
-### Qualidade de Código
-- ✅ Clippy 100% (já alcançado)
-- [ ] Test coverage > 90%
-- [ ] Zero panics em produção
-- [ ] Documentação 100% APIs públicas
+#### Task 4.1: Context-Aware Performance Optimizations
+```rust
+// Otimizações específicas para cada contexto
+pub struct PerformanceOptimizer {
+    context: ProjectContext,
+}
 
-### Performance
-- [ ] < 1s para resolver deps em monorepo médio (50 packages)
-- [ ] < 5s para monorepo grande (200 packages)
-- [ ] Memory usage < 100MB para casos típicos
-- [ ] Concurrent operations scaling
+impl PerformanceOptimizer {
+    pub async fn optimize_for_context(&self) -> OptimizationStrategy {
+        match &self.context {
+            ProjectContext::Single(_) => OptimizationStrategy {
+                // Foco em network I/O e registry resolution
+                concurrent_downloads: 10,
+                enable_cascade_bumping: false,  // Desnecessário
+                enable_workspace_scanning: false, // Desnecessário
+                cache_strategy: CacheStrategy::NetworkHeavy,
+            },
+            ProjectContext::Monorepo(ctx) => OptimizationStrategy {
+                // Foco em filesystem I/O e workspace scanning
+                concurrent_downloads: 5,  // Menos para evitar rate limiting
+                enable_cascade_bumping: true,
+                enable_workspace_scanning: true,
+                cache_strategy: CacheStrategy::FilesystemHeavy,
+                workspace_package_count: ctx.workspace_packages.len(),
+            }
+        }
+    }
+}
+```
+- [ ] **Implementar otimizações context-aware**
+- [ ] **Single repo: otimizar network I/O, desabilitar workspace features**
+- [ ] **Monorepo: otimizar filesystem I/O, habilitar cascade features**
+- [ ] **Refatorar todas operações para async**
+- [ ] **Implementar concurrent processing (futures::stream)**
+- [ ] **Usar rayon para CPU-bound tasks**
+- [ ] **Benchmarking vs implementação atual por contexto**
+
+#### Task 4.2: Context-Aware Cascade Version Bumping
+```rust
+// CONTEXT-AWARE: Cascade só faz sentido em monorepo
+pub struct CascadeBumper<F: AsyncFileSystem> {
+    context: ProjectContext,
+    
+    pub async fn smart_cascade_bump(&self, changes: ChangeSet) -> Result<BumpPlan> {
+        match &self.context {
+            ProjectContext::Single(_) => {
+                // Single repository: apenas bump o próprio package
+                Ok(BumpPlan {
+                    primary_bumps: changes.into_primary_bumps(),
+                    cascade_bumps: HashMap::new(), // Não há cascade
+                    reference_updates: Vec::new(), // Não há internals
+                })
+            }
+            ProjectContext::Monorepo(_) => {
+                // Monorepo: cascade bumping completo
+                self.perform_monorepo_cascade_bump(changes).await
+            }
+        }
+    }
+}
+
+// Exemplo: A sofre change, B depende de A
+// Resultado: A bump + B patch bump + B dependency reference updated
+pub struct BumpPlan {
+    pub primary_bumps: HashMap<String, BumpType>,    // Packages que mudaram
+    pub cascade_bumps: HashMap<String, BumpType>,    // Dependents que precisam bump
+    pub reference_updates: Vec<DependencyUpdate>,    // Updates em references
+}
+
+// CORREÇÃO: Internas apontam sempre para versão fixa (última versão)
+pub struct DependencyUpdate {
+    pub package: String,
+    pub dependency: String,
+    pub from_reference: String,    // "1.0.0" ou "^1.0.0"  
+    pub to_reference: String,      // "1.1.0" (versão fixa) ou "workspace:*"
+    pub update_type: ReferenceUpdateType,
+}
+
+pub enum ReferenceUpdateType {
+    FixedVersion,      // Internas: sempre versão fixa "1.1.0"
+    WorkspaceProtocol, // Sugestão: "workspace:*"
+    KeepRange,         // Externas: manter "^1.0.0" range
+}
+```
+- [ ] **Implementar cascade bumping context-aware**
+- [ ] **Single repository: desabilitar cascade (só self-bump)**
+- [ ] **Monorepo: cascade completo (A change → A bump, B depends on A → B patch + update reference)**
+- [ ] **Suportar mixed references em cascade**
+- [ ] **Detectar quando ambos A e B mudaram**
+- [ ] **Otimizar performance: skip cascade computation em single repos**
+
+#### Task 4.3: Caching & Network Resilience
+- [ ] Implementar LRU cache com TTL
+- [ ] Adicionar retry policy com exponential backoff
+- [ ] Implementar circuit breaker pattern
+- [ ] Configurar via PackageToolsConfig
+
+---
+
+### **FASE 5: Testing & Validation** (3-4 dias)
+**Status**: 🧪 QUALIDADE
+
+#### Task 5.1: Context-Aware Comprehensive Testing
+- [ ] **Unit tests para todos módulos refatorados**
+- [ ] **Integration tests context-aware:**
+  - [ ] **Single repository scenarios**: dependency resolution, upgrades, conflicts
+  - [ ] **Monorepo scenarios**: workspace protocols, cascade bumping, internal classification
+  - [ ] **Protocol coverage**: npm, jsr, git, file, workspace, url
+- [ ] **Property-based tests para dependency resolution (ambos contextos)**
+- [ ] **Performance tests por contexto**
+- [ ] **Coverage report > 90%**
+
+#### Task 5.2: Migration & Documentation
+- [ ] Finalizar migration guide
+- [ ] Documentar breaking changes
+- [ ] Criar examples atualizados
+- [ ] Performance comparison report
+
+---
+
+## 🎯 Roadmap de Releases
+
+### **v0.2.0 - Breaking Change Release** (2-3 semanas)
+- ✅ Arquitetura reestruturada (Fases 0-2)
+- ✅ Standard crate integration completa
+- ✅ Basic monorepo support
+- ❌ **BREAKING**: APIs completamente reestruturadas
+
+### **v0.3.0 - Monorepo Complete** (4-5 semanas)
+- ✅ Full workspace protocol support
+- ✅ Hash tree visualization
+- ✅ Internal/external classification
+- ✅ Enterprise performance features
+
+### **v1.0.0 - Production Ready** (6-7 semanas)
+- ✅ 95%+ test coverage
+- ✅ Performance optimizations
+- ✅ Complete documentation
+- ✅ Migration tooling
+
+---
+
+## 📊 Métricas de Sucesso
+
+### Qualidade Arquitetural
+- [ ] **0 duplicações de conceito** (registry confusion eliminated)
+- [ ] **SRP compliance 100%** (cada módulo uma responsabilidade)
+- [ ] **Standard integration 90%+** (filesystem, config, monorepo)
+- [ ] **Async-first 100%** (todas I/O operations)
+
+### Funcionalidade Context-Aware
+- [ ] **Context detection 100%** (single repository vs monorepo auto-detection)
+- [ ] **All dependency protocols support** (npm, jsr, git, file, workspace, url)
+- [ ] **Single repository optimization** (network-focused, workspace features disabled)
+- [ ] **Monorepo complete support** (workspace protocols, cascade bumping, internal classification)
+- [ ] **Mixed references support** (A→B semver, B→C workspace no mesmo monorepo)
+- [ ] **Internal/external classification por NOME** (não protocolo, só monorepo)
+- [ ] **Context-aware cascade bumping** (disabled em single, inteligente em monorepo)
+- [ ] **HashTree como objeto queryável** (não só visualização)
+- [ ] **Warning system** para inconsistent references
+- [ ] **Snapshot versioning** com SHA/timestamp
+
+### Performance Context-Aware
+- [ ] **Single repository**: **< 200ms** dependency resolution, **< 10MB** memory
+- [ ] **Typical monorepo (20 packages)**: **< 500ms** resolution, **< 30MB** memory
+- [ ] **Large monorepo (100+ packages)**: **< 2s** resolution, **< 50MB** memory
+- [ ] **Context-optimized concurrent processing** (different strategies per context)
+- [ ] **Memory usage optimized** per context (network cache vs filesystem cache)
 
 ### Developer Experience
-- [ ] API intuitiva e Rust idiomática
-- [ ] Exemplos para todos os use cases
-- [ ] Error messages claros e acionáveis
-- [ ] Zero breaking changes sem migration path
-
-### Architectural Quality
-- [ ] Modular mas não over-engineered
-- [ ] Testável sem mocks complexos
-- [ ] Extensível via composition
-- [ ] Thread-safe por design
+- [ ] **Zero configuration** para casos comuns
+- [ ] **Rust idiomático 100%** (composition over abstraction)
+- [ ] **Error messages actionable**
+- [ ] **Migration guide completo**
 
 ---
 
-## Princípios de Implementação
+## 🚨 Decisões Críticas para Aprovação
 
-### Do ✅
-- Use free functions quando faz sentido
-- Prefira composição sobre traits abstratos
-- Mantenha structs simples e focadas
-- Use enums para estados finitos
-- Error handling explícito com Result
-- Zero-cost abstractions
+### 1. **Breaking Changes**
+**Decisão**: Aceitar breaking changes completos para atingir qualidade enterprise?
+- ✅ **Pro**: Arquitetura limpa, sem débito técnico
+- ❌ **Con**: Migração necessária para usuários existentes
 
-### Don't ❌
-- Repository pattern desnecessário
-- Dependency injection complexa
-- Traits apenas por abstração
-- Async onde sync é suficiente
-- Factories e builders em excesso
-- Design patterns Java-like
+### 2. **Timeline**
+**Decisão**: 2-3 semanas de refatoração intensiva são aceitáveis?
+- ✅ **Pro**: Resultado final de alta qualidade
+- ❌ **Con**: Pausa temporária em features novas
 
----
+### 3. **Standard Integration**
+**Decisão**: Mover 90%+ das funcionalidades para usar standard crate?
+- ✅ **Pro**: Consistência, reutilização, maintainability
+- ❌ **Con**: Dependência maior entre crates
 
-## Notas de Progresso
-
-### 2024-01-XX - Início da Refatoração
-- Plano original era muito "enterprise Java"
-- Decisão de pivotar para Rust idiomático
-- Fase 1 completa com sucesso
-
-### 2024-01-XX - Fase 2 Simplificação
-- Registry refatorado com sucesso (Task 2.1)
-- Identificada necessidade de simplificar Package
-- Graph module já está bem estruturado
+### 4. **Monorepo Focus**
+**Decisão**: Priorizar monorepo support como diferenciador?
+- ✅ **Pro**: Funcionalidade crítica para enterprise
+- ❌ **Con**: Complexidade adicional
 
 ---
 
-## Como Usar Este Plano
+## 🤔 Próximos Passos
 
-1. **Check Progress**: Marque checkboxes conforme completa tarefas
-2. **Update Status**: Atualize percentagens de progresso
-3. **Add Notes**: Adicione notas na seção de progresso
-4. **Track Metrics**: Meça contra métricas de sucesso
-5. **Adjust Timeline**: Ajuste estimativas baseado em velocidade real
+1. **Revisar e aprovar** este plano
+2. **Decidir sobre breaking changes** e timeline
+3. **Começar Fase 0** (preparação e config)
+4. **Iterar** conforme necessário durante implementação
 
-Este plano é um documento vivo - atualize conforme aprende e progride!
+**Este plano está pronto para execução. Qual decisão queres tomar primeiro?**
