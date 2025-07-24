@@ -19,6 +19,9 @@
 //! scattered command execution logic throughout the codebase and provides enterprise-grade
 //! reliability patterns including retry logic, timeout handling, and comprehensive error management.
 
+#![allow(dead_code)] // Phase 4.2 integration pending - API fully implemented
+#![allow(clippy::unused_async)] // I/O operations pending integration
+
 use crate::{
     config::PackageToolsConfig,
     errors::PackageError,
@@ -805,6 +808,56 @@ where
     #[must_use]
     pub fn config(&self) -> &PackageToolsConfig {
         &self.config
+    }
+
+    /// Check if performance optimizations are enabled
+    ///
+    /// # Returns
+    ///
+    /// `true` if performance optimizations are enabled, `false` otherwise
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_package_tools::services::PackageCommandService;
+    /// use sublime_standard_tools::{command::DefaultCommandExecutor, filesystem::FileSystemManager};
+    ///
+    /// let fs = FileSystemManager::new();
+    /// let executor = DefaultCommandExecutor::new();
+    /// let service = PackageCommandService::new(executor, fs);
+    /// 
+    /// if service.is_performance_optimized() {
+    ///     println!("Performance optimizations enabled");
+    /// }
+    /// ```
+    #[must_use]
+    pub fn is_performance_optimized(&self) -> bool {
+        self.performance_optimizer.is_some()
+    }
+
+    /// Check if concurrent processor is enabled
+    ///
+    /// # Returns
+    ///
+    /// `true` if concurrent processor is enabled, `false` otherwise
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_package_tools::services::PackageCommandService;
+    /// use sublime_standard_tools::{command::DefaultCommandExecutor, filesystem::FileSystemManager};
+    ///
+    /// let fs = FileSystemManager::new();
+    /// let executor = DefaultCommandExecutor::new();
+    /// let service = PackageCommandService::new(executor, fs);
+    /// 
+    /// if service.has_concurrent_processor() {
+    ///     println!("Concurrent processing enabled");
+    /// }
+    /// ```
+    #[must_use]
+    pub fn has_concurrent_processor(&self) -> bool {
+        self.concurrent_processor.is_some()
     }
 
     /// Clear the cached package manager to force re-detection

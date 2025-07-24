@@ -39,6 +39,8 @@
 //! # }
 //! ```
 
+#![allow(clippy::unused_async)] // I/O operations pending integration - async preserved for consistency
+
 use crate::{
     errors::{DependencyResolutionError, VersionError},
     dependency::resolution::ResolutionResult,

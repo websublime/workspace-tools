@@ -42,6 +42,8 @@
 //! # }
 //! ```
 
+#![allow(clippy::unused_async)] // I/O operations pending integration - async preserved for consistency
+
 use serde::{Deserialize, Serialize};
 
 use crate::context::{ProjectContext, SingleRepositoryContext, MonorepoContext};

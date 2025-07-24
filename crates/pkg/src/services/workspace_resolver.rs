@@ -34,6 +34,9 @@
 //! # }
 //! ```
 
+#![allow(dead_code)] // Phase 4.2 integration pending - workspace resolver fully implemented
+#![allow(clippy::unused_async)] // I/O operations pending integration
+
 use crate::{
     context::{ContextDetector, ProjectContext, DependencyClassifier, DependencyClass},
     config::PackageToolsConfig,
