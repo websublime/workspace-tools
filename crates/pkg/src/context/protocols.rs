@@ -268,7 +268,8 @@ impl DependencyProtocol {
     /// ```rust
     /// use sublime_package_tools::context::DependencyProtocol;
     ///
-    /// assert_eq!(DependencyProtocol::parse("^1.0.0"), DependencyProtocol::Npm);
+    /// assert_eq!(DependencyProtocol::parse("^1.0.0"), DependencyProtocol::Registry);
+    /// assert_eq!(DependencyProtocol::parse("npm:package@^1.0.0"), DependencyProtocol::Npm);
     /// assert_eq!(DependencyProtocol::parse("workspace:*"), DependencyProtocol::Workspace);
     /// assert_eq!(DependencyProtocol::parse("git+https://github.com/user/repo.git"), DependencyProtocol::Git);
     /// assert_eq!(DependencyProtocol::parse("file:../local-package"), DependencyProtocol::File);
@@ -277,6 +278,8 @@ impl DependencyProtocol {
     pub fn parse(dep_string: &str) -> Self {
         if dep_string.starts_with("workspace:") {
             Self::Workspace
+        } else if dep_string.starts_with("npm:") {
+            Self::Npm
         } else if dep_string.starts_with("jsr:") {
             Self::Jsr
         } else if dep_string.starts_with("git+") || dep_string.ends_with(".git") {
@@ -296,8 +299,8 @@ impl DependencyProtocol {
         } else if dep_string.starts_with('@') {
             Self::Scoped
         } else {
-            // Default to NPM for semver-like strings
-            Self::Npm
+            // Default to Registry for semver-like strings
+            Self::Registry
         }
     }
 }

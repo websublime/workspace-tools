@@ -47,6 +47,11 @@ pub mod project;
 pub mod detection;
 pub mod classification;
 pub mod protocols;
+pub mod dependency_source;
+pub mod dependency_parser;
+
+#[cfg(test)]
+mod test_parsing;
 
 pub use project::{
     ProjectContext, 
@@ -58,3 +63,5 @@ pub use project::{
 pub use detection::ContextDetector;
 pub use classification::{DependencyClassifier, DependencyClass, InternalClassification};
 pub use protocols::{DependencyProtocol, ProtocolSupport};
+pub use dependency_source::{DependencySource, WorkspaceConstraint, GitReference};
+pub use dependency_parser::DependencyParser;
