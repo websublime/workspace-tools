@@ -180,6 +180,7 @@
 #![deny(clippy::unimplemented)]
 #![deny(clippy::panic)]
 
+pub mod config;
 mod dependency;
 pub mod errors;
 mod graph;
@@ -224,4 +225,11 @@ pub use upgrader::{
     builder::Upgrader,
     config::{ExecutionMode, UpgradeConfig},
     status::{AvailableUpgrade, UpgradeStatus},
+};
+
+pub use config::{
+    PackageToolsConfig, VersionBumpConfig, ResolutionConfig, 
+    CircularDependencyConfig, ContextAwareConfig, PerformanceConfig, CacheConfig,
+    VersionBumpStrategy, AffectedDetectionStrategy, DependencyProtocol,
+    CircularDependencyHandling, ProjectContextType, MemoryOptimizationLevel,
 };

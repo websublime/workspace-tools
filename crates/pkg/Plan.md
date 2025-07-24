@@ -272,9 +272,9 @@ src/
 ## 📋 Fases de Refatoração
 
 ### **FASE 0: Preparação** (3 dias)
-**Status**: 🚧 CRÍTICA
+**Status**: ✅ **COMPLETADO**
 
-#### Task 0.1: Configuração via repo.config (Standard Integration)
+#### Task 0.1: Configuração via repo.config (Standard Integration) ✅ **CONCLUÍDO**
 ```rust
 // INTEGRAÇÃO: Usar repo.config.{toml,yml,json} do standard crate
 // Extender StandardConfig com PackageToolsConfig
@@ -291,17 +291,14 @@ impl Configurable for PackageToolsConfig {
     fn merge_with(&mut self, other: Self) -> ConfigResult<()>;
 }
 ```
-- [ ] **Integrar com repo.config.{toml,yml,json} do standard crate**
-- [ ] **Extender StandardConfig com PackageToolsConfig section**
-- [ ] Configurar loading via env vars (SUBLIME_PKG_*)
-- [ ] Criar configs padrão para npm/yarn/pnpm/bun
-- [ ] Implementar validação de configuração
+- [x] **Integrar com repo.config.{toml,yml,json} do standard crate**
+- [x] **Extender StandardConfig com PackageToolsConfig section**
+- [x] Configurar loading via env vars (SUBLIME_PKG_*)
+- [x] Criar configs padrão para npm/yarn/pnpm/bun
+- [x] Implementar validação de configuração
 
-#### Task 0.2: Análise de Breaking Changes
-- [ ] Mapear APIs públicas atuais
-- [ ] Identificar dependências internas
-- [ ] Criar migration guide detalhado
-- [ ] Setup feature flags para transição
+#### ~~Task 0.2: Análise de Breaking Changes~~ ❌ **REMOVIDO**
+**Motivo**: REESCRITA COMPLETA - Zero compatibilidade mantida intencionalmente
 
 ---
 
@@ -672,35 +669,115 @@ pub enum ReferenceUpdateType {
   - [ ] **Protocol coverage**: npm, jsr, git, file, workspace, url
 - [ ] **Property-based tests para dependency resolution (ambos contextos)**
 - [ ] **Performance tests por contexto**
-- [ ] **Coverage report > 90%**
+- [ ] **Coverage report > 95%** (UPGRADE: era 90%, agora 95%)
 
 #### Task 5.2: Migration & Documentation
-- [ ] Finalizar migration guide
-- [ ] Documentar breaking changes
+- [ ] ~~Finalizar migration guide~~ ❌ **REMOVIDO** (Zero compatibilidade)
+- [ ] ~~Documentar breaking changes~~ ❌ **REMOVIDO** (Reescrita completa)
 - [ ] Criar examples atualizados
 - [ ] Performance comparison report
+
+---
+
+## 🧪 **TESTING REQUIREMENTS MANDATÓRIOS** (ADICIONADO)
+
+### **Estrutura de Tests por Módulo**
+**OBRIGATÓRIO**: Cada módulo deve ter um arquivo `tests.rs` com cobertura 100%:
+
+```
+src/
+├── config/
+│   ├── package_config.rs
+│   ├── tests.rs              # ✅ OBRIGATÓRIO: Tests config completos
+│   └── mod.rs
+├── core/
+│   ├── dependency.rs
+│   ├── package.rs
+│   ├── version.rs
+│   ├── tests.rs              # ✅ OBRIGATÓRIO: Tests core domain
+│   └── mod.rs
+├── storage/
+│   ├── dependency_storage.rs
+│   ├── tests.rs              # ✅ OBRIGATÓRIO: Tests storage persistence
+│   └── mod.rs
+├── external/
+│   ├── npm_client.rs
+│   ├── registry_manager.rs
+│   ├── tests.rs              # ✅ OBRIGATÓRIO: Tests external services
+│   └── mod.rs
+├── services/
+│   ├── package_service.rs
+│   ├── resolution_service.rs
+│   ├── workspace_service.rs
+│   ├── tests.rs              # ✅ OBRIGATÓRIO: Tests business logic
+│   └── mod.rs
+```
+
+### **Coverage Requirements por Módulo**
+- **Unit Tests**: 100% de todas funções públicas e privadas críticas
+- **Integration Tests**: Todos os workflows principais
+- **Property-Based Tests**: Dependency resolution, version handling
+- **Performance Tests**: Contexto single repo vs monorepo
+- **Error Handling Tests**: Todos os error paths testados
+
+### **Test Categories (CLAUDE.md Compliance)**
+```rust
+// Exemplo de estrutura tests.rs
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    mod unit_tests {
+        // Tests isolados de cada função
+    }
+    
+    mod integration_tests {
+        // Tests de workflows completos
+    }
+    
+    mod error_tests {
+        // Tests de todos error paths
+    }
+    
+    mod performance_tests {
+        // Benchmarks e performance regression
+    }
+    
+    mod property_tests {
+        // Property-based testing com quickcheck
+    }
+}
+```
+
+### **Testing Commands (MANDATORY)**
+```bash
+# DEVE passar sem erros:
+cargo test -- --nocapture     # Unit + Integration tests
+cargo clippy -- -D warnings   # Zero clippy warnings
+cargo build                    # Zero compilation errors
+```
 
 ---
 
 ## 🎯 Roadmap de Releases
 
 ### **v0.2.0 - Breaking Change Release** (2-3 semanas)
-- ✅ Arquitetura reestruturada (Fases 0-2)
-- ✅ Standard crate integration completa
-- ✅ Basic monorepo support
+- ✅ **FASE 0**: Standard crate integration completa (**COMPLETADO**)
+- ⏳ **FASE 1**: Arquitetura reestruturada (Em progresso)
+- ⏳ **FASE 2**: Basic monorepo support (Pendente)
 - ❌ **BREAKING**: APIs completamente reestruturadas
 
 ### **v0.3.0 - Monorepo Complete** (4-5 semanas)
-- ✅ Full workspace protocol support
-- ✅ Hash tree visualization
-- ✅ Internal/external classification
-- ✅ Enterprise performance features
+- ⏳ Full workspace protocol support
+- ⏳ Hash tree visualization
+- ⏳ Internal/external classification
+- ⏳ Enterprise performance features
 
 ### **v1.0.0 - Production Ready** (6-7 semanas)
-- ✅ 95%+ test coverage
-- ✅ Performance optimizations
-- ✅ Complete documentation
-- ✅ Migration tooling
+- ⏳ 95%+ test coverage
+- ⏳ Performance optimizations
+- ⏳ Complete documentation
+- ❌ ~~Migration tooling~~ (Removido - zero compatibilidade)
 
 ---
 
