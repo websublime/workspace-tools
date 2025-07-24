@@ -377,12 +377,16 @@ pub enum DependencyProtocol {
 ---
 
 ### **FASE 2: Standard Crate Integration** (1 semana)
-**Status**: 🎯 ESSENCIAL
+**Status**: ✅ **PARCIALMENTE COMPLETADO** 🚀
 
-#### Task 2.1: AsyncFileSystem Integration
-- [ ] Refatorar todas operações I/O para async
-- [ ] Implementar `PackageJsonReader<F: AsyncFileSystem>`
-- [ ] Substituir operações síncronas por async equivalentes
+#### Task 2.1: AsyncFileSystem Integration ✅ **CONCLUÍDO**
+- [x] **Refatorar todas operações I/O para async**
+- [x] **Implementar filesystem operations em ContextDetector (has_workspace_config, has_monorepo_tools, etc.)**
+- [x] **Implementar filesystem operations em PackageService (package.json read/write com *_with_path methods)**
+- [x] **Implementar filesystem operations em VersionManager (version bumping, dependency graph, monorepo support)**
+- [x] **Substituir operações síncronas por async equivalentes**
+- [x] **Adicionar AsyncFileSystem constraint bounds em todos os services**
+- [x] **Implementar VersionError::IO variant para operações filesystem**
 - [ ] Performance benchmarking vs implementação atual
 
 #### Task 2.2: Project/Monorepo Detection
@@ -393,16 +397,16 @@ pub struct WorkspaceAwareDependencyResolver<F: AsyncFileSystem> {
     config: PackageToolsConfig,
 }
 ```
-- [ ] Integrar ProjectDetector para context awareness
-- [ ] Integrar MonorepoDetector para workspace detection  
-- [ ] Implementar auto-detection de contexto (simple vs monorepo)
-- [ ] Distinguir internal vs external dependencies
+- [ ] **Integrar ProjectDetector para context awareness**
+- [ ] **Integrar MonorepoDetector para workspace detection**  
+- [ ] **Implementar auto-detection de contexto (simple vs monorepo)**
+- [ ] **Distinguir internal vs external dependencies**
 
 #### Task 2.3: Command Integration
-- [ ] Integrar CommandExecutor para npm/yarn/pnpm operations
-- [ ] Usar PackageManager::detect_with_config
-- [ ] Implementar timeout configuration
-- [ ] Adicionar retry logic para network operations
+- [ ] **Integrar CommandExecutor para npm/yarn/pnpm operations**
+- [ ] **Usar PackageManager::detect_with_config**
+- [ ] **Implementar timeout configuration**
+- [ ] **Adicionar retry logic para network operations**
 
 ---
 
@@ -797,7 +801,10 @@ cargo build                    # Zero compilation errors
 ### **v0.2.0 - Breaking Change Release** (2-3 semanas)
 - ✅ **FASE 0**: Standard crate integration completa (**COMPLETADO**)
 - ✅ **FASE 1**: Arquitetura reestruturada (**COMPLETADO**) 🚀
-- ⏳ **FASE 2**: Standard Crate Integration (Próxima)
+- 📊 **FASE 2**: Standard Crate Integration (**PARCIALMENTE COMPLETADO**) 🚀
+  - ✅ **Task 2.1**: AsyncFileSystem Integration (**COMPLETADO**)
+  - ⏳ **Task 2.2**: Project/Monorepo Detection (Próximo)
+  - ⏳ **Task 2.3**: Command Integration (Pendente)
 - ❌ **BREAKING**: APIs completamente reestruturadas
 
 ### **v0.3.0 - Monorepo Complete** (4-5 semanas)
@@ -819,8 +826,9 @@ cargo build                    # Zero compilation errors
 ### Qualidade Arquitetural
 - [x] **0 duplicações de conceito** (registry confusion eliminated) ✅ **FASE 1 DONE**
 - [x] **SRP compliance 100%** (cada módulo uma responsabilidade) ✅ **FASE 1 DONE**
-- [ ] **Standard integration 90%+** (filesystem, config, monorepo)
-- [ ] **Async-first 100%** (todas I/O operations)
+- [x] **AsyncFileSystem integration 100%** (ContextDetector, PackageService, VersionManager) ✅ **FASE 2 Task 2.1 DONE**
+- [x] **Async-first 100%** (todas I/O operations implementadas) ✅ **FASE 2 Task 2.1 DONE**
+- [ ] **Standard integration 90%+** (ProjectDetector, MonorepoDetector, CommandExecutor)
 
 ### Funcionalidade Context-Aware ✅ **FASE 1 COMPLETADO**
 - [x] **Context detection 100%** (single repository vs monorepo auto-detection) ✅
@@ -830,6 +838,8 @@ cargo build                    # Zero compilation errors
 - [x] **Mixed references support** (A→B semver, B→C workspace no mesmo monorepo) ✅
 - [x] **Internal/external classification por NOME** (não protocolo, só monorepo) ✅
 - [x] **Context-aware cascade bumping** (disabled em single, inteligente em monorepo) ✅
+- [x] **Filesystem-integrated version management** (real package.json read/write) ✅ **FASE 2 Task 2.1 DONE**
+- [x] **Monorepo version bumping** (cascade bumping com filesystem persistence) ✅ **FASE 2 Task 2.1 DONE**
 - [ ] **HashTree como objeto queryável** (não só visualização)
 - [x] **Warning system** para inconsistent references ✅
 - [x] **Snapshot versioning** com SHA/timestamp ✅
