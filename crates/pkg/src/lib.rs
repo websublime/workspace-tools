@@ -191,6 +191,7 @@ mod dependency;
 pub mod errors;
 mod external;
 mod graph;
+pub mod network;
 mod package;
 mod services;
 mod storage;
@@ -264,6 +265,7 @@ pub use upgrader::{
 pub use config::{
     PackageToolsConfig, VersionBumpConfig, ResolutionConfig, 
     CircularDependencyConfig, ContextAwareConfig, PerformanceConfig, CacheConfig,
+    NetworkConfig, NetworkRetryConfig, NetworkCircuitBreakerConfig,
     VersionBumpStrategy, AffectedDetectionStrategy, DependencyProtocol,
     CircularDependencyHandling, ProjectContextType, MemoryOptimizationLevel,
 };
@@ -274,4 +276,11 @@ pub use context::{
     DependencyClassifier, DependencyClass, InternalClassification,
     protocols::{DependencyProtocol as ContextDependencyProtocol, ProtocolSupport},
     dependency_source::{DependencySource, WorkspaceConstraint, GitReference},
+};
+
+pub use network::{
+    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError,
+    CircuitBreakerManager, CircuitState, LruCache,
+    ResilientClient, ResilientClientBuilder, ResilientClientConfig,
+    ResilientClientError, RetryConfig, RetryPolicy, Retryable, RetryableError,
 };

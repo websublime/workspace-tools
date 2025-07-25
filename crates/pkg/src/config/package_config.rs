@@ -81,6 +81,10 @@ pub struct PackageToolsConfig {
     /// Cache configuration
     #[serde(default)]
     pub cache: CacheConfig,
+
+    /// Network resilience configuration
+    #[serde(default)]
+    pub network: NetworkConfig,
 }
 
 impl Default for PackageToolsConfig {
@@ -93,6 +97,7 @@ impl Default for PackageToolsConfig {
             context_aware: ContextAwareConfig::default(),
             performance: PerformanceConfig::default(),
             cache: CacheConfig::default(),
+            network: NetworkConfig::default(),
         }
     }
 }
@@ -152,6 +157,23 @@ impl Configurable for PackageToolsConfig {
             return Err("Cache compression level cannot exceed 9".into());
         }
 
+        // Validate network configuration
+        if self.network.retry_config.max_retries > 10 {
+            return Err("Max retries cannot exceed 10".into());
+        }
+
+        if self.network.circuit_breaker_config.failure_threshold == 0 {
+            return Err("Circuit breaker failure threshold must be greater than 0".into());
+        }
+
+        if self.network.circuit_breaker_config.failure_threshold > 20 {
+            return Err("Circuit breaker failure threshold cannot exceed 20".into());
+        }
+
+        if self.network.circuit_breaker_config.success_threshold == 0 {
+            return Err("Circuit breaker success threshold must be greater than 0".into());
+        }
+
         Ok(())
     }
 
@@ -179,6 +201,9 @@ impl Configurable for PackageToolsConfig {
         
         self.cache.merge_with(other.cache)
             .map_err(|e| format!("Failed to merge cache config: {e}"))?;
+        
+        self.network.merge_with(other.network)
+            .map_err(|e| format!("Failed to merge network config: {e}"))?;
 
         Ok(())
     }
@@ -786,4 +811,235 @@ fn default_cache_compression() -> u32 {
 
 fn default_true() -> bool {
     true
+}
+
+/// Configuration for network resilience features.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkConfig {
+    /// Enable network resilience features
+    #[serde(default = "default_true")]
+    pub enable_resilience: bool,
+
+    /// Retry policy configuration
+    #[serde(default)]
+    pub retry_config: NetworkRetryConfig,
+
+    /// Circuit breaker configuration
+    #[serde(default)]
+    pub circuit_breaker_config: NetworkCircuitBreakerConfig,
+
+    /// Enable response caching
+    #[serde(default = "default_true")]
+    pub enable_caching: bool,
+
+    /// Request timeout duration
+    #[serde(default = "default_network_timeout", with = "humantime_serde")]
+    pub request_timeout: Duration,
+
+    /// Enable connection pooling
+    #[serde(default = "default_true")]
+    pub enable_connection_pooling: bool,
+
+    /// Maximum concurrent connections
+    #[serde(default = "default_max_connections")]
+    pub max_connections: usize,
+}
+
+impl Default for NetworkConfig {
+    fn default() -> Self {
+        Self {
+            enable_resilience: true,
+            retry_config: NetworkRetryConfig::default(),
+            circuit_breaker_config: NetworkCircuitBreakerConfig::default(),
+            enable_caching: true,
+            request_timeout: default_network_timeout(),
+            enable_connection_pooling: true,
+            max_connections: default_max_connections(),
+        }
+    }
+}
+
+impl NetworkConfig {
+    fn merge_with(&mut self, other: Self) -> ConfigResult<()> {
+        self.enable_resilience = other.enable_resilience;
+        self.retry_config.merge_with(other.retry_config)?;
+        self.circuit_breaker_config.merge_with(other.circuit_breaker_config)?;
+        self.enable_caching = other.enable_caching;
+        if other.request_timeout.as_secs() > 0 {
+            self.request_timeout = other.request_timeout;
+        }
+        self.enable_connection_pooling = other.enable_connection_pooling;
+        if other.max_connections > 0 {
+            self.max_connections = other.max_connections;
+        }
+        Ok(())
+    }
+}
+
+/// Retry configuration for network operations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkRetryConfig {
+    /// Maximum number of retries
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
+
+    /// Initial delay between retries
+    #[serde(default = "default_initial_delay", with = "humantime_serde")]
+    pub initial_delay: Duration,
+
+    /// Maximum delay between retries
+    #[serde(default = "default_max_delay", with = "humantime_serde")]
+    pub max_delay: Duration,
+
+    /// Exponential backoff multiplier
+    #[serde(default = "default_exponential_base")]
+    pub exponential_base: f64,
+
+    /// Enable jitter to avoid thundering herd
+    #[serde(default = "default_true")]
+    pub enable_jitter: bool,
+}
+
+impl Default for NetworkRetryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: default_max_retries(),
+            initial_delay: default_initial_delay(),
+            max_delay: default_max_delay(),
+            exponential_base: default_exponential_base(),
+            enable_jitter: true,
+        }
+    }
+}
+
+impl NetworkRetryConfig {
+    fn merge_with(&mut self, other: Self) -> ConfigResult<()> {
+        self.max_retries = other.max_retries;
+        if other.initial_delay.as_millis() > 0 {
+            self.initial_delay = other.initial_delay;
+        }
+        if other.max_delay.as_secs() > 0 {
+            self.max_delay = other.max_delay;
+        }
+        if other.exponential_base > 0.0 {
+            self.exponential_base = other.exponential_base;
+        }
+        self.enable_jitter = other.enable_jitter;
+        Ok(())
+    }
+}
+
+/// Circuit breaker configuration for network operations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkCircuitBreakerConfig {
+    /// Number of failures to open the circuit
+    #[serde(default = "default_failure_threshold")]
+    pub failure_threshold: u32,
+
+    /// Number of successes to close the circuit
+    #[serde(default = "default_success_threshold")]
+    pub success_threshold: u32,
+
+    /// Timeout before transitioning to half-open
+    #[serde(default = "default_circuit_breaker_timeout", with = "humantime_serde")]
+    pub timeout: Duration,
+
+    /// Maximum calls in half-open state
+    #[serde(default = "default_half_open_max_calls")]
+    pub half_open_max_calls: u32,
+}
+
+impl Default for NetworkCircuitBreakerConfig {
+    fn default() -> Self {
+        Self {
+            failure_threshold: default_failure_threshold(),
+            success_threshold: default_success_threshold(),
+            timeout: default_circuit_breaker_timeout(),
+            half_open_max_calls: default_half_open_max_calls(),
+        }
+    }
+}
+
+impl NetworkCircuitBreakerConfig {
+    fn merge_with(&mut self, other: Self) -> ConfigResult<()> {
+        if other.failure_threshold > 0 {
+            self.failure_threshold = other.failure_threshold;
+        }
+        if other.success_threshold > 0 {
+            self.success_threshold = other.success_threshold;
+        }
+        if other.timeout.as_secs() > 0 {
+            self.timeout = other.timeout;
+        }
+        if other.half_open_max_calls > 0 {
+            self.half_open_max_calls = other.half_open_max_calls;
+        }
+        Ok(())
+    }
+}
+
+// Network configuration defaults
+
+fn default_network_timeout() -> Duration {
+    // Check environment variable
+    if let Ok(env_timeout) = std::env::var("SUBLIME_PKG_NETWORK_TIMEOUT") {
+        if let Ok(seconds) = env_timeout.trim().parse::<u64>() {
+            if (1..=300).contains(&seconds) {
+                return Duration::from_secs(seconds);
+            }
+        }
+    }
+    Duration::from_secs(30)
+}
+
+fn default_max_connections() -> usize {
+    // Check environment variable
+    if let Ok(env_connections) = std::env::var("SUBLIME_PKG_MAX_CONNECTIONS") {
+        if let Ok(connections) = env_connections.trim().parse::<usize>() {
+            if (1..=100).contains(&connections) {
+                return connections;
+            }
+        }
+    }
+    20
+}
+
+fn default_max_retries() -> u32 {
+    // Check environment variable
+    if let Ok(env_retries) = std::env::var("SUBLIME_PKG_MAX_RETRIES") {
+        if let Ok(retries) = env_retries.trim().parse::<u32>() {
+            if (0..=10).contains(&retries) {
+                return retries;
+            }
+        }
+    }
+    3
+}
+
+fn default_initial_delay() -> Duration {
+    Duration::from_millis(100)
+}
+
+fn default_max_delay() -> Duration {
+    Duration::from_secs(10)
+}
+
+fn default_exponential_base() -> f64 {
+    2.0
+}
+
+fn default_failure_threshold() -> u32 {
+    5
+}
+
+fn default_success_threshold() -> u32 {
+    2
+}
+
+fn default_circuit_breaker_timeout() -> Duration {
+    Duration::from_secs(30)
+}
+
+fn default_half_open_max_calls() -> u32 {
+    3
 }
