@@ -18,6 +18,7 @@
 //! These components work together to provide a comprehensive system for managing
 //! package dependencies in JavaScript/TypeScript projects.
 
+pub mod analyzer;
 pub mod change;
 pub mod conflict_resolver;
 pub mod dependency;
@@ -29,3 +30,4 @@ pub mod update;
 
 #[cfg(test)]
 mod tests;
+

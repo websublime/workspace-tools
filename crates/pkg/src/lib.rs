@@ -21,27 +21,31 @@
 //!
 //! ```rust
 //! # fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! use sublime_package_tools::{Dependency, Registry, Package};
+//! use sublime_package_tools::{Dependency, Package};
 //!
-//! // Create dependencies using a registry (ensures consistent instances)
-//! let mut registry = Registry::new();
-//! let react_dep = registry.get_or_create("react", "^17.0.2")?;
-//! let router_dep = registry.get_or_create("react-router", "^6.0.0")?;
-//!
-//! // Create a package with dependencies
-//! let package = Package::new_with_registry(
-//!     "my-app",
-//!     "1.0.0",
-//!     Some(vec![("react", "^17.0.2"), ("react-router", "^6.0.0")]),
-//!     &mut registry
-//! )?;
+//! // Create a package with dependencies (pure data structure)
+//! let package = Package {
+//!     name: "my-app".to_string(),
+//!     version: "1.0.0".to_string(),
+//!     dependencies: vec![
+//!         Dependency {
+//!             name: "react".to_string(),
+//!             version: "^17.0.2".to_string(),
+//!         },
+//!         Dependency {
+//!             name: "react-router".to_string(),
+//!             version: "^6.0.0".to_string(),
+//!         },
+//!     ],
+//!     ..Package::default()
+//! };
 //!
 //! // Access package information
-//! println!("Package: {} v{}", package.name(), package.version_str());
+//! println!("Package: {} v{}", package.name, package.version);
 //!
 //! // Work with dependencies
-//! for dep in package.dependencies() {
-//!     println!("  Depends on: {} {}", dep.borrow().name(), dep.borrow().version());
+//! for dep in &package.dependencies {
+//!     println!("  Depends on: {} {}", dep.name, dep.version);
 //! }
 //! # Ok(())
 //! # }
@@ -51,11 +55,20 @@
 //!
 //! ```rust
 //! # fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! # use sublime_package_tools::{Package, Dependency, Registry};
-//! # let mut registry = Registry::new();
+//! # use sublime_package_tools::{Package, Dependency};
 //! # let packages = vec![
-//! #     Package::new_with_registry("pkg-a", "1.0.0", Some(vec![("pkg-b", "^1.0.0")]), &mut registry)?,
-//! #     Package::new_with_registry("pkg-b", "1.0.0", Some(vec![]), &mut registry)?
+//! #     Package {
+//! #         name: "pkg-a".to_string(),
+//! #         version: "1.0.0".to_string(),
+//! #         dependencies: vec![Dependency { name: "pkg-b".to_string(), version: "^1.0.0".to_string() }],
+//! #         ..Package::default()
+//! #     },
+//! #     Package {
+//! #         name: "pkg-b".to_string(),
+//! #         version: "1.0.0".to_string(),
+//! #         dependencies: vec![],
+//! #         ..Package::default()
+//! #     }
 //! # ];
 //! use sublime_package_tools::{
 //!     build_dependency_graph_from_packages,
@@ -178,23 +191,14 @@
 #![deny(clippy::todo)]
 #![deny(clippy::unimplemented)]
 #![deny(clippy::panic)]
-// Phase 4.1 completion - temporary allows for refactoring code
-#![allow(dead_code)] // APIs implemented for Phase 4.2 integration
-#![allow(clippy::unused_async)] // Async preserved for I/O consistency
-#![allow(clippy::unnecessary_wraps)] // Result patterns maintained for enterprise error handling
-#![allow(clippy::pedantic)] // Pedantic warnings during refactoring
-#![allow(clippy::only_used_in_recursion)] // Recursive algorithms preserved
 
 pub mod config;
 pub mod context;
 mod dependency;
 pub mod errors;
-mod external;
 mod graph;
-pub mod network;
 mod package;
 mod services;
-mod storage;
 mod upgrader;
 mod version;
 
@@ -203,53 +207,54 @@ pub use package::{
     change::ChangeType,
     diff::PackageDiff,
     info::Info,
+    manager::{PackageManager, PackageValidationReport},
     package::Package,
     registry::{NpmRegistry, PackageRegistry, PackageRegistryClone},
     scope::{package_scope_name_version, PackageScopeMetadata},
 };
 
 pub use dependency::{
-    change::Change, dependency::Dependency, filter::Filter,
-    graph::Graph, resolution::ResolutionResult,
-    update::Update,
-};
-
-pub use storage::{
-    dependency_storage::Registry,
+    analyzer::{
+        DependencyAnalyzer, DependencyReport, DependencyClass as AnalyzerDependencyClass, 
+        Conflict, ConflictSeverity, VersionAnalysis, VersionPattern, VersionIssue, 
+        DependencyInsight, InsightType, InsightPriority, WorkspaceInfo,
+    },
+    change::Change, dependency::Dependency, filter::Filter, graph::Graph,
+    resolution::ResolutionResult, update::Update,
 };
 
 pub use errors::{Error, Result};
 
-pub use external::{
-    local_registry::LocalRegistry,
-    registry_manager::{RegistryAuth, RegistryManager, RegistryType},
-};
+pub use config::{MonorepoConfig, PackageToolsConfig, RegistryConfig};
 
 pub use version::{
     // Core version types
     version::{
-        Version, VersionRelationship, VersionStability, VersionUpdateStrategy,
-        BumpStrategy, VersionManager, VersionBumpReport, DependencyReferenceUpdate, ReferenceUpdateType
+        BumpStrategy, DependencyReferenceUpdate, ReferenceUpdateType, Version, VersionBumpReport,
+        VersionRelationship, VersionStability, VersionUpdateStrategy,
     },
+    BumpExecutionMode,
+    CascadeBumpAnalysis,
     // Phase 4.2: Context-aware cascade bumping
-    CascadeBumper, CascadeBumpAnalysis, CascadeContextInfo,
-    ChangeSet, BumpExecutionMode,
-    MonorepoVersionBumpConfig, MonorepoVersioningStrategy,
+    CascadeBumper,
+    CascadeContextInfo,
+    ChangeSet,
+    MonorepoVersionBumpConfig,
+    MonorepoVersioningStrategy,
 };
 
 pub use services::{
-    PackageService, PackageInfo, ValidationResult,
-    PerformanceOptimizer, OptimizationStrategy, OptimizationOverrides,
-    CacheStrategy, MemoryOptimizationLevel as ServiceMemoryOptimizationLevel,
-    IoStrategy, TimeoutStrategy, RetryStrategy, ResourceLimits, PerformanceMetrics,
-    ConcurrentProcessor, specialized,
+    specialized, CacheStrategy, ConcurrentProcessor, IoStrategy,
+    MemoryOptimizationLevel as ServiceMemoryOptimizationLevel, OptimizationOverrides,
+    OptimizationStrategy, PackageInfo, PackageService, PerformanceMetrics, PerformanceOptimizer,
+    ResourceLimits, RetryStrategy, TimeoutStrategy, ValidationResult,
 };
 
 pub use graph::{
     builder::{build_dependency_graph_from_package_infos, build_dependency_graph_from_packages},
     hash_tree::{
-        DependencyHashTree, PackageNode, DependencyReference, PackageLocation,
-        CircularDependency, CircularDependencyType, CycleSeverity,
+        CircularDependency, CircularDependencyType, CycleSeverity, DependencyHashTree,
+        DependencyReference, PackageLocation, PackageNode,
     },
     node::{Node, Step},
     validation::{ValidationIssue, ValidationOptions, ValidationReport},
@@ -262,25 +267,9 @@ pub use upgrader::{
     status::{AvailableUpgrade, UpgradeStatus},
 };
 
-pub use config::{
-    PackageToolsConfig, VersionBumpConfig, ResolutionConfig, 
-    CircularDependencyConfig, ContextAwareConfig, PerformanceConfig, CacheConfig,
-    NetworkConfig, NetworkRetryConfig, NetworkCircuitBreakerConfig,
-    VersionBumpStrategy, AffectedDetectionStrategy, DependencyProtocol,
-    CircularDependencyHandling, ProjectContextType, MemoryOptimizationLevel,
-};
-
 pub use context::{
-    ProjectContext, SingleRepositoryContext, MonorepoContext,
-    SingleRepoFeatures, MonorepoFeatures, ContextDetector,
-    DependencyClassifier, DependencyClass, InternalClassification,
+    dependency_source::{DependencySource, GitReference, WorkspaceConstraint},
     protocols::{DependencyProtocol as ContextDependencyProtocol, ProtocolSupport},
-    dependency_source::{DependencySource, WorkspaceConstraint, GitReference},
-};
-
-pub use network::{
-    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError,
-    CircuitBreakerManager, CircuitState, LruCache,
-    ResilientClient, ResilientClientBuilder, ResilientClientConfig,
-    ResilientClientError, RetryConfig, RetryPolicy, Retryable, RetryableError,
+    ContextDetector, DependencyClass, DependencyClassifier, InternalClassification,
+    MonorepoContext, MonorepoFeatures, ProjectContext, SingleRepoFeatures, SingleRepositoryContext,
 };
