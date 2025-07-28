@@ -1,4 +1,14 @@
-# sublime_package_tools API Specification
+# ⚠️ OBSOLETO - Este documento está desatualizado
+
+> **AVISO**: Este documento refere-se à versão v1.x do sublime_package_tools e está **OBSOLETO**.  
+> Para a nova arquitetura v2.0, consulte o [Plan.md](./Plan.md).
+>
+> **Data de Obsolescência**: 2025-07-28  
+> **Motivo**: Reescrita completa do crate com nova arquitetura e APIs
+
+---
+
+# sublime_package_tools API Specification (v1.x - OBSOLETO)
 
 A comprehensive API specification for the sublime_package_tools Rust library.
 
