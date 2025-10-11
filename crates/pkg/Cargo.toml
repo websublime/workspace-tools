@@ -1,0 +1,46 @@
+[package]
+name = "sublime_pkg_tools"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Package and version management toolkit for Node.js projects"
+repository = "https://github.com/your-org/workspace-node-tools"
+documentation = "https://docs.rs/sublime_pkg_tools"
+
+[dependencies]
+# Internal dependencies
+sublime_git_tools = { path = "../git" }
+sublime_standard_tools = { path = "../standard" }
+
+# Async runtime
+tokio = { version = "1.40", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Semantic versioning
+semver = "1.0"
+
+# HTTP client for registry
+reqwest = { version = "0.12", features = ["json"] }
+
+# Error handling
+thiserror = "1.0"
+
+# Date/time for changesets
+chrono = { version = "0.4", features = ["serde"] }
+
+# Graph algorithms for dependency analysis
+petgraph = "0.6"
+
+# Regex for conventional commit parsing
+regex = "1.10"
+
+# Logging
+log = "0.4"
+
+[dev-dependencies]
+tempfile = "3.8"
+proptest = "1.4"
+tokio-test = "0.4"
