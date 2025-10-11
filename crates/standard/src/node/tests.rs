@@ -761,10 +761,10 @@ mod tests {
 
         for (input, expected) in test_cases {
             let result: Result<PackageManagerKind, _> = serde_json::from_str(input);
-            assert!(result.is_ok(), "Failed to deserialize: {}", input);
-            assert_eq!(result.unwrap(), expected, "Unexpected result for: {}", input);
+            assert!(result.is_ok(), "Failed to deserialize: {input}");
+            assert_eq!(result.unwrap(), expected, "Unexpected result for: {input}");
         }
-        
+
         // Test invalid case
         let result: Result<PackageManagerKind, _> = serde_json::from_str(r#""invalid""#);
         assert!(result.is_err(), "Should have failed for invalid input");

@@ -5,6 +5,7 @@ This document provides a comprehensive specification of the public API for the `
 ## Table of Contents
 
 - [Overview](#overview)
+- [Version Information](#version-information)
 - [Config Module](#config-module)
   - [Configuration Management](#configuration-management)
   - [Standard Configuration](#standard-configuration)
@@ -18,6 +19,7 @@ This document provides a comprehensive specification of the public API for the `
   - [Project Types](#project-types)
   - [Project Detection](#project-detection)
   - [Project Management](#project-management)
+  - [Project Validation](#project-validation)
 - [Monorepo Module](#monorepo-module)
   - [Monorepo Types](#monorepo-types)
   - [Monorepo Detection](#monorepo-detection)
@@ -49,12 +51,15 @@ The `sublime_standard_tools` crate provides a comprehensive set of utilities for
 - **Filesystem Module**: Async filesystem operations and path utilities
 - **Error Module**: Comprehensive error handling with recovery strategies
 
-```rust
-// Version information
-const VERSION: &str = "..."; // Returns the current crate version
+## Version Information
 
-// Get version
-fn version() -> &'static str;
+```rust
+/// Version of the crate
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Returns the version of the crate
+#[must_use]
+pub fn version() -> &'static str;
 ```
 
 ## Config Module
@@ -106,17 +111,17 @@ impl<T: Configurable> ConfigBuilder<T> {
     /// Adds a configuration file as a source.
     pub fn with_file(self, path: impl Into<PathBuf>) -> Self;
     
+    /// Adds a configuration file as an optional source (won't fail if missing).
+    pub fn with_file_optional(self, path: impl Into<PathBuf>) -> Self;
+    
     /// Adds environment variables with a prefix as a source.
     pub fn with_env_prefix(self, prefix: impl Into<String>) -> Self;
     
     /// Adds a custom configuration source.
     pub fn with_source(self, source: ConfigSource) -> Self;
     
-    /// Builds the ConfigManager with the specified filesystem.
-    pub fn build<F: AsyncFileSystem + Clone + 'static>(
-        self, 
-        filesystem: F
-    ) -> ConfigResult<ConfigManager<T>>;
+    /// Builds the ConfigManager.
+    pub fn build(self) -> ConfigResult<ConfigManager<T>>;
 }
 ```
 
@@ -130,6 +135,76 @@ pub trait Configurable: Clone + Default + Serialize + DeserializeOwned + Send + 
     
     /// Merges this configuration with another.
     fn merge_with(&mut self, other: Self) -> ConfigResult<()>;
+}
+```
+
+#### ConfigProvider Trait
+
+```rust
+/// Trait for configuration providers.
+#[async_trait]
+pub trait ConfigProvider<T: Configurable>: Send + Sync {
+    /// Loads configuration from this provider.
+    async fn load(&self) -> ConfigResult<Option<T>>;
+    
+    /// Saves configuration to this provider (if supported).
+    async fn save(&self, config: &T) -> ConfigResult<()>;
+    
+    /// Returns the priority of this provider.
+    fn priority(&self) -> ConfigSourcePriority;
+    
+    /// Returns whether this provider supports saving.
+    fn supports_save(&self) -> bool;
+}
+```
+
+#### Configuration Sources
+
+```rust
+/// Different sources of configuration data.
+#[derive(Debug, Clone)]
+pub enum ConfigSource {
+    /// Default values
+    Defaults,
+    /// Environment variables with prefix
+    Environment { prefix: String },
+    /// Configuration file
+    File { path: PathBuf, optional: bool },
+    /// Custom provider
+    Custom(Box<dyn ConfigProvider<T>>),
+}
+
+/// Priority levels for configuration sources.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ConfigSourcePriority {
+    Lowest = 0,
+    Low = 25,
+    Medium = 50,
+    High = 75,
+    Highest = 100,
+}
+```
+
+#### Configuration Formats
+
+```rust
+/// Supported configuration file formats.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigFormat {
+    /// TOML format
+    Toml,
+    /// JSON format
+    Json,
+    /// YAML format
+    Yaml,
+}
+
+impl ConfigFormat {
+    /// Detects format from file extension.
+    pub fn from_extension(ext: &str) -> Option<Self>;
+    
+    /// Returns the default file extension for this format.
+    pub fn extension(&self) -> &'static str;
 }
 ```
 
@@ -160,6 +235,10 @@ pub struct StandardConfig {
     pub validation: ValidationConfig,
 }
 
+impl Default for StandardConfig {
+    fn default() -> Self;
+}
+
 impl Configurable for StandardConfig {
     fn validate(&self) -> ConfigResult<()>;
     fn merge_with(&mut self, other: Self) -> ConfigResult<()>;
@@ -173,10 +252,10 @@ impl Configurable for StandardConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageManagerConfig {
     /// Detection order for package managers
-    pub detection_order: Vec<PackageManagerKind>,
+    pub detection_order: Vec<String>,
     
     /// Custom lock file names for each package manager
-    pub custom_lock_files: HashMap<PackageManagerKind, String>,
+    pub custom_lock_files: HashMap<String, String>,
     
     /// Whether to detect from environment variables
     pub detect_from_env: bool,
@@ -185,10 +264,14 @@ pub struct PackageManagerConfig {
     pub env_var_name: String,
     
     /// Custom binary paths for package managers
-    pub binary_paths: HashMap<PackageManagerKind, PathBuf>,
+    pub binary_paths: HashMap<String, String>,
     
     /// Fallback package manager if none detected
-    pub fallback: Option<PackageManagerKind>,
+    pub fallback: Option<String>,
+}
+
+impl Default for PackageManagerConfig {
+    fn default() -> Self;
 }
 ```
 
@@ -215,6 +298,10 @@ pub struct MonorepoConfig {
     
     /// Custom patterns for workspace detection in package.json
     pub custom_workspace_fields: Vec<String>,
+}
+
+impl Default for MonorepoConfig {
+    fn default() -> Self;
 }
 ```
 
@@ -256,6 +343,10 @@ pub struct CommandConfig {
     /// Queue idle sleep duration in milliseconds
     pub queue_idle_sleep_ms: u64,
 }
+
+impl Default for CommandConfig {
+    fn default() -> Self;
+}
 ```
 
 #### FilesystemConfig
@@ -264,17 +355,63 @@ pub struct CommandConfig {
 /// Filesystem operation configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FilesystemConfig {
-    /// Path conventions overrides
-    pub path_conventions: HashMap<String, PathBuf>,
+    /// Patterns to ignore during directory traversal
+    pub ignore_patterns: Vec<String>,
     
     /// Async I/O configuration
     pub async_io: AsyncIoConfig,
     
     /// File operation retry configuration
-    pub retry: RetryConfig,
+    pub retry: Option<RetryConfig>,
     
-    /// Patterns to ignore during directory traversal
-    pub ignore_patterns: Vec<String>,
+    /// Path conventions overrides
+    pub path_conventions: PathConventions,
+}
+
+/// Async I/O configuration for filesystem operations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AsyncIoConfig {
+    /// Buffer size for async I/O operations
+    pub buffer_size: usize,
+    
+    /// Maximum concurrent filesystem operations
+    pub max_concurrent_operations: usize,
+    
+    /// Timeout for individual operations
+    #[serde(with = "humantime_serde")]
+    pub operation_timeout: Duration,
+}
+
+/// Retry configuration for filesystem operations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetryConfig {
+    /// Maximum number of retry attempts
+    pub max_attempts: usize,
+    
+    /// Initial delay between retries
+    #[serde(with = "humantime_serde")]
+    pub initial_delay: Duration,
+    
+    /// Maximum delay between retries
+    #[serde(with = "humantime_serde")]
+    pub max_delay: Duration,
+    
+    /// Backoff multiplier for exponential backoff
+    pub backoff_multiplier: f64,
+}
+
+/// Path naming conventions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PathConventions {
+    /// Node modules directory name
+    pub node_modules: String,
+    
+    /// Package.json file name
+    pub package_json: String,
+}
+
+impl Default for FilesystemConfig {
+    fn default() -> Self;
 }
 ```
 
@@ -299,6 +436,10 @@ pub struct ValidationConfig {
     /// Whether to fail on validation warnings
     pub strict_mode: bool,
 }
+
+impl Default for ValidationConfig {
+    fn default() -> Self;
+}
 ```
 
 ### Environment Variable Overrides
@@ -319,6 +460,15 @@ The configuration system supports extensive environment variable overrides with 
 - `SUBLIME_COMMAND_TIMEOUT`: Command execution timeout in seconds (1-3600)
 - `SUBLIME_MAX_CONCURRENT`: Maximum concurrent commands (1-100)
 - `SUBLIME_BUFFER_SIZE`: Command output buffer size in bytes (256-65536)
+- `SUBLIME_COLLECTION_WINDOW_MS`: Queue collection window in milliseconds (1-1000)
+- `SUBLIME_COLLECTION_SLEEP_US`: Queue collection sleep in microseconds (10-10000)
+- `SUBLIME_IDLE_SLEEP_MS`: Queue idle sleep in milliseconds (1-1000)
+
+#### Filesystem Configuration
+- `SUBLIME_IGNORE_PATTERNS`: Comma-separated filesystem ignore patterns
+- `SUBLIME_ASYNC_BUFFER_SIZE`: Async I/O buffer size in bytes (1024-1048576)
+- `SUBLIME_MAX_CONCURRENT_IO`: Maximum concurrent I/O operations (1-1000)
+- `SUBLIME_IO_TIMEOUT`: I/O operation timeout in seconds (1-300)
 
 #### Examples
 
@@ -330,10 +480,10 @@ use std::path::Path;
 async fn load_config() -> Result<StandardConfig, Box<dyn std::error::Error>> {
     let manager = ConfigManager::<StandardConfig>::builder()
         .with_defaults()
-        .with_file("~/.config/sublime/config.toml")
-        .with_file(".sublime.toml")
+        .with_file_optional("~/.config/sublime/config.toml")
+        .with_file_optional(".sublime.toml")
         .with_env_prefix("SUBLIME")
-        .build(FileSystemManager::new())?;
+        .build()?;
 
     let config = manager.load().await?;
     Ok(config)
@@ -341,7 +491,7 @@ async fn load_config() -> Result<StandardConfig, Box<dyn std::error::Error>> {
 
 // Use configuration in components
 let config = load_config().await?;
-let package_manager = PackageManager::detect_with_config(Path::new("."), &config.package_managers)?;
+println!("Detection order: {:?}", config.package_managers.detection_order);
 ```
 
 ## Node Module
@@ -383,7 +533,7 @@ impl RepoKind {
 
 ```rust
 /// Represents the type of package manager used in a Node.js project.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PackageManagerKind {
     /// npm package manager (default for Node.js)
     Npm,
@@ -412,6 +562,12 @@ impl PackageManagerKind {
     
     /// Returns the workspace configuration file for this package manager.
     pub fn workspace_config_file(self) -> Option<&'static str>;
+    
+    /// Parses a package manager kind from string.
+    pub fn from_str(s: &str) -> Option<Self>;
+    
+    /// Returns all available package manager kinds.
+    pub fn all() -> &'static [PackageManagerKind];
 }
 ```
 
@@ -429,10 +585,13 @@ impl PackageManager {
     pub fn new(kind: PackageManagerKind, root: impl Into<PathBuf>) -> Self;
     
     /// Detects which package manager is being used using default configuration.
-    pub fn detect(path: impl AsRef<Path>) -> Result<Self>;
+    pub fn detect(path: impl AsRef<Path>) -> Result<Self, Error>;
     
     /// Detects which package manager is being used with custom configuration.
-    pub fn detect_with_config(path: impl AsRef<Path>, config: &PackageManagerConfig) -> Result<Self>;
+    pub fn detect_with_config(
+        path: impl AsRef<Path>, 
+        config: &PackageManagerConfig
+    ) -> Result<Self, Error>;
     
     /// Returns the kind of package manager.
     pub fn kind(&self) -> PackageManagerKind;
@@ -444,10 +603,10 @@ impl PackageManager {
     pub fn command(&self) -> &'static str;
     
     /// Returns the lock file name for this package manager.
-    pub fn lock_file(&self) -> &'static str;
+    pub fn lock_file_name(&self) -> Option<&'static str>;
     
     /// Returns the full path to the lock file for this package manager.
-    pub fn lock_file_path(&self) -> PathBuf;
+    pub fn lock_file_path(&self) -> Option<PathBuf>;
     
     /// Checks if this package manager supports workspaces.
     pub fn supports_workspaces(&self) -> bool;
@@ -472,6 +631,9 @@ pub trait RepositoryInfo {
     
     /// Checks if this is a monorepo.
     fn is_monorepo(&self) -> bool;
+    
+    /// Returns the root directory of the repository.
+    fn root(&self) -> &Path;
 }
 ```
 
@@ -482,16 +644,23 @@ use sublime_standard_tools::node::{PackageManager, PackageManagerKind, RepoKind}
 use sublime_standard_tools::config::PackageManagerConfig;
 use std::path::Path;
 
-// Package manager detection with configuration
+// Package manager detection with default configuration
+let manager = PackageManager::detect(Path::new("."))?;
+println!("Using package manager: {}", manager.command());
+println!("Supports workspaces: {}", manager.supports_workspaces());
+
+// Package manager detection with custom configuration
 let config = PackageManagerConfig {
-    detection_order: vec![PackageManagerKind::Pnpm, PackageManagerKind::Yarn],
+    detection_order: vec![
+        "pnpm".to_string(),
+        "yarn".to_string(),
+        "npm".to_string(),
+    ],
     detect_from_env: true,
     ..Default::default()
 };
 
 let manager = PackageManager::detect_with_config(Path::new("."), &config)?;
-println!("Using package manager: {}", manager.command());
-println!("Supports workspaces: {}", manager.supports_workspaces());
 
 // Repository types
 let simple_repo = RepoKind::Simple;
@@ -544,7 +713,7 @@ pub trait ProjectInfo: Send + Sync {
     fn package_manager(&self) -> Option<&PackageManager>;
     
     /// Returns the parsed package.json for the project, if available.
-    fn package_json(&self) -> Option<&PackageJson>;
+    fn package_json(&self) -> Option<&serde_json::Value>;
     
     /// Returns the validation status of the project.
     fn validation_status(&self) -> &ProjectValidationStatus;
@@ -565,7 +734,12 @@ pub struct Project {
 
 impl Project {
     /// Creates a new Project instance.
-    pub fn new(root: PathBuf, kind: ProjectKind) -> Self;
+    pub fn new(
+        root: PathBuf, 
+        kind: ProjectKind, 
+        package_manager: Option<PackageManager>,
+        package_json: Option<serde_json::Value>,
+    ) -> Self;
     
     /// Checks if this project is a monorepo.
     pub fn is_monorepo(&self) -> bool;
@@ -575,12 +749,15 @@ impl Project {
     
     /// Returns internal workspace dependencies for monorepos.
     pub fn internal_dependencies(&self) -> &[WorkspacePackage];
+    
+    /// Sets the validation status for this project.
+    pub fn set_validation_status(&mut self, status: ProjectValidationStatus);
 }
 
 impl ProjectInfo for Project {
     fn root(&self) -> &Path;
     fn package_manager(&self) -> Option<&PackageManager>;
-    fn package_json(&self) -> Option<&PackageJson>;
+    fn package_json(&self) -> Option<&serde_json::Value>;
     fn validation_status(&self) -> &ProjectValidationStatus;
     fn kind(&self) -> ProjectKind;
 }
@@ -590,7 +767,7 @@ impl ProjectInfo for Project {
 
 ```rust
 /// Represents project dependencies information.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Dependencies {
     /// Production dependencies
     pub dependencies: HashMap<String, String>,
@@ -600,6 +777,20 @@ pub struct Dependencies {
     pub optional_dependencies: HashMap<String, String>,
     /// Peer dependencies
     pub peer_dependencies: HashMap<String, String>,
+}
+
+impl Dependencies {
+    /// Creates a new empty Dependencies instance.
+    pub fn new() -> Self;
+    
+    /// Returns all dependency names across all types.
+    pub fn all_names(&self) -> Vec<&str>;
+    
+    /// Checks if a dependency exists in any category.
+    pub fn contains(&self, name: &str) -> bool;
+    
+    /// Gets the version requirement for a dependency.
+    pub fn get_version(&self, name: &str) -> Option<&str>;
 }
 ```
 
@@ -616,6 +807,9 @@ pub enum ProjectDescriptor {
 impl ProjectDescriptor {
     /// Returns a reference to the project as a trait object.
     pub fn as_project_info(&self) -> &dyn ProjectInfo;
+    
+    /// Consumes the descriptor and returns the inner project.
+    pub fn into_project(self) -> Project;
 }
 ```
 
@@ -650,6 +844,9 @@ impl ProjectValidationStatus {
     
     /// Gets the list of errors if any.
     pub fn errors(&self) -> Option<&[String]>;
+    
+    /// Returns the status as a string.
+    pub fn status(&self) -> &str;
 }
 ```
 
@@ -662,10 +859,14 @@ impl ProjectValidationStatus {
 #[async_trait]
 pub trait ProjectDetectorTrait: Send + Sync {
     /// Asynchronously detects and analyzes a project at the given path.
-    async fn detect(&self, path: &Path, config: Option<&StandardConfig>) -> Result<ProjectDescriptor>;
+    async fn detect(
+        &self, 
+        path: &Path, 
+        config: Option<&StandardConfig>
+    ) -> Result<ProjectDescriptor, Error>;
     
     /// Asynchronously detects only the project kind without full analysis.
-    async fn detect_kind(&self, path: &Path) -> Result<ProjectKind>;
+    async fn detect_kind(&self, path: &Path) -> Result<ProjectKind, Error>;
     
     /// Asynchronously checks if the path contains a valid Node.js project.
     async fn is_valid_project(&self, path: &Path) -> bool;
@@ -686,7 +887,7 @@ pub trait ProjectDetectorWithFs<F: AsyncFileSystem>: ProjectDetectorTrait {
         &self,
         paths: &[&Path],
         config: Option<&StandardConfig>,
-    ) -> Vec<Result<ProjectDescriptor>>;
+    ) -> Vec<Result<ProjectDescriptor, Error>>;
 }
 ```
 
@@ -702,28 +903,36 @@ pub struct ProjectDetector<F: AsyncFileSystem = FileSystemManager> {
 impl ProjectDetector<FileSystemManager> {
     /// Creates a new ProjectDetector with the default async filesystem.
     pub fn new() -> Self;
+    
+    /// Creates a new ProjectDetector with project-specific configuration.
+    pub async fn new_with_project_config(project_root: &Path) -> Result<Self, Error>;
 }
 
 impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
     /// Creates a new ProjectDetector with a custom async filesystem.
     pub fn with_filesystem(fs: F) -> Self;
     
+    /// Creates a new ProjectDetector with filesystem and configuration.
+    pub fn with_filesystem_and_config(fs: F, config: StandardConfig) -> Self;
+}
+
+impl<F: AsyncFileSystem + Clone + Send + Sync + 'static> ProjectDetector<F> {
     /// Detects and analyzes a project using configuration-controlled detection.
     pub async fn detect(
         &self,
         path: impl AsRef<Path>,
         config: Option<&StandardConfig>,
-    ) -> Result<ProjectDescriptor>;
+    ) -> Result<ProjectDescriptor, Error>;
     
     /// Detects only the project kind using default configuration.
-    pub async fn detect_kind(&self, path: impl AsRef<Path>) -> Result<ProjectKind>;
+    pub async fn detect_kind(&self, path: impl AsRef<Path>) -> Result<ProjectKind, Error>;
     
     /// Detects the project kind using custom configuration.
     pub async fn detect_kind_with_config(
         &self,
         path: impl AsRef<Path>,
         config: &StandardConfig,
-    ) -> Result<ProjectKind>;
+    ) -> Result<ProjectKind, Error>;
     
     /// Checks if the path contains a valid Node.js project.
     pub async fn is_valid_project(&self, path: impl AsRef<Path>) -> bool;
@@ -743,18 +952,68 @@ pub struct ProjectManager<F: AsyncFileSystem = FileSystemManager> {
 impl ProjectManager<FileSystemManager> {
     /// Creates a new ProjectManager with the default filesystem.
     pub fn new() -> Self;
+    
+    /// Creates a new ProjectManager with project configuration.
+    pub async fn new_with_project_config(project_root: &Path) -> Result<Self, Error>;
 }
 
 impl<F: AsyncFileSystem + Clone> ProjectManager<F> {
     /// Creates a new ProjectManager with a custom filesystem.
     pub fn with_filesystem(fs: F) -> Self;
     
+    /// Creates a new ProjectManager with filesystem and configuration.
+    pub fn with_filesystem_and_config(fs: F, config: StandardConfig) -> Self;
+    
     /// Creates a project descriptor from a path with configuration.
     pub async fn create_project(
         &self, 
         path: impl AsRef<Path>, 
         config: Option<&StandardConfig>
-    ) -> Result<ProjectDescriptor>;
+    ) -> Result<ProjectDescriptor, Error>;
+    
+    /// Updates an existing project with new information.
+    pub async fn update_project(
+        &self,
+        project: &mut Project,
+        config: Option<&StandardConfig>,
+    ) -> Result<(), Error>;
+}
+```
+
+### Project Validation
+
+#### ProjectValidator
+
+```rust
+/// Validates Node.js project structures and configurations.
+pub struct ProjectValidator {
+    // Private fields
+}
+
+impl ProjectValidator {
+    /// Creates a new ProjectValidator with the given configuration.
+    pub fn new(config: StandardConfig) -> Self;
+    
+    /// Validates a project and returns the validation status.
+    pub async fn validate(&self, project: &Project) -> Result<ProjectValidationStatus, Error>;
+    
+    /// Validates a project descriptor.
+    pub async fn validate_descriptor(
+        &self, 
+        project: &ProjectDescriptor
+    ) -> Result<ProjectValidationStatus, Error>;
+    
+    /// Validates only package.json requirements.
+    pub async fn validate_package_json(
+        &self,
+        package_json: &serde_json::Value,
+    ) -> Result<Vec<String>, Error>;
+    
+    /// Validates dependency structures.
+    pub async fn validate_dependencies(
+        &self,
+        dependencies: &Dependencies,
+    ) -> Result<Vec<String>, Error>;
 }
 ```
 
@@ -762,7 +1021,7 @@ impl<F: AsyncFileSystem + Clone> ProjectManager<F> {
 
 ```rust
 use sublime_standard_tools::project::{
-    ProjectDetector, ProjectDetectorTrait, ProjectDescriptor, ProjectInfo
+    ProjectDetector, ProjectDetectorTrait, ProjectDescriptor, ProjectInfo, ProjectValidator
 };
 use sublime_standard_tools::config::StandardConfig;
 use std::path::Path;
@@ -781,6 +1040,11 @@ match project {
         if nodejs_project.is_monorepo() {
             println!("Packages: {}", nodejs_project.internal_dependencies().len());
         }
+        
+        // Validate the project
+        let validator = ProjectValidator::new(StandardConfig::default());
+        let validation_status = validator.validate(&nodejs_project).await?;
+        println!("Validation: {:?}", validation_status);
     }
 }
 
@@ -801,18 +1065,24 @@ The monorepo module provides specialized functionality for detecting and managin
 
 ```rust
 /// Represents the type of monorepo system being used.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MonorepoKind {
-    /// Npm monorepo
-    NpmWorkSpace,
+    /// Npm workspaces monorepo
+    NpmWorkspaces,
     /// Yarn Workspaces monorepo
     YarnWorkspaces,
     /// pnpm Workspaces monorepo
     PnpmWorkspaces,
-    /// Bun monorepo
+    /// Bun workspaces monorepo
     BunWorkspaces,
-    /// Deno Workspaces monorepo
+    /// Deno workspaces monorepo
     DenoWorkspaces,
+    /// Lerna monorepo
+    Lerna,
+    /// Rush monorepo
+    Rush,
+    /// Nx monorepo
+    Nx,
     /// Custom monorepo (generic structure detection)
     Custom {
         /// The name of the custom monorepo kind
@@ -827,10 +1097,16 @@ impl MonorepoKind {
     pub fn name(&self) -> String;
     
     /// Returns the primary configuration file for this monorepo kind.
-    pub fn config_file(self) -> String;
+    pub fn config_file(&self) -> String;
     
     /// Creates a custom monorepo kind with the specified name and config file.
-    pub fn set_custom(&self, name: String, config_file: String) -> Self;
+    pub fn custom(name: String, config_file: String) -> Self;
+    
+    /// Returns all known monorepo kinds (excluding custom).
+    pub fn all_known() -> &'static [MonorepoKind];
+    
+    /// Parses a monorepo kind from its name.
+    pub fn from_name(name: &str) -> Option<Self>;
 }
 ```
 
@@ -838,7 +1114,7 @@ impl MonorepoKind {
 
 ```rust
 /// Represents a single package within a monorepo workspace.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspacePackage {
     /// Name of the package
     pub name: String,
@@ -848,10 +1124,64 @@ pub struct WorkspacePackage {
     pub location: PathBuf,
     /// Absolute path to the package
     pub absolute_path: PathBuf,
-    /// Direct dependencies within the workspace
+    /// Production dependencies within the workspace
+    pub dependencies: HashMap<String, String>,
+    /// Development dependencies within the workspace
+    pub dev_dependencies: HashMap<String, String>,
+    /// Workspace dependencies (internal dependencies)
     pub workspace_dependencies: Vec<String>,
-    /// Direct dev_dependencies within the workspace
+    /// Workspace dev dependencies (internal dev dependencies)
     pub workspace_dev_dependencies: Vec<String>,
+}
+
+impl WorkspacePackage {
+    /// Creates a new WorkspacePackage.
+    pub fn new(
+        name: String,
+        version: String,
+        location: PathBuf,
+        absolute_path: PathBuf,
+    ) -> Self;
+    
+    /// Adds a workspace dependency.
+    pub fn add_workspace_dependency(&mut self, name: String);
+    
+    /// Adds a workspace dev dependency.
+    pub fn add_workspace_dev_dependency(&mut self, name: String);
+    
+    /// Checks if this package depends on another workspace package.
+    pub fn depends_on_workspace(&self, name: &str) -> bool;
+    
+    /// Returns all workspace dependencies (both prod and dev).
+    pub fn all_workspace_dependencies(&self) -> Vec<&str>;
+}
+```
+
+#### WorkspaceConfig
+
+```rust
+/// Configuration for workspace detection and management.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceConfig {
+    /// Glob patterns for workspace packages
+    pub patterns: Vec<String>,
+    
+    /// Packages to exclude from workspace
+    pub exclude: Option<Vec<String>>,
+    
+    /// Additional workspace-specific configuration
+    pub additional_config: HashMap<String, serde_json::Value>,
+}
+
+impl WorkspaceConfig {
+    /// Creates a new WorkspaceConfig with the given patterns.
+    pub fn new(patterns: Vec<String>) -> Self;
+    
+    /// Adds an exclusion pattern.
+    pub fn exclude(&mut self, pattern: String);
+    
+    /// Checks if a path matches any workspace pattern.
+    pub fn matches_pattern(&self, path: &Path) -> bool;
 }
 ```
 
@@ -871,7 +1201,7 @@ impl MonorepoDescriptor {
         root: PathBuf,
         packages: Vec<WorkspacePackage>,
         package_manager: Option<PackageManager>,
-        package_json: Option<PackageJson>,
+        package_json: Option<serde_json::Value>,
         validation_status: ProjectValidationStatus,
     ) -> Self;
     
@@ -895,12 +1225,21 @@ impl MonorepoDescriptor {
     
     /// Finds the package that contains a specific path.
     pub fn find_package_for_path(&self, path: &Path) -> Option<&WorkspacePackage>;
+    
+    /// Returns the workspace configuration if available.
+    pub fn workspace_config(&self) -> Option<&WorkspaceConfig>;
+    
+    /// Adds a package to the monorepo.
+    pub fn add_package(&mut self, package: WorkspacePackage);
+    
+    /// Removes a package from the monorepo.
+    pub fn remove_package(&mut self, name: &str) -> Option<WorkspacePackage>;
 }
 
 impl ProjectInfo for MonorepoDescriptor {
     fn root(&self) -> &Path;
     fn package_manager(&self) -> Option<&PackageManager>;
-    fn package_json(&self) -> Option<&PackageJson>;
+    fn package_json(&self) -> Option<&serde_json::Value>;
     fn validation_status(&self) -> &ProjectValidationStatus;
     fn kind(&self) -> ProjectKind;
 }
@@ -915,16 +1254,16 @@ impl ProjectInfo for MonorepoDescriptor {
 #[async_trait]
 pub trait MonorepoDetectorTrait: Send + Sync {
     /// Checks if a path is the root of a monorepo.
-    async fn is_monorepo_root(&self, path: &Path) -> Result<Option<MonorepoKind>>;
+    async fn is_monorepo_root(&self, path: &Path) -> Result<Option<MonorepoKind>, Error>;
     
     /// Finds the nearest monorepo root by walking up from the given path.
     async fn find_monorepo_root(
         &self,
         start_path: &Path,
-    ) -> Result<Option<(PathBuf, MonorepoKind)>>;
+    ) -> Result<Option<(PathBuf, MonorepoKind)>, Error>;
     
     /// Detects and analyzes a monorepo at the given path.
-    async fn detect_monorepo(&self, path: &Path) -> Result<MonorepoDescriptor>;
+    async fn detect_monorepo(&self, path: &Path) -> Result<MonorepoDescriptor, Error>;
     
     /// Checks if a directory contains multiple packages.
     async fn has_multiple_packages(&self, path: &Path) -> bool;
@@ -941,7 +1280,7 @@ pub trait MonorepoDetectorWithFs<F: AsyncFileSystem>: MonorepoDetectorTrait {
     fn filesystem(&self) -> &F;
     
     /// Detects monorepos in multiple paths concurrently.
-    async fn detect_multiple(&self, paths: &[&Path]) -> Vec<Result<MonorepoDescriptor>>;
+    async fn detect_multiple(&self, paths: &[&Path]) -> Vec<Result<MonorepoDescriptor, Error>>;
 }
 ```
 
@@ -956,6 +1295,9 @@ pub struct MonorepoDetector<F: AsyncFileSystem = FileSystemManager> {
 impl MonorepoDetector<FileSystemManager> {
     /// Creates a new MonorepoDetector with the default filesystem.
     pub fn new() -> Self;
+    
+    /// Creates a new MonorepoDetector with project-specific configuration.
+    pub async fn new_with_project_config(project_root: &Path) -> Result<Self, Error>;
 }
 
 impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
@@ -964,21 +1306,36 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
     
     /// Creates a new MonorepoDetector with filesystem and configuration.
     pub fn with_filesystem_and_config(fs: F, config: MonorepoConfig) -> Self;
-    
+}
+
+impl<F: AsyncFileSystem + Clone + Send + Sync + 'static> MonorepoDetector<F> {
     /// Checks if a path is the root of a monorepo.
-    pub async fn is_monorepo_root(&self, path: impl AsRef<Path>) -> Result<Option<MonorepoKind>>;
+    pub async fn is_monorepo_root(
+        &self, 
+        path: impl AsRef<Path>
+    ) -> Result<Option<MonorepoKind>, Error>;
     
     /// Finds the nearest monorepo root by walking up from the given path.
     pub async fn find_monorepo_root(
         &self,
         start_path: impl AsRef<Path>,
-    ) -> Result<Option<(PathBuf, MonorepoKind)>>;
+    ) -> Result<Option<(PathBuf, MonorepoKind)>, Error>;
     
     /// Detects and analyzes a monorepo at the given path.
-    pub async fn detect_monorepo(&self, path: impl AsRef<Path>) -> Result<MonorepoDescriptor>;
+    pub async fn detect_monorepo(
+        &self, 
+        path: impl AsRef<Path>
+    ) -> Result<MonorepoDescriptor, Error>;
     
     /// Checks if a directory contains multiple packages.
     pub async fn has_multiple_packages(&self, path: &Path) -> bool;
+    
+    /// Gets all workspace packages in a directory.
+    pub async fn get_workspace_packages(
+        &self,
+        root: &Path,
+        config: &MonorepoConfig,
+    ) -> Result<Vec<WorkspacePackage>, Error>;
 }
 ```
 
@@ -988,17 +1345,34 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
 
 ```rust
 /// Configuration structure for PNPM workspaces.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PnpmWorkspaceConfig {
     /// Package locations (glob patterns)
     pub packages: Vec<String>,
+    
+    /// Packages to exclude
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exclude: Option<Vec<String>>,
+}
+
+impl PnpmWorkspaceConfig {
+    /// Creates a new PnpmWorkspaceConfig.
+    pub fn new(packages: Vec<String>) -> Self;
+    
+    /// Adds a package pattern.
+    pub fn add_package(&mut self, pattern: String);
+    
+    /// Adds an exclusion pattern.
+    pub fn add_exclusion(&mut self, pattern: String);
 }
 ```
 
 #### Examples
 
 ```rust
-use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait, MonorepoKind};
+use sublime_standard_tools::monorepo::{
+    MonorepoDetector, MonorepoDetectorTrait, MonorepoKind, WorkspacePackage
+};
 use sublime_standard_tools::config::MonorepoConfig;
 use std::path::Path;
 
@@ -1010,10 +1384,7 @@ let config = MonorepoConfig {
     ..Default::default()
 };
 
-let detector = MonorepoDetector::with_filesystem_and_config(
-    FileSystemManager::new(),
-    config
-);
+let detector = MonorepoDetector::new_with_project_config(Path::new(".")).await?;
 
 if let Some(kind) = detector.is_monorepo_root(".").await? {
     println!("This directory is a {} monorepo", kind.name());
@@ -1028,14 +1399,20 @@ if let Some(kind) = detector.is_monorepo_root(".").await? {
                  package.version, 
                  package.location.display());
         
-        // Print dependencies
-        let deps = monorepo.find_dependencies_by_name(&package.name);
-        if !deps.is_empty() {
-            println!("  Dependencies:");
-            for dep in deps {
-                println!("    - {}", dep.name);
+        // Print workspace dependencies
+        let workspace_deps = package.all_workspace_dependencies();
+        if !workspace_deps.is_empty() {
+            println!("  Workspace Dependencies:");
+            for dep in workspace_deps {
+                println!("    - {}", dep);
             }
         }
+    }
+    
+    // Generate dependency graph
+    let graph = monorepo.get_dependency_graph();
+    for (pkg_name, deps) in graph {
+        println!("{} depends on {} workspace packages", pkg_name, deps.len());
     }
 }
 
@@ -1055,6 +1432,7 @@ The command module provides a comprehensive framework for executing external com
 
 ```rust
 /// Represents a command to be executed.
+#[derive(Debug, Clone)]
 pub struct Command {
     // Private fields
 }
@@ -1077,6 +1455,9 @@ impl Command {
     
     /// Returns the timeout.
     pub fn timeout(&self) -> Option<Duration>;
+    
+    /// Returns a string representation of the command.
+    pub fn to_string(&self) -> String;
 }
 ```
 
@@ -1087,14 +1468,14 @@ impl Command {
 #[async_trait]
 pub trait Executor: Send + Sync {
     /// Executes a command and returns the output.
-    async fn execute(&self, command: Command) -> Result<CommandOutput>;
+    async fn execute(&self, command: Command) -> Result<CommandOutput, CommandError>;
     
     /// Executes a command with streaming output.
     async fn execute_stream(
         &self,
         command: Command,
         stream_config: StreamConfig,
-    ) -> Result<(CommandStream, tokio::process::Child)>;
+    ) -> Result<(CommandStream, tokio::process::Child), CommandError>;
 }
 ```
 
@@ -1102,6 +1483,7 @@ pub trait Executor: Send + Sync {
 
 ```rust
 /// Default async command executor implementation.
+#[derive(Debug, Clone)]
 pub struct DefaultCommandExecutor {
     // Private fields
 }
@@ -1111,11 +1493,20 @@ impl DefaultCommandExecutor {
     pub fn new() -> Self;
     
     /// Creates a new DefaultCommandExecutor with project configuration.
-    pub async fn new_with_project_config(project_root: &Path) -> Result<Self>;
+    pub async fn new_with_project_config(project_root: &Path) -> Result<Self, Error>;
+    
+    /// Creates a new DefaultCommandExecutor with custom configuration.
+    pub fn with_config(config: CommandConfig) -> Self;
 }
 
 impl Executor for DefaultCommandExecutor {
-    // Implementation of async execute methods
+    async fn execute(&self, command: Command) -> Result<CommandOutput, CommandError>;
+    
+    async fn execute_stream(
+        &self,
+        command: Command,
+        stream_config: StreamConfig,
+    ) -> Result<(CommandStream, tokio::process::Child), CommandError>;
 }
 ```
 
@@ -1123,6 +1514,7 @@ impl Executor for DefaultCommandExecutor {
 
 ```rust
 /// Synchronous command executor for blocking operations.
+#[derive(Debug)]
 pub struct SyncCommandExecutor {
     // Private fields
 }
@@ -1131,8 +1523,11 @@ impl SyncCommandExecutor {
     /// Creates a new SyncCommandExecutor.
     pub fn new() -> Self;
     
+    /// Creates a new SyncCommandExecutor with custom configuration.
+    pub fn with_config(config: CommandConfig) -> Self;
+    
     /// Executes a command synchronously.
-    pub fn execute_sync(&self, command: Command) -> Result<CommandOutput>;
+    pub fn execute(&self, command: Command) -> Result<CommandOutput, CommandError>;
 }
 ```
 
@@ -1140,7 +1535,7 @@ impl SyncCommandExecutor {
 
 ```rust
 /// Thread-safe shared synchronous executor.
-pub type SharedSyncExecutor = Arc<Mutex<SyncCommandExecutor>>;
+pub type SharedSyncExecutor = std::sync::Arc<std::sync::Mutex<SyncCommandExecutor>>;
 ```
 
 ### Command Builder
@@ -1149,6 +1544,7 @@ pub type SharedSyncExecutor = Arc<Mutex<SyncCommandExecutor>>;
 
 ```rust
 /// Builder for creating Command instances.
+#[derive(Debug, Clone)]
 pub struct CommandBuilder {
     // Private fields
 }
@@ -1172,11 +1568,24 @@ impl CommandBuilder {
     /// Sets an environment variable.
     pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self;
     
+    /// Sets multiple environment variables.
+    pub fn envs<I, K, V>(mut self, vars: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>;
+    
     /// Sets the current directory.
     pub fn current_dir(mut self, path: impl AsRef<Path>) -> Self;
     
     /// Sets the timeout.
     pub fn timeout(mut self, timeout: Duration) -> Self;
+    
+    /// Clears all arguments.
+    pub fn clear_args(mut self) -> Self;
+    
+    /// Clears all environment variables.
+    pub fn clear_env(mut self) -> Self;
 }
 ```
 
@@ -1186,16 +1595,22 @@ impl CommandBuilder {
 
 ```rust
 /// Represents the output of a command execution.
+#[derive(Debug, Clone)]
 pub struct CommandOutput {
     // Private fields
 }
 
 impl CommandOutput {
     /// Creates a new CommandOutput instance.
-    pub fn new(status: i32, stdout: String, stderr: String, duration: Duration) -> Self;
+    pub fn new(
+        status: std::process::ExitStatus, 
+        stdout: String, 
+        stderr: String, 
+        duration: Duration
+    ) -> Self;
     
-    /// Returns the exit status code.
-    pub fn status(&self) -> i32;
+    /// Returns the exit status.
+    pub fn status(&self) -> std::process::ExitStatus;
     
     /// Returns the standard output content.
     pub fn stdout(&self) -> &str;
@@ -1208,6 +1623,163 @@ impl CommandOutput {
     
     /// Returns true if the command was successful (exit code 0).
     pub fn success(&self) -> bool;
+    
+    /// Returns the exit code if available.
+    pub fn exit_code(&self) -> Option<i32>;
+}
+```
+
+### Command Queue
+
+#### CommandQueue
+
+```rust
+/// Manages queued command execution with priority.
+#[derive(Debug)]
+pub struct CommandQueue {
+    // Private fields
+}
+
+impl CommandQueue {
+    /// Creates a new CommandQueue with default configuration.
+    pub fn new() -> Self;
+    
+    /// Creates a new CommandQueue with custom configuration.
+    pub fn new_with_config(config: CommandQueueConfig) -> Self;
+    
+    /// Creates a new CommandQueue with a custom executor.
+    pub fn with_executor<E: Executor + 'static>(executor: E) -> Self;
+    
+    /// Starts the command queue processing.
+    pub fn start(mut self) -> Result<Self, CommandError>;
+    
+    /// Enqueues a command with priority.
+    pub async fn enqueue(
+        &mut self, 
+        command: Command, 
+        priority: CommandPriority
+    ) -> Result<String, CommandError>;
+    
+    /// Enqueues multiple commands.
+    pub async fn enqueue_batch(
+        &mut self, 
+        commands: Vec<(Command, CommandPriority)>
+    ) -> Result<Vec<String>, CommandError>;
+    
+    /// Gets the status of a command.
+    pub async fn get_status(&self, id: &str) -> Option<CommandStatus>;
+    
+    /// Gets the result of a command.
+    pub async fn get_result(&self, id: &str) -> Option<CommandQueueResult>;
+    
+    /// Waits for a command to complete.
+    pub async fn wait_for_command(
+        &mut self, 
+        id: &str, 
+        timeout: Duration
+    ) -> Result<CommandQueueResult, CommandError>;
+    
+    /// Waits for all commands to complete.
+    pub async fn wait_for_completion(&mut self) -> Result<(), CommandError>;
+    
+    /// Returns queue statistics.
+    pub async fn stats(&self) -> Result<CommandQueueStats, CommandError>;
+    
+    /// Shuts down the queue.
+    pub async fn shutdown(&mut self) -> Result<(), CommandError>;
+}
+```
+
+#### CommandQueueConfig
+
+```rust
+/// Configuration for command queue behavior.
+#[derive(Debug, Clone)]
+pub struct CommandQueueConfig {
+    /// Maximum concurrent commands
+    pub max_concurrent_commands: usize,
+    /// Collection window for batching
+    pub collection_window: Duration,
+    /// Sleep duration during collection
+    pub collection_sleep: Duration,
+    /// Sleep duration when idle
+    pub idle_sleep: Duration,
+}
+
+impl Default for CommandQueueConfig {
+    fn default() -> Self;
+}
+```
+
+#### CommandPriority
+
+```rust
+/// Priority levels for commands in the queue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CommandPriority {
+    /// Low priority command
+    Low = 0,
+    /// Normal priority command
+    Normal = 1,
+    /// High priority command
+    High = 2,
+    /// Critical priority command
+    Critical = 3,
+}
+```
+
+#### CommandStatus
+
+```rust
+/// Status of a command in the queue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandStatus {
+    /// Command is queued for execution
+    Queued,
+    /// Command is currently running
+    Running,
+    /// Command completed successfully
+    Completed,
+    /// Command failed during execution
+    Failed,
+    /// Command was cancelled
+    Cancelled,
+}
+```
+
+#### CommandQueueResult
+
+```rust
+/// Result of a command execution from the queue.
+#[derive(Debug, Clone)]
+pub struct CommandQueueResult {
+    /// The command output
+    pub output: CommandOutput,
+    /// The final status
+    pub status: CommandStatus,
+    /// Time when the command was queued
+    pub queued_at: std::time::SystemTime,
+    /// Time when the command started execution
+    pub started_at: Option<std::time::SystemTime>,
+    /// Time when the command completed
+    pub completed_at: Option<std::time::SystemTime>,
+}
+```
+
+#### CommandQueueStats
+
+```rust
+/// Statistics about command queue performance.
+#[derive(Debug, Clone)]
+pub struct CommandQueueStats {
+    /// Total commands processed
+    pub total_processed: usize,
+    /// Commands currently running
+    pub currently_running: usize,
+    /// Commands in queue
+    pub queued: usize,
+    /// Average execution time
+    pub average_execution_time: Duration,
 }
 ```
 
@@ -1217,6 +1789,7 @@ impl CommandOutput {
 
 ```rust
 /// Represents a stream of command output.
+#[derive(Debug)]
 pub struct CommandStream {
     // Private fields
 }
@@ -1226,10 +1799,16 @@ impl CommandStream {
     pub async fn next_timeout(
         &mut self,
         timeout_duration: Duration,
-    ) -> Result<Option<StreamOutput>>;
+    ) -> Result<Option<StreamOutput>, CommandError>;
+    
+    /// Receives the next output line without timeout.
+    pub async fn next(&mut self) -> Result<Option<StreamOutput>, CommandError>;
     
     /// Cancels the stream.
     pub fn cancel(&self);
+    
+    /// Checks if the stream is finished.
+    pub fn is_finished(&self) -> bool;
 }
 ```
 
@@ -1237,6 +1816,7 @@ impl CommandStream {
 
 ```rust
 /// Represents output from a command stream.
+#[derive(Debug, Clone)]
 pub enum StreamOutput {
     /// Standard output line
     Stdout(String),
@@ -1251,12 +1831,16 @@ pub enum StreamOutput {
 
 ```rust
 /// Configuration for command streaming.
+#[derive(Debug, Clone)]
 pub struct StreamConfig {
-    // Private fields
+    /// Buffer size for reading output
+    pub buffer_size: usize,
+    /// Timeout for read operations
+    pub read_timeout: Duration,
 }
 
 impl StreamConfig {
-    /// Creates a new StreamConfig.
+    /// Creates a new StreamConfig with specified parameters.
     pub fn new(buffer_size: usize, read_timeout: Duration) -> Self;
 }
 
@@ -1265,83 +1849,12 @@ impl Default for StreamConfig {
 }
 ```
 
-### Command Queue
-
-#### CommandQueue
-
-```rust
-/// Manages queued command execution with priority.
-pub struct CommandQueue {
-    // Private fields
-}
-
-impl CommandQueue {
-    /// Creates a new CommandQueue.
-    pub fn new() -> Self;
-    
-    /// Creates a new CommandQueue with custom configuration.
-    pub fn with_config(config: CommandQueueConfig) -> Self;
-    
-    /// Creates a new CommandQueue with a custom executor.
-    pub fn with_executor<E: Executor + 'static>(executor: E) -> Self;
-    
-    /// Starts the command queue.
-    pub fn start(mut self) -> Result<Self>;
-    
-    /// Enqueues a command with priority.
-    pub async fn enqueue(&self, command: Command, priority: CommandPriority) -> Result<String>;
-    
-    /// Enqueues multiple commands.
-    pub async fn enqueue_batch(&self, commands: Vec<(Command, CommandPriority)>) -> Result<Vec<String>>;
-    
-    /// Gets the status of a command.
-    pub fn get_status(&self, id: &str) -> Option<CommandStatus>;
-    
-    /// Gets the result of a command.
-    pub fn get_result(&self, id: &str) -> Option<CommandQueueResult>;
-    
-    /// Waits for a command to complete.
-    pub async fn wait_for_command(&self, id: &str, timeout: Duration) -> Result<CommandQueueResult>;
-    
-    /// Waits for all commands to complete.
-    pub async fn wait_for_completion(&self) -> Result<()>;
-    
-    /// Shuts down the queue.
-    pub async fn shutdown(&mut self) -> Result<()>;
-}
-```
-
-#### CommandPriority
-
-```rust
-/// Priority levels for commands.
-pub enum CommandPriority {
-    Low = 0,
-    Normal = 1,
-    High = 2,
-    Critical = 3,
-}
-```
-
-#### CommandStatus
-
-```rust
-/// Status of a command in the queue.
-pub enum CommandStatus {
-    Queued,
-    Running,
-    Completed,
-    Failed,
-    Cancelled,
-}
-```
-
 #### Examples
 
 ```rust
 use sublime_standard_tools::command::{
     CommandBuilder, DefaultCommandExecutor, Executor, 
-    CommandQueue, CommandPriority, StreamConfig
+    CommandQueue, CommandPriority, StreamConfig, StreamOutput
 };
 use std::time::Duration;
 
@@ -1362,10 +1875,10 @@ if output.success() {
 }
 
 // Stream command output
-let stream_config = StreamConfig::default();
-let cmd = CommandBuilder::new("npm").arg("run").arg("build").build();
+let stream_config = StreamConfig::new(1024, Duration::from_secs(1));
+let cmd = CommandBuilder::new("npm").args(["run", "build"]).build();
 
-let (mut stream, mut child) = executor.execute_stream(cmd, stream_config).await?;
+let (mut stream, _child) = executor.execute_stream(cmd, stream_config).await?;
 while let Ok(Some(output)) = stream.next_timeout(Duration::from_secs(1)).await {
     match output {
         StreamOutput::Stdout(line) => println!("STDOUT: {}", line),
@@ -1375,7 +1888,14 @@ while let Ok(Some(output)) = stream.next_timeout(Duration::from_secs(1)).await {
 }
 
 // Command queue with priority
-let mut queue = CommandQueue::new().start()?;
+let config = CommandQueueConfig {
+    max_concurrent_commands: 3,
+    collection_window: Duration::from_millis(100),
+    collection_sleep: Duration::from_micros(500),
+    idle_sleep: Duration::from_millis(50),
+};
+
+let mut queue = CommandQueue::new_with_config(config).start()?;
 
 let high_priority_cmd = CommandBuilder::new("npm").arg("test").build();
 let normal_priority_cmd = CommandBuilder::new("npm").arg("lint").build();
@@ -1384,7 +1904,13 @@ let id1 = queue.enqueue(high_priority_cmd, CommandPriority::High).await?;
 let id2 = queue.enqueue(normal_priority_cmd, CommandPriority::Normal).await?;
 
 let result = queue.wait_for_command(&id1, Duration::from_secs(30)).await?;
-println!("High priority command result: {:?}", result);
+println!("High priority command result: {:?}", result.status);
+
+// Get queue statistics
+let stats = queue.stats().await?;
+println!("Processed {} commands", stats.total_processed);
+
+queue.shutdown().await?;
 ```
 
 ## Filesystem Module
@@ -1400,31 +1926,79 @@ The filesystem module provides async abstractions for interacting with the files
 #[async_trait]
 pub trait AsyncFileSystem: Send + Sync {
     /// Reads a file and returns its contents as bytes.
-    async fn read_file(&self, path: &Path) -> Result<Vec<u8>>;
+    async fn read(&self, path: &Path) -> Result<Vec<u8>, FileSystemError>;
     
     /// Writes bytes to a file.
-    async fn write_file(&self, path: &Path, contents: &[u8]) -> Result<()>;
+    async fn write(&self, path: &Path, contents: &[u8]) -> Result<(), FileSystemError>;
     
     /// Reads a file and returns its contents as a string.
-    async fn read_file_string(&self, path: &Path) -> Result<String>;
+    async fn read_to_string(&self, path: &Path) -> Result<String, FileSystemError>;
     
     /// Writes a string to a file.
-    async fn write_file_string(&self, path: &Path, contents: &str) -> Result<()>;
+    async fn write_string(&self, path: &Path, contents: &str) -> Result<(), FileSystemError>;
     
     /// Creates a directory and all parent directories.
-    async fn create_dir_all(&self, path: &Path) -> Result<()>;
+    async fn create_dir_all(&self, path: &Path) -> Result<(), FileSystemError>;
     
     /// Removes a file or directory.
-    async fn remove(&self, path: &Path) -> Result<()>;
+    async fn remove(&self, path: &Path) -> Result<(), FileSystemError>;
+    
+    /// Removes a file.
+    async fn remove_file(&self, path: &Path) -> Result<(), FileSystemError>;
+    
+    /// Removes a directory and all its contents.
+    async fn remove_dir_all(&self, path: &Path) -> Result<(), FileSystemError>;
     
     /// Checks if a path exists.
-    async fn exists(&self, path: &Path) -> bool;
+    async fn exists(&self, path: &Path) -> Result<bool, FileSystemError>;
+    
+    /// Checks if a path is a file.
+    async fn is_file(&self, path: &Path) -> Result<bool, FileSystemError>;
+    
+    /// Checks if a path is a directory.
+    async fn is_dir(&self, path: &Path) -> Result<bool, FileSystemError>;
+    
+    /// Gets metadata for a file or directory.
+    async fn metadata(&self, path: &Path) -> Result<std::fs::Metadata, FileSystemError>;
     
     /// Reads a directory and returns its entries.
-    async fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>>;
+    async fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>, FileSystemError>;
     
     /// Walks a directory tree and returns all paths.
-    async fn walk_dir(&self, path: &Path) -> Result<Vec<PathBuf>>;
+    async fn walk_dir(&self, path: &Path) -> Result<Vec<PathBuf>, FileSystemError>;
+    
+    /// Copies a file from source to destination.
+    async fn copy(&self, from: &Path, to: &Path) -> Result<(), FileSystemError>;
+    
+    /// Moves a file from source to destination.
+    async fn rename(&self, from: &Path, to: &Path) -> Result<(), FileSystemError>;
+}
+```
+
+#### AsyncFileSystemConfig
+
+```rust
+/// Configuration for async filesystem operations.
+#[derive(Debug, Clone)]
+pub struct AsyncFileSystemConfig {
+    /// Buffer size for I/O operations
+    pub buffer_size: usize,
+    
+    /// Maximum concurrent operations
+    pub max_concurrent_operations: usize,
+    
+    /// Timeout for individual operations
+    pub operation_timeout: Duration,
+    
+    /// Retry configuration for failed operations
+    pub retry_config: Option<RetryConfig>,
+    
+    /// Patterns to ignore during operations
+    pub ignore_patterns: Vec<String>,
+}
+
+impl Default for AsyncFileSystemConfig {
+    fn default() -> Self;
 }
 ```
 
@@ -1432,16 +2006,20 @@ pub trait AsyncFileSystem: Send + Sync {
 
 ```rust
 /// Default async implementation of the AsyncFileSystem trait.
+#[derive(Debug, Clone)]
 pub struct FileSystemManager {
     // Private fields
 }
 
 impl FileSystemManager {
-    /// Creates a new FileSystemManager.
+    /// Creates a new FileSystemManager with default configuration.
     pub fn new() -> Self;
     
+    /// Creates a new FileSystemManager with custom configuration.
+    pub fn new_with_config(config: AsyncFileSystemConfig) -> Self;
+    
     /// Creates a new FileSystemManager with project configuration.
-    pub async fn new_with_project_config(project_root: &Path) -> Result<Self>;
+    pub async fn new_with_project_config(project_root: &Path) -> Result<Self, Error>;
 }
 
 impl AsyncFileSystem for FileSystemManager {
@@ -1458,14 +2036,32 @@ impl AsyncFileSystem for FileSystemManager {
 pub struct PathUtils;
 
 impl PathUtils {
-    /// Finds the root directory of a Node.js project.
+    /// Finds the root directory of a Node.js project by walking up the directory tree.
     pub fn find_project_root(start: &Path) -> Option<PathBuf>;
     
     /// Gets the current working directory.
-    pub fn current_dir() -> FileSystemResult<PathBuf>;
+    pub fn current_dir() -> Result<PathBuf, FileSystemError>;
     
     /// Makes a path relative to a base path.
-    pub fn make_relative(path: &Path, base: &Path) -> FileSystemResult<PathBuf>;
+    pub fn make_relative(path: &Path, base: &Path) -> Result<PathBuf, FileSystemError>;
+    
+    /// Normalizes a path by resolving `.` and `..` components.
+    pub fn normalize(path: &Path) -> PathBuf;
+    
+    /// Joins multiple path components safely.
+    pub fn join<P: AsRef<Path>>(base: &Path, paths: &[P]) -> PathBuf;
+    
+    /// Checks if a path is absolute.
+    pub fn is_absolute(path: &Path) -> bool;
+    
+    /// Gets the parent directory of a path.
+    pub fn parent(path: &Path) -> Option<&Path>;
+    
+    /// Gets the file name from a path.
+    pub fn file_name(path: &Path) -> Option<&str>;
+    
+    /// Gets the file extension from a path.
+    pub fn extension(path: &Path) -> Option<&str>;
 }
 ```
 
@@ -1475,23 +2071,41 @@ impl PathUtils {
 
 ```rust
 /// Represents common directory and file types in Node.js projects.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NodePathKind {
+    /// Project root directory (contains package.json)
+    ProjectRoot,
+    /// Package directory (workspace package)
+    PackageDirectory,
     /// Node modules directory
     NodeModules,
-    /// Package configuration
-    PackageJson,
-    /// Source directory
-    Src,
-    /// Distribution directory
-    Dist,
-    /// Test directory
-    Test,
+    /// Source directory (src, lib, etc.)
+    SourceDirectory,
+    /// Distribution directory (dist, build, out, etc.)
+    DistDirectory,
+    /// Test directory (test, tests, __tests__, etc.)
+    TestDirectory,
+    /// Configuration directory (.config, config, etc.)
+    ConfigDirectory,
+    /// Documentation directory (docs, documentation, etc.)
+    DocsDirectory,
+    /// Examples directory
+    ExamplesDirectory,
+    /// Tools directory (scripts, tools, etc.)
+    ToolsDirectory,
+    /// Other path type
+    Other,
 }
 
 impl NodePathKind {
     /// Returns the default path string for the given Node.js path kind.
     pub fn default_path(self) -> &'static str;
+    
+    /// Detects the path kind from a directory name.
+    pub fn from_dir_name(name: &str) -> Self;
+    
+    /// Returns all known path kinds.
+    pub fn all() -> &'static [NodePathKind];
 }
 ```
 
@@ -1503,21 +2117,40 @@ pub trait PathExt {
     /// Normalizes a path by resolving `.` and `..` components.
     fn normalize(&self) -> PathBuf;
     
+    /// Checks if this path contains a package.json file.
+    fn is_package_json_dir(&self) -> bool;
+    
     /// Checks if this path is inside a Node.js project.
-    fn is_in_project(&self) -> bool;
+    fn is_node_project(&self) -> bool;
     
     /// Gets the path relative to the nearest Node.js project root.
     fn relative_to_project(&self) -> Option<PathBuf>;
     
+    /// Finds the package.json file by walking up the directory tree.
+    fn find_package_json(&self) -> Option<PathBuf>;
+    
+    /// Determines the Node.js path kind for this path.
+    fn node_path_kind(&self) -> NodePathKind;
+    
     /// Joins a Node.js path kind to this path.
     fn node_path(&self, kind: NodePathKind) -> PathBuf;
     
-    /// Canonicalizes a path, resolving symlinks if needed.
-    fn canonicalize(&self) -> Result<PathBuf>;
+    /// Checks if this path is in node_modules.
+    fn is_in_node_modules(&self) -> bool;
+    
+    /// Checks if this path is a workspace package directory.
+    fn is_workspace_package(&self) -> bool;
+    
+    /// Gets the workspace package name if this is a package directory.
+    fn workspace_package_name(&self) -> Option<String>;
 }
 
 impl PathExt for Path {
     // All PathExt methods implemented
+}
+
+impl PathExt for PathBuf {
+    // All PathExt methods implemented (delegated to Path)
 }
 ```
 
@@ -1525,36 +2158,80 @@ impl PathExt for Path {
 
 ```rust
 use sublime_standard_tools::filesystem::{
-    AsyncFileSystem, FileSystemManager, NodePathKind, PathExt, PathUtils
+    AsyncFileSystem, FileSystemManager, AsyncFileSystemConfig, NodePathKind, PathExt, PathUtils
 };
 use std::path::Path;
+use std::time::Duration;
 
 // Configuration-aware filesystem operations
+let config = AsyncFileSystemConfig {
+    buffer_size: 8192,
+    max_concurrent_operations: 10,
+    operation_timeout: Duration::from_secs(30),
+    retry_config: Some(RetryConfig {
+        max_attempts: 3,
+        initial_delay: Duration::from_millis(100),
+        max_delay: Duration::from_secs(5),
+        backoff_multiplier: 2.0,
+    }),
+    ignore_patterns: vec![".git".to_string(), "node_modules".to_string()],
+};
+
+let fs = FileSystemManager::new_with_config(config);
+
+// Or load with project configuration
 let fs = FileSystemManager::new_with_project_config(Path::new(".")).await?;
-let content = fs.read_file_string(Path::new("package.json")).await?;
-fs.write_file_string(Path::new("output.txt"), "Hello, world!").await?;
+
+// Basic file operations
+if fs.exists(Path::new("package.json")).await? {
+    let content = fs.read_to_string(Path::new("package.json")).await?;
+    println!("Package.json content: {}", content);
+}
+
+// Write file
+fs.write_string(Path::new("output.txt"), "Hello, world!").await?;
 
 // Directory operations
 let entries = fs.read_dir(Path::new(".")).await?;
 for entry in entries {
-    println!("Found: {}", entry.display());
+    if fs.is_dir(&entry).await? {
+        println!("Directory: {}", entry.display());
+    } else {
+        println!("File: {}", entry.display());
+    }
 }
 
 // Path extensions
 let path = Path::new("src/components/Button.js");
 let normalized = path.normalize();
 
-if path.is_in_project() {
+if path.is_node_project() {
     println!("Path is within a Node.js project");
     
-    if let Some(relative) = path.relative_to_project() {
-        println!("Path relative to project: {}", relative.display());
+    if let Some(package_json) = path.find_package_json() {
+        println!("Package.json found at: {}", package_json.display());
     }
 }
 
-// Node.js specific paths
-let node_modules = Path::new(".").node_path(NodePathKind::NodeModules);
-println!("Node modules path: {}", node_modules.display());
+// Node.js specific paths and detection
+let current_path = Path::new(".");
+match current_path.node_path_kind() {
+    NodePathKind::ProjectRoot => println!("This is a project root"),
+    NodePathKind::PackageDirectory => println!("This is a package directory"),
+    NodePathKind::SourceDirectory => println!("This is a source directory"),
+    other => println!("Path kind: {:?}", other),
+}
+
+// Path utilities
+if let Some(project_root) = PathUtils::find_project_root(Path::new(".")) {
+    println!("Project root: {}", project_root.display());
+}
+
+let relative = PathUtils::make_relative(
+    Path::new("/home/user/project/src/main.js"), 
+    Path::new("/home/user/project")
+)?;
+println!("Relative path: {}", relative.display());
 ```
 
 ## Error Module
@@ -1567,36 +2244,48 @@ The error module provides comprehensive error handling for all operations within
 
 ```rust
 /// General error type for the standard tools library.
-#[derive(ThisError, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub enum Error {
     /// Monorepo-related error.
-    #[error("Monorepo execution error")]
-    Monorepo(#[from] MonorepoError),
+    Monorepo(MonorepoError),
     
     /// Filesystem-related error.
-    #[error("FileSystem execution error")]
-    FileSystem(#[from] FileSystemError),
+    FileSystem(FileSystemError),
     
     /// Workspace-related error.
-    #[error("Workspace execution error")]
-    Workspace(#[from] WorkspaceError),
+    Workspace(WorkspaceError),
     
     /// Command-related error.
-    #[error("Command execution error")]
-    Command(#[from] CommandError),
+    Command(CommandError),
     
     /// Configuration-related error.
-    #[error("Configuration error")]
-    Config(#[from] ConfigError),
+    Config(ConfigError),
     
     /// General purpose errors with a custom message.
-    #[error("Operation error: {0}")]
     Operation(String),
 }
 
 impl Error {
     /// Creates a new operational error.
     pub fn operation(message: impl Into<String>) -> Self;
+    
+    /// Returns a string representation of the error category.
+    pub fn kind(&self) -> &'static str;
+    
+    /// Checks if this error is of a specific type.
+    pub fn is_filesystem_error(&self) -> bool;
+    pub fn is_command_error(&self) -> bool;
+    pub fn is_monorepo_error(&self) -> bool;
+    pub fn is_config_error(&self) -> bool;
+    pub fn is_workspace_error(&self) -> bool;
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)>;
 }
 ```
 
@@ -1604,31 +2293,50 @@ impl Error {
 
 ```rust
 /// Errors that can occur during configuration operations.
-#[derive(ThisError, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub enum ConfigError {
     /// Configuration file not found.
-    #[error("Configuration file not found: {path}")]
-    NotFound { path: PathBuf },
+    NotFound { 
+        path: PathBuf 
+    },
     
     /// Failed to parse configuration file.
-    #[error("Failed to parse configuration file '{path}': {source}")]
-    ParseError { path: PathBuf, source: String },
+    ParseError { 
+        path: PathBuf, 
+        source: String 
+    },
     
     /// Invalid configuration values.
-    #[error("Invalid configuration: {message}")]
-    InvalidConfig { message: String },
+    InvalidConfig { 
+        message: String 
+    },
     
     /// Configuration validation failed.
-    #[error("Configuration validation failed: {errors:?}")]
-    ValidationFailed { errors: Vec<String> },
+    ValidationFailed { 
+        errors: Vec<String> 
+    },
     
     /// Unsupported configuration format.
-    #[error("Unsupported configuration format: {format}")]
-    UnsupportedFormat { format: String },
+    UnsupportedFormat { 
+        format: String 
+    },
     
     /// I/O error during configuration operations.
-    #[error("I/O error during configuration operation: {source}")]
-    Io { source: std::io::Error },
+    Io { 
+        source: String 
+    },
+    
+    /// Environment variable parsing error.
+    EnvVarError { 
+        var_name: String, 
+        reason: String 
+    },
+    
+    /// Configuration merge conflict.
+    MergeConflict { 
+        field: String, 
+        reason: String 
+    },
 }
 ```
 
@@ -1636,35 +2344,61 @@ pub enum ConfigError {
 
 ```rust
 /// Errors that can occur during filesystem operations.
-#[derive(ThisError, Debug)]
+#[derive(Debug, Clone)]
 pub enum FileSystemError {
     /// Path not found.
-    #[error("Path not found: {path}")]
-    NotFound { path: PathBuf },
+    NotFound { 
+        path: PathBuf 
+    },
 
     /// Permission denied for accessing the path.
-    #[error("Permission denied for path: {path}")]
-    PermissionDenied { path: PathBuf },
+    PermissionDenied { 
+        path: PathBuf, 
+        operation: String 
+    },
 
     /// Generic I/O error during filesystem operation.
-    #[error("I/O error accessing path '{path}': {source}")]
-    Io { path: PathBuf, source: io::Error },
+    Io { 
+        path: PathBuf, 
+        operation: String,
+        source: String 
+    },
 
     /// Attempted an operation requiring a directory on a file.
-    #[error("Expected a directory but found a file: {path}")]
-    NotADirectory { path: PathBuf },
+    NotADirectory { 
+        path: PathBuf 
+    },
 
     /// Attempted an operation requiring a file on a directory.
-    #[error("Expected a file but found a directory: {path}")]
-    NotAFile { path: PathBuf },
+    NotAFile { 
+        path: PathBuf 
+    },
 
     /// Failed to decode UTF-8 content from a file.
-    #[error("Failed to decode UTF-8 content in file: {path}")]
-    Utf8Decode { path: PathBuf, source: std::string::FromUtf8Error },
+    Utf8Decode { 
+        path: PathBuf, 
+        source: String 
+    },
 
     /// Path validation failed.
-    #[error("Path validation failed for '{path}': {reason}")]
-    Validation { path: PathBuf, reason: String },
+    Validation { 
+        path: PathBuf, 
+        reason: String 
+    },
+    
+    /// Operation timed out.
+    Timeout { 
+        path: PathBuf, 
+        operation: String,
+        duration: Duration 
+    },
+    
+    /// Maximum retry attempts exceeded.
+    MaxRetriesExceeded { 
+        path: PathBuf, 
+        operation: String,
+        attempts: usize 
+    },
 }
 ```
 
@@ -1672,42 +2406,65 @@ pub enum FileSystemError {
 
 ```rust
 /// Errors that can occur during command execution.
-#[derive(ThisError, Debug)]
+#[derive(Debug, Clone)]
 pub enum CommandError {
     /// The command failed to start.
-    #[error("Failed to spawn command '{cmd}': {source}")]
-    SpawnFailed { cmd: String, source: io::Error },
+    SpawnFailed { 
+        command: String, 
+        source: String 
+    },
 
     /// The command execution process itself failed.
-    #[error("Command execution failed for '{cmd}': {source:?}")]
-    ExecutionFailed { cmd: String, source: Option<io::Error> },
+    ExecutionFailed { 
+        command: String, 
+        source: String 
+    },
 
     /// The command executed but returned a non-zero exit code.
-    #[error("Command '{cmd}' failed with exit code {code:?}. Stderr: {stderr}")]
-    NonZeroExitCode { cmd: String, code: Option<i32>, stderr: String },
+    NonZeroExitCode { 
+        command: String, 
+        exit_code: Option<i32>, 
+        stderr: String 
+    },
 
     /// The command timed out.
-    #[error("Command timed out after {duration:?}")]
-    Timeout { duration: Duration },
+    Timeout { 
+        command: String,
+        duration: Duration 
+    },
 
-    /// The command was killed.
-    #[error("Command was killed: {reason}")]
-    Killed { reason: String },
+    /// The command was killed or interrupted.
+    Killed { 
+        command: String,
+        reason: String 
+    },
 
     /// Invalid configuration provided for the command.
-    #[error("Invalid command configuration: {description}")]
-    Configuration { description: String },
+    InvalidConfiguration { 
+        field: String,
+        reason: String 
+    },
 
     /// Failed to capture stdout or stderr.
-    #[error("Failed to capture {stream} stream")]
-    CaptureFailed { stream: String },
+    CaptureFailed { 
+        command: String,
+        stream: String 
+    },
 
     /// Error occurred while reading stdout or stderr stream.
-    #[error("Error reading {stream} stream: {source}")]
-    StreamReadError { stream: String, source: io::Error },
+    StreamReadError { 
+        command: String,
+        stream: String, 
+        source: String 
+    },
+
+    /// Command queue operation failed.
+    QueueError { 
+        operation: String,
+        reason: String 
+    },
 
     /// Generic error during command processing.
-    #[error("Command processing error: {0}")]
     Generic(String),
 }
 ```
@@ -1716,27 +2473,58 @@ pub enum CommandError {
 
 ```rust
 /// Errors that can occur during monorepo operations.
-#[derive(ThisError, Debug)]
+#[derive(Debug, Clone)]
 pub enum MonorepoError {
     /// Failed to detect the monorepo type.
-    #[error("Failed to detect monorepo type: {source}")]
-    Detection { source: FileSystemError },
+    DetectionFailed { 
+        path: PathBuf,
+        reason: String 
+    },
     
-    /// Failed to parse the monorepo descriptor file.
-    #[error("Failed to parse monorepo descriptor: {source}")]
-    Parsing { source: FileSystemError },
+    /// Failed to parse the monorepo configuration file.
+    ConfigParsingFailed { 
+        file_path: PathBuf,
+        format: String,
+        source: String 
+    },
     
-    /// Failed to read the monorepo descriptor file.
-    #[error("Failed to read monorepo descriptor: {source}")]
-    Reading { source: FileSystemError },
+    /// Failed to read the monorepo configuration file.
+    ConfigReadFailed { 
+        file_path: PathBuf,
+        source: FileSystemError 
+    },
     
-    /// Failed to write the monorepo descriptor file.
-    #[error("Failed to write monorepo descriptor: {source}")]
-    Writing { source: FileSystemError },
+    /// Failed to write the monorepo configuration file.
+    ConfigWriteFailed { 
+        file_path: PathBuf,
+        source: FileSystemError 
+    },
     
-    /// Failed to find a package manager for the monorepo.
-    #[error("Failed to find package manager")]
-    ManagerNotFound,
+    /// No package manager found for the monorepo.
+    NoPackageManager { 
+        monorepo_root: PathBuf 
+    },
+    
+    /// Invalid workspace configuration.
+    InvalidWorkspaceConfig { 
+        reason: String 
+    },
+    
+    /// Package not found in workspace.
+    PackageNotFound { 
+        package_name: String,
+        workspace_root: PathBuf 
+    },
+    
+    /// Circular dependency detected.
+    CircularDependency { 
+        packages: Vec<String> 
+    },
+    
+    /// Workspace analysis failed.
+    AnalysisFailed { 
+        reason: String 
+    },
 }
 ```
 
@@ -1744,43 +2532,65 @@ pub enum MonorepoError {
 
 ```rust
 /// Errors that can occur during workspace operations.
-#[derive(ThisError, Debug)]
+#[derive(Debug, Clone)]
 pub enum WorkspaceError {
     /// Error parsing package.json format.
-    #[error("Invalid package json format: {0}")]
-    InvalidPackageJson(String),
+    InvalidPackageJson { 
+        path: PathBuf,
+        reason: String 
+    },
     
     /// Error parsing workspaces pattern.
-    #[error("Invalid workspaces pattern: {0}")]
-    InvalidWorkspacesPattern(String),
+    InvalidWorkspacesPattern { 
+        pattern: String,
+        reason: String 
+    },
     
     /// Error parsing pnpm workspace configuration.
-    #[error("Invalid pnpm workspace configuration: {0}")]
-    InvalidPnpmWorkspace(String),
+    InvalidPnpmWorkspace { 
+        config_path: PathBuf,
+        reason: String 
+    },
     
     /// Package not found in workspace.
-    #[error("Package not found: {0}")]
-    PackageNotFound(String),
+    PackageNotFound { 
+        package_name: String 
+    },
     
     /// Workspace not found.
-    #[error("Workspace not found: {0}")]
-    WorkspaceNotFound(String),
+    WorkspaceNotFound { 
+        workspace_path: PathBuf 
+    },
     
     /// Workspace configuration is missing.
-    #[error("Workspace config is missing: {0}")]
-    WorkspaceConfigMissing(String),
+    WorkspaceConfigMissing { 
+        expected_path: PathBuf 
+    },
+    
+    /// Dependency resolution failed.
+    DependencyResolution { 
+        package_name: String,
+        reason: String 
+    },
+    
+    /// Workspace validation failed.
+    ValidationFailed { 
+        errors: Vec<String> 
+    },
 }
 ```
 
 ### Result Types
 
 ```rust
-/// Convenient type aliases for Results
+/// Convenient type aliases for Results with domain-specific errors
 pub type FileSystemResult<T> = std::result::Result<T, FileSystemError>;
 pub type MonorepoResult<T> = std::result::Result<T, MonorepoError>;
 pub type WorkspaceResult<T> = std::result::Result<T, WorkspaceError>;
 pub type CommandResult<T> = std::result::Result<T, CommandError>;
 pub type ConfigResult<T> = std::result::Result<T, ConfigError>;
+
+/// General result type for operations that may return various error types
 pub type Result<T> = std::result::Result<T, Error>;
 ```
 
@@ -1790,39 +2600,70 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 ```rust
 /// Manages error recovery strategies and provides context-aware error handling.
+#[derive(Debug)]
 pub struct ErrorRecoveryManager {
     // Private fields
 }
 
 impl ErrorRecoveryManager {
-    /// Creates a new ErrorRecoveryManager.
+    /// Creates a new ErrorRecoveryManager with default strategies.
     pub fn new() -> Self;
     
-    /// Attempts to recover from an error using registered strategies.
-    pub async fn recover<T>(&self, error: &Error, context: &str) -> RecoveryResult<T>;
+    /// Adds a recovery strategy for a specific error pattern.
+    pub fn add_strategy(&mut self, name: &str, strategy: RecoveryStrategy);
     
-    /// Registers a recovery strategy for a specific error type.
-    pub fn register_strategy(&mut self, strategy: Box<dyn RecoveryStrategy>);
+    /// Removes a recovery strategy by name.
+    pub fn remove_strategy(&mut self, name: &str) -> Option<RecoveryStrategy>;
+    
+    /// Attempts to recover from an error using registered strategies.
+    pub async fn recover(
+        &mut self, 
+        context: &str, 
+        error: &Error, 
+        log_level: LogLevel
+    ) -> RecoveryResult;
     
     /// Logs an error with appropriate level and context.
     pub fn log_error(&self, error: &Error, context: &str, level: LogLevel);
+    
+    /// Returns statistics about recovery attempts.
+    pub fn stats(&self) -> RecoveryStats;
+    
+    /// Resets all statistics.
+    pub fn reset_stats(&mut self);
 }
 ```
 
 #### RecoveryStrategy
 
 ```rust
-/// Trait for implementing error recovery strategies.
-#[async_trait]
-pub trait RecoveryStrategy: Send + Sync {
-    /// Attempts to recover from the given error.
-    async fn recover<T>(&self, error: &Error, context: &str) -> RecoveryResult<T>;
+/// Defines different recovery strategies for handling errors.
+#[derive(Debug, Clone)]
+pub enum RecoveryStrategy {
+    /// Retry the operation with exponential backoff.
+    Retry {
+        max_attempts: usize,
+        delay: Duration,
+    },
     
-    /// Checks if this strategy can handle the given error.
-    fn can_handle(&self, error: &Error) -> bool;
+    /// Use a fallback value or operation.
+    Fallback {
+        alternative: String,
+    },
     
-    /// Returns the priority of this strategy (higher is better).
-    fn priority(&self) -> u8;
+    /// Ignore the error and continue.
+    Ignore,
+    
+    /// Log the error and continue.
+    LogAndContinue {
+        log_level: LogLevel,
+    },
+    
+    /// Custom recovery function.
+    Custom {
+        name: String,
+        handler: String, // Placeholder for function pointer
+    },
 }
 ```
 
@@ -1830,13 +2671,16 @@ pub trait RecoveryStrategy: Send + Sync {
 
 ```rust
 /// Result of an error recovery attempt.
-pub enum RecoveryResult<T> {
+#[derive(Debug, Clone)]
+pub enum RecoveryResult {
     /// Recovery was successful.
-    Recovered(T),
-    /// Recovery failed, but error was handled gracefully.
-    HandledGracefully,
-    /// Recovery failed, original error should be propagated.
-    Failed,
+    Recovered,
+    
+    /// Recovery failed with an error.
+    Failed(String),
+    
+    /// No recovery strategy was available.
+    NoStrategy,
 }
 ```
 
@@ -1844,12 +2688,181 @@ pub enum RecoveryResult<T> {
 
 ```rust
 /// Logging levels for error reporting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LogLevel {
+    /// Error level - critical issues that need immediate attention.
     Error,
+    /// Warning level - potential issues that should be noted.
     Warn,
+    /// Info level - general information messages.
     Info,
+    /// Debug level - detailed debugging information.
     Debug,
+    /// Trace level - very detailed tracing information.
+    Trace,
 }
 ```
 
-This comprehensive API specification reflects the current architectural approach with clean separation of concerns, unified project handling, robust configuration management, async-first design, and comprehensive error handling. The crate provides a consistent, type-safe interface for working with Node.js projects from Rust applications with extensive configuration capabilities and performance optimizations.
+#### RecoveryStats
+
+```rust
+/// Statistics about error recovery operations.
+#[derive(Debug, Clone)]
+pub struct RecoveryStats {
+    /// Total number of recovery attempts.
+    pub total_attempts: usize,
+    
+    /// Number of successful recoveries.
+    pub successful_recoveries: usize,
+    
+    /// Number of failed recoveries.
+    pub failed_recoveries: usize,
+    
+    /// Number of errors with no available strategy.
+    pub no_strategy_available: usize,
+    
+    /// Recovery attempts by error type.
+    pub attempts_by_error_type: std::collections::HashMap<String, usize>,
+}
+```
+
+#### ErrorContext Trait
+
+```rust
+/// Provides additional context for errors.
+pub trait ErrorContext {
+    /// Adds context information to an error.
+    fn with_context(self, context: String) -> Error;
+    
+    /// Adds formatted context information to an error.
+    fn with_context_f(self, f: impl FnOnce() -> String) -> Error;
+}
+
+impl<T, E> ErrorContext for std::result::Result<T, E> 
+where 
+    E: Into<Error>
+{
+    fn with_context(self, context: String) -> Error {
+        match self {
+            Ok(_) => unreachable!("ErrorContext called on Ok result"),
+            Err(e) => {
+                let mut error = e.into();
+                // Add context to error (implementation detail)
+                error
+            }
+        }
+    }
+    
+    fn with_context_f(self, f: impl FnOnce() -> String) -> Error {
+        self.with_context(f())
+    }
+}
+```
+
+#### Examples
+
+```rust
+use sublime_standard_tools::error::{
+    Error, ErrorRecoveryManager, RecoveryStrategy, RecoveryResult, LogLevel,
+    FileSystemError, CommandError, MonorepoError, ErrorContext
+};
+use std::time::Duration;
+
+// Error handling with pattern matching
+fn handle_operation_error(error: Error) {
+    match error {
+        Error::FileSystem(FileSystemError::NotFound { path }) => {
+            eprintln!("File not found: {}", path.display());
+        }
+        Error::Command(CommandError::Timeout { command, duration }) => {
+            eprintln!("Command '{}' timed out after {:?}", command, duration);
+        }
+        Error::Monorepo(MonorepoError::NoPackageManager { monorepo_root }) => {
+            eprintln!("No package manager found in monorepo at {}", monorepo_root.display());
+        }
+        Error::Config(config_err) => {
+            eprintln!("Configuration error: {}", config_err);
+        }
+        Error::Operation(msg) => {
+            eprintln!("Operation error: {}", msg);
+        }
+        _ => {
+            eprintln!("Unknown error: {}", error);
+        }
+    }
+}
+
+// Error recovery manager setup
+let mut recovery_manager = ErrorRecoveryManager::new();
+
+// Add recovery strategies
+recovery_manager.add_strategy(
+    "file_not_found",
+    RecoveryStrategy::Retry {
+        max_attempts: 3,
+        delay: Duration::from_millis(100),
+    },
+);
+
+recovery_manager.add_strategy(
+    "command_timeout",
+    RecoveryStrategy::Fallback {
+        alternative: "Use default timeout".to_string(),
+    },
+);
+
+recovery_manager.add_strategy(
+    "config_error",
+    RecoveryStrategy::LogAndContinue {
+        log_level: LogLevel::Warn,
+    },
+);
+
+// Use error context for better error messages
+async fn operation_with_context() -> Result<(), Error> {
+    some_filesystem_operation()
+        .await
+        .map_err(Error::FileSystem)
+        .with_context("Failed to read project configuration".to_string())?;
+    
+    Ok(())
+}
+
+// Recovery attempt
+async fn handle_with_recovery(error: Error) {
+    match recovery_manager.recover("project_analysis", &error, LogLevel::Error).await {
+        RecoveryResult::Recovered => {
+            println!("Successfully recovered from error");
+        }
+        RecoveryResult::Failed(reason) => {
+            eprintln!("Recovery failed: {}", reason);
+        }
+        RecoveryResult::NoStrategy => {
+            eprintln!("No recovery strategy available for error: {}", error);
+        }
+    }
+}
+
+// Get recovery statistics
+let stats = recovery_manager.stats();
+println!("Recovery Statistics:");
+println!("  Total attempts: {}", stats.total_attempts);
+println!("  Successful: {}", stats.successful_recoveries);
+println!("  Failed: {}", stats.failed_recoveries);
+println!("  No strategy: {}", stats.no_strategy_available);
+```
+
+---
+
+This comprehensive API specification reflects the current architectural approach of the `sublime_standard_tools` crate with:
+
+- **Clean separation of concerns**: Each module has a clearly defined responsibility
+- **Unified project handling**: Consistent APIs for both simple and monorepo projects  
+- **Async-first design**: All I/O operations use async/await for optimal performance
+- **Robust configuration management**: Flexible, multi-source configuration system
+- **Comprehensive error handling**: Structured errors with recovery strategies
+- **Cross-platform support**: Full compatibility with Windows, macOS, and Linux
+- **Type safety**: Strong typing prevents common errors and improves API usability
+- **Performance optimization**: Designed for large repositories and complex workflows
+
+The crate provides a consistent, well-documented interface for working with Node.js projects from Rust applications, making it easy to build robust tooling and automation systems.

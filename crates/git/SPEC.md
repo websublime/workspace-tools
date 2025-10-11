@@ -17,13 +17,17 @@
 - [Tag Operations](#tag-operations)
   - [Creating Tags](#creating-tags)
   - [Tag Information](#tag-information)
-- [File Change Detection](#file-change-detection)
+- [File Status and Change Detection](#file-status-and-change-detection)
+  - [Repository Status](#repository-status)
   - [Changed Files](#changed-files)
   - [Package-specific Changes](#package-specific-changes)
 - [Remote Operations](#remote-operations)
   - [Pushing and Pulling](#pushing-and-pulling)
   - [Fetching](#fetching)
+  - [SSH Operations](#ssh-operations)
+- [Advanced Git Operations](#advanced-git-operations)
   - [Merging](#merging)
+  - [Repository Analysis](#repository-analysis)
 - [Types Reference](#types-reference)
   - [Repository Types](#repository-types)
   - [File Status Types](#file-status-types)
@@ -48,6 +52,8 @@ This crate is designed for Rust applications that need to:
 - Push/pull with remote repositories
 - Get detailed commit histories
 - Detect changes in specific parts of a repository
+- Handle SSH authentication for remote operations
+- Perform advanced Git operations like merging and status checking
 
 ## Repository Management
 
@@ -69,7 +75,7 @@ pub fn create(path: &str) -> Result<Self, RepoError>
 
 **Example:**
 ```rust
-let repo = Repo::create("/path/to/new/repo").expect("Failed to create repository");
+let repo = Repo::create("/path/to/new/repo")?;
 println!("Repository created at: {}", repo.get_repo_path().display());
 ```
 
@@ -93,8 +99,8 @@ pub fn open(path: &str) -> Result<Self, RepoError>
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-project").expect("Failed to open repository");
-let branch = repo.get_current_branch().expect("Failed to get current branch");
+let repo = Repo::open("./my-project")?;
+let branch = repo.get_current_branch()?;
 println!("Current branch: {}", branch);
 ```
 
@@ -119,8 +125,7 @@ pub fn clone(url: &str, path: &str) -> Result<Self, RepoError>
 
 **Example:**
 ```rust
-let repo = Repo::clone("https://github.com/example/repo.git", "./cloned-repo")
-    .expect("Failed to clone repository");
+let repo = Repo::clone("https://github.com/example/repo.git", "./cloned-repo")?;
 ```
 
 **Possible errors:**
@@ -131,64 +136,63 @@ let repo = Repo::clone("https://github.com/example/repo.git", "./cloned-repo")
 
 #### `Repo::get_repo_path`
 
-Gets the local path of the repository.
+Returns the path to the repository root directory.
 
 ```rust
 pub fn get_repo_path(&self) -> &Path
 ```
 
 **Returns:**
-- `&Path`: The path to the repository
+- `&Path`: Reference to the repository path
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-println!("Repository path: {}", repo.get_repo_path().display());
+let repo = Repo::open("./my-project")?;
+let path = repo.get_repo_path();
+println!("Repository path: {}", path.display());
 ```
 
 ### Configuration
 
 #### `Repo::config`
 
-Configures the repository with user information and core settings.
+Sets the Git configuration for username and email in the repository.
 
 ```rust
 pub fn config(&self, username: &str, email: &str) -> Result<&Self, RepoError>
 ```
 
 **Parameters:**
-- `username`: The Git user name
-- `email`: The Git user email
+- `username`: The Git username to set
+- `email`: The Git email to set
 
 **Returns:**
-- `Result<&Self, RepoError>`: A reference to self for method chaining, or an error
+- `Result<&Self, RepoError>`: Reference to self for chaining or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-repo.config("Jane Doe", "jane@example.com").expect("Failed to configure repository");
+repo.config("Jane Doe", "jane@example.com")?;
 ```
 
 **Possible errors:**
-- `ConfigError`: Failed to access or update the Git configuration
+- `ConfigError`: Failed to access or modify Git configuration
 
 #### `Repo::list_config`
 
-Lists all configuration entries for the repository.
+Lists all configuration entries in the repository.
 
 ```rust
 pub fn list_config(&self) -> Result<HashMap<String, String>, RepoError>
 ```
 
 **Returns:**
-- `Result<HashMap<String, String>, RepoError>`: A map of config keys to values, or an error
+- `Result<HashMap<String, String>, RepoError>`: Map of configuration key-value pairs or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-let config = repo.list_config().expect("Failed to list config");
-for (key, value) in config {
-    println!("{} = {}", key, value);
+let config_entries = repo.list_config()?;
+for (key, value) in config_entries {
+    println!("{}: {}", key, value);
 }
 ```
 
@@ -202,32 +206,31 @@ for (key, value) in config {
 
 #### `Repo::create_branch`
 
-Creates a new branch based on the current HEAD.
+Creates a new branch from the current HEAD commit.
 
 ```rust
 pub fn create_branch(&self, branch_name: &str) -> Result<&Self, RepoError>
 ```
 
 **Parameters:**
-- `branch_name`: The name for the new branch
+- `branch_name`: The name of the new branch to create
 
 **Returns:**
-- `Result<&Self, RepoError>`: A reference to self for method chaining, or an error
+- `Result<&Self, RepoError>`: Reference to self for chaining or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-repo.create_branch("feature/new-feature").expect("Failed to create branch");
+repo.create_branch("feature/new-feature")?;
 ```
 
 **Possible errors:**
-- `HeadError`: Failed to get the current HEAD
-- `PeelError`: Failed to peel reference to a commit
-- `BranchError`: Failed to create branch
+- `HeadError`: Failed to get repository HEAD
+- `PeelError`: Failed to peel HEAD to commit
+- `BranchError`: Failed to create the branch
 
 #### `Repo::checkout`
 
-Checks out a local branch.
+Switches to the specified branch.
 
 ```rust
 pub fn checkout(&self, branch_name: &str) -> Result<&Self, RepoError>
@@ -237,17 +240,17 @@ pub fn checkout(&self, branch_name: &str) -> Result<&Self, RepoError>
 - `branch_name`: The name of the branch to checkout
 
 **Returns:**
-- `Result<&Self, RepoError>`: A reference to self for method chaining, or an error
+- `Result<&Self, RepoError>`: Reference to self for chaining or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-repo.checkout("feature-branch").expect("Failed to checkout branch");
+repo.checkout("feature-branch")?;
 ```
 
 **Possible errors:**
-- `CheckoutBranchError`: Failed to find or checkout the branch
-- `BranchNameError`: Invalid branch name
+- `BranchError`: Failed to find the branch
+- `CheckoutBranchError`: Failed to checkout the branch
+- `CheckoutError`: Failed to perform checkout
 
 ### Branch Information
 
@@ -260,12 +263,11 @@ pub fn list_branches(&self) -> Result<Vec<String>, RepoError>
 ```
 
 **Returns:**
-- `Result<Vec<String>, RepoError>`: A list of branch names, or an error
+- `Result<Vec<String>, RepoError>`: Vector of branch names or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-let branches = repo.list_branches().expect("Failed to list branches");
+let branches = repo.list_branches()?;
 for branch in branches {
     println!("Branch: {}", branch);
 }
@@ -273,6 +275,7 @@ for branch in branches {
 
 **Possible errors:**
 - `BranchListError`: Failed to list branches
+- `BranchNameError`: Failed to get branch name
 
 #### `Repo::get_current_branch`
 
@@ -283,42 +286,60 @@ pub fn get_current_branch(&self) -> Result<String, RepoError>
 ```
 
 **Returns:**
-- `Result<String, RepoError>`: The current branch name, or an error
+- `Result<String, RepoError>`: The current branch name or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-let branch = repo.get_current_branch().expect("Failed to get current branch");
-println!("Current branch: {}", branch);
+let current_branch = repo.get_current_branch()?;
+println!("Current branch: {}", current_branch);
 ```
 
 **Possible errors:**
 - `HeadError`: Failed to get repository HEAD
-- `BranchNameError`: Failed to get branch name
+- `BranchNameError`: Failed to get branch name from HEAD
+
+#### `Repo::branch_exists`
+
+Checks if a branch exists in the repository.
+
+```rust
+pub fn branch_exists(&self, branch_name: &str) -> Result<bool, RepoError>
+```
+
+**Parameters:**
+- `branch_name`: The name of the branch to check
+
+**Returns:**
+- `Result<bool, RepoError>`: True if branch exists, false otherwise, or an error
+
+**Example:**
+```rust
+if repo.branch_exists("main")? {
+    println!("Branch 'main' exists");
+}
+```
+
+**Possible errors:**
+- `BranchError`: Failed to access branch information
 
 #### `Repo::get_branch_from_commit`
 
-Finds the branch that contains a specific commit.
+Gets the branch name that contains a specific commit.
 
 ```rust
 pub fn get_branch_from_commit(&self, sha: &str) -> Result<Option<String>, RepoError>
 ```
 
 **Parameters:**
-- `sha`: The commit SHA to find
+- `sha`: The commit SHA to search for
 
 **Returns:**
-- `Result<Option<String>, RepoError>`: The branch name if found, None if not found, or an error
+- `Result<Option<String>, RepoError>`: Branch name if found, None if not found, or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-let commit_sha = repo.get_current_sha().expect("Failed to get current SHA");
-
-match repo.get_branch_from_commit(&commit_sha) {
-    Ok(Some(branch)) => println!("Commit {} is in branch: {}", commit_sha, branch),
-    Ok(None) => println!("Commit {} is not in any branch", commit_sha),
-    Err(e) => println!("Error: {}", e),
+if let Some(branch) = repo.get_branch_from_commit("abcdef123456")? {
+    println!("Commit is on branch: {}", branch);
 }
 ```
 
@@ -326,65 +347,33 @@ match repo.get_branch_from_commit(&commit_sha) {
 - `CommitOidError`: Failed to parse commit SHA
 - `BranchListError`: Failed to list branches
 - `BranchNameError`: Failed to get branch name
-- `PeelError`: Failed to peel reference to commit
-- `GraphError`: Failed on repository graph operations
 
 #### `Repo::get_branches_containing_commit`
 
-Finds all branches that contain a specific commit.
+Gets all branches that contain a specific commit.
 
 ```rust
 pub fn get_branches_containing_commit(&self, sha: &str) -> Result<Vec<String>, RepoError>
 ```
 
 **Parameters:**
-- `sha`: The commit SHA to find
+- `sha`: The commit SHA to search for
 
 **Returns:**
-- `Result<Vec<String>, RepoError>`: List of branch names containing the commit, or an error
+- `Result<Vec<String>, RepoError>`: Vector of branch names containing the commit or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-let commit_sha = repo.get_current_sha().expect("Failed to get current SHA");
-
-let branches = repo.get_branches_containing_commit(&commit_sha)
-    .expect("Failed to find branches");
+let branches = repo.get_branches_containing_commit("abcdef123456")?;
 for branch in branches {
-    println!("Branch contains commit: {}", branch);
+    println!("Branch {} contains the commit", branch);
 }
 ```
 
 **Possible errors:**
-- Similar to `get_branch_from_commit`
-
-#### `Repo::get_diverged_commit`
-
-Finds the common ancestor (merge base) between HEAD and another reference.
-
-```rust
-pub fn get_diverged_commit(&self, git_ref: &str) -> Result<String, RepoError>
-```
-
-**Parameters:**
-- `git_ref`: The reference to compare with HEAD (branch name, tag, or commit SHA)
-
-**Returns:**
-- `Result<String, RepoError>`: The SHA of the common ancestor commit, or an error
-
-**Example:**
-```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-let merge_base = repo.get_diverged_commit("feature-branch")
-    .expect("Failed to find common ancestor");
-println!("Common ancestor commit: {}", merge_base);
-```
-
-**Possible errors:**
-- `ReferenceError`: Failed to parse reference
-- `PeelError`: Failed to peel reference to commit
-- `HeadError`: Failed to get repository HEAD
-- `MergeError`: Failed to find merge base
+- `CommitOidError`: Failed to parse commit SHA
+- `BranchListError`: Failed to list branches
+- `GraphError`: Failed to perform graph operations
 
 ## Commit Operations
 
@@ -392,7 +381,7 @@ println!("Common ancestor commit: {}", merge_base);
 
 #### `Repo::add`
 
-Adds a file to the Git index.
+Adds a specific file to the staging area.
 
 ```rust
 pub fn add(&self, file_path: &str) -> Result<&Self, RepoError>
@@ -402,40 +391,42 @@ pub fn add(&self, file_path: &str) -> Result<&Self, RepoError>
 - `file_path`: The path to the file to add
 
 **Returns:**
-- `Result<&Self, RepoError>`: A reference to self for method chaining, or an error
+- `Result<&Self, RepoError>`: Reference to self for chaining or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-repo.add("src/main.rs").expect("Failed to add file");
+repo.add("src/main.rs")?;
 ```
 
 **Possible errors:**
-- `IndexError`: Failed to get or manipulate the index
+- `IndexError`: Failed to access the index
+- `AddFilesError`: Failed to add file to index
+- `WriteIndexError`: Failed to write index
 
 #### `Repo::add_all`
 
-Adds all changed files to the Git index.
+Adds all changed files to the staging area.
 
 ```rust
 pub fn add_all(&self) -> Result<&Self, RepoError>
 ```
 
 **Returns:**
-- `Result<&Self, RepoError>`: A reference to self for method chaining, or an error
+- `Result<&Self, RepoError>`: Reference to self for chaining or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-repo.add_all().expect("Failed to add all changes");
+repo.add_all()?;
 ```
 
 **Possible errors:**
-- `IndexError`: Failed to get or manipulate the index
+- `IndexError`: Failed to access the index
+- `AddFilesError`: Failed to add files to index
+- `WriteIndexError`: Failed to write index
 
 #### `Repo::commit`
 
-Creates a new commit with the current index.
+Creates a commit with the currently staged changes.
 
 ```rust
 pub fn commit(&self, message: &str) -> Result<String, RepoError>
@@ -445,30 +436,24 @@ pub fn commit(&self, message: &str) -> Result<String, RepoError>
 - `message`: The commit message
 
 **Returns:**
-- `Result<String, RepoError>`: The new commit's SHA, or an error
+- `Result<String, RepoError>`: The commit SHA or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-// First add some files
-repo.add("src/main.rs").expect("Failed to add file");
-// Then commit
-let commit_id = repo.commit("fix: update main.rs").expect("Failed to commit");
+let commit_id = repo.commit("feat: add new functionality")?;
 println!("Created commit: {}", commit_id);
 ```
 
 **Possible errors:**
-- `SignatureError`: Failed to get signature
-- `HeadError`: Failed to get HEAD
-- `PeelError`: Failed to peel reference to commit
-- `IndexError`: Failed to get index
-- `WriteTreeError`: Failed to write tree
-- `TreeError`: Failed to find tree
+- `SignatureError`: Failed to get repository signature
+- `HeadError`: Failed to get repository HEAD
+- `IndexError`: Failed to access the index
+- `TreeError`: Failed to create tree from index
 - `CommitError`: Failed to create commit
 
 #### `Repo::commit_changes`
 
-Adds all changes and creates a new commit in one step.
+Adds all changes and creates a commit in one operation.
 
 ```rust
 pub fn commit_changes(&self, message: &str) -> Result<String, RepoError>
@@ -478,17 +463,22 @@ pub fn commit_changes(&self, message: &str) -> Result<String, RepoError>
 - `message`: The commit message
 
 **Returns:**
-- `Result<String, RepoError>`: The new commit's SHA, or an error
+- `Result<String, RepoError>`: The commit SHA or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-let commit_id = repo.commit_changes("feat: add new feature").expect("Failed to commit changes");
+let commit_id = repo.commit_changes("fix: resolve authentication issue")?;
 println!("Created commit: {}", commit_id);
 ```
 
 **Possible errors:**
-- Similar to `commit` plus `AddFilesError`
+- `SignatureError`: Failed to get repository signature
+- `HeadError`: Failed to get repository HEAD
+- `IndexError`: Failed to access the index
+- `AddFilesError`: Failed to add files to index
+- `WriteIndexError`: Failed to write index
+- `TreeError`: Failed to create tree from index
+- `CommitError`: Failed to create commit
 
 ### Commit Information
 
@@ -501,113 +491,74 @@ pub fn get_current_sha(&self) -> Result<String, RepoError>
 ```
 
 **Returns:**
-- `Result<String, RepoError>`: The current commit SHA, or an error
+- `Result<String, RepoError>`: The current commit SHA or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-let sha = repo.get_current_sha().expect("Failed to get current SHA");
-println!("Current commit: {}", sha);
+let current_sha = repo.get_current_sha()?;
+println!("Current commit: {}", current_sha);
 ```
 
 **Possible errors:**
 - `HeadError`: Failed to get repository HEAD
+- `CommitOidError`: Failed to get commit OID
 
 #### `Repo::get_previous_sha`
 
-Gets the SHA of the parent of the current HEAD commit.
+Gets the SHA of the previous commit (parent of HEAD).
 
 ```rust
 pub fn get_previous_sha(&self) -> Result<String, RepoError>
 ```
 
 **Returns:**
-- `Result<String, RepoError>`: The previous commit SHA, or an error
+- `Result<String, RepoError>`: The previous commit SHA or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-let prev_sha = repo.get_previous_sha().expect("Failed to get previous SHA");
-println!("Previous commit: {}", prev_sha);
+let previous_sha = repo.get_previous_sha()?;
+println!("Previous commit: {}", previous_sha);
 ```
 
 **Possible errors:**
 - `HeadError`: Failed to get repository HEAD
-- `PeelError`: Failed to peel reference to commit
-- `GitFailure`: Failed to get parent commit
-
-#### `Repo::status_porcelain`
-
-Gets the status of the repository in porcelain format (a list of changed file paths).
-
-```rust
-pub fn status_porcelain(&self) -> Result<Vec<String>, RepoError>
-```
-
-**Returns:**
-- `Result<Vec<String>, RepoError>`: List of changed file paths, or an error
-
-**Example:**
-```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-let status = repo.status_porcelain().expect("Failed to get status");
-for file in status {
-    println!("Changed file: {}", file);
-}
-```
-
-**Possible errors:**
-- `StatusError`: Failed to get repository status
+- `PeelError`: Failed to peel HEAD to commit
+- `CommitOidError`: Failed to get commit OID
 
 ### Commit History
 
 #### `Repo::get_commits_since`
 
-Gets commits made since a specific reference or from the beginning.
+Gets commits since a specific reference, optionally filtered by file path.
 
 ```rust
-pub fn get_commits_since(&self, since: Option<String>, relative: &Option<String>) -> Result<Vec<RepoCommit>, RepoError>
+pub fn get_commits_since(
+    &self,
+    since: Option<String>,
+    path: &Option<String>
+) -> Result<Vec<RepoCommit>, RepoError>
 ```
 
 **Parameters:**
-- `since`: Optional reference to start from (branch, tag, or commit SHA)
-- `relative`: Optional path to filter commits by (only commits touching this path)
+- `since`: Optional reference (tag, branch, or commit SHA) to start from
+- `path`: Optional file path to filter commits
 
 **Returns:**
-- `Result<Vec<RepoCommit>, RepoError>`: List of commits, or an error
+- `Result<Vec<RepoCommit>, RepoError>`: Vector of commits or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
+// Get all commits since a tag
+let commits = repo.get_commits_since(Some("v1.0.0".to_string()), &None)?;
 
-// Get all commits since v1.0.0
-let commits = repo.get_commits_since(
-    Some("v1.0.0".to_string()),
-    &None
-).expect("Failed to get commits");
-
-// Get all commits that touched a specific file
-let file_commits = repo.get_commits_since(
-    None,
-    &Some("src/main.rs".to_string())
-).expect("Failed to get commits");
-
-for commit in commits {
-    println!("{}: {} ({})",
-        commit.hash,
-        commit.message,
-        commit.author_name
-    );
-}
+// Get commits affecting a specific file
+let file_commits = repo.get_commits_since(None, &Some("src/main.rs".to_string()))?;
 ```
 
 **Possible errors:**
-- `GitFailure`: General Git operation failure
-- `RevWalkError`: Failed on revision walking
-- `ReferenceError`: Failed to parse reference
-- `PeelError`: Failed to peel reference to commit
-- `CommitOidError`: Failed to parse commit SHA
-- `CommitError`: Failed to find commit
+- `RevWalkError`: Failed to perform revision walk
+- `ReferenceError`: Failed to resolve reference
+- `CommitOidError`: Failed to parse commit
 
 ## Tag Operations
 
@@ -615,186 +566,276 @@ for commit in commits {
 
 #### `Repo::create_tag`
 
-Creates a new tag at the current HEAD.
+Creates a new tag at the current HEAD commit.
 
 ```rust
 pub fn create_tag(&self, tag: &str, message: Option<String>) -> Result<&Self, RepoError>
 ```
 
 **Parameters:**
-- `tag`: The name for the new tag
-- `message`: Optional message for the tag
+- `tag`: The name of the tag to create
+- `message`: Optional message for annotated tag (None for lightweight tag)
 
 **Returns:**
-- `Result<&Self, RepoError>`: A reference to self for method chaining, or an error
+- `Result<&Self, RepoError>`: Reference to self for chaining or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-repo.create_tag("v1.0.0", Some("Version 1.0.0 release".to_string()))
-    .expect("Failed to create tag");
+// Create annotated tag
+repo.create_tag("v1.0.0", Some("Release version 1.0.0".to_string()))?;
+
+// Create lightweight tag
+repo.create_tag("v1.0.1", None)?;
 ```
 
 **Possible errors:**
-- `SignatureError`: Failed to get signature
-- `HeadError`: Failed to get HEAD
+- `SignatureError`: Failed to get repository signature
+- `HeadError`: Failed to get repository HEAD
+- `PeelError`: Failed to peel HEAD to commit
 - `CreateTagError`: Failed to create tag
 
 ### Tag Information
 
 #### `Repo::get_last_tag`
 
-Gets the name of the last tag in the repository.
+Gets the most recent tag in the repository.
 
 ```rust
 pub fn get_last_tag(&self) -> Result<String, RepoError>
 ```
 
 **Returns:**
-- `Result<String, RepoError>`: The last tag name, or an error
+- `Result<String, RepoError>`: The most recent tag name or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-match repo.get_last_tag() {
-    Ok(tag) => println!("Last tag: {}", tag),
-    Err(e) => println!("No tags found or error: {}", e),
-}
+let last_tag = repo.get_last_tag()?;
+println!("Last tag: {}", last_tag);
 ```
 
 **Possible errors:**
-- `LastTagError`: Failed to get or find tags
+- `LastTagError`: Failed to get tags or no tags found
 
 #### `Repo::get_remote_or_local_tags`
 
-Gets tags from either local repository or remote.
+Gets tags from local or remote repositories.
 
 ```rust
-pub fn get_remote_or_local_tags(&self, local: Option<bool>) -> Result<Vec<RepoTags>, RepoError>
+pub fn get_remote_or_local_tags(
+    &self,
+    local: Option<bool>
+) -> Result<Vec<RepoTags>, RepoError>
 ```
 
 **Parameters:**
-- `local`: If Some(true), gets local tags; if Some(false) or None, gets remote tags
+- `local`: Optional flag to specify local (true) or remote (false) tags. None for both.
 
 **Returns:**
-- `Result<Vec<RepoTags>, RepoError>`: List of tags, or an error
+- `Result<Vec<RepoTags>, RepoError>`: Vector of tags or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-
 // Get local tags
-let local_tags = repo.get_remote_or_local_tags(Some(true))
-    .expect("Failed to get local tags");
+let local_tags = repo.get_remote_or_local_tags(Some(true))?;
 
-// Get remote tags (default)
-let remote_tags = repo.get_remote_or_local_tags(None)
-    .expect("Failed to get remote tags");
+// Get remote tags
+let remote_tags = repo.get_remote_or_local_tags(Some(false))?;
 
-for tag in local_tags {
-    println!("Tag: {} ({})", tag.tag, tag.hash);
+// Get all tags
+let all_tags = repo.get_remote_or_local_tags(None)?;
+```
+
+**Possible errors:**
+- `TagError`: Failed to retrieve tags
+- `RemoteError`: Failed to access remote (for remote tags)
+
+## File Status and Change Detection
+
+### Repository Status
+
+#### `Repo::status_porcelain`
+
+Gets the repository status in porcelain format (simple, parseable format).
+
+```rust
+pub fn status_porcelain(&self) -> Result<Vec<String>, RepoError>
+```
+
+**Returns:**
+- `Result<Vec<String>, RepoError>`: Vector of status lines or an error
+
+**Example:**
+```rust
+let status_lines = repo.status_porcelain()?;
+for line in status_lines {
+    println!("{}", line);
 }
 ```
 
 **Possible errors:**
-- `ReferenceError`: Failed on reference parsing
-- `TagError`: Failed on tag operations
-- `RemoteError`: Failed on remote operations
+- `StatusError`: Failed to get repository status
 
-## File Change Detection
+#### `Repo::get_status_detailed`
+
+Gets detailed status information for all files in the repository.
+
+```rust
+pub fn get_status_detailed(&self) -> Result<Vec<GitChangedFile>, RepoError>
+```
+
+**Returns:**
+- `Result<Vec<GitChangedFile>, RepoError>`: Vector of file status information or an error
+
+**Example:**
+```rust
+let detailed_status = repo.get_status_detailed()?;
+for file in detailed_status {
+    println!("File: {}, Status: {:?}, Staged: {}, Workdir: {}",
+        file.path, file.status, file.staged, file.workdir);
+}
+```
+
+**Possible errors:**
+- `StatusError`: Failed to get repository status
+
+#### `Repo::get_staged_files`
+
+Gets a list of files that are currently staged for commit.
+
+```rust
+pub fn get_staged_files(&self) -> Result<Vec<String>, RepoError>
+```
+
+**Returns:**
+- `Result<Vec<String>, RepoError>`: Vector of staged file paths or an error
+
+**Example:**
+```rust
+let staged_files = repo.get_staged_files()?;
+println!("Files ready for commit: {:?}", staged_files);
+```
+
+**Possible errors:**
+- `StatusError`: Failed to get repository status
 
 ### Changed Files
 
 #### `Repo::get_all_files_changed_since_sha_with_status`
 
-Gets all files changed since a specific reference with their status.
+Gets all files that changed since a specific commit/reference with their status information.
 
 ```rust
-pub fn get_all_files_changed_since_sha_with_status(&self, git_ref: &str) -> Result<Vec<GitChangedFile>, RepoError>
+pub fn get_all_files_changed_since_sha_with_status(
+    &self,
+    git_ref: &str
+) -> Result<Vec<GitChangedFile>, RepoError>
 ```
 
 **Parameters:**
-- `git_ref`: The reference to compare with HEAD (branch name, tag, or commit SHA)
+- `git_ref`: The reference (commit SHA, tag, or branch) to compare against
 
 **Returns:**
-- `Result<Vec<GitChangedFile>, RepoError>`: List of changed files with status, or an error
+- `Result<Vec<GitChangedFile>, RepoError>`: Vector of changed files with status or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-let changed_files = repo.get_all_files_changed_since_sha_with_status("v1.0.0")
-    .expect("Failed to get changed files");
-
+let changed_files = repo.get_all_files_changed_since_sha_with_status("v1.0.0")?;
 for file in changed_files {
-    println!("File: {} - {:?}", file.path, file.status);
+    println!("Changed file: {} ({:?})", file.path, file.status);
 }
 ```
 
 **Possible errors:**
-- `ReferenceError`: Failed to parse reference
-- `PeelError`: Failed to peel reference to commit
-- `GitFailure`: General Git operation failure
-- `DiffError`: Failed on diff operations
+- `ReferenceError`: Failed to resolve reference
+- `DiffError`: Failed to perform diff operation
+- `CommitOidError`: Failed to parse commit
 
 #### `Repo::get_all_files_changed_since_sha`
 
-Gets all files changed since a specific reference (paths only, no status).
+Gets a simple list of files that changed since a specific commit/reference.
 
 ```rust
 pub fn get_all_files_changed_since_sha(&self, git_ref: &str) -> Result<Vec<String>, RepoError>
 ```
 
 **Parameters:**
-- `git_ref`: The reference to compare with HEAD (branch name, tag, or commit SHA)
+- `git_ref`: The reference (commit SHA, tag, or branch) to compare against
 
 **Returns:**
-- `Result<Vec<String>, RepoError>`: List of changed file paths, or an error
+- `Result<Vec<String>, RepoError>`: Vector of changed file paths or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-let changed_files = repo.get_all_files_changed_since_sha("v1.0.0")
-    .expect("Failed to get changed files");
-
+let changed_files = repo.get_all_files_changed_since_sha("v1.0.0")?;
 for file in changed_files {
-    println!("Changed file: {}", file);
+    println!("Changed: {}", file);
 }
 ```
 
 **Possible errors:**
-- Same as `get_all_files_changed_since_sha_with_status`
+- `ReferenceError`: Failed to resolve reference
+- `DiffError`: Failed to perform diff operation
+
+#### `Repo::get_files_changed_between`
+
+Gets files changed between two references.
+
+```rust
+pub fn get_files_changed_between(&self, from_ref: &str, to_ref: &str) -> Result<Vec<GitChangedFile>, RepoError>
+```
+
+**Parameters:**
+- `from_ref`: The starting reference
+- `to_ref`: The ending reference
+
+**Returns:**
+- `Result<Vec<GitChangedFile>, RepoError>`: Vector of changed files with status or an error
+
+**Example:**
+```rust
+let files = repo.get_files_changed_between("main", "feature-branch")?;
+for file in files {
+    println!("File: {}, Status: {:?}", file.path, file.status);
+}
+```
+
+**Possible errors:**
+- `ReferenceError`: Failed to resolve references
+- `DiffError`: Failed to perform diff operation
 
 ### Package-specific Changes
 
 #### `Repo::get_all_files_changed_since_branch`
 
-Gets all files changed since a specific branch within specified package paths.
+Gets files changed in specific package directories since a branch.
 
 ```rust
-pub fn get_all_files_changed_since_branch(&self, packages_paths: &[String], branch: &str) -> Result<Vec<String>, RepoError>
+pub fn get_all_files_changed_since_branch(
+    &self,
+    packages_paths: &[String],
+    branch: &str
+) -> Result<Vec<String>, RepoError>
 ```
 
 **Parameters:**
-- `packages_paths`: List of package paths to filter by
+- `packages_paths`: Vector of package directory paths to check
 - `branch`: The branch to compare against
 
 **Returns:**
-- `Result<Vec<String>, RepoError>`: List of changed file paths within the packages, or an error
+- `Result<Vec<String>, RepoError>`: Vector of changed files in the specified packages or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
 let packages = vec!["packages/pkg1".to_string(), "packages/pkg2".to_string()];
-let changed_files = repo.get_all_files_changed_since_branch(&packages, "main")
-    .expect("Failed to get changed files");
-
-for file in changed_files {
-    println!("Changed file: {}", file);
+let package_changes = repo.get_all_files_changed_since_branch(&packages, "main")?;
+for file in package_changes {
+    println!("Package change: {}", file);
 }
 ```
 
 **Possible errors:**
-- Same as `get_all_files_changed_since_sha`
+- `ReferenceError`: Failed to resolve branch reference
+- `DiffError`: Failed to perform diff operation
 
 ## Remote Operations
 
@@ -810,56 +851,29 @@ pub fn push(&self, remote_name: &str, follow_tags: Option<bool>) -> Result<bool,
 
 **Parameters:**
 - `remote_name`: The name of the remote (e.g., "origin")
-- `follow_tags`: Whether to also push tags
+- `follow_tags`: Optional flag to push tags along with commits
 
 **Returns:**
-- `Result<bool, RepoError>`: Success indicator or an error
+- `Result<bool, RepoError>`: True if push was successful, or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-// Push current branch with tags
-repo.push("origin", Some(true)).expect("Failed to push");
+// Push without tags
+let success = repo.push("origin", Some(false))?;
+
+// Push with tags
+repo.push("origin", Some(true))?;
 ```
 
 **Possible errors:**
 - `HeadError`: Failed to get repository HEAD
 - `BranchNameError`: Failed to get branch name
-- `RemoteError`: Failed on remote operations
+- `RemoteError`: Failed to find or access remote
 - `PushError`: Failed to push to remote
-
-#### `Repo::push_with_ssh_config`
-
-Pushes the current branch to a remote repository with custom SSH key paths.
-
-```rust
-pub fn push_with_ssh_config(&self, remote_name: &str, follow_tags: Option<bool>, ssh_key_paths: Vec<PathBuf>) -> Result<bool, RepoError>
-```
-
-**Parameters:**
-- `remote_name`: The name of the remote (e.g., "origin")
-- `follow_tags`: Whether to also push tags
-- `ssh_key_paths`: Paths to SSH keys to try for authentication
-
-**Returns:**
-- `Result<bool, RepoError>`: Success indicator or an error
-
-**Example:**
-```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-let key_paths = vec![
-    PathBuf::from("/custom/path/to/id_ed25519"),
-    PathBuf::from("/custom/path/to/id_rsa"),
-];
-repo.push_with_ssh_config("origin", Some(true), key_paths).expect("Failed to push");
-```
-
-**Possible errors:**
-- Same as `push`
 
 #### `Repo::pull`
 
-Pulls changes from a remote repository. This fetches from the remote and merges the changes into the current branch.
+Pulls changes from a remote repository.
 
 ```rust
 pub fn pull(&self, remote_name: &str, branch_name: Option<&str>) -> Result<bool, RepoError>
@@ -867,100 +881,189 @@ pub fn pull(&self, remote_name: &str, branch_name: Option<&str>) -> Result<bool,
 
 **Parameters:**
 - `remote_name`: The name of the remote (e.g., "origin")
-- `branch_name`: Optional branch name to pull from (defaults to tracking branch)
+- `branch_name`: Optional specific branch to pull (current branch if None)
 
 **Returns:**
-- `Result<bool, RepoError>`: Success indicator or an error
+- `Result<bool, RepoError>`: True if pull was successful, or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-// Pull from the tracking branch
-repo.pull("origin", None).expect("Failed to pull");
+// Pull current branch
+let success = repo.pull("origin", None)?;
 
-// Pull from a specific branch
-repo.pull("origin", Some("feature-branch")).expect("Failed to pull from feature branch");
+// Pull specific branch
+repo.pull("origin", Some("feature-branch"))?;
 ```
 
 **Possible errors:**
-- `RemoteError`: Failed on remote operations
-- `BranchNameError`: Failed to get branch name
-- `PeelError`: Failed to peel reference to commit
-- `MergeError`: Failed on merge operations
-- `IndexError`: Failed to get or manipulate the index
-- `WriteTreeError`: Failed to write tree
-- `TreeError`: Failed to find tree
-- `SignatureError`: Failed to get signature
-- `CommitError`: Failed to create commit
-- `MergeConflictError`: Merge conflicts detected
+- `RemoteError`: Failed to find or access remote
+- `HeadError`: Failed to get repository HEAD
+- `MergeError`: Failed to merge pulled changes
 
 ### Fetching
 
 #### `Repo::fetch`
 
-Fetches changes from a remote repository.
+Fetches changes from a remote repository without merging.
 
 ```rust
-pub fn fetch(&self, remote_name: &str, refspecs: Option<&[&str]>, prune: bool) -> Result<bool, RepoError>
+pub fn fetch(
+    &self,
+    remote_name: &str,
+    refspecs: Option<&[&str]>,
+    prune: bool
+) -> Result<bool, RepoError>
 ```
 
 **Parameters:**
 - `remote_name`: The name of the remote (e.g., "origin")
-- `refspecs`: Optional reference specs to fetch
-- `prune`: Whether to prune deleted references
+- `refspecs`: Optional reference specs to fetch (all refs if None)
+- `prune`: Whether to prune deleted remote branches
 
 **Returns:**
-- `Result<bool, RepoError>`: Success indicator or an error
+- `Result<bool, RepoError>`: True if fetch was successful, or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-// Fetch with default refspecs and no pruning
-repo.fetch("origin", None, false).expect("Failed to fetch");
+// Fetch all refs
+repo.fetch("origin", None, false)?;
 
-// Fetch a specific branch and prune
-repo.fetch("origin", Some(&["refs/heads/main:refs/remotes/origin/main"]), true)
-    .expect("Failed to fetch specific branch");
+// Fetch specific refspecs with pruning
+repo.fetch("origin", Some(&["refs/heads/main:refs/remotes/origin/main"]), true)?;
 ```
 
 **Possible errors:**
-- `RemoteError`: Failed on remote operations
+- `RemoteError`: Failed to find or access remote
+- `GitFailure`: Failed to fetch from remote
+
+### SSH Operations
+
+#### `Repo::push_with_ssh_config`
+
+Pushes to a remote repository using SSH authentication with custom key paths.
+
+```rust
+pub fn push_with_ssh_config(
+    &self,
+    remote_name: &str,
+    follow_tags: Option<bool>,
+    ssh_key_paths: Vec<PathBuf>
+) -> Result<bool, RepoError>
+```
+
+**Parameters:**
+- `remote_name`: The name of the remote (e.g., "origin")
+- `follow_tags`: Optional flag to push tags along with commits
+- `ssh_key_paths`: Vector of SSH key file paths to try in order
+
+**Returns:**
+- `Result<bool, RepoError>`: True if push was successful, or an error
+
+**Example:**
+```rust
+use std::path::PathBuf;
+
+let key_paths = vec![
+    PathBuf::from("/home/user/.ssh/id_ed25519"),
+    PathBuf::from("/home/user/.ssh/id_rsa"),
+];
+let success = repo.push_with_ssh_config("origin", Some(true), key_paths)?;
+```
+
+**Possible errors:**
+- `HeadError`: Failed to get repository HEAD
+- `BranchNameError`: Failed to get branch name
+- `RemoteError`: Failed to find or access remote
+- `PushError`: Failed to push to remote
+
+## Advanced Git Operations
 
 ### Merging
 
 #### `Repo::merge`
 
-Merges the specified branch into the current HEAD.
+Merges a branch into the current branch.
 
 ```rust
 pub fn merge(&self, branch_name: &str) -> Result<(), RepoError>
 ```
 
 **Parameters:**
-- `branch_name`: The name of the branch to merge into the current branch
+- `branch_name`: The name of the branch to merge
 
 **Returns:**
 - `Result<(), RepoError>`: Success or an error
 
 **Example:**
 ```rust
-let repo = Repo::open("./my-repo").expect("Failed to open repository");
-repo.checkout("main").expect("Failed to checkout main");
-repo.merge("feature-branch").expect("Failed to merge feature branch");
+match repo.merge("feature-branch") {
+    Ok(_) => println!("Merge completed successfully"),
+    Err(RepoError::MergeConflictError(_)) => {
+        println!("Merge conflicts detected");
+    },
+    Err(e) => println!("Merge failed: {}", e),
+}
 ```
 
 **Possible errors:**
 - `HeadError`: Failed to get repository HEAD
-- `PeelError`: Failed to peel reference to commit
-- `ReferenceError`: Failed on reference parsing
-- `CommitError`: Failed to create or find commit
-- `MergeError`: Failed on merge operations
-- `CheckoutError`: Failed on checkout
-- `IndexError`: Failed to get or manipulate the index
-- `WriteTreeError`: Failed to write tree
-- `TreeError`: Failed to find tree
-- `SignatureError`: Failed to get signature
+- `BranchError`: Failed to find branch
+- `MergeError`: Failed to perform merge
 - `MergeConflictError`: Merge conflicts detected
+
+### Repository Analysis
+
+#### `Repo::get_merge_base`
+
+Finds the merge base (common ancestor) between two branches.
+
+```rust
+pub fn get_merge_base(&self, branch1: &str, branch2: &str) -> Result<String, RepoError>
+```
+
+**Parameters:**
+- `branch1`: The first branch name
+- `branch2`: The second branch name
+
+**Returns:**
+- `Result<String, RepoError>`: The merge base commit SHA or an error
+
+**Example:**
+```rust
+let merge_base = repo.get_merge_base("main", "feature-branch")?;
+println!("Merge base: {}", merge_base);
+```
+
+**Possible errors:**
+- `ReferenceError`: Failed to resolve branch references
+- `GraphError`: Failed to find merge base
+- `CommitOidError`: Failed to get commit OID
+
+#### `Repo::get_diverged_commit`
+
+Finds the common ancestor commit between the current branch and a reference.
+
+```rust
+pub fn get_diverged_commit(&self, git_ref: &str) -> Result<String, RepoError>
+```
+
+**Parameters:**
+- `git_ref`: The reference to compare against (branch, tag, or commit SHA)
+
+**Returns:**
+- `Result<String, RepoError>`: The common ancestor commit SHA or an error
+
+**Example:**
+```rust
+let diverged_commit = repo.get_diverged_commit("feature-branch")?;
+println!("Common ancestor: {}", diverged_commit);
+```
+
+**Possible errors:**
+- `ReferenceError`: Failed to resolve reference
+- `HeadError`: Failed to get repository HEAD
+- `GraphError`: Failed to find common ancestor
+- `CommitOidError`: Failed to get commit OID
 
 ## Types Reference
 
@@ -968,18 +1071,18 @@ repo.merge("feature-branch").expect("Failed to merge feature branch");
 
 #### `Repo`
 
-Represents a Git repository with high-level operation methods.
+The main repository struct that wraps libgit2 functionality.
 
 ```rust
 pub struct Repo {
-    repo: Rc<Repository>,
+    repo: Repository,
     local_path: PathBuf,
 }
 ```
 
-**Description:**
-- `repo`: The internal libgit2 repository (wrapped in an `Rc` for reference counting)
-- `local_path`: The path to the repository on the local filesystem
+**Fields:**
+- `repo`: Internal libgit2 repository handle
+- `local_path`: Path to the repository root directory
 
 ### File Status Types
 
@@ -989,22 +1092,37 @@ Represents the status of a file in Git.
 
 ```rust
 pub enum GitFileStatus {
-    Added,    // File has been added to the repository
-    Modified, // File has been modified
-    Deleted,  // File has been deleted
+    Added,
+    Modified,
+    Deleted,
+    Untracked,
 }
 ```
+
+**Variants:**
+- `Added`: File has been added to the repository
+- `Modified`: File has been modified
+- `Deleted`: File has been deleted
+- `Untracked`: File is not tracked by Git
 
 #### `GitChangedFile`
 
-Represents a changed file in the Git repository.
+Represents a changed file with detailed status information.
 
 ```rust
 pub struct GitChangedFile {
-    pub path: String,         // The path to the changed file
-    pub status: GitFileStatus, // The status of the file (Added, Modified, or Deleted)
+    pub path: String,
+    pub status: GitFileStatus,
+    pub staged: bool,
+    pub workdir: bool,
 }
 ```
+
+**Fields:**
+- `path`: The path to the changed file
+- `status`: The status of the file (Added, Modified, Deleted, or Untracked)
+- `staged`: Whether the file is staged in the index
+- `workdir`: Whether the file has changes in the working directory
 
 ### Commit and Tag Types
 
@@ -1014,13 +1132,20 @@ Represents a commit in the Git repository.
 
 ```rust
 pub struct RepoCommit {
-    pub hash: String,         // The commit hash (SHA)
-    pub author_name: String,  // The name of the commit author
-    pub author_email: String, // The email of the commit author
-    pub author_date: String,  // The date of the commit in RFC2822 format
-    pub message: String,      // The commit message
+    pub hash: String,
+    pub author_name: String,
+    pub author_email: String,
+    pub author_date: String,
+    pub message: String,
 }
 ```
+
+**Fields:**
+- `hash`: The commit hash (SHA)
+- `author_name`: The name of the commit author
+- `author_email`: The email of the commit author
+- `author_date`: The date of the commit in RFC2822 format
+- `message`: The commit message
 
 #### `RepoTags`
 
@@ -1028,68 +1153,72 @@ Represents a tag in the Git repository.
 
 ```rust
 pub struct RepoTags {
-    pub hash: String, // The hash of the commit that the tag points to
-    pub tag: String,  // The name of the tag
+    pub hash: String,
+    pub tag: String,
 }
 ```
+
+**Fields:**
+- `hash`: The hash of the commit that the tag points to
+- `tag`: The name of the tag
 
 ### Error Types
 
 #### `RepoError`
 
-Errors that can occur when working with Git repositories.
+Comprehensive error type for all Git operations.
 
 ```rust
 pub enum RepoError {
-    CanonicalPathFailure(std::io::Error),     // Failed to canonicalize a path
-    GitFailure(Git2Error),                     // Generic Git operation failure
-    CreateRepoFailure(Git2Error),              // Failed to create a new repository
-    OpenRepoFailure(Git2Error),                // Failed to open an existing repository
-    CloneRepoFailure(Git2Error),               // Failed to clone a repository
-    ConfigError(Git2Error),                    // Git configuration error
-    ConfigEntriesError(Git2Error),             // Failed to retrieve configuration entries
-    HeadError(Git2Error),                      // Failed to get repository HEAD
-    PeelError(Git2Error),                      // Failed to peel a reference to a commit
-    BranchError(Git2Error),                    // Failed to create or manipulate a branch
-    SignatureError(Git2Error),                 // Failed to get repository signature
-    IndexError(Git2Error),                     // Failed to get or manipulate the index
-    AddFilesError(Git2Error),                  // Failed to add files to the index
-    WriteIndexError(Git2Error),                // Failed to write the index
-    TreeError(Git2Error),                      // Failed to find or manipulate a tree
-    CommitError(Git2Error),                    // Failed to create a commit
-    WriteTreeError(Git2Error),                 // Failed to write a tree
-    BranchListError(Git2Error),                // Failed to list branches
-    BranchNameError(Git2Error),                // Failed to get a branch name
-    CheckoutBranchError(Git2Error),            // Failed to checkout a branch
-    CheckoutError(Git2Error),                  // Failed to checkout
-    LastTagError(Git2Error),                   // Failed to get the last tag
-    CreateTagError(Git2Error),                 // Failed to create a tag
-    StatusError(Git2Error),                    // Failed to get repository status
-    CommitOidError(Git2Error),                 // Failed to parse a commit SHA
-    GraphError(Git2Error),                     // Failed on repository graph operations
-    PushError(Git2Error),                      // Failed to push to a remote
-    RemoteError(Git2Error),                    // Failed on remote operations
-    ReferenceError(Git2Error),                 // Failed on reference parsing
-    DiffError(Git2Error),                      // Failed on diff operations
-    RevWalkError(Git2Error),                   // Failed on revision walking
-    TagError(Git2Error),                       // Failed on tag operations
-    MergeError(Git2Error),                     // Failed on merge operations
-    MergeConflictError(Git2Error),             // Failed due to merge conflicts
+    CanonicalPathFailure(std::io::Error),
+    GitFailure(git2::Error),
+    CreateRepoFailure(git2::Error),
+    OpenRepoFailure(git2::Error),
+    CloneRepoFailure(git2::Error),
+    ConfigError(git2::Error),
+    ConfigEntriesError(git2::Error),
+    HeadError(git2::Error),
+    PeelError(git2::Error),
+    BranchError(git2::Error),
+    SignatureError(git2::Error),
+    IndexError(git2::Error),
+    AddFilesError(git2::Error),
+    WriteIndexError(git2::Error),
+    TreeError(git2::Error),
+    CommitError(git2::Error),
+    WriteTreeError(git2::Error),
+    BranchListError(git2::Error),
+    BranchNameError(git2::Error),
+    CheckoutBranchError(git2::Error),
+    CheckoutError(git2::Error),
+    LastTagError(git2::Error),
+    CreateTagError(git2::Error),
+    StatusError(git2::Error),
+    CommitOidError(git2::Error),
+    GraphError(git2::Error),
+    PushError(git2::Error),
+    RemoteError(git2::Error),
+    ReferenceError(git2::Error),
+    DiffError(git2::Error),
+    RevWalkError(git2::Error),
+    TagError(git2::Error),
+    MergeError(git2::Error),
+    MergeConflictError(git2::Error),
 }
 ```
 
 ## Error Handling
 
-The crate provides detailed error types through `RepoError` which wraps the underlying libgit2 errors. This allows for precise error handling in your application code.
+All operations return `Result<T, RepoError>` to provide comprehensive error information. The error types are specific to the operation that failed, allowing for targeted error handling:
 
 ```rust
+use sublime_git_tools::{Repo, RepoError};
+
 match repo.checkout("feature-branch") {
     Ok(_) => println!("Switched to feature-branch"),
-    Err(e) => match e {
-        RepoError::BranchNameError(_) => eprintln!("Branch does not exist"),
-        RepoError::CheckoutBranchError(_) => eprintln!("Failed to checkout branch"),
-        _ => eprintln!("Error: {}", e),
-    }
+    Err(RepoError::BranchNameError(_)) => println!("Branch does not exist"),
+    Err(RepoError::CheckoutBranchError(_)) => println!("Failed to checkout branch"),
+    Err(e) => println!("Other error: {}", e),
 }
 ```
 
@@ -1099,25 +1228,20 @@ match repo.checkout("feature-branch") {
 
 ```rust
 use sublime_git_tools::Repo;
-use std::fs::File;
-use std::io::Write;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create a new repository
+    // Create or open repository
     let repo = Repo::create("/tmp/example-repo")?;
+    
+    // Configure repository
     repo.config("John Doe", "john@example.com")?;
     
-    // Create a file and make an initial commit
-    let mut file = File::create("/tmp/example-repo/README.md")?;
-    writeln!(file, "# Example Repository\n\nThis is an example repository.")?;
+    // Create and commit changes
+    std::fs::write("/tmp/example-repo/README.md", "# Example Project")?;
+    repo.add("README.md")?;
+    let commit_id = repo.commit("Initial commit")?;
     
-    repo.add_all()?;
-    let commit_id = repo.commit("docs: add README")?;
     println!("Created commit: {}", commit_id);
-    
-    // Create a tag for this initial version
-    repo.create_tag("v0.1.0", Some("Initial release".to_string()))?;
-    
     Ok(())
 }
 ```
@@ -1126,35 +1250,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 use sublime_git_tools::Repo;
-use std::fs::File;
-use std::io::Write;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Open an existing repository
-    let repo = Repo::open("/tmp/example-repo")?;
+    let repo = Repo::open("./my-project")?;
     
-    // Create a feature branch
+    // Create and switch to feature branch
     repo.create_branch("feature/new-feature")?;
     repo.checkout("feature/new-feature")?;
     
-    // Make changes on the feature branch
-    let mut file = File::create("/tmp/example-repo/feature.txt")?;
-    writeln!(file, "This is a new feature")?;
-    
+    // Make changes and commit
     repo.add_all()?;
-    repo.commit("feat: add new feature")?;
+    repo.commit("Add new feature")?;
     
-    // Go back to main branch
+    // Switch back to main and merge
     repo.checkout("main")?;
-    
-    // Merge the feature
     repo.merge("feature/new-feature")?;
     
     // List all branches
     let branches = repo.list_branches()?;
-    println!("Branches in repository:");
     for branch in branches {
-        println!("- {}", branch);
+        println!("Branch: {}", branch);
     }
     
     Ok(())
@@ -1167,44 +1282,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 use sublime_git_tools::Repo;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Open an existing repository
-    let repo = Repo::open("/tmp/example-repo")?;
+    let repo = Repo::open("./my-project")?;
     
-    // Get the last tag
+    // Get last tag
     let last_tag = repo.get_last_tag()?;
+    println!("Last release: {}", last_tag);
     
-    // Get all files changed since that tag
-    let changed_files = repo.get_all_files_changed_since_sha(&last_tag)?;
+    // Get changes since last release
+    let changed_files = repo.get_all_files_changed_since_sha_with_status(&last_tag)?;
+    println!("Changes since {}:", last_tag);
     
-    println!("Files changed since {}:", last_tag);
-    for file in &changed_files {
-        println!("- {}", file);
-    }
-    
-    // Get detailed changes with status
-    let changes_with_status = repo.get_all_files_changed_since_sha_with_status(&last_tag)?;
-    
-    println!("\nDetailed changes:");
-    for change in changes_with_status {
-        let status = match change.status {
-            sublime_git_tools::GitFileStatus::Added => "Added",
-            sublime_git_tools::GitFileStatus::Modified => "Modified",
-            sublime_git_tools::GitFileStatus::Deleted => "Deleted",
+    for file in changed_files {
+        let status_char = match file.status {
+            GitFileStatus::Added => "+",
+            GitFileStatus::Modified => "M",
+            GitFileStatus::Deleted => "-",
+            GitFileStatus::Untracked => "?",
         };
-        println!("- {} ({})", change.path, status);
+        println!("{} {}", status_char, file.path);
     }
     
     // Get commit history
     let commits = repo.get_commits_since(Some(last_tag), &None)?;
-    
-    println!("\nCommits since {}:", last_tag);
+    println!("\nCommits since last release:");
     for commit in commits {
-        println!("{}: {} (by {} on {})",
-            &commit.hash[0..7],
-            commit.message.lines().next().unwrap_or(""),
-            commit.author_name,
-            commit.author_date
-        );
+        println!("- {} ({})", commit.message, &commit.hash[0..7]);
     }
     
     Ok(())
@@ -1241,7 +1343,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     repo.pull("origin", None)?;
     
     // List remote tags
-    let remote_tags = repo.get_remote_or_local_tags(None)?;
+    let remote_tags = repo.get_remote_or_local_tags(Some(false))?;
     println!("Remote tags:");
     for tag in remote_tags {
         println!("- {} ({})", tag.tag, &tag.hash[0..7]);
@@ -1250,4 +1352,3 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
-
