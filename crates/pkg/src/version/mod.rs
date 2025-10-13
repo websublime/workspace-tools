@@ -25,6 +25,8 @@
 //! clean release versioning. Each commit on feature branches gets a unique
 //! version identifier without polluting the Git history.
 mod bump;
+mod parser;
+mod range;
 mod resolver;
 mod snapshot;
 mod versioning;
@@ -33,6 +35,11 @@ mod versioning;
 mod tests;
 
 pub use bump::VersionBump;
+pub use parser::{
+    PackageManagerFormat, ValidationResult, ValidationSummary, VersionAnalysis, VersionMetadata,
+    VersionParser, VersionParserConfig, VersionStability, VersionType,
+};
+pub use range::{VersionConstraint, VersionRange};
 pub use resolver::{ResolvedVersion, VersionResolver};
 pub use snapshot::SnapshotVersion;
 pub use versioning::{Version, VersionComparison};

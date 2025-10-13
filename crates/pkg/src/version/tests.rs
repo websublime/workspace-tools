@@ -3,7 +3,8 @@
 #[cfg(test)]
 mod version_tests {
     use crate::{
-        version::VersionComparison, ResolvedVersion, SnapshotVersion, Version, VersionBump,
+        version::{VersionComparison, VersionConstraint, VersionParser, VersionRange, VersionType},
+        ResolvedVersion, SnapshotVersion, Version, VersionBump,
     };
     use chrono::DateTime;
     use std::str::FromStr;
@@ -268,5 +269,296 @@ mod version_tests {
 
         // Edge case - workspace config but no multiple packages
         assert_eq!(determine_repo_type(true, false), RepoType::SingleRepo);
+    }
+
+    #[test]
+    fn test_version_range_parsing() {
+        // Test exact version
+        let exact = VersionRange::from_str("1.2.3").unwrap();
+        assert!(matches!(exact, VersionRange::Exact(_)));
+        assert_eq!(exact.to_string(), "1.2.3");
+
+        // Test caret range
+        let caret = VersionRange::from_str("^1.2.3").unwrap();
+        assert!(matches!(caret, VersionRange::Caret(_)));
+        assert_eq!(caret.to_string(), "^1.2.3");
+
+        // Test tilde range
+        let tilde = VersionRange::from_str("~1.2.3").unwrap();
+        assert!(matches!(tilde, VersionRange::Tilde(_)));
+        assert_eq!(tilde.to_string(), "~1.2.3");
+
+        // Test comparison operators
+        let gte = VersionRange::from_str(">=1.2.3").unwrap();
+        assert!(matches!(gte, VersionRange::GreaterOrEqual(_)));
+        assert_eq!(gte.to_string(), ">=1.2.3");
+
+        let lt = VersionRange::from_str("<2.0.0").unwrap();
+        assert!(matches!(lt, VersionRange::Less(_)));
+        assert_eq!(lt.to_string(), "<2.0.0");
+
+        // Test wildcard patterns
+        let wildcard_patch = VersionRange::from_str("1.2.*").unwrap();
+        assert!(matches!(wildcard_patch, VersionRange::Wildcard { major: 1, minor: Some(2) }));
+        assert_eq!(wildcard_patch.to_string(), "1.2.*");
+
+        let wildcard_minor = VersionRange::from_str("1.*").unwrap();
+        assert!(matches!(wildcard_minor, VersionRange::Wildcard { major: 1, minor: None }));
+        assert_eq!(wildcard_minor.to_string(), "1.*");
+
+        // Test range
+        let range = VersionRange::from_str("1.0.0 - 2.0.0").unwrap();
+        assert!(matches!(range, VersionRange::Range { .. }));
+        assert_eq!(range.to_string(), "1.0.0 - 2.0.0");
+
+        // Test any
+        let any = VersionRange::from_str("*").unwrap();
+        assert!(matches!(any, VersionRange::Any));
+        assert_eq!(any.to_string(), "*");
+    }
+
+    #[test]
+    fn test_version_range_matching() {
+        let version_1_2_3 = Version::from_str("1.2.3").unwrap();
+        let version_1_2_4 = Version::from_str("1.2.4").unwrap();
+        let version_1_3_0 = Version::from_str("1.3.0").unwrap();
+        let version_2_0_0 = Version::from_str("2.0.0").unwrap();
+
+        // Test exact matching
+        let exact = VersionRange::exact(version_1_2_3.clone());
+        assert!(exact.matches(&version_1_2_3));
+        assert!(!exact.matches(&version_1_2_4));
+
+        // Test caret matching
+        let caret = VersionRange::caret(version_1_2_3.clone());
+        assert!(caret.matches(&version_1_2_3));
+        assert!(caret.matches(&version_1_2_4));
+        assert!(caret.matches(&version_1_3_0));
+        assert!(!caret.matches(&version_2_0_0));
+
+        // Test tilde matching
+        let tilde = VersionRange::tilde(version_1_2_3.clone());
+        assert!(tilde.matches(&version_1_2_3));
+        assert!(tilde.matches(&version_1_2_4));
+        assert!(!tilde.matches(&version_1_3_0));
+
+        // Test wildcard matching
+        let wildcard = VersionRange::wildcard(1, Some(2));
+        assert!(wildcard.matches(&version_1_2_3));
+        assert!(wildcard.matches(&version_1_2_4));
+        assert!(!wildcard.matches(&version_1_3_0));
+
+        // Test any matching
+        let any = VersionRange::any();
+        assert!(any.matches(&version_1_2_3));
+        assert!(any.matches(&version_2_0_0));
+    }
+
+    #[test]
+    fn test_version_range_edge_cases() {
+        // Test caret with 0.x.y versions
+        let caret_0_2_3 = VersionRange::from_str("^0.2.3").unwrap();
+        let version_0_2_3 = Version::from_str("0.2.3").unwrap();
+        let version_0_2_4 = Version::from_str("0.2.4").unwrap();
+        let version_0_3_0 = Version::from_str("0.3.0").unwrap();
+
+        assert!(caret_0_2_3.matches(&version_0_2_3));
+        assert!(caret_0_2_3.matches(&version_0_2_4));
+        assert!(!caret_0_2_3.matches(&version_0_3_0));
+
+        // Test caret with 0.0.x versions
+        let caret_0_0_3 = VersionRange::from_str("^0.0.3").unwrap();
+        let version_0_0_3 = Version::from_str("0.0.3").unwrap();
+        let version_0_0_4 = Version::from_str("0.0.4").unwrap();
+
+        assert!(caret_0_0_3.matches(&version_0_0_3));
+        assert!(!caret_0_0_3.matches(&version_0_0_4));
+    }
+
+    #[test]
+    fn test_version_constraint() {
+        let range = VersionRange::from_str("^1.2.3").unwrap();
+        let constraint = VersionConstraint::new(range.clone(), Some("test-dep".to_string()));
+
+        assert_eq!(constraint.name(), Some("test-dep"));
+        assert_eq!(constraint.range(), &range);
+
+        let version = Version::from_str("1.5.0").unwrap();
+        assert!(constraint.satisfies(&version));
+
+        let version_2 = Version::from_str("2.0.0").unwrap();
+        assert!(!constraint.satisfies(&version_2));
+    }
+
+    #[test]
+    fn test_version_parser_basic() {
+        let parser = VersionParser::new();
+
+        // Test exact version parsing
+        let analysis = parser.parse_and_analyze("1.2.3").unwrap();
+        assert_eq!(analysis.version_type, VersionType::Exact);
+        assert!(analysis.validation.is_valid);
+        assert!(!analysis.metadata.has_prerelease);
+        assert!(!analysis.metadata.has_build_metadata);
+
+        // Test pre-release version
+        let analysis = parser.parse_and_analyze("1.2.3-alpha.1").unwrap();
+        assert_eq!(analysis.version_type, VersionType::Exact);
+        assert!(analysis.metadata.has_prerelease);
+        assert_eq!(analysis.metadata.prerelease_parts, vec!["alpha", "1"]);
+
+        // Test build metadata
+        let analysis = parser.parse_and_analyze("1.2.3+build.123").unwrap();
+        assert!(analysis.metadata.has_build_metadata);
+        assert_eq!(analysis.metadata.build_parts, vec!["build", "123"]);
+    }
+
+    #[test]
+    fn test_version_parser_ranges() {
+        let parser = VersionParser::new();
+
+        // Test caret range
+        let analysis = parser.parse_and_analyze("^1.2.3").unwrap();
+        assert_eq!(analysis.version_type, VersionType::Caret);
+        assert!(matches!(analysis.range, VersionRange::Caret(_)));
+
+        // Test tilde range
+        let analysis = parser.parse_and_analyze("~1.2.3").unwrap();
+        assert_eq!(analysis.version_type, VersionType::Tilde);
+
+        // Test comparison
+        let analysis = parser.parse_and_analyze(">=1.2.3").unwrap();
+        assert_eq!(analysis.version_type, VersionType::Comparison);
+
+        // Test wildcard
+        let analysis = parser.parse_and_analyze("1.2.*").unwrap();
+        assert_eq!(analysis.version_type, VersionType::Wildcard);
+
+        // Test range
+        let analysis = parser.parse_and_analyze("1.0.0 - 2.0.0").unwrap();
+        assert_eq!(analysis.version_type, VersionType::Range);
+
+        // Test any
+        let analysis = parser.parse_and_analyze("*").unwrap();
+        assert_eq!(analysis.version_type, VersionType::Any);
+    }
+
+    #[test]
+    fn test_version_parser_validation() {
+        let parser = VersionParser::new();
+
+        // Test invalid version
+        let analysis = parser.parse_and_analyze("invalid-version").unwrap();
+        assert_eq!(analysis.version_type, VersionType::Invalid);
+        assert!(!analysis.validation.is_valid);
+
+        // Test multiple versions validation
+        let versions = vec!["1.2.3", "^1.2.3", "invalid", "~2.0.0"];
+        let summary = parser.validate_multiple(&versions).unwrap();
+
+        assert_eq!(summary.total_count, 4);
+        assert_eq!(summary.valid_count, 3);
+        assert_eq!(summary.invalid_count, 1);
+        assert!(!summary.all_valid());
+        assert_eq!(summary.success_rate(), 75.0);
+    }
+
+    #[test]
+    fn test_version_parser_suggestions() {
+        let parser = VersionParser::new();
+
+        // Test suggestions for incomplete version
+        let suggestions = parser.suggest_corrections("1.2").unwrap();
+        assert!(!suggestions.is_empty());
+        assert!(suggestions.contains(&"1.2.0".to_string()));
+
+        // Test suggestions for version with 'v' prefix
+        let suggestions = parser.suggest_corrections("v1.2.3").unwrap();
+        assert!(!suggestions.is_empty());
+    }
+
+    #[test]
+    fn test_version_range_properties() {
+        let exact = VersionRange::from_str("1.2.3").unwrap();
+        assert!(exact.is_exact());
+        assert!(!exact.is_wildcard());
+
+        let wildcard = VersionRange::from_str("1.2.*").unwrap();
+        assert!(!wildcard.is_exact());
+        assert!(wildcard.is_wildcard());
+
+        let caret = VersionRange::from_str("^1.2.3").unwrap();
+        assert_eq!(caret.min_version().unwrap().to_string(), "1.2.3");
+        assert!(caret.max_version().is_none());
+
+        let range = VersionRange::from_str("1.0.0 - 2.0.0").unwrap();
+        assert_eq!(range.min_version().unwrap().to_string(), "1.0.0");
+        assert_eq!(range.max_version().unwrap().to_string(), "2.0.0");
+    }
+
+    #[test]
+    fn test_version_parser_normalization() {
+        let parser = VersionParser::new();
+
+        // Test normalization of 'v' prefix
+        let analysis = parser.parse_and_analyze("v1.2.3").unwrap();
+        assert_eq!(analysis.normalized, "1.2.3");
+
+        // Test whitespace normalization
+        let analysis = parser.parse_and_analyze("  1.0.0  -  2.0.0  ").unwrap();
+        assert_eq!(analysis.normalized, "1.0.0 - 2.0.0");
+    }
+
+    #[test]
+    fn test_version_comparison_detailed() {
+        let parser = VersionParser::new();
+
+        let comparison = parser.compare_versions("1.2.3", "1.2.4").unwrap();
+        assert_eq!(comparison, VersionComparison::Less);
+
+        let comparison = parser.compare_versions("2.0.0", "1.9.9").unwrap();
+        assert_eq!(comparison, VersionComparison::Greater);
+
+        let comparison = parser.compare_versions("1.2.3", "1.2.3").unwrap();
+        assert_eq!(comparison, VersionComparison::Equal);
+    }
+
+    #[test]
+    fn test_version_range_invalid_formats() {
+        // Test invalid wildcard formats
+        assert!(VersionRange::from_str("1.2.3.*").is_err());
+        assert!(VersionRange::from_str("1.*.3").is_err());
+        assert!(VersionRange::from_str("*.2.3").is_err());
+
+        // Test invalid range format
+        assert!(VersionRange::from_str("1.2.3 - invalid").is_err());
+        assert!(VersionRange::from_str("invalid - 2.0.0").is_err());
+
+        // Test invalid comparison formats
+        assert!(VersionRange::from_str(">invalid").is_err());
+        assert!(VersionRange::from_str(">=").is_err());
+    }
+
+    #[test]
+    fn test_validation_summary_methods() {
+        use std::collections::HashMap;
+
+        let mut issues = HashMap::new();
+        issues.insert(0, vec!["Invalid format".to_string()]);
+        issues.insert(2, vec!["Missing patch version".to_string()]);
+
+        let summary = crate::version::ValidationSummary {
+            total_count: 5,
+            valid_count: 3,
+            invalid_count: 2,
+            warnings: vec!["Warning 1".to_string()],
+            errors: vec!["Error 1".to_string(), "Error 2".to_string()],
+            issues,
+        };
+
+        assert_eq!(summary.success_rate(), 60.0);
+        assert!(!summary.all_valid());
+        assert_eq!(summary.issues_for(0), Some(&vec!["Invalid format".to_string()]));
+        assert_eq!(summary.issues_for(1), None);
     }
 }
