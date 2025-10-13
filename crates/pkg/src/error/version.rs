@@ -329,3 +329,18 @@ impl VersionError {
         }
     }
 }
+
+impl AsRef<str> for VersionError {
+    fn as_ref(&self) -> &str {
+        match self {
+            VersionError::InvalidFormat { .. } => "VersionError::InvalidFormat",
+            VersionError::ParseFailed { .. } => "VersionError::ParseFailed",
+            VersionError::SnapshotResolutionFailed { .. } => {
+                "VersionError::SnapshotResolutionFailed"
+            }
+            VersionError::Conflict { .. } => "VersionError::Conflict",
+            VersionError::BumpCalculationFailed { .. } => "VersionError::BumpCalculationFailed",
+            VersionError::PreReleaseError { .. } => "VersionError::PreReleaseError",
+        }
+    }
+}

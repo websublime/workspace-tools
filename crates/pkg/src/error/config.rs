@@ -372,3 +372,14 @@ impl ConfigError {
         }
     }
 }
+
+impl AsRef<str> for ConfigError {
+    fn as_ref(&self) -> &str {
+        match self {
+            ConfigError::InvalidPackageConfig { .. } => "ConfigError::InvalidPackageConfig",
+            ConfigError::InvalidEnvironmentConfig { .. } => "ConfigError::InvalidEnvironmentConfig",
+            ConfigError::InvalidRegistryConfig { .. } => "ConfigError::InvalidRegistryConfig",
+            ConfigError::InvalidVersionStrategy { .. } => "ConfigError::InvalidVersionStrategy",
+        }
+    }
+}

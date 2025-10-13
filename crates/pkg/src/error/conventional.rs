@@ -299,6 +299,30 @@ impl ConventionalCommitError {
     }
 }
 
+impl AsRef<str> for ConventionalCommitError {
+    fn as_ref(&self) -> &str {
+        match self {
+            ConventionalCommitError::InvalidFormat { .. } => {
+                "ConventionalCommitError::InvalidFormat"
+            }
+            ConventionalCommitError::UnknownType { .. } => "ConventionalCommitError::UnknownType",
+            ConventionalCommitError::ParseFailed { .. } => "ConventionalCommitError::ParseFailed",
+            ConventionalCommitError::BreakingChangeDetectionFailed { .. } => {
+                "ConventionalCommitError::BreakingChangeDetectionFailed"
+            }
+        }
+    }
+}
+
+impl AsRef<str> for CommitTypeParseError {
+    fn as_ref(&self) -> &str {
+        match self {
+            CommitTypeParseError::Empty => "CommitTypeParseError::Empty",
+            CommitTypeParseError::InvalidFormat(_) => "CommitTypeParseError::InvalidFormat",
+        }
+    }
+}
+
 impl CommitTypeParseError {
     /// Creates an empty error.
     ///

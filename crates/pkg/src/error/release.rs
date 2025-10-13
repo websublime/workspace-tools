@@ -402,3 +402,17 @@ impl ReleaseError {
         }
     }
 }
+
+impl AsRef<str> for ReleaseError {
+    fn as_ref(&self) -> &str {
+        match self {
+            ReleaseError::PlanningFailed { .. } => "ReleaseError::PlanningFailed",
+            ReleaseError::ExecutionFailed { .. } => "ReleaseError::ExecutionFailed",
+            ReleaseError::PackageReleaseFailed { .. } => "ReleaseError::PackageReleaseFailed",
+            ReleaseError::TagCreationFailed { .. } => "ReleaseError::TagCreationFailed",
+            ReleaseError::DryRunFailed { .. } => "ReleaseError::DryRunFailed",
+            ReleaseError::StrategyNotSupported { .. } => "ReleaseError::StrategyNotSupported",
+            ReleaseError::RollbackFailed { .. } => "ReleaseError::RollbackFailed",
+        }
+    }
+}

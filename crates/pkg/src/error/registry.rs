@@ -403,3 +403,17 @@ impl RegistryError {
         }
     }
 }
+
+impl AsRef<str> for RegistryError {
+    fn as_ref(&self) -> &str {
+        match self {
+            RegistryError::AuthenticationFailed { .. } => "RegistryError::AuthenticationFailed",
+            RegistryError::PackageNotFound { .. } => "RegistryError::PackageNotFound",
+            RegistryError::PublishFailed { .. } => "RegistryError::PublishFailed",
+            RegistryError::NetworkFailed { .. } => "RegistryError::NetworkFailed",
+            RegistryError::InvalidConfig { .. } => "RegistryError::InvalidConfig",
+            RegistryError::VersionAlreadyExists { .. } => "RegistryError::VersionAlreadyExists",
+            RegistryError::Timeout { .. } => "RegistryError::Timeout",
+        }
+    }
+}

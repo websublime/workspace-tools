@@ -387,3 +387,19 @@ impl DependencyError {
         }
     }
 }
+
+impl AsRef<str> for DependencyError {
+    fn as_ref(&self) -> &str {
+        match self {
+            DependencyError::CircularDependency { .. } => "DependencyError::CircularDependency",
+            DependencyError::ResolutionFailed { .. } => "DependencyError::ResolutionFailed",
+            DependencyError::MissingDependency { .. } => "DependencyError::MissingDependency",
+            DependencyError::InvalidSpecification { .. } => "DependencyError::InvalidSpecification",
+            DependencyError::GraphConstructionFailed { .. } => {
+                "DependencyError::GraphConstructionFailed"
+            }
+            DependencyError::PropagationFailed { .. } => "DependencyError::PropagationFailed",
+            DependencyError::MaxDepthExceeded { .. } => "DependencyError::MaxDepthExceeded",
+        }
+    }
+}

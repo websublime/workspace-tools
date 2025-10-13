@@ -313,3 +313,17 @@ impl ChangelogError {
         }
     }
 }
+
+impl AsRef<str> for ChangelogError {
+    fn as_ref(&self) -> &str {
+        match self {
+            ChangelogError::GenerationFailed { .. } => "ChangelogError::GenerationFailed",
+            ChangelogError::TemplateNotFound { .. } => "ChangelogError::TemplateNotFound",
+            ChangelogError::TemplateRenderingFailed { .. } => {
+                "ChangelogError::TemplateRenderingFailed"
+            }
+            ChangelogError::WriteFileFailed { .. } => "ChangelogError::WriteFileFailed",
+            ChangelogError::InvalidFormat { .. } => "ChangelogError::InvalidFormat",
+        }
+    }
+}

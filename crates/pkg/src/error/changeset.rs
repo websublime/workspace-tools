@@ -456,3 +456,21 @@ impl ChangesetError {
         }
     }
 }
+
+impl AsRef<str> for ChangesetError {
+    fn as_ref(&self) -> &str {
+        match self {
+            ChangesetError::NotFound { .. } => "ChangesetError::NotFound",
+            ChangesetError::InvalidFormat { .. } => "ChangesetError::InvalidFormat",
+            ChangesetError::ValidationFailed { .. } => "ChangesetError::ValidationFailed",
+            ChangesetError::AlreadyExists { .. } => "ChangesetError::AlreadyExists",
+            ChangesetError::CreationFailed { .. } => "ChangesetError::CreationFailed",
+            ChangesetError::ApplicationFailed { .. } => "ChangesetError::ApplicationFailed",
+            ChangesetError::HistoryOperationFailed { .. } => {
+                "ChangesetError::HistoryOperationFailed"
+            }
+            ChangesetError::EnvironmentNotFound { .. } => "ChangesetError::EnvironmentNotFound",
+            ChangesetError::PackageNotFound { .. } => "ChangesetError::PackageNotFound",
+        }
+    }
+}

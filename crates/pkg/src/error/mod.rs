@@ -408,3 +408,24 @@ impl PackageError {
         }
     }
 }
+
+impl AsRef<str> for PackageError {
+    fn as_ref(&self) -> &str {
+        match self {
+            PackageError::Version(_) => "PackageError::Version",
+            PackageError::Changeset(_) => "PackageError::Changeset",
+            PackageError::Registry(_) => "PackageError::Registry",
+            PackageError::Dependency(_) => "PackageError::Dependency",
+            PackageError::ConventionalCommit(_) => "PackageError::ConventionalCommit",
+            PackageError::Release(_) => "PackageError::Release",
+            PackageError::Changelog(_) => "PackageError::Changelog",
+            PackageError::Config(_) => "PackageError::Config",
+            PackageError::Git(_) => "PackageError::Git",
+            PackageError::Standard(_) => "PackageError::Standard",
+            PackageError::Io(_) => "PackageError::Io",
+            PackageError::Json(_) => "PackageError::Json",
+            PackageError::Http(_) => "PackageError::Http",
+            PackageError::Operation { .. } => "PackageError::Operation",
+        }
+    }
+}
