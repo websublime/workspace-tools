@@ -1,46 +1,60 @@
 [package]
 name = "sublime_pkg_tools"
-version = "0.1.0"
-edition = "2021"
-license = "MIT"
-description = "Package and version management toolkit for Node.js projects"
-repository = "https://github.com/your-org/workspace-node-tools"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Package and version management toolkit for Node.js projects with changeset support"
 documentation = "https://docs.rs/sublime_pkg_tools"
+keywords = ["package-management", "versioning", "monorepo", "nodejs", "changesets"]
+categories = ["development-tools", "command-line-utilities"]
 
 [dependencies]
 # Internal dependencies
-sublime_git_tools = { path = "../git" }
-sublime_standard_tools = { path = "../standard" }
+sublime_git_tools.workspace = true
+sublime_standard_tools.workspace = true
 
 # Async runtime
-tokio = { version = "1.40", features = ["full"] }
+tokio = { workspace = true, features = ["full"] }
 
 # Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde.workspace = true
+serde_json.workspace = true
+
+# Date/time for changesets
+chrono.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+# Logging
+log.workspace = true
+
+# Regex for conventional commit parsing
+regex.workspace = true
 
 # Semantic versioning
-semver = "1.0"
+semver = { version = "1.0", features = ["serde"] }
 
 # HTTP client for registry
 reqwest = { version = "0.12", features = ["json"] }
 
-# Error handling
-thiserror = "1.0"
-
-# Date/time for changesets
-chrono = { version = "0.4", features = ["serde"] }
-
 # Graph algorithms for dependency analysis
 petgraph = "0.6"
 
-# Regex for conventional commit parsing
-regex = "1.10"
+# UUID for changeset IDs
+uuid = { version = "1.6", features = ["v4", "serde"] }
 
-# Logging
-log = "0.4"
+# Path utilities
+path-clean = "1.0"
+
+# Base64 encoding for registry auth
+base64 = "0.21"
 
 [dev-dependencies]
-tempfile = "3.8"
-proptest = "1.4"
+tempfile.workspace = true
 tokio-test = "0.4"
+proptest = "1.4"
+pretty_assertions = "1.4"
