@@ -232,7 +232,7 @@ pub mod version;
 
 // Re-export commonly used types for convenience
 pub use error::{PackageError, PackageResult};
-pub use version::{ResolvedVersion, SnapshotVersion, Version, VersionBump};
+pub use version::{ResolvedVersion, SnapshotVersion, Version, VersionBump, VersionResolver};
 
 /// Library version information.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

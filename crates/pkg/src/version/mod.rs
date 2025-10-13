@@ -33,6 +33,6 @@ mod versioning;
 mod tests;
 
 pub use bump::VersionBump;
-pub use resolver::ResolvedVersion;
+pub use resolver::{ResolvedVersion, VersionResolver};
 pub use snapshot::SnapshotVersion;
 pub use versioning::{Version, VersionComparison};
