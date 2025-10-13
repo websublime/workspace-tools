@@ -1625,6 +1625,7 @@ dependencies = [
 name = "sublime_pkg_tools"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "base64 0.21.7",
  "chrono",
  "dirs 5.0.1",

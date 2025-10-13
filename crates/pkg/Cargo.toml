@@ -56,6 +56,9 @@ dirs = "5.0"
 # Base64 encoding for registry auth
 base64 = "0.21"
 
+# Async trait for trait objects
+async-trait = "0.1"
+
 [dev-dependencies]
 tempfile.workspace = true
 tokio-test = "0.4"

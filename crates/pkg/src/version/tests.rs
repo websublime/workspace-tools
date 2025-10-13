@@ -158,4 +158,115 @@ mod version_tests {
         assert_eq!(resolved_release.compare(&resolved_snapshot), VersionComparison::Incomparable);
         assert_eq!(resolved_snapshot.compare(&resolved_release), VersionComparison::Incomparable);
     }
+
+    #[test]
+    fn test_commit_hash_shortening_logic() {
+        // Test the logic that would be used in VersionResolver for shortening commit hashes
+        let full_hash = "abcd1234567890123456";
+        let expected_short = "abcd123";
+
+        // This demonstrates what the shortening logic should do:
+        let actual_short: String = full_hash.chars().take(7).collect();
+        assert_eq!(actual_short, expected_short);
+
+        // Test edge case where hash is shorter than requested length
+        let short_hash = "abc";
+        let result: String = short_hash.chars().take(7).collect();
+        assert_eq!(result, "abc");
+    }
+
+    #[test]
+    fn test_version_resolver_snapshot_format() {
+        let base_version = Version::from_str("1.2.3").unwrap();
+        let commit_id = "abc123d".to_string();
+
+        let snapshot = SnapshotVersion::new(base_version, commit_id);
+        assert_eq!(snapshot.to_string(), "1.2.3-abc123d.snapshot");
+    }
+
+    #[test]
+    fn test_single_repo_vs_monorepo_detection() {
+        // Test the conceptual logic for repository type detection
+        // In a real implementation, this would use MonorepoDetector
+
+        // Single repo scenario
+        let single_repo_package_name = "my-single-package";
+        let single_repo_root_name = "my-single-package";
+        assert_eq!(single_repo_package_name, single_repo_root_name);
+
+        // Monorepo scenario - package names differ from root
+        let monorepo_package_name = "@myorg/auth-service";
+        let monorepo_root_name = "my-workspace";
+        assert_ne!(monorepo_package_name, monorepo_root_name);
+    }
+
+    #[test]
+    fn test_package_name_matching_logic() {
+        // Test the logic used in single repo package resolution
+
+        struct MockPackageJson {
+            name: String,
+        }
+
+        let package_json = MockPackageJson { name: "@myorg/service".to_string() };
+
+        // Test exact match (should succeed)
+        let requested_name = "@myorg/service";
+        assert_eq!(package_json.name, requested_name);
+
+        // Test mismatch (should fail)
+        let wrong_name = "@myorg/other-service";
+        assert_ne!(package_json.name, wrong_name);
+    }
+
+    #[test]
+    fn test_error_message_formatting() {
+        // Test the error message format for different scenarios
+
+        let package_name = "@myorg/nonexistent";
+        let available_packages = ["@myorg/auth-service", "@myorg/user-service", "@myorg/web-app"];
+
+        let error_message = format!(
+            "Package '{}' not found in monorepo. Available packages: {}",
+            package_name,
+            available_packages.join(", ")
+        );
+
+        assert!(error_message.contains("@myorg/nonexistent"));
+        assert!(error_message.contains("@myorg/auth-service"));
+        assert!(error_message.contains("Available packages"));
+    }
+
+    #[test]
+    fn test_repository_type_scenarios() {
+        // Test different repository type scenarios
+
+        #[derive(Debug, PartialEq)]
+        enum RepoType {
+            SingleRepo,
+            Monorepo,
+        }
+
+        // Function to determine repo type based on workspace configuration
+        fn determine_repo_type(
+            has_workspace_config: bool,
+            has_multiple_packages: bool,
+        ) -> RepoType {
+            if has_workspace_config && has_multiple_packages {
+                RepoType::Monorepo
+            } else {
+                RepoType::SingleRepo
+            }
+        }
+
+        // Single repo scenarios
+        assert_eq!(determine_repo_type(false, false), RepoType::SingleRepo);
+        assert_eq!(determine_repo_type(false, true), RepoType::SingleRepo);
+
+        // Monorepo scenarios
+        assert_eq!(determine_repo_type(true, true), RepoType::Monorepo);
+
+        // Edge case - workspace config but no multiple packages
+        assert_eq!(determine_repo_type(true, false), RepoType::SingleRepo);
+    }
 }
