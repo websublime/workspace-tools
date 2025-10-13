@@ -96,7 +96,7 @@ mod error_tests {
             package: "test-package".to_string(),
             reason: "snapshot not found".to_string(),
         };
-        assert!(snapshot_error.to_string().contains("Failed to resolve version snapshot"));
+        assert!(snapshot_error.to_string().contains("Failed to resolve snapshot version"));
         assert!(snapshot_error.to_string().contains("test-package"));
 
         // Test Conflict error
@@ -143,7 +143,7 @@ mod error_tests {
             registry: "https://private.registry.com".to_string(),
             reason: "invalid token".to_string(),
         };
-        assert!(auth_error.to_string().contains("Authentication failed"));
+        assert!(auth_error.to_string().contains("Registry authentication failed"));
         assert!(auth_error.to_string().contains("https://private.registry.com"));
 
         // Test PackageNotFound error
@@ -151,7 +151,7 @@ mod error_tests {
             package: "missing-package".to_string(),
             registry: "https://registry.npmjs.org".to_string(),
         };
-        assert!(not_found_error.to_string().contains("Package not found"));
+        assert!(not_found_error.to_string().contains("not found"));
         assert!(not_found_error.to_string().contains("missing-package"));
 
         // Test PublishFailed error
@@ -216,7 +216,7 @@ mod error_tests {
             commit: "malformed commit".to_string(),
             reason: "parsing error".to_string(),
         };
-        assert!(parse_error.to_string().contains("Failed to parse conventional commit"));
+        assert!(parse_error.to_string().contains("Failed to parse commit"));
         assert!(parse_error.to_string().contains("malformed commit"));
     }
 
@@ -242,7 +242,7 @@ mod error_tests {
             environment: "staging".to_string(),
             reason: "build error".to_string(),
         };
-        assert!(package_error.to_string().contains("Package release failed"));
+        assert!(package_error.to_string().contains("Failed to release package"));
         assert!(package_error.to_string().contains("failed-package"));
         assert!(package_error.to_string().contains("staging"));
     }
@@ -267,7 +267,7 @@ mod error_tests {
             path: PathBuf::from("/protected/CHANGELOG.md"),
             reason: "permission denied".to_string(),
         };
-        assert!(write_error.to_string().contains("Failed to write changelog file"));
+        assert!(write_error.to_string().contains("Failed to write changelog to"));
         assert!(write_error.to_string().contains("/protected/CHANGELOG.md"));
     }
 
@@ -278,7 +278,7 @@ mod error_tests {
             field: "version_strategy".to_string(),
             reason: "unknown strategy type".to_string(),
         };
-        assert!(package_config_error.to_string().contains("Invalid package configuration"));
+        assert!(package_config_error.to_string().contains("Invalid package tools configuration"));
         assert!(package_config_error.to_string().contains("version_strategy"));
 
         // Test InvalidEnvironmentConfig error

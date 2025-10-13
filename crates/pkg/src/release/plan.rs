@@ -55,7 +55,10 @@ pub enum ReleaseStrategy {
     /// Independent versioning - each package maintains its own version
     Independent,
     /// Unified versioning - all packages share the same version
-    Unified { version: String },
+    Unified {
+        /// The unified version to use for all packages
+        version: String,
+    },
 }
 
 /// Result of a dry run execution.

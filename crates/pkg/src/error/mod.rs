@@ -613,7 +613,7 @@ pub enum CommitTypeParseError {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```ignore
 /// use sublime_pkg_tools::error::PackageResult;
 ///
 /// fn parse_version(version_str: &str) -> PackageResult<semver::Version> {

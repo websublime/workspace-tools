@@ -5,6 +5,7 @@ use crate::{changeset::Changeset, error::ChangesetError, PackageResult};
 /// Changeset manager service.
 ///
 /// Provides high-level operations for changeset management.
+#[allow(dead_code)]
 pub struct ChangesetManager {
     pub(crate) changeset_path: PathBuf,
     pub(crate) history_path: PathBuf,

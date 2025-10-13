@@ -132,7 +132,7 @@ impl FromStr for CommitType {
     ///
     /// ```rust
     /// use std::str::FromStr;
-    /// use sublime_package_tools::conventional::commit::CommitType;
+    /// use sublime_pkg_tools::conventional::CommitType;
     ///
     /// assert_eq!(CommitType::from_str("feat").unwrap(), CommitType::Feat);
     /// assert_eq!(CommitType::from_str("fix").unwrap(), CommitType::Fix);

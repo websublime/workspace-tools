@@ -7,11 +7,28 @@ use crate::changeset::{entry::ChangesetPackage, release::ReleaseInfo};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ChangeReason {
     /// Direct changes to the package
-    DirectChanges { commits: Vec<String> },
+    DirectChanges {
+        /// List of commit hashes that caused the change
+        commits: Vec<String>,
+    },
     /// Dependency update propagation
-    DependencyUpdate { dependency: String, old_version: String, new_version: String },
+    DependencyUpdate {
+        /// Name of the updated dependency
+        dependency: String,
+        /// Previous version of the dependency
+        old_version: String,
+        /// New version of the dependency
+        new_version: String,
+    },
     /// Dev dependency update propagation
-    DevDependencyUpdate { dependency: String, old_version: String, new_version: String },
+    DevDependencyUpdate {
+        /// Name of the updated dev dependency
+        dependency: String,
+        /// Previous version of the dev dependency
+        old_version: String,
+        /// New version of the dev dependency
+        new_version: String,
+    },
 }
 
 /// Core changeset data structure.

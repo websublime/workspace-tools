@@ -91,7 +91,10 @@ mod config_tests {
         assert_eq!(changeset_config.path, PathBuf::from(".changesets"));
         assert_eq!(changeset_config.history_path, PathBuf::from(".changesets/history"));
         assert!(changeset_config.auto_archive_applied);
-        assert_eq!(changeset_config.available_environments, vec!["dev", "prod"]);
+        assert_eq!(
+            changeset_config.available_environments,
+            vec!["dev", "test", "qa", "staging", "prod"]
+        );
     }
 
     #[test]
@@ -139,9 +142,9 @@ mod config_tests {
         let changelog_config = ChangelogConfig::default();
 
         assert!(changelog_config.include_commit_hash);
-        assert!(!changelog_config.include_authors);
+        assert!(changelog_config.include_authors);
         assert!(changelog_config.group_by_type);
-        assert!(!changelog_config.include_date);
+        assert!(changelog_config.include_date);
     }
 
     #[test]

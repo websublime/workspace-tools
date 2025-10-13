@@ -24,6 +24,7 @@ pub struct Changelog {
 }
 
 /// Service for generating changelog content.
+#[allow(dead_code)]
 pub struct ChangelogGenerator {
     /// Whether to include commit hashes
     pub(crate) include_commit_hash: bool,

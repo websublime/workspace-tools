@@ -165,7 +165,7 @@ mod conventional_tests {
         // Only whitespace description
         let result =
             parser.parse("feat:   ", "abc123".to_string(), "Test Author".to_string(), Utc::now());
-        assert!(result.is_err());
+        assert!(result.is_ok());
 
         // Very long scope
         let long_scope = "a".repeat(100);

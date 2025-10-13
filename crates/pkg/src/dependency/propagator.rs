@@ -21,13 +21,44 @@ pub struct PropagatedUpdate {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PropagationReason {
     /// Direct changes to the package
-    DirectChanges { commits: Vec<String> },
+    DirectChanges {
+        /// List of commit hashes that caused the change
+        commits: Vec<String>,
+    },
     /// Runtime dependency was updated
-    DependencyUpdate { dependency: String, old_version: String, new_version: String },
+    DependencyUpdate {
+        /// Name of the updated dependency
+        dependency: String,
+        /// Previous version of the dependency
+        old_version: String,
+        /// New version of the dependency
+        new_version: String,
+    },
     /// Development dependency was updated
-    DevDependencyUpdate { dependency: String, old_version: String, new_version: String },
+    DevDependencyUpdate {
+        /// Name of the updated dev dependency
+        dependency: String,
+        /// Previous version of the dev dependency
+        old_version: String,
+        /// New version of the dev dependency
+        new_version: String,
+    },
     /// Optional dependency was updated
-    OptionalDependencyUpdate { dependency: String, old_version: String, new_version: String },
+    OptionalDependencyUpdate {
+        /// Name of the updated optional dependency
+        dependency: String,
+        /// Previous version of the optional dependency
+        old_version: String,
+        /// New version of the optional dependency
+        new_version: String,
+    },
     /// Peer dependency was updated
-    PeerDependencyUpdate { dependency: String, old_version: String, new_version: String },
+    PeerDependencyUpdate {
+        /// Name of the updated peer dependency
+        dependency: String,
+        /// Previous version of the peer dependency
+        old_version: String,
+        /// New version of the peer dependency
+        new_version: String,
+    },
 }

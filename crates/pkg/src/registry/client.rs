@@ -12,6 +12,7 @@ use crate::{
 };
 
 /// Registry client for NPM operations.
+#[allow(dead_code)]
 pub struct RegistryClient {
     /// HTTP client for registry requests
     pub(crate) client: reqwest::Client,

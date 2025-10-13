@@ -7,6 +7,7 @@ use crate::{
 };
 
 /// Service for dependency analysis and propagation.
+#[allow(dead_code)]
 pub struct DependencyAnalyzer {
     pub(crate) graph: DependencyGraph,
     pub(crate) max_depth: u32,

@@ -141,9 +141,9 @@ mod changelog_tests {
     fn test_changelog_generator_default() {
         let generator = ChangelogGenerator::default();
         assert!(generator.include_commit_hash);
-        assert!(!generator.include_authors);
+        assert!(generator.include_authors);
         assert!(generator.group_by_type);
-        assert!(!generator.include_date);
+        assert!(generator.include_date);
         assert!(generator.max_commits_per_release.is_none());
         assert!(generator.template_file.is_none());
     }

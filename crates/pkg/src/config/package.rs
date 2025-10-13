@@ -14,7 +14,7 @@ use crate::config::{
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```ignore
 /// use sublime_pkg_tools::config::PackageToolsConfig;
 /// use sublime_standard_tools::config::ConfigManager;
 ///

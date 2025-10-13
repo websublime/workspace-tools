@@ -5,6 +5,7 @@ use crate::{
 };
 
 /// Release manager for orchestrating package releases.
+#[allow(dead_code)]
 pub struct ReleaseManager {
     /// Release strategy configuration
     pub(crate) strategy: ReleaseStrategy,
