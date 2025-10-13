@@ -50,6 +50,9 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 # Path utilities
 path-clean = "1.0"
 
+# Directory utilities
+dirs = "5.0"
+
 # Base64 encoding for registry auth
 base64 = "0.21"
 
