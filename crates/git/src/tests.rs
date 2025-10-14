@@ -524,6 +524,97 @@ mod tests {
     }
 
     #[test]
+    fn test_get_commits_between() -> Result<(), RepoError> {
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
+
+        // Initialize a Git repository
+        let repo = Repo::create(workspace_path.to_str().unwrap())?;
+
+        // Create initial commit
+        let initial_file = workspace_path.join("initial.txt");
+        let mut initial_file_handle = File::create(&initial_file).unwrap();
+        writeln!(initial_file_handle, "Initial content").unwrap();
+        repo.add("initial.txt")?;
+        let initial_commit = repo.commit("Initial commit")?;
+
+        // Create first commit
+        let first_file = workspace_path.join("first.txt");
+        let mut first_file_handle = File::create(&first_file).unwrap();
+        writeln!(first_file_handle, "First change").unwrap();
+        repo.add("first.txt")?;
+        let first_commit = repo.commit("feat: add first feature")?;
+
+        // Create second commit
+        let second_file = workspace_path.join("second.txt");
+        let mut second_file_handle = File::create(&second_file).unwrap();
+        writeln!(second_file_handle, "Second change").unwrap();
+        repo.add("second.txt")?;
+        let second_commit = repo.commit("fix: resolve issue")?;
+
+        // Create third commit
+        let third_file = workspace_path.join("third.txt");
+        let mut third_file_handle = File::create(&third_file).unwrap();
+        writeln!(third_file_handle, "Third change").unwrap();
+        repo.add("third.txt")?;
+        let third_commit = repo.commit("perf: optimize performance")?;
+
+        // Test 1: Get commits between initial and second (should return first and second)
+        let commits_between = repo.get_commits_between(&initial_commit, &second_commit, &None)?;
+        assert_eq!(commits_between.len(), 2, "Should have 2 commits between initial and second");
+
+        // Verify the commits are in reverse chronological order (newest first)
+        assert_eq!(
+            commits_between[0].hash, second_commit,
+            "First commit should be the second commit"
+        );
+        assert_eq!(
+            commits_between[1].hash, first_commit,
+            "Second commit should be the first commit"
+        );
+
+        // Test 2: Get commits between first and third (should return second and third)
+        let commits_between_first_third =
+            repo.get_commits_between(&first_commit, &third_commit, &None)?;
+        assert_eq!(
+            commits_between_first_third.len(),
+            2,
+            "Should have 2 commits between first and third"
+        );
+        assert_eq!(
+            commits_between_first_third[0].hash, third_commit,
+            "First should be third commit"
+        );
+        assert_eq!(
+            commits_between_first_third[1].hash, second_commit,
+            "Second should be second commit"
+        );
+
+        // Test 3: Get commits between same references (should return empty)
+        let same_ref_commits = repo.get_commits_between(&first_commit, &first_commit, &None)?;
+        assert_eq!(same_ref_commits.len(), 0, "Should have no commits between same references");
+
+        // Test 4: Get commits between second and first (reverse order - should return empty)
+        let reverse_commits = repo.get_commits_between(&second_commit, &first_commit, &None)?;
+        assert_eq!(
+            reverse_commits.len(),
+            0,
+            "Should have no commits when from_ref is newer than to_ref"
+        );
+
+        // Test 5: Verify commit message parsing
+        let example_commit = &commits_between[0];
+        assert!(
+            example_commit.message.contains("fix: resolve issue"),
+            "Commit message should be preserved"
+        );
+        assert!(!example_commit.author_name.is_empty(), "Author name should not be empty");
+        assert!(!example_commit.author_email.is_empty(), "Author email should not be empty");
+
+        Ok(())
+    }
+
+    #[test]
     fn test_get_local_tags() -> Result<(), RepoError> {
         let workspace = TestWorkspace::new().unwrap();
         let workspace_path = workspace.path();

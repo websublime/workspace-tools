@@ -560,6 +560,42 @@ let file_commits = repo.get_commits_since(None, &Some("src/main.rs".to_string())
 - `ReferenceError`: Failed to resolve reference
 - `CommitOidError`: Failed to parse commit
 
+#### `Repo::get_commits_between`
+
+Gets commits between two references (commits in `to_ref` but not in `from_ref`).
+
+```rust
+pub fn get_commits_between(
+    &self,
+    from_ref: &str,
+    to_ref: &str,
+    relative: &Option<String>
+) -> Result<Vec<RepoCommit>, RepoError>
+```
+
+**Parameters:**
+- `from_ref`: Starting reference (commits after this point)
+- `to_ref`: Ending reference (commits up to this point)
+- `relative`: Optional file path to filter commits
+
+**Returns:**
+- `Result<Vec<RepoCommit>, RepoError>`: Vector of commits between references
+
+**Example:**
+```rust
+// Get commits between two tags
+let commits = repo.get_commits_between("v1.0.0", "v1.1.0", &None)?;
+
+// Get commits between branches affecting specific path
+let path_commits = repo.get_commits_between("main", "feature-branch", &Some("src/".to_string()))?;
+```
+
+**Possible errors:**
+- `RevWalkError`: Failed to perform revision walk
+- `ReferenceError`: Failed to resolve reference
+- `CommitOidError`: Failed to parse commit
+- `PeelError`: Failed to peel reference to commit
+
 ## Tag Operations
 
 ### Creating Tags
