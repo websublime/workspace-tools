@@ -71,7 +71,7 @@
 //!     Ok(project) => {
 //!         let info = project.as_project_info();
 //!         println!("Found {} project", info.kind().name());
-//!         
+//!
 //!         if let Some(pm) = info.package_manager() {
 //!             println!("Using {} package manager", pm.command());
 //!         }
@@ -124,11 +124,11 @@
 //! let detector = MonorepoDetector::new();
 //! if let Some(kind) = detector.is_monorepo_root(".")? {
 //!     let monorepo = detector.detect_monorepo(".")?;
-//!     
+//!
 //!     println!("Found {} with {} packages",
 //!              monorepo.kind().name(),
 //!              monorepo.packages().len());
-//!              
+//!
 //!     // Analyze dependencies
 //!     let graph = monorepo.get_dependency_graph();
 //!     for (pkg, deps) in graph {

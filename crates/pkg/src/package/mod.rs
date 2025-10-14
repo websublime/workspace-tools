@@ -18,6 +18,7 @@
 //!
 //! Uses serde_json for parsing with custom formatting preservation logic.
 //! Integrates with FileSystemManager for cross-platform file operations.
+//! Leverages MonorepoDetector from standard crate for workspace discovery.
 //! Provides type-safe representations of package.json structure and validates
 //! against Node.js package.json specifications.
 //!
@@ -26,7 +27,8 @@
 //! Package.json files are central to Node.js project management. This module
 //! ensures safe, reliable modifications while preserving the human-readable
 //! formatting that developers depend on. It supports the version management
-//! workflows required by changeset operations.
+//! workflows required by changeset operations while reusing battle-tested
+//! monorepo detection from the standard crate.
 //!
 //! # Examples
 //!
@@ -57,6 +59,7 @@
 //! ```
 
 use futures::future::BoxFuture;
+use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
 
 mod editor;
 mod json;
@@ -250,14 +253,16 @@ where
 
 /// Finds all package directories in a given root directory.
 ///
-/// This function recursively searches for directories containing package.json
-/// files, useful for monorepo package discovery.
+/// This function uses the MonorepoDetector from sublime_standard_tools to discover
+/// packages in monorepo structures, falling back to simple directory scanning
+/// for non-monorepo projects. This provides more robust workspace detection
+/// while maintaining backward compatibility.
 ///
 /// # Arguments
 ///
 /// * `filesystem` - The filesystem implementation to use
 /// * `root` - Root directory to search from
-/// * `max_depth` - Maximum search depth (None for unlimited)
+/// * `max_depth` - Maximum search depth (Some for compatibility, but ignored in monorepo detection)
 ///
 /// # Returns
 ///
@@ -286,14 +291,50 @@ pub async fn find_package_directories<F>(
     max_depth: Option<usize>,
 ) -> PackageResult<Vec<std::path::PathBuf>>
 where
-    F: AsyncFileSystem + Send + Sync,
+    F: AsyncFileSystem + Send + Sync + Clone,
 {
+    // First, try to use MonorepoDetector for enhanced workspace discovery
+    let detector = MonorepoDetector::with_filesystem(filesystem.clone());
+
+    // Check if this is a monorepo root
+    match detector.is_monorepo_root(root).await {
+        Ok(Some(_monorepo_kind)) => {
+            // Use MonorepoDetector for workspace package discovery
+            match detector.detect_packages(root).await {
+                Ok(workspace_packages) => {
+                    let package_paths: Vec<std::path::PathBuf> =
+                        workspace_packages.into_iter().map(|pkg| pkg.absolute_path).collect();
+                    return Ok(package_paths);
+                }
+                Err(e) => {
+                    log::warn!("MonorepoDetector failed, falling back to manual scan: {}", e);
+                    // Fall through to manual scanning
+                }
+            }
+        }
+        Ok(None) => {
+            // Not a monorepo, check if root itself is a package
+            if is_package_directory(filesystem, root).await {
+                return Ok(vec![root.to_path_buf()]);
+            }
+            // Fall through to manual scanning for loose packages
+        }
+        Err(e) => {
+            log::warn!("MonorepoDetector check failed, falling back to manual scan: {}", e);
+            // Fall through to manual scanning
+        }
+    }
+
+    // Fallback: use original recursive scanning approach
     let mut packages = Vec::new();
     find_packages_recursive(filesystem, root, root, max_depth, 0, &mut packages).await?;
     Ok(packages)
 }
 
-/// Recursive helper function for finding package directories.
+/// Recursive helper function for finding package directories (fallback implementation).
+///
+/// This function is used as a fallback when MonorepoDetector cannot be used or fails.
+/// It provides the original manual scanning behavior for backward compatibility.
 fn find_packages_recursive<'a, F>(
     filesystem: &'a F,
     current: &'a Path,
@@ -318,9 +359,20 @@ where
             packages.push(current.to_path_buf());
         }
 
-        // Skip node_modules directories
+        // Skip node_modules directories to avoid scanning dependencies
         if current.file_name().and_then(|name| name.to_str()) == Some("node_modules") {
             return Ok(());
+        }
+
+        // Skip common non-package directories for performance
+        if let Some(dir_name) = current.file_name().and_then(|name| name.to_str()) {
+            match dir_name {
+                "node_modules" | ".git" | ".svn" | ".hg" | "target" | "build" | "dist"
+                | ".next" => {
+                    return Ok(());
+                }
+                _ => {}
+            }
         }
 
         // Recursively search subdirectories
