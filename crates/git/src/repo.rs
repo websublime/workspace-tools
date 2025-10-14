@@ -630,17 +630,12 @@ impl Repo {
     /// ```
     pub fn get_merge_base(&self, branch1: &str, branch2: &str) -> Result<String, RepoError> {
         // Resolve the references to commit IDs
-        let commit1 = self.repo.revparse_single(branch1)
-            .map_err(RepoError::ReferenceError)?
-            .id();
-        
-        let commit2 = self.repo.revparse_single(branch2)
-            .map_err(RepoError::ReferenceError)?
-            .id();
+        let commit1 = self.repo.revparse_single(branch1).map_err(RepoError::ReferenceError)?.id();
+
+        let commit2 = self.repo.revparse_single(branch2).map_err(RepoError::ReferenceError)?.id();
 
         // Find the merge base
-        let merge_base = self.repo.merge_base(commit1, commit2)
-            .map_err(RepoError::CommitError)?;
+        let merge_base = self.repo.merge_base(commit1, commit2).map_err(RepoError::CommitError)?;
 
         Ok(merge_base.to_string())
     }
@@ -675,28 +670,36 @@ impl Repo {
     ///     println!("{}: {:?}", file.path, file.status);
     /// }
     /// ```
-    pub fn get_files_changed_between(&self, from_ref: &str, to_ref: &str) -> Result<Vec<GitChangedFile>, RepoError> {
+    pub fn get_files_changed_between(
+        &self,
+        from_ref: &str,
+        to_ref: &str,
+    ) -> Result<Vec<GitChangedFile>, RepoError> {
         use crate::{GitChangedFile, GitFileStatus};
-        
+
         // Resolve the references to commits
-        let from_commit = self.repo.revparse_single(from_ref)
+        let from_commit = self
+            .repo
+            .revparse_single(from_ref)
             .map_err(RepoError::ReferenceError)?
             .peel_to_commit()
             .map_err(RepoError::CommitError)?;
-        
-        let to_commit = self.repo.revparse_single(to_ref)
+
+        let to_commit = self
+            .repo
+            .revparse_single(to_ref)
             .map_err(RepoError::ReferenceError)?
             .peel_to_commit()
             .map_err(RepoError::CommitError)?;
 
         // Get the trees for both commits
-        let from_tree = from_commit.tree()
-            .map_err(RepoError::TreeError)?;
-        let to_tree = to_commit.tree()
-            .map_err(RepoError::TreeError)?;
+        let from_tree = from_commit.tree().map_err(RepoError::TreeError)?;
+        let to_tree = to_commit.tree().map_err(RepoError::TreeError)?;
 
         // Create diff between the trees
-        let diff = self.repo.diff_tree_to_tree(Some(&from_tree), Some(&to_tree), None)
+        let diff = self
+            .repo
+            .diff_tree_to_tree(Some(&from_tree), Some(&to_tree), None)
             .map_err(RepoError::DiffError)?;
 
         let mut changed_files = Vec::new();
@@ -706,8 +709,9 @@ impl Repo {
             &mut |delta, _progress| {
                 let old_file = delta.old_file();
                 let new_file = delta.new_file();
-                
-                let path = new_file.path()
+
+                let path = new_file
+                    .path()
                     .or_else(|| old_file.path())
                     .and_then(|p| p.to_str())
                     .unwrap_or("unknown");
@@ -728,9 +732,10 @@ impl Repo {
                 true // Continue processing
             },
             None, // No binary callback
-            None, // No hunk callback  
+            None, // No hunk callback
             None, // No line callback
-        ).map_err(RepoError::DiffError)?;
+        )
+        .map_err(RepoError::DiffError)?;
 
         Ok(changed_files)
     }
@@ -2697,6 +2702,123 @@ impl Repo {
             let author = commit.author();
             let name = author.name().unwrap_or("").to_string();
             let email = author.email().unwrap_or("").to_string();
+
+            // Get commit message
+            let message = commit.message().unwrap_or("").to_string();
+
+            // Create and add the repository commit
+            commits.push(RepoCommit {
+                hash: commit.id().to_string(),
+                author_name: name,
+                author_email: email,
+                author_date: date_str,
+                message,
+            });
+        }
+
+        Ok(commits)
+    }
+
+    /// Gets all commits between two references
+    ///
+    /// This method retrieves commits that exist in `to_ref` but not in `from_ref`,
+    /// effectively getting the commits between the two references.
+    ///
+    /// # Arguments
+    ///
+    /// * `from_ref` - Starting reference (commits after this point)
+    /// * `to_ref` - Ending reference (commits up to this point)
+    /// * `relative` - Optional path to filter commits that touch specific files
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Vec<RepoCommit>, RepoError>` - Vector of commits between the references
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Either reference cannot be resolved
+    /// - Git operations fail
+    /// - Commit objects are corrupted
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use git::repo::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    ///
+    /// // Get commits between two tags
+    /// let commits = repo.get_commits_between("v1.0.0", "v1.1.0", &None)
+    ///     .expect("Failed to get commits");
+    ///
+    /// println!("Found {} commits between versions", commits.len());
+    /// ```
+    pub fn get_commits_between(
+        &self,
+        from_ref: &str,
+        to_ref: &str,
+        relative: &Option<String>,
+    ) -> Result<Vec<RepoCommit>, RepoError> {
+        // Start a revwalk to iterate through commits
+        let mut revwalk = self.repo.revwalk().map_err(RepoError::GitFailure)?;
+
+        // Resolve both references to OIDs
+        let from_obj = self.repo.revparse_single(from_ref).map_err(RepoError::ReferenceError)?;
+        let from_commit = from_obj.peel_to_commit().map_err(RepoError::PeelError)?;
+
+        let to_obj = self.repo.revparse_single(to_ref).map_err(RepoError::ReferenceError)?;
+        let to_commit = to_obj.peel_to_commit().map_err(RepoError::PeelError)?;
+
+        // Push the 'to' commit as the starting point
+        revwalk.push(to_commit.id()).map_err(RepoError::RevWalkError)?;
+
+        // Hide commits reachable from 'from' commit
+        // This gives us commits that are in 'to' but not in 'from'
+        revwalk.hide(from_commit.id()).map_err(RepoError::CommitError)?;
+
+        // Set sorting (newest first, like 'git log')
+        revwalk.set_sorting(git2::Sort::TIME).map_err(RepoError::RevWalkError)?;
+
+        // Collect commits
+        let mut commits = Vec::new();
+
+        for oid_result in revwalk {
+            let oid = oid_result.map_err(RepoError::CommitOidError)?;
+            let commit = self.repo.find_commit(oid).map_err(RepoError::CommitError)?;
+
+            // If relative path is provided, check if commit touches this path
+            if let Some(rel_path) = &relative {
+                let rel_path_buf = PathBuf::from(rel_path);
+
+                // Skip this commit if it doesn't touch the specified path
+                if !self.commit_touches_path(&commit, &rel_path_buf)? {
+                    continue;
+                }
+            }
+
+            // Get author information
+            let signature = commit.author();
+            let name = signature.name().unwrap_or("Unknown").to_string();
+            let email = signature.email().unwrap_or("unknown@example.com").to_string();
+
+            // Convert timestamp to RFC3339 format
+            let time = commit.time();
+            let offset = time.offset_minutes();
+            let datetime = chrono::DateTime::from_timestamp(time.seconds(), 0)
+                .unwrap_or_else(chrono::Utc::now);
+
+            // Handle timezone offset safely - fallback to UTC if invalid
+            let date_str = match chrono::FixedOffset::east_opt(offset * 60) {
+                Some(offset_duration) => {
+                    let date_with_offset = datetime.with_timezone(&offset_duration);
+                    date_with_offset.to_rfc3339()
+                }
+                None => {
+                    // Invalid offset, use UTC
+                    datetime.to_rfc3339()
+                }
+            };
 
             // Get commit message
             let message = commit.message().unwrap_or("").to_string();

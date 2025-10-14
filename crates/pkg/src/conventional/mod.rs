@@ -26,9 +26,11 @@
 //! ensuring consistent release practices.
 mod commit;
 mod parser;
+mod service;
 
 #[cfg(test)]
 mod tests;
 
 pub use commit::{BreakingChange, CommitType, CommitTypeConfig, ConventionalCommit};
 pub use parser::ConventionalCommitParser;
+pub use service::{CommitAnalysis, ConventionalCommitService};

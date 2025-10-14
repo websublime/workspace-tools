@@ -232,6 +232,10 @@ pub mod release;
 pub mod version;
 
 // Re-export commonly used types for convenience
+pub use conventional::{
+    BreakingChange, CommitAnalysis, CommitType, CommitTypeConfig, ConventionalCommit,
+    ConventionalCommitParser, ConventionalCommitService,
+};
 pub use error::{PackageError, PackageResult};
 pub use package::{
     create_package_from_directory, find_package_directories, is_package_directory,

@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use regex::Regex;
 
 use crate::{
+    config::ConventionalConfig,
     conventional::commit::{CommitType, CommitTypeConfig, ConventionalCommit},
     error::ConventionalCommitError,
     PackageResult, VersionBump,
@@ -18,6 +19,8 @@ pub struct ConventionalCommitParser {
     pub(crate) breaking_regex: Regex,
     /// Configuration for commit type mappings
     pub(crate) type_config: HashMap<String, CommitTypeConfig>,
+    /// Conventional commit configuration
+    pub(crate) conventional_config: ConventionalConfig,
 }
 
 impl ConventionalCommitParser {
@@ -27,6 +30,32 @@ impl ConventionalCommitParser {
     ///
     /// Returns error if regex compilation fails.
     pub fn new() -> PackageResult<Self> {
+        Self::with_config(ConventionalConfig::default())
+    }
+
+    /// Creates a new conventional commit parser with custom configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Conventional commit configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns error if regex compilation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::conventional::ConventionalCommitParser;
+    /// use sublime_pkg_tools::config::ConventionalConfig;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let config = ConventionalConfig::default();
+    /// let parser = ConventionalCommitParser::with_config(config)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn with_config(config: ConventionalConfig) -> PackageResult<Self> {
         let commit_regex = Regex::new(
             r"^(?P<type>\w+)(?:\((?P<scope>.+)\))?\s*(?P<breaking>!)?\s*:\s*(?P<description>.+)$",
         )
@@ -35,96 +64,53 @@ impl ConventionalCommitParser {
             reason: e.to_string(),
         })?;
 
-        let breaking_regex = Regex::new(r"(?i)breaking\s+change\s*:\s*(.+)").map_err(|e| {
+        // Build breaking change regex from configuration patterns
+        let patterns = if config.breaking_change_patterns.is_empty() {
+            vec!["BREAKING CHANGE:".to_string(), "BREAKING-CHANGE:".to_string()]
+        } else {
+            config.breaking_change_patterns.clone()
+        };
+
+        let pattern = patterns.iter().map(|p| regex::escape(p)).collect::<Vec<_>>().join("|");
+        let breaking_regex_pattern = format!(r"(?i)({})(.+)", pattern);
+
+        let breaking_regex = Regex::new(&breaking_regex_pattern).map_err(|e| {
             ConventionalCommitError::ParseFailed {
                 commit: "breaking change regex compilation".to_string(),
                 reason: e.to_string(),
             }
         })?;
 
+        // Build type configuration from conventional config
         let mut type_config = HashMap::new();
-        type_config.insert(
-            "feat".to_string(),
-            CommitTypeConfig {
-                version_bump: VersionBump::Minor,
-                include_in_changelog: true,
-                changelog_section: Some("Features".to_string()),
-            },
-        );
-        type_config.insert(
-            "fix".to_string(),
-            CommitTypeConfig {
-                version_bump: VersionBump::Patch,
-                include_in_changelog: true,
-                changelog_section: Some("Bug Fixes".to_string()),
-            },
-        );
-        type_config.insert(
-            "perf".to_string(),
-            CommitTypeConfig {
-                version_bump: VersionBump::Patch,
-                include_in_changelog: true,
-                changelog_section: Some("Performance Improvements".to_string()),
-            },
-        );
-        type_config.insert(
-            "docs".to_string(),
-            CommitTypeConfig {
-                version_bump: VersionBump::None,
-                include_in_changelog: false,
-                changelog_section: None,
-            },
-        );
-        type_config.insert(
-            "style".to_string(),
-            CommitTypeConfig {
-                version_bump: VersionBump::None,
-                include_in_changelog: false,
-                changelog_section: None,
-            },
-        );
-        type_config.insert(
-            "refactor".to_string(),
-            CommitTypeConfig {
-                version_bump: VersionBump::None,
-                include_in_changelog: false,
-                changelog_section: None,
-            },
-        );
-        type_config.insert(
-            "test".to_string(),
-            CommitTypeConfig {
-                version_bump: VersionBump::None,
-                include_in_changelog: false,
-                changelog_section: None,
-            },
-        );
-        type_config.insert(
-            "build".to_string(),
-            CommitTypeConfig {
-                version_bump: VersionBump::None,
-                include_in_changelog: false,
-                changelog_section: None,
-            },
-        );
-        type_config.insert(
-            "ci".to_string(),
-            CommitTypeConfig {
-                version_bump: VersionBump::None,
-                include_in_changelog: false,
-                changelog_section: None,
-            },
-        );
-        type_config.insert(
-            "chore".to_string(),
-            CommitTypeConfig {
-                version_bump: VersionBump::None,
-                include_in_changelog: false,
-                changelog_section: None,
-            },
-        );
+        for (type_name, commit_type_config) in &config.types {
+            let version_bump = match commit_type_config.bump.as_str() {
+                "major" => VersionBump::Major,
+                "minor" => VersionBump::Minor,
+                "patch" => VersionBump::Patch,
+                "none" => VersionBump::None,
+                _ => {
+                    // Use default bump type from config
+                    match config.default_bump_type.as_str() {
+                        "major" => VersionBump::Major,
+                        "minor" => VersionBump::Minor,
+                        "patch" => VersionBump::Patch,
+                        _ => VersionBump::None,
+                    }
+                }
+            };
 
-        Ok(Self { commit_regex, breaking_regex, type_config })
+            type_config.insert(
+                type_name.clone(),
+                CommitTypeConfig {
+                    version_bump,
+                    include_in_changelog: commit_type_config.changelog,
+                    changelog_section: commit_type_config.changelog_title.clone(),
+                },
+            );
+        }
+
+        Ok(Self { commit_regex, breaking_regex, type_config, conventional_config: config })
     }
 
     /// Parses a commit message into a conventional commit.
@@ -192,9 +178,12 @@ impl ConventionalCommitParser {
         // Parse body and footer
         let body = if lines.len() > 2 { Some(lines[2..].join("\n")) } else { None };
 
-        // Check for breaking changes in body/footer
-        let breaking_in_content =
-            body.as_ref().map(|b| self.breaking_regex.is_match(b)).unwrap_or(false);
+        // Check for breaking changes in body/footer if enabled
+        let breaking_in_content = if self.conventional_config.parse_breaking_changes {
+            body.as_ref().map(|b| self.breaking_regex.is_match(b)).unwrap_or(false)
+        } else {
+            false
+        };
 
         let breaking = breaking_marker || breaking_in_content;
 
@@ -223,20 +212,20 @@ impl ConventionalCommitParser {
             return VersionBump::Major;
         }
 
-        match commit_type {
-            CommitType::Other(type_str) => self
-                .type_config
-                .get(type_str)
-                .map(|config| config.version_bump)
-                .unwrap_or(VersionBump::None),
-            _ => {
-                let type_str = commit_type.as_str();
-                self.type_config
-                    .get(type_str)
-                    .map(|config| config.version_bump)
-                    .unwrap_or(VersionBump::None)
+        let type_str = match commit_type {
+            CommitType::Other(s) => s.as_str(),
+            _ => commit_type.as_str(),
+        };
+
+        self.type_config.get(type_str).map(|config| config.version_bump).unwrap_or_else(|| {
+            // Use default bump type from config
+            match self.conventional_config.default_bump_type.as_str() {
+                "major" => VersionBump::Major,
+                "minor" => VersionBump::Minor,
+                "patch" => VersionBump::Patch,
+                _ => VersionBump::None,
             }
-        }
+        })
     }
 
     /// Checks if a commit type should be included in changelog.
@@ -247,10 +236,65 @@ impl ConventionalCommitParser {
     #[must_use]
     pub fn should_include_in_changelog(&self, commit_type: &CommitType) -> bool {
         let type_str = match commit_type {
-            CommitType::Other(s) => s,
+            CommitType::Other(s) => s.as_str(),
             _ => commit_type.as_str(),
         };
 
         self.type_config.get(type_str).map(|config| config.include_in_changelog).unwrap_or(false)
+    }
+
+    /// Gets the changelog section title for a commit type.
+    ///
+    /// # Arguments
+    ///
+    /// * `commit_type` - The commit type to get the section title for
+    ///
+    /// # Returns
+    ///
+    /// Optional section title for changelog organization.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::conventional::{ConventionalCommitParser, CommitType};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let parser = ConventionalCommitParser::new()?;
+    /// let title = parser.get_changelog_section(&CommitType::Feat);
+    /// assert_eq!(title, Some("Features"));
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn get_changelog_section(&self, commit_type: &CommitType) -> Option<&str> {
+        let type_str = match commit_type {
+            CommitType::Other(s) => s.as_str(),
+            _ => commit_type.as_str(),
+        };
+
+        self.type_config.get(type_str).and_then(|config| config.changelog_section.as_deref())
+    }
+
+    /// Checks if conventional commits are required by configuration.
+    ///
+    /// # Returns
+    ///
+    /// True if all commits must follow conventional format.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::conventional::ConventionalCommitParser;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let parser = ConventionalCommitParser::new()?;
+    /// let required = parser.are_conventional_commits_required();
+    /// println!("Conventional commits required: {}", required);
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn are_conventional_commits_required(&self) -> bool {
+        self.conventional_config.require_conventional_commits
     }
 }
