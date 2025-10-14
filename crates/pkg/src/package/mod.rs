@@ -361,14 +361,11 @@ where
         }
 
         // Skip common non-package directories for performance
-        if let Some(dir_name) = current.file_name().and_then(|name| name.to_str()) {
-            match dir_name {
-                "node_modules" | ".git" | ".svn" | ".hg" | "target" | "build" | "dist"
-                | ".next" => {
-                    return Ok(());
-                }
-                _ => {}
-            }
+        if let Some(
+            "node_modules" | ".git" | ".svn" | ".hg" | "target" | "build" | "dist" | ".next",
+        ) = current.file_name().and_then(|name| name.to_str())
+        {
+            return Ok(());
         }
 
         // Recursively search subdirectories
