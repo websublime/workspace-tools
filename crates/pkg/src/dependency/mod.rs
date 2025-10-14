@@ -31,6 +31,6 @@ mod propagator;
 #[cfg(test)]
 mod tests;
 
-pub use analyzer::DependencyAnalyzer;
+pub use analyzer::{DependencyAnalyzer, DependencyGraphBuilder};
 pub use graph::{DependencyEdge, DependencyGraph, DependencyNode, DependencyType};
 pub use propagator::{PropagatedUpdate, PropagationReason};
