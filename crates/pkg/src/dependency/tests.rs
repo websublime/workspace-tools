@@ -2,12 +2,17 @@
 #[allow(clippy::panic)]
 #[cfg(test)]
 mod dependency_tests {
+    use crate::config::DependencyConfig;
     use crate::dependency::{
-        DependencyAnalyzer, DependencyEdge, DependencyGraph, DependencyNode, DependencyType,
+        DependencyAnalyzer, DependencyEdge, DependencyGraph, DependencyGraphBuilder,
+        DependencyNode, DependencyType, PropagationReason,
     };
     use crate::version::Version;
+    use crate::{ResolvedVersion, VersionBump};
+    use std::collections::HashMap;
     use std::path::PathBuf;
     use std::str::FromStr;
+    use sublime_standard_tools::filesystem::FileSystemManager;
 
     #[test]
     fn test_dependency_graph_creation() {
@@ -55,12 +60,17 @@ mod dependency_tests {
     #[test]
     fn test_dependency_analyzer_creation() {
         let graph = DependencyGraph::new();
-        let analyzer = DependencyAnalyzer::new(graph, 10, true, false, false);
+        let config = DependencyConfig::default();
+        let fs = FileSystemManager::new();
+        let analyzer = DependencyAnalyzer::new(graph, config.clone(), fs);
 
-        assert_eq!(analyzer.max_depth, 10);
-        assert!(analyzer.include_dev_dependencies);
-        assert!(!analyzer.include_optional_dependencies);
-        assert!(!analyzer.include_peer_dependencies);
+        assert_eq!(analyzer.config().max_propagation_depth, config.max_propagation_depth);
+        assert_eq!(analyzer.config().propagate_dev_dependencies, config.propagate_dev_dependencies);
+        assert_eq!(
+            analyzer.config().include_optional_dependencies,
+            config.include_optional_dependencies
+        );
+        assert_eq!(analyzer.config().include_peer_dependencies, config.include_peer_dependencies);
     }
 
     #[test]
@@ -133,14 +143,200 @@ mod dependency_tests {
     }
 
     #[test]
-    fn test_dependency_analyzer_settings() {
-        let graph = DependencyGraph::new();
-        let analyzer = DependencyAnalyzer::new(graph, 20, false, true, true);
+    fn test_dependency_graph_add_edge() {
+        let mut graph = DependencyGraph::new();
+        let version = Version::from_str("1.0.0").unwrap();
 
-        assert_eq!(analyzer.max_depth, 20);
-        assert!(!analyzer.include_dev_dependencies);
-        assert!(analyzer.include_optional_dependencies);
-        assert!(analyzer.include_peer_dependencies);
+        // Add two packages
+        let node_a =
+            DependencyNode::new("pkg-a".to_string(), version.clone().into(), PathBuf::from("/a"));
+        let node_b = DependencyNode::new("pkg-b".to_string(), version.into(), PathBuf::from("/b"));
+
+        graph.add_node(node_a);
+        graph.add_node(node_b);
+
+        // Add edge from B to A (B depends on A)
+        let edge = DependencyEdge::new(DependencyType::Runtime, "^1.0.0".to_string());
+        let result = graph.add_edge("pkg-b", "pkg-a", edge);
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_dependency_graph_get_dependencies() {
+        let mut graph = DependencyGraph::new();
+        let version = Version::from_str("1.0.0").unwrap();
+
+        // Create three packages
+        let node_a =
+            DependencyNode::new("pkg-a".to_string(), version.clone().into(), PathBuf::from("/a"));
+        let node_b =
+            DependencyNode::new("pkg-b".to_string(), version.clone().into(), PathBuf::from("/b"));
+        let node_c = DependencyNode::new("pkg-c".to_string(), version.into(), PathBuf::from("/c"));
+
+        graph.add_node(node_a);
+        graph.add_node(node_b);
+        graph.add_node(node_c);
+
+        // Create dependency chain: C -> B -> A
+        let edge = DependencyEdge::new(DependencyType::Runtime, "^1.0.0".to_string());
+        graph.add_edge("pkg-b", "pkg-a", edge.clone()).unwrap();
+        graph.add_edge("pkg-c", "pkg-b", edge).unwrap();
+
+        // Test getting dependencies
+        let c_deps = graph.get_dependencies("pkg-c");
+        let b_deps = graph.get_dependencies("pkg-b");
+        let a_deps = graph.get_dependencies("pkg-a");
+
+        assert_eq!(c_deps, vec!["pkg-b"]);
+        assert_eq!(b_deps, vec!["pkg-a"]);
+        assert!(a_deps.is_empty());
+    }
+
+    #[test]
+    fn test_dependency_graph_get_dependents() {
+        let mut graph = DependencyGraph::new();
+        let version = Version::from_str("1.0.0").unwrap();
+
+        // Create three packages
+        let node_a =
+            DependencyNode::new("pkg-a".to_string(), version.clone().into(), PathBuf::from("/a"));
+        let node_b =
+            DependencyNode::new("pkg-b".to_string(), version.clone().into(), PathBuf::from("/b"));
+        let node_c = DependencyNode::new("pkg-c".to_string(), version.into(), PathBuf::from("/c"));
+
+        graph.add_node(node_a);
+        graph.add_node(node_b);
+        graph.add_node(node_c);
+
+        // Create dependency chain: C -> B -> A
+        let edge = DependencyEdge::new(DependencyType::Runtime, "^1.0.0".to_string());
+        graph.add_edge("pkg-b", "pkg-a", edge.clone()).unwrap();
+        graph.add_edge("pkg-c", "pkg-b", edge).unwrap();
+
+        // Test getting dependents
+        let a_dependents = graph.get_dependents("pkg-a");
+        let b_dependents = graph.get_dependents("pkg-b");
+        let c_dependents = graph.get_dependents("pkg-c");
+
+        assert_eq!(a_dependents, vec!["pkg-b"]);
+        assert_eq!(b_dependents, vec!["pkg-c"]);
+        assert!(c_dependents.is_empty());
+    }
+
+    #[test]
+    fn test_dependency_graph_cycle_detection() {
+        let mut graph = DependencyGraph::new();
+        let version = Version::from_str("1.0.0").unwrap();
+
+        // Create packages that form a cycle
+        let node_a =
+            DependencyNode::new("pkg-a".to_string(), version.clone().into(), PathBuf::from("/a"));
+        let node_b = DependencyNode::new("pkg-b".to_string(), version.into(), PathBuf::from("/b"));
+
+        graph.add_node(node_a);
+        graph.add_node(node_b);
+
+        // Create cycle: A -> B -> A
+        let edge = DependencyEdge::new(DependencyType::Runtime, "^1.0.0".to_string());
+        graph.add_edge("pkg-a", "pkg-b", edge.clone()).unwrap();
+        graph.add_edge("pkg-b", "pkg-a", edge).unwrap();
+
+        let cycles = graph.detect_cycles();
+        assert!(!cycles.is_empty());
+
+        // Should detect the cycle containing both packages
+        let first_cycle = &cycles[0];
+        assert!(first_cycle.contains(&"pkg-a".to_string()));
+        assert!(first_cycle.contains(&"pkg-b".to_string()));
+    }
+
+    #[test]
+    fn test_dependency_graph_no_cycles() {
+        let mut graph = DependencyGraph::new();
+        let version = Version::from_str("1.0.0").unwrap();
+
+        // Create packages without cycles
+        let node_a =
+            DependencyNode::new("pkg-a".to_string(), version.clone().into(), PathBuf::from("/a"));
+        let node_b =
+            DependencyNode::new("pkg-b".to_string(), version.clone().into(), PathBuf::from("/b"));
+        let node_c = DependencyNode::new("pkg-c".to_string(), version.into(), PathBuf::from("/c"));
+
+        graph.add_node(node_a);
+        graph.add_node(node_b);
+        graph.add_node(node_c);
+
+        // Create linear dependency: C -> B -> A
+        let edge = DependencyEdge::new(DependencyType::Runtime, "^1.0.0".to_string());
+        graph.add_edge("pkg-b", "pkg-a", edge.clone()).unwrap();
+        graph.add_edge("pkg-c", "pkg-b", edge).unwrap();
+
+        let cycles = graph.detect_cycles();
+        assert!(cycles.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_dependency_analyzer_propagation() {
+        let mut graph = DependencyGraph::new();
+        let version = Version::from_str("1.0.0").unwrap();
+
+        // Create packages
+        let mut node_a =
+            DependencyNode::new("pkg-a".to_string(), version.clone().into(), PathBuf::from("/a"));
+        let node_b = DependencyNode::new("pkg-b".to_string(), version.into(), PathBuf::from("/b"));
+
+        // B depends on A
+        node_a.add_dependency("pkg-b".to_string(), "^1.0.0".to_string());
+
+        graph.add_node(node_a);
+        graph.add_node(node_b);
+
+        // Add edge
+        let edge = DependencyEdge::new(DependencyType::Runtime, "^1.0.0".to_string());
+        graph.add_edge("pkg-a", "pkg-b", edge).unwrap();
+
+        let config = DependencyConfig::default();
+        let fs = FileSystemManager::new();
+        let analyzer = DependencyAnalyzer::new(graph, config, fs);
+
+        // Test propagation when pkg-b is updated
+        let mut changed_packages = HashMap::new();
+        let new_version = Version::from_str("1.1.0").unwrap();
+        changed_packages.insert(
+            "pkg-b".to_string(),
+            (VersionBump::Minor, ResolvedVersion::Release(new_version)),
+        );
+
+        let propagated = analyzer.analyze_propagation(&changed_packages).await.unwrap();
+        assert!(!propagated.is_empty());
+
+        let update = &propagated[0];
+        assert_eq!(update.package_name, "pkg-a");
+        assert_eq!(update.suggested_bump, VersionBump::Patch); // Default config uses patch
+    }
+
+    #[test]
+    fn test_dependency_graph_builder_creation() {
+        let fs = FileSystemManager::new();
+        let config = DependencyConfig::default();
+        let _builder = DependencyGraphBuilder::new(fs, config);
+    }
+
+    #[test]
+    fn test_propagation_reason_variants() {
+        let reason = PropagationReason::DependencyUpdate {
+            dependency: "lodash".to_string(),
+            old_version: "4.0.0".to_string(),
+            new_version: "4.1.0".to_string(),
+        };
+
+        match reason {
+            PropagationReason::DependencyUpdate { dependency, .. } => {
+                assert_eq!(dependency, "lodash");
+            }
+            _ => panic!("Expected DependencyUpdate variant"),
+        }
     }
 
     #[test]
@@ -169,5 +365,71 @@ mod dependency_tests {
         assert_eq!(deserialized_node.path, PathBuf::from("/test/path"));
         assert_eq!(deserialized_node.dependencies.len(), 1);
         assert_eq!(deserialized_node.dev_dependencies.len(), 1);
+    }
+
+    #[test]
+    fn test_dependency_config_defaults() {
+        let config = DependencyConfig::default();
+        assert!(config.propagate_updates);
+        assert!(!config.propagate_dev_dependencies);
+        assert_eq!(config.max_propagation_depth, 10);
+        assert!(config.detect_circular);
+        assert!(config.fail_on_circular);
+        assert_eq!(config.dependency_update_bump, "patch");
+        assert!(!config.include_peer_dependencies);
+        assert!(!config.include_optional_dependencies);
+    }
+
+    #[tokio::test]
+    async fn test_dependency_version_tracking_in_propagation() {
+        let mut graph = DependencyGraph::new();
+        let version_a = Version::from_str("1.0.0").unwrap();
+        let version_b = Version::from_str("2.0.0").unwrap();
+
+        // Create packages with specific dependency versions
+        let mut node_a =
+            DependencyNode::new("pkg-a".to_string(), version_a.into(), PathBuf::from("/a"));
+        let node_b =
+            DependencyNode::new("pkg-b".to_string(), version_b.clone().into(), PathBuf::from("/b"));
+
+        // A depends on B with specific version requirement
+        node_a.add_dependency("pkg-b".to_string(), "^2.0.0".to_string());
+
+        graph.add_node(node_a);
+        graph.add_node(node_b);
+
+        // Add edge for dependency relationship
+        let edge = DependencyEdge::new(DependencyType::Runtime, "^2.0.0".to_string());
+        graph.add_edge("pkg-a", "pkg-b", edge).unwrap();
+
+        let config = DependencyConfig::default();
+        let fs = FileSystemManager::new();
+        let analyzer = DependencyAnalyzer::new(graph, config, fs);
+
+        // Simulate pkg-b being updated
+        let mut changed_packages = HashMap::new();
+        let new_version_b = Version::from_str("2.1.0").unwrap();
+        changed_packages.insert(
+            "pkg-b".to_string(),
+            (VersionBump::Minor, ResolvedVersion::Release(new_version_b)),
+        );
+
+        let propagated = analyzer.analyze_propagation(&changed_packages).await.unwrap();
+
+        // Should have propagated update for pkg-a
+        assert!(!propagated.is_empty());
+        let update = &propagated[0];
+        assert_eq!(update.package_name, "pkg-a");
+
+        // Check that the propagation reason contains actual version info (not "unknown")
+        match &update.reason {
+            PropagationReason::DependencyUpdate { dependency, old_version, new_version } => {
+                assert_eq!(dependency, "pkg-b");
+                // Should have actual version requirement, not "unknown"
+                assert_eq!(old_version, "^2.0.0");
+                assert_eq!(new_version, "2.1.0");
+            }
+            _ => panic!("Expected DependencyUpdate reason"),
+        }
     }
 }
