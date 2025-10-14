@@ -1081,4 +1081,109 @@ mod integration_tests {
         let result = create_package_from_directory(&fs, Path::new("empty-dir")).await;
         assert!(result.is_err());
     }
+
+    #[tokio::test]
+    async fn test_editor_with_config() {
+        use sublime_standard_tools::config::StandardConfig;
+
+        let fs = MockFileSystem::new();
+        let json_content = r#"
+        {
+            "name": "test-package",
+            "version": "1.0.0",
+            "description": "Test package with config"
+        }
+        "#;
+        fs.add_file(Path::new("package.json"), json_content);
+
+        let mut config = StandardConfig::default();
+        config.validation.strict_mode = true;
+        config.validation.required_package_fields = vec!["description".to_string()];
+
+        let editor = PackageJsonEditor::new_with_config(fs, Path::new("package.json"), config)
+            .await
+            .unwrap();
+
+        assert!(editor.is_strict_mode());
+        assert!(editor.config().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_config_validation_failure() {
+        use sublime_standard_tools::config::StandardConfig;
+
+        let fs = MockFileSystem::new();
+        let json_content = r#"
+        {
+            "name": "test-package",
+            "version": "1.0.0"
+        }
+        "#;
+        fs.add_file(Path::new("package.json"), json_content);
+
+        let mut config = StandardConfig::default();
+        config.validation.strict_mode = true;
+        config.validation.required_package_fields = vec!["description".to_string()];
+
+        let result =
+            PackageJsonEditor::new_with_config(fs, Path::new("package.json"), config).await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_save_with_config_validation() {
+        use sublime_standard_tools::config::StandardConfig;
+
+        let fs = MockFileSystem::new();
+        let json_content = r#"
+        {
+            "name": "test-package",
+            "version": "1.0.0",
+            "description": "Test package",
+            "dependencies": {
+                "lodash": "^4.17.21"
+            }
+        }
+        "#;
+        fs.add_file(Path::new("package.json"), json_content);
+
+        let mut config = StandardConfig::default();
+        config.validation.strict_mode = true;
+        config.validation.validate_dependencies = true;
+
+        let mut editor = PackageJsonEditor::new_with_config(fs, Path::new("package.json"), config)
+            .await
+            .unwrap();
+
+        editor.set_version("2.0.0").unwrap();
+        let result = editor.save().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_config_dependency_validation_failure() {
+        use sublime_standard_tools::config::StandardConfig;
+
+        let fs = MockFileSystem::new();
+        let json_content = r#"
+        {
+            "name": "test-package",
+            "version": "1.0.0",
+            "dependencies": {
+                "invalid-dep": ""
+            }
+        }
+        "#;
+        fs.add_file(Path::new("package.json"), json_content);
+
+        let mut config = StandardConfig::default();
+        config.validation.strict_mode = true;
+        config.validation.validate_dependencies = true;
+
+        let result =
+            PackageJsonEditor::new_with_config(fs, Path::new("package.json"), config).await;
+
+        assert!(result.is_err());
+    }
 }

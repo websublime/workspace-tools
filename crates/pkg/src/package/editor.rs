@@ -54,6 +54,7 @@ use crate::error::{PackageError, PackageResult};
 use crate::package::PackageJson;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
+use sublime_standard_tools::config::StandardConfig;
 use sublime_standard_tools::filesystem::AsyncFileSystem;
 
 /// Represents a modification to be applied to package.json.
@@ -167,6 +168,8 @@ pub struct PackageJsonEditor<F> {
     parsed_json: PackageJson,
     /// List of pending modifications
     modifications: Vec<PackageJsonModification>,
+    /// Optional configuration for validation and behavior
+    config: Option<StandardConfig>,
 }
 
 impl<F> PackageJsonEditor<F>
@@ -221,6 +224,73 @@ where
             current_content: content,
             parsed_json,
             modifications: Vec::new(),
+            config: None,
+        })
+    }
+
+    /// Creates a new PackageJsonEditor with StandardConfig integration.
+    ///
+    /// This constructor enables configuration-driven validation rules,
+    /// retry policies, and other settings from the project's StandardConfig.
+    ///
+    /// # Arguments
+    ///
+    /// * `filesystem` - Filesystem implementation to use
+    /// * `file_path` - Path to the package.json file
+    /// * `config` - StandardConfig with validation and behavior settings
+    ///
+    /// # Returns
+    ///
+    /// A configured PackageJsonEditor instance
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - The file cannot be read
+    /// - The JSON content is malformed
+    /// - Configuration validation fails
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use sublime_pkg_tools::package::PackageJsonEditor;
+    /// use sublime_standard_tools::{filesystem::FileSystemManager, config::StandardConfig};
+    /// use std::path::Path;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = FileSystemManager::new();
+    /// let config = StandardConfig::default();
+    /// let editor = PackageJsonEditor::new_with_config(&fs, Path::new("./package.json"), config).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn new_with_config(
+        filesystem: F,
+        file_path: &Path,
+        config: StandardConfig,
+    ) -> PackageResult<Self> {
+        let content = filesystem.read_file_string(file_path).await.map_err(|e| {
+            PackageError::operation(
+                "read_package_json",
+                format!("Failed to read {}: {}", file_path.display(), e),
+            )
+        })?;
+
+        let parsed_json = PackageJson::parse_from_str(&content)?;
+
+        // Validate against config rules if strict mode is enabled
+        if config.validation.strict_mode {
+            Self::validate_against_config(&parsed_json, &config)?;
+        }
+
+        Ok(Self {
+            filesystem,
+            file_path: file_path.to_path_buf(),
+            original_content: content.clone(),
+            current_content: content,
+            parsed_json,
+            modifications: Vec::new(),
+            config: Some(config),
         })
     }
 
@@ -506,6 +576,14 @@ where
         // Update state
         self.current_content = content;
         self.parsed_json = PackageJson::parse_from_str(&self.current_content)?;
+
+        // Validate against config if available
+        if let Some(config) = &self.config {
+            if config.validation.strict_mode {
+                Self::validate_against_config(&self.parsed_json, config)?;
+            }
+        }
+
         self.modifications.clear();
 
         Ok(())
@@ -656,5 +734,99 @@ where
 
         // Convert back to pretty JSON
         serde_json::to_string_pretty(&json).map_err(PackageError::Json)
+    }
+
+    /// Validates package.json against StandardConfig rules.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_json` - PackageJson to validate
+    /// * `config` - StandardConfig with validation rules
+    ///
+    /// # Errors
+    ///
+    /// Returns error if validation fails
+    fn validate_against_config(
+        package_json: &PackageJson,
+        config: &StandardConfig,
+    ) -> PackageResult<()> {
+        // Check required fields
+        for required_field in &config.validation.required_package_fields {
+            match required_field.as_str() {
+                "name" => {
+                    if package_json.name.is_empty() {
+                        return Err(PackageError::operation(
+                            "validation",
+                            "Package name is required by configuration".to_string(),
+                        ));
+                    }
+                }
+                "version" => {
+                    // Version is always required by our PackageJson structure
+                }
+                "description" => {
+                    if package_json.description.is_none() {
+                        return Err(PackageError::operation(
+                            "validation",
+                            "Package description is required by configuration".to_string(),
+                        ));
+                    }
+                }
+                "license" => {
+                    if package_json.license.is_none() {
+                        return Err(PackageError::operation(
+                            "validation",
+                            "Package license is required by configuration".to_string(),
+                        ));
+                    }
+                }
+                _ => {
+                    log::warn!("Unknown required field in configuration: {}", required_field);
+                }
+            }
+        }
+
+        // Validate dependencies if enabled
+        if config.validation.validate_dependencies {
+            let all_deps = package_json.get_all_dependencies();
+            for (name, version, _dep_type) in all_deps {
+                if version.trim().is_empty() {
+                    return Err(PackageError::operation(
+                        "validation",
+                        format!("Empty version for dependency '{}'", name),
+                    ));
+                }
+
+                // Basic semver format check
+                if !version.chars().any(|c| c.is_ascii_digit()) {
+                    return Err(PackageError::operation(
+                        "validation",
+                        format!("Invalid version format for dependency '{}': {}", name, version),
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Gets the current configuration if available.
+    ///
+    /// # Returns
+    ///
+    /// Optional reference to the StandardConfig
+    #[must_use]
+    pub fn config(&self) -> Option<&StandardConfig> {
+        self.config.as_ref()
+    }
+
+    /// Checks if strict mode validation is enabled.
+    ///
+    /// # Returns
+    ///
+    /// True if strict mode is enabled in configuration
+    #[must_use]
+    pub fn is_strict_mode(&self) -> bool {
+        self.config.as_ref().map_or(false, |c| c.validation.strict_mode)
     }
 }
