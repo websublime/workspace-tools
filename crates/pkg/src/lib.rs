@@ -226,12 +226,20 @@ pub mod config;
 pub mod conventional;
 pub mod dependency;
 pub mod error;
+pub mod package;
 pub mod registry;
 pub mod release;
 pub mod version;
 
 // Re-export commonly used types for convenience
 pub use error::{PackageError, PackageResult};
+pub use package::{
+    create_package_from_directory, find_package_directories, is_package_directory,
+    read_package_json, validate_package_json, BugsInfo, Dependencies, DependencyType, Package,
+    PackageInfo, PackageJson, PackageJsonEditor, PackageJsonModification, PackageJsonValidator,
+    PersonOrString, Repository, Scripts, ValidationIssue,
+    ValidationResult as PackageValidationResult, ValidationSeverity, WorkspaceConfig,
+};
 pub use version::{
     PackageManagerFormat, ResolvedVersion, SnapshotVersion, ValidationResult, ValidationSummary,
     Version, VersionAnalysis, VersionBump, VersionComparison, VersionConstraint, VersionMetadata,
