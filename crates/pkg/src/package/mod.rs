@@ -46,14 +46,10 @@
 //! println!("Package: {} v{}", package_json.name, package_json.version);
 //!
 //! // Create editor for modifications
-//! let mut editor = PackageJsonEditor::new(&fs, package_path).await?;
+//! let mut editor = PackageJsonEditor::new(fs, package_path).await?;
 //! editor.set_version("1.2.4")?;
 //! editor.update_dependency("lodash", "^4.17.21")?;
 //! editor.save().await?;
-//!
-//! // Create Package representation
-//! let package = Package::from_path(&fs, Path::new("./")).await?;
-//! println!("Found package: {}", package.name);
 //! # Ok(())
 //! # }
 //! ```

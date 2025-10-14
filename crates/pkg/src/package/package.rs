@@ -316,14 +316,13 @@ impl Package {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::package::{Package, PackageJson};
+    /// use sublime_pkg_tools::package::{Package, PackageJson, PackageInfo};
     /// use sublime_pkg_tools::version::Version;
     /// use std::path::PathBuf;
-    /// use std::str::FromStr;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut package = Package::new(PackageJson::default(), PathBuf::from("."));
-    /// let new_version = Version::from_str("2.0.0")?;
+    /// let new_version = Version::new(2, 0, 0);
     /// package.set_version(new_version);
     /// assert_eq!(package.version().to_string(), "2.0.0");
     /// # Ok(())
@@ -343,7 +342,7 @@ impl Package {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::package::{Package, PackageJson};
+    /// use sublime_pkg_tools::package::{Package, PackageJson, PackageInfo};
     /// use std::path::PathBuf;
     ///
     /// # fn example() {
@@ -391,7 +390,7 @@ impl Package {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::package::{Package, PackageJson};
+    /// use sublime_pkg_tools::package::{Package, PackageJson, PackageInfo};
     /// use std::path::PathBuf;
     ///
     /// # fn example() {
