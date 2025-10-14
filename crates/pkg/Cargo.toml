@@ -59,6 +59,9 @@ base64 = "0.21"
 # Async trait for trait objects
 async-trait = "0.1"
 
+# Futures utilities
+futures = "0.3"
+
 [dev-dependencies]
 tempfile.workspace = true
 tokio-test = "0.4"
