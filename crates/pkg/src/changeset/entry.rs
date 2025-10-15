@@ -845,10 +845,10 @@ impl ChangeEntry {
     /// ```rust
     /// use sublime_pkg_tools::changeset::ChangeEntry;
     ///
-    /// let breaking = ChangeEntry::breaking("feat", "Remove API", None);
+    /// let breaking = ChangeEntry::breaking("feat", "Remove API", None::<String>);
     /// assert!(breaking.is_breaking());
     ///
-    /// let normal = ChangeEntry::feature("Add feature", false, None);
+    /// let normal = ChangeEntry::feature("Add feature", false, None::<String>);
     /// assert!(!normal.is_breaking());
     /// ```
     #[must_use]
@@ -863,10 +863,10 @@ impl ChangeEntry {
     /// ```rust
     /// use sublime_pkg_tools::changeset::ChangeEntry;
     ///
-    /// let feature = ChangeEntry::feature("Add feature", false, None);
+    /// let feature = ChangeEntry::feature("Add feature", false, None::<String>);
     /// assert!(feature.is_feature());
     ///
-    /// let fix = ChangeEntry::fix("Fix bug", None);
+    /// let fix = ChangeEntry::fix("Fix bug", None::<String>);
     /// assert!(!fix.is_feature());
     /// ```
     #[must_use]
@@ -881,10 +881,10 @@ impl ChangeEntry {
     /// ```rust
     /// use sublime_pkg_tools::changeset::ChangeEntry;
     ///
-    /// let fix = ChangeEntry::fix("Fix bug", None);
+    /// let fix = ChangeEntry::fix("Fix bug", None::<String>);
     /// assert!(fix.is_fix());
     ///
-    /// let feature = ChangeEntry::feature("Add feature", false, None);
+    /// let feature = ChangeEntry::feature("Add feature", false, None::<String>);
     /// assert!(!feature.is_fix());
     /// ```
     #[must_use]
@@ -899,7 +899,7 @@ impl ChangeEntry {
     /// ```rust
     /// use sublime_pkg_tools::changeset::ChangeEntry;
     ///
-    /// let docs = ChangeEntry::new("docs", "Update README", false, None);
+    /// let docs = ChangeEntry::new("docs", "Update README", false, None::<String>);
     /// assert!(docs.is_docs());
     /// ```
     #[must_use]
@@ -914,7 +914,7 @@ impl ChangeEntry {
     /// ```rust
     /// use sublime_pkg_tools::changeset::ChangeEntry;
     ///
-    /// let refactor = ChangeEntry::new("refactor", "Extract utility function", false, None);
+    /// let refactor = ChangeEntry::new("refactor", "Extract utility function", false, None::<String>);
     /// assert!(refactor.is_refactor());
     /// ```
     #[must_use]
@@ -929,7 +929,7 @@ impl ChangeEntry {
     /// ```rust
     /// use sublime_pkg_tools::changeset::ChangeEntry;
     ///
-    /// let perf = ChangeEntry::new("perf", "Optimize database queries", false, None);
+    /// let perf = ChangeEntry::new("perf", "Optimize database queries", false, None::<String>);
     /// assert!(perf.is_performance());
     /// ```
     #[must_use]
@@ -944,7 +944,7 @@ impl ChangeEntry {
     /// ```rust
     /// use sublime_pkg_tools::changeset::ChangeEntry;
     ///
-    /// let test = ChangeEntry::new("test", "Add integration tests", false, None);
+    /// let test = ChangeEntry::new("test", "Add integration tests", false, None::<String>);
     /// assert!(test.is_test());
     /// ```
     #[must_use]
@@ -959,7 +959,7 @@ impl ChangeEntry {
     /// ```rust
     /// use sublime_pkg_tools::changeset::ChangeEntry;
     ///
-    /// let build = ChangeEntry::new("build", "Update webpack config", false, None);
+    /// let build = ChangeEntry::new("build", "Update webpack config", false, None::<String>);
     /// assert!(build.is_build());
     /// ```
     #[must_use]
@@ -974,7 +974,7 @@ impl ChangeEntry {
     /// ```rust
     /// use sublime_pkg_tools::changeset::ChangeEntry;
     ///
-    /// let ci = ChangeEntry::new("ci", "Add GitHub Actions workflow", false, None);
+    /// let ci = ChangeEntry::new("ci", "Add GitHub Actions workflow", false, None::<String>);
     /// assert!(ci.is_ci());
     /// ```
     #[must_use]
@@ -989,7 +989,7 @@ impl ChangeEntry {
     /// ```rust
     /// use sublime_pkg_tools::changeset::ChangeEntry;
     ///
-    /// let chore = ChangeEntry::new("chore", "Update dependencies", false, None);
+    /// let chore = ChangeEntry::new("chore", "Update dependencies", false, None::<String>);
     /// assert!(chore.is_chore());
     /// ```
     #[must_use]
@@ -1008,10 +1008,10 @@ impl ChangeEntry {
     /// ```rust
     /// use sublime_pkg_tools::changeset::ChangeEntry;
     ///
-    /// let valid = ChangeEntry::feature("Add feature", false, None);
+    /// let valid = ChangeEntry::feature("Add feature", false, None::<String>);
     /// assert!(valid.validate().is_ok());
     ///
-    /// let invalid = ChangeEntry::new("", "", false, None);
+    /// let invalid = ChangeEntry::new("", "", false, None::<String>);
     /// assert!(invalid.validate().is_err());
     /// ```
     pub fn validate(&self) -> Result<(), String> {
