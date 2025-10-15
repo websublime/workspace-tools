@@ -454,10 +454,9 @@ mod changeset_tests {
 // Storage and Manager Tests Module
 #[allow(clippy::unwrap_used)]
 mod storage_and_manager_tests {
-    use super::super::*;
     use crate::changeset::{
         ChangeEntry, ChangeReason, Changeset, ChangesetManager, ChangesetPackage, ChangesetStorage,
-        EnvironmentRelease, FileBasedChangesetStorage, ReleaseInfo,
+        ChangesetSummary, EnvironmentRelease, FileBasedChangesetStorage, ReleaseInfo,
     };
     use crate::config::ChangesetConfig;
     use crate::version::{Version, VersionBump};
@@ -981,5 +980,432 @@ mod storage_and_manager_tests {
         assert!(!summary.has_pending());
         assert!(!summary.has_history());
         assert_eq!(summary.total_count(), 0);
+    }
+}
+
+// Tests for PackageChangeDetector
+#[allow(clippy::unwrap_used)]
+#[cfg(test)]
+mod detector_tests {
+    use crate::changeset::PackageChangeDetector;
+    use std::path::{Path, PathBuf};
+    use sublime_standard_tools::filesystem::FileSystemManager;
+    use tempfile::TempDir;
+
+    fn create_test_detector(root: &Path) -> PackageChangeDetector<FileSystemManager> {
+        PackageChangeDetector::new(root.to_path_buf(), FileSystemManager::new())
+    }
+
+    async fn create_test_package_json(
+        dir: &Path,
+        name: &str,
+        version: &str,
+    ) -> Result<(), std::io::Error> {
+        let content = format!(
+            r#"{{
+  "name": "{}",
+  "version": "{}",
+  "description": "Test package"
+}}"#,
+            name, version
+        );
+        tokio::fs::write(dir.join("package.json"), content).await
+    }
+
+    #[tokio::test]
+    async fn test_detector_creation() {
+        let temp_dir = TempDir::new().unwrap();
+        let detector = create_test_detector(temp_dir.path());
+
+        assert_eq!(detector.workspace_root, temp_dir.path());
+    }
+
+    #[tokio::test]
+    async fn test_detect_empty_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let detector = create_test_detector(temp_dir.path());
+
+        let result = detector.detect_affected_packages(&[]).await.unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_is_monorepo_single_package() {
+        let temp_dir = TempDir::new().unwrap();
+        create_test_package_json(temp_dir.path(), "@test/single", "1.0.0").await.unwrap();
+
+        let detector = create_test_detector(temp_dir.path());
+        let is_mono = detector.is_monorepo().await.unwrap();
+
+        // Single package.json at root = not a monorepo
+        assert!(!is_mono);
+    }
+
+    #[tokio::test]
+    async fn test_detect_single_package() {
+        let temp_dir = TempDir::new().unwrap();
+        create_test_package_json(temp_dir.path(), "@test/single", "1.0.0").await.unwrap();
+
+        let src_dir = temp_dir.path().join("src");
+        tokio::fs::create_dir_all(&src_dir).await.unwrap();
+        tokio::fs::write(src_dir.join("index.ts"), "console.log('test');").await.unwrap();
+
+        let detector = create_test_detector(temp_dir.path());
+        let changed_files = vec![temp_dir.path().join("src/index.ts")];
+
+        let result = detector.detect_affected_packages(&changed_files).await.unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert!(result.contains_key("@test/single"));
+        assert_eq!(result["@test/single"].len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_list_all_packages_single() {
+        let temp_dir = TempDir::new().unwrap();
+        create_test_package_json(temp_dir.path(), "@test/single", "1.0.0").await.unwrap();
+
+        let detector = create_test_detector(temp_dir.path());
+        let packages = detector.list_all_packages().await.unwrap();
+
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].metadata.name, "@test/single");
+        assert_eq!(packages[0].metadata.version.to_string(), "1.0.0");
+    }
+
+    #[tokio::test]
+    async fn test_get_package_for_file_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let detector = create_test_detector(temp_dir.path());
+
+        let result =
+            detector.get_package_for_file(&PathBuf::from("nonexistent/file.ts")).await.unwrap();
+        assert!(result.is_none());
+    }
+}
+
+// Tests for ChangesetBuilder
+#[allow(clippy::unwrap_used)]
+#[allow(clippy::panic)]
+#[cfg(test)]
+mod builder_tests {
+    use crate::changeset::{ChangeReason, ChangesetBuilder};
+    use crate::config::PackageToolsConfig;
+    use crate::conventional::ConventionalCommitService;
+    use crate::version::VersionBump;
+    use sublime_git_tools::Repo;
+    use tempfile::TempDir;
+
+    struct TestRepoWithService {
+        _temp_dir: TempDir,
+        repo: Repo,
+        commit_service: ConventionalCommitService,
+    }
+
+    async fn create_test_git_repo() -> Result<TestRepoWithService, Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let repo_path = temp_dir.path().to_str().ok_or("Invalid path")?;
+        let repo = Repo::create(repo_path)?;
+
+        // Create initial package.json
+        let package_json = r#"{
+  "name": "@test/package",
+  "version": "1.0.0",
+  "description": "Test package"
+}"#;
+        tokio::fs::write(temp_dir.path().join("package.json"), package_json).await?;
+
+        // Create a file to commit
+        tokio::fs::write(temp_dir.path().join("README.md"), "# Test").await?;
+
+        // Initial commit
+        repo.add_all()?;
+        repo.commit("chore: initial commit")?;
+
+        // Create commit service
+        let config = PackageToolsConfig::default();
+        let commit_service = ConventionalCommitService::new(repo, config)?;
+
+        let repo_path = temp_dir.path().to_str().ok_or("Invalid path")?;
+        let repo = Repo::open(repo_path)?;
+
+        Ok(TestRepoWithService { _temp_dir: temp_dir, repo, commit_service })
+    }
+
+    #[tokio::test]
+    async fn test_builder_creation() {
+        let test_setup = create_test_git_repo().await.unwrap();
+        let config = PackageToolsConfig::default();
+
+        let builder = ChangesetBuilder::new(
+            &test_setup.repo,
+            &test_setup.commit_service,
+            test_setup.repo.get_repo_path().to_path_buf(),
+            config,
+        );
+        assert!(builder.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_builder_no_changes_detected() {
+        let test_setup = create_test_git_repo().await.unwrap();
+        let config = PackageToolsConfig::default();
+
+        let builder = ChangesetBuilder::new(
+            &test_setup.repo,
+            &test_setup.commit_service,
+            test_setup.repo.get_repo_path().to_path_buf(),
+            config,
+        )
+        .unwrap();
+
+        // No commits since the initial commit
+        let result = builder
+            .from_commits_since(None, "test@example.com".to_string(), vec!["prod".to_string()])
+            .await;
+
+        // Should return Ok with empty or no package changes when no relevant changes
+        // (initial commit exists but may not result in version bumps)
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_builder_from_commits_with_changes() {
+        let mut test_setup = create_test_git_repo().await.unwrap();
+
+        // Add a new file
+        let repo_path = test_setup.repo.get_repo_path().to_path_buf();
+        let src_dir = repo_path.join("src");
+        tokio::fs::create_dir_all(&src_dir).await.unwrap();
+        tokio::fs::write(src_dir.join("index.ts"), "export const test = 1;").await.unwrap();
+        test_setup.repo.add_all().unwrap();
+        test_setup.repo.commit("feat: add new feature").unwrap();
+
+        // Need to recreate service after new commits
+        let config = PackageToolsConfig::default();
+        test_setup.commit_service =
+            ConventionalCommitService::new(test_setup.repo, config.clone()).unwrap();
+        test_setup.repo = Repo::open(repo_path.to_str().unwrap()).unwrap();
+
+        let builder = ChangesetBuilder::new(
+            &test_setup.repo,
+            &test_setup.commit_service,
+            repo_path.clone(),
+            config,
+        )
+        .unwrap();
+
+        let changeset = builder
+            .from_commits_since(None, "test@example.com".to_string(), vec!["dev".to_string()])
+            .await
+            .unwrap();
+
+        // Verify changeset structure
+        assert_eq!(changeset.author, "test@example.com");
+        assert_eq!(changeset.releases, vec!["dev".to_string()]);
+        assert!(!changeset.packages.is_empty());
+
+        // Should have detected the package
+        let package = &changeset.packages[0];
+        assert_eq!(package.name, "@test/package");
+        // Version comparison needs to account for ResolvedVersion
+        assert_eq!(package.bump, VersionBump::Minor); // feat = minor
+    }
+
+    #[tokio::test]
+    async fn test_builder_breaking_change() {
+        let mut test_setup = create_test_git_repo().await.unwrap();
+
+        // Add a breaking change
+        let repo_path = test_setup.repo.get_repo_path().to_path_buf();
+        let src_dir = repo_path.join("src");
+        tokio::fs::create_dir_all(&src_dir).await.unwrap();
+        tokio::fs::write(src_dir.join("api.ts"), "export const breaking = true;").await.unwrap();
+        test_setup.repo.add_all().unwrap();
+        test_setup.repo.commit("feat!: breaking change").unwrap();
+
+        let config = PackageToolsConfig::default();
+        test_setup.commit_service =
+            ConventionalCommitService::new(test_setup.repo, config.clone()).unwrap();
+        test_setup.repo = Repo::open(repo_path.to_str().unwrap()).unwrap();
+
+        let builder =
+            ChangesetBuilder::new(&test_setup.repo, &test_setup.commit_service, repo_path, config)
+                .unwrap();
+
+        let changeset = builder
+            .from_commits_since(None, "test@example.com".to_string(), vec!["prod".to_string()])
+            .await
+            .unwrap();
+
+        // Breaking change should result in major bump
+        let package = &changeset.packages[0];
+        assert_eq!(package.bump, VersionBump::Major);
+        assert!(package.changes.iter().any(|c| c.breaking));
+    }
+
+    #[tokio::test]
+    async fn test_builder_fix_commit() {
+        let mut test_setup = create_test_git_repo().await.unwrap();
+
+        // Add a fix
+        let repo_path = test_setup.repo.get_repo_path().to_path_buf();
+        let src_dir = repo_path.join("src");
+        tokio::fs::create_dir_all(&src_dir).await.unwrap();
+        tokio::fs::write(src_dir.join("bug.ts"), "export const fixed = true;").await.unwrap();
+        test_setup.repo.add_all().unwrap();
+        test_setup.repo.commit("fix: resolve critical bug").unwrap();
+
+        let config = PackageToolsConfig::default();
+        test_setup.commit_service =
+            ConventionalCommitService::new(test_setup.repo, config.clone()).unwrap();
+        test_setup.repo = Repo::open(repo_path.to_str().unwrap()).unwrap();
+
+        let builder =
+            ChangesetBuilder::new(&test_setup.repo, &test_setup.commit_service, repo_path, config)
+                .unwrap();
+
+        let changeset = builder
+            .from_commits_since(None, "test@example.com".to_string(), vec!["dev".to_string()])
+            .await
+            .unwrap();
+
+        // Fix should result in patch bump
+        let package = &changeset.packages[0];
+        assert_eq!(package.bump, VersionBump::Patch);
+        assert!(!package.changes.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_builder_multiple_commits() {
+        let mut test_setup = create_test_git_repo().await.unwrap();
+
+        // Add multiple commits
+        let repo_path = test_setup.repo.get_repo_path().to_path_buf();
+        let src_dir = repo_path.join("src");
+        tokio::fs::create_dir_all(&src_dir).await.unwrap();
+        tokio::fs::write(src_dir.join("feature1.ts"), "export const f1 = 1;").await.unwrap();
+        test_setup.repo.add_all().unwrap();
+        test_setup.repo.commit("feat: add feature 1").unwrap();
+
+        tokio::fs::write(src_dir.join("feature2.ts"), "export const f2 = 2;").await.unwrap();
+        test_setup.repo.add_all().unwrap();
+        test_setup.repo.commit("feat: add feature 2").unwrap();
+
+        tokio::fs::write(src_dir.join("fix.ts"), "export const fix = true;").await.unwrap();
+        test_setup.repo.add_all().unwrap();
+        test_setup.repo.commit("fix: resolve issue").unwrap();
+
+        let config = PackageToolsConfig::default();
+        test_setup.commit_service =
+            ConventionalCommitService::new(test_setup.repo, config.clone()).unwrap();
+        test_setup.repo = Repo::open(repo_path.to_str().unwrap()).unwrap();
+
+        let builder =
+            ChangesetBuilder::new(&test_setup.repo, &test_setup.commit_service, repo_path, config)
+                .unwrap();
+
+        let changeset = builder
+            .from_commits_since(None, "test@example.com".to_string(), vec!["dev".to_string()])
+            .await
+            .unwrap();
+
+        // Should have detected multiple changes
+        let package = &changeset.packages[0];
+
+        // Debug output
+        eprintln!("Package changes count: {}", package.changes.len());
+        for change in &package.changes {
+            eprintln!("  - {:?}: {}", change.change_type, change.description);
+        }
+        eprintln!("Calculated bump: {:?}", package.bump);
+
+        assert_eq!(package.bump, VersionBump::Minor); // feat > fix
+                                                      // Includes initial commit + feature 1 + feature 2 + fix = 4 commits
+                                                      // But may include more depending on how commits are counted
+        assert!(package.changes.len() >= 3);
+
+        // Verify the new commits are included
+        assert!(package.changes.iter().any(|c| c.description.contains("feature 1")));
+        assert!(package.changes.iter().any(|c| c.description.contains("feature 2")));
+        assert!(package.changes.iter().any(|c| c.description.contains("resolve issue")));
+    }
+
+    #[tokio::test]
+    async fn test_builder_with_multiple_environments() {
+        let mut test_setup = create_test_git_repo().await.unwrap();
+
+        // Add a change
+        let repo_path = test_setup.repo.get_repo_path().to_path_buf();
+        let src_dir = repo_path.join("src");
+        tokio::fs::create_dir_all(&src_dir).await.unwrap();
+        tokio::fs::write(src_dir.join("new.ts"), "export const new = true;").await.unwrap();
+        test_setup.repo.add_all().unwrap();
+        test_setup.repo.commit("feat: add new module").unwrap();
+
+        let config = PackageToolsConfig::default();
+        test_setup.commit_service =
+            ConventionalCommitService::new(test_setup.repo, config.clone()).unwrap();
+        test_setup.repo = Repo::open(repo_path.to_str().unwrap()).unwrap();
+
+        let builder =
+            ChangesetBuilder::new(&test_setup.repo, &test_setup.commit_service, repo_path, config)
+                .unwrap();
+
+        let changeset = builder
+            .from_commits_since(
+                None,
+                "ci-bot@example.com".to_string(),
+                vec!["dev".to_string(), "qa".to_string(), "staging".to_string()],
+            )
+            .await
+            .unwrap();
+
+        // Verify multiple environments
+        assert_eq!(changeset.releases.len(), 3);
+        assert!(changeset.releases.contains(&"dev".to_string()));
+        assert!(changeset.releases.contains(&"qa".to_string()));
+        assert!(changeset.releases.contains(&"staging".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_builder_change_reason_tracking() {
+        let mut test_setup = create_test_git_repo().await.unwrap();
+
+        // Add commits
+        let repo_path = test_setup.repo.get_repo_path().to_path_buf();
+        let src_dir = repo_path.join("src");
+        tokio::fs::create_dir_all(&src_dir).await.unwrap();
+        tokio::fs::write(src_dir.join("code.ts"), "export const code = 1;").await.unwrap();
+        test_setup.repo.add_all().unwrap();
+        test_setup.repo.commit("feat: add code").unwrap();
+
+        let config = PackageToolsConfig::default();
+        test_setup.commit_service =
+            ConventionalCommitService::new(test_setup.repo, config.clone()).unwrap();
+        test_setup.repo = Repo::open(repo_path.to_str().unwrap()).unwrap();
+
+        let builder =
+            ChangesetBuilder::new(&test_setup.repo, &test_setup.commit_service, repo_path, config)
+                .unwrap();
+
+        let changeset = builder
+            .from_commits_since(None, "dev@example.com".to_string(), vec!["dev".to_string()])
+            .await
+            .unwrap();
+
+        let package = &changeset.packages[0];
+
+        // Verify reason is DirectChanges
+        match &package.reason {
+            ChangeReason::DirectChanges { commits } => {
+                // Commits contains commit hashes, not messages
+                // Should have at least the commits we added
+                assert!(commits.len() >= 1);
+                // Verify we have commit hashes (non-empty strings)
+                assert!(commits.iter().all(|c| !c.is_empty()));
+            }
+            _ => panic!("Expected DirectChanges reason"),
+        }
     }
 }

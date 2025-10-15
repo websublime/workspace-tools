@@ -26,7 +26,7 @@
 
 use std::collections::HashMap;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use sublime_git_tools::{Repo, RepoCommit};
 
 use crate::{
@@ -66,11 +66,11 @@ use crate::{
 #[derive(Debug)]
 pub struct ConventionalCommitService {
     /// Git repository for commit operations
-    repo: Repo,
+    pub(crate) repo: Repo,
     /// Conventional commit parser
-    parser: ConventionalCommitParser,
+    pub(crate) parser: ConventionalCommitParser,
     /// Configuration for commit type mappings
-    config: PackageToolsConfig,
+    pub(crate) config: PackageToolsConfig,
 }
 
 impl ConventionalCommitService {
@@ -246,6 +246,58 @@ impl ConventionalCommitService {
         // Get merge base between current branch and main
         let merge_base = self.repo.get_merge_base(&current_branch, main_branch)?;
         self.get_commits_since(Some(&merge_base)).await
+    }
+
+    /// Parses a single commit message into a ConventionalCommit.
+    ///
+    /// This is a convenience method for parsing individual commit messages
+    /// when you already have the commit metadata.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The commit message to parse
+    /// * `hash` - The commit hash
+    /// * `author` - The commit author name
+    /// * `date` - The commit date
+    ///
+    /// # Returns
+    ///
+    /// A parsed ConventionalCommit
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the message doesn't follow conventional commit format
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use sublime_pkg_tools::conventional::ConventionalCommitService;
+    /// use sublime_git_tools::Repo;
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use chrono::Utc;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let repo = Repo::open(".")?;
+    /// let config = PackageToolsConfig::default();
+    /// let service = ConventionalCommitService::new(repo, config)?;
+    ///
+    /// let commit = service.parse_commit_message(
+    ///     "feat: add new feature",
+    ///     "abc123".to_string(),
+    ///     "John Doe".to_string(),
+    ///     Utc::now(),
+    /// )?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn parse_commit_message(
+        &self,
+        message: &str,
+        hash: String,
+        author: String,
+        date: DateTime<Utc>,
+    ) -> PackageResult<ConventionalCommit> {
+        self.parser.parse(message, hash, author, date)
     }
 
     /// Calculates the suggested version bump from a collection of commits.

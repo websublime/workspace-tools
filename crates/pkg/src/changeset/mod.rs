@@ -23,7 +23,9 @@
 //! Changesets provide a controlled, reviewable way to manage version
 //! bumps across multiple packages while maintaining complete audit
 //! trails of all releases.
+mod builder;
 mod change;
+mod detector;
 mod entry;
 mod manager;
 mod release;
@@ -32,7 +34,9 @@ mod storage;
 #[cfg(test)]
 mod tests;
 
+pub use builder::ChangesetBuilder;
 pub use change::{ChangeReason, Changeset};
+pub use detector::PackageChangeDetector;
 pub use entry::{ChangeEntry, ChangesetPackage};
 pub use manager::{ChangesetManager, ChangesetSummary};
 pub use release::{EnvironmentRelease, ReleaseInfo};

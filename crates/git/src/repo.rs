@@ -740,6 +740,110 @@ impl Repo {
         Ok(changed_files)
     }
 
+    /// Gets the list of files changed in a specific commit.
+    ///
+    /// Returns the files that were added, modified, or deleted in the given commit
+    /// by comparing it with its parent commit.
+    ///
+    /// # Arguments
+    ///
+    /// * `commit_hash` - The commit hash to analyze
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Vec<GitChangedFile>, RepoError>` - List of changed files with their status
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The commit hash is invalid or not found
+    /// - The commit has no parent (initial commit)
+    /// - The diff operation fails
+    /// - Tree objects cannot be accessed
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let files = repo.get_files_changed_in_commit("abc123def456")
+    ///     .expect("Failed to get changed files");
+    ///
+    /// for file in files {
+    ///     println!("{}: {:?}", file.path, file.status);
+    /// }
+    /// ```
+    pub fn get_files_changed_in_commit(
+        &self,
+        commit_hash: &str,
+    ) -> Result<Vec<GitChangedFile>, RepoError> {
+        use crate::{GitChangedFile, GitFileStatus};
+
+        // Resolve the commit
+        let commit = self
+            .repo
+            .revparse_single(commit_hash)
+            .map_err(RepoError::ReferenceError)?
+            .peel_to_commit()
+            .map_err(RepoError::CommitError)?;
+
+        // Get the parent commit (if it exists)
+        let parent_tree = if commit.parent_count() > 0 {
+            let parent = commit.parent(0).map_err(RepoError::CommitError)?;
+            Some(parent.tree().map_err(RepoError::TreeError)?)
+        } else {
+            // Initial commit has no parent
+            None
+        };
+
+        // Get the commit's tree
+        let commit_tree = commit.tree().map_err(RepoError::TreeError)?;
+
+        // Create diff between parent and current commit
+        let diff = self
+            .repo
+            .diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), None)
+            .map_err(RepoError::DiffError)?;
+
+        let mut changed_files = Vec::new();
+
+        // Process each delta in the diff
+        diff.foreach(
+            &mut |delta, _progress| {
+                let old_file = delta.old_file();
+                let new_file = delta.new_file();
+
+                let path = new_file
+                    .path()
+                    .or_else(|| old_file.path())
+                    .and_then(|p| p.to_str())
+                    .unwrap_or("unknown");
+
+                let status = match delta.status() {
+                    git2::Delta::Added | git2::Delta::Copied => GitFileStatus::Added,
+                    git2::Delta::Deleted => GitFileStatus::Deleted,
+                    _ => GitFileStatus::Modified,
+                };
+
+                changed_files.push(GitChangedFile {
+                    path: path.to_string(),
+                    status,
+                    staged: false,
+                    workdir: false,
+                });
+
+                true // Continue processing
+            },
+            None, // No binary callback
+            None, // No hunk callback
+            None, // No line callback
+        )
+        .map_err(RepoError::DiffError)?;
+
+        Ok(changed_files)
+    }
+
     /// Lists all configuration entries for the repository
     ///
     /// # Returns
