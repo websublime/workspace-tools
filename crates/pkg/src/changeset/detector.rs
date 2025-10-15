@@ -25,7 +25,7 @@ use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
 
 use crate::{
     error::{ChangesetError, ChangesetResult},
-    package::{read_package_json, Package},
+    package::{Package, PackageJson},
 };
 
 /// Detector for mapping file changes to affected packages.
@@ -300,7 +300,7 @@ where
 
             if self.filesystem.exists(&package_json_path).await {
                 // Found a package.json, try to read it
-                match read_package_json(&self.filesystem, &package_json_path).await {
+                match PackageJson::read_from_path(&self.filesystem, &package_json_path).await {
                     Ok(package_json) => {
                         let package = Package { metadata: package_json, path: current_dir.clone() };
                         return Ok(Some(package));
@@ -368,7 +368,7 @@ where
         let mut package_map: HashMap<PathBuf, String> = HashMap::new();
         for pkg in packages {
             let package_json_path = pkg.absolute_path.join("package.json");
-            match read_package_json(&self.filesystem, &package_json_path).await {
+            match PackageJson::read_from_path(&self.filesystem, &package_json_path).await {
                 Ok(pkg_json) => {
                     package_map.insert(pkg.absolute_path.clone(), pkg_json.name.clone());
                 }
@@ -411,7 +411,7 @@ where
         if !unmatched_files.is_empty() {
             let root_package_json = self.workspace_root.join("package.json");
             if self.filesystem.exists(&root_package_json).await {
-                match read_package_json(&self.filesystem, &root_package_json).await {
+                match PackageJson::read_from_path(&self.filesystem, &root_package_json).await {
                     Ok(pkg_json) => {
                         result.insert(pkg_json.name.clone(), unmatched_files);
                     }
@@ -457,8 +457,9 @@ where
             ));
         }
 
-        let package_json =
-            read_package_json(&self.filesystem, &package_json_path).await.map_err(|e| {
+        let package_json = PackageJson::read_from_path(&self.filesystem, &package_json_path)
+            .await
+            .map_err(|e| {
                 ChangesetError::package_json_read_failed(
                     package_json_path.clone(),
                     format!("{}", e),
@@ -530,7 +531,7 @@ where
 
         for pkg in workspace_packages {
             let package_json_path = pkg.absolute_path.join("package.json");
-            match read_package_json(&self.filesystem, &package_json_path).await {
+            match PackageJson::read_from_path(&self.filesystem, &package_json_path).await {
                 Ok(package_json) => {
                     packages
                         .push(Package { metadata: package_json, path: pkg.absolute_path.clone() });
@@ -557,8 +558,9 @@ where
             ));
         }
 
-        let package_json =
-            read_package_json(&self.filesystem, &package_json_path).await.map_err(|e| {
+        let package_json = PackageJson::read_from_path(&self.filesystem, &package_json_path)
+            .await
+            .map_err(|e| {
                 ChangesetError::package_json_read_failed(
                     package_json_path.clone(),
                     format!("{}", e),
