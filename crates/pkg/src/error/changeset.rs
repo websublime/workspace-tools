@@ -132,6 +132,59 @@ pub enum ChangesetError {
         /// Changeset identifier
         changeset_id: String,
     },
+
+    /// Failed to analyze Git changes
+    #[error("Failed to analyze Git changes: {reason}")]
+    GitAnalysisFailed {
+        /// Reason for failure
+        reason: String,
+    },
+
+    /// Failed to detect affected packages
+    #[error("Failed to detect affected packages: {reason}")]
+    PackageDetectionFailed {
+        /// Reason for failure
+        reason: String,
+    },
+
+    /// No changes detected
+    #[error("No changes detected since '{since_ref}'")]
+    NoChangesDetected {
+        /// Reference point for comparison
+        since_ref: String,
+    },
+
+    /// Failed to build dependency graph
+    #[error("Failed to build dependency graph: {reason}")]
+    DependencyAnalysisFailed {
+        /// Reason for failure
+        reason: String,
+    },
+
+    /// Failed to parse version
+    #[error("Failed to parse version for package '{package}': {reason}")]
+    VersionParsingFailed {
+        /// Package name
+        package: String,
+        /// Reason for failure
+        reason: String,
+    },
+
+    /// Failed to read package.json
+    #[error("Failed to read package.json at '{path}': {reason}")]
+    PackageJsonReadFailed {
+        /// Path to package.json
+        path: PathBuf,
+        /// Reason for failure
+        reason: String,
+    },
+
+    /// No packages found for changes
+    #[error("No packages found affected by changes since '{since_ref}'")]
+    NoPackagesAffected {
+        /// Reference point for comparison
+        since_ref: String,
+    },
 }
 
 impl ChangesetError {
@@ -399,6 +452,188 @@ impl ChangesetError {
         )
     }
 
+    /// Creates a Git analysis failed error.
+    ///
+    /// # Arguments
+    ///
+    /// * `reason` - Why Git analysis failed
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_pkg_tools::error::ChangesetError;
+    ///
+    /// let error = ChangesetError::git_analysis_failed("Unable to retrieve commits");
+    /// assert!(error.to_string().contains("Git changes"));
+    /// ```
+    #[must_use]
+    pub fn git_analysis_failed(reason: impl Into<String>) -> Self {
+        Self::GitAnalysisFailed { reason: reason.into() }
+    }
+
+    /// Creates a package detection failed error.
+    ///
+    /// # Arguments
+    ///
+    /// * `reason` - Why package detection failed
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_pkg_tools::error::ChangesetError;
+    ///
+    /// let error = ChangesetError::package_detection_failed("No packages found in workspace");
+    /// assert!(error.to_string().contains("detect affected packages"));
+    /// ```
+    #[must_use]
+    pub fn package_detection_failed(reason: impl Into<String>) -> Self {
+        Self::PackageDetectionFailed { reason: reason.into() }
+    }
+
+    /// Creates a no changes detected error.
+    ///
+    /// # Arguments
+    ///
+    /// * `since_ref` - Reference point for comparison
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_pkg_tools::error::ChangesetError;
+    ///
+    /// let error = ChangesetError::no_changes_detected("v1.0.0");
+    /// assert!(error.to_string().contains("No changes detected"));
+    /// ```
+    #[must_use]
+    pub fn no_changes_detected(since_ref: impl Into<String>) -> Self {
+        Self::NoChangesDetected { since_ref: since_ref.into() }
+    }
+
+    /// Creates a dependency analysis failed error.
+    ///
+    /// # Arguments
+    ///
+    /// * `reason` - Why dependency analysis failed
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_pkg_tools::error::ChangesetError;
+    ///
+    /// let error = ChangesetError::dependency_analysis_failed("Circular dependency detected");
+    /// assert!(error.to_string().contains("dependency graph"));
+    /// ```
+    #[must_use]
+    pub fn dependency_analysis_failed(reason: impl Into<String>) -> Self {
+        Self::DependencyAnalysisFailed { reason: reason.into() }
+    }
+
+    /// Creates a version parsing failed error.
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - Package name
+    /// * `reason` - Why version parsing failed
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_pkg_tools::error::ChangesetError;
+    ///
+    /// let error = ChangesetError::version_parsing_failed("@myorg/auth", "Invalid semver");
+    /// assert!(error.to_string().contains("parse version"));
+    /// ```
+    #[must_use]
+    pub fn version_parsing_failed(package: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self::VersionParsingFailed { package: package.into(), reason: reason.into() }
+    }
+
+    /// Creates a package.json read failed error.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to package.json
+    /// * `reason` - Why reading failed
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_pkg_tools::error::ChangesetError;
+    /// use std::path::PathBuf;
+    ///
+    /// let error = ChangesetError::package_json_read_failed(
+    ///     PathBuf::from("package.json"),
+    ///     "File not found"
+    /// );
+    /// assert!(error.to_string().contains("package.json"));
+    /// ```
+    #[must_use]
+    pub fn package_json_read_failed(path: PathBuf, reason: impl Into<String>) -> Self {
+        Self::PackageJsonReadFailed { path, reason: reason.into() }
+    }
+
+    /// Creates a no packages affected error.
+    ///
+    /// # Arguments
+    ///
+    /// * `since_ref` - Reference point for comparison
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_pkg_tools::error::ChangesetError;
+    ///
+    /// let error = ChangesetError::no_packages_affected("v1.0.0");
+    /// assert!(error.to_string().contains("No packages found"));
+    /// ```
+    #[must_use]
+    pub fn no_packages_affected(since_ref: impl Into<String>) -> Self {
+        Self::NoPackagesAffected { since_ref: since_ref.into() }
+    }
+
+    /// Checks if this is a Git operation related error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_pkg_tools::error::ChangesetError;
+    ///
+    /// let error = ChangesetError::git_analysis_failed("reason");
+    /// assert!(error.is_git_error());
+    ///
+    /// let error = ChangesetError::validation_failed("id", vec![]);
+    /// assert!(!error.is_git_error());
+    /// ```
+    #[must_use]
+    pub fn is_git_error(&self) -> bool {
+        matches!(self, Self::GitAnalysisFailed { .. } | Self::NoChangesDetected { .. })
+    }
+
+    /// Checks if this is a package detection related error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_pkg_tools::error::ChangesetError;
+    ///
+    /// let error = ChangesetError::package_detection_failed("reason");
+    /// assert!(error.is_package_error());
+    ///
+    /// let error = ChangesetError::validation_failed("id", vec![]);
+    /// assert!(!error.is_package_error());
+    /// ```
+    #[must_use]
+    pub fn is_package_error(&self) -> bool {
+        matches!(
+            self,
+            Self::PackageDetectionFailed { .. }
+                | Self::NoPackagesAffected { .. }
+                | Self::PackageNotFound { .. }
+                | Self::PackageJsonReadFailed { .. }
+                | Self::VersionParsingFailed { .. }
+        )
+    }
+
     /// Gets the changeset ID from errors that include it.
     ///
     /// # Examples
@@ -423,7 +658,14 @@ impl ChangesetError {
             Self::NotFound { .. }
             | Self::InvalidFormat { .. }
             | Self::CreationFailed { .. }
-            | Self::HistoryOperationFailed { .. } => None,
+            | Self::HistoryOperationFailed { .. }
+            | Self::GitAnalysisFailed { .. }
+            | Self::PackageDetectionFailed { .. }
+            | Self::NoChangesDetected { .. }
+            | Self::DependencyAnalysisFailed { .. }
+            | Self::VersionParsingFailed { .. }
+            | Self::PackageJsonReadFailed { .. }
+            | Self::NoPackagesAffected { .. } => None,
         }
     }
 
@@ -452,7 +694,14 @@ impl ChangesetError {
             | Self::ApplicationFailed { .. }
             | Self::HistoryOperationFailed { .. }
             | Self::EnvironmentNotFound { .. }
-            | Self::PackageNotFound { .. } => None,
+            | Self::PackageNotFound { .. }
+            | Self::GitAnalysisFailed { .. }
+            | Self::PackageDetectionFailed { .. }
+            | Self::NoChangesDetected { .. }
+            | Self::DependencyAnalysisFailed { .. }
+            | Self::VersionParsingFailed { .. }
+            | Self::NoPackagesAffected { .. } => None,
+            Self::PackageJsonReadFailed { path, .. } => Some(path),
         }
     }
 }
@@ -471,6 +720,17 @@ impl AsRef<str> for ChangesetError {
             }
             ChangesetError::EnvironmentNotFound { .. } => "ChangesetError::EnvironmentNotFound",
             ChangesetError::PackageNotFound { .. } => "ChangesetError::PackageNotFound",
+            ChangesetError::GitAnalysisFailed { .. } => "ChangesetError::GitAnalysisFailed",
+            ChangesetError::PackageDetectionFailed { .. } => {
+                "ChangesetError::PackageDetectionFailed"
+            }
+            ChangesetError::NoChangesDetected { .. } => "ChangesetError::NoChangesDetected",
+            ChangesetError::DependencyAnalysisFailed { .. } => {
+                "ChangesetError::DependencyAnalysisFailed"
+            }
+            ChangesetError::VersionParsingFailed { .. } => "ChangesetError::VersionParsingFailed",
+            ChangesetError::PackageJsonReadFailed { .. } => "ChangesetError::PackageJsonReadFailed",
+            ChangesetError::NoPackagesAffected { .. } => "ChangesetError::NoPackagesAffected",
         }
     }
 }
