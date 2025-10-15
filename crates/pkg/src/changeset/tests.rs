@@ -20,6 +20,258 @@ mod changeset_tests {
     }
 
     #[test]
+    fn test_changeset_new() {
+        let changeset = Changeset::new("feat/user-auth".to_string(), "dev@example.com".to_string());
+
+        assert_eq!(changeset.branch, "feat/user-auth");
+        assert_eq!(changeset.author, "dev@example.com");
+        assert_eq!(changeset.releases, vec!["dev"]);
+        assert!(changeset.packages.is_empty());
+        assert!(changeset.is_pending());
+        assert!(!changeset.is_applied());
+    }
+
+    #[test]
+    fn test_changeset_generate_id() {
+        let changeset = Changeset::new("feat/user-auth".to_string(), "dev@example.com".to_string());
+
+        let id = changeset.generate_id();
+        assert!(id.starts_with("feat-user-auth-"));
+        assert!(id.ends_with("Z"));
+        assert!(!id.contains('/'));
+    }
+
+    #[test]
+    fn test_changeset_generate_filename() {
+        let changeset =
+            Changeset::new("bugfix/memory-leak".to_string(), "dev@example.com".to_string());
+
+        let filename = changeset.generate_filename();
+        assert!(filename.starts_with("bugfix-memory-leak-"));
+        assert!(filename.ends_with(".json"));
+    }
+
+    #[test]
+    fn test_changeset_sanitize_branch_name() {
+        let changeset =
+            Changeset::new("feat/user:auth*test?".to_string(), "dev@example.com".to_string());
+
+        let id = changeset.generate_id();
+        assert!(id.starts_with("feat-user-auth-test-"));
+        assert!(!id.contains('/'));
+        assert!(!id.contains(':'));
+        assert!(!id.contains('*'));
+        assert!(!id.contains('?'));
+    }
+
+    #[test]
+    fn test_changeset_add_package() {
+        let mut changeset = Changeset::new("feat/auth".to_string(), "dev@example.com".to_string());
+
+        let package = ChangesetPackage {
+            name: "auth-service".to_string(),
+            bump: VersionBump::Minor,
+            current_version: Version::new(1, 0, 0).into(),
+            next_version: Version::new(1, 1, 0).into(),
+            reason: ChangeReason::DirectChanges { commits: vec!["abc123".to_string()] },
+            dependency: None,
+            changes: vec![],
+        };
+
+        changeset.add_package(package);
+        assert_eq!(changeset.packages.len(), 1);
+        assert_eq!(changeset.packages[0].name, "auth-service");
+    }
+
+    #[test]
+    fn test_changeset_target_environments() {
+        let mut changeset = Changeset::new("feat/auth".to_string(), "dev@example.com".to_string());
+
+        changeset.add_target_environment("staging".to_string());
+        changeset.add_target_environment("prod".to_string());
+
+        assert_eq!(changeset.releases.len(), 3);
+        assert!(changeset.releases.contains(&"dev".to_string()));
+        assert!(changeset.releases.contains(&"staging".to_string()));
+        assert!(changeset.releases.contains(&"prod".to_string()));
+
+        // Adding duplicate should not increase count
+        changeset.add_target_environment("staging".to_string());
+        assert_eq!(changeset.releases.len(), 3);
+
+        // Remove environment
+        assert!(changeset.remove_target_environment("staging"));
+        assert_eq!(changeset.releases.len(), 2);
+        assert!(!changeset.releases.contains(&"staging".to_string()));
+
+        // Remove non-existent environment
+        assert!(!changeset.remove_target_environment("non-existent"));
+    }
+
+    #[test]
+    fn test_changeset_find_package() {
+        let mut changeset = Changeset::new("feat/auth".to_string(), "dev@example.com".to_string());
+
+        let package = ChangesetPackage {
+            name: "auth-service".to_string(),
+            bump: VersionBump::Minor,
+            current_version: Version::new(1, 0, 0).into(),
+            next_version: Version::new(1, 1, 0).into(),
+            reason: ChangeReason::DirectChanges { commits: vec!["abc123".to_string()] },
+            dependency: None,
+            changes: vec![],
+        };
+
+        changeset.add_package(package);
+
+        let found = changeset.find_package("auth-service");
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().name, "auth-service");
+
+        let not_found = changeset.find_package("non-existent");
+        assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn test_changeset_validation_empty() {
+        let changeset = Changeset::default();
+        let result = changeset.validate(None);
+        assert!(result.is_err());
+
+        if let Err(crate::error::ChangesetError::ValidationFailed { errors, .. }) = result {
+            assert!(errors.iter().any(|e| e.contains("Branch name cannot be empty")));
+            assert!(errors.iter().any(|e| e.contains("Author cannot be empty")));
+            assert!(errors.iter().any(|e| e.contains("At least one package change is required")));
+        } else {
+            panic!("Expected ValidationFailed error");
+        }
+    }
+
+    #[test]
+    fn test_changeset_validation_valid() {
+        let mut changeset = Changeset::new("feat/auth".to_string(), "dev@example.com".to_string());
+
+        let package = ChangesetPackage {
+            name: "auth-service".to_string(),
+            bump: VersionBump::Minor,
+            current_version: Version::new(1, 0, 0).into(),
+            next_version: Version::new(1, 1, 0).into(),
+            reason: ChangeReason::DirectChanges { commits: vec!["abc123".to_string()] },
+            dependency: None,
+            changes: vec![ChangeEntry {
+                change_type: "feat".to_string(),
+                description: "Add authentication".to_string(),
+                breaking: false,
+                commit: Some("abc123".to_string()),
+            }],
+        };
+
+        changeset.add_package(package);
+
+        let result = changeset.validate(None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_changeset_validation_environments() {
+        let mut changeset = Changeset::new("feat/auth".to_string(), "dev@example.com".to_string());
+
+        changeset.add_target_environment("invalid-env".to_string());
+
+        let package = ChangesetPackage {
+            name: "auth-service".to_string(),
+            bump: VersionBump::Minor,
+            current_version: Version::new(1, 0, 0).into(),
+            next_version: Version::new(1, 1, 0).into(),
+            reason: ChangeReason::DirectChanges { commits: vec!["abc123".to_string()] },
+            dependency: None,
+            changes: vec![],
+        };
+
+        changeset.add_package(package);
+
+        let available_envs = vec!["dev".to_string(), "staging".to_string(), "prod".to_string()];
+        let result = changeset.validate(Some(&available_envs));
+        assert!(result.is_err());
+
+        if let Err(crate::error::ChangesetError::ValidationFailed { errors, .. }) = result {
+            assert!(errors
+                .iter()
+                .any(|e| e.contains("invalid-env") && e.contains("not in available environments")));
+        } else {
+            panic!("Expected ValidationFailed error");
+        }
+    }
+
+    #[test]
+    fn test_changeset_get_bump_summary() {
+        let mut changeset = Changeset::new("feat/multi".to_string(), "dev@example.com".to_string());
+
+        let package1 = ChangesetPackage {
+            name: "pkg1".to_string(),
+            bump: VersionBump::Minor,
+            current_version: Version::new(1, 0, 0).into(),
+            next_version: Version::new(1, 1, 0).into(),
+            reason: ChangeReason::DirectChanges { commits: vec!["abc".to_string()] },
+            dependency: None,
+            changes: vec![],
+        };
+
+        let package2 = ChangesetPackage {
+            name: "pkg2".to_string(),
+            bump: VersionBump::Patch,
+            current_version: Version::new(2, 0, 0).into(),
+            next_version: Version::new(2, 0, 1).into(),
+            reason: ChangeReason::DirectChanges { commits: vec!["def".to_string()] },
+            dependency: None,
+            changes: vec![],
+        };
+
+        let package3 = ChangesetPackage {
+            name: "pkg3".to_string(),
+            bump: VersionBump::Minor,
+            current_version: Version::new(3, 0, 0).into(),
+            next_version: Version::new(3, 1, 0).into(),
+            reason: ChangeReason::DirectChanges { commits: vec!["ghi".to_string()] },
+            dependency: None,
+            changes: vec![],
+        };
+
+        changeset.add_package(package1);
+        changeset.add_package(package2);
+        changeset.add_package(package3);
+
+        let summary = changeset.get_bump_summary();
+        assert_eq!(summary.get(&VersionBump::Minor), Some(&2));
+        assert_eq!(summary.get(&VersionBump::Patch), Some(&1));
+        assert_eq!(summary.get(&VersionBump::Major), None);
+    }
+
+    #[test]
+    fn test_change_reason_equality() {
+        let reason1 = ChangeReason::DirectChanges { commits: vec!["abc".to_string()] };
+        let reason2 = ChangeReason::DirectChanges { commits: vec!["abc".to_string()] };
+        let reason3 = ChangeReason::DirectChanges { commits: vec!["def".to_string()] };
+
+        assert_eq!(reason1, reason2);
+        assert_ne!(reason1, reason3);
+
+        let dep_reason1 = ChangeReason::DependencyUpdate {
+            dependency: "pkg".to_string(),
+            old_version: "1.0.0".to_string(),
+            new_version: "1.1.0".to_string(),
+        };
+        let dep_reason2 = ChangeReason::DependencyUpdate {
+            dependency: "pkg".to_string(),
+            old_version: "1.0.0".to_string(),
+            new_version: "1.1.0".to_string(),
+        };
+
+        assert_eq!(dep_reason1, dep_reason2);
+        assert_ne!(reason1, dep_reason1);
+    }
+
+    #[test]
     fn test_changeset_manager_creation() {
         let manager = ChangesetManager::new(
             PathBuf::from(".changesets"),
