@@ -27,11 +27,13 @@ mod change;
 mod entry;
 mod manager;
 mod release;
+mod storage;
 
 #[cfg(test)]
 mod tests;
 
 pub use change::{ChangeReason, Changeset};
 pub use entry::{ChangeEntry, ChangesetPackage};
-pub use manager::ChangesetManager;
+pub use manager::{ChangesetManager, ChangesetSummary};
 pub use release::{EnvironmentRelease, ReleaseInfo};
+pub use storage::{ChangesetStorage, FileBasedChangesetStorage};
