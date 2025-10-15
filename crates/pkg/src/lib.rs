@@ -238,11 +238,10 @@ pub use conventional::{
 };
 pub use error::{PackageError, PackageResult};
 pub use package::{
-    create_package_from_directory, find_package_directories, is_package_directory,
-    read_package_json, validate_package_json, BugsInfo, Dependencies, DependencyType, Package,
-    PackageInfo, PackageJson, PackageJsonEditor, PackageJsonModification, PackageJsonValidator,
-    PersonOrString, Repository, Scripts, ValidationIssue,
-    ValidationResult as PackageValidationResult, ValidationSeverity, WorkspaceConfig,
+    validate_package_json, BugsInfo, Dependencies, DependencyType, Package, PackageInfo,
+    PackageJson, PackageJsonEditor, PackageJsonModification, PackageJsonValidator, PersonOrString,
+    Repository, Scripts, ValidationIssue, ValidationResult as PackageValidationResult,
+    ValidationSeverity, WorkspaceConfig,
 };
 pub use version::{
     PackageManagerFormat, ResolvedVersion, SnapshotVersion, ValidationResult, ValidationSummary,
