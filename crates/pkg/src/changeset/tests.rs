@@ -4,12 +4,11 @@
 mod changeset_tests {
     use crate::{
         changeset::{
-            ChangeEntry, ChangeReason, Changeset, ChangesetManager, ChangesetPackage,
-            EnvironmentRelease, ReleaseInfo,
+            ChangeEntry, ChangeReason, Changeset, ChangesetPackage, EnvironmentRelease, ReleaseInfo,
         },
         Version, VersionBump,
     };
-    use std::{collections::HashMap, path::PathBuf};
+    use std::collections::HashMap;
 
     #[test]
     fn test_changeset_creation() {
@@ -272,16 +271,6 @@ mod changeset_tests {
     }
 
     #[test]
-    fn test_changeset_manager_creation() {
-        let manager = ChangesetManager::new(
-            PathBuf::from(".changesets"),
-            PathBuf::from(".changesets/history"),
-        );
-        assert_eq!(manager.changeset_path, PathBuf::from(".changesets"));
-        assert_eq!(manager.history_path, PathBuf::from(".changesets/history"));
-    }
-
-    #[test]
     fn test_changeset_with_packages() {
         let mut changeset = Changeset::default();
         let package = ChangesetPackage {
@@ -397,17 +386,6 @@ mod changeset_tests {
     }
 
     #[test]
-    fn test_changeset_manager_paths() {
-        let changeset_path = PathBuf::from("/custom/changesets");
-        let history_path = PathBuf::from("/custom/history");
-
-        let manager = ChangesetManager::new(changeset_path.clone(), history_path.clone());
-
-        assert_eq!(manager.changeset_path, changeset_path);
-        assert_eq!(manager.history_path, history_path);
-    }
-
-    #[test]
     fn test_empty_changeset_properties() {
         let changeset = Changeset::default();
 
@@ -470,5 +448,538 @@ mod changeset_tests {
             EnvironmentRelease { released_at: chrono::Utc::now(), tag: "v2.0.0".to_string() };
 
         assert_eq!(env_release.tag, "v2.0.0");
+    }
+}
+
+// Storage and Manager Tests Module
+#[allow(clippy::unwrap_used)]
+mod storage_and_manager_tests {
+    use super::super::*;
+    use crate::changeset::{
+        ChangeEntry, ChangeReason, Changeset, ChangesetManager, ChangesetPackage, ChangesetStorage,
+        EnvironmentRelease, FileBasedChangesetStorage, ReleaseInfo,
+    };
+    use crate::config::ChangesetConfig;
+    use crate::version::{Version, VersionBump};
+    use std::collections::HashMap;
+    use tempfile::TempDir;
+
+    // Helper functions for test setup
+    fn create_test_storage(
+    ) -> (FileBasedChangesetStorage<sublime_standard_tools::filesystem::FileSystemManager>, TempDir)
+    {
+        let temp_dir = TempDir::new().unwrap();
+        let config = ChangesetConfig::default();
+        let fs = sublime_standard_tools::filesystem::FileSystemManager::new();
+        let storage = FileBasedChangesetStorage::new(fs, temp_dir.path().to_path_buf(), config);
+        (storage, temp_dir)
+    }
+
+    fn create_test_manager() -> (
+        ChangesetManager<
+            FileBasedChangesetStorage<sublime_standard_tools::filesystem::FileSystemManager>,
+        >,
+        TempDir,
+    ) {
+        let temp_dir = TempDir::new().unwrap();
+        let config = ChangesetConfig::default();
+        let fs = sublime_standard_tools::filesystem::FileSystemManager::new();
+        let storage = FileBasedChangesetStorage::new(fs, temp_dir.path().to_path_buf(), config);
+        let manager = ChangesetManager::new(storage);
+        (manager, temp_dir)
+    }
+
+    fn create_test_changeset(branch: &str) -> Changeset {
+        let mut changeset = Changeset::new(branch.to_string(), "test@example.com".to_string());
+        changeset.add_target_environment("dev".to_string());
+
+        let package = ChangesetPackage {
+            name: "@test/package".to_string(),
+            bump: VersionBump::Minor,
+            current_version: Version::new(1, 0, 0).into(),
+            next_version: Version::new(1, 1, 0).into(),
+            reason: ChangeReason::DirectChanges { commits: vec!["abc123".to_string()] },
+            dependency: None,
+            changes: vec![ChangeEntry {
+                change_type: "feat".to_string(),
+                description: "Add feature".to_string(),
+                breaking: false,
+                commit: Some("abc123".to_string()),
+            }],
+        };
+
+        changeset.add_package(package);
+        changeset
+    }
+
+    fn create_release_info() -> ReleaseInfo {
+        let mut environments = HashMap::new();
+        environments.insert(
+            "dev".to_string(),
+            EnvironmentRelease { released_at: chrono::Utc::now(), tag: "v1.1.0-dev".to_string() },
+        );
+
+        ReleaseInfo {
+            applied_at: chrono::Utc::now(),
+            applied_by: "test".to_string(),
+            git_commit: "abc1234".to_string(),
+            environments_released: environments,
+        }
+    }
+
+    // Storage Tests
+    #[tokio::test]
+    async fn test_storage_save_and_load() {
+        let (storage, _temp) = create_test_storage();
+        let changeset = create_test_changeset("feat/test");
+
+        let id = storage.save(&changeset).await.unwrap();
+        let loaded = storage.load(&id).await.unwrap();
+
+        assert_eq!(loaded.branch, "feat/test");
+        assert_eq!(loaded.author, "test@example.com");
+        assert_eq!(loaded.packages.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_storage_save_duplicate_fails() {
+        let (storage, _temp) = create_test_storage();
+        let changeset = create_test_changeset("feat/test");
+
+        storage.save(&changeset).await.unwrap();
+        let result = storage.save(&changeset).await;
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), crate::error::ChangesetError::AlreadyExists { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_storage_exists() {
+        let (storage, _temp) = create_test_storage();
+        let changeset = create_test_changeset("feat/test");
+
+        let id = storage.save(&changeset).await.unwrap();
+
+        assert!(storage.exists(&id).await.unwrap());
+        assert!(!storage.exists("nonexistent").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_storage_delete() {
+        let (storage, _temp) = create_test_storage();
+        let changeset = create_test_changeset("feat/test");
+
+        let id = storage.save(&changeset).await.unwrap();
+        storage.delete(&id).await.unwrap();
+
+        assert!(!storage.exists(&id).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_storage_delete_nonexistent_fails() {
+        let (storage, _temp) = create_test_storage();
+
+        let result = storage.delete("nonexistent").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_storage_list_pending() {
+        let (storage, _temp) = create_test_storage();
+
+        let cs1 = create_test_changeset("feat/one");
+        let cs2 = create_test_changeset("feat/two");
+
+        storage.save(&cs1).await.unwrap();
+        storage.save(&cs2).await.unwrap();
+
+        let pending = storage.list_pending().await.unwrap();
+        assert_eq!(pending.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_storage_list_pending_empty() {
+        let (storage, _temp) = create_test_storage();
+
+        let pending = storage.list_pending().await.unwrap();
+        assert_eq!(pending.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_storage_list_history_empty() {
+        let (storage, _temp) = create_test_storage();
+
+        let history = storage.list_history().await.unwrap();
+        assert_eq!(history.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_storage_archive() {
+        let (storage, _temp) = create_test_storage();
+        let mut changeset = create_test_changeset("feat/test");
+        let release_info = create_release_info();
+        changeset.apply_release_info(release_info);
+
+        let id = storage.save(&changeset).await.unwrap();
+        storage.archive(&id).await.unwrap();
+
+        // Should be in history
+        let history = storage.list_history().await.unwrap();
+        assert_eq!(history.len(), 1);
+
+        // Should not be in pending
+        let pending = storage.list_pending().await.unwrap();
+        assert_eq!(pending.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_storage_archive_without_release_info_fails() {
+        let (storage, _temp) = create_test_storage();
+        let changeset = create_test_changeset("feat/test");
+
+        let id = storage.save(&changeset).await.unwrap();
+        let result = storage.archive(&id).await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_storage_load_from_history() {
+        let (storage, _temp) = create_test_storage();
+        let mut changeset = create_test_changeset("feat/test");
+        let release_info = create_release_info();
+        changeset.apply_release_info(release_info);
+
+        let id = storage.save(&changeset).await.unwrap();
+        storage.archive(&id).await.unwrap();
+
+        let loaded = storage.load_from_history(&id).await.unwrap();
+        assert!(loaded.is_applied());
+    }
+
+    #[tokio::test]
+    async fn test_storage_query_by_branch() {
+        let (storage, _temp) = create_test_storage();
+
+        let cs1 = create_test_changeset("feat/auth");
+        let cs2 = create_test_changeset("feat/other");
+
+        storage.save(&cs1).await.unwrap();
+        storage.save(&cs2).await.unwrap();
+
+        let results = storage.query_by_branch("feat/auth").await.unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_storage_query_by_branch_no_matches() {
+        let (storage, _temp) = create_test_storage();
+
+        let results = storage.query_by_branch("feat/nonexistent").await.unwrap();
+        assert_eq!(results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_storage_query_history_by_date() {
+        let (storage, _temp) = create_test_storage();
+        let mut changeset = create_test_changeset("feat/test");
+        let release_info = create_release_info();
+        changeset.apply_release_info(release_info);
+
+        let id = storage.save(&changeset).await.unwrap();
+        storage.archive(&id).await.unwrap();
+
+        let start = chrono::Utc::now() - chrono::Duration::days(1);
+        let end = chrono::Utc::now() + chrono::Duration::days(1);
+
+        let results = storage.query_history_by_date(start, end).await.unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_storage_query_history_by_package() {
+        let (storage, _temp) = create_test_storage();
+        let mut changeset = create_test_changeset("feat/test");
+        let release_info = create_release_info();
+        changeset.apply_release_info(release_info);
+
+        let id = storage.save(&changeset).await.unwrap();
+        storage.archive(&id).await.unwrap();
+
+        let results = storage.query_history_by_package("@test/package").await.unwrap();
+        assert_eq!(results.len(), 1);
+
+        let results = storage.query_history_by_package("@test/other").await.unwrap();
+        assert_eq!(results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_storage_get_latest_for_branch() {
+        let (storage, _temp) = create_test_storage();
+
+        let cs = create_test_changeset("feat/test");
+        let id = storage.save(&cs).await.unwrap();
+
+        let latest = storage.get_latest_for_branch("feat/test").await.unwrap();
+        assert_eq!(latest, Some(id));
+    }
+
+    #[tokio::test]
+    async fn test_storage_get_latest_for_branch_none() {
+        let (storage, _temp) = create_test_storage();
+
+        let latest = storage.get_latest_for_branch("feat/nonexistent").await.unwrap();
+        assert_eq!(latest, None);
+    }
+
+    // Manager Tests
+    #[tokio::test]
+    async fn test_manager_create_and_load() {
+        let (manager, _temp) = create_test_manager();
+        let changeset = create_test_changeset("feat/test");
+
+        let id = manager.create(&changeset).await.unwrap();
+        let loaded = manager.load(&id).await.unwrap();
+
+        assert_eq!(loaded.branch, "feat/test");
+        assert!(!loaded.is_applied());
+    }
+
+    #[tokio::test]
+    async fn test_manager_create_empty_packages_fails() {
+        let (manager, _temp) = create_test_manager();
+        let changeset = Changeset::new("feat/test".to_string(), "test@example.com".to_string());
+
+        let result = manager.create(&changeset).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_manager_create_already_applied_fails() {
+        let (manager, _temp) = create_test_manager();
+        let mut changeset = create_test_changeset("feat/test");
+        let release_info = create_release_info();
+        changeset.apply_release_info(release_info);
+
+        let result = manager.create(&changeset).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_manager_exists() {
+        let (manager, _temp) = create_test_manager();
+        let changeset = create_test_changeset("feat/test");
+
+        let id = manager.create(&changeset).await.unwrap();
+
+        assert!(manager.exists(&id).await.unwrap());
+        assert!(!manager.exists("nonexistent").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_manager_delete() {
+        let (manager, _temp) = create_test_manager();
+        let changeset = create_test_changeset("feat/test");
+
+        let id = manager.create(&changeset).await.unwrap();
+        manager.delete(&id).await.unwrap();
+
+        assert!(!manager.exists(&id).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_manager_list_pending() {
+        let (manager, _temp) = create_test_manager();
+
+        let cs1 = create_test_changeset("feat/one");
+        let cs2 = create_test_changeset("feat/two");
+
+        manager.create(&cs1).await.unwrap();
+        manager.create(&cs2).await.unwrap();
+
+        let pending = manager.list_pending().await.unwrap();
+        assert_eq!(pending.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_manager_list_history() {
+        let (manager, _temp) = create_test_manager();
+        let changeset = create_test_changeset("feat/test");
+
+        let id = manager.create(&changeset).await.unwrap();
+        let release_info = create_release_info();
+        manager.apply(&id, release_info).await.unwrap();
+
+        let history = manager.list_history().await.unwrap();
+        assert_eq!(history.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_manager_apply_and_archive() {
+        let (manager, _temp) = create_test_manager();
+        let changeset = create_test_changeset("feat/test");
+
+        let id = manager.create(&changeset).await.unwrap();
+        let release_info = create_release_info();
+        manager.apply(&id, release_info).await.unwrap();
+
+        // Should be in history now
+        let history = manager.list_history().await.unwrap();
+        assert_eq!(history.len(), 1);
+
+        // Should not be in pending
+        let pending = manager.list_pending().await.unwrap();
+        assert_eq!(pending.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_manager_apply_already_applied_fails() {
+        let (manager, _temp) = create_test_manager();
+        let changeset = create_test_changeset("feat/test");
+
+        let id = manager.create(&changeset).await.unwrap();
+        let release_info = create_release_info();
+        manager.apply(&id, release_info.clone()).await.unwrap();
+
+        let result = manager.apply(&id, release_info).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_manager_load_from_history() {
+        let (manager, _temp) = create_test_manager();
+        let changeset = create_test_changeset("feat/test");
+
+        let id = manager.create(&changeset).await.unwrap();
+        let release_info = create_release_info();
+        manager.apply(&id, release_info).await.unwrap();
+
+        let loaded = manager.load_from_history(&id).await.unwrap();
+        assert!(loaded.is_applied());
+    }
+
+    #[tokio::test]
+    async fn test_manager_query_by_branch() {
+        let (manager, _temp) = create_test_manager();
+
+        let cs1 = create_test_changeset("feat/auth");
+        let cs2 = create_test_changeset("feat/other");
+
+        manager.create(&cs1).await.unwrap();
+        manager.create(&cs2).await.unwrap();
+
+        let results = manager.query_by_branch("feat/auth").await.unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_manager_query_history_by_date() {
+        let (manager, _temp) = create_test_manager();
+        let changeset = create_test_changeset("feat/test");
+
+        let id = manager.create(&changeset).await.unwrap();
+        let release_info = create_release_info();
+        manager.apply(&id, release_info).await.unwrap();
+
+        let start = chrono::Utc::now() - chrono::Duration::days(1);
+        let end = chrono::Utc::now() + chrono::Duration::days(1);
+
+        let results = manager.query_history_by_date(start, end).await.unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_manager_query_history_by_package() {
+        let (manager, _temp) = create_test_manager();
+        let changeset = create_test_changeset("feat/test");
+
+        let id = manager.create(&changeset).await.unwrap();
+        let release_info = create_release_info();
+        manager.apply(&id, release_info).await.unwrap();
+
+        let results = manager.query_history_by_package("@test/package").await.unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_manager_get_latest_for_branch() {
+        let (manager, _temp) = create_test_manager();
+
+        let cs = create_test_changeset("feat/test");
+        let id = manager.create(&cs).await.unwrap();
+
+        let latest = manager.get_latest_for_branch("feat/test").await.unwrap();
+        assert_eq!(latest, Some(id));
+
+        let none = manager.get_latest_for_branch("feat/nonexistent").await.unwrap();
+        assert_eq!(none, None);
+    }
+
+    #[tokio::test]
+    async fn test_manager_get_summary() {
+        let (manager, _temp) = create_test_manager();
+
+        let cs1 = create_test_changeset("feat/one");
+        let cs2 = create_test_changeset("feat/two");
+
+        manager.create(&cs1).await.unwrap();
+        manager.create(&cs2).await.unwrap();
+
+        let summary = manager.get_summary().await.unwrap();
+        assert_eq!(summary.pending_count, 2);
+        assert_eq!(summary.history_count, 0);
+        assert!(summary.has_pending());
+        assert!(!summary.has_history());
+        assert_eq!(summary.total_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_manager_get_summary_with_history() {
+        let (manager, _temp) = create_test_manager();
+
+        let cs1 = create_test_changeset("feat/one");
+        let cs2 = create_test_changeset("feat/two");
+
+        let id1 = manager.create(&cs1).await.unwrap();
+        manager.create(&cs2).await.unwrap();
+
+        // Apply one changeset
+        let release_info = create_release_info();
+        manager.apply(&id1, release_info).await.unwrap();
+
+        let summary = manager.get_summary().await.unwrap();
+        assert_eq!(summary.pending_count, 1);
+        assert_eq!(summary.history_count, 1);
+        assert!(summary.has_pending());
+        assert!(summary.has_history());
+        assert_eq!(summary.total_count(), 2);
+    }
+
+    #[test]
+    fn test_changeset_summary_methods() {
+        let summary = ChangesetSummary {
+            pending_count: 5,
+            history_count: 10,
+            pending_ids: vec!["id1".to_string()],
+            history_ids: vec!["id2".to_string()],
+        };
+
+        assert!(summary.has_pending());
+        assert!(summary.has_history());
+        assert_eq!(summary.total_count(), 15);
+    }
+
+    #[test]
+    fn test_changeset_summary_empty() {
+        let summary = ChangesetSummary {
+            pending_count: 0,
+            history_count: 0,
+            pending_ids: vec![],
+            history_ids: vec![],
+        };
+
+        assert!(!summary.has_pending());
+        assert!(!summary.has_history());
+        assert_eq!(summary.total_count(), 0);
     }
 }
