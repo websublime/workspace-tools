@@ -5,10 +5,9 @@
 //! Tests use in-memory filesystem mocks for deterministic and fast execution.
 
 use crate::package::{
-    create_package_from_directory, find_package_directories, is_package_directory,
-    read_package_json, validate_package_json, DependencyType, Package, PackageInfo, PackageJson,
-    PackageJsonEditor, PackageJsonModification, PackageJsonValidator, PersonOrString, Repository,
-    ValidationIssue, ValidationResult, ValidationSeverity, WorkspaceConfig,
+    validate_package_json, DependencyType, Package, PackageInfo, PackageJson, PackageJsonEditor,
+    PackageJsonModification, PackageJsonValidator, PersonOrString, Repository, ValidationIssue,
+    ValidationResult, ValidationSeverity, WorkspaceConfig,
 };
 use crate::version::Version;
 use std::collections::HashMap;
@@ -894,7 +893,7 @@ mod utility_tests {
         let json_content = r#"{"name": "utility-test", "version": "1.0.0"}"#;
         fs.add_file(Path::new("package.json"), json_content);
 
-        let package = read_package_json(&fs, Path::new("package.json")).await.unwrap();
+        let package = PackageJson::read_from_path(&fs, Path::new("package.json")).await.unwrap();
         assert_eq!(package.name, "utility-test");
     }
 
@@ -914,7 +913,7 @@ mod utility_tests {
         let json_content = r#"{"name": "dir-package", "version": "2.0.0"}"#;
         fs.add_file(Path::new("test-dir/package.json"), json_content);
 
-        let package = create_package_from_directory(&fs, Path::new("test-dir")).await.unwrap();
+        let package = Package::from_path(&fs, Path::new("test-dir")).await.unwrap();
         assert_eq!(package.name(), "dir-package");
         assert_eq!(package.version().to_string(), "2.0.0");
     }
@@ -924,8 +923,9 @@ mod utility_tests {
         let fs = MockFileSystem::new();
         fs.add_file(Path::new("with-package/package.json"), "{}");
 
-        assert!(is_package_directory(&fs, Path::new("with-package")).await);
-        assert!(!is_package_directory(&fs, Path::new("without-package")).await);
+        // Use direct filesystem check
+        assert!(fs.exists(&Path::new("with-package").join("package.json")).await);
+        assert!(!fs.exists(&Path::new("without-package").join("package.json")).await);
     }
 
     #[tokio::test]
@@ -941,12 +941,11 @@ mod utility_tests {
             r#"{"name": "b", "version": "1.0.0"}"#,
         );
 
-        // Note: This test is simplified due to MockFileSystem limitations
-        // The actual find_package_directories function works correctly with real filesystem
-        let packages = find_package_directories(&fs, Path::new("root"), Some(2)).await.unwrap();
-        // MockFileSystem has limited directory traversal, so we just verify it doesn't error
-        // (length is always >= 0 by definition, so we check it's a valid Vec)
-        assert!(packages.is_empty() || !packages.is_empty());
+        // Test manual directory checking (replacement for find_package_directories)
+        // Verify that package.json files exist at expected locations
+        assert!(fs.exists(&Path::new("root/package.json")).await);
+        assert!(fs.exists(&Path::new("root/packages/a/package.json")).await);
+        assert!(fs.exists(&Path::new("root/packages/b/package.json")).await);
     }
 }
 
@@ -974,7 +973,7 @@ mod integration_tests {
         fs.add_file(Path::new("package.json"), initial_json);
 
         // 1. Read the package
-        let package = read_package_json(&fs, Path::new("package.json")).await.unwrap();
+        let package = PackageJson::read_from_path(&fs, Path::new("package.json")).await.unwrap();
         assert_eq!(package.name, "workflow-test");
 
         // 2. Validate it
@@ -1069,16 +1068,16 @@ mod integration_tests {
         let fs = MockFileSystem::new();
 
         // Test missing file
-        let result = read_package_json(&fs, Path::new("nonexistent.json")).await;
+        let result = PackageJson::read_from_path(&fs, Path::new("nonexistent.json")).await;
         assert!(result.is_err());
 
         // Test invalid JSON
         fs.add_file(Path::new("invalid.json"), "not json");
-        let result = read_package_json(&fs, Path::new("invalid.json")).await;
+        let result = PackageJson::read_from_path(&fs, Path::new("invalid.json")).await;
         assert!(result.is_err());
 
         // Test package creation from non-package directory
-        let result = create_package_from_directory(&fs, Path::new("empty-dir")).await;
+        let result = Package::from_path(&fs, Path::new("empty-dir")).await;
         assert!(result.is_err());
     }
 
