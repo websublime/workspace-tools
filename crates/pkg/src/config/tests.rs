@@ -10,8 +10,16 @@
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::expect_used)]
 
-use crate::config::*;
 use sublime_standard_tools::config::Configurable;
+
+use crate::config::{
+    load_config, load_config_from_file, validate_config, validate_path_format, validate_url_format,
+    AuditConfig, AuditSectionsConfig, BackupConfig, BreakingChangesAuditConfig, ChangelogConfig,
+    ChangelogFormat, ChangesetConfig, ConfigLoader, ConventionalConfig, DependencyAuditConfig,
+    DependencyConfig, ExcludeConfig, GitConfig, MonorepoMode, PackageToolsConfig, RegistryConfig,
+    TemplateConfig, UpgradeAuditConfig, UpgradeConfig, VersionConfig,
+    VersionConsistencyAuditConfig, VersioningStrategy,
+};
 
 // =============================================================================
 // PackageToolsConfig Tests
@@ -902,5 +910,216 @@ mod audit_config {
             ..Default::default()
         };
         assert!(config.validate().is_ok());
+    }
+}
+
+// =============================================================================
+// Configuration Loading Tests
+// =============================================================================
+
+#[cfg(test)]
+mod loader_tests {
+    use std::fs;
+    use tempfile::TempDir;
+
+    use crate::config::{load_config, ConfigLoader};
+
+    #[tokio::test]
+    async fn test_load_defaults() {
+        let result = ConfigLoader::load_defaults().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_load_from_nonexistent_files() {
+        // Should succeed with just defaults
+        let result = ConfigLoader::load_from_files(vec!["nonexistent.toml"]).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_load_from_toml_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("test-config.toml");
+
+        let toml_content = r#"
+[changeset]
+path = ".custom-changesets"
+history_path = ".custom-history"
+available_environments = ["dev", "prod"]
+default_environments = ["prod"]
+
+[version]
+strategy = "unified"
+default_bump = "minor"
+"#;
+
+        fs::write(&config_path, toml_content).unwrap();
+
+        let result = ConfigLoader::load_from_file(&config_path).await;
+        assert!(result.is_ok());
+
+        if let Ok(config) = result {
+            assert_eq!(config.changeset.path, ".custom-changesets");
+            assert_eq!(config.changeset.history_path, ".custom-history");
+            assert_eq!(config.version.default_bump, "minor");
+        }
+    }
+}
+
+// =============================================================================
+// Enhanced Validation Tests
+// =============================================================================
+
+#[cfg(test)]
+mod validation_tests {
+    use crate::config::{
+        validate_config, validate_path_format, validate_url_format, PackageToolsConfig,
+    };
+
+    #[test]
+    fn test_validate_default_config() {
+        let config = PackageToolsConfig::default();
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn test_validate_changeset_parent_directory() {
+        let mut config = PackageToolsConfig::default();
+        config.changeset.path = "../changesets".to_string();
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_same_changeset_paths() {
+        let mut config = PackageToolsConfig::default();
+        config.changeset.path = ".changesets".to_string();
+        config.changeset.history_path = ".changesets".to_string();
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_duplicate_environments() {
+        let mut config = PackageToolsConfig::default();
+        config.changeset.available_environments = vec!["prod".to_string(), "prod".to_string()];
+        config.changeset.default_environments = vec!["prod".to_string()];
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_environment_with_whitespace() {
+        let mut config = PackageToolsConfig::default();
+        config.changeset.available_environments = vec!["prod test".to_string()];
+        config.changeset.default_environments = vec!["prod test".to_string()];
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_invalid_registry_url() {
+        let mut config = PackageToolsConfig::default();
+        config.upgrade.registry.default_registry = "not-a-url".to_string();
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_high_max_depth() {
+        let mut config = PackageToolsConfig::default();
+        config.dependency.max_depth = 150;
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_no_propagation() {
+        let mut config = PackageToolsConfig::default();
+        config.dependency.propagate_dependencies = false;
+        config.dependency.propagate_dev_dependencies = false;
+        config.dependency.propagate_peer_dependencies = false;
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_path_format_empty() {
+        let result = validate_path_format("", "test_field");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_path_format_valid() {
+        let result = validate_path_format(".changesets", "test_field");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_url_format_valid_https() {
+        let result = validate_url_format("https://registry.npmjs.org", "test_field");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_url_format_valid_http() {
+        let result = validate_url_format("http://localhost:4873", "test_field");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_url_format_invalid() {
+        let result = validate_url_format("not-a-url", "test_field");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_url_format_empty() {
+        let result = validate_url_format("", "test_field");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_snapshot_format_missing_placeholder() {
+        let mut config = PackageToolsConfig::default();
+        config.version.snapshot_format = "invalid-format".to_string();
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_zero_timeout() {
+        let mut config = PackageToolsConfig::default();
+        config.upgrade.registry.timeout_secs = 0;
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_high_timeout() {
+        let mut config = PackageToolsConfig::default();
+        config.upgrade.registry.timeout_secs = 500;
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_too_many_retries() {
+        let mut config = PackageToolsConfig::default();
+        config.upgrade.registry.retry_attempts = 20;
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
     }
 }

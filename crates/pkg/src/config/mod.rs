@@ -136,8 +136,10 @@ mod changelog;
 mod changeset;
 mod dependency;
 mod git;
+mod loader;
 mod types;
 mod upgrade;
+mod validation;
 mod version;
 
 // Tests module
@@ -156,6 +158,8 @@ pub use changelog::{
 pub use changeset::ChangesetConfig;
 pub use dependency::DependencyConfig;
 pub use git::GitConfig;
+pub use loader::{load_config, load_config_from_file, ConfigLoader};
 pub use types::PackageToolsConfig;
 pub use upgrade::{BackupConfig, RegistryConfig, UpgradeConfig};
+pub use validation::{path_exists, validate_config, validate_path_format, validate_url_format};
 pub use version::{VersionConfig, VersioningStrategy};
