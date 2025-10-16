@@ -107,6 +107,12 @@ pub use self::config::{ConfigError, ConfigResult};
 pub use self::upgrade::{UpgradeError, UpgradeResult};
 pub use self::version::{VersionError, VersionResult};
 
+// Re-export context and recovery types
+pub use self::context::{ErrorContext, WithContext};
+pub use self::recovery::{
+    ErrorRecoveryManager, LogLevel, RecoveryResult, RecoveryStats, RecoveryStrategy,
+};
+
 // Domain-specific error modules
 pub mod audit;
 pub mod changelog;
@@ -115,6 +121,10 @@ pub mod changeset;
 pub mod config;
 pub mod upgrade;
 pub mod version;
+
+// Error handling utilities
+pub mod context;
+pub mod recovery;
 
 #[cfg(test)]
 mod tests;

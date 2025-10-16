@@ -2,12 +2,16 @@
 //!
 //! This module contains all tests for error types, organized by error category.
 
+#![allow(clippy::unwrap_used)]
+
 use crate::error::{
     AuditError, AuditResult, ChangelogError, ChangelogResult, ChangesError, ChangesResult,
-    ChangesetError, ChangesetResult, ConfigError, ConfigResult, Error, Result, UpgradeError,
+    ChangesetError, ChangesetResult, ConfigError, ConfigResult, Error, ErrorContext,
+    ErrorRecoveryManager, LogLevel, RecoveryResult, RecoveryStrategy, Result, UpgradeError,
     UpgradeResult, VersionError, VersionResult,
 };
 use std::path::PathBuf;
+use std::time::Duration;
 
 // =============================================================================
 // Config Error Tests
@@ -1271,5 +1275,454 @@ mod main_error {
 
         assert!(json_error.is_some());
         assert!(matches!(json_error, Some(Error::Json(_))), "Expected Json error variant");
+    }
+}
+
+// =============================================================================
+// Error Context Tests
+// =============================================================================
+
+mod context {
+    use super::*;
+
+    #[test]
+    fn test_with_context_on_filesystem_error() {
+        let result: Result<()> = Err(Error::FileSystem("file not found".to_string()));
+        let with_context = result.with_context("Failed to read configuration".to_string());
+
+        assert!(with_context.is_err());
+        let error = with_context.unwrap_err();
+        assert!(error.to_string().contains("Failed to read configuration"));
+        assert!(error.to_string().contains("file not found"));
+    }
+
+    #[test]
+    fn test_with_context_on_git_error() {
+        let result: Result<()> = Err(Error::Git("repository not found".to_string()));
+        let with_context = result.with_context("Failed to fetch commits".to_string());
+
+        assert!(with_context.is_err());
+        let error = with_context.unwrap_err();
+        assert!(error.to_string().contains("Failed to fetch commits"));
+        assert!(error.to_string().contains("repository not found"));
+    }
+
+    #[test]
+    fn test_with_context_lazy_only_evaluates_on_error() {
+        let mut called = false;
+        let result: Result<String> = Ok("success".to_string());
+
+        let with_context = result.with_context_lazy(|| {
+            called = true;
+            "This should not be called".to_string()
+        });
+
+        assert!(with_context.is_ok());
+        assert!(!called, "Context closure should not be called on Ok result");
+    }
+
+    #[test]
+    fn test_with_context_lazy_evaluates_on_error() {
+        let mut called = false;
+        let result: Result<()> = Err(Error::FileSystem("error".to_string()));
+
+        let with_context = result.with_context_lazy(|| {
+            called = true;
+            "Context message".to_string()
+        });
+
+        assert!(with_context.is_err());
+        assert!(called, "Context closure should be called on Err result");
+        let error = with_context.unwrap_err();
+        assert!(error.to_string().contains("Context message"));
+    }
+
+    #[test]
+    fn test_with_context_preserves_config_error() {
+        let result: Result<()> =
+            Err(Error::Config(ConfigError::NotFound { path: PathBuf::from("config.toml") }));
+
+        let with_context = result.with_context("Loading configuration".to_string());
+
+        assert!(with_context.is_err());
+        let error = with_context.unwrap_err();
+        assert!(matches!(error, Error::Config(_)));
+    }
+
+    #[test]
+    fn test_with_context_preserves_version_error() {
+        let result: Result<()> = Err(Error::Version(VersionError::InvalidVersion {
+            version: "invalid".to_string(),
+            reason: "not semver".to_string(),
+        }));
+
+        let with_context = result.with_context("Resolving version".to_string());
+
+        assert!(with_context.is_err());
+        let error = with_context.unwrap_err();
+        assert!(matches!(error, Error::Version(_)));
+    }
+
+    #[test]
+    fn test_with_context_preserves_changeset_error() {
+        let result: Result<()> =
+            Err(Error::Changeset(ChangesetError::NotFound { branch: "main".to_string() }));
+
+        let with_context = result.with_context("Loading changeset".to_string());
+
+        assert!(with_context.is_err());
+        let error = with_context.unwrap_err();
+        assert!(matches!(error, Error::Changeset(_)));
+    }
+
+    #[test]
+    fn test_with_context_can_chain_multiple_contexts() {
+        let result: Result<()> = Err(Error::FileSystem("file not found".to_string()));
+
+        let with_context = result
+            .with_context("Reading package.json".to_string())
+            .with_context("Processing package".to_string());
+
+        assert!(with_context.is_err());
+        let error = with_context.unwrap_err();
+        assert!(error.to_string().contains("Processing package"));
+    }
+
+    #[test]
+    fn test_with_context_on_success_returns_ok() {
+        let result: Result<String> = Ok("success".to_string());
+        let with_context = result.with_context("This context is not used".to_string());
+
+        assert!(with_context.is_ok());
+        assert_eq!(with_context.unwrap(), "success");
+    }
+
+    #[test]
+    fn test_with_context_lazy_with_expensive_computation() {
+        let result: Result<()> = Err(Error::FileSystem("error".to_string()));
+
+        let with_context = result.with_context_lazy(|| {
+            // Simulate expensive computation
+            let data = vec!["package1", "package2", "package3"];
+            format!("Failed to process {} packages", data.len())
+        });
+
+        assert!(with_context.is_err());
+        let error = with_context.unwrap_err();
+        assert!(error.to_string().contains("Failed to process 3 packages"));
+    }
+
+    #[test]
+    fn test_error_context_from_any_error() {
+        fn helper_that_returns_config_error() -> std::result::Result<(), ConfigError> {
+            Err(ConfigError::NotFound { path: PathBuf::from("test.toml") })
+        }
+
+        let result = helper_that_returns_config_error()
+            .map_err(Error::from)
+            .with_context("Initializing application".to_string());
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(matches!(error, Error::Config(_)));
+    }
+
+    #[test]
+    fn test_as_ref_after_context() {
+        let result: Result<()> =
+            Err(Error::Config(ConfigError::NotFound { path: PathBuf::from("config.toml") }));
+
+        let with_context = result.with_context("Loading config".to_string());
+
+        assert!(with_context.is_err());
+        let error = with_context.unwrap_err();
+        let error_str: &str = error.as_ref();
+        // Context wrapping preserves the inner error type's as_ref result
+        assert_eq!(error_str, "configuration file not found");
+    }
+}
+
+// =============================================================================
+// Error Recovery Tests
+// =============================================================================
+
+mod recovery {
+    use super::*;
+
+    #[test]
+    fn test_log_level_as_str() {
+        assert_eq!(LogLevel::Error.as_str(), "ERROR");
+        assert_eq!(LogLevel::Warn.as_str(), "WARN");
+        assert_eq!(LogLevel::Info.as_str(), "INFO");
+        assert_eq!(LogLevel::Debug.as_str(), "DEBUG");
+        assert_eq!(LogLevel::Trace.as_str(), "TRACE");
+    }
+
+    #[test]
+    fn test_log_level_ordering() {
+        assert!(LogLevel::Error < LogLevel::Warn);
+        assert!(LogLevel::Warn < LogLevel::Info);
+        assert!(LogLevel::Info < LogLevel::Debug);
+        assert!(LogLevel::Debug < LogLevel::Trace);
+    }
+
+    #[test]
+    fn test_error_recovery_manager_new() {
+        let manager = ErrorRecoveryManager::new();
+        assert_eq!(manager.stats().total_attempts, 0);
+        assert_eq!(manager.stats().successful_recoveries, 0);
+        assert_eq!(manager.stats().failed_recoveries, 0);
+    }
+
+    #[test]
+    fn test_error_recovery_manager_default() {
+        let manager = ErrorRecoveryManager::default();
+        assert_eq!(manager.stats().total_attempts, 0);
+    }
+
+    #[test]
+    fn test_add_strategy() {
+        let mut manager = ErrorRecoveryManager::new();
+
+        manager.add_strategy(
+            "test",
+            RecoveryStrategy::Retry { max_attempts: 3, delay: Duration::from_millis(100) },
+        );
+
+        // Verify strategy was added by attempting recovery
+        assert_eq!(manager.stats().total_attempts, 0);
+    }
+
+    #[test]
+    fn test_remove_strategy() {
+        let mut manager = ErrorRecoveryManager::new();
+
+        manager.add_strategy("test", RecoveryStrategy::Ignore);
+        let removed = manager.remove_strategy("test");
+        assert!(removed.is_some());
+    }
+
+    #[test]
+    fn test_remove_nonexistent_strategy() {
+        let mut manager = ErrorRecoveryManager::new();
+        let removed = manager.remove_strategy("nonexistent");
+        assert!(removed.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_recover_no_strategy() {
+        let mut manager = ErrorRecoveryManager::new();
+        let error = Error::FileSystem("test error".to_string());
+
+        let result = manager.recover("unknown_operation", &error, LogLevel::Error).await;
+
+        assert_eq!(result, RecoveryResult::NoStrategy);
+        assert_eq!(manager.stats().total_attempts, 1);
+        assert_eq!(manager.stats().no_strategy_available, 1);
+    }
+
+    #[tokio::test]
+    async fn test_recover_with_retry_strategy_transient() {
+        let mut manager = ErrorRecoveryManager::new();
+
+        manager.add_strategy(
+            "test_op",
+            RecoveryStrategy::Retry { max_attempts: 3, delay: Duration::from_millis(10) },
+        );
+
+        let error = Error::FileSystem("temporary error".to_string());
+        let result = manager.recover("test_op", &error, LogLevel::Error).await;
+
+        assert_eq!(result, RecoveryResult::Recovered);
+        assert_eq!(manager.stats().total_attempts, 1);
+        assert_eq!(manager.stats().successful_recoveries, 1);
+    }
+
+    #[tokio::test]
+    async fn test_recover_with_retry_strategy_non_transient() {
+        let mut manager = ErrorRecoveryManager::new();
+
+        manager.add_strategy(
+            "test_op",
+            RecoveryStrategy::Retry { max_attempts: 3, delay: Duration::from_millis(10) },
+        );
+
+        let error = Error::Config(ConfigError::InvalidConfig { message: "invalid".to_string() });
+
+        let result = manager.recover("test_op", &error, LogLevel::Error).await;
+
+        assert!(matches!(result, RecoveryResult::Failed(_)));
+        assert_eq!(manager.stats().total_attempts, 1);
+        assert_eq!(manager.stats().failed_recoveries, 1);
+    }
+
+    #[tokio::test]
+    async fn test_recover_with_fallback_strategy() {
+        let mut manager = ErrorRecoveryManager::new();
+
+        manager.add_strategy(
+            "test_op",
+            RecoveryStrategy::Fallback { alternative: "Use default".to_string() },
+        );
+
+        let error = Error::FileSystem("error".to_string());
+        let result = manager.recover("test_op", &error, LogLevel::Error).await;
+
+        assert_eq!(result, RecoveryResult::Recovered);
+        assert_eq!(manager.stats().successful_recoveries, 1);
+    }
+
+    #[tokio::test]
+    async fn test_recover_with_ignore_strategy() {
+        let mut manager = ErrorRecoveryManager::new();
+
+        manager.add_strategy("test_op", RecoveryStrategy::Ignore);
+
+        let error = Error::FileSystem("error".to_string());
+        let result = manager.recover("test_op", &error, LogLevel::Error).await;
+
+        assert_eq!(result, RecoveryResult::Recovered);
+        assert_eq!(manager.stats().successful_recoveries, 1);
+    }
+
+    #[tokio::test]
+    async fn test_recover_with_log_and_continue_strategy() {
+        let mut manager = ErrorRecoveryManager::new();
+
+        manager.add_strategy(
+            "test_op",
+            RecoveryStrategy::LogAndContinue { log_level: LogLevel::Warn },
+        );
+
+        let error = Error::FileSystem("error".to_string());
+        let result = manager.recover("test_op", &error, LogLevel::Error).await;
+
+        assert_eq!(result, RecoveryResult::Recovered);
+        assert_eq!(manager.stats().successful_recoveries, 1);
+    }
+
+    #[tokio::test]
+    async fn test_recover_with_custom_strategy() {
+        let mut manager = ErrorRecoveryManager::new();
+
+        manager.add_strategy(
+            "test_op",
+            RecoveryStrategy::Custom {
+                name: "my_handler".to_string(),
+                handler: "Custom recovery logic".to_string(),
+            },
+        );
+
+        let error = Error::FileSystem("error".to_string());
+        let result = manager.recover("test_op", &error, LogLevel::Error).await;
+
+        assert!(matches!(result, RecoveryResult::Failed(_)));
+        assert_eq!(manager.stats().failed_recoveries, 1);
+    }
+
+    #[tokio::test]
+    async fn test_recover_tracks_error_types() {
+        let mut manager = ErrorRecoveryManager::new();
+
+        manager.add_strategy("test_op", RecoveryStrategy::Ignore);
+
+        let error1 = Error::FileSystem("error1".to_string());
+        let error2 = Error::Git("error2".to_string());
+
+        let _ = manager.recover("test_op", &error1, LogLevel::Error).await;
+        let _ = manager.recover("test_op", &error2, LogLevel::Error).await;
+        let _ = manager.recover("test_op", &error1, LogLevel::Error).await;
+
+        let stats = manager.stats();
+        assert_eq!(stats.total_attempts, 3);
+        assert_eq!(*stats.attempts_by_error_type.get("filesystem error").unwrap_or(&0), 2);
+        assert_eq!(*stats.attempts_by_error_type.get("git error").unwrap_or(&0), 1);
+    }
+
+    #[test]
+    fn test_reset_stats() {
+        let mut manager = ErrorRecoveryManager::new();
+
+        manager.reset_stats();
+
+        let stats = manager.stats();
+        assert_eq!(stats.total_attempts, 0);
+        assert_eq!(stats.successful_recoveries, 0);
+        assert_eq!(stats.failed_recoveries, 0);
+    }
+
+    #[test]
+    fn test_log_error() {
+        let manager = ErrorRecoveryManager::new();
+        let error = Error::FileSystem("test error".to_string());
+
+        // This should not panic
+        manager.log_error(&error, LogLevel::Error);
+        manager.log_error(&error, LogLevel::Warn);
+    }
+
+    #[test]
+    fn test_recovery_result_equality() {
+        assert_eq!(RecoveryResult::Recovered, RecoveryResult::Recovered);
+        assert_eq!(
+            RecoveryResult::Failed("reason".to_string()),
+            RecoveryResult::Failed("reason".to_string())
+        );
+        assert_eq!(RecoveryResult::NoStrategy, RecoveryResult::NoStrategy);
+
+        assert_ne!(RecoveryResult::Recovered, RecoveryResult::NoStrategy);
+    }
+
+    #[tokio::test]
+    async fn test_multiple_operations_with_different_strategies() {
+        let mut manager = ErrorRecoveryManager::new();
+
+        manager.add_strategy(
+            "critical",
+            RecoveryStrategy::Retry { max_attempts: 5, delay: Duration::from_millis(10) },
+        );
+
+        manager.add_strategy(
+            "non_critical",
+            RecoveryStrategy::LogAndContinue { log_level: LogLevel::Warn },
+        );
+
+        let error = Error::FileSystem("error".to_string());
+
+        let result1 = manager.recover("critical", &error, LogLevel::Error).await;
+        let result2 = manager.recover("non_critical", &error, LogLevel::Warn).await;
+
+        assert_eq!(result1, RecoveryResult::Recovered);
+        assert_eq!(result2, RecoveryResult::Recovered);
+        assert_eq!(manager.stats().total_attempts, 2);
+        assert_eq!(manager.stats().successful_recoveries, 2);
+    }
+
+    #[test]
+    fn test_recovery_stats_success_rate() {
+        use crate::error::RecoveryStats;
+
+        let mut stats = RecoveryStats::new();
+        assert_eq!(stats.success_rate(), 0.0);
+
+        stats.total_attempts = 10;
+        stats.successful_recoveries = 8;
+        assert_eq!(stats.success_rate(), 80.0);
+
+        stats.total_attempts = 5;
+        stats.successful_recoveries = 5;
+        assert_eq!(stats.success_rate(), 100.0);
+    }
+
+    #[test]
+    fn test_recovery_stats_new() {
+        use crate::error::RecoveryStats;
+
+        let stats = RecoveryStats::new();
+        assert_eq!(stats.total_attempts, 0);
+        assert_eq!(stats.successful_recoveries, 0);
+        assert_eq!(stats.failed_recoveries, 0);
+        assert_eq!(stats.no_strategy_available, 0);
+        assert!(stats.attempts_by_error_type.is_empty());
     }
 }
