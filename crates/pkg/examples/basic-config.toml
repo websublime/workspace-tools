@@ -1,0 +1,259 @@
+# Basic Package Tools Configuration
+# This example shows the minimal configuration needed for a simple single-package project.
+# All settings shown here are the default values - you can omit sections you don't need to customize.
+
+[package_tools.changeset]
+# Directory where active changesets are stored
+path = ".changesets"
+
+# Directory where archived changesets (release history) are stored
+history_path = ".changesets/history"
+
+# List of valid environment names for deployment targeting
+available_environments = ["production"]
+
+# Default environments to use when none are specified
+default_environments = ["production"]
+
+[package_tools.version]
+# Versioning strategy: "independent" (each package versioned separately) or "unified" (all packages share version)
+strategy = "independent"
+
+# Default version bump when not specified in changeset: "major", "minor", "patch", or "none"
+default_bump = "patch"
+
+# Format template for snapshot versions (pre-release versions)
+# Placeholders: {version}, {branch}, {timestamp}, {short_hash}
+snapshot_format = "{version}-{branch}.{timestamp}"
+
+[package_tools.dependency]
+# Version bump to apply when propagating changes through dependencies
+# Valid values: "major", "minor", "patch", "none"
+propagation_bump = "patch"
+
+# Whether to propagate version changes to regular dependencies
+propagate_dependencies = true
+
+# Whether to propagate version changes to devDependencies
+propagate_dev_dependencies = false
+
+# Whether to propagate version changes to peerDependencies
+propagate_peer_dependencies = true
+
+# Maximum depth to traverse when propagating changes (prevents infinite loops)
+max_depth = 10
+
+# Whether to fail the operation if circular dependencies are detected
+fail_on_circular = true
+
+# Skip version specs using workspace protocol (workspace:*)
+skip_workspace_protocol = true
+
+# Skip version specs using file protocol (file:...)
+skip_file_protocol = true
+
+# Skip version specs using link protocol (link:...)
+skip_link_protocol = true
+
+# Skip version specs using portal protocol (portal:...)
+skip_portal_protocol = true
+
+[package_tools.upgrade]
+# Automatically create a changeset when upgrades are applied
+auto_changeset = true
+
+# Default bump type for automatic changeset when upgrades are applied
+changeset_bump = "patch"
+
+[package_tools.upgrade.registry]
+# Default npm registry URL
+default_registry = "https://registry.npmjs.org"
+
+# Request timeout in seconds
+timeout_secs = 30
+
+# Number of retry attempts for failed requests
+retry_attempts = 3
+
+# Delay between retry attempts in milliseconds
+retry_delay_ms = 1000
+
+# Whether to read and respect .npmrc configuration
+read_npmrc = true
+
+# Scoped registries (optional)
+# [package_tools.upgrade.registry.scoped]
+# "@myorg" = "https://npm.pkg.github.com"
+
+[package_tools.upgrade.backup]
+# Whether to create backups before applying upgrades
+enabled = true
+
+# Directory where backups are stored
+backup_dir = ".pkg-tools/backups"
+
+# Whether to keep backups after successful upgrades
+keep_after_success = false
+
+# Maximum number of backups to retain
+max_backups = 5
+
+[package_tools.changelog]
+# Whether changelog generation is enabled
+enabled = true
+
+# Changelog format: "keep-a-changelog", "conventional", or "custom"
+format = "keep-a-changelog"
+
+# Changelog filename
+filename = "CHANGELOG.md"
+
+# Include links to commits in the changelog
+include_commit_links = true
+
+# Include links to issues/PRs in the changelog
+include_issue_links = true
+
+# Include author names in changelog entries
+include_authors = false
+
+# Repository URL for generating links (optional)
+# repository_url = "https://github.com/org/repo"
+
+# Monorepo mode: "per-package" (one changelog per package), "root" (single root changelog), or "both"
+monorepo_mode = "per-package"
+
+# Version tag format for detecting versions from git tags
+# Placeholders: {version}, {package}
+version_tag_format = "{package}@{version}"
+
+# Root tag format for unified versioning
+root_tag_format = "v{version}"
+
+[package_tools.changelog.conventional]
+# Enable conventional commits parsing
+enabled = true
+
+# Map commit types to changelog sections
+[package_tools.changelog.conventional.sections]
+feat = "Features"
+fix = "Bug Fixes"
+perf = "Performance Improvements"
+refactor = "Code Refactoring"
+docs = "Documentation"
+build = "Build System"
+ci = "Continuous Integration"
+test = "Tests"
+chore = "Chores"
+
+# Section name for breaking changes
+breaking = "BREAKING CHANGES"
+
+[package_tools.changelog.exclude]
+# Glob patterns to exclude from changelog
+patterns = [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.git/**",
+]
+
+# Author emails to exclude from changelog (e.g., bots)
+authors = []
+
+[package_tools.changelog.template]
+# Custom template for changelog header (optional)
+# header = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n"
+
+# Custom template for version header (optional)
+# Placeholders: {version}, {date}
+# version_header = "## [{version}] - {date}"
+
+# Custom template for section header (optional)
+# Placeholders: {section}
+# section_header = "### {section}"
+
+# Custom template for entry format (optional)
+# Placeholders: {description}, {commit}, {author}
+# entry_format = "- {description} ({commit})"
+
+[package_tools.git]
+# Template for merge commit messages
+# Placeholders: {version}, {package}, {bump}, {environments}, {changelog}
+merge_commit_template = """
+Release {package} v{version}
+
+{changelog}
+"""
+
+# Template for monorepo merge commits with multiple packages
+# Placeholders: {packages}, {summary}
+monorepo_merge_commit_template = """
+Release multiple packages
+
+{summary}
+"""
+
+# Include breaking change warnings in commit messages
+include_breaking_warning = true
+
+# Template for breaking change warning
+# Placeholders: {count}
+breaking_warning_template = """
+⚠️ BREAKING CHANGES: This release contains {count} breaking change(s).
+Please review the changelog carefully before upgrading.
+"""
+
+[package_tools.audit]
+# Whether audit functionality is enabled
+enabled = true
+
+# Minimum severity level to report: "critical", "warning", or "info"
+min_severity = "warning"
+
+[package_tools.audit.sections]
+# Enable individual audit sections
+upgrades = true
+dependencies = true
+breaking_changes = true
+categorization = true
+version_consistency = true
+
+[package_tools.audit.upgrades]
+# Include patch version upgrades in audit
+include_patch = true
+
+# Include minor version upgrades in audit
+include_minor = true
+
+# Include major version upgrades in audit
+include_major = true
+
+# Treat deprecated packages as critical issues
+deprecated_as_critical = true
+
+[package_tools.audit.dependencies]
+# Check for circular dependencies
+check_circular = true
+
+# Check for missing dependencies (used but not declared)
+check_missing = true
+
+# Check for unused dependencies (declared but not used)
+check_unused = true
+
+# Check for version conflicts across packages
+check_version_conflicts = true
+
+[package_tools.audit.breaking_changes]
+# Check conventional commits for breaking changes
+check_conventional_commits = true
+
+# Check changelog for breaking changes
+check_changelog = true
+
+[package_tools.audit.version_consistency]
+# Fail the audit if version inconsistencies are found
+fail_on_inconsistency = false
+
+# Warn about version inconsistencies
+warn_on_inconsistency = true
