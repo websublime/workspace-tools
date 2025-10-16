@@ -1,0 +1,16 @@
+{
+  "name": "@test/pkg-a",
+  "version": "1.0.0",
+  "description": "Test package A for sublime_pkg_tools",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Test pkg-a\"",
+    "build": "echo \"Build pkg-a\""
+  },
+  "dependencies": {
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0"
+  }
+}
