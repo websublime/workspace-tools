@@ -457,10 +457,9 @@ impl AsyncFileSystem for MockFileSystem {
         }
 
         // Remove the path and all its children
-        let path_str = path.to_string_lossy().to_string();
         files.retain(|p, _| {
-            let p_str = p.to_string_lossy().to_string();
-            p != path && !p_str.starts_with(&format!("{}/", path_str))
+            // Keep only paths that are not the target and not descendants of it
+            p != path && !p.starts_with(path)
         });
 
         Ok(())
@@ -483,15 +482,14 @@ impl AsyncFileSystem for MockFileSystem {
             None => return Err(FileSystemError::NotFound { path: path.to_path_buf() }.into()),
         }
 
-        let path_str = path.to_string_lossy().to_string();
         let mut entries = Vec::new();
 
         for (p, _) in files.iter() {
-            let p_str = p.to_string_lossy().to_string();
-
-            // Check if this is a direct child
-            if let Some(remaining) = p_str.strip_prefix(&format!("{}/", path_str)) {
-                if !remaining.contains('/') {
+            // Check if this path is a direct child of the given path
+            if let Ok(relative) = p.strip_prefix(path) {
+                // Count the number of components in the relative path
+                // Direct children should have exactly 1 component
+                if relative.components().count() == 1 {
                     entries.push(p.clone());
                 }
             }
@@ -512,12 +510,11 @@ impl AsyncFileSystem for MockFileSystem {
             None => return Err(FileSystemError::NotFound { path: path.to_path_buf() }.into()),
         }
 
-        let path_str = path.to_string_lossy().to_string();
         let mut entries = Vec::new();
 
         for (p, _) in files.iter() {
-            let p_str = p.to_string_lossy().to_string();
-            if p_str.starts_with(&format!("{}/", path_str)) || p == path {
+            // Include the directory itself and all its descendants
+            if p == path || p.starts_with(path) {
                 entries.push(p.clone());
             }
         }
