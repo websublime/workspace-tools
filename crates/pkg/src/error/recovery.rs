@@ -57,7 +57,7 @@
 //! };
 //!
 //! async fn operation_with_recovery() -> Result<(), Error> {
-//!     let manager = ErrorRecoveryManager::new();
+//!     let mut manager = ErrorRecoveryManager::new();
 //!
 //!     match perform_operation().await {
 //!         Ok(result) => Ok(result),
