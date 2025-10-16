@@ -130,6 +130,32 @@
 //! - `audit`: Audit and health check settings
 //! - `git`: Git integration settings
 
-#![allow(clippy::todo)]
+// Configuration modules
+mod audit;
+mod changelog;
+mod changeset;
+mod dependency;
+mod git;
+mod types;
+mod upgrade;
+mod version;
 
-// Module will be implemented in subsequent stories (Epic 2)
+// Tests module
+#[cfg(test)]
+mod tests;
+
+// Re-export all configuration types
+pub use audit::{
+    AuditConfig, AuditSectionsConfig, BreakingChangesAuditConfig, DependencyAuditConfig,
+    UpgradeAuditConfig, VersionConsistencyAuditConfig,
+};
+pub use changelog::{
+    ChangelogConfig, ChangelogFormat, ConventionalConfig, ExcludeConfig, MonorepoMode,
+    TemplateConfig,
+};
+pub use changeset::ChangesetConfig;
+pub use dependency::DependencyConfig;
+pub use git::GitConfig;
+pub use types::PackageToolsConfig;
+pub use upgrade::{BackupConfig, RegistryConfig, UpgradeConfig};
+pub use version::{VersionConfig, VersioningStrategy};
