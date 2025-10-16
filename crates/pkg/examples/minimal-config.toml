@@ -1,0 +1,42 @@
+# Minimal Package Tools Configuration
+# This example shows the absolute minimum configuration needed.
+# All settings use their default values, so you only need to customize what differs.
+
+# For most projects, you can start with this minimal configuration and add
+# settings as needed. The library works out of the box with sensible defaults.
+
+[package_tools.changeset]
+# Only specify if you want a different path
+# path = ".changesets"
+
+[package_tools.version]
+# Only specify if you want unified versioning instead of independent
+# strategy = "unified"
+
+[package_tools.changelog]
+# Only specify if you have a repository URL for link generation
+# repository_url = "https://github.com/org/repo"
+
+# That's it! Everything else will use sensible defaults.
+# Run with default configuration by simply not providing a config file,
+# or customize specific sections as your project grows.
+
+# Common customizations you might add later:
+#
+# For scoped package registries:
+# [package_tools.upgrade.registry.scoped]
+# "@myorg" = "https://npm.pkg.github.com"
+#
+# For multiple deployment environments:
+# [package_tools.changeset]
+# available_environments = ["development", "staging", "production"]
+# default_environments = ["production"]
+#
+# For unified versioning in monorepos:
+# [package_tools.version]
+# strategy = "unified"
+#
+# For custom changelog format:
+# [package_tools.changelog]
+# format = "conventional"
+# monorepo_mode = "both"

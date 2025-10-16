@@ -1,0 +1,261 @@
+# Monorepo Package Tools Configuration
+# This example demonstrates configuration for a monorepo with multiple packages,
+# showing advanced features like unified versioning, scoped registries, and per-package changelogs.
+
+[package_tools.changeset]
+# Directory for active changesets - shared across all packages
+path = ".changesets"
+
+# Archive location for release history
+history_path = ".changesets/history"
+
+# Multiple environments for different deployment stages
+available_environments = ["development", "staging", "production"]
+
+# Target staging and production by default
+default_environments = ["staging", "production"]
+
+[package_tools.version]
+# Unified versioning - all packages share the same version number
+# This is useful for tightly coupled monorepo packages
+strategy = "unified"
+
+# Default to minor bumps for unified releases
+default_bump = "minor"
+
+# Snapshot format for pre-release versions
+snapshot_format = "{version}-{branch}.{timestamp}"
+
+[package_tools.dependency]
+# Use minor bump when propagating changes to maintain compatibility
+propagation_bump = "minor"
+
+# Propagate to all dependency types in a monorepo
+propagate_dependencies = true
+propagate_dev_dependencies = true
+propagate_peer_dependencies = true
+
+# Higher depth limit for complex dependency graphs
+max_depth = 20
+
+# Fail on circular dependencies to catch issues early
+fail_on_circular = true
+
+# Skip workspace protocols (monorepo internal references)
+skip_workspace_protocol = true
+skip_file_protocol = true
+skip_link_protocol = true
+skip_portal_protocol = true
+
+[package_tools.upgrade]
+# Auto-create changeset for dependency upgrades
+auto_changeset = true
+
+# Use patch bump for dependency upgrades
+changeset_bump = "patch"
+
+[package_tools.upgrade.registry]
+# Default to public npm registry
+default_registry = "https://registry.npmjs.org"
+
+# Longer timeout for large monorepos
+timeout_secs = 60
+
+# More retries for reliability
+retry_attempts = 5
+retry_delay_ms = 2000
+
+# Read .npmrc for authentication and registry overrides
+read_npmrc = true
+
+# Scoped registries for organization packages
+[package_tools.upgrade.registry.scoped]
+"@myorg" = "https://npm.pkg.github.com"
+"@internal" = "https://registry.internal.company.com"
+
+[package_tools.upgrade.backup]
+# Always create backups in monorepos
+enabled = true
+
+# Custom backup location
+backup_dir = ".pkg-tools/backups"
+
+# Keep backups for audit trail
+keep_after_success = true
+
+# Retain more backups for complex monorepos
+max_backups = 10
+
+[package_tools.changelog]
+# Enable changelog generation
+enabled = true
+
+# Use conventional commits format for consistency
+format = "conventional"
+
+# Changelog per package for better organization
+filename = "CHANGELOG.md"
+
+# Include all links for traceability
+include_commit_links = true
+include_issue_links = true
+include_authors = true
+
+# Repository URL for link generation
+repository_url = "https://github.com/myorg/monorepo"
+
+# Generate both per-package and root changelogs
+monorepo_mode = "both"
+
+# Tag format includes package name
+version_tag_format = "{package}@{version}"
+
+# Root changelog uses simple version tag
+root_tag_format = "v{version}"
+
+[package_tools.changelog.conventional]
+# Enable conventional commits parsing
+enabled = true
+
+# Comprehensive type mapping for detailed changelogs
+[package_tools.changelog.conventional.sections]
+feat = "Features"
+fix = "Bug Fixes"
+perf = "Performance Improvements"
+refactor = "Code Refactoring"
+docs = "Documentation"
+style = "Styles"
+build = "Build System"
+ci = "Continuous Integration"
+test = "Tests"
+chore = "Chores"
+revert = "Reverts"
+
+# Prominent breaking changes section
+breaking = "⚠ BREAKING CHANGES"
+
+[package_tools.changelog.exclude]
+# Exclude build artifacts and tooling
+patterns = [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/.git/**",
+    "**/.github/**",
+    "**/coverage/**",
+    "**/*.log",
+]
+
+# Exclude bot commits
+authors = [
+    "renovate[bot]@users.noreply.github.com",
+    "dependabot[bot]@users.noreply.github.com",
+]
+
+[package_tools.changelog.template]
+# Custom header with monorepo context
+header = """
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+This is a monorepo containing multiple packages. See individual package changelogs
+for package-specific changes, or refer to this root changelog for an overview.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+"""
+
+# Version header with date
+version_header = "## [{version}] - {date}"
+
+# Section header with emoji for better visibility
+section_header = "### {section}"
+
+# Entry format with author attribution
+entry_format = "- {description} ([{commit}]({commit_url})) by @{author}"
+
+[package_tools.git]
+# Detailed merge commit template
+merge_commit_template = """
+chore(release): publish {package} v{version}
+
+Release {package} version {version} to {environments}
+
+{changelog}
+
+---
+Generated by sublime_pkg_tools
+"""
+
+# Monorepo merge commit with summary
+monorepo_merge_commit_template = """
+chore(release): publish packages
+
+The following packages have been released:
+
+{packages}
+
+## Summary
+
+{summary}
+
+---
+Generated by sublime_pkg_tools
+"""
+
+# Include breaking change warnings prominently
+include_breaking_warning = true
+
+# Detailed breaking change warning
+breaking_warning_template = """
+⚠️  BREAKING CHANGES ⚠️
+
+This release contains {count} breaking change(s) that may require action.
+
+Please review the BREAKING CHANGES section in the changelog carefully
+and update your code accordingly before upgrading.
+
+For migration assistance, see the migration guide in the documentation.
+"""
+
+[package_tools.audit]
+# Enable comprehensive auditing
+enabled = true
+
+# Report warnings and above
+min_severity = "warning"
+
+[package_tools.audit.sections]
+# Enable all audit sections
+upgrades = true
+dependencies = true
+breaking_changes = true
+categorization = true
+version_consistency = true
+
+[package_tools.audit.upgrades]
+# Audit all upgrade types
+include_patch = true
+include_minor = true
+include_major = true
+
+# Treat deprecated packages as critical in monorepos
+deprecated_as_critical = true
+
+[package_tools.audit.dependencies]
+# Comprehensive dependency checks
+check_circular = true
+check_missing = true
+check_unused = true
+check_version_conflicts = true
+
+[package_tools.audit.breaking_changes]
+# Check both sources for breaking changes
+check_conventional_commits = true
+check_changelog = true
+
+[package_tools.audit.version_consistency]
+# Enforce version consistency across the monorepo
+fail_on_inconsistency = true
+warn_on_inconsistency = true
