@@ -13,20 +13,18 @@
 //!
 //! # Examples
 //!
-//! ```rust
-//! use sublime_pkg_tools::error::{AuditError, AuditResult};
-//!
-//! fn run_audit(package: &str) -> AuditResult<String> {
-//!     if package.is_empty() {
-//!         return Err(AuditError::InvalidPackage {
-//!             package: package.to_string(),
-//!             reason: "Package name cannot be empty".to_string(),
-//!         });
-//!     }
-//!     Ok("audit-report".to_string())
-//! }
-//! ```
-
+/// ```rust
+/// use sublime_pkg_tools::error::{AuditError, AuditResult};
+///
+/// fn run_audit(package: &str) -> AuditResult<String> {
+///     if package.is_empty() {
+///         return Err(AuditError::PackageNotFound {
+///             package: package.to_string(),
+///         });
+///     }
+///     Ok("audit-report".to_string())
+/// }
+/// ```
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -509,4 +507,3 @@ impl AuditError {
         )
     }
 }
-
