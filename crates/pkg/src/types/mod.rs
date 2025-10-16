@@ -121,6 +121,10 @@
 mod version;
 pub use version::{Version, VersionBump, VersioningStrategy};
 
+// Package types (Story 4.2)
+mod package;
+pub use package::{DependencyType, PackageInfo};
+
 // Tests module
 #[cfg(test)]
 mod tests;
