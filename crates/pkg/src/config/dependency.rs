@@ -37,7 +37,7 @@ use sublime_standard_tools::config::{ConfigResult, Configurable};
 /// use sublime_pkg_tools::config::DependencyConfig;
 ///
 /// let config = DependencyConfig::default();
-/// assert_eq!(config.propagation_bump.as_ref(), "patch");
+/// assert_eq!(config.propagation_bump, "patch");
 /// assert!(config.propagate_dependencies);
 /// ```
 ///
@@ -410,4 +410,3 @@ impl Configurable for DependencyConfig {
         Ok(())
     }
 }
-

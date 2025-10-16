@@ -31,7 +31,7 @@ use sublime_standard_tools::config::{ConfigResult, Configurable};
 ///
 /// let config = VersionConfig::default();
 /// assert_eq!(config.strategy, VersioningStrategy::Independent);
-/// assert_eq!(config.default_bump.as_ref(), "patch");
+/// assert_eq!(config.default_bump, "patch");
 /// ```
 ///
 /// # TOML Representation
@@ -269,4 +269,3 @@ impl Configurable for VersionConfig {
         Ok(())
     }
 }
-
