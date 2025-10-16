@@ -117,4 +117,12 @@
 
 #![allow(clippy::todo)]
 
+// Version types (Story 4.1)
+mod version;
+pub use version::{Version, VersionBump, VersioningStrategy};
+
+// Tests module
+#[cfg(test)]
+mod tests;
+
 // Module will be implemented in subsequent stories (Epic 4)
