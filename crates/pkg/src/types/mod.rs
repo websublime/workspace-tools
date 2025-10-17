@@ -125,6 +125,10 @@ pub use version::{Version, VersionBump, VersioningStrategy};
 mod package;
 pub use package::{DependencyType, PackageInfo};
 
+// Changeset types (Story 4.3)
+mod changeset;
+pub use changeset::{ArchivedChangeset, Changeset, ReleaseInfo};
+
 // Tests module
 #[cfg(test)]
 mod tests;
