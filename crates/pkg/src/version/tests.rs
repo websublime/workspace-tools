@@ -2300,3 +2300,517 @@ mod circular_dependency_property_tests {
         }
     }
 }
+
+// ============================================================================
+// Story 5.6: Snapshot Version Generation Tests
+// ============================================================================
+
+mod snapshot_tests {
+    use crate::error::VersionError;
+    use crate::types::Version;
+    use crate::version::snapshot::{SnapshotContext, SnapshotGenerator, SnapshotVariable};
+
+    #[test]
+    fn test_snapshot_generator_new_with_valid_format() {
+        let generator = SnapshotGenerator::new("{version}-{branch}.{commit}");
+        assert!(generator.is_ok());
+
+        let generator = generator.expect("Should create generator");
+        assert_eq!(generator.format(), "{version}-{branch}.{commit}");
+    }
+
+    #[test]
+    fn test_snapshot_generator_new_with_empty_format() {
+        let result = SnapshotGenerator::new("");
+        assert!(result.is_err());
+
+        match result.expect_err("Should fail with empty format") {
+            VersionError::SnapshotFailed { reason, .. } => {
+                assert!(reason.contains("cannot be empty"));
+            }
+            _ => panic!("Expected SnapshotFailed error"),
+        }
+    }
+
+    #[test]
+    fn test_snapshot_generator_new_without_version_variable() {
+        let result = SnapshotGenerator::new("{branch}.{commit}");
+        assert!(result.is_err());
+
+        match result.expect_err("Should fail without version variable") {
+            VersionError::SnapshotFailed { reason, .. } => {
+                assert!(reason.contains("must contain {version}"));
+            }
+            _ => panic!("Expected SnapshotFailed error"),
+        }
+    }
+
+    #[test]
+    fn test_snapshot_generator_new_with_unsupported_variable() {
+        let result = SnapshotGenerator::new("{version}-{invalid}");
+        assert!(result.is_err());
+
+        match result.expect_err("Should fail with unsupported variable") {
+            VersionError::SnapshotFailed { reason, .. } => {
+                assert!(reason.contains("unsupported variable"));
+                assert!(reason.contains("{invalid}"));
+            }
+            _ => panic!("Expected SnapshotFailed error"),
+        }
+    }
+
+    #[test]
+    fn test_snapshot_generator_validate() {
+        let generator =
+            SnapshotGenerator::new("{version}-{branch}.{commit}").expect("Should create generator");
+        assert!(generator.validate().is_ok());
+    }
+
+    #[test]
+    fn test_snapshot_generator_variables() {
+        let generator =
+            SnapshotGenerator::new("{version}-{branch}.{commit}").expect("Should create generator");
+
+        let vars = generator.variables();
+        assert_eq!(vars.len(), 3);
+        assert!(vars.contains(&SnapshotVariable::Version));
+        assert!(vars.contains(&SnapshotVariable::Branch));
+        assert!(vars.contains(&SnapshotVariable::Commit));
+        assert!(!vars.contains(&SnapshotVariable::Timestamp));
+    }
+
+    #[test]
+    fn test_snapshot_generator_variables_with_timestamp() {
+        let generator = SnapshotGenerator::new("{version}-snapshot.{timestamp}")
+            .expect("Should create generator");
+
+        let vars = generator.variables();
+        assert_eq!(vars.len(), 2);
+        assert!(vars.contains(&SnapshotVariable::Version));
+        assert!(vars.contains(&SnapshotVariable::Timestamp));
+    }
+
+    #[test]
+    fn test_snapshot_generator_variables_deduplication() {
+        let generator = SnapshotGenerator::new("{version}-{version}.{branch}-{branch}")
+            .expect("Should create generator");
+
+        let vars = generator.variables();
+        assert_eq!(vars.len(), 2);
+        assert!(vars.contains(&SnapshotVariable::Version));
+        assert!(vars.contains(&SnapshotVariable::Branch));
+    }
+
+    #[test]
+    fn test_snapshot_generator_generate_basic() {
+        let generator =
+            SnapshotGenerator::new("{version}-{branch}.{commit}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.2.3").expect("Should parse version"),
+            "feat/oauth".to_string(),
+            "abc123def456".to_string(),
+            1640000000,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "1.2.3-feat-oauth.abc123d");
+    }
+
+    #[test]
+    fn test_snapshot_generator_generate_with_timestamp() {
+        let generator = SnapshotGenerator::new("{version}-snapshot.{timestamp}")
+            .expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("2.0.0").expect("Should parse version"),
+            "main".to_string(),
+            "def456abc123".to_string(),
+            1640000000,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "2.0.0-snapshot.1640000000");
+    }
+
+    #[test]
+    fn test_snapshot_generator_generate_version_only() {
+        let generator = SnapshotGenerator::new("{version}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("3.1.4").expect("Should parse version"),
+            "develop".to_string(),
+            "xyz789".to_string(),
+            1640000000,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "3.1.4");
+    }
+
+    #[test]
+    fn test_snapshot_generator_generate_all_variables() {
+        let generator = SnapshotGenerator::new("{version}-{branch}.{commit}.{timestamp}")
+            .expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.0.0").expect("Should parse version"),
+            "feature/new-api".to_string(),
+            "aabbccddee".to_string(),
+            1234567890,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "1.0.0-feature-new-api.aabbccd.1234567890");
+    }
+
+    #[test]
+    fn test_snapshot_context_new_with_current_timestamp() {
+        let context = SnapshotContext::new(
+            Version::parse("1.2.3").expect("Should parse version"),
+            "main".to_string(),
+            "abc123".to_string(),
+        );
+
+        assert_eq!(context.version.to_string(), "1.2.3");
+        assert_eq!(context.branch, "main");
+        assert_eq!(context.commit, "abc123");
+        assert!(context.timestamp > 0);
+    }
+
+    #[test]
+    fn test_snapshot_context_with_timestamp() {
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("2.3.4").expect("Should parse version"),
+            "develop".to_string(),
+            "def456".to_string(),
+            1640000000,
+        );
+
+        assert_eq!(context.version.to_string(), "2.3.4");
+        assert_eq!(context.branch, "develop");
+        assert_eq!(context.commit, "def456");
+        assert_eq!(context.timestamp, 1640000000);
+    }
+
+    #[test]
+    fn test_branch_sanitization_slashes() {
+        let generator =
+            SnapshotGenerator::new("{version}-{branch}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.0.0").expect("Should parse version"),
+            "feat/oauth".to_string(),
+            "abc123".to_string(),
+            1640000000,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "1.0.0-feat-oauth");
+    }
+
+    #[test]
+    fn test_branch_sanitization_uppercase() {
+        let generator =
+            SnapshotGenerator::new("{version}-{branch}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.0.0").expect("Should parse version"),
+            "FIX/JIRA-123".to_string(),
+            "abc123".to_string(),
+            1640000000,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "1.0.0-fix-jira-123");
+    }
+
+    #[test]
+    fn test_branch_sanitization_special_characters() {
+        let generator =
+            SnapshotGenerator::new("{version}-{branch}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.0.0").expect("Should parse version"),
+            "feature/api__v2@test".to_string(),
+            "abc123".to_string(),
+            1640000000,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "1.0.0-feature-api__v2test");
+    }
+
+    #[test]
+    fn test_branch_sanitization_multiple_hyphens() {
+        let generator =
+            SnapshotGenerator::new("{version}-{branch}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.0.0").expect("Should parse version"),
+            "feat---multiple---hyphens".to_string(),
+            "abc123".to_string(),
+            1640000000,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "1.0.0-feat-multiple-hyphens");
+    }
+
+    #[test]
+    fn test_branch_sanitization_leading_trailing_hyphens() {
+        let generator =
+            SnapshotGenerator::new("{version}-{branch}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.0.0").expect("Should parse version"),
+            "-feature-branch-".to_string(),
+            "abc123".to_string(),
+            1640000000,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "1.0.0-feature-branch");
+    }
+
+    #[test]
+    fn test_commit_hash_shortening() {
+        let generator =
+            SnapshotGenerator::new("{version}.{commit}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.0.0").expect("Should parse version"),
+            "main".to_string(),
+            "abc123def456789012345678".to_string(),
+            1640000000,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "1.0.0.abc123d");
+    }
+
+    #[test]
+    fn test_commit_hash_short_not_shortened() {
+        let generator =
+            SnapshotGenerator::new("{version}.{commit}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.0.0").expect("Should parse version"),
+            "main".to_string(),
+            "abc12".to_string(),
+            1640000000,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "1.0.0.abc12");
+    }
+
+    #[test]
+    fn test_format_with_mixed_separators() {
+        let generator =
+            SnapshotGenerator::new("{version}+{branch}-{commit}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.2.3").expect("Should parse version"),
+            "main".to_string(),
+            "abc123".to_string(),
+            1640000000,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "1.2.3+main-abc123");
+    }
+
+    #[test]
+    fn test_format_with_no_separators() {
+        let generator =
+            SnapshotGenerator::new("{version}{branch}{commit}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.0.0").expect("Should parse version"),
+            "dev".to_string(),
+            "abc123".to_string(),
+            1640000000,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "1.0.0devabc123");
+    }
+
+    #[test]
+    fn test_different_formats_produce_different_snapshots() {
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.2.3").expect("Should parse version"),
+            "feat/new".to_string(),
+            "abc123def".to_string(),
+            1640000000,
+        );
+
+        let gen1 =
+            SnapshotGenerator::new("{version}-{branch}.{commit}").expect("Should create generator");
+        let snapshot1 = gen1.generate(&context).expect("Should generate");
+
+        let gen2 =
+            SnapshotGenerator::new("{version}.{commit}-{branch}").expect("Should create generator");
+        let snapshot2 = gen2.generate(&context).expect("Should generate");
+
+        assert_ne!(snapshot1, snapshot2);
+    }
+
+    #[test]
+    fn test_snapshot_variable_equality() {
+        assert_eq!(SnapshotVariable::Version, SnapshotVariable::Version);
+        assert_eq!(SnapshotVariable::Branch, SnapshotVariable::Branch);
+        assert_eq!(SnapshotVariable::Commit, SnapshotVariable::Commit);
+        assert_eq!(SnapshotVariable::Timestamp, SnapshotVariable::Timestamp);
+
+        assert_ne!(SnapshotVariable::Version, SnapshotVariable::Branch);
+        assert_ne!(SnapshotVariable::Commit, SnapshotVariable::Timestamp);
+    }
+
+    #[test]
+    fn test_complex_branch_names() {
+        let test_cases = vec![
+            ("feature/PROJ-123-add-auth", "feature-proj-123-add-auth"),
+            ("hotfix/bug_fix_v2", "hotfix-bug_fix_v2"),
+            ("release/2.0.0-beta", "release-2.0.0-beta"),
+            ("feat/user@domain.com", "feat-userdomain.com"),
+            ("fix/issue#456", "fix-issue456"),
+        ];
+
+        let generator =
+            SnapshotGenerator::new("{version}-{branch}").expect("Should create generator");
+
+        for (input_branch, expected_sanitized) in test_cases {
+            let context = SnapshotContext::with_timestamp(
+                Version::parse("1.0.0").expect("Should parse version"),
+                input_branch.to_string(),
+                "abc123".to_string(),
+                1640000000,
+            );
+
+            let snapshot = generator.generate(&context).expect("Should generate snapshot");
+            let expected = format!("1.0.0-{}", expected_sanitized);
+            assert_eq!(snapshot, expected, "Failed for branch: {}", input_branch);
+        }
+    }
+
+    #[test]
+    fn test_prerelease_versions() {
+        let generator =
+            SnapshotGenerator::new("{version}-{branch}.{commit}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("2.0.0-alpha.1").expect("Should parse version"),
+            "develop".to_string(),
+            "def456".to_string(),
+            1640000000,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "2.0.0-alpha.1-develop.def456");
+    }
+
+    #[test]
+    fn test_version_with_build_metadata() {
+        let generator =
+            SnapshotGenerator::new("{version}-{branch}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.0.0+build.123").expect("Should parse version"),
+            "main".to_string(),
+            "abc123".to_string(),
+            1640000000,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "1.0.0+build.123-main");
+    }
+
+    #[test]
+    fn test_empty_branch_name() {
+        let generator =
+            SnapshotGenerator::new("{version}-{branch}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.0.0").expect("Should parse version"),
+            "".to_string(),
+            "abc123".to_string(),
+            1640000000,
+        );
+
+        // Empty branch results in just version with hyphen separator
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert!(!snapshot.is_empty());
+        assert!(snapshot.starts_with("1.0.0"));
+    }
+
+    #[test]
+    fn test_format_validation_with_valid_semver_result() {
+        // This format should produce valid semver
+        let generator =
+            SnapshotGenerator::new("{version}-{branch}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.0.0").expect("Should parse version"),
+            "main".to_string(),
+            "abc123".to_string(),
+            1640000000,
+        );
+
+        let result = generator.generate(&context);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_timestamp_format() {
+        let generator =
+            SnapshotGenerator::new("{version}-{timestamp}").expect("Should create generator");
+
+        let timestamp = 1234567890_i64;
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.0.0").expect("Should parse version"),
+            "main".to_string(),
+            "abc123".to_string(),
+            timestamp,
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+        assert_eq!(snapshot, "1.0.0-1234567890");
+    }
+
+    #[test]
+    fn test_multiple_formats() {
+        let formats = vec![
+            "{version}-{branch}.{commit}",
+            "{version}-snapshot.{timestamp}",
+            "{version}.{commit}",
+            "{version}-{branch}-{timestamp}",
+        ];
+
+        for format in formats {
+            let result = SnapshotGenerator::new(format);
+            assert!(result.is_ok(), "Format '{}' should be valid", format);
+        }
+    }
+
+    #[test]
+    fn test_real_world_scenario() {
+        // Simulate a real CI/CD scenario
+        let generator =
+            SnapshotGenerator::new("{version}-{branch}.{commit}").expect("Should create generator");
+
+        let context = SnapshotContext::with_timestamp(
+            Version::parse("1.2.3").expect("Should parse version"),
+            "feat/oauth-integration".to_string(),
+            "a1b2c3d4e5f6789".to_string(),
+            chrono::Utc::now().timestamp(),
+        );
+
+        let snapshot = generator.generate(&context).expect("Should generate snapshot");
+
+        // Verify it contains expected parts
+        assert!(snapshot.starts_with("1.2.3-feat-oauth-integration."));
+        assert!(snapshot.ends_with("a1b2c3d"));
+    }
+}
