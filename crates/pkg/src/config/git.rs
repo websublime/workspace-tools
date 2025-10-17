@@ -247,4 +247,3 @@ impl Configurable for GitConfig {
         Ok(())
     }
 }
-

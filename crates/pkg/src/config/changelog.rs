@@ -367,4 +367,3 @@ impl Configurable for TemplateConfig {
         Ok(())
     }
 }
-

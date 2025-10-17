@@ -617,8 +617,17 @@ impl std::fmt::Display for UpdateReason {
 ///
 /// ```rust,ignore
 /// use sublime_pkg_tools::types::dependency::{PackageUpdate, UpdateReason};
+/// use sublime_pkg_tools::types::Version;
+/// use std::path::PathBuf;
 ///
-/// // TODO: will be implemented on story 5.4
+/// let update = PackageUpdate {
+///     name: "@myorg/core".to_string(),
+///     path: PathBuf::from("/workspace/packages/core"),
+///     current_version: Version::parse("1.0.0")?,
+///     next_version: Version::parse("1.1.0")?,
+///     reason: UpdateReason::DirectChange,
+///     dependency_updates: vec![],
+/// };
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PackageUpdate {

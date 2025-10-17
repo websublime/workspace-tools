@@ -64,9 +64,8 @@
 //! );
 //!
 //! // Add packages and commits
-//! // TODO: will be implemented on story 4.3
-//! // changeset.add_package("my-package");
-//! // changeset.add_commit("abc123", "feat: add new feature");
+//! changeset.add_package("my-package");
+//! changeset.add_commit("abc123");
 //!
 //! println!("Changeset for branch: {}", changeset.branch);
 //! println!("Version bump: {:?}", changeset.bump);
@@ -77,22 +76,25 @@
 //! ```rust,ignore
 //! use sublime_pkg_tools::types::{Version, VersionBump};
 //!
-//! // TODO: will be implemented on story 4.1
-//! // let version = Version::parse("1.2.3")?;
-//! // let bumped = version.bump(VersionBump::Minor);
-//! // assert_eq!(bumped.to_string(), "1.3.0");
+//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let version = Version::parse("1.2.3")?;
+//! let bumped = version.bump(VersionBump::Minor)?;
+//! assert_eq!(bumped.to_string(), "1.3.0");
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Dependency Graph
 //!
 //! ```rust,ignore
-//! use sublime_pkg_tools::types::DependencyGraph;
+//! use sublime_pkg_tools::version::DependencyGraph;
+//! use sublime_pkg_tools::types::PackageInfo;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! // TODO: will be implemented on story 4.4
-//! // let packages = load_packages().await?;
-//! // let graph = DependencyGraph::from_packages(&packages)?;
-//! //
+//! // Load packages from workspace
+//! let packages: Vec<PackageInfo> = vec![/* ... */];
+//! let graph = DependencyGraph::from_packages(&packages)?;
+//!
 //! // // Find all packages that depend on a specific package
 //! // let dependents = graph.dependents("my-package");
 //! // println!("Packages depending on my-package: {:?}", dependents);

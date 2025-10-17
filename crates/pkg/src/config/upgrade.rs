@@ -270,4 +270,3 @@ impl Configurable for BackupConfig {
         Ok(())
     }
 }
-
