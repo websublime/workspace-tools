@@ -34,9 +34,8 @@
 //! use std::path::PathBuf;
 //! use package_json::PackageJson;
 //!
-//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! // Load package.json from a file
-//! let package_json = PackageJson::load("path/to/package.json")?;
+//! // Create package.json for testing
+//! let package_json = PackageJson::default();
 //! let package_info = PackageInfo::new(
 //!     package_json,
 //!     None, // No workspace context
@@ -45,8 +44,6 @@
 //!
 //! println!("Package: {}", package_info.name());
 //! println!("Version: {}", package_info.version());
-//! # Ok(())
-//! # }
 //! ```
 //!
 //! ## Accessing Dependencies
@@ -56,8 +53,7 @@
 //! use package_json::PackageJson;
 //! use std::path::PathBuf;
 //!
-//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let package_json = PackageJson::load("path/to/package.json")?;
+//! let package_json = PackageJson::default();
 //! let package_info = PackageInfo::new(package_json, None, PathBuf::from("."));
 //!
 //! // Get all dependencies (filters out workspace: and local protocols)
@@ -68,8 +64,6 @@
 //!
 //! // Get only production dependencies
 //! let prod_deps = package_info.dependencies();
-//! # Ok(())
-//! # }
 //! ```
 //!
 //! ## Filtering Internal Dependencies
@@ -79,8 +73,7 @@
 //! use package_json::PackageJson;
 //! use std::path::PathBuf;
 //!
-//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let package_json = PackageJson::load("path/to/package.json")?;
+//! let package_json = PackageJson::default();
 //! let package_info = PackageInfo::new(package_json, None, PathBuf::from("."));
 //!
 //! // Check if package is internal (has workspace dependencies)
@@ -95,8 +88,6 @@
 //! // Get external dependencies
 //! let external = package_info.external_dependencies();
 //! println!("External dependencies: {:?}", external);
-//! # Ok(())
-//! # }
 //! ```
 
 use package_json::PackageJson;
@@ -117,22 +108,18 @@ use crate::types::Version;
 ///
 /// ```rust
 /// use sublime_pkg_tools::types::PackageInfo;
-/// use package_json::PackageJson;
 /// use std::path::PathBuf;
+/// use package_json::PackageJson;
 ///
-/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let package_json = PackageJson::load("package.json")?;
-/// let info = PackageInfo::new(
+/// let package_json = PackageJson::default();
+/// let package_info = PackageInfo::new(
 ///     package_json,
-///     None,
-///     PathBuf::from("/path/to/package")
+///     None, // No workspace context
+///     PathBuf::from("path/to/package")
 /// );
 ///
-/// println!("Package: {}", info.name());
-/// println!("Version: {}", info.version());
-/// println!("Path: {}", info.path().display());
-/// # Ok(())
-/// # }
+/// println!("Package: {}", package_info.name());
+/// println!("Version: {}", package_info.version());
 /// ```
 #[derive(Debug)]
 pub struct PackageInfo {
@@ -162,15 +149,16 @@ impl PackageInfo {
     /// use package_json::PackageJson;
     /// use std::path::PathBuf;
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let package_json = PackageJson::load("package.json")?;
+    /// let package_json = PackageJson::default();
     /// let info = PackageInfo::new(
     ///     package_json,
     ///     None,
     ///     PathBuf::from("/path/to/package")
     /// );
-    /// # Ok(())
-    /// # }
+    ///
+    /// println!("Package: {}", info.name());
+    /// println!("Version: {}", info.version());
+    /// println!("Path: {}", info.path().display());
     /// ```
     #[must_use]
     pub fn new(
@@ -190,12 +178,9 @@ impl PackageInfo {
     /// use package_json::PackageJson;
     /// use std::path::PathBuf;
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let package_json = PackageJson::load("package.json")?;
+    /// let package_json = PackageJson::default();
     /// let info = PackageInfo::new(package_json, None, PathBuf::from("."));
     /// println!("Package name: {}", info.name());
-    /// # Ok(())
-    /// # }
     /// ```
     #[must_use]
     pub fn name(&self) -> &str {
@@ -214,13 +199,10 @@ impl PackageInfo {
     /// use package_json::PackageJson;
     /// use std::path::PathBuf;
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let package_json = PackageJson::load("package.json")?;
+    /// let package_json = PackageJson::default();
     /// let info = PackageInfo::new(package_json, None, PathBuf::from("."));
     /// let version = info.version();
     /// println!("Current version: {}", version);
-    /// # Ok(())
-    /// # }
     /// ```
     #[must_use]
     pub fn version(&self) -> Version {
@@ -236,12 +218,9 @@ impl PackageInfo {
     /// use package_json::PackageJson;
     /// use std::path::PathBuf;
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let package_json = PackageJson::load("package.json")?;
+    /// let package_json = PackageJson::default();
     /// let info = PackageInfo::new(package_json, None, PathBuf::from("."));
     /// let pkg_json = info.package_json();
-    /// # Ok(())
-    /// # }
     /// ```
     #[must_use]
     pub fn package_json(&self) -> &PackageJson {
@@ -257,14 +236,11 @@ impl PackageInfo {
     /// use package_json::PackageJson;
     /// use std::path::PathBuf;
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let package_json = PackageJson::load("package.json")?;
+    /// let package_json = PackageJson::default();
     /// let info = PackageInfo::new(package_json, None, PathBuf::from("."));
     /// if let Some(workspace) = info.workspace() {
     ///     println!("Workspace package: {}", workspace.name);
     /// }
-    /// # Ok(())
-    /// # }
     /// ```
     #[must_use]
     pub fn workspace(&self) -> Option<&WorkspacePackage> {
@@ -280,12 +256,9 @@ impl PackageInfo {
     /// use package_json::PackageJson;
     /// use std::path::PathBuf;
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let package_json = PackageJson::load("package.json")?;
+    /// let package_json = PackageJson::default();
     /// let info = PackageInfo::new(package_json, None, PathBuf::from("/path/to/package"));
     /// println!("Package path: {}", info.path().display());
-    /// # Ok(())
-    /// # }
     /// ```
     #[must_use]
     pub fn path(&self) -> &PathBuf {
@@ -312,8 +285,7 @@ impl PackageInfo {
     /// use package_json::PackageJson;
     /// use std::path::PathBuf;
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let package_json = PackageJson::load("package.json")?;
+    /// let package_json = PackageJson::default();
     /// let info = PackageInfo::new(package_json, None, PathBuf::from("."));
     ///
     /// for (name, version, dep_type) in info.all_dependencies() {
@@ -324,8 +296,6 @@ impl PackageInfo {
     ///         DependencyType::Optional => println!("optionalDep: {} @ {}", name, version),
     ///     }
     /// }
-    /// # Ok(())
-    /// # }
     /// ```
     #[must_use]
     pub fn all_dependencies(&self) -> Vec<(String, String, DependencyType)> {
@@ -379,13 +349,10 @@ impl PackageInfo {
     /// use package_json::PackageJson;
     /// use std::path::PathBuf;
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let package_json = PackageJson::load("package.json")?;
+    /// let package_json = PackageJson::default();
     /// let info = PackageInfo::new(package_json, None, PathBuf::from("."));
     /// let prod_deps = info.dependencies();
     /// println!("Production dependencies: {:?}", prod_deps);
-    /// # Ok(())
-    /// # }
     /// ```
     #[must_use]
     pub fn dependencies(&self) -> HashMap<String, String> {
@@ -410,13 +377,10 @@ impl PackageInfo {
     /// use package_json::PackageJson;
     /// use std::path::PathBuf;
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let package_json = PackageJson::load("package.json")?;
+    /// let package_json = PackageJson::default();
     /// let info = PackageInfo::new(package_json, None, PathBuf::from("."));
     /// let dev_deps = info.dev_dependencies();
     /// println!("Dev dependencies: {:?}", dev_deps);
-    /// # Ok(())
-    /// # }
     /// ```
     #[must_use]
     pub fn dev_dependencies(&self) -> HashMap<String, String> {
@@ -441,13 +405,10 @@ impl PackageInfo {
     /// use package_json::PackageJson;
     /// use std::path::PathBuf;
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let package_json = PackageJson::load("package.json")?;
+    /// let package_json = PackageJson::default();
     /// let info = PackageInfo::new(package_json, None, PathBuf::from("."));
     /// let peer_deps = info.peer_dependencies();
     /// println!("Peer dependencies: {:?}", peer_deps);
-    /// # Ok(())
-    /// # }
     /// ```
     #[must_use]
     pub fn peer_dependencies(&self) -> HashMap<String, String> {
@@ -472,13 +433,10 @@ impl PackageInfo {
     /// use package_json::PackageJson;
     /// use std::path::PathBuf;
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let package_json = PackageJson::load("package.json")?;
+    /// let package_json = PackageJson::default();
     /// let info = PackageInfo::new(package_json, None, PathBuf::from("."));
     /// let optional_deps = info.optional_dependencies();
     /// println!("Optional dependencies: {:?}", optional_deps);
-    /// # Ok(())
-    /// # }
     /// ```
     #[must_use]
     pub fn optional_dependencies(&self) -> HashMap<String, String> {
@@ -506,8 +464,7 @@ impl PackageInfo {
     /// use package_json::PackageJson;
     /// use std::path::PathBuf;
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let package_json = PackageJson::load("package.json")?;
+    /// let package_json = PackageJson::default();
     /// let info = PackageInfo::new(package_json, None, PathBuf::from("."));
     ///
     /// if info.is_internal() {
@@ -515,8 +472,6 @@ impl PackageInfo {
     /// } else {
     ///     println!("Package has no workspace dependencies");
     /// }
-    /// # Ok(())
-    /// # }
     /// ```
     #[must_use]
     pub fn is_internal(&self) -> bool {
@@ -537,14 +492,11 @@ impl PackageInfo {
     /// use package_json::PackageJson;
     /// use std::path::PathBuf;
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let package_json = PackageJson::load("package.json")?;
+    /// let package_json = PackageJson::default();
     /// let info = PackageInfo::new(package_json, None, PathBuf::from("."));
     ///
     /// let internal_deps = info.internal_dependencies();
     /// println!("Internal dependencies: {:?}", internal_deps);
-    /// # Ok(())
-    /// # }
     /// ```
     #[must_use]
     pub fn internal_dependencies(&self) -> Vec<String> {
@@ -570,16 +522,13 @@ impl PackageInfo {
     /// use package_json::PackageJson;
     /// use std::path::PathBuf;
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let package_json = PackageJson::load("package.json")?;
+    /// let package_json = PackageJson::default();
     /// let info = PackageInfo::new(package_json, None, PathBuf::from("."));
     ///
     /// let external_deps = info.external_dependencies();
     /// for (name, version) in external_deps {
     ///     println!("External dep: {} @ {}", name, version);
     /// }
-    /// # Ok(())
-    /// # }
     /// ```
     #[must_use]
     pub fn external_dependencies(&self) -> HashMap<String, String> {
@@ -611,7 +560,6 @@ impl PackageInfo {
     /// use package_json::PackageJson;
     /// use std::path::PathBuf;
     ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// // These are internal/local protocols that should be skipped
     /// assert_eq!(PackageInfo::is_skipped_version_spec("workspace:*"), true);
     /// assert_eq!(PackageInfo::is_skipped_version_spec("file:../local"), true);
@@ -621,8 +569,6 @@ impl PackageInfo {
     /// // Normal version specs should not be skipped
     /// assert_eq!(PackageInfo::is_skipped_version_spec("^1.2.3"), false);
     /// assert_eq!(PackageInfo::is_skipped_version_spec(">=2.0.0"), false);
-    /// # Ok(())
-    /// # }
     /// ```
     #[must_use]
     pub fn is_skipped_version_spec(version_spec: &str) -> bool {
