@@ -108,20 +108,25 @@
 //! Generate snapshot versions for testing:
 //!
 //! ```rust,ignore
-//! use sublime_pkg_tools::version::VersionResolver;
-//! use sublime_pkg_tools::types::Changeset;
+//! use sublime_pkg_tools::version::{SnapshotGenerator, SnapshotContext};
+//! use sublime_pkg_tools::types::Version;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! # let resolver: VersionResolver = todo!();
-//! # let changeset: Changeset = todo!();
-//! // TODO: Story 5.6 - Snapshot versions (not yet implemented)
-//! // // Generate snapshot versions like "1.2.3-feature.20240101120000"
-//! // let resolution = resolver.resolve_snapshot_versions(&changeset).await?;
-//! //
-//! // for update in &resolution.updates {
-//! //     println!("{}: {}", update.name, update.next_version);
-//! //     // Output: my-package: 1.2.3-feature.20240101120000
-//! // }
+//! // Story 5.6 - Snapshot versions (implemented)
+//! // Create a generator with a format template
+//! let generator = SnapshotGenerator::new("{version}-{branch}.{commit}")?;
+//!
+//! // Create context with version and git information
+//! let context = SnapshotContext {
+//!     version: Version::parse("1.2.3")?,
+//!     branch: "feat/oauth".to_string(),
+//!     commit: "abc123def456",
+//!     timestamp: 1640000000,
+//! };
+//!
+//! // Generate snapshot version
+//! let snapshot = generator.generate(&context)?;
+//! // Output: 1.2.3-feat-oauth.abc123d
 //! # Ok(())
 //! # }
 //! ```
@@ -189,6 +194,7 @@ mod graph;
 mod propagation;
 mod resolution;
 mod resolver;
+mod snapshot;
 
 #[cfg(test)]
 mod tests;
@@ -197,3 +203,4 @@ pub use graph::DependencyGraph;
 pub use propagation::DependencyPropagator;
 pub use resolution::{PackageUpdate, VersionResolution};
 pub use resolver::VersionResolver;
+pub use snapshot::{SnapshotContext, SnapshotGenerator, SnapshotVariable};
