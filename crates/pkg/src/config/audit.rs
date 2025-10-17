@@ -383,4 +383,3 @@ impl Configurable for VersionConsistencyAuditConfig {
         Ok(())
     }
 }
-

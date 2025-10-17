@@ -1,5 +1,8 @@
 //! Tests for the version module.
 //!
+//! This module contains tests for version resolution, dependency graph construction,
+//! and circular dependency detection.
+//!
 //! **What**: Comprehensive test suite for version resolution functionality including
 //! `VersionResolver` initialization, project detection, and package discovery.
 //!
@@ -1336,6 +1339,540 @@ mod circular_dependency_property_tests {
             let cycles = graph.detect_cycles();
 
             prop_assert!(cycles.is_empty(), "Tree structure should have no cycles");
+        }
+    }
+
+    // ============================================================================
+    // Version Resolution Tests (Story 5.4)
+    // ============================================================================
+
+    #[allow(clippy::unwrap_used)]
+    mod resolution_tests {
+        use super::*;
+        use crate::types::{
+            Changeset, DependencyType, UpdateReason, Version, VersionBump, VersioningStrategy,
+        };
+        use crate::version::resolution::{resolve_versions, PackageUpdate, VersionResolution};
+        use std::collections::HashMap;
+
+        /// Test resolving versions with independent strategy and minor bump
+        #[tokio::test]
+        async fn test_resolve_independent_minor_bump() {
+            let mut changeset = Changeset::new(
+                "feature/new-api",
+                VersionBump::Minor,
+                vec!["production".to_string()],
+            );
+            changeset.add_package("@myorg/core");
+            changeset.add_package("@myorg/utils");
+
+            let mut packages = HashMap::new();
+            packages.insert(
+                "@myorg/core".to_string(),
+                create_package_info("@myorg/core", "1.2.3", vec![]),
+            );
+            packages.insert(
+                "@myorg/utils".to_string(),
+                create_package_info("@myorg/utils", "0.5.0", vec![]),
+            );
+
+            let resolution =
+                resolve_versions(&changeset, &packages, VersioningStrategy::Independent)
+                    .await
+                    .unwrap();
+
+            assert_eq!(resolution.updates.len(), 2);
+            assert!(resolution.circular_dependencies.is_empty());
+
+            // Check core package
+            let core_update = resolution.updates.iter().find(|u| u.name == "@myorg/core").unwrap();
+            assert_eq!(core_update.current_version, Version::parse("1.2.3").unwrap());
+            assert_eq!(core_update.next_version, Version::parse("1.3.0").unwrap());
+            assert!(matches!(core_update.reason, UpdateReason::DirectChange));
+
+            // Check utils package
+            let utils_update =
+                resolution.updates.iter().find(|u| u.name == "@myorg/utils").unwrap();
+            assert_eq!(utils_update.current_version, Version::parse("0.5.0").unwrap());
+            assert_eq!(utils_update.next_version, Version::parse("0.6.0").unwrap());
+            assert!(matches!(utils_update.reason, UpdateReason::DirectChange));
+        }
+
+        /// Test resolving versions with independent strategy and major bump
+        #[tokio::test]
+        async fn test_resolve_independent_major_bump() {
+            let mut changeset = Changeset::new(
+                "breaking/api-changes",
+                VersionBump::Major,
+                vec!["production".to_string()],
+            );
+            changeset.add_package("@myorg/core");
+
+            let mut packages = HashMap::new();
+            packages.insert(
+                "@myorg/core".to_string(),
+                create_package_info("@myorg/core", "1.2.3", vec![]),
+            );
+
+            let resolution =
+                resolve_versions(&changeset, &packages, VersioningStrategy::Independent)
+                    .await
+                    .unwrap();
+
+            assert_eq!(resolution.updates.len(), 1);
+
+            let update = &resolution.updates[0];
+            assert_eq!(update.name, "@myorg/core");
+            assert_eq!(update.current_version, Version::parse("1.2.3").unwrap());
+            assert_eq!(update.next_version, Version::parse("2.0.0").unwrap());
+            assert!(update.is_direct_change());
+            assert!(!update.is_propagated());
+        }
+
+        /// Test resolving versions with independent strategy and patch bump
+        #[tokio::test]
+        async fn test_resolve_independent_patch_bump() {
+            let mut changeset =
+                Changeset::new("fix/bug-fix", VersionBump::Patch, vec!["production".to_string()]);
+            changeset.add_package("@myorg/core");
+
+            let mut packages = HashMap::new();
+            packages.insert(
+                "@myorg/core".to_string(),
+                create_package_info("@myorg/core", "1.2.3", vec![]),
+            );
+
+            let resolution =
+                resolve_versions(&changeset, &packages, VersioningStrategy::Independent)
+                    .await
+                    .unwrap();
+
+            assert_eq!(resolution.updates.len(), 1);
+
+            let update = &resolution.updates[0];
+            assert_eq!(update.current_version, Version::parse("1.2.3").unwrap());
+            assert_eq!(update.next_version, Version::parse("1.2.4").unwrap());
+        }
+
+        /// Test resolving versions with independent strategy and no bump
+        #[tokio::test]
+        async fn test_resolve_independent_no_bump() {
+            let mut changeset = Changeset::new(
+                "docs/update-readme",
+                VersionBump::None,
+                vec!["production".to_string()],
+            );
+            changeset.add_package("@myorg/core");
+
+            let mut packages = HashMap::new();
+            packages.insert(
+                "@myorg/core".to_string(),
+                create_package_info("@myorg/core", "1.2.3", vec![]),
+            );
+
+            let resolution =
+                resolve_versions(&changeset, &packages, VersioningStrategy::Independent)
+                    .await
+                    .unwrap();
+
+            assert_eq!(resolution.updates.len(), 1);
+
+            let update = &resolution.updates[0];
+            assert_eq!(update.current_version, Version::parse("1.2.3").unwrap());
+            assert_eq!(update.next_version, Version::parse("1.2.3").unwrap());
+        }
+
+        /// Test resolving versions with unified strategy
+        #[tokio::test]
+        async fn test_resolve_unified_strategy() {
+            let mut changeset = Changeset::new(
+                "feature/unified",
+                VersionBump::Minor,
+                vec!["production".to_string()],
+            );
+            changeset.add_package("@myorg/core");
+            changeset.add_package("@myorg/utils");
+            changeset.add_package("@myorg/cli");
+
+            let mut packages = HashMap::new();
+            packages.insert(
+                "@myorg/core".to_string(),
+                create_package_info("@myorg/core", "1.5.0", vec![]),
+            );
+            packages.insert(
+                "@myorg/utils".to_string(),
+                create_package_info("@myorg/utils", "1.2.0", vec![]),
+            );
+            packages.insert(
+                "@myorg/cli".to_string(),
+                create_package_info("@myorg/cli", "1.3.5", vec![]),
+            );
+
+            let resolution =
+                resolve_versions(&changeset, &packages, VersioningStrategy::Unified).await.unwrap();
+
+            assert_eq!(resolution.updates.len(), 3);
+
+            // All packages should have the same next version (based on highest current version)
+            // Highest is 1.5.0, so next should be 1.6.0
+            let expected_next = Version::parse("1.6.0").unwrap();
+
+            for update in &resolution.updates {
+                assert_eq!(update.next_version, expected_next);
+                assert!(update.is_direct_change());
+            }
+
+            // Verify individual current versions
+            let core = resolution.updates.iter().find(|u| u.name == "@myorg/core").unwrap();
+            assert_eq!(core.current_version, Version::parse("1.5.0").unwrap());
+
+            let utils = resolution.updates.iter().find(|u| u.name == "@myorg/utils").unwrap();
+            assert_eq!(utils.current_version, Version::parse("1.2.0").unwrap());
+
+            let cli = resolution.updates.iter().find(|u| u.name == "@myorg/cli").unwrap();
+            assert_eq!(cli.current_version, Version::parse("1.3.5").unwrap());
+        }
+
+        /// Test unified strategy with major bump
+        #[tokio::test]
+        async fn test_resolve_unified_major_bump() {
+            let mut changeset =
+                Changeset::new("breaking/v2", VersionBump::Major, vec!["production".to_string()]);
+            changeset.add_package("@myorg/core");
+            changeset.add_package("@myorg/utils");
+
+            let mut packages = HashMap::new();
+            packages.insert(
+                "@myorg/core".to_string(),
+                create_package_info("@myorg/core", "1.9.9", vec![]),
+            );
+            packages.insert(
+                "@myorg/utils".to_string(),
+                create_package_info("@myorg/utils", "1.5.0", vec![]),
+            );
+
+            let resolution =
+                resolve_versions(&changeset, &packages, VersioningStrategy::Unified).await.unwrap();
+
+            assert_eq!(resolution.updates.len(), 2);
+
+            // Highest version is 1.9.9, major bump gives 2.0.0
+            let expected_next = Version::parse("2.0.0").unwrap();
+
+            for update in &resolution.updates {
+                assert_eq!(update.next_version, expected_next);
+            }
+        }
+
+        /// Test error when package not found
+        #[tokio::test]
+        async fn test_resolve_package_not_found() {
+            let mut changeset =
+                Changeset::new("feature/test", VersionBump::Minor, vec!["production".to_string()]);
+            changeset.add_package("@myorg/nonexistent");
+
+            let packages = HashMap::new();
+
+            let result =
+                resolve_versions(&changeset, &packages, VersioningStrategy::Independent).await;
+
+            assert!(result.is_err());
+            match result.unwrap_err() {
+                crate::error::VersionError::PackageNotFound { name, workspace_root: _ } => {
+                    assert_eq!(name, "@myorg/nonexistent");
+                }
+                _ => panic!("Expected PackageNotFound error"),
+            }
+        }
+
+        /// Test error when one of multiple packages not found
+        #[tokio::test]
+        async fn test_resolve_multiple_packages_one_not_found() {
+            let mut changeset =
+                Changeset::new("feature/test", VersionBump::Minor, vec!["production".to_string()]);
+            changeset.add_package("@myorg/core");
+            changeset.add_package("@myorg/missing");
+
+            let mut packages = HashMap::new();
+            packages.insert(
+                "@myorg/core".to_string(),
+                create_package_info("@myorg/core", "1.0.0", vec![]),
+            );
+
+            let result =
+                resolve_versions(&changeset, &packages, VersioningStrategy::Independent).await;
+
+            assert!(result.is_err());
+            match result.unwrap_err() {
+                crate::error::VersionError::PackageNotFound { name, workspace_root: _ } => {
+                    assert_eq!(name, "@myorg/missing");
+                }
+                _ => panic!("Expected PackageNotFound error"),
+            }
+        }
+
+        /// Test empty changeset (no packages)
+        #[tokio::test]
+        async fn test_resolve_empty_changeset() {
+            let changeset =
+                Changeset::new("feature/test", VersionBump::Minor, vec!["production".to_string()]);
+
+            let packages = HashMap::new();
+
+            let resolution =
+                resolve_versions(&changeset, &packages, VersioningStrategy::Independent)
+                    .await
+                    .unwrap();
+
+            assert!(resolution.updates.is_empty());
+            assert!(!resolution.has_updates());
+            assert_eq!(resolution.update_count(), 0);
+        }
+
+        /// Test VersionResolution methods
+        #[test]
+        fn test_version_resolution_methods() {
+            let mut resolution = VersionResolution::new();
+
+            assert!(!resolution.has_updates());
+            assert_eq!(resolution.update_count(), 0);
+            assert!(!resolution.has_circular_dependencies());
+
+            let update = PackageUpdate::new(
+                "@myorg/core".to_string(),
+                PathBuf::from("/workspace/packages/core"),
+                Version::parse("1.0.0").unwrap(),
+                Version::parse("1.1.0").unwrap(),
+                UpdateReason::DirectChange,
+            );
+
+            resolution.add_update(update);
+
+            assert!(resolution.has_updates());
+            assert_eq!(resolution.update_count(), 1);
+        }
+
+        /// Test PackageUpdate methods
+        #[test]
+        fn test_package_update_methods() {
+            let update = PackageUpdate::new(
+                "@myorg/core".to_string(),
+                PathBuf::from("/workspace/packages/core"),
+                Version::parse("1.0.0").unwrap(),
+                Version::parse("1.1.0").unwrap(),
+                UpdateReason::DirectChange,
+            );
+
+            assert!(update.is_direct_change());
+            assert!(!update.is_propagated());
+            assert_eq!(update.name, "@myorg/core");
+            assert_eq!(update.dependency_updates.len(), 0);
+        }
+
+        /// Test propagated update reason
+        #[test]
+        fn test_package_update_propagated() {
+            let update = PackageUpdate::new(
+                "@myorg/utils".to_string(),
+                PathBuf::from("/workspace/packages/utils"),
+                Version::parse("1.0.0").unwrap(),
+                Version::parse("1.0.1").unwrap(),
+                UpdateReason::DependencyPropagation {
+                    triggered_by: "@myorg/core".to_string(),
+                    depth: 1,
+                },
+            );
+
+            assert!(!update.is_direct_change());
+            assert!(update.is_propagated());
+
+            match &update.reason {
+                UpdateReason::DependencyPropagation { triggered_by, depth } => {
+                    assert_eq!(triggered_by, "@myorg/core");
+                    assert_eq!(*depth, 1);
+                }
+                _ => panic!("Expected DependencyPropagation reason"),
+            }
+        }
+
+        /// Test VersionResolution default
+        #[test]
+        fn test_version_resolution_default() {
+            let resolution = VersionResolution::default();
+
+            assert!(!resolution.has_updates());
+            assert!(!resolution.has_circular_dependencies());
+            assert_eq!(resolution.updates.len(), 0);
+            assert_eq!(resolution.circular_dependencies.len(), 0);
+        }
+
+        /// Test resolving with prerelease versions
+        #[tokio::test]
+        async fn test_resolve_with_prerelease_versions() {
+            let mut changeset =
+                Changeset::new("feature/test", VersionBump::Minor, vec!["production".to_string()]);
+            changeset.add_package("@myorg/core");
+
+            let mut packages = HashMap::new();
+            packages.insert(
+                "@myorg/core".to_string(),
+                create_package_info("@myorg/core", "1.0.0-beta.1", vec![]),
+            );
+
+            let resolution =
+                resolve_versions(&changeset, &packages, VersioningStrategy::Independent)
+                    .await
+                    .unwrap();
+
+            assert_eq!(resolution.updates.len(), 1);
+
+            let update = &resolution.updates[0];
+            assert_eq!(update.current_version, Version::parse("1.0.0-beta.1").unwrap());
+            // Minor bump on 1.0.0-beta.1 should give 1.1.0
+            assert_eq!(update.next_version, Version::parse("1.1.0").unwrap());
+        }
+
+        /// Test resolving multiple packages with different versions (independent)
+        #[tokio::test]
+        async fn test_resolve_independent_different_versions() {
+            let mut changeset =
+                Changeset::new("feature/multi", VersionBump::Patch, vec!["production".to_string()]);
+            changeset.add_package("@myorg/a");
+            changeset.add_package("@myorg/b");
+            changeset.add_package("@myorg/c");
+
+            let mut packages = HashMap::new();
+            packages
+                .insert("@myorg/a".to_string(), create_package_info("@myorg/a", "1.0.0", vec![]));
+            packages
+                .insert("@myorg/b".to_string(), create_package_info("@myorg/b", "2.5.3", vec![]));
+            packages
+                .insert("@myorg/c".to_string(), create_package_info("@myorg/c", "0.1.0", vec![]));
+
+            let resolution =
+                resolve_versions(&changeset, &packages, VersioningStrategy::Independent)
+                    .await
+                    .unwrap();
+
+            assert_eq!(resolution.updates.len(), 3);
+
+            let a_update = resolution.updates.iter().find(|u| u.name == "@myorg/a").unwrap();
+            assert_eq!(a_update.next_version, Version::parse("1.0.1").unwrap());
+
+            let b_update = resolution.updates.iter().find(|u| u.name == "@myorg/b").unwrap();
+            assert_eq!(b_update.next_version, Version::parse("2.5.4").unwrap());
+
+            let c_update = resolution.updates.iter().find(|u| u.name == "@myorg/c").unwrap();
+            assert_eq!(c_update.next_version, Version::parse("0.1.1").unwrap());
+        }
+
+        /// Test unified strategy with same starting versions
+        #[tokio::test]
+        async fn test_resolve_unified_same_versions() {
+            let mut changeset =
+                Changeset::new("feature/test", VersionBump::Minor, vec!["production".to_string()]);
+            changeset.add_package("@myorg/a");
+            changeset.add_package("@myorg/b");
+
+            let mut packages = HashMap::new();
+            packages
+                .insert("@myorg/a".to_string(), create_package_info("@myorg/a", "1.0.0", vec![]));
+            packages
+                .insert("@myorg/b".to_string(), create_package_info("@myorg/b", "1.0.0", vec![]));
+
+            let resolution =
+                resolve_versions(&changeset, &packages, VersioningStrategy::Unified).await.unwrap();
+
+            assert_eq!(resolution.updates.len(), 2);
+
+            for update in &resolution.updates {
+                assert_eq!(update.current_version, Version::parse("1.0.0").unwrap());
+                assert_eq!(update.next_version, Version::parse("1.1.0").unwrap());
+            }
+        }
+
+        /// Test DependencyType enum
+        #[test]
+        fn test_dependency_type() {
+            let regular = DependencyType::Regular;
+            let dev = DependencyType::Dev;
+            let peer = DependencyType::Peer;
+
+            assert_ne!(regular, dev);
+            assert_ne!(regular, peer);
+            assert_ne!(dev, peer);
+        }
+
+        /// Test serialization of VersionResolution
+        #[test]
+        fn test_version_resolution_serialization() {
+            let mut resolution = VersionResolution::new();
+
+            let update = PackageUpdate::new(
+                "@myorg/core".to_string(),
+                PathBuf::from("/workspace/packages/core"),
+                Version::parse("1.0.0").unwrap(),
+                Version::parse("1.1.0").unwrap(),
+                UpdateReason::DirectChange,
+            );
+
+            resolution.add_update(update);
+
+            let json = serde_json::to_string(&resolution).unwrap();
+            let deserialized: VersionResolution = serde_json::from_str(&json).unwrap();
+
+            assert_eq!(resolution, deserialized);
+        }
+
+        /// Test UpdateReason serialization
+        #[test]
+        fn test_update_reason_serialization() {
+            let direct = UpdateReason::DirectChange;
+            let json = serde_json::to_string(&direct).unwrap();
+            let deserialized: UpdateReason = serde_json::from_str(&json).unwrap();
+            assert_eq!(direct, deserialized);
+
+            let propagated = UpdateReason::DependencyPropagation {
+                triggered_by: "@myorg/core".to_string(),
+                depth: 2,
+            };
+            let json = serde_json::to_string(&propagated).unwrap();
+            let deserialized: UpdateReason = serde_json::from_str(&json).unwrap();
+            assert_eq!(propagated, deserialized);
+        }
+
+        /// Test resolving with VersionResolver.resolve_versions method
+        #[tokio::test]
+        async fn test_version_resolver_resolve_versions_integration() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let workspace_root = temp_dir.path();
+
+            // Create single package
+            let package_json = serde_json::json!({
+                "name": "@myorg/test",
+                "version": "1.0.0"
+            });
+
+            std::fs::write(
+                workspace_root.join("package.json"),
+                serde_json::to_string_pretty(&package_json).unwrap(),
+            )
+            .unwrap();
+
+            let config = crate::config::PackageToolsConfig::default();
+            let resolver =
+                VersionResolver::new(workspace_root.to_path_buf(), config).await.unwrap();
+
+            let mut changeset =
+                Changeset::new("feature/test", VersionBump::Minor, vec!["production".to_string()]);
+            changeset.add_package("@myorg/test");
+
+            let resolution = resolver.resolve_versions(&changeset).await.unwrap();
+
+            assert_eq!(resolution.updates.len(), 1);
+            assert_eq!(resolution.updates[0].name, "@myorg/test");
+            assert_eq!(resolution.updates[0].current_version, Version::parse("1.0.0").unwrap());
+            assert_eq!(resolution.updates[0].next_version, Version::parse("1.1.0").unwrap());
         }
     }
 }

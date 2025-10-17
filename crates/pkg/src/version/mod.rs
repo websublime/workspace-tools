@@ -49,25 +49,20 @@
 //! let fs = FileSystemManager::new();
 //! let config = PackageToolsConfig::default();
 //!
-//! // TODO: will be implemented on story 5.1
-//! // let resolver = VersionResolver::new(
-//! //     workspace_root,
-//! //     VersioningStrategy::Independent,
-//! //     fs,
-//! //     config,
-//! // ).await?;
-//! //
-//! // // Create a changeset
-//! // let mut changeset = Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
-//! // changeset.add_package("my-package");
-//! //
-//! // // Resolve versions (dry run)
-//! // let resolution = resolver.resolve_versions(&changeset).await?;
-//! // for update in &resolution.updates {
-//! //     println!("{}: {} -> {}", update.name, update.current_version, update.next_version);
-//! // }
-//! //
-//! // // Apply versions for real
+//! // Story 5.1 - Create resolver (implemented)
+//! let resolver = VersionResolver::new(workspace_root, config).await?;
+//!
+//! // Create a changeset
+//! let mut changeset = Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+//! changeset.add_package("my-package");
+//!
+//! // Story 5.4 - Resolve versions (implemented)
+//! let resolution = resolver.resolve_versions(&changeset).await?;
+//! for update in &resolution.updates {
+//!     println!("{}: {} -> {}", update.name, update.current_version, update.next_version);
+//! }
+//!
+//! // TODO: Story 5.7 - Apply versions (not yet implemented)
 //! // let result = resolver.apply_versions(&changeset, false).await?;
 //! // println!("Updated {} packages", result.resolution.updates.len());
 //! # Ok(())
@@ -85,28 +80,25 @@
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! # let resolver: VersionResolver = todo!();
 //! # let changeset: Changeset = todo!();
-//! // TODO: will be implemented on story 5.5
-//! // // Package A depends on Package B
-//! // // If Package B version changes from 1.0.0 to 1.1.0,
-//! // // Package A's dependency on B will be updated to 1.1.0
-//! //
-//! // let resolution = resolver.resolve_versions(&changeset).await?;
-//! //
-//! // for update in &resolution.updates {
-//! //     println!("Package: {}", update.name);
-//! //     println!("  Version: {} -> {}", update.current_version, update.next_version);
-//! //
-//! //     if !update.dependency_updates.is_empty() {
-//! //         println!("  Dependency updates:");
-//! //         for dep in &update.dependency_updates {
-//! //             println!("    {}: {} -> {}",
-//! //                 dep.dependency_name,
-//! //                 dep.old_version_spec,
-//! //                 dep.new_version_spec
-//! //             );
-//! //         }
-//! //     }
-//! // }
+//! // Story 5.4 - Version resolution works
+//! let resolution = resolver.resolve_versions(&changeset).await?;
+//!
+//! for update in &resolution.updates {
+//!     println!("Package: {}", update.name);
+//!     println!("  Version: {} -> {}", update.current_version, update.next_version);
+//!
+//!     // TODO: Story 5.5 - Dependency propagation (not yet implemented)
+//!     // if !update.dependency_updates.is_empty() {
+//!     //     println!("  Dependency updates:");
+//!     //     for dep in &update.dependency_updates {
+//!     //         println!("    {}: {} -> {}",
+//!     //             dep.dependency_name,
+//!     //             dep.old_version_spec,
+//!     //             dep.new_version_spec
+//!     //         );
+//!     //     }
+//!     // }
+//! }
 //! # Ok(())
 //! # }
 //! ```
@@ -122,7 +114,7 @@
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! # let resolver: VersionResolver = todo!();
 //! # let changeset: Changeset = todo!();
-//! // TODO: will be implemented on story 5.6
+//! // TODO: Story 5.6 - Snapshot versions (not yet implemented)
 //! // // Generate snapshot versions like "1.2.3-feature.20240101120000"
 //! // let resolution = resolver.resolve_snapshot_versions(&changeset).await?;
 //! //
@@ -143,15 +135,16 @@
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! # let resolver: VersionResolver = todo!();
-//! // TODO: will be implemented on story 5.3
-//! // let resolution = resolver.resolve_versions(&changeset).await?;
-//! //
-//! // if !resolution.circular_dependencies.is_empty() {
-//! //     println!("Warning: Circular dependencies detected!");
-//! //     for circular in &resolution.circular_dependencies {
-//! //         println!("  Cycle: {:?}", circular.cycle);
-//! //     }
-//! // }
+//! # let changeset: Changeset = todo!();
+//! // Story 5.3 & 5.4 - Circular dependency detection (implemented)
+//! let resolution = resolver.resolve_versions(&changeset).await?;
+//!
+//! if !resolution.circular_dependencies.is_empty() {
+//!     println!("Warning: Circular dependencies detected!");
+//!     for circular in &resolution.circular_dependencies {
+//!         println!("  Cycle: {:?}", circular.cycle);
+//!     }
+//! }
 //! # Ok(())
 //! # }
 //! ```
@@ -193,10 +186,12 @@
 #![allow(clippy::todo)]
 
 mod graph;
+mod resolution;
 mod resolver;
 
 #[cfg(test)]
 mod tests;
 
 pub use graph::DependencyGraph;
+pub use resolution::{PackageUpdate, VersionResolution};
 pub use resolver::VersionResolver;

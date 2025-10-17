@@ -15,7 +15,9 @@
 
 use crate::config::PackageToolsConfig;
 use crate::error::{VersionError, VersionResult};
-use crate::types::{PackageInfo, VersioningStrategy};
+use crate::types::{Changeset, PackageInfo, VersioningStrategy};
+use crate::version::resolution::{resolve_versions, VersionResolution};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
 use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait, WorkspacePackage};
@@ -64,8 +66,14 @@ use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait, 
 ///     println!("Detected single package");
 /// }
 ///
-/// // TODO: will be implemented on story 5.4
-/// // let resolution = resolver.resolve_versions(&changeset).await?;
+/// // Resolve versions from changeset
+/// let mut changeset = Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+/// changeset.add_package("@myorg/package");
+///
+/// let resolution = resolver.resolve_versions(&changeset).await?;
+/// for update in &resolution.updates {
+///     println!("{}: {} -> {}", update.name, update.current_version, update.next_version);
+/// }
 /// # Ok(())
 /// # }
 /// ```
@@ -493,5 +501,80 @@ impl<F: AsyncFileSystem + Clone + Send + Sync + 'static> VersionResolver<F> {
 
         // Create PackageInfo with workspace package info if available
         Ok(PackageInfo::new(package_json, workspace_package, package_path.to_path_buf()))
+    }
+
+    /// Resolves versions for packages in a changeset.
+    ///
+    /// This method calculates the next versions for all packages in the changeset based on
+    /// their current versions and the bump type specified in the changeset. It uses the
+    /// configured versioning strategy (independent or unified) to determine how versions
+    /// are calculated.
+    ///
+    /// # Arguments
+    ///
+    /// * `changeset` - The changeset containing packages and bump type
+    ///
+    /// # Returns
+    ///
+    /// Returns a `VersionResolution` containing all package updates with their current
+    /// and next versions, along with the reason for each update.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if:
+    /// - A package in the changeset is not found in the workspace
+    /// - A package has an invalid version in package.json
+    /// - Version bump calculation fails
+    /// - Filesystem operations fail
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::version::VersionResolver;
+    /// use sublime_pkg_tools::types::{Changeset, VersionBump};
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let workspace_root = PathBuf::from(".");
+    /// let config = PackageToolsConfig::default();
+    /// let resolver = VersionResolver::new(workspace_root, config).await?;
+    ///
+    /// let mut changeset = Changeset::new(
+    ///     "main",
+    ///     VersionBump::Minor,
+    ///     vec!["production".to_string()],
+    /// );
+    /// changeset.add_package("@myorg/core");
+    /// changeset.add_package("@myorg/utils");
+    ///
+    /// let resolution = resolver.resolve_versions(&changeset).await?;
+    ///
+    /// for update in &resolution.updates {
+    ///     println!("{}: {} -> {}",
+    ///         update.name,
+    ///         update.current_version,
+    ///         update.next_version
+    ///     );
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn resolve_versions(
+        &self,
+        changeset: &Changeset,
+    ) -> VersionResult<VersionResolution> {
+        // Discover all packages in the workspace
+        let package_list = self.discover_packages().await?;
+
+        // Build a map of package name to package info
+        let mut packages = HashMap::new();
+        for package_info in package_list {
+            let name = package_info.name().to_string();
+            packages.insert(name, package_info);
+        }
+
+        // Delegate to the resolution module
+        resolve_versions(changeset, &packages, self.strategy).await
     }
 }

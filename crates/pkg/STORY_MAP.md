@@ -163,6 +163,7 @@ Set up the foundational project structure following `sublime_standard_tools` pat
 - [ ] Basic documentation in place
 - [ ] PR approved and merged
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 1.2: Setup CI/CD Pipeline
@@ -218,6 +219,7 @@ Configure GitHub Actions (or equivalent) to run automated checks on every commit
 - [ ] Coverage reporting works
 - [ ] Documentation updated
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 1.3: Setup Testing Infrastructure
@@ -274,6 +276,7 @@ Create reusable test utilities, mock implementations, and test fixtures that wil
 - [ ] Documentation complete
 - [ ] Ready for use in module tests
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ## Epic 2: Configuration System
@@ -361,6 +364,7 @@ Define all configuration structs, enums, and types that will be used across the 
 - [ ] Documentation complete
 - [ ] Tests written and passing
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 2.2: Implement Configuration Loading
@@ -428,6 +432,7 @@ Implement configuration loading from TOML/YAML/JSON files using the `sublime_sta
 - [ ] Documentation complete
 - [ ] Integration with standard tools verified
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 2.3: Configuration Documentation and Examples
@@ -473,6 +478,7 @@ Create comprehensive documentation for all configuration options, including exam
 - [ ] Examples working
 - [ ] Guide published
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ## Epic 3: Error Handling
@@ -560,6 +566,7 @@ Define all domain-specific error types using thiserror. Each module gets its own
 - [ ] Tests verify `AsRef<str>` implementation
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 3.2: Error Context and Recovery
@@ -603,6 +610,7 @@ Add error context helpers and optional recovery strategies following patterns fr
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ## Epic 4: Core Types
@@ -672,6 +680,7 @@ Define Version struct with parsing, comparison, and bumping capabilities using t
 - [ ] Documentation with examples
 - [ ] No unwrap/expect used
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 4.2: Package Types
@@ -725,6 +734,7 @@ Define `PackageInfo` struct that aggregates package.json data and workspace info
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 4.3: Changeset Types
@@ -777,6 +787,7 @@ Define the `Changeset` struct and related types for storing release information.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 4.4: Dependency Types
@@ -813,6 +824,7 @@ Define enums and structs for dependency classification and management.
 - [ ] Tests pass
 - [ ] Ready for use
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ## Epic 5: Versioning Engine
@@ -874,6 +886,7 @@ Implement the main `VersionResolver` struct with project detection and initializ
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 5.2: Dependency Graph Construction
@@ -926,6 +939,7 @@ Implement `DependencyGraph` that represents internal package dependencies.
 - [ ] Tests comprehensive
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 5.3: Circular Dependency Detection
@@ -980,6 +994,7 @@ Implement Tarjan's algorithm or similar to detect cycles in the dependency graph
 - [ ] Documentation with examples
 - [ ] Property tests pass
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 5.4: Version Resolution Logic
@@ -1034,6 +1049,7 @@ Implement the core version resolution logic that calculates next versions based 
 - [ ] Tests comprehensive
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 5.5: Dependency Propagation
@@ -1102,6 +1118,7 @@ Implement the dependency propagation algorithm that updates all packages that de
 - [ ] Performance verified
 - [ ] Documentation with diagrams
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 5.6: Snapshot Version Generation
@@ -1145,6 +1162,7 @@ Implement snapshot version generation with configurable format.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 5.7: Apply Versions with Dry-Run
@@ -1206,6 +1224,7 @@ Implement version application logic that writes updated versions to package.json
 - [ ] Rollback tested
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 5.8: Version Resolution Integration Tests
@@ -1248,6 +1267,7 @@ Write comprehensive integration tests that verify the entire version resolution 
 - [ ] Coverage verified
 - [ ] CI integration complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ## Epic 6: Changeset Management
@@ -1291,6 +1311,7 @@ Define the `ChangesetStorage` trait that abstracts changeset persistence.
 - [ ] Trait compiles
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 6.2: File-Based Storage Implementation
@@ -1368,6 +1389,7 @@ Implement `FileBasedChangesetStorage` that stores changesets as JSON files.
 - [ ] Documentation complete
 - [ ] Concurrent access tested
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 6.3: Changeset Manager
@@ -1436,6 +1458,7 @@ Implement `ChangesetManager` that provides a high-level API for changeset operat
 - [ ] Tests pass
 - [ ] Documentation with examples
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 6.4: Git Integration for Commits
@@ -1487,6 +1510,7 @@ Implement git integration that detects which packages are affected by commits.
 - [ ] Tests comprehensive
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 6.5: Changeset History and Archiving
@@ -1536,6 +1560,7 @@ Implement changeset archiving and history query functionality.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ## Epic 7: Changes Analysis
@@ -1590,6 +1615,7 @@ Implement the main `ChangesAnalyzer` struct with git and monorepo integration.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 7.2: File-to-Package Mapping
@@ -1641,6 +1667,7 @@ Implement logic to map file paths to their owning packages in a monorepo.
 - [ ] Tests comprehensive
 - [ ] Performance verified
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 7.3: Working Directory Analysis
@@ -1683,6 +1710,7 @@ Implement analysis of working directory changes (staged and unstaged).
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 7.4: Commit Range Analysis
@@ -1734,6 +1762,7 @@ Implement analysis of changes between two git references (commits, branches, tag
 - [ ] Tests comprehensive
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 7.5: Version Preview Calculation
@@ -1782,6 +1811,7 @@ Add version preview calculation based on changeset bump type.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 7.6: Changes Statistics
@@ -1823,6 +1853,7 @@ Add comprehensive statistics calculation for changes.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ## Epic 8: Changelog Generation
@@ -1890,6 +1921,7 @@ Implement a parser for conventional commit messages following the specification.
 - [ ] Documentation with examples
 - [ ] Specification compliance verified
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 8.2: Changelog Generator Foundation
@@ -1936,6 +1968,7 @@ Implement the main `ChangelogGenerator` struct with git and config integration.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 8.3: Version Detection from Git Tags
@@ -1984,6 +2017,7 @@ Implement logic to detect and parse version tags from git.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 8.4: Changelog Data Collection
@@ -2042,6 +2076,7 @@ Implement logic to collect all data needed for a changelog from git commits.
 - [ ] Tests comprehensive
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 8.5: Keep a Changelog Formatter
@@ -2086,6 +2121,7 @@ Implement formatter for the Keep a Changelog format.
 - [ ] Tests pass
 - [ ] Specification compliance verified
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 8.6: Conventional Commits Formatter
@@ -2128,6 +2164,7 @@ Implement formatter that groups changes by conventional commit type.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 8.7: Custom Template Formatter
@@ -2166,6 +2203,7 @@ Implement formatter that uses custom templates from configuration.
 - [ ] Tests pass
 - [ ] Documentation with examples
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 8.8: Changelog File Management
@@ -2222,6 +2260,7 @@ Implement logic to create, update, and parse CHANGELOG.md files.
 - [ ] Tests comprehensive
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 8.9: Merge Commit Message Generation
@@ -2263,6 +2302,7 @@ Implement merge commit message generation using configured templates.
 - [ ] Tests pass
 - [ ] Documentation with examples
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 8.10: Generate from Changeset
@@ -2306,6 +2346,7 @@ Implement high-level method to generate changelogs from changeset and version re
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ## Epic 9: Dependency Upgrades
@@ -2365,6 +2406,7 @@ Implement HTTP client for querying npm registry and private registries.
 - [ ] Tests comprehensive
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 9.2: .npmrc Parsing and Configuration
@@ -2413,6 +2455,7 @@ Implement .npmrc file parsing to extract registry URLs and authentication tokens
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 9.3: Upgrade Detection
@@ -2469,6 +2512,7 @@ Implement logic to detect upgrades for all external dependencies.
 - [ ] Tests comprehensive
 - [ ] Performance verified
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 9.4: Upgrade Application
@@ -2518,6 +2562,7 @@ Implement logic to apply selected upgrades to package.json files.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 9.5: Backup and Rollback
@@ -2568,6 +2613,7 @@ Implement backup system that creates snapshots before applying upgrades.
 - [ ] Rollback verified
 - [ ] Tests comprehensive
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 9.6: Automatic Changeset Creation
@@ -2610,6 +2656,7 @@ Implement automatic changeset creation when upgrades are applied.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 9.7: Upgrade Manager Integration
@@ -2646,6 +2693,7 @@ Implement `UpgradeManager` that ties all upgrade functionality together.
 - [ ] Tests pass
 - [ ] Ready for use
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ## Epic 10: Audit & Health Checks
@@ -2694,6 +2742,7 @@ Implement the main `AuditManager` struct that coordinates all audit sections.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 10.2: Upgrade Audit Section
@@ -2735,6 +2784,7 @@ Implement upgrade audit section using the upgrade manager.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 10.3: Dependency Audit Section
@@ -2776,6 +2826,7 @@ Implement dependency audit section with graph analysis.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 10.4: Dependency Categorization
@@ -2819,6 +2870,7 @@ Implement dependency categorization into internal, external, workspace, local.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 10.5: Breaking Changes Audit
@@ -2854,6 +2906,7 @@ Implement breaking changes audit using conventional commits and changesets.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 10.6: Version Consistency Audit
@@ -2892,6 +2945,7 @@ Implement version consistency audit for internal dependencies.
 - [ ] Tests pass
 - [ ] Documentation complete
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 10.7: Health Score Calculation
@@ -2935,6 +2989,7 @@ Implement health score calculation based on all audit findings.
 - [ ] Tests pass
 - [ ] Algorithm explained in docs
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 10.8: Report Formatting
@@ -2976,6 +3031,7 @@ Implement report formatters for Markdown and JSON.
 - [ ] Tests pass
 - [ ] Documentation with examples
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 10.9: Audit Integration Tests
@@ -3017,6 +3073,7 @@ Write comprehensive integration tests for the complete audit workflow.
 - [ ] Performance verified
 - [ ] Ready for production
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ## Epic 11: Integration & Documentation
@@ -3066,6 +3123,7 @@ Write comprehensive end-to-end tests that verify complete release workflows from
 - [ ] All passing in CI
 - [ ] Documentation updated
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 11.2: API Documentation
@@ -3109,6 +3167,7 @@ Complete all API documentation with examples for every public item.
 - [ ] Examples verified
 - [ ] Published to docs.rs
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 11.3: Usage Examples
@@ -3153,6 +3212,7 @@ Create runnable examples in the `examples/` directory covering common use cases.
 - [ ] All working
 - [ ] CI integration done
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 11.4: User Guides
@@ -3202,6 +3262,7 @@ Create user guides covering common scenarios and best practices.
 - [ ] Examples tested
 - [ ] Published to docs/
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 11.5: README and Crate Metadata
@@ -3245,6 +3306,7 @@ Create comprehensive README and update crate metadata.
 - [ ] Metadata updated
 - [ ] Ready for publication
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 11.6: Performance Benchmarks
@@ -3286,6 +3348,7 @@ Create performance benchmarks for critical operations.
 - [ ] CI tracking enabled
 - [ ] Performance documented
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ### Story 11.7: Release Preparation
@@ -3331,6 +3394,7 @@ Final checks and preparation for v1.0.0 release.
 - [ ] Version tagged
 - [ ] Ready to publish
 
+- [ ] Verify all the code if needs to be updated with the new implementation, looking for TODOS that are waiting for this implementation
 ---
 
 ## Summary
