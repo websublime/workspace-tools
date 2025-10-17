@@ -114,7 +114,7 @@ impl VersionResolution {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::version::resolution::VersionResolution;
+    /// use sublime_pkg_tools::version::VersionResolution;
     ///
     /// let resolution = VersionResolution::new();
     /// assert!(resolution.updates.is_empty());
@@ -130,7 +130,7 @@ impl VersionResolution {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::version::resolution::VersionResolution;
+    /// use sublime_pkg_tools::version::VersionResolution;
     ///
     /// let resolution = VersionResolution::new();
     /// assert!(!resolution.has_updates());
@@ -145,7 +145,7 @@ impl VersionResolution {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::version::resolution::VersionResolution;
+    /// use sublime_pkg_tools::version::VersionResolution;
     ///
     /// let resolution = VersionResolution::new();
     /// assert_eq!(resolution.update_count(), 0);
@@ -160,7 +160,7 @@ impl VersionResolution {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::version::resolution::VersionResolution;
+    /// use sublime_pkg_tools::version::VersionResolution;
     ///
     /// let resolution = VersionResolution::new();
     /// assert!(!resolution.has_circular_dependencies());
