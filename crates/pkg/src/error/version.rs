@@ -122,6 +122,16 @@ pub enum VersionError {
         reason: String,
     },
 
+    /// Invalid bump type in configuration.
+    ///
+    /// This error occurs when the propagation_bump configuration value
+    /// is not one of the valid values (major, minor, patch, none).
+    #[error("Invalid bump type '{bump_type}'. Must be one of: major, minor, patch, none")]
+    InvalidBumpType {
+        /// The invalid bump type string from configuration.
+        bump_type: String,
+    },
+
     /// Circular dependency detected in package dependency graph.
     ///
     /// This error occurs during dependency graph construction when packages
@@ -324,6 +334,7 @@ impl AsRef<str> for VersionError {
             Self::InvalidVersion { .. } => "invalid version",
             Self::ParseError { .. } => "version parse error",
             Self::InvalidBump { .. } => "invalid bump type",
+            Self::InvalidBumpType { .. } => "invalid bump type",
             Self::CircularDependency { .. } => "circular dependency",
             Self::PackageNotFound { .. } => "package not found",
             Self::PackageJsonError { .. } => "package.json error",

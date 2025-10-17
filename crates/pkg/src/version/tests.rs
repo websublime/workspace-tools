@@ -1875,4 +1875,428 @@ mod circular_dependency_property_tests {
             assert_eq!(resolution.updates[0].next_version, Version::parse("1.1.0").unwrap());
         }
     }
+
+    // ============================================================================
+    // Dependency Propagation Tests
+    // ============================================================================
+
+    #[allow(clippy::unwrap_used)]
+    mod propagation_tests {
+        use super::*;
+        use crate::config::DependencyConfig;
+        use crate::types::{DependencyType, UpdateReason, Version};
+        use crate::version::propagation::DependencyPropagator;
+        use crate::version::{PackageUpdate, VersionResolution};
+
+        /// Creates a simple monorepo structure for propagation testing.
+        ///
+        /// Structure:
+        /// - pkg-a (no dependencies)
+        /// - pkg-b (depends on pkg-a)
+        /// - pkg-c (depends on pkg-b)
+        fn create_propagation_packages() -> (HashMap<String, PackageInfo>, DependencyGraph) {
+            let pkg_a = create_package_info("@test/pkg-a", "1.0.0", vec![]);
+            let pkg_b =
+                create_package_info("@test/pkg-b", "1.0.0", vec![("@test/pkg-a", "^1.0.0")]);
+            let pkg_c =
+                create_package_info("@test/pkg-c", "1.0.0", vec![("@test/pkg-b", "^1.0.0")]);
+
+            let packages_for_graph = vec![
+                create_package_info("@test/pkg-a", "1.0.0", vec![]),
+                create_package_info("@test/pkg-b", "1.0.0", vec![("@test/pkg-a", "^1.0.0")]),
+                create_package_info("@test/pkg-c", "1.0.0", vec![("@test/pkg-b", "^1.0.0")]),
+            ];
+
+            let mut packages = HashMap::new();
+            packages.insert("@test/pkg-a".to_string(), pkg_a);
+            packages.insert("@test/pkg-b".to_string(), pkg_b);
+            packages.insert("@test/pkg-c".to_string(), pkg_c);
+
+            let graph = DependencyGraph::from_packages(&packages_for_graph).unwrap();
+
+            (packages, graph)
+        }
+
+        #[test]
+        fn test_propagation_basic_chain() {
+            let (packages, graph) = create_propagation_packages();
+            let config = DependencyConfig::default();
+            let propagator = DependencyPropagator::new(&graph, &packages, &config);
+
+            // Start with pkg-a getting updated
+            let mut resolution = VersionResolution::new();
+            resolution.add_update(PackageUpdate::new(
+                "@test/pkg-a".to_string(),
+                PathBuf::from("/test/pkg-a"),
+                Version::new(1, 0, 0),
+                Version::new(2, 0, 0),
+                UpdateReason::DirectChange,
+            ));
+
+            // Propagate changes
+            propagator.propagate(&mut resolution).unwrap();
+
+            // Should have 3 updates: pkg-a (direct), pkg-b and pkg-c (propagated)
+            assert_eq!(resolution.updates.len(), 3);
+
+            // Find pkg-b update
+            let pkg_b_update = resolution
+                .updates
+                .iter()
+                .find(|u| u.name == "@test/pkg-b")
+                .expect("pkg-b should be updated");
+            assert_eq!(pkg_b_update.current_version, Version::new(1, 0, 0));
+            assert_eq!(pkg_b_update.next_version, Version::new(1, 0, 1)); // patch bump
+            assert!(pkg_b_update.is_propagated());
+
+            // Find pkg-c update
+            let pkg_c_update = resolution
+                .updates
+                .iter()
+                .find(|u| u.name == "@test/pkg-c")
+                .expect("pkg-c should be updated");
+            assert_eq!(pkg_c_update.current_version, Version::new(1, 0, 0));
+            assert_eq!(pkg_c_update.next_version, Version::new(1, 0, 1)); // patch bump
+            assert!(pkg_c_update.is_propagated());
+        }
+
+        #[test]
+        fn test_propagation_with_minor_bump() {
+            let (packages, graph) = create_propagation_packages();
+            let config =
+                DependencyConfig { propagation_bump: "minor".to_string(), ..Default::default() };
+            let propagator = DependencyPropagator::new(&graph, &packages, &config);
+
+            let mut resolution = VersionResolution::new();
+            resolution.add_update(PackageUpdate::new(
+                "@test/pkg-a".to_string(),
+                PathBuf::from("/test/pkg-a"),
+                Version::new(1, 0, 0),
+                Version::new(2, 0, 0),
+                UpdateReason::DirectChange,
+            ));
+
+            propagator.propagate(&mut resolution).unwrap();
+
+            // pkg-b should get minor bump
+            let pkg_b_update = resolution.updates.iter().find(|u| u.name == "@test/pkg-b").unwrap();
+            assert_eq!(pkg_b_update.next_version, Version::new(1, 1, 0));
+        }
+
+        #[test]
+        fn test_propagation_respects_max_depth() {
+            let (packages, graph) = create_propagation_packages();
+            let config = DependencyConfig { max_depth: 1, ..Default::default() };
+            let propagator = DependencyPropagator::new(&graph, &packages, &config);
+
+            let mut resolution = VersionResolution::new();
+            resolution.add_update(PackageUpdate::new(
+                "@test/pkg-a".to_string(),
+                PathBuf::from("/test/pkg-a"),
+                Version::new(1, 0, 0),
+                Version::new(2, 0, 0),
+                UpdateReason::DirectChange,
+            ));
+
+            propagator.propagate(&mut resolution).unwrap();
+
+            // Should only propagate to pkg-b (depth 1), not pkg-c (depth 2)
+            assert_eq!(resolution.updates.len(), 2);
+            assert!(resolution.updates.iter().any(|u| u.name == "@test/pkg-a"));
+            assert!(resolution.updates.iter().any(|u| u.name == "@test/pkg-b"));
+            assert!(!resolution.updates.iter().any(|u| u.name == "@test/pkg-c"));
+        }
+
+        #[test]
+        fn test_propagation_skips_workspace_protocol() {
+            let pkg_a = create_package_info("@test/pkg-a", "1.0.0", vec![]);
+            let pkg_b =
+                create_package_info("@test/pkg-b", "1.0.0", vec![("@test/pkg-a", "workspace:*")]);
+
+            let packages_for_graph = vec![
+                create_package_info("@test/pkg-a", "1.0.0", vec![]),
+                create_package_info("@test/pkg-b", "1.0.0", vec![("@test/pkg-a", "workspace:*")]),
+            ];
+
+            let mut packages = HashMap::new();
+            packages.insert("@test/pkg-a".to_string(), pkg_a);
+            packages.insert("@test/pkg-b".to_string(), pkg_b);
+
+            let graph = DependencyGraph::from_packages(&packages_for_graph).unwrap();
+            let config = DependencyConfig::default();
+            let propagator = DependencyPropagator::new(&graph, &packages, &config);
+
+            let mut resolution = VersionResolution::new();
+            resolution.add_update(PackageUpdate::new(
+                "@test/pkg-a".to_string(),
+                PathBuf::from("/test/pkg-a"),
+                Version::new(1, 0, 0),
+                Version::new(2, 0, 0),
+                UpdateReason::DirectChange,
+            ));
+
+            propagator.propagate(&mut resolution).unwrap();
+
+            // pkg-b should NOT be propagated because it uses workspace:*
+            assert_eq!(resolution.updates.len(), 1);
+            assert_eq!(resolution.updates[0].name, "@test/pkg-a");
+        }
+
+        #[test]
+        fn test_propagation_skips_dev_dependencies_by_default() {
+            let pkg_a = create_package_info("@test/pkg-a", "1.0.0", vec![]);
+            let pkg_b = create_package_info_with_dev_deps(
+                "@test/pkg-b",
+                "1.0.0",
+                vec![],
+                vec![("@test/pkg-a", "^1.0.0")],
+            );
+
+            let packages_for_graph = vec![
+                create_package_info("@test/pkg-a", "1.0.0", vec![]),
+                create_package_info_with_dev_deps(
+                    "@test/pkg-b",
+                    "1.0.0",
+                    vec![],
+                    vec![("@test/pkg-a", "^1.0.0")],
+                ),
+            ];
+
+            let mut packages = HashMap::new();
+            packages.insert("@test/pkg-a".to_string(), pkg_a);
+            packages.insert("@test/pkg-b".to_string(), pkg_b);
+
+            let graph = DependencyGraph::from_packages(&packages_for_graph).unwrap();
+            let config = DependencyConfig::default();
+            let propagator = DependencyPropagator::new(&graph, &packages, &config);
+
+            let mut resolution = VersionResolution::new();
+            resolution.add_update(PackageUpdate::new(
+                "@test/pkg-a".to_string(),
+                PathBuf::from("/test/pkg-a"),
+                Version::new(1, 0, 0),
+                Version::new(2, 0, 0),
+                UpdateReason::DirectChange,
+            ));
+
+            propagator.propagate(&mut resolution).unwrap();
+
+            // pkg-b should NOT be propagated (devDependencies disabled by default)
+            assert_eq!(resolution.updates.len(), 1);
+        }
+
+        #[test]
+        fn test_propagation_includes_dev_dependencies_when_enabled() {
+            let pkg_a = create_package_info("@test/pkg-a", "1.0.0", vec![]);
+            let pkg_b = create_package_info_with_dev_deps(
+                "@test/pkg-b",
+                "1.0.0",
+                vec![],
+                vec![("@test/pkg-a", "^1.0.0")],
+            );
+
+            let packages_for_graph = vec![
+                create_package_info("@test/pkg-a", "1.0.0", vec![]),
+                create_package_info_with_dev_deps(
+                    "@test/pkg-b",
+                    "1.0.0",
+                    vec![],
+                    vec![("@test/pkg-a", "^1.0.0")],
+                ),
+            ];
+
+            let mut packages = HashMap::new();
+            packages.insert("@test/pkg-a".to_string(), pkg_a);
+            packages.insert("@test/pkg-b".to_string(), pkg_b);
+
+            let graph = DependencyGraph::from_packages(&packages_for_graph).unwrap();
+            let config =
+                DependencyConfig { propagate_dev_dependencies: true, ..Default::default() };
+            let propagator = DependencyPropagator::new(&graph, &packages, &config);
+
+            let mut resolution = VersionResolution::new();
+            resolution.add_update(PackageUpdate::new(
+                "@test/pkg-a".to_string(),
+                PathBuf::from("/test/pkg-a"),
+                Version::new(1, 0, 0),
+                Version::new(2, 0, 0),
+                UpdateReason::DirectChange,
+            ));
+
+            propagator.propagate(&mut resolution).unwrap();
+
+            // pkg-b SHOULD be propagated when dev deps are enabled
+            assert_eq!(resolution.updates.len(), 2);
+            assert!(resolution.updates.iter().any(|u| u.name == "@test/pkg-b"));
+        }
+
+        #[test]
+        fn test_propagation_updates_dependency_specs() {
+            let (packages, graph) = create_propagation_packages();
+            let config = DependencyConfig::default();
+            let propagator = DependencyPropagator::new(&graph, &packages, &config);
+
+            let mut resolution = VersionResolution::new();
+            resolution.add_update(PackageUpdate::new(
+                "@test/pkg-a".to_string(),
+                PathBuf::from("/test/pkg-a"),
+                Version::new(1, 0, 0),
+                Version::new(2, 0, 0),
+                UpdateReason::DirectChange,
+            ));
+
+            propagator.propagate(&mut resolution).unwrap();
+
+            // pkg-b should have dependency updates
+            let pkg_b_update = resolution.updates.iter().find(|u| u.name == "@test/pkg-b").unwrap();
+
+            assert_eq!(pkg_b_update.dependency_updates.len(), 1);
+            let dep_update = &pkg_b_update.dependency_updates[0];
+            assert_eq!(dep_update.dependency_name, "@test/pkg-a");
+            assert_eq!(dep_update.old_version_spec, "^1.0.0");
+            assert_eq!(dep_update.new_version_spec, "^2.0.0");
+            assert_eq!(dep_update.dependency_type, DependencyType::Regular);
+        }
+
+        #[test]
+        fn test_propagation_preserves_range_operators() {
+            let pkg_a = create_package_info("@test/pkg-a", "1.0.0", vec![]);
+            let pkg_b =
+                create_package_info("@test/pkg-b", "1.0.0", vec![("@test/pkg-a", "~1.0.0")]);
+
+            let packages_for_graph = vec![
+                create_package_info("@test/pkg-a", "1.0.0", vec![]),
+                create_package_info("@test/pkg-b", "1.0.0", vec![("@test/pkg-a", "~1.0.0")]),
+            ];
+
+            let mut packages = HashMap::new();
+            packages.insert("@test/pkg-a".to_string(), pkg_a);
+            packages.insert("@test/pkg-b".to_string(), pkg_b);
+
+            let graph = DependencyGraph::from_packages(&packages_for_graph).unwrap();
+            let config = DependencyConfig::default();
+            let propagator = DependencyPropagator::new(&graph, &packages, &config);
+
+            let mut resolution = VersionResolution::new();
+            resolution.add_update(PackageUpdate::new(
+                "@test/pkg-a".to_string(),
+                PathBuf::from("/test/pkg-a"),
+                Version::new(1, 0, 0),
+                Version::new(2, 0, 0),
+                UpdateReason::DirectChange,
+            ));
+
+            propagator.propagate(&mut resolution).unwrap();
+
+            let pkg_b_update = resolution.updates.iter().find(|u| u.name == "@test/pkg-b").unwrap();
+
+            // Should preserve ~ operator
+            assert_eq!(pkg_b_update.dependency_updates[0].new_version_spec, "~2.0.0");
+        }
+
+        #[test]
+        fn test_propagation_with_none_bump() {
+            let (packages, graph) = create_propagation_packages();
+            let config =
+                DependencyConfig { propagation_bump: "none".to_string(), ..Default::default() };
+            let propagator = DependencyPropagator::new(&graph, &packages, &config);
+
+            let mut resolution = VersionResolution::new();
+            resolution.add_update(PackageUpdate::new(
+                "@test/pkg-a".to_string(),
+                PathBuf::from("/test/pkg-a"),
+                Version::new(1, 0, 0),
+                Version::new(2, 0, 0),
+                UpdateReason::DirectChange,
+            ));
+
+            propagator.propagate(&mut resolution).unwrap();
+
+            // With none bump, only dependency specs are updated, not versions
+            // However, dependents still get updates for dependency spec changes
+            assert!(resolution.updates.len() >= 2);
+        }
+
+        #[test]
+        fn test_propagation_tracks_depth() {
+            let (packages, graph) = create_propagation_packages();
+            let config = DependencyConfig::default();
+            let propagator = DependencyPropagator::new(&graph, &packages, &config);
+
+            let mut resolution = VersionResolution::new();
+            resolution.add_update(PackageUpdate::new(
+                "@test/pkg-a".to_string(),
+                PathBuf::from("/test/pkg-a"),
+                Version::new(1, 0, 0),
+                Version::new(2, 0, 0),
+                UpdateReason::DirectChange,
+            ));
+
+            propagator.propagate(&mut resolution).unwrap();
+
+            // Check depth tracking
+            let pkg_b_update = resolution.updates.iter().find(|u| u.name == "@test/pkg-b").unwrap();
+
+            if let UpdateReason::DependencyPropagation { depth, .. } = &pkg_b_update.reason {
+                assert_eq!(depth, &1);
+            } else {
+                panic!("Expected DependencyPropagation reason");
+            }
+
+            let pkg_c_update = resolution.updates.iter().find(|u| u.name == "@test/pkg-c").unwrap();
+
+            if let UpdateReason::DependencyPropagation { depth, .. } = &pkg_c_update.reason {
+                assert_eq!(depth, &2);
+            } else {
+                panic!("Expected DependencyPropagation reason");
+            }
+        }
+
+        #[test]
+        fn test_propagation_no_duplicate_updates() {
+            let (packages, graph) = create_propagation_packages();
+            let config = DependencyConfig::default();
+            let propagator = DependencyPropagator::new(&graph, &packages, &config);
+
+            let mut resolution = VersionResolution::new();
+            resolution.add_update(PackageUpdate::new(
+                "@test/pkg-a".to_string(),
+                PathBuf::from("/test/pkg-a"),
+                Version::new(1, 0, 0),
+                Version::new(2, 0, 0),
+                UpdateReason::DirectChange,
+            ));
+
+            // Propagate twice
+            propagator.propagate(&mut resolution).unwrap();
+            propagator.propagate(&mut resolution).unwrap();
+
+            // Should still only have unique updates
+            let mut names: Vec<_> = resolution.updates.iter().map(|u| u.name.as_str()).collect();
+            names.sort();
+            names.dedup();
+            assert_eq!(names.len(), resolution.updates.len());
+        }
+
+        #[test]
+        fn test_propagation_invalid_bump_type() {
+            let (packages, graph) = create_propagation_packages();
+            let config =
+                DependencyConfig { propagation_bump: "invalid".to_string(), ..Default::default() };
+            let propagator = DependencyPropagator::new(&graph, &packages, &config);
+
+            let mut resolution = VersionResolution::new();
+            resolution.add_update(PackageUpdate::new(
+                "@test/pkg-a".to_string(),
+                PathBuf::from("/test/pkg-a"),
+                Version::new(1, 0, 0),
+                Version::new(2, 0, 0),
+                UpdateReason::DirectChange,
+            ));
+
+            // Should return error for invalid bump type
+            let result = propagator.propagate(&mut resolution);
+            assert!(result.is_err());
+        }
+    }
 }

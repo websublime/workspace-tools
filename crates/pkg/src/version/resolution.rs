@@ -348,16 +348,12 @@ impl PackageUpdate {
 
     /// Adds a dependency update to this package update.
     ///
-    /// This is used during dependency propagation (Story 5.5).
+    /// This is used during dependency propagation to track changes in dependency
+    /// version specifications when a package is updated due to propagation.
     ///
     /// # Arguments
     ///
     /// * `dep_update` - The dependency update to add
-    ///
-    /// # Note
-    ///
-    /// TODO: will be implemented on story 5.5 (Dependency Propagation)
-    #[allow(dead_code)]
     pub(crate) fn add_dependency_update(&mut self, dep_update: DependencyUpdate) {
         self.dependency_updates.push(dep_update);
     }

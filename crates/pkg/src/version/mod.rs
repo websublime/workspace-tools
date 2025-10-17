@@ -87,17 +87,17 @@
 //!     println!("Package: {}", update.name);
 //!     println!("  Version: {} -> {}", update.current_version, update.next_version);
 //!
-//!     // TODO: Story 5.5 - Dependency propagation (not yet implemented)
-//!     // if !update.dependency_updates.is_empty() {
-//!     //     println!("  Dependency updates:");
-//!     //     for dep in &update.dependency_updates {
-//!     //         println!("    {}: {} -> {}",
-//!     //             dep.dependency_name,
-//!     //             dep.old_version_spec,
-//!     //             dep.new_version_spec
-//!     //         );
-//!     //     }
-//!     // }
+//!     // Story 5.5 - Dependency propagation is now implemented
+//!     if !update.dependency_updates.is_empty() {
+//!         println!("  Dependency updates:");
+//!         for dep in &update.dependency_updates {
+//!             println!("    {}: {} -> {}",
+//!                 dep.dependency_name,
+//!                 dep.old_version_spec,
+//!                 dep.new_version_spec
+//!             );
+//!         }
+//!     }
 //! }
 //! # Ok(())
 //! # }
@@ -186,6 +186,7 @@
 #![allow(clippy::todo)]
 
 mod graph;
+mod propagation;
 mod resolution;
 mod resolver;
 
@@ -193,5 +194,6 @@ mod resolver;
 mod tests;
 
 pub use graph::DependencyGraph;
+pub use propagation::DependencyPropagator;
 pub use resolution::{PackageUpdate, VersionResolution};
 pub use resolver::VersionResolver;
