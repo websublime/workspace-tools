@@ -834,3 +834,508 @@ fn test_graph_diamond_dependency_structure() {
     assert!(transitive_a.contains(&"package-c".to_string()));
     assert!(transitive_a.contains(&"package-d".to_string()));
 }
+
+// ============================================================================
+// Comprehensive Circular Dependency Detection Tests (Story 5.3)
+// ============================================================================
+
+#[test]
+fn test_graph_self_loop_single_package() {
+    // A package that depends on itself (should not create a cycle in our model
+    // since we only track internal workspace dependencies, but test anyway)
+    let packages = vec![create_package_info("package-a", "1.0.0", vec![("package-a", "^1.0.0")])];
+
+    let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+
+    // Self-loops create a strongly connected component of size 1
+    // Tarjan's algorithm will not report this as a cycle since we filter scc.len() > 1
+    let cycles = graph.detect_cycles();
+    assert!(cycles.is_empty(), "Self-loops should not be detected as cycles");
+}
+
+#[test]
+fn test_graph_nested_cycles_complex() {
+    // Complex nested structure:
+    // Cycle 1: a -> b -> a
+    // Cycle 2: c -> d -> e -> c
+    // Additionally: b -> c (connecting the two cycles)
+    let packages = vec![
+        create_package_info("package-a", "1.0.0", vec![("package-b", "^1.0.0")]),
+        create_package_info(
+            "package-b",
+            "1.0.0",
+            vec![("package-a", "^1.0.0"), ("package-c", "^1.0.0")],
+        ),
+        create_package_info("package-c", "1.0.0", vec![("package-d", "^1.0.0")]),
+        create_package_info("package-d", "1.0.0", vec![("package-e", "^1.0.0")]),
+        create_package_info("package-e", "1.0.0", vec![("package-c", "^1.0.0")]),
+    ];
+
+    let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+
+    let cycles = graph.detect_cycles();
+
+    // When cycles are connected, Tarjan's algorithm may merge them into one large SCC
+    // We should have 1 large SCC containing all 5 packages since they're all connected
+    assert!(!cycles.is_empty(), "Should detect interconnected cycles");
+
+    // Verify that all packages in cycles are accounted for
+    let mut all_cycle_packages = std::collections::HashSet::new();
+    for cycle in &cycles {
+        for pkg in &cycle.cycle {
+            all_cycle_packages.insert(pkg.as_str());
+        }
+    }
+
+    // All 5 packages should be part of the detected cycles
+    assert_eq!(all_cycle_packages.len(), 5);
+    assert!(all_cycle_packages.contains("package-a"));
+    assert!(all_cycle_packages.contains("package-b"));
+    assert!(all_cycle_packages.contains("package-c"));
+    assert!(all_cycle_packages.contains("package-d"));
+    assert!(all_cycle_packages.contains("package-e"));
+}
+
+#[test]
+fn test_graph_cycle_with_independent_packages() {
+    // Cycle: a -> b -> c -> a
+    // Independent: d -> e (no cycle)
+    let packages = vec![
+        create_package_info("package-a", "1.0.0", vec![("package-b", "^1.0.0")]),
+        create_package_info("package-b", "1.0.0", vec![("package-c", "^1.0.0")]),
+        create_package_info("package-c", "1.0.0", vec![("package-a", "^1.0.0")]),
+        create_package_info("package-d", "1.0.0", vec![("package-e", "^1.0.0")]),
+        create_package_info("package-e", "1.0.0", vec![]),
+    ];
+
+    let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+
+    let cycles = graph.detect_cycles();
+
+    assert_eq!(cycles.len(), 1, "Should detect exactly one cycle");
+
+    let cycle = &cycles[0];
+    assert_eq!(cycle.len(), 3, "Cycle should contain 3 packages");
+    assert!(cycle.involves("package-a"));
+    assert!(cycle.involves("package-b"));
+    assert!(cycle.involves("package-c"));
+    assert!(!cycle.involves("package-d"), "package-d should not be in the cycle");
+    assert!(!cycle.involves("package-e"), "package-e should not be in the cycle");
+}
+
+#[test]
+fn test_graph_large_cycle_chain() {
+    // Large cycle: a -> b -> c -> d -> e -> f -> g -> h -> i -> j -> a
+    let packages = vec![
+        create_package_info("package-a", "1.0.0", vec![("package-b", "^1.0.0")]),
+        create_package_info("package-b", "1.0.0", vec![("package-c", "^1.0.0")]),
+        create_package_info("package-c", "1.0.0", vec![("package-d", "^1.0.0")]),
+        create_package_info("package-d", "1.0.0", vec![("package-e", "^1.0.0")]),
+        create_package_info("package-e", "1.0.0", vec![("package-f", "^1.0.0")]),
+        create_package_info("package-f", "1.0.0", vec![("package-g", "^1.0.0")]),
+        create_package_info("package-g", "1.0.0", vec![("package-h", "^1.0.0")]),
+        create_package_info("package-h", "1.0.0", vec![("package-i", "^1.0.0")]),
+        create_package_info("package-i", "1.0.0", vec![("package-j", "^1.0.0")]),
+        create_package_info("package-j", "1.0.0", vec![("package-a", "^1.0.0")]),
+    ];
+
+    let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+
+    let cycles = graph.detect_cycles();
+
+    assert_eq!(cycles.len(), 1, "Should detect exactly one large cycle");
+
+    let cycle = &cycles[0];
+    assert_eq!(cycle.len(), 10, "Cycle should contain all 10 packages");
+
+    // Verify all packages are involved
+    for letter in &['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'] {
+        let pkg_name = format!("package-{}", letter);
+        assert!(cycle.involves(&pkg_name), "Cycle should involve {}", pkg_name);
+    }
+}
+
+#[test]
+fn test_graph_bidirectional_dependencies() {
+    // Multiple bidirectional pairs:
+    // a <-> b
+    // c <-> d
+    // e <-> f
+    let packages = vec![
+        create_package_info("package-a", "1.0.0", vec![("package-b", "^1.0.0")]),
+        create_package_info("package-b", "1.0.0", vec![("package-a", "^1.0.0")]),
+        create_package_info("package-c", "1.0.0", vec![("package-d", "^1.0.0")]),
+        create_package_info("package-d", "1.0.0", vec![("package-c", "^1.0.0")]),
+        create_package_info("package-e", "1.0.0", vec![("package-f", "^1.0.0")]),
+        create_package_info("package-f", "1.0.0", vec![("package-e", "^1.0.0")]),
+    ];
+
+    let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+
+    let cycles = graph.detect_cycles();
+
+    assert_eq!(cycles.len(), 3, "Should detect three separate bidirectional cycles");
+
+    // Verify each cycle contains exactly 2 packages
+    for cycle in &cycles {
+        assert_eq!(cycle.len(), 2, "Each bidirectional cycle should have 2 packages");
+    }
+}
+
+#[test]
+fn test_graph_cycle_display_format() {
+    // Test the display_cycle method
+    let packages = vec![
+        create_package_info("package-a", "1.0.0", vec![("package-b", "^1.0.0")]),
+        create_package_info("package-b", "1.0.0", vec![("package-c", "^1.0.0")]),
+        create_package_info("package-c", "1.0.0", vec![("package-a", "^1.0.0")]),
+    ];
+
+    let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+
+    let cycles = graph.detect_cycles();
+    assert_eq!(cycles.len(), 1);
+
+    let cycle = &cycles[0];
+    let display = cycle.display_cycle();
+
+    // The display should contain all package names separated by " -> "
+    assert!(display.contains("package-a"));
+    assert!(display.contains("package-b"));
+    assert!(display.contains("package-c"));
+    assert!(display.contains(" -> "));
+}
+
+#[test]
+fn test_graph_complex_interconnected_cycles() {
+    // Very complex structure with multiple interconnected cycles:
+    // Cycle 1: a -> b -> a
+    // Cycle 2: c -> d -> c
+    // Bridge: a -> c (connects the cycles into one large SCC)
+    // Additional: e -> d (another connection)
+    let packages = vec![
+        create_package_info(
+            "package-a",
+            "1.0.0",
+            vec![("package-b", "^1.0.0"), ("package-c", "^1.0.0")],
+        ),
+        create_package_info("package-b", "1.0.0", vec![("package-a", "^1.0.0")]),
+        create_package_info("package-c", "1.0.0", vec![("package-d", "^1.0.0")]),
+        create_package_info("package-d", "1.0.0", vec![("package-c", "^1.0.0")]),
+        create_package_info("package-e", "1.0.0", vec![("package-d", "^1.0.0")]),
+    ];
+
+    let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+
+    let cycles = graph.detect_cycles();
+
+    assert!(!cycles.is_empty(), "Should detect interconnected cycles");
+
+    // With the bridge, all cyclic packages form one large SCC
+    // package-e is not part of the cycle since it only points to d
+    let mut total_packages_in_cycles = std::collections::HashSet::new();
+    for cycle in &cycles {
+        for pkg in &cycle.cycle {
+            total_packages_in_cycles.insert(pkg.as_str());
+        }
+    }
+
+    // a, b, c, d should all be in cycles
+    assert!(total_packages_in_cycles.contains("package-a"));
+    assert!(total_packages_in_cycles.contains("package-b"));
+    assert!(total_packages_in_cycles.contains("package-c"));
+    assert!(total_packages_in_cycles.contains("package-d"));
+}
+
+#[test]
+fn test_graph_no_false_positives() {
+    // Ensure that valid dependency trees don't trigger false positives
+    // Tree structure (no cycles):
+    //        a
+    //       / \
+    //      b   c
+    //     / \   \
+    //    d   e   f
+    let packages = vec![
+        create_package_info(
+            "package-a",
+            "1.0.0",
+            vec![("package-b", "^1.0.0"), ("package-c", "^1.0.0")],
+        ),
+        create_package_info(
+            "package-b",
+            "1.0.0",
+            vec![("package-d", "^1.0.0"), ("package-e", "^1.0.0")],
+        ),
+        create_package_info("package-c", "1.0.0", vec![("package-f", "^1.0.0")]),
+        create_package_info("package-d", "1.0.0", vec![]),
+        create_package_info("package-e", "1.0.0", vec![]),
+        create_package_info("package-f", "1.0.0", vec![]),
+    ];
+
+    let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+
+    let cycles = graph.detect_cycles();
+
+    assert!(cycles.is_empty(), "Tree structure should have no cycles");
+}
+
+#[test]
+fn test_graph_cycle_with_external_dependencies() {
+    // Cycle with external dependencies (external deps should be filtered)
+    // Internal cycle: a -> b -> a
+    // External deps: a -> "external-lib", b -> "another-lib"
+    let packages = vec![
+        create_package_info(
+            "package-a",
+            "1.0.0",
+            vec![("package-b", "^1.0.0"), ("external-lib", "^1.0.0")],
+        ),
+        create_package_info(
+            "package-b",
+            "1.0.0",
+            vec![("package-a", "^1.0.0"), ("another-lib", "^2.0.0")],
+        ),
+    ];
+
+    let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+
+    // Graph should only have 2 nodes (internal packages)
+    assert_eq!(graph.package_count(), 2);
+
+    // Should still detect the cycle between a and b
+    let cycles = graph.detect_cycles();
+    assert_eq!(cycles.len(), 1);
+
+    let cycle = &cycles[0];
+    assert_eq!(cycle.len(), 2);
+    assert!(cycle.involves("package-a"));
+    assert!(cycle.involves("package-b"));
+}
+
+// ============================================================================
+// Performance Tests for Circular Dependency Detection (Story 5.3)
+// ============================================================================
+
+#[test]
+fn test_graph_performance_100_packages_no_cycles() {
+    // Performance test: 100 packages in a linear chain (no cycles)
+    // Should complete in < 1s as per acceptance criteria
+    let mut packages = Vec::new();
+
+    // Create linear chain: 0 -> 1 -> 2 -> ... -> 99
+    packages.push(create_package_info("package-0", "1.0.0", vec![]));
+    for i in 1..100 {
+        packages.push(create_package_info(
+            &format!("package-{}", i),
+            "1.0.0",
+            vec![(&format!("package-{}", i - 1), "^1.0.0")],
+        ));
+    }
+
+    let start = std::time::Instant::now();
+    let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+    let cycles = graph.detect_cycles();
+    let elapsed = start.elapsed();
+
+    assert!(cycles.is_empty(), "Linear chain should have no cycles");
+    assert_eq!(graph.package_count(), 100);
+    assert!(elapsed.as_secs() < 1, "Should complete in under 1 second, took {:?}", elapsed);
+}
+
+#[test]
+fn test_graph_performance_100_packages_with_cycles() {
+    // Performance test: 100 packages with multiple cycles
+    // Create 10 separate cycles of 10 packages each
+    let mut packages = Vec::new();
+
+    for group in 0..10 {
+        for i in 0..10 {
+            let pkg_name = format!("package-g{}-{}", group, i);
+            let next_i = (i + 1) % 10;
+            let dep_name = format!("package-g{}-{}", group, next_i);
+
+            packages.push(create_package_info(&pkg_name, "1.0.0", vec![(&dep_name, "^1.0.0")]));
+        }
+    }
+
+    let start = std::time::Instant::now();
+    let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+    let cycles = graph.detect_cycles();
+    let elapsed = start.elapsed();
+
+    assert_eq!(graph.package_count(), 100);
+    assert_eq!(cycles.len(), 10, "Should detect 10 separate cycles");
+    assert!(elapsed.as_secs() < 1, "Should complete in under 1 second, took {:?}", elapsed);
+
+    // Verify each cycle has 10 packages
+    for cycle in &cycles {
+        assert_eq!(cycle.len(), 10, "Each cycle should have 10 packages");
+    }
+}
+
+#[test]
+fn test_graph_performance_complex_interconnected() {
+    // Performance test: Complex interconnected graph
+    // Create a mesh-like structure with many cross-dependencies
+    let mut packages = Vec::new();
+
+    for i in 0..50 {
+        let mut deps = vec![];
+        // Each package depends on the next 3 packages (with wraparound)
+        for j in 1..=3 {
+            let dep_idx = (i + j) % 50;
+            deps.push((format!("package-{}", dep_idx), "^1.0.0".to_string()));
+        }
+
+        let deps_ref: Vec<(&str, &str)> =
+            deps.iter().map(|(n, v)| (n.as_str(), v.as_str())).collect();
+        packages.push(create_package_info(&format!("package-{}", i), "1.0.0", deps_ref));
+    }
+
+    let start = std::time::Instant::now();
+    let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+    let cycles = graph.detect_cycles();
+    let elapsed = start.elapsed();
+
+    assert_eq!(graph.package_count(), 50);
+    assert!(!cycles.is_empty(), "Complex mesh should have cycles");
+    assert!(elapsed.as_secs() < 1, "Should complete in under 1 second, took {:?}", elapsed);
+}
+
+// ============================================================================
+// Property-Based Tests for Circular Dependency Detection (Story 5.3)
+// ============================================================================
+
+#[cfg(test)]
+mod circular_dependency_property_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn test_property_no_dependencies_no_cycles(package_count in 1usize..20) {
+            // Property: Packages with no dependencies should never have cycles
+            let mut packages = Vec::new();
+            for i in 0..package_count {
+                packages.push(create_package_info(&format!("package-{}", i), "1.0.0", vec![]));
+            }
+
+            let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+            let cycles = graph.detect_cycles();
+
+            prop_assert!(cycles.is_empty(), "Packages with no dependencies should have no cycles");
+        }
+
+        #[test]
+        fn test_property_linear_chain_no_cycles(package_count in 2usize..20) {
+            // Property: A linear dependency chain should never have cycles
+            let mut packages = Vec::new();
+            packages.push(create_package_info("package-0", "1.0.0", vec![]));
+
+            for i in 1..package_count {
+                packages.push(create_package_info(
+                    &format!("package-{}", i),
+                    "1.0.0",
+                    vec![(&format!("package-{}", i - 1), "^1.0.0")],
+                ));
+            }
+
+            let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+            let cycles = graph.detect_cycles();
+
+            prop_assert!(cycles.is_empty(), "Linear chains should have no cycles");
+        }
+
+        #[test]
+        fn test_property_simple_cycle_always_detected(package_count in 2usize..10) {
+            // Property: A simple circular chain should always be detected
+            // Create cycle: 0 -> 1 -> 2 -> ... -> (n-1) -> 0
+            let mut packages = Vec::new();
+
+            for i in 0..package_count {
+                let next = (i + 1) % package_count;
+                packages.push(create_package_info(
+                    &format!("package-{}", i),
+                    "1.0.0",
+                    vec![(&format!("package-{}", next), "^1.0.0")],
+                ));
+            }
+
+            let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+            let cycles = graph.detect_cycles();
+
+            prop_assert!(!cycles.is_empty(), "Circular chain should be detected");
+            prop_assert_eq!(cycles.len(), 1, "Should detect exactly one cycle");
+            prop_assert_eq!(cycles[0].len(), package_count, "Cycle should contain all packages");
+        }
+
+        #[test]
+        fn test_property_bidirectional_is_cycle(name1_idx in 0usize..50, name2_idx in 0usize..50) {
+            // Property: Two packages with bidirectional dependencies form a cycle
+            if name1_idx == name2_idx {
+                return Ok(());
+            }
+
+            let name1 = format!("package-{}", name1_idx);
+            let name2 = format!("package-{}", name2_idx);
+
+            let packages = vec![
+                create_package_info(&name1, "1.0.0", vec![(&name2, "^1.0.0")]),
+                create_package_info(&name2, "1.0.0", vec![(&name1, "^1.0.0")]),
+            ];
+
+            let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+            let cycles = graph.detect_cycles();
+
+            prop_assert_eq!(cycles.len(), 1, "Bidirectional dependency should create one cycle");
+            prop_assert_eq!(cycles[0].len(), 2, "Cycle should contain both packages");
+            prop_assert!(cycles[0].involves(&name1), "Cycle should involve first package");
+            prop_assert!(cycles[0].involves(&name2), "Cycle should involve second package");
+        }
+
+        #[test]
+        fn test_property_tree_no_cycles(depth in 1usize..5, branching in 1usize..4) {
+            // Property: A tree structure (no back edges) should have no cycles
+            let mut packages = Vec::new();
+            let mut counter = 0;
+
+            fn add_tree_level(
+                packages: &mut Vec<PackageInfo>,
+                counter: &mut usize,
+                parent: Option<String>,
+                depth: usize,
+                branching: usize,
+            ) {
+                if depth == 0 {
+                    return;
+                }
+
+                for _ in 0..branching {
+                    let name = format!("package-{}", *counter);
+                    *counter += 1;
+
+                    let deps = if let Some(ref p) = parent {
+                        vec![(p.as_str(), "^1.0.0")]
+                    } else {
+                        vec![]
+                    };
+
+                    packages.push(create_package_info(&name, "1.0.0", deps));
+                    add_tree_level(packages, counter, Some(name), depth - 1, branching);
+                }
+            }
+
+            add_tree_level(&mut packages, &mut counter, None, depth, branching);
+
+            if packages.is_empty() {
+                return Ok(());
+            }
+
+            let graph = DependencyGraph::from_packages(&packages).expect("Failed to create graph");
+            let cycles = graph.detect_cycles();
+
+            prop_assert!(cycles.is_empty(), "Tree structure should have no cycles");
+        }
+    }
+}
