@@ -14,7 +14,11 @@
 
 use super::{Version, VersionBump, VersioningStrategy};
 use crate::error::VersionError;
+use package_json::PackageJson;
 use proptest::prelude::*;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use sublime_standard_tools::monorepo::WorkspacePackage;
 
 // =============================================================================
 // Version Tests
@@ -619,5 +623,541 @@ proptest! {
         let json = serde_json::to_string(&version).unwrap();
         let deserialized: Version = serde_json::from_str(&json).unwrap();
         assert_eq!(version, deserialized);
+    }
+}
+
+// ============================================================================
+// PackageInfo Tests
+// ============================================================================
+
+mod package_info_tests {
+    use super::*;
+    use crate::types::{DependencyType, PackageInfo};
+
+    /// Helper function to create a minimal PackageJson for testing
+    fn create_test_package_json(name: &str, version: &str) -> PackageJson {
+        PackageJson {
+            name: name.to_string(),
+            version: version.to_string(),
+            ..PackageJson::default()
+        }
+    }
+
+    /// Helper function to create a PackageJson with dependencies
+    fn create_package_json_with_deps(
+        name: &str,
+        version: &str,
+        deps: Vec<(&str, &str)>,
+        dev_deps: Vec<(&str, &str)>,
+    ) -> PackageJson {
+        let mut pkg = create_test_package_json(name, version);
+
+        if !deps.is_empty() {
+            let mut dependencies = HashMap::new();
+            for (dep_name, dep_version) in deps {
+                dependencies.insert(dep_name.to_string(), dep_version.to_string());
+            }
+            pkg.dependencies = Some(dependencies);
+        }
+
+        if !dev_deps.is_empty() {
+            let mut dev_dependencies = HashMap::new();
+            for (dep_name, dep_version) in dev_deps {
+                dev_dependencies.insert(dep_name.to_string(), dep_version.to_string());
+            }
+            pkg.dev_dependencies = Some(dev_dependencies);
+        }
+
+        pkg
+    }
+
+    /// Helper function to create a WorkspacePackage for testing
+    fn create_test_workspace_package(
+        name: &str,
+        version: &str,
+        workspace_deps: Vec<String>,
+    ) -> WorkspacePackage {
+        WorkspacePackage {
+            name: name.to_string(),
+            version: version.to_string(),
+            location: PathBuf::from(format!("packages/{}", name)),
+            absolute_path: PathBuf::from(format!("/workspace/packages/{}", name)),
+            workspace_dependencies: workspace_deps,
+            workspace_dev_dependencies: vec![],
+        }
+    }
+
+    #[test]
+    fn test_package_info_new() {
+        let pkg_json = create_test_package_json("test-package", "1.0.0");
+        let path = PathBuf::from("/path/to/package");
+
+        let info = PackageInfo::new(pkg_json, None, path.clone());
+
+        assert_eq!(info.name(), "test-package");
+        assert_eq!(info.version().to_string(), "1.0.0");
+        assert_eq!(info.path(), &path);
+        assert!(info.workspace().is_none());
+    }
+
+    #[test]
+    fn test_package_info_with_workspace() {
+        let pkg_json = create_test_package_json("test-package", "1.0.0");
+        let workspace = create_test_workspace_package("test-package", "1.0.0", vec![]);
+        let path = PathBuf::from("/path/to/package");
+
+        let info = PackageInfo::new(pkg_json, Some(workspace), path);
+
+        assert_eq!(info.name(), "test-package");
+        assert!(info.workspace().is_some());
+    }
+
+    #[test]
+    fn test_package_info_name() {
+        let pkg_json = create_test_package_json("my-awesome-package", "2.3.4");
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        assert_eq!(info.name(), "my-awesome-package");
+    }
+
+    #[test]
+    fn test_package_info_name_empty() {
+        let pkg_json = PackageJson::default();
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        assert_eq!(info.name(), "");
+    }
+
+    #[test]
+    fn test_package_info_version() {
+        let pkg_json = create_test_package_json("test", "3.2.1");
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        assert_eq!(info.version().to_string(), "3.2.1");
+    }
+
+    #[test]
+    fn test_package_info_version_invalid_defaults_to_0_0_0() {
+        let pkg_json = PackageJson {
+            name: "test".to_string(),
+            version: "not-a-valid-version".to_string(),
+            ..PackageJson::default()
+        };
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        assert_eq!(info.version().to_string(), "0.0.0");
+    }
+
+    #[test]
+    fn test_package_info_version_empty_defaults_to_0_0_0() {
+        let pkg_json = PackageJson {
+            name: "test".to_string(),
+            version: "".to_string(),
+            ..PackageJson::default()
+        };
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        assert_eq!(info.version().to_string(), "0.0.0");
+    }
+
+    #[test]
+    fn test_package_info_all_dependencies_empty() {
+        let pkg_json = create_test_package_json("test", "1.0.0");
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        let deps = info.all_dependencies();
+        assert!(deps.is_empty());
+    }
+
+    #[test]
+    fn test_package_info_all_dependencies_with_regular_deps() {
+        let pkg_json = create_package_json_with_deps(
+            "test",
+            "1.0.0",
+            vec![("lodash", "^4.17.21"), ("react", "^18.0.0")],
+            vec![],
+        );
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        let deps = info.all_dependencies();
+        assert_eq!(deps.len(), 2);
+        assert!(deps.iter().any(|(name, version, dep_type)| name == "lodash"
+            && version == "^4.17.21"
+            && *dep_type == DependencyType::Regular));
+        assert!(deps.iter().any(|(name, version, dep_type)| name == "react"
+            && version == "^18.0.0"
+            && *dep_type == DependencyType::Regular));
+    }
+
+    #[test]
+    fn test_package_info_all_dependencies_with_dev_deps() {
+        let pkg_json = create_package_json_with_deps(
+            "test",
+            "1.0.0",
+            vec![],
+            vec![("jest", "^29.0.0"), ("eslint", "^8.0.0")],
+        );
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        let deps = info.all_dependencies();
+        assert_eq!(deps.len(), 2);
+        assert!(deps.iter().any(|(name, version, dep_type)| name == "jest"
+            && version == "^29.0.0"
+            && *dep_type == DependencyType::Dev));
+        assert!(deps.iter().any(|(name, version, dep_type)| name == "eslint"
+            && version == "^8.0.0"
+            && *dep_type == DependencyType::Dev));
+    }
+
+    #[test]
+    fn test_package_info_all_dependencies_mixed() {
+        let pkg_json = create_package_json_with_deps(
+            "test",
+            "1.0.0",
+            vec![("lodash", "^4.17.21")],
+            vec![("jest", "^29.0.0")],
+        );
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        let deps = info.all_dependencies();
+        assert_eq!(deps.len(), 2);
+        assert!(deps
+            .iter()
+            .any(|(name, _, dep_type)| name == "lodash" && *dep_type == DependencyType::Regular));
+        assert!(deps
+            .iter()
+            .any(|(name, _, dep_type)| name == "jest" && *dep_type == DependencyType::Dev));
+    }
+
+    #[test]
+    fn test_package_info_all_dependencies_filters_workspace_protocol() {
+        let pkg_json = create_package_json_with_deps(
+            "test",
+            "1.0.0",
+            vec![("lodash", "^4.17.21"), ("@myorg/core", "workspace:*"), ("react", "^18.0.0")],
+            vec![],
+        );
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        let deps = info.all_dependencies();
+        assert_eq!(deps.len(), 2);
+        assert!(!deps.iter().any(|(name, _, _)| name == "@myorg/core"));
+    }
+
+    #[test]
+    fn test_package_info_all_dependencies_filters_file_protocol() {
+        let pkg_json = create_package_json_with_deps(
+            "test",
+            "1.0.0",
+            vec![("local-lib", "file:../local-lib"), ("lodash", "^4.17.21")],
+            vec![],
+        );
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        let deps = info.all_dependencies();
+        assert_eq!(deps.len(), 1);
+        assert!(!deps.iter().any(|(name, _, _)| name == "local-lib"));
+    }
+
+    #[test]
+    fn test_package_info_all_dependencies_filters_link_protocol() {
+        let pkg_json = create_package_json_with_deps(
+            "test",
+            "1.0.0",
+            vec![("linked-lib", "link:../linked"), ("lodash", "^4.17.21")],
+            vec![],
+        );
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        let deps = info.all_dependencies();
+        assert_eq!(deps.len(), 1);
+        assert!(!deps.iter().any(|(name, _, _)| name == "linked-lib"));
+    }
+
+    #[test]
+    fn test_package_info_all_dependencies_filters_portal_protocol() {
+        let pkg_json = create_package_json_with_deps(
+            "test",
+            "1.0.0",
+            vec![("portal-lib", "portal:../portal"), ("lodash", "^4.17.21")],
+            vec![],
+        );
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        let deps = info.all_dependencies();
+        assert_eq!(deps.len(), 1);
+        assert!(!deps.iter().any(|(name, _, _)| name == "portal-lib"));
+    }
+
+    #[test]
+    fn test_package_info_dependencies() {
+        let pkg_json = create_package_json_with_deps(
+            "test",
+            "1.0.0",
+            vec![("lodash", "^4.17.21"), ("react", "^18.0.0")],
+            vec![("jest", "^29.0.0")],
+        );
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        let deps = info.dependencies();
+        assert_eq!(deps.len(), 2);
+        assert_eq!(deps.get("lodash"), Some(&"^4.17.21".to_string()));
+        assert_eq!(deps.get("react"), Some(&"^18.0.0".to_string()));
+        assert!(!deps.contains_key("jest"));
+    }
+
+    #[test]
+    fn test_package_info_dev_dependencies() {
+        let pkg_json = create_package_json_with_deps(
+            "test",
+            "1.0.0",
+            vec![("lodash", "^4.17.21")],
+            vec![("jest", "^29.0.0"), ("eslint", "^8.0.0")],
+        );
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        let dev_deps = info.dev_dependencies();
+        assert_eq!(dev_deps.len(), 2);
+        assert_eq!(dev_deps.get("jest"), Some(&"^29.0.0".to_string()));
+        assert_eq!(dev_deps.get("eslint"), Some(&"^8.0.0".to_string()));
+        assert!(!dev_deps.contains_key("lodash"));
+    }
+
+    #[test]
+    fn test_package_info_peer_dependencies() {
+        let mut pkg_json = create_test_package_json("test", "1.0.0");
+        let mut peer_deps = HashMap::new();
+        peer_deps.insert("react".to_string(), ">=16.0.0".to_string());
+        pkg_json.peer_dependencies = Some(peer_deps);
+
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        let peer_deps = info.peer_dependencies();
+        assert_eq!(peer_deps.len(), 1);
+        assert_eq!(peer_deps.get("react"), Some(&">=16.0.0".to_string()));
+    }
+
+    #[test]
+    fn test_package_info_optional_dependencies() {
+        let mut pkg_json = create_test_package_json("test", "1.0.0");
+        let mut optional_deps = HashMap::new();
+        optional_deps.insert("fsevents".to_string(), "^2.3.0".to_string());
+        pkg_json.optional_dependencies = Some(optional_deps);
+
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        let optional_deps = info.optional_dependencies();
+        assert_eq!(optional_deps.len(), 1);
+        assert_eq!(optional_deps.get("fsevents"), Some(&"^2.3.0".to_string()));
+    }
+
+    #[test]
+    fn test_package_info_is_internal_no_workspace() {
+        let pkg_json = create_test_package_json("test", "1.0.0");
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        assert!(!info.is_internal());
+    }
+
+    #[test]
+    fn test_package_info_is_internal_with_empty_workspace_deps() {
+        let pkg_json = create_test_package_json("test", "1.0.0");
+        let workspace = create_test_workspace_package("test", "1.0.0", vec![]);
+        let info = PackageInfo::new(pkg_json, Some(workspace), PathBuf::from("."));
+
+        assert!(!info.is_internal());
+    }
+
+    #[test]
+    fn test_package_info_is_internal_with_workspace_deps() {
+        let pkg_json = create_test_package_json("test", "1.0.0");
+        let workspace = create_test_workspace_package("test", "1.0.0", vec!["core".to_string()]);
+        let info = PackageInfo::new(pkg_json, Some(workspace), PathBuf::from("."));
+
+        assert!(info.is_internal());
+    }
+
+    #[test]
+    fn test_package_info_internal_dependencies_no_workspace() {
+        let pkg_json = create_test_package_json("test", "1.0.0");
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        let internal = info.internal_dependencies();
+        assert!(internal.is_empty());
+    }
+
+    #[test]
+    fn test_package_info_internal_dependencies_with_workspace() {
+        let pkg_json = create_test_package_json("test", "1.0.0");
+        let workspace = create_test_workspace_package(
+            "test",
+            "1.0.0",
+            vec!["core".to_string(), "utils".to_string()],
+        );
+        let info = PackageInfo::new(pkg_json, Some(workspace), PathBuf::from("."));
+
+        let internal = info.internal_dependencies();
+        assert_eq!(internal.len(), 2);
+        assert!(internal.contains(&"core".to_string()));
+        assert!(internal.contains(&"utils".to_string()));
+    }
+
+    #[test]
+    fn test_package_info_external_dependencies() {
+        let pkg_json = create_package_json_with_deps(
+            "test",
+            "1.0.0",
+            vec![("lodash", "^4.17.21"), ("react", "^18.0.0"), ("core", "^1.0.0")],
+            vec![],
+        );
+        let workspace = create_test_workspace_package("test", "1.0.0", vec!["core".to_string()]);
+        let info = PackageInfo::new(pkg_json, Some(workspace), PathBuf::from("."));
+
+        let external = info.external_dependencies();
+        assert_eq!(external.len(), 2);
+        assert!(external.contains_key("lodash"));
+        assert!(external.contains_key("react"));
+        assert!(!external.contains_key("core")); // Internal dependency
+    }
+
+    #[test]
+    fn test_package_info_is_skipped_version_spec_workspace() {
+        assert!(PackageInfo::is_skipped_version_spec("workspace:*"));
+        assert!(PackageInfo::is_skipped_version_spec("workspace:^1.0.0"));
+        assert!(PackageInfo::is_skipped_version_spec("workspace:~"));
+    }
+
+    #[test]
+    fn test_package_info_is_skipped_version_spec_file() {
+        assert!(PackageInfo::is_skipped_version_spec("file:../local"));
+        assert!(PackageInfo::is_skipped_version_spec("file:./relative"));
+        assert!(PackageInfo::is_skipped_version_spec("file:/absolute/path"));
+    }
+
+    #[test]
+    fn test_package_info_is_skipped_version_spec_link() {
+        assert!(PackageInfo::is_skipped_version_spec("link:../linked"));
+        assert!(PackageInfo::is_skipped_version_spec("link:./local"));
+    }
+
+    #[test]
+    fn test_package_info_is_skipped_version_spec_portal() {
+        assert!(PackageInfo::is_skipped_version_spec("portal:../portal"));
+        assert!(PackageInfo::is_skipped_version_spec("portal:./local"));
+    }
+
+    #[test]
+    fn test_package_info_is_skipped_version_spec_normal_versions() {
+        assert!(!PackageInfo::is_skipped_version_spec("^1.2.3"));
+        assert!(!PackageInfo::is_skipped_version_spec("~2.0.0"));
+        assert!(!PackageInfo::is_skipped_version_spec(">=3.0.0"));
+        assert!(!PackageInfo::is_skipped_version_spec("1.0.0"));
+        assert!(!PackageInfo::is_skipped_version_spec("*"));
+        assert!(!PackageInfo::is_skipped_version_spec("latest"));
+    }
+
+    #[test]
+    fn test_package_info_package_json_accessor() {
+        let pkg_json = create_test_package_json("test", "1.0.0");
+        let info = PackageInfo::new(pkg_json, None, PathBuf::from("."));
+
+        let retrieved = info.package_json();
+        assert_eq!(retrieved.name, "test");
+        assert_eq!(retrieved.version, "1.0.0");
+    }
+}
+
+// ============================================================================
+// DependencyType Tests
+// ============================================================================
+
+mod dependency_type_tests {
+    use crate::types::DependencyType;
+
+    #[test]
+    fn test_dependency_type_as_str() {
+        assert_eq!(DependencyType::Regular.as_str(), "dependencies");
+        assert_eq!(DependencyType::Dev.as_str(), "devDependencies");
+        assert_eq!(DependencyType::Peer.as_str(), "peerDependencies");
+        assert_eq!(DependencyType::Optional.as_str(), "optionalDependencies");
+    }
+
+    #[test]
+    fn test_dependency_type_is_production() {
+        assert!(DependencyType::Regular.is_production());
+        assert!(!DependencyType::Dev.is_production());
+        assert!(!DependencyType::Peer.is_production());
+        assert!(!DependencyType::Optional.is_production());
+    }
+
+    #[test]
+    fn test_dependency_type_is_development() {
+        assert!(!DependencyType::Regular.is_development());
+        assert!(DependencyType::Dev.is_development());
+        assert!(!DependencyType::Peer.is_development());
+        assert!(!DependencyType::Optional.is_development());
+    }
+
+    #[test]
+    fn test_dependency_type_is_peer() {
+        assert!(!DependencyType::Regular.is_peer());
+        assert!(!DependencyType::Dev.is_peer());
+        assert!(DependencyType::Peer.is_peer());
+        assert!(!DependencyType::Optional.is_peer());
+    }
+
+    #[test]
+    fn test_dependency_type_is_optional() {
+        assert!(!DependencyType::Regular.is_optional());
+        assert!(!DependencyType::Dev.is_optional());
+        assert!(!DependencyType::Peer.is_optional());
+        assert!(DependencyType::Optional.is_optional());
+    }
+
+    #[test]
+    fn test_dependency_type_display() {
+        assert_eq!(format!("{}", DependencyType::Regular), "dependencies");
+        assert_eq!(format!("{}", DependencyType::Dev), "devDependencies");
+        assert_eq!(format!("{}", DependencyType::Peer), "peerDependencies");
+        assert_eq!(format!("{}", DependencyType::Optional), "optionalDependencies");
+    }
+
+    #[test]
+    fn test_dependency_type_clone_copy() {
+        let dep_type = DependencyType::Regular;
+        let cloned = dep_type;
+        assert_eq!(dep_type, cloned);
+    }
+
+    #[test]
+    fn test_dependency_type_equality() {
+        assert_eq!(DependencyType::Regular, DependencyType::Regular);
+        assert_ne!(DependencyType::Regular, DependencyType::Dev);
+        assert_ne!(DependencyType::Dev, DependencyType::Peer);
+        assert_ne!(DependencyType::Peer, DependencyType::Optional);
+    }
+
+    #[test]
+    fn test_dependency_type_serialization() {
+        let dep_type = DependencyType::Regular;
+        let serialized = serde_json::to_string(&dep_type).unwrap();
+        let deserialized: DependencyType = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(dep_type, deserialized);
+    }
+
+    #[test]
+    fn test_dependency_type_all_variants_serialization() {
+        let types = vec![
+            DependencyType::Regular,
+            DependencyType::Dev,
+            DependencyType::Peer,
+            DependencyType::Optional,
+        ];
+
+        for dep_type in types {
+            let serialized = serde_json::to_string(&dep_type).unwrap();
+            let deserialized: DependencyType = serde_json::from_str(&serialized).unwrap();
+            assert_eq!(dep_type, deserialized);
+        }
     }
 }

@@ -1681,6 +1681,7 @@ dependencies = [
  "dirs 5.0.1",
  "futures",
  "log",
+ "package-json",
  "path-clean",
  "petgraph",
  "pretty_assertions",

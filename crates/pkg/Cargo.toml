@@ -50,6 +50,9 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 # Path utilities
 path-clean = "1.0"
 
+# Package.json parsing
+package-json = "0.5.0"
+
 # Directory utilities
 dirs = "5.0"
 
