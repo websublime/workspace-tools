@@ -192,9 +192,11 @@
 
 #![allow(clippy::todo)]
 
+mod graph;
 mod resolver;
 
 #[cfg(test)]
 mod tests;
 
+pub use graph::DependencyGraph;
 pub use resolver::VersionResolver;
