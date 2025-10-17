@@ -192,4 +192,9 @@
 
 #![allow(clippy::todo)]
 
-// Module will be implemented in subsequent stories (Epic 5)
+mod resolver;
+
+#[cfg(test)]
+mod tests;
+
+pub use resolver::VersionResolver;
