@@ -354,41 +354,6 @@ impl DependencyGraph {
             .collect()
     }
 
-    /// Returns the node index for a given package name.
-    ///
-    /// This is an internal method used for advanced graph operations.
-    ///
-    /// # Arguments
-    ///
-    /// * `package` - The name of the package
-    ///
-    /// # Returns
-    ///
-    /// The node index if the package exists, `None` otherwise.
-    ///
-    /// # Note
-    ///
-    /// TODO: will be implemented on story 5.5 (Dependency Propagation)
-    #[must_use]
-    #[allow(dead_code)]
-    pub(crate) fn get_node_index(&self, package: &str) -> Option<NodeIndex> {
-        self.node_map.get(package).copied()
-    }
-
-    /// Returns a reference to the underlying graph.
-    ///
-    /// This is an internal method that provides access to the raw petgraph structure
-    /// for advanced operations.
-    ///
-    /// # Note
-    ///
-    /// TODO: will be implemented on story 5.5 (Dependency Propagation)
-    #[must_use]
-    #[allow(dead_code)]
-    pub(crate) fn inner_graph(&self) -> &DiGraph<String, ()> {
-        &self.graph
-    }
-
     /// Finds all transitive dependents of a package.
     ///
     /// This method performs a breadth-first traversal to find all packages that
