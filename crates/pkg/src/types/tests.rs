@@ -1693,3 +1693,507 @@ mod release_info_tests {
         }
     }
 }
+
+// =============================================================================
+// Dependency Type Tests
+// =============================================================================
+
+mod dependency_tests {
+    use super::*;
+    use crate::types::dependency::{
+        extract_protocol_path, is_local_protocol, is_workspace_protocol, parse_protocol,
+        should_skip_protocol, CircularDependency, DependencyUpdate, LocalLinkType, PackageUpdate,
+        UpdateReason, VersionProtocol,
+    };
+    use crate::types::DependencyType;
+
+    // =========================================================================
+    // VersionProtocol Tests
+    // =========================================================================
+
+    #[test]
+    fn test_version_protocol_as_str() {
+        assert_eq!(VersionProtocol::Workspace.as_str(), "workspace:");
+        assert_eq!(VersionProtocol::Local(LocalLinkType::File).as_str(), "file:");
+        assert_eq!(VersionProtocol::Local(LocalLinkType::Link).as_str(), "link:");
+        assert_eq!(VersionProtocol::Local(LocalLinkType::Portal).as_str(), "portal:");
+        assert_eq!(VersionProtocol::Semver.as_str(), "");
+    }
+
+    #[test]
+    fn test_version_protocol_prefix() {
+        assert_eq!(VersionProtocol::Workspace.prefix(), "workspace:");
+        assert_eq!(VersionProtocol::Local(LocalLinkType::File).prefix(), "file:");
+        assert_eq!(VersionProtocol::Semver.prefix(), "");
+    }
+
+    #[test]
+    fn test_version_protocol_parse() {
+        assert_eq!(VersionProtocol::parse("workspace:*"), VersionProtocol::Workspace);
+        assert_eq!(VersionProtocol::parse("workspace:^1.0.0"), VersionProtocol::Workspace);
+        assert_eq!(
+            VersionProtocol::parse("file:../lib"),
+            VersionProtocol::Local(LocalLinkType::File)
+        );
+        assert_eq!(
+            VersionProtocol::parse("link:./shared"),
+            VersionProtocol::Local(LocalLinkType::Link)
+        );
+        assert_eq!(
+            VersionProtocol::parse("portal:./pkg"),
+            VersionProtocol::Local(LocalLinkType::Portal)
+        );
+        assert_eq!(VersionProtocol::parse("^1.0.0"), VersionProtocol::Semver);
+        assert_eq!(VersionProtocol::parse("~2.3.4"), VersionProtocol::Semver);
+        assert_eq!(VersionProtocol::parse("1.0.0"), VersionProtocol::Semver);
+    }
+
+    #[test]
+    fn test_version_protocol_should_skip() {
+        assert!(VersionProtocol::Workspace.should_skip());
+        assert!(VersionProtocol::Local(LocalLinkType::File).should_skip());
+        assert!(VersionProtocol::Local(LocalLinkType::Link).should_skip());
+        assert!(VersionProtocol::Local(LocalLinkType::Portal).should_skip());
+        assert!(!VersionProtocol::Semver.should_skip());
+    }
+
+    #[test]
+    fn test_version_protocol_display() {
+        assert_eq!(VersionProtocol::Workspace.to_string(), "workspace");
+        assert_eq!(VersionProtocol::Local(LocalLinkType::File).to_string(), "file");
+        assert_eq!(VersionProtocol::Local(LocalLinkType::Link).to_string(), "link");
+        assert_eq!(VersionProtocol::Local(LocalLinkType::Portal).to_string(), "portal");
+        assert_eq!(VersionProtocol::Semver.to_string(), "semver");
+    }
+
+    #[test]
+    fn test_version_protocol_serialization() {
+        let protocol = VersionProtocol::Workspace;
+        let json = serde_json::to_string(&protocol).unwrap();
+        let deserialized: VersionProtocol = serde_json::from_str(&json).unwrap();
+        assert_eq!(protocol, deserialized);
+
+        let protocol = VersionProtocol::Local(LocalLinkType::File);
+        let json = serde_json::to_string(&protocol).unwrap();
+        let deserialized: VersionProtocol = serde_json::from_str(&json).unwrap();
+        assert_eq!(protocol, deserialized);
+    }
+
+    #[test]
+    fn test_version_protocol_clone_copy() {
+        let protocol = VersionProtocol::Workspace;
+        let cloned = protocol;
+        assert_eq!(protocol, cloned);
+    }
+
+    // =========================================================================
+    // LocalLinkType Tests
+    // =========================================================================
+
+    #[test]
+    fn test_local_link_type_as_str() {
+        assert_eq!(LocalLinkType::File.as_str(), "file:");
+        assert_eq!(LocalLinkType::Link.as_str(), "link:");
+        assert_eq!(LocalLinkType::Portal.as_str(), "portal:");
+    }
+
+    #[test]
+    fn test_local_link_type_display() {
+        assert_eq!(LocalLinkType::File.to_string(), "file");
+        assert_eq!(LocalLinkType::Link.to_string(), "link");
+        assert_eq!(LocalLinkType::Portal.to_string(), "portal");
+    }
+
+    #[test]
+    fn test_local_link_type_serialization() {
+        let link_type = LocalLinkType::File;
+        let json = serde_json::to_string(&link_type).unwrap();
+        let deserialized: LocalLinkType = serde_json::from_str(&json).unwrap();
+        assert_eq!(link_type, deserialized);
+    }
+
+    #[test]
+    fn test_local_link_type_clone_copy() {
+        let link_type = LocalLinkType::File;
+        let cloned = link_type;
+        assert_eq!(link_type, cloned);
+    }
+
+    // =========================================================================
+    // DependencyUpdate Tests
+    // =========================================================================
+
+    #[test]
+    fn test_dependency_update_new() {
+        let update =
+            DependencyUpdate::new("my-package", DependencyType::Regular, "^1.0.0", "^2.0.0");
+
+        assert_eq!(update.dependency_name, "my-package");
+        assert_eq!(update.dependency_type, DependencyType::Regular);
+        assert_eq!(update.old_version_spec, "^1.0.0");
+        assert_eq!(update.new_version_spec, "^2.0.0");
+    }
+
+    #[test]
+    fn test_dependency_update_is_workspace_protocol() {
+        let update = DependencyUpdate::new(
+            "pkg",
+            DependencyType::Regular,
+            "workspace:*",
+            "workspace:^2.0.0",
+        );
+        assert!(update.is_workspace_protocol());
+
+        let update = DependencyUpdate::new("pkg", DependencyType::Regular, "^1.0.0", "^2.0.0");
+        assert!(!update.is_workspace_protocol());
+
+        let update = DependencyUpdate::new("pkg", DependencyType::Regular, "workspace:*", "^2.0.0");
+        assert!(update.is_workspace_protocol());
+    }
+
+    #[test]
+    fn test_dependency_update_is_local_protocol() {
+        let update =
+            DependencyUpdate::new("pkg", DependencyType::Regular, "file:../lib", "file:../lib");
+        assert!(update.is_local_protocol());
+
+        let update = DependencyUpdate::new("pkg", DependencyType::Regular, "^1.0.0", "^2.0.0");
+        assert!(!update.is_local_protocol());
+
+        let update =
+            DependencyUpdate::new("pkg", DependencyType::Regular, "link:./shared", "^2.0.0");
+        assert!(update.is_local_protocol());
+    }
+
+    #[test]
+    fn test_dependency_update_with_all_dependency_types() {
+        for dep_type in &[
+            DependencyType::Regular,
+            DependencyType::Dev,
+            DependencyType::Peer,
+            DependencyType::Optional,
+        ] {
+            let update = DependencyUpdate::new("pkg", *dep_type, "^1.0.0", "^2.0.0");
+            assert_eq!(update.dependency_type, *dep_type);
+        }
+    }
+
+    #[test]
+    fn test_dependency_update_serialization() {
+        let update =
+            DependencyUpdate::new("my-package", DependencyType::Regular, "^1.0.0", "^2.0.0");
+        let json = serde_json::to_string(&update).unwrap();
+        let deserialized: DependencyUpdate = serde_json::from_str(&json).unwrap();
+        assert_eq!(update, deserialized);
+    }
+
+    #[test]
+    fn test_dependency_update_clone() {
+        let update =
+            DependencyUpdate::new("my-package", DependencyType::Regular, "^1.0.0", "^2.0.0");
+        let cloned = update.clone();
+        assert_eq!(update, cloned);
+    }
+
+    // =========================================================================
+    // CircularDependency Tests
+    // =========================================================================
+
+    #[test]
+    fn test_circular_dependency_new() {
+        let cycle = CircularDependency::new(vec![
+            "pkg-a".to_string(),
+            "pkg-b".to_string(),
+            "pkg-a".to_string(),
+        ]);
+
+        assert_eq!(cycle.cycle.len(), 3);
+        assert_eq!(cycle.cycle[0], "pkg-a");
+        assert_eq!(cycle.cycle[1], "pkg-b");
+        assert_eq!(cycle.cycle[2], "pkg-a");
+    }
+
+    #[test]
+    fn test_circular_dependency_len() {
+        let cycle = CircularDependency::new(vec![
+            "a".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "a".to_string(),
+        ]);
+        assert_eq!(cycle.len(), 4);
+
+        let empty = CircularDependency::new(vec![]);
+        assert_eq!(empty.len(), 0);
+    }
+
+    #[test]
+    fn test_circular_dependency_is_empty() {
+        let cycle = CircularDependency::new(vec!["a".to_string(), "b".to_string()]);
+        assert!(!cycle.is_empty());
+
+        let empty = CircularDependency::new(vec![]);
+        assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn test_circular_dependency_involves() {
+        let cycle = CircularDependency::new(vec![
+            "pkg-a".to_string(),
+            "pkg-b".to_string(),
+            "pkg-c".to_string(),
+        ]);
+
+        assert!(cycle.involves("pkg-a"));
+        assert!(cycle.involves("pkg-b"));
+        assert!(cycle.involves("pkg-c"));
+        assert!(!cycle.involves("pkg-d"));
+    }
+
+    #[test]
+    fn test_circular_dependency_display_cycle() {
+        let cycle = CircularDependency::new(vec![
+            "a".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "a".to_string(),
+        ]);
+
+        assert_eq!(cycle.display_cycle(), "a -> b -> c -> a");
+
+        let empty = CircularDependency::new(vec![]);
+        assert_eq!(empty.display_cycle(), "");
+    }
+
+    #[test]
+    fn test_circular_dependency_display_trait() {
+        let cycle =
+            CircularDependency::new(vec!["a".to_string(), "b".to_string(), "a".to_string()]);
+
+        let display = cycle.to_string();
+        assert!(display.contains("Circular dependency"));
+        assert!(display.contains("a -> b -> a"));
+    }
+
+    #[test]
+    fn test_circular_dependency_serialization() {
+        let cycle = CircularDependency::new(vec![
+            "pkg-a".to_string(),
+            "pkg-b".to_string(),
+            "pkg-a".to_string(),
+        ]);
+
+        let json = serde_json::to_string(&cycle).unwrap();
+        let deserialized: CircularDependency = serde_json::from_str(&json).unwrap();
+        assert_eq!(cycle, deserialized);
+    }
+
+    #[test]
+    fn test_circular_dependency_clone() {
+        let cycle = CircularDependency::new(vec!["a".to_string(), "b".to_string()]);
+        let cloned = cycle.clone();
+        assert_eq!(cycle, cloned);
+    }
+
+    // =========================================================================
+    // UpdateReason Tests
+    // =========================================================================
+
+    #[test]
+    fn test_update_reason_is_direct() {
+        let direct = UpdateReason::DirectChange;
+        assert!(direct.is_direct());
+        assert!(!direct.is_propagated());
+
+        let propagated =
+            UpdateReason::DependencyPropagation { triggered_by: "pkg".to_string(), depth: 1 };
+        assert!(!propagated.is_direct());
+        assert!(propagated.is_propagated());
+    }
+
+    #[test]
+    fn test_update_reason_depth() {
+        let direct = UpdateReason::DirectChange;
+        assert_eq!(direct.depth(), 0);
+
+        let propagated =
+            UpdateReason::DependencyPropagation { triggered_by: "pkg".to_string(), depth: 3 };
+        assert_eq!(propagated.depth(), 3);
+    }
+
+    #[test]
+    fn test_update_reason_display() {
+        let direct = UpdateReason::DirectChange;
+        assert_eq!(direct.to_string(), "direct change");
+
+        let propagated =
+            UpdateReason::DependencyPropagation { triggered_by: "core-pkg".to_string(), depth: 2 };
+        assert!(propagated.to_string().contains("core-pkg"));
+        assert!(propagated.to_string().contains("depth 2"));
+    }
+
+    #[test]
+    fn test_update_reason_serialization() {
+        let direct = UpdateReason::DirectChange;
+        let json = serde_json::to_string(&direct).unwrap();
+        let deserialized: UpdateReason = serde_json::from_str(&json).unwrap();
+        assert_eq!(direct, deserialized);
+
+        let propagated =
+            UpdateReason::DependencyPropagation { triggered_by: "pkg".to_string(), depth: 2 };
+        let json = serde_json::to_string(&propagated).unwrap();
+        let deserialized: UpdateReason = serde_json::from_str(&json).unwrap();
+        assert_eq!(propagated, deserialized);
+    }
+
+    #[test]
+    fn test_update_reason_clone() {
+        let direct = UpdateReason::DirectChange;
+        let cloned = direct.clone();
+        assert_eq!(direct, cloned);
+
+        let propagated =
+            UpdateReason::DependencyPropagation { triggered_by: "pkg".to_string(), depth: 1 };
+        let cloned = propagated.clone();
+        assert_eq!(propagated, cloned);
+    }
+
+    // =========================================================================
+    // PackageUpdate Tests (Basic structure validation)
+    // =========================================================================
+
+    #[test]
+    fn test_package_update_serialization() {
+        let update = PackageUpdate {
+            name: "test-pkg".to_string(),
+            path: PathBuf::from("/test/path"),
+            current_version: Version::new(1, 0, 0),
+            next_version: Version::new(2, 0, 0),
+            reason: UpdateReason::DirectChange,
+            dependency_updates: vec![],
+        };
+
+        let json = serde_json::to_string(&update).unwrap();
+        let deserialized: PackageUpdate = serde_json::from_str(&json).unwrap();
+        assert_eq!(update, deserialized);
+    }
+
+    #[test]
+    fn test_package_update_with_dependency_updates() {
+        let update = PackageUpdate {
+            name: "test-pkg".to_string(),
+            path: PathBuf::from("/test/path"),
+            current_version: Version::new(1, 0, 0),
+            next_version: Version::new(2, 0, 0),
+            reason: UpdateReason::DirectChange,
+            dependency_updates: vec![DependencyUpdate::new(
+                "dep",
+                DependencyType::Regular,
+                "^1.0.0",
+                "^2.0.0",
+            )],
+        };
+
+        assert_eq!(update.dependency_updates.len(), 1);
+        assert_eq!(update.dependency_updates[0].dependency_name, "dep");
+    }
+
+    // =========================================================================
+    // Protocol Helper Function Tests
+    // =========================================================================
+
+    #[test]
+    fn test_is_workspace_protocol() {
+        assert!(is_workspace_protocol("workspace:*"));
+        assert!(is_workspace_protocol("workspace:^1.0.0"));
+        assert!(is_workspace_protocol("workspace:~2.3.0"));
+        assert!(is_workspace_protocol("workspace:1.0.0"));
+        assert!(!is_workspace_protocol("^1.0.0"));
+        assert!(!is_workspace_protocol("file:../lib"));
+        assert!(!is_workspace_protocol("link:./shared"));
+    }
+
+    #[test]
+    fn test_is_local_protocol() {
+        assert!(is_local_protocol("file:../lib"));
+        assert!(is_local_protocol("file:./local"));
+        assert!(is_local_protocol("link:./shared"));
+        assert!(is_local_protocol("link:../other"));
+        assert!(is_local_protocol("portal:./packages"));
+        assert!(is_local_protocol("portal:../monorepo"));
+        assert!(!is_local_protocol("workspace:*"));
+        assert!(!is_local_protocol("^1.0.0"));
+        assert!(!is_local_protocol("~2.3.4"));
+    }
+
+    #[test]
+    fn test_should_skip_protocol() {
+        assert!(should_skip_protocol("workspace:*"));
+        assert!(should_skip_protocol("workspace:^1.0.0"));
+        assert!(should_skip_protocol("file:../lib"));
+        assert!(should_skip_protocol("link:./shared"));
+        assert!(should_skip_protocol("portal:./pkg"));
+        assert!(!should_skip_protocol("^1.0.0"));
+        assert!(!should_skip_protocol("~2.3.4"));
+        assert!(!should_skip_protocol("1.0.0"));
+        assert!(!should_skip_protocol(">=1.0.0"));
+    }
+
+    #[test]
+    fn test_extract_protocol_path() {
+        assert_eq!(extract_protocol_path("file:../lib"), "../lib");
+        assert_eq!(extract_protocol_path("file:./local"), "./local");
+        assert_eq!(extract_protocol_path("link:./shared"), "./shared");
+        assert_eq!(extract_protocol_path("link:../other"), "../other");
+        assert_eq!(extract_protocol_path("portal:./pkg"), "./pkg");
+        assert_eq!(extract_protocol_path("portal:../monorepo"), "../monorepo");
+        assert_eq!(extract_protocol_path("workspace:*"), "*");
+        assert_eq!(extract_protocol_path("workspace:^1.0.0"), "^1.0.0");
+        assert_eq!(extract_protocol_path("^1.0.0"), "^1.0.0");
+        assert_eq!(extract_protocol_path("~2.3.4"), "~2.3.4");
+    }
+
+    #[test]
+    fn test_parse_protocol() {
+        assert_eq!(parse_protocol("workspace:*"), VersionProtocol::Workspace);
+        assert_eq!(parse_protocol("file:../lib"), VersionProtocol::Local(LocalLinkType::File));
+        assert_eq!(parse_protocol("link:./shared"), VersionProtocol::Local(LocalLinkType::Link));
+        assert_eq!(parse_protocol("portal:./pkg"), VersionProtocol::Local(LocalLinkType::Portal));
+        assert_eq!(parse_protocol("^1.0.0"), VersionProtocol::Semver);
+        assert_eq!(parse_protocol("~2.3.4"), VersionProtocol::Semver);
+        assert_eq!(parse_protocol("1.0.0"), VersionProtocol::Semver);
+    }
+
+    #[test]
+    fn test_parse_protocol_edge_cases() {
+        // Empty string
+        assert_eq!(parse_protocol(""), VersionProtocol::Semver);
+
+        // Partial matches shouldn't trigger
+        assert_eq!(parse_protocol("myworkspace:*"), VersionProtocol::Semver);
+        assert_eq!(parse_protocol("myfile:path"), VersionProtocol::Semver);
+
+        // Case sensitivity
+        assert_eq!(parse_protocol("Workspace:*"), VersionProtocol::Semver);
+        assert_eq!(parse_protocol("FILE:../lib"), VersionProtocol::Semver);
+    }
+
+    #[test]
+    fn test_protocol_detection_consistency() {
+        let test_cases = vec![
+            ("workspace:*", true, false, true),
+            ("workspace:^1.0.0", true, false, true),
+            ("file:../lib", false, true, true),
+            ("link:./shared", false, true, true),
+            ("portal:./pkg", false, true, true),
+            ("^1.0.0", false, false, false),
+            ("~2.3.4", false, false, false),
+        ];
+
+        for (spec, is_workspace, is_local, should_skip) in test_cases {
+            assert_eq!(is_workspace_protocol(spec), is_workspace, "Failed for: {}", spec);
+            assert_eq!(is_local_protocol(spec), is_local, "Failed for: {}", spec);
+            assert_eq!(should_skip_protocol(spec), should_skip, "Failed for: {}", spec);
+        }
+    }
+}

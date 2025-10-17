@@ -129,6 +129,14 @@ pub use package::{DependencyType, PackageInfo};
 mod changeset;
 pub use changeset::{ArchivedChangeset, Changeset, ReleaseInfo};
 
+// Dependency types (Story 4.4)
+pub mod dependency;
+pub use dependency::{
+    extract_protocol_path, is_local_protocol, is_workspace_protocol, parse_protocol,
+    should_skip_protocol, CircularDependency, DependencyUpdate, LocalLinkType, PackageUpdate,
+    UpdateReason, VersionProtocol,
+};
+
 // Tests module
 #[cfg(test)]
 mod tests;
