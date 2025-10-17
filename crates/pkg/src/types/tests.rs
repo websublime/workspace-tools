@@ -12,8 +12,8 @@
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::panic)]
 
-use super::{Version, VersionBump, VersioningStrategy};
-use crate::error::VersionError;
+use super::{ArchivedChangeset, Changeset, ReleaseInfo, Version, VersionBump, VersioningStrategy};
+use crate::error::{ChangesetError, VersionError};
 use package_json::PackageJson;
 use proptest::prelude::*;
 use std::collections::HashMap;
@@ -1155,9 +1155,541 @@ mod dependency_type_tests {
         ];
 
         for dep_type in types {
-            let serialized = serde_json::to_string(&dep_type).unwrap();
-            let deserialized: DependencyType = serde_json::from_str(&serialized).unwrap();
+            let json = serde_json::to_string(&dep_type).unwrap();
+            let deserialized: DependencyType = serde_json::from_str(&json).unwrap();
             assert_eq!(dep_type, deserialized);
+        }
+    }
+}
+
+// =============================================================================
+// Changeset Tests
+// =============================================================================
+
+mod changeset_tests {
+    use super::*;
+
+    #[test]
+    fn test_changeset_new() {
+        let changeset =
+            Changeset::new("feature/oauth", VersionBump::Minor, vec!["production".to_string()]);
+
+        assert_eq!(changeset.branch, "feature/oauth");
+        assert_eq!(changeset.bump, VersionBump::Minor);
+        assert_eq!(changeset.environments, vec!["production"]);
+        assert!(changeset.packages.is_empty());
+        assert!(changeset.changes.is_empty());
+        assert!(changeset.updated_at >= changeset.created_at);
+    }
+
+    #[test]
+    fn test_changeset_add_package() {
+        let mut changeset =
+            Changeset::new("feat/test", VersionBump::Patch, vec!["dev".to_string()]);
+
+        changeset.add_package("@myorg/core");
+        assert_eq!(changeset.packages.len(), 1);
+        assert!(changeset.has_package("@myorg/core"));
+
+        // Adding duplicate should not increase count
+        changeset.add_package("@myorg/core");
+        assert_eq!(changeset.packages.len(), 1);
+
+        changeset.add_package("@myorg/utils");
+        assert_eq!(changeset.packages.len(), 2);
+        assert!(changeset.has_package("@myorg/utils"));
+    }
+
+    #[test]
+    fn test_changeset_add_commit() {
+        let mut changeset =
+            Changeset::new("feat/test", VersionBump::Minor, vec!["staging".to_string()]);
+
+        changeset.add_commit("abc123");
+        assert_eq!(changeset.changes.len(), 1);
+        assert!(changeset.has_commit("abc123"));
+
+        // Adding duplicate should not increase count
+        changeset.add_commit("abc123");
+        assert_eq!(changeset.changes.len(), 1);
+
+        changeset.add_commit("def456");
+        assert_eq!(changeset.changes.len(), 2);
+        assert!(changeset.has_commit("def456"));
+    }
+
+    #[test]
+    fn test_changeset_remove_package() {
+        let mut changeset =
+            Changeset::new("feat/test", VersionBump::Major, vec!["production".to_string()]);
+
+        changeset.add_package("@myorg/core");
+        changeset.add_package("@myorg/utils");
+        assert_eq!(changeset.packages.len(), 2);
+
+        assert!(changeset.remove_package("@myorg/core"));
+        assert_eq!(changeset.packages.len(), 1);
+        assert!(!changeset.has_package("@myorg/core"));
+
+        // Removing non-existent package should return false
+        assert!(!changeset.remove_package("@myorg/nonexistent"));
+        assert_eq!(changeset.packages.len(), 1);
+    }
+
+    #[test]
+    fn test_changeset_has_package() {
+        let mut changeset =
+            Changeset::new("feat/test", VersionBump::Patch, vec!["dev".to_string()]);
+
+        assert!(!changeset.has_package("@myorg/core"));
+
+        changeset.add_package("@myorg/core");
+        assert!(changeset.has_package("@myorg/core"));
+        assert!(!changeset.has_package("@myorg/other"));
+    }
+
+    #[test]
+    fn test_changeset_has_commit() {
+        let mut changeset =
+            Changeset::new("feat/test", VersionBump::Minor, vec!["staging".to_string()]);
+
+        assert!(!changeset.has_commit("abc123"));
+
+        changeset.add_commit("abc123");
+        assert!(changeset.has_commit("abc123"));
+        assert!(!changeset.has_commit("xyz789"));
+    }
+
+    #[test]
+    fn test_changeset_is_empty() {
+        let mut changeset =
+            Changeset::new("feat/test", VersionBump::Minor, vec!["dev".to_string()]);
+
+        assert!(changeset.is_empty());
+
+        changeset.add_package("@myorg/core");
+        assert!(!changeset.is_empty());
+
+        changeset.remove_package("@myorg/core");
+        assert!(changeset.is_empty());
+    }
+
+    #[test]
+    fn test_changeset_set_bump() {
+        let mut changeset =
+            Changeset::new("feat/test", VersionBump::Patch, vec!["dev".to_string()]);
+
+        assert_eq!(changeset.bump, VersionBump::Patch);
+
+        changeset.set_bump(VersionBump::Major);
+        assert_eq!(changeset.bump, VersionBump::Major);
+    }
+
+    #[test]
+    fn test_changeset_set_environments() {
+        let mut changeset =
+            Changeset::new("feat/test", VersionBump::Minor, vec!["dev".to_string()]);
+
+        assert_eq!(changeset.environments, vec!["dev"]);
+
+        changeset.set_environments(vec!["staging".to_string(), "production".to_string()]);
+        assert_eq!(changeset.environments.len(), 2);
+        assert_eq!(changeset.environments, vec!["staging", "production"]);
+    }
+
+    #[test]
+    fn test_changeset_touch() {
+        let mut changeset =
+            Changeset::new("feat/test", VersionBump::Patch, vec!["dev".to_string()]);
+
+        let initial_timestamp = changeset.updated_at;
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        changeset.touch();
+        assert!(changeset.updated_at > initial_timestamp);
+    }
+
+    #[test]
+    fn test_changeset_validate_success() {
+        let mut changeset =
+            Changeset::new("feature/test", VersionBump::Minor, vec!["production".to_string()]);
+
+        changeset.add_package("@myorg/core");
+
+        let available_envs = vec!["dev", "staging", "production"];
+        assert!(changeset.validate(&available_envs).is_ok());
+    }
+
+    #[test]
+    fn test_changeset_validate_empty_branch() {
+        let mut changeset = Changeset::new("", VersionBump::Minor, vec!["production".to_string()]);
+
+        changeset.add_package("@myorg/core");
+
+        let available_envs = vec!["production"];
+        let result = changeset.validate(&available_envs);
+        assert!(result.is_err());
+
+        if let Err(ChangesetError::ValidationFailed { errors }) = result {
+            assert!(errors.iter().any(|e| e.contains("Branch name cannot be empty")));
+        } else {
+            panic!("Expected ValidationFailed error");
+        }
+    }
+
+    #[test]
+    fn test_changeset_validate_no_packages() {
+        let changeset =
+            Changeset::new("feature/test", VersionBump::Minor, vec!["production".to_string()]);
+
+        let available_envs = vec!["production"];
+        let result = changeset.validate(&available_envs);
+        assert!(result.is_err());
+
+        if let Err(ChangesetError::ValidationFailed { errors }) = result {
+            assert!(errors.iter().any(|e| e.contains("at least one package")));
+        } else {
+            panic!("Expected ValidationFailed error");
+        }
+    }
+
+    #[test]
+    fn test_changeset_validate_no_environments() {
+        let mut changeset = Changeset::new("feature/test", VersionBump::Minor, vec![]);
+
+        changeset.add_package("@myorg/core");
+
+        let available_envs = vec!["production"];
+        let result = changeset.validate(&available_envs);
+        assert!(result.is_err());
+
+        if let Err(ChangesetError::ValidationFailed { errors }) = result {
+            assert!(errors.iter().any(|e| e.contains("at least one environment")));
+        } else {
+            panic!("Expected ValidationFailed error");
+        }
+    }
+
+    #[test]
+    fn test_changeset_validate_invalid_environment() {
+        let mut changeset =
+            Changeset::new("feature/test", VersionBump::Minor, vec!["invalid-env".to_string()]);
+
+        changeset.add_package("@myorg/core");
+
+        let available_envs = vec!["dev", "staging", "production"];
+        let result = changeset.validate(&available_envs);
+        assert!(result.is_err());
+
+        if let Err(ChangesetError::ValidationFailed { errors }) = result {
+            assert!(errors.iter().any(|e| e.contains("invalid-env")));
+        } else {
+            panic!("Expected ValidationFailed error");
+        }
+    }
+
+    #[test]
+    fn test_changeset_validate_multiple_errors() {
+        let changeset = Changeset::new("", VersionBump::Minor, vec!["invalid".to_string()]);
+
+        let available_envs = vec!["production"];
+        let result = changeset.validate(&available_envs);
+        assert!(result.is_err());
+
+        if let Err(ChangesetError::ValidationFailed { errors }) = result {
+            assert!(errors.len() >= 3); // empty branch, no packages, invalid env
+        } else {
+            panic!("Expected ValidationFailed error");
+        }
+    }
+
+    #[test]
+    fn test_changeset_serialization() {
+        let mut changeset =
+            Changeset::new("feature/test", VersionBump::Minor, vec!["production".to_string()]);
+
+        changeset.add_package("@myorg/core");
+        changeset.add_commit("abc123");
+
+        let json = serde_json::to_string(&changeset).unwrap();
+        let deserialized: Changeset = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(changeset.branch, deserialized.branch);
+        assert_eq!(changeset.bump, deserialized.bump);
+        assert_eq!(changeset.environments, deserialized.environments);
+        assert_eq!(changeset.packages, deserialized.packages);
+        assert_eq!(changeset.changes, deserialized.changes);
+    }
+
+    #[test]
+    fn test_changeset_json_format() {
+        let mut changeset =
+            Changeset::new("feature/test", VersionBump::Patch, vec!["dev".to_string()]);
+
+        changeset.add_package("@myorg/core");
+        changeset.add_commit("abc123");
+
+        let json = serde_json::to_string_pretty(&changeset).unwrap();
+
+        assert!(json.contains("\"branch\""));
+        assert!(json.contains("\"bump\""));
+        assert!(json.contains("\"environments\""));
+        assert!(json.contains("\"packages\""));
+        assert!(json.contains("\"changes\""));
+        assert!(json.contains("\"created_at\""));
+        assert!(json.contains("\"updated_at\""));
+    }
+
+    #[test]
+    fn test_changeset_clone() {
+        let mut changeset =
+            Changeset::new("feat/test", VersionBump::Minor, vec!["dev".to_string()]);
+
+        changeset.add_package("@myorg/core");
+
+        let cloned = changeset.clone();
+        assert_eq!(changeset, cloned);
+    }
+
+    #[test]
+    fn test_changeset_equality() {
+        let changeset1 = Changeset::new("feat/test", VersionBump::Minor, vec!["dev".to_string()]);
+
+        let changeset2 = changeset1.clone();
+        assert_eq!(changeset1, changeset2);
+    }
+}
+
+// =============================================================================
+// ArchivedChangeset Tests
+// =============================================================================
+
+mod archived_changeset_tests {
+    use super::*;
+
+    #[test]
+    fn test_archived_changeset_new() {
+        let mut changeset =
+            Changeset::new("feature/release", VersionBump::Major, vec!["production".to_string()]);
+        changeset.add_package("@myorg/core");
+
+        let mut versions = HashMap::new();
+        versions.insert("@myorg/core".to_string(), "2.0.0".to_string());
+
+        let release_info = ReleaseInfo::new("ci-bot", "abc123", versions);
+        let archived = ArchivedChangeset::new(changeset.clone(), release_info.clone());
+
+        assert_eq!(archived.changeset, changeset);
+        assert_eq!(archived.release_info, release_info);
+    }
+
+    #[test]
+    fn test_archived_changeset_preserves_changeset_data() {
+        let mut changeset = Changeset::new(
+            "feat/api",
+            VersionBump::Minor,
+            vec!["staging".to_string(), "production".to_string()],
+        );
+        changeset.add_package("@myorg/api");
+        changeset.add_package("@myorg/utils");
+        changeset.add_commit("commit1");
+        changeset.add_commit("commit2");
+
+        let versions = HashMap::new();
+        let release_info = ReleaseInfo::new("developer@example.com", "def456", versions);
+        let archived = ArchivedChangeset::new(changeset.clone(), release_info);
+
+        assert_eq!(archived.changeset.branch, "feat/api");
+        assert_eq!(archived.changeset.packages.len(), 2);
+        assert_eq!(archived.changeset.changes.len(), 2);
+        assert!(archived.changeset.has_package("@myorg/api"));
+        assert!(archived.changeset.has_commit("commit1"));
+    }
+
+    #[test]
+    fn test_archived_changeset_serialization() {
+        let mut changeset =
+            Changeset::new("feature/test", VersionBump::Patch, vec!["dev".to_string()]);
+        changeset.add_package("@myorg/test");
+
+        let mut versions = HashMap::new();
+        versions.insert("@myorg/test".to_string(), "1.0.1".to_string());
+
+        let release_info = ReleaseInfo::new("ci", "abc", versions);
+        let archived = ArchivedChangeset::new(changeset, release_info);
+
+        let json = serde_json::to_string(&archived).unwrap();
+        let deserialized: ArchivedChangeset = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(archived.changeset.branch, deserialized.changeset.branch);
+        assert_eq!(archived.release_info.applied_by, deserialized.release_info.applied_by);
+    }
+
+    #[test]
+    fn test_archived_changeset_json_structure() {
+        let changeset =
+            Changeset::new("feat/test", VersionBump::Minor, vec!["production".to_string()]);
+
+        let release_info = ReleaseInfo::new("user", "commit", HashMap::new());
+        let archived = ArchivedChangeset::new(changeset, release_info);
+
+        let json = serde_json::to_string_pretty(&archived).unwrap();
+
+        assert!(json.contains("\"changeset\""));
+        assert!(json.contains("\"release_info\""));
+        assert!(json.contains("\"branch\""));
+        assert!(json.contains("\"applied_at\""));
+        assert!(json.contains("\"applied_by\""));
+    }
+
+    #[test]
+    fn test_archived_changeset_clone() {
+        let changeset = Changeset::new("feat/test", VersionBump::Minor, vec!["dev".to_string()]);
+        let release_info = ReleaseInfo::new("ci", "abc", HashMap::new());
+        let archived = ArchivedChangeset::new(changeset, release_info);
+
+        let cloned = archived.clone();
+        assert_eq!(archived, cloned);
+    }
+}
+
+// =============================================================================
+// ReleaseInfo Tests
+// =============================================================================
+
+mod release_info_tests {
+    use super::*;
+
+    #[test]
+    fn test_release_info_new() {
+        let mut versions = HashMap::new();
+        versions.insert("@myorg/core".to_string(), "1.2.3".to_string());
+        versions.insert("@myorg/utils".to_string(), "2.0.0".to_string());
+
+        let release_info = ReleaseInfo::new("ci-system", "abc123def456", versions.clone());
+
+        assert_eq!(release_info.applied_by, "ci-system");
+        assert_eq!(release_info.git_commit, "abc123def456");
+        assert_eq!(release_info.versions, versions);
+    }
+
+    #[test]
+    fn test_release_info_get_version() {
+        let mut versions = HashMap::new();
+        versions.insert("@myorg/core".to_string(), "3.0.0".to_string());
+        versions.insert("@myorg/api".to_string(), "1.5.2".to_string());
+
+        let release_info = ReleaseInfo::new("user", "commit", versions);
+
+        assert_eq!(release_info.get_version("@myorg/core"), Some("3.0.0"));
+        assert_eq!(release_info.get_version("@myorg/api"), Some("1.5.2"));
+        assert_eq!(release_info.get_version("@myorg/nonexistent"), None);
+    }
+
+    #[test]
+    fn test_release_info_package_count() {
+        let mut versions = HashMap::new();
+        versions.insert("pkg1".to_string(), "1.0.0".to_string());
+        versions.insert("pkg2".to_string(), "2.0.0".to_string());
+        versions.insert("pkg3".to_string(), "3.0.0".to_string());
+
+        let release_info = ReleaseInfo::new("ci", "abc", versions);
+        assert_eq!(release_info.package_count(), 3);
+    }
+
+    #[test]
+    fn test_release_info_package_count_empty() {
+        let release_info = ReleaseInfo::new("ci", "abc", HashMap::new());
+        assert_eq!(release_info.package_count(), 0);
+    }
+
+    #[test]
+    fn test_release_info_timestamp_set() {
+        let release_info = ReleaseInfo::new("user", "commit", HashMap::new());
+
+        // Should have a valid timestamp close to now
+        let now = chrono::Utc::now();
+        let diff = (now - release_info.applied_at).num_seconds().abs();
+        assert!(diff < 5); // Should be within 5 seconds
+    }
+
+    #[test]
+    fn test_release_info_serialization() {
+        let mut versions = HashMap::new();
+        versions.insert("pkg".to_string(), "1.0.0".to_string());
+
+        let release_info = ReleaseInfo::new("developer@example.com", "abc123", versions);
+
+        let json = serde_json::to_string(&release_info).unwrap();
+        let deserialized: ReleaseInfo = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(release_info.applied_by, deserialized.applied_by);
+        assert_eq!(release_info.git_commit, deserialized.git_commit);
+        assert_eq!(release_info.versions, deserialized.versions);
+    }
+
+    #[test]
+    fn test_release_info_json_format() {
+        let mut versions = HashMap::new();
+        versions.insert("@myorg/test".to_string(), "1.0.0".to_string());
+
+        let release_info = ReleaseInfo::new("ci-bot", "commit123", versions);
+
+        let json = serde_json::to_string_pretty(&release_info).unwrap();
+
+        assert!(json.contains("\"applied_at\""));
+        assert!(json.contains("\"applied_by\""));
+        assert!(json.contains("\"git_commit\""));
+        assert!(json.contains("\"versions\""));
+        assert!(json.contains("ci-bot"));
+        assert!(json.contains("commit123"));
+    }
+
+    #[test]
+    fn test_release_info_clone() {
+        let mut versions = HashMap::new();
+        versions.insert("pkg".to_string(), "1.0.0".to_string());
+
+        let release_info = ReleaseInfo::new("user", "commit", versions);
+        let cloned = release_info.clone();
+
+        assert_eq!(release_info, cloned);
+    }
+
+    #[test]
+    fn test_release_info_equality() {
+        let mut versions = HashMap::new();
+        versions.insert("pkg".to_string(), "1.0.0".to_string());
+
+        let release_info1 = ReleaseInfo::new("user", "commit", versions.clone());
+        let release_info2 = release_info1.clone();
+
+        assert_eq!(release_info1, release_info2);
+    }
+
+    #[test]
+    fn test_release_info_with_multiple_packages() {
+        let mut versions = HashMap::new();
+        versions.insert("@org/pkg1".to_string(), "1.0.0".to_string());
+        versions.insert("@org/pkg2".to_string(), "2.3.4".to_string());
+        versions.insert("@org/pkg3".to_string(), "0.1.0".to_string());
+
+        let release_info = ReleaseInfo::new("ci", "hash", versions.clone());
+
+        assert_eq!(release_info.package_count(), 3);
+        assert_eq!(release_info.get_version("@org/pkg1"), Some("1.0.0"));
+        assert_eq!(release_info.get_version("@org/pkg2"), Some("2.3.4"));
+        assert_eq!(release_info.get_version("@org/pkg3"), Some("0.1.0"));
+    }
+
+    #[test]
+    fn test_release_info_applied_by_variations() {
+        let test_cases =
+            vec!["ci-bot", "developer@example.com", "github-actions", "jenkins", "manual-release"];
+
+        for applied_by in test_cases {
+            let release_info = ReleaseInfo::new(applied_by, "commit", HashMap::new());
+            assert_eq!(release_info.applied_by, applied_by);
         }
     }
 }
