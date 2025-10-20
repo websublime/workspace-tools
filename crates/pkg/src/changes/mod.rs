@@ -112,12 +112,15 @@
 mod analyzer;
 pub use analyzer::ChangesAnalyzer;
 
+// Mapping module - Story 7.2
+pub mod mapping;
+pub use mapping::PackageMapper;
+
 // Tests module
 #[cfg(test)]
 mod tests;
 
 // Module will be implemented in subsequent stories (Epic 7)
-// TODO: will be implemented on story 7.2 - File-to-Package Mapping
 // TODO: will be implemented on story 7.3 - Working Directory Analysis
 // TODO: will be implemented on story 7.4 - Commit Range Analysis
 // TODO: will be implemented on story 7.5 - Version Preview Calculation
