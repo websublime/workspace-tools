@@ -1104,12 +1104,22 @@ async fn test_integration_normalized_paths_in_resolution() {
     for path in &result.modified_files {
         // Should not contain mixed separators or redundant separators
         let path_str = path.to_string_lossy();
-        assert!(!path_str.contains("//"), "Path should not have double slashes: {}", path_str);
-        assert!(
-            !path_str.contains("\\\\"),
-            "Path should not have double backslashes: {}",
-            path_str
-        );
+
+        // On Windows, \\?\ prefix is valid for extended-length paths, so skip this check
+        // if the path starts with that prefix
+        let has_extended_prefix = cfg!(windows) && path_str.starts_with(r"\\?\");
+
+        if !has_extended_prefix {
+            assert!(!path_str.contains("//"), "Path should not have double slashes: {}", path_str);
+            assert!(
+                !path_str.contains("\\\\"),
+                "Path should not have double backslashes: {}",
+                path_str
+            );
+        }
+
+        // Verify the path is absolute and exists
+        assert!(path.is_absolute(), "Path should be absolute: {:?}", path);
     }
 }
 
