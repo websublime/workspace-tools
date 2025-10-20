@@ -186,6 +186,7 @@
 #![allow(clippy::todo)]
 
 // Internal modules
+mod git_integration;
 mod manager;
 mod storage;
 
@@ -193,10 +194,10 @@ mod storage;
 mod tests;
 
 // Public API - re-exports
+pub use git_integration::PackageDetector;
 pub use manager::ChangesetManager;
 pub use storage::{ChangesetStorage, FileBasedChangesetStorage};
 
 // Additional modules will be implemented in subsequent stories (Epic 6)
 // - history: Story 6.5
-// - package_detector: Story 6.4
 // - update_summary: Story 6.4</parameter>

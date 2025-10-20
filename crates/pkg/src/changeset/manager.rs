@@ -13,11 +13,12 @@
 
 use crate::config::ChangesetConfig;
 use crate::error::{ChangesetError, ChangesetResult};
-use crate::types::{Changeset, VersionBump};
+use crate::types::{Changeset, UpdateSummary, VersionBump};
 use std::path::PathBuf;
 use sublime_git_tools::Repo;
 use sublime_standard_tools::filesystem::FileSystemManager;
 
+use super::git_integration::PackageDetector;
 use super::storage::{ChangesetStorage, FileBasedChangesetStorage};
 
 /// Manager for high-level changeset operations.
@@ -70,6 +71,8 @@ use super::storage::{ChangesetStorage, FileBasedChangesetStorage};
 pub struct ChangesetManager<S: ChangesetStorage> {
     /// The storage implementation for persisting changesets.
     storage: S,
+    /// Root directory of the workspace.
+    workspace_root: PathBuf,
     /// Optional Git repository for commit integration (will be used in Story 6.4).
     git_repo: Option<Repo>,
     /// Configuration for changeset validation and behavior.
@@ -134,7 +137,7 @@ impl ChangesetManager<FileBasedChangesetStorage<FileSystemManager>> {
         // Attempt to open Git repository (non-fatal if it fails)
         let git_repo = Repo::open(workspace_root.to_string_lossy().as_ref()).ok();
 
-        Ok(Self { storage, git_repo, config: changeset_config })
+        Ok(Self { storage, workspace_root, git_repo, config: changeset_config })
     }
 }
 
@@ -179,8 +182,13 @@ impl<S: ChangesetStorage> ChangesetManager<S> {
     /// # }
     /// ```
     #[must_use]
-    pub fn with_storage(storage: S, git_repo: Option<Repo>, config: ChangesetConfig) -> Self {
-        Self { storage, git_repo, config }
+    pub fn with_storage(
+        storage: S,
+        workspace_root: impl Into<PathBuf>,
+        git_repo: Option<Repo>,
+        config: ChangesetConfig,
+    ) -> Self {
+        Self { storage, workspace_root: workspace_root.into(), git_repo, config }
     }
 
     /// Creates a new changeset.
@@ -462,6 +470,22 @@ impl<S: ChangesetStorage> ChangesetManager<S> {
         self.git_repo.as_ref()
     }
 
+    /// Returns a reference to the workspace root path.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// # use sublime_pkg_tools::changeset::ChangesetManager;
+    /// # fn example(manager: ChangesetManager<impl ChangesetStorage>) {
+    /// let root = manager.workspace_root();
+    /// println!("Workspace root: {:?}", root);
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn workspace_root(&self) -> &std::path::Path {
+        &self.workspace_root
+    }
+
     /// Returns a reference to the changeset configuration.
     ///
     /// # Examples
@@ -476,5 +500,190 @@ impl<S: ChangesetStorage> ChangesetManager<S> {
     #[must_use]
     pub fn config(&self) -> &ChangesetConfig {
         &self.config
+    }
+
+    /// Adds commits manually to a changeset.
+    ///
+    /// This method allows adding specific commit IDs to a changeset without
+    /// detecting affected packages. Use this when you already know which commits
+    /// should be included in the changeset.
+    ///
+    /// # Parameters
+    ///
+    /// * `branch` - The branch name of the changeset to update
+    /// * `commit_ids` - List of commit IDs to add
+    ///
+    /// # Returns
+    ///
+    /// An `UpdateSummary` with the number of commits added and empty package lists.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The changeset does not exist
+    /// - Storage operation fails
+    /// - Validation fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// # use sublime_pkg_tools::changeset::ChangesetManager;
+    /// # async fn example(manager: ChangesetManager<impl ChangesetStorage>) -> Result<(), Box<dyn std::error::Error>> {
+    /// let summary = manager.add_commits(
+    ///     "feature/new-api",
+    ///     vec!["abc123".to_string(), "def456".to_string()]
+    /// ).await?;
+    ///
+    /// println!("Added {} commits", summary.commits_added);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn add_commits(
+        &self,
+        branch: &str,
+        commit_ids: Vec<String>,
+    ) -> ChangesetResult<UpdateSummary> {
+        if commit_ids.is_empty() {
+            return Ok(UpdateSummary::empty());
+        }
+
+        // Load the changeset
+        let mut changeset = self.load(branch).await?;
+
+        // Filter out commits that are already in the changeset
+        let new_commits: Vec<String> =
+            commit_ids.into_iter().filter(|id| !changeset.has_commit(id)).collect();
+
+        if new_commits.is_empty() {
+            return Ok(UpdateSummary::new(0, Vec::new(), Vec::new(), changeset.packages.clone()));
+        }
+
+        // Add commits to changeset
+        for commit in &new_commits {
+            changeset.add_commit(commit);
+        }
+
+        // Save the updated changeset
+        self.update(&changeset).await?;
+
+        Ok(UpdateSummary::new(
+            new_commits.len(),
+            new_commits,
+            Vec::new(),
+            changeset.packages.clone(),
+        ))
+    }
+
+    /// Adds commits from Git to a changeset with automatic package detection.
+    ///
+    /// This method retrieves commits from the Git repository and automatically detects
+    /// which packages are affected by analyzing the changed files. It's the primary
+    /// method for populating changesets from Git history.
+    ///
+    /// The method will:
+    /// 1. Get commits since the last commit in the changeset (or all commits if empty)
+    /// 2. Detect which packages are affected by the commits
+    /// 3. Add new packages to the changeset
+    /// 4. Add commit IDs to the changeset
+    /// 5. Save the updated changeset
+    ///
+    /// # Parameters
+    ///
+    /// * `branch` - The branch name of the changeset to update
+    ///
+    /// # Returns
+    ///
+    /// An `UpdateSummary` containing:
+    /// - Number of commits added
+    /// - List of commit IDs added
+    /// - Newly discovered packages
+    /// - Existing packages in the changeset
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Git repository is not available
+    /// - The changeset does not exist
+    /// - Git operations fail
+    /// - Package detection fails
+    /// - Storage operation fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// # use sublime_pkg_tools::changeset::ChangesetManager;
+    /// # async fn example(manager: ChangesetManager<impl ChangesetStorage>) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Create a changeset
+    /// let changeset = manager.create(
+    ///     "feature/new-api",
+    ///     sublime_pkg_tools::types::VersionBump::Minor,
+    ///     vec!["production".to_string()]
+    /// ).await?;
+    ///
+    /// // Add commits from Git with automatic package detection
+    /// let summary = manager.add_commits_from_git("feature/new-api").await?;
+    ///
+    /// println!("Added {} commits", summary.commits_added);
+    /// println!("Discovered {} new packages", summary.new_packages.len());
+    /// for package in &summary.new_packages {
+    ///     println!("  - {}", package);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn add_commits_from_git(&self, branch: &str) -> ChangesetResult<UpdateSummary> {
+        // Ensure we have a Git repository
+        let repo = self.git_repo.as_ref().ok_or_else(|| ChangesetError::GitIntegration {
+            operation: "add commits from git".to_string(),
+            reason: "Git repository not available".to_string(),
+        })?;
+
+        // Load the changeset
+        let mut changeset = self.load(branch).await?;
+
+        // Get the last commit in the changeset to use as a starting point
+        let since_commit = changeset.changes.last().cloned();
+
+        // Get new commits from Git
+        let detector =
+            PackageDetector::new(self.workspace_root.clone(), repo, FileSystemManager::new());
+
+        let new_commits = detector.get_commits_since(since_commit)?;
+
+        if new_commits.is_empty() {
+            return Ok(UpdateSummary::empty());
+        }
+
+        // Extract commit IDs
+        let commit_ids: Vec<String> = new_commits.iter().map(|c| c.hash.clone()).collect();
+
+        // Detect affected packages
+        let affected_packages = detector.detect_affected_packages(&commit_ids).await?;
+
+        // Determine which packages are new and which already existed
+        let mut new_packages: Vec<String> = Vec::new();
+        let mut existing_packages: Vec<String> = Vec::new();
+
+        for pkg in affected_packages {
+            if changeset.has_package(&pkg) {
+                existing_packages.push(pkg);
+            } else {
+                new_packages.push(pkg);
+            }
+        }
+
+        // Update changeset with new packages and commits
+        for package in &new_packages {
+            changeset.add_package(package);
+        }
+
+        for commit_id in &commit_ids {
+            changeset.add_commit(commit_id);
+        }
+
+        // Save the updated changeset
+        self.update(&changeset).await?;
+
+        Ok(UpdateSummary::new(commit_ids.len(), commit_ids, new_packages, existing_packages))
     }
 }

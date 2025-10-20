@@ -698,6 +698,29 @@ where
             })
             .collect()
     }
+
+    /// Returns a reference to the workspace root path.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::changeset::FileBasedChangesetStorage;
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// use std::path::PathBuf;
+    ///
+    /// let storage = FileBasedChangesetStorage::new(
+    ///     PathBuf::from("/workspace"),
+    ///     ".changesets".to_string(),
+    ///     ".changesets/history".to_string(),
+    ///     FileSystemManager::new(),
+    /// );
+    ///
+    /// assert_eq!(storage.workspace_root(), PathBuf::from("/workspace").as_path());
+    /// ```
+    #[must_use]
+    pub fn workspace_root(&self) -> &std::path::Path {
+        &self.root_path
+    }
 }
 
 #[async_trait]
