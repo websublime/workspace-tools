@@ -10,7 +10,7 @@
 //! consistent access to settings across all modules while maintaining clear organization.
 
 use serde::{Deserialize, Serialize};
-use sublime_standard_tools::config::{ConfigResult, Configurable};
+use sublime_standard_tools::config::{ConfigResult, Configurable, StandardConfig};
 
 use super::{
     audit::AuditConfig, changelog::ChangelogConfig, changeset::ChangesetConfig,
@@ -116,6 +116,13 @@ pub struct PackageToolsConfig {
     ///
     /// Settings for dependency audits and health score calculation.
     pub audit: AuditConfig,
+
+    /// Standard tools configuration.
+    ///
+    /// Configuration from sublime_standard_tools for filesystem, package managers, etc.
+    /// This field is not serialized in the package_tools section but is loaded separately.
+    #[serde(skip)]
+    pub standard_config: StandardConfig,
 }
 
 impl Default for PackageToolsConfig {
@@ -141,6 +148,7 @@ impl Default for PackageToolsConfig {
             changelog: ChangelogConfig::default(),
             git: GitConfig::default(),
             audit: AuditConfig::default(),
+            standard_config: StandardConfig::default(),
         }
     }
 }
@@ -212,7 +220,75 @@ impl Configurable for PackageToolsConfig {
         self.changelog.merge_with(other.changelog)?;
         self.git.merge_with(other.git)?;
         self.audit.merge_with(other.audit)?;
+        self.standard_config.merge_with(other.standard_config)?;
 
         Ok(())
+    }
+}
+
+impl PackageToolsConfig {
+    /// Returns a reference to the standard configuration.
+    ///
+    /// This provides access to the `StandardConfig` from `sublime_standard_tools`,
+    /// which includes settings for filesystem, package managers, monorepo detection, etc.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    ///
+    /// let config = PackageToolsConfig::default();
+    /// let standard = config.get_standard_config();
+    /// println!("Monorepo patterns: {:?}", standard.monorepo.workspace_patterns);
+    /// ```
+    #[must_use]
+    pub fn get_standard_config(&self) -> &StandardConfig {
+        &self.standard_config
+    }
+
+    /// Sets the standard configuration.
+    ///
+    /// This allows updating the standard configuration after initialization,
+    /// which is useful when loading configuration from files.
+    ///
+    /// # Arguments
+    ///
+    /// * `standard_config` - The standard configuration to set
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use sublime_standard_tools::config::StandardConfig;
+    ///
+    /// let mut config = PackageToolsConfig::default();
+    /// let standard = StandardConfig::default();
+    /// config.set_standard_config(standard);
+    /// ```
+    pub fn set_standard_config(&mut self, standard_config: StandardConfig) {
+        self.standard_config = standard_config;
+    }
+
+    /// Creates a new `PackageToolsConfig` with a specific standard configuration.
+    ///
+    /// This is useful when you want to create a configuration with custom
+    /// standard settings while using defaults for package tools settings.
+    ///
+    /// # Arguments
+    ///
+    /// * `standard_config` - The standard configuration to use
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use sublime_standard_tools::config::StandardConfig;
+    ///
+    /// let standard = StandardConfig::default();
+    /// let config = PackageToolsConfig::with_standard_config(standard);
+    /// ```
+    #[must_use]
+    pub fn with_standard_config(standard_config: StandardConfig) -> Self {
+        Self { standard_config, ..Self::default() }
     }
 }
