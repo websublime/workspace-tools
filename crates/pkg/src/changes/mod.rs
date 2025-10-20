@@ -116,12 +116,30 @@ pub use analyzer::ChangesAnalyzer;
 pub mod mapping;
 pub use mapping::PackageMapper;
 
+// Report types - Story 7.3
+mod report;
+pub use report::{AnalysisMode, ChangesReport};
+
+// Package changes - Story 7.3
+mod package_changes;
+pub use package_changes::PackageChanges;
+
+// File changes - Story 7.3
+mod file_change;
+pub use file_change::{FileChange, FileChangeType};
+
+// Commit info - Story 7.3 (minimal implementation)
+mod commit_info;
+pub use commit_info::CommitInfo;
+
+// Statistics - Story 7.3
+mod stats;
+pub use stats::{ChangesSummary, PackageChangeStats};
+
 // Tests module
 #[cfg(test)]
 mod tests;
 
 // Module will be implemented in subsequent stories (Epic 7)
-// TODO: will be implemented on story 7.3 - Working Directory Analysis
 // TODO: will be implemented on story 7.4 - Commit Range Analysis
 // TODO: will be implemented on story 7.5 - Version Preview Calculation
-// TODO: will be implemented on story 7.6 - Changes Statistics
