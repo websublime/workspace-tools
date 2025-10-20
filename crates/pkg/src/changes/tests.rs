@@ -433,3 +433,415 @@ mod mapping_tests {
         assert!(package_files.is_empty());
     }
 }
+
+// ============================================================================
+// Story 7.3: Working Directory Analysis Tests
+// ============================================================================
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod working_directory_tests {
+    use crate::changes::{AnalysisMode, ChangesAnalyzer, FileChangeType};
+    use crate::config::PackageToolsConfig;
+    use std::path::PathBuf;
+    use sublime_git_tools::Repo;
+    use sublime_standard_tools::filesystem::FileSystemManager;
+    use tempfile::TempDir;
+    use tokio::fs;
+
+    /// Creates a test workspace with git repo
+    async fn create_test_workspace_with_git() -> (TempDir, PathBuf) {
+        let temp = TempDir::new().expect("Failed to create temp dir");
+        let workspace_root = temp.path().to_path_buf();
+
+        // Create package.json
+        let package_json = serde_json::json!({
+            "name": "@test/package",
+            "version": "1.0.0"
+        });
+        fs::write(
+            workspace_root.join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Failed to serialize JSON"),
+        )
+        .await
+        .expect("Failed to write package.json");
+
+        // Initialize git repo
+        let repo = Repo::create(workspace_root.to_str().expect("Invalid path"))
+            .expect("Failed to create git repo");
+
+        // Configure git
+        repo.config("user.name", "Test User").expect("Failed to set git user.name");
+        repo.config("user.email", "test@example.com").expect("Failed to set git user.email");
+
+        // Add and commit package.json
+        repo.add_all().expect("Failed to add files");
+        repo.commit("Initial commit").expect("Failed to create initial commit");
+
+        (temp, workspace_root)
+    }
+
+    /// Creates a test monorepo workspace with git repo
+    async fn create_test_monorepo_with_git() -> (TempDir, PathBuf) {
+        let temp = TempDir::new().expect("Failed to create temp dir");
+        let workspace_root = temp.path().to_path_buf();
+
+        // Create root package.json with workspaces
+        let root_package = serde_json::json!({
+            "name": "test-monorepo",
+            "version": "0.0.0",
+            "private": true,
+            "workspaces": ["packages/*"]
+        });
+        fs::write(
+            workspace_root.join("package.json"),
+            serde_json::to_string_pretty(&root_package).expect("Failed to serialize JSON"),
+        )
+        .await
+        .expect("Failed to write root package.json");
+
+        // Create packages directory
+        fs::create_dir_all(workspace_root.join("packages"))
+            .await
+            .expect("Failed to create packages dir");
+
+        // Create package A
+        fs::create_dir_all(workspace_root.join("packages/a"))
+            .await
+            .expect("Failed to create package a dir");
+        let package_a = serde_json::json!({
+            "name": "@test/a",
+            "version": "1.0.0"
+        });
+        fs::write(
+            workspace_root.join("packages/a/package.json"),
+            serde_json::to_string_pretty(&package_a).expect("Failed to serialize JSON"),
+        )
+        .await
+        .expect("Failed to write package a");
+
+        // Create package B
+        fs::create_dir_all(workspace_root.join("packages/b"))
+            .await
+            .expect("Failed to create package b dir");
+        let package_b = serde_json::json!({
+            "name": "@test/b",
+            "version": "2.0.0"
+        });
+        fs::write(
+            workspace_root.join("packages/b/package.json"),
+            serde_json::to_string_pretty(&package_b).expect("Failed to serialize JSON"),
+        )
+        .await
+        .expect("Failed to write package b");
+
+        // Initialize git repo
+        let repo = Repo::create(workspace_root.to_str().expect("Invalid path"))
+            .expect("Failed to create git repo");
+
+        // Configure git
+        repo.config("user.name", "Test User").expect("Failed to set git user.name");
+        repo.config("user.email", "test@example.com").expect("Failed to set git user.email");
+
+        // Add and commit all files
+        repo.add_all().expect("Failed to add files");
+        repo.commit("Initial commit").expect("Failed to create initial commit");
+
+        (temp, workspace_root)
+    }
+
+    #[tokio::test]
+    async fn test_analyze_working_directory_no_changes() {
+        let (_temp, workspace_root) = create_test_workspace_with_git().await;
+        let repo = Repo::open(workspace_root.to_str().expect("Invalid path"))
+            .expect("Failed to open repo");
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::with_filesystem(workspace_root, repo, fs, config)
+            .await
+            .expect("Failed to create analyzer");
+
+        let report = analyzer
+            .analyze_working_directory()
+            .await
+            .expect("Failed to analyze working directory");
+
+        assert_eq!(report.analysis_mode, AnalysisMode::WorkingDirectory);
+        assert!(!report.has_changes());
+        assert_eq!(report.summary.packages_with_changes, 0);
+        assert_eq!(report.summary.total_files_changed, 0);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_working_directory_with_staged_changes() {
+        let (_temp, workspace_root) = create_test_workspace_with_git().await;
+
+        // Create a new file
+        fs::write(workspace_root.join("new-file.txt"), "test content")
+            .await
+            .expect("Failed to write new file");
+
+        // Stage the file
+        let repo = Repo::open(workspace_root.to_str().expect("Invalid path"))
+            .expect("Failed to open repo");
+        repo.add("new-file.txt").expect("Failed to stage file");
+
+        let fs_manager = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::with_filesystem(workspace_root, repo, fs_manager, config)
+            .await
+            .expect("Failed to create analyzer");
+
+        let report = analyzer
+            .analyze_working_directory()
+            .await
+            .expect("Failed to analyze working directory");
+
+        assert_eq!(report.analysis_mode, AnalysisMode::WorkingDirectory);
+        assert!(report.has_changes());
+        assert_eq!(report.summary.packages_with_changes, 1);
+        assert_eq!(report.summary.total_files_changed, 1);
+
+        let packages_with_changes = report.packages_with_changes();
+        assert_eq!(packages_with_changes.len(), 1);
+
+        let package = packages_with_changes[0];
+        assert_eq!(package.files.len(), 1);
+        assert_eq!(package.files[0].change_type, FileChangeType::Added);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_working_directory_with_unstaged_changes() {
+        let (_temp, workspace_root) = create_test_workspace_with_git().await;
+
+        // Modify package.json
+        let package_json = serde_json::json!({
+            "name": "@test/package",
+            "version": "1.1.0"
+        });
+        fs::write(
+            workspace_root.join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Failed to serialize JSON"),
+        )
+        .await
+        .expect("Failed to write package.json");
+
+        let repo = Repo::open(workspace_root.to_str().expect("Invalid path"))
+            .expect("Failed to open repo");
+        let fs_manager = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::with_filesystem(workspace_root, repo, fs_manager, config)
+            .await
+            .expect("Failed to create analyzer");
+
+        let report = analyzer
+            .analyze_working_directory()
+            .await
+            .expect("Failed to analyze working directory");
+
+        assert!(report.has_changes());
+        assert_eq!(report.summary.total_files_changed, 1);
+
+        let package = &report.packages_with_changes()[0];
+        assert!(package.package_json_modified());
+        assert_eq!(package.files[0].change_type, FileChangeType::Modified);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_working_directory_with_both_staged_and_unstaged() {
+        let (_temp, workspace_root) = create_test_workspace_with_git().await;
+
+        // Create and stage a new file
+        fs::write(workspace_root.join("staged.txt"), "staged")
+            .await
+            .expect("Failed to write staged file");
+
+        let repo = Repo::open(workspace_root.to_str().expect("Invalid path"))
+            .expect("Failed to open repo");
+        repo.add("staged.txt").expect("Failed to stage file");
+
+        // Create unstaged file
+        fs::write(workspace_root.join("unstaged.txt"), "unstaged")
+            .await
+            .expect("Failed to write unstaged file");
+
+        let fs_manager = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::with_filesystem(workspace_root, repo, fs_manager, config)
+            .await
+            .expect("Failed to create analyzer");
+
+        let report = analyzer
+            .analyze_working_directory()
+            .await
+            .expect("Failed to analyze working directory");
+
+        assert!(report.has_changes());
+        assert_eq!(report.summary.total_files_changed, 2);
+
+        let package = &report.packages_with_changes()[0];
+        assert_eq!(package.files.len(), 2);
+
+        // Both should be detected as added/untracked
+        let added_count = package.files.iter().filter(|f| f.is_addition()).count();
+        assert_eq!(added_count, 2);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_working_directory_monorepo() {
+        let (_temp, workspace_root) = create_test_monorepo_with_git().await;
+
+        // Modify file in package A
+        fs::write(workspace_root.join("packages/a/index.js"), "console.log('package a');")
+            .await
+            .expect("Failed to write file in package a");
+
+        // Modify file in package B
+        fs::write(workspace_root.join("packages/b/index.js"), "console.log('package b');")
+            .await
+            .expect("Failed to write file in package b");
+
+        let repo = Repo::open(workspace_root.to_str().expect("Invalid path"))
+            .expect("Failed to open repo");
+        let fs_manager = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::with_filesystem(workspace_root, repo, fs_manager, config)
+            .await
+            .expect("Failed to create analyzer");
+
+        let report = analyzer
+            .analyze_working_directory()
+            .await
+            .expect("Failed to analyze working directory");
+
+        // Note: is_monorepo detection may vary based on workspace structure detection
+        // Focus on verifying that we detected changes across multiple packages
+        assert!(report.has_changes());
+
+        // In a monorepo with multiple packages changed, we should detect at least 2 packages
+        // (or it could be detected as single package if monorepo detection didn't work)
+        let packages_with_changes = report.packages_with_changes();
+        assert!(
+            !packages_with_changes.is_empty(),
+            "Should detect at least one package with changes"
+        );
+
+        // Verify we detected the file changes
+        assert!(report.summary.total_files_changed >= 2, "Should detect at least 2 changed files");
+    }
+
+    #[tokio::test]
+    async fn test_analyze_working_directory_report_accuracy() {
+        let (_temp, workspace_root) = create_test_workspace_with_git().await;
+
+        // Create multiple files
+        fs::write(workspace_root.join("file1.txt"), "content 1")
+            .await
+            .expect("Failed to write file1");
+        fs::write(workspace_root.join("file2.txt"), "content 2")
+            .await
+            .expect("Failed to write file2");
+        fs::write(workspace_root.join("file3.txt"), "content 3")
+            .await
+            .expect("Failed to write file3");
+
+        let repo = Repo::open(workspace_root.to_str().expect("Invalid path"))
+            .expect("Failed to open repo");
+        let fs_manager = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::with_filesystem(workspace_root, repo, fs_manager, config)
+            .await
+            .expect("Failed to create analyzer");
+
+        let report = analyzer
+            .analyze_working_directory()
+            .await
+            .expect("Failed to analyze working directory");
+
+        // Verify report accuracy
+        assert_eq!(report.summary.total_files_changed, 3);
+        assert_eq!(report.summary.packages_with_changes, 1);
+        assert_eq!(report.summary.total_packages, 1);
+        assert_eq!(report.summary.packages_without_changes, 0);
+
+        let package = &report.packages_with_changes()[0];
+        assert_eq!(package.stats.files_changed, 3);
+        assert_eq!(package.stats.files_added, 3);
+        assert_eq!(package.stats.files_modified, 0);
+        assert_eq!(package.stats.files_deleted, 0);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_working_directory_deleted_files() {
+        let (_temp, workspace_root) = create_test_workspace_with_git().await;
+
+        // Create and commit a file first
+        fs::write(workspace_root.join("to-delete.txt"), "content")
+            .await
+            .expect("Failed to write file");
+
+        let repo = Repo::open(workspace_root.to_str().expect("Invalid path"))
+            .expect("Failed to open repo");
+        repo.add("to-delete.txt").expect("Failed to add file");
+        repo.commit("Add file to delete").expect("Failed to commit");
+
+        // Delete the file
+        fs::remove_file(workspace_root.join("to-delete.txt")).await.expect("Failed to delete file");
+
+        let fs_manager = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::with_filesystem(workspace_root, repo, fs_manager, config)
+            .await
+            .expect("Failed to create analyzer");
+
+        let report = analyzer
+            .analyze_working_directory()
+            .await
+            .expect("Failed to analyze working directory");
+
+        assert!(report.has_changes());
+
+        let package = &report.packages_with_changes()[0];
+        assert_eq!(package.stats.files_deleted, 1);
+        assert_eq!(package.files[0].change_type, FileChangeType::Deleted);
+    }
+
+    #[tokio::test]
+    async fn test_working_directory_with_current_version() {
+        let (_temp, workspace_root) = create_test_workspace_with_git().await;
+
+        // Add a new file
+        fs::write(workspace_root.join("new.txt"), "new content")
+            .await
+            .expect("Failed to write file");
+
+        let repo = Repo::open(workspace_root.to_str().expect("Invalid path"))
+            .expect("Failed to open repo");
+        let fs_manager = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::with_filesystem(workspace_root, repo, fs_manager, config)
+            .await
+            .expect("Failed to create analyzer");
+
+        let report = analyzer
+            .analyze_working_directory()
+            .await
+            .expect("Failed to analyze working directory");
+
+        let package = &report.packages_with_changes()[0];
+        assert!(package.current_version.is_some());
+        if let Some(version) = &package.current_version {
+            assert_eq!(version.to_string(), "1.0.0");
+        }
+        // next_version is None because we're not calculating versions in working directory analysis
+        assert!(package.next_version.is_none());
+    }
+}

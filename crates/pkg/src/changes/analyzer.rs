@@ -11,13 +11,16 @@
 //! complex monorepo structures, enabling accurate detection of which packages are affected by
 //! changes.
 
+use crate::changes::PackageMapper;
 use crate::config::PackageToolsConfig;
 use crate::error::{ChangesError, ChangesResult};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use sublime_git_tools::Repo;
 use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
-use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait, MonorepoKind};
+use sublime_standard_tools::monorepo::{
+    MonorepoDetector, MonorepoDetectorTrait, MonorepoKind, WorkspacePackage,
+};
 
 /// Main analyzer for detecting and analyzing changes in a workspace.
 ///
@@ -481,6 +484,202 @@ where
     #[must_use]
     pub fn config(&self) -> &PackageToolsConfig {
         &self.config
+    }
+
+    /// Analyzes changes in the working directory (uncommitted changes).
+    ///
+    /// Detects all uncommitted changes (working tree + staging area) and maps them
+    /// to affected packages. This method does not include commit information, as the
+    /// changes have not been committed yet.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `ChangesReport` containing all affected packages and their changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Git status cannot be retrieved
+    /// - File-to-package mapping fails
+    /// - Package information cannot be loaded
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::changes::ChangesAnalyzer;
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use sublime_git_tools::Repo;
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let workspace_root = PathBuf::from(".");
+    /// let git_repo = Repo::open(".")?;
+    /// let fs = FileSystemManager::new();
+    /// let config = PackageToolsConfig::default();
+    ///
+    /// let analyzer = ChangesAnalyzer::with_filesystem(
+    ///     workspace_root,
+    ///     git_repo,
+    ///     fs,
+    ///     config
+    /// ).await?;
+    ///
+    /// let report = analyzer.analyze_working_directory().await?;
+    ///
+    /// for package in report.packages_with_changes() {
+    ///     println!("Package {} has {} files changed",
+    ///         package.package_name(),
+    ///         package.files.len());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn analyze_working_directory(&self) -> ChangesResult<crate::changes::ChangesReport> {
+        use crate::changes::{
+            AnalysisMode, ChangesReport, FileChange, FileChangeType, PackageChanges,
+        };
+        use std::collections::HashMap;
+
+        // Get git status for all files
+        let status = self.git_repo.get_status_detailed().map_err(|e| ChangesError::GitError {
+            operation: "get_status_detailed".to_string(),
+            reason: format!("Failed to get git status: {}", e),
+        })?;
+
+        if status.is_empty() {
+            // No changes detected, return empty report with all packages
+            let mut report = ChangesReport::new(AnalysisMode::WorkingDirectory, self.is_monorepo());
+
+            // Get all packages even if they have no changes
+            let packages = self.get_all_packages().await?;
+            for package_info in packages {
+                report.add_package(PackageChanges::new(package_info));
+            }
+
+            return Ok(report);
+        }
+
+        // Convert git changed files to paths
+        let changed_paths: Vec<PathBuf> = status.iter().map(|f| PathBuf::from(&f.path)).collect();
+
+        // Create package mapper
+        let mut package_mapper =
+            PackageMapper::with_filesystem(self.workspace_root.clone(), self.fs.clone());
+
+        // Map files to packages (not used directly but ensures cache is populated)
+        let _files_by_package = package_mapper.map_files_to_packages(&changed_paths).await?;
+
+        // Build file changes grouped by package
+        let mut package_file_changes: HashMap<String, Vec<FileChange>> = HashMap::new();
+
+        for git_file in &status {
+            let file_path = PathBuf::from(&git_file.path);
+
+            // Find which package this file belongs to
+            if let Some(package_name) = package_mapper.find_package_for_file(&file_path).await? {
+                // Get the package info to calculate relative path
+                let all_pkgs = self.get_all_packages().await?;
+                let package_info = all_pkgs.iter().find(|p| p.name == package_name);
+
+                let package_relative_path = if let Some(pkg) = package_info {
+                    file_path.strip_prefix(&pkg.location).unwrap_or(&file_path).to_path_buf()
+                } else {
+                    file_path.clone()
+                };
+
+                // Create FileChange
+                let change_type = FileChangeType::from_git_status(&git_file.status);
+                let file_change = FileChange::new(file_path, package_relative_path, change_type);
+
+                package_file_changes.entry(package_name).or_default().push(file_change);
+            }
+        }
+
+        // Get all packages to include those without changes
+        let all_packages = self.get_all_packages().await?;
+
+        // Create ChangesReport
+        let mut report = ChangesReport::new(AnalysisMode::WorkingDirectory, self.is_monorepo());
+
+        for package_info in all_packages {
+            let mut package_changes = PackageChanges::new(package_info.clone());
+
+            // Set current version from package info
+            if let Ok(version) = crate::types::Version::parse(&package_info.version) {
+                package_changes.current_version = Some(version);
+            }
+
+            // Add file changes if any
+            if let Some(files) = package_file_changes.get(&package_info.name) {
+                for file in files {
+                    package_changes.add_file(file.clone());
+                }
+            }
+
+            report.add_package(package_changes);
+        }
+
+        Ok(report)
+    }
+
+    /// Gets all packages in the workspace.
+    ///
+    /// Returns package information for all packages, regardless of whether they
+    /// have changes or not.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if package discovery fails or package.json files cannot be read.
+    async fn get_all_packages(&self) -> ChangesResult<Vec<WorkspacePackage>> {
+        // Check if we have cached monorepo info
+        let packages = if let Some(_monorepo_kind) = &self.monorepo_kind {
+            // It's a monorepo, get all packages from monorepo detector
+            self.monorepo_detector.detect_packages(&self.workspace_root).await.map_err(|e| {
+                ChangesError::MonorepoDetectionFailed {
+                    reason: format!("Failed to detect workspace packages: {}", e),
+                }
+            })?
+        } else {
+            // Single package, create a WorkspacePackage for the root
+            let package_json_path = self.workspace_root.join("package.json");
+
+            let content_result = self.fs.read_file_string(&package_json_path).await;
+
+            if content_result.is_err() {
+                return Err(ChangesError::NoPackagesFound {
+                    workspace_root: self.workspace_root.clone(),
+                });
+            }
+
+            let content = content_result.map_err(|e| ChangesError::FileSystemError {
+                path: package_json_path.clone(),
+                reason: format!("Failed to read package.json: {}", e),
+            })?;
+
+            let package_json: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+                ChangesError::PackageJsonParseError {
+                    path: package_json_path.clone(),
+                    reason: format!("Failed to parse package.json: {}", e),
+                }
+            })?;
+
+            let name = package_json["name"].as_str().unwrap_or("root").to_string();
+            let version = package_json["version"].as_str().unwrap_or("0.0.0").to_string();
+
+            // Create WorkspacePackage manually since new() might not exist
+            let package = WorkspacePackage {
+                name,
+                version,
+                location: PathBuf::from("."),
+                absolute_path: self.workspace_root.clone(),
+                workspace_dependencies: Vec::new(),
+                workspace_dev_dependencies: Vec::new(),
+            };
+            vec![package]
+        };
+
+        Ok(packages)
     }
 }
 
