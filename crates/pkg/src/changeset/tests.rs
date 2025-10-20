@@ -1060,11 +1060,15 @@ mod manager_tests {
     #[derive(Debug, Clone)]
     pub(super) struct MockManagerStorage {
         changesets: Arc<Mutex<HashMap<String, Changeset>>>,
+        archived: Arc<Mutex<HashMap<String, ArchivedChangeset>>>,
     }
 
     impl MockManagerStorage {
         fn new() -> Self {
-            Self { changesets: Arc::new(Mutex::new(HashMap::new())) }
+            Self {
+                changesets: Arc::new(Mutex::new(HashMap::new())),
+                archived: Arc::new(Mutex::new(HashMap::new())),
+            }
         }
 
         fn get_count(&self) -> usize {
@@ -1107,21 +1111,30 @@ mod manager_tests {
 
         async fn archive(
             &self,
-            _changeset: &Changeset,
-            _release_info: ReleaseInfo,
+            changeset: &Changeset,
+            release_info: ReleaseInfo,
         ) -> ChangesetResult<()> {
-            // TODO: will be implemented on story 6.5
+            // Remove from pending
+            self.changesets.lock().unwrap().remove(&changeset.branch);
+
+            // Add to archived
+            let archived_changeset = ArchivedChangeset::new(changeset.clone(), release_info);
+            self.archived.lock().unwrap().insert(changeset.branch.clone(), archived_changeset);
+
             Ok(())
         }
 
-        async fn load_archived(&self, _id: &str) -> ChangesetResult<ArchivedChangeset> {
-            // TODO: will be implemented on story 6.5
-            Err(ChangesetError::NotFound { branch: "archived".to_string() })
+        async fn load_archived(&self, branch: &str) -> ChangesetResult<ArchivedChangeset> {
+            self.archived
+                .lock()
+                .unwrap()
+                .get(branch)
+                .cloned()
+                .ok_or_else(|| ChangesetError::NotFound { branch: branch.to_string() })
         }
 
         async fn list_archived(&self) -> ChangesetResult<Vec<ArchivedChangeset>> {
-            // TODO: will be implemented on story 6.5
-            Ok(Vec::new())
+            Ok(self.archived.lock().unwrap().values().cloned().collect())
         }
     }
 
@@ -1621,6 +1634,75 @@ mod manager_tests {
         let result = manager.add_commits("nonexistent", vec!["abc123".to_string()]).await;
 
         assert!(result.is_err());
+        match result.unwrap_err() {
+            ChangesetError::NotFound { branch } => {
+                assert_eq!(branch, "nonexistent");
+            }
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_manager_archive_success() {
+        let manager = create_test_manager();
+
+        // Create a changeset
+        let mut changeset = manager
+            .create("feature/archive-test", VersionBump::Major, vec!["production".to_string()])
+            .await
+            .unwrap();
+
+        changeset.add_package("@myorg/core");
+        changeset.add_package("@myorg/utils");
+        manager.update(&changeset).await.unwrap();
+
+        // Create release info
+        let mut versions = HashMap::new();
+        versions.insert("@myorg/core".to_string(), "2.0.0".to_string());
+        versions.insert("@myorg/utils".to_string(), "1.5.0".to_string());
+
+        let release_info = crate::types::ReleaseInfo::new(
+            "ci-bot@example.com".to_string(),
+            "abc123def456789".to_string(),
+            versions,
+        );
+
+        // Archive the changeset
+        let result = manager.archive("feature/archive-test", release_info).await;
+        assert!(result.is_ok(), "Archive should succeed");
+
+        // Verify it's no longer in pending
+        let exists = manager.storage().exists("feature/archive-test").await.unwrap();
+        assert!(!exists, "Changeset should not exist in pending after archiving");
+
+        // Verify it's in archived
+        let archived = manager.storage().load_archived("feature/archive-test").await;
+        assert!(archived.is_ok(), "Archived changeset should be loadable");
+
+        let archived = archived.unwrap();
+        assert_eq!(archived.changeset.branch, "feature/archive-test");
+        assert_eq!(archived.changeset.bump, VersionBump::Major);
+        assert_eq!(archived.release_info.applied_by, "ci-bot@example.com");
+        assert_eq!(archived.release_info.git_commit, "abc123def456789");
+        assert_eq!(archived.release_info.package_count(), 2);
+        assert_eq!(archived.release_info.get_version("@myorg/core"), Some("2.0.0"));
+        assert_eq!(archived.release_info.get_version("@myorg/utils"), Some("1.5.0"));
+    }
+
+    #[tokio::test]
+    async fn test_manager_archive_nonexistent_changeset() {
+        let manager = create_test_manager();
+
+        let versions = HashMap::new();
+        let release_info = crate::types::ReleaseInfo::new(
+            "user@example.com".to_string(),
+            "commit123".to_string(),
+            versions,
+        );
+
+        let result = manager.archive("nonexistent", release_info).await;
+
+        assert!(result.is_err(), "Archive should fail for nonexistent changeset");
         match result.unwrap_err() {
             ChangesetError::NotFound { branch } => {
                 assert_eq!(branch, "nonexistent");
@@ -2213,5 +2295,586 @@ mod git_integration_tests {
         } else {
             panic!("Expected GitIntegration error");
         }
+    }
+}
+
+// ============================================================================
+// ChangesetHistory Tests
+// ============================================================================
+
+mod history_tests {
+    use super::*;
+    use crate::changeset::ChangesetHistory;
+    use chrono::{Duration, Utc};
+
+    #[tokio::test]
+    async fn test_history_list_all_empty() {
+        let storage = MockStorage::new();
+        let history = ChangesetHistory::new(Box::new(storage));
+
+        let all = history.list_all().await.unwrap();
+        assert_eq!(all.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_history_list_all_multiple() {
+        let storage = MockStorage::new();
+
+        // Archive multiple changesets
+        for i in 1..=5 {
+            let mut changeset = Changeset::new(
+                format!("feature/history-{}", i),
+                VersionBump::Minor,
+                vec!["production".to_string()],
+            );
+            changeset.add_package(format!("package{}", i));
+
+            storage.save(&changeset).await.unwrap();
+
+            let release_info = ReleaseInfo::new(
+                format!("user{}@example.com", i),
+                format!("commit{}", i),
+                versions_map(vec![(format!("package{}", i), format!("1.{}.0", i))]),
+            );
+
+            storage.archive(&changeset, release_info).await.unwrap();
+        }
+
+        let history = ChangesetHistory::new(Box::new(storage));
+        let all = history.list_all().await.unwrap();
+        assert_eq!(all.len(), 5);
+
+        // Verify all branches are present
+        let branches: Vec<String> = all.iter().map(|a| a.changeset.branch.clone()).collect();
+        for i in 1..=5 {
+            let expected = format!("feature/history-{}", i);
+            assert!(branches.contains(&expected), "Expected to find branch {}", expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_history_list_all_sorted_by_date() {
+        let storage = MockStorage::new();
+        let now = Utc::now();
+
+        // Archive changesets with different timestamps
+        for i in 1..=3 {
+            let mut changeset = Changeset::new(
+                format!("feature/sorted-{}", i),
+                VersionBump::Minor,
+                vec!["production".to_string()],
+            );
+            changeset.add_package("package");
+
+            storage.save(&changeset).await.unwrap();
+
+            // Each release is older than the previous
+            let applied_at = now - Duration::days(i);
+            let mut release_info = ReleaseInfo::new(
+                "user@example.com".to_string(),
+                format!("commit{}", i),
+                versions_map(vec![("package".to_string(), "1.0.0".to_string())]),
+            );
+            release_info.applied_at = applied_at;
+
+            storage.archive(&changeset, release_info).await.unwrap();
+        }
+
+        let history = ChangesetHistory::new(Box::new(storage));
+        let all = history.list_all().await.unwrap();
+
+        // Verify sorting (most recent first)
+        assert_eq!(all[0].changeset.branch, "feature/sorted-1");
+        assert_eq!(all[1].changeset.branch, "feature/sorted-2");
+        assert_eq!(all[2].changeset.branch, "feature/sorted-3");
+    }
+
+    #[tokio::test]
+    async fn test_history_get_existing() {
+        let storage = MockStorage::new();
+        let mut changeset =
+            Changeset::new("feature/get-test", VersionBump::Major, vec!["production".to_string()]);
+        changeset.add_package("test-package");
+
+        storage.save(&changeset).await.unwrap();
+
+        let release_info = ReleaseInfo::new(
+            "ci-bot@example.com".to_string(),
+            "abc123".to_string(),
+            versions_map(vec![("test-package".to_string(), "2.0.0".to_string())]),
+        );
+
+        storage.archive(&changeset, release_info).await.unwrap();
+
+        let history = ChangesetHistory::new(Box::new(storage));
+        let archived = history.get("feature/get-test").await.unwrap();
+
+        assert_eq!(archived.changeset.branch, "feature/get-test");
+        assert_eq!(archived.changeset.bump, VersionBump::Major);
+        assert_eq!(archived.release_info.applied_by, "ci-bot@example.com");
+        assert_eq!(archived.release_info.git_commit, "abc123");
+    }
+
+    #[tokio::test]
+    async fn test_history_get_nonexistent() {
+        let storage = MockStorage::new();
+        let history = ChangesetHistory::new(Box::new(storage));
+
+        let result = history.get("nonexistent").await;
+        assert!(result.is_err());
+
+        match result {
+            Err(ChangesetError::NotFound { branch }) => {
+                assert_eq!(branch, "nonexistent");
+            }
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_query_by_date_range() {
+        let storage = MockStorage::new();
+        let now = Utc::now();
+
+        // Create changesets with different dates
+        let dates = [
+            now - Duration::days(10), // Old
+            now - Duration::days(5),  // In range
+            now - Duration::days(3),  // In range
+            now - Duration::days(1),  // Recent
+        ];
+
+        for (i, date) in dates.iter().enumerate() {
+            let mut changeset = Changeset::new(
+                format!("feature/date-{}", i),
+                VersionBump::Patch,
+                vec!["production".to_string()],
+            );
+            changeset.add_package("package");
+
+            storage.save(&changeset).await.unwrap();
+
+            let mut release_info = ReleaseInfo::new(
+                "user@example.com".to_string(),
+                format!("commit{}", i),
+                versions_map(vec![("package".to_string(), "1.0.0".to_string())]),
+            );
+            release_info.applied_at = *date;
+
+            storage.archive(&changeset, release_info).await.unwrap();
+        }
+
+        let history = ChangesetHistory::new(Box::new(storage));
+
+        // Query for dates 6 days ago to 2 days ago
+        let start = now - Duration::days(6);
+        let end = now - Duration::days(2);
+        let results = history.query_by_date(start, end).await.unwrap();
+
+        // Should only get the two in range
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().any(|a| a.changeset.branch == "feature/date-1"));
+        assert!(results.iter().any(|a| a.changeset.branch == "feature/date-2"));
+    }
+
+    #[tokio::test]
+    async fn test_query_by_date_no_results() {
+        let storage = MockStorage::new();
+        let now = Utc::now();
+
+        // Create a changeset from long ago
+        let mut changeset =
+            Changeset::new("feature/old", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("package");
+
+        storage.save(&changeset).await.unwrap();
+
+        let mut release_info = ReleaseInfo::new(
+            "user@example.com".to_string(),
+            "commit".to_string(),
+            versions_map(vec![("package".to_string(), "1.0.0".to_string())]),
+        );
+        release_info.applied_at = now - Duration::days(100);
+
+        storage.archive(&changeset, release_info).await.unwrap();
+
+        let history = ChangesetHistory::new(Box::new(storage));
+
+        // Query recent dates
+        let start = now - Duration::days(7);
+        let end = now;
+        let results = history.query_by_date(start, end).await.unwrap();
+
+        assert_eq!(results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_query_by_package_single_match() {
+        let storage = MockStorage::new();
+
+        // Create changesets with different packages
+        for i in 1..=3 {
+            let mut changeset = Changeset::new(
+                format!("feature/pkg-{}", i),
+                VersionBump::Minor,
+                vec!["production".to_string()],
+            );
+
+            if i == 2 {
+                changeset.add_package("target-package");
+            } else {
+                changeset.add_package(format!("other-package-{}", i));
+            }
+
+            storage.save(&changeset).await.unwrap();
+
+            let release_info = ReleaseInfo::new(
+                "user@example.com".to_string(),
+                format!("commit{}", i),
+                versions_map(vec![("package".to_string(), "1.0.0".to_string())]),
+            );
+
+            storage.archive(&changeset, release_info).await.unwrap();
+        }
+
+        let history = ChangesetHistory::new(Box::new(storage));
+        let results = history.query_by_package("target-package").await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].changeset.branch, "feature/pkg-2");
+    }
+
+    #[tokio::test]
+    async fn test_query_by_package_multiple_matches() {
+        let storage = MockStorage::new();
+
+        // Create multiple changesets with the same package
+        for i in 1..=4 {
+            let mut changeset = Changeset::new(
+                format!("feature/common-pkg-{}", i),
+                VersionBump::Patch,
+                vec!["production".to_string()],
+            );
+            changeset.add_package("@myorg/core");
+            changeset.add_package(format!("package-{}", i));
+
+            storage.save(&changeset).await.unwrap();
+
+            let release_info = ReleaseInfo::new(
+                "user@example.com".to_string(),
+                format!("commit{}", i),
+                versions_map(vec![
+                    ("@myorg/core".to_string(), format!("1.{}.0", i)),
+                    (format!("package-{}", i), "1.0.0".to_string()),
+                ]),
+            );
+
+            storage.archive(&changeset, release_info).await.unwrap();
+        }
+
+        let history = ChangesetHistory::new(Box::new(storage));
+        let results = history.query_by_package("@myorg/core").await.unwrap();
+
+        assert_eq!(results.len(), 4);
+        for result in results {
+            assert!(result.changeset.has_package("@myorg/core"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_query_by_package_no_matches() {
+        let storage = MockStorage::new();
+
+        let mut changeset =
+            Changeset::new("feature/other", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("package1");
+
+        storage.save(&changeset).await.unwrap();
+
+        let release_info = ReleaseInfo::new(
+            "user@example.com".to_string(),
+            "commit".to_string(),
+            versions_map(vec![("package1".to_string(), "1.0.0".to_string())]),
+        );
+
+        storage.archive(&changeset, release_info).await.unwrap();
+
+        let history = ChangesetHistory::new(Box::new(storage));
+        let results = history.query_by_package("nonexistent-package").await.unwrap();
+
+        assert_eq!(results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_query_by_environment_single() {
+        let storage = MockStorage::new();
+
+        // Create changesets with different environments
+        let envs = [vec!["production"], vec!["staging"], vec!["production"], vec!["development"]];
+
+        for (i, env) in envs.iter().enumerate() {
+            let changeset = Changeset::new(
+                format!("feature/env-{}", i),
+                VersionBump::Minor,
+                env.iter().map(|s| s.to_string()).collect(),
+            );
+
+            storage.save(&changeset).await.unwrap();
+
+            let release_info = ReleaseInfo::new(
+                "user@example.com".to_string(),
+                format!("commit{}", i),
+                versions_map(vec![("package".to_string(), "1.0.0".to_string())]),
+            );
+
+            storage.archive(&changeset, release_info).await.unwrap();
+        }
+
+        let history = ChangesetHistory::new(Box::new(storage));
+        let results = history.query_by_environment("production").await.unwrap();
+
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().any(|a| a.changeset.branch == "feature/env-0"));
+        assert!(results.iter().any(|a| a.changeset.branch == "feature/env-2"));
+    }
+
+    #[tokio::test]
+    async fn test_query_by_environment_multiple() {
+        let storage = MockStorage::new();
+
+        // Create changeset with multiple environments
+        let mut changeset = Changeset::new(
+            "feature/multi-env",
+            VersionBump::Major,
+            vec!["staging".to_string(), "production".to_string()],
+        );
+        changeset.add_package("package");
+
+        storage.save(&changeset).await.unwrap();
+
+        let release_info = ReleaseInfo::new(
+            "user@example.com".to_string(),
+            "commit".to_string(),
+            versions_map(vec![("package".to_string(), "2.0.0".to_string())]),
+        );
+
+        storage.archive(&changeset, release_info).await.unwrap();
+
+        let history = ChangesetHistory::new(Box::new(storage));
+
+        // Should match when querying for either environment
+        let staging_results = history.query_by_environment("staging").await.unwrap();
+        assert_eq!(staging_results.len(), 1);
+
+        let prod_results = history.query_by_environment("production").await.unwrap();
+        assert_eq!(prod_results.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_query_by_environment_no_matches() {
+        let storage = MockStorage::new();
+
+        let changeset =
+            Changeset::new("feature/prod-only", VersionBump::Minor, vec!["production".to_string()]);
+
+        storage.save(&changeset).await.unwrap();
+
+        let release_info = ReleaseInfo::new(
+            "user@example.com".to_string(),
+            "commit".to_string(),
+            versions_map(vec![("package".to_string(), "1.0.0".to_string())]),
+        );
+
+        storage.archive(&changeset, release_info).await.unwrap();
+
+        let history = ChangesetHistory::new(Box::new(storage));
+        let results = history.query_by_environment("development").await.unwrap();
+
+        assert_eq!(results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_query_by_bump_type() {
+        let storage = MockStorage::new();
+
+        // Create changesets with different bump types
+        let bumps = [
+            VersionBump::Major,
+            VersionBump::Minor,
+            VersionBump::Major,
+            VersionBump::Patch,
+            VersionBump::Minor,
+        ];
+
+        for (i, bump) in bumps.iter().enumerate() {
+            let changeset = Changeset::new(
+                format!("feature/bump-{}", i),
+                *bump,
+                vec!["production".to_string()],
+            );
+
+            storage.save(&changeset).await.unwrap();
+
+            let release_info = ReleaseInfo::new(
+                "user@example.com".to_string(),
+                format!("commit{}", i),
+                versions_map(vec![("package".to_string(), "1.0.0".to_string())]),
+            );
+
+            storage.archive(&changeset, release_info).await.unwrap();
+        }
+
+        let history = ChangesetHistory::new(Box::new(storage));
+
+        // Query for major bumps
+        let major_results = history.query_by_bump(VersionBump::Major).await.unwrap();
+        assert_eq!(major_results.len(), 2);
+        assert!(major_results.iter().any(|a| a.changeset.branch == "feature/bump-0"));
+        assert!(major_results.iter().any(|a| a.changeset.branch == "feature/bump-2"));
+
+        // Query for minor bumps
+        let minor_results = history.query_by_bump(VersionBump::Minor).await.unwrap();
+        assert_eq!(minor_results.len(), 2);
+        assert!(minor_results.iter().any(|a| a.changeset.branch == "feature/bump-1"));
+        assert!(minor_results.iter().any(|a| a.changeset.branch == "feature/bump-4"));
+
+        // Query for patch bumps
+        let patch_results = history.query_by_bump(VersionBump::Patch).await.unwrap();
+        assert_eq!(patch_results.len(), 1);
+        assert_eq!(patch_results[0].changeset.branch, "feature/bump-3");
+    }
+
+    #[tokio::test]
+    async fn test_query_by_bump_none() {
+        let storage = MockStorage::new();
+
+        let changeset =
+            Changeset::new("feature/no-bump", VersionBump::None, vec!["production".to_string()]);
+
+        storage.save(&changeset).await.unwrap();
+
+        let release_info = ReleaseInfo::new(
+            "user@example.com".to_string(),
+            "commit".to_string(),
+            versions_map(vec![("package".to_string(), "1.0.0".to_string())]),
+        );
+
+        storage.archive(&changeset, release_info).await.unwrap();
+
+        let history = ChangesetHistory::new(Box::new(storage));
+
+        let results = history.query_by_bump(VersionBump::None).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].changeset.branch, "feature/no-bump");
+
+        // Other bumps should return empty
+        let major_results = history.query_by_bump(VersionBump::Major).await.unwrap();
+        assert_eq!(major_results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_combined_queries() {
+        let storage = MockStorage::new();
+        let now = Utc::now();
+
+        // Create a diverse set of changesets
+        let mut changeset1 = Changeset::new(
+            "feature/combined-1",
+            VersionBump::Major,
+            vec!["production".to_string()],
+        );
+        changeset1.add_package("@myorg/core");
+
+        let mut changeset2 =
+            Changeset::new("feature/combined-2", VersionBump::Minor, vec!["staging".to_string()]);
+        changeset2.add_package("@myorg/utils");
+
+        let mut changeset3 = Changeset::new(
+            "feature/combined-3",
+            VersionBump::Major,
+            vec!["production".to_string()],
+        );
+        changeset3.add_package("@myorg/core");
+
+        storage.save(&changeset1).await.unwrap();
+        storage.save(&changeset2).await.unwrap();
+        storage.save(&changeset3).await.unwrap();
+
+        let mut release_info1 = ReleaseInfo::new(
+            "user@example.com".to_string(),
+            "commit1".to_string(),
+            versions_map(vec![("@myorg/core".to_string(), "2.0.0".to_string())]),
+        );
+        release_info1.applied_at = now - Duration::days(2);
+
+        let mut release_info2 = ReleaseInfo::new(
+            "user@example.com".to_string(),
+            "commit2".to_string(),
+            versions_map(vec![("@myorg/utils".to_string(), "1.1.0".to_string())]),
+        );
+        release_info2.applied_at = now - Duration::days(5);
+
+        let mut release_info3 = ReleaseInfo::new(
+            "user@example.com".to_string(),
+            "commit3".to_string(),
+            versions_map(vec![("@myorg/core".to_string(), "3.0.0".to_string())]),
+        );
+        release_info3.applied_at = now - Duration::days(1);
+
+        storage.archive(&changeset1, release_info1).await.unwrap();
+        storage.archive(&changeset2, release_info2).await.unwrap();
+        storage.archive(&changeset3, release_info3).await.unwrap();
+
+        let history = ChangesetHistory::new(Box::new(storage));
+
+        // Query by package
+        let core_releases = history.query_by_package("@myorg/core").await.unwrap();
+        assert_eq!(core_releases.len(), 2);
+
+        // Query by environment
+        let prod_releases = history.query_by_environment("production").await.unwrap();
+        assert_eq!(prod_releases.len(), 2);
+
+        // Query by bump
+        let major_releases = history.query_by_bump(VersionBump::Major).await.unwrap();
+        assert_eq!(major_releases.len(), 2);
+
+        // Query by date (last 3 days should get 2 releases)
+        let start = now - Duration::days(3);
+        let end = now;
+        let recent_releases = history.query_by_date(start, end).await.unwrap();
+        assert_eq!(recent_releases.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_history_with_release_version_info() {
+        let storage = MockStorage::new();
+
+        let mut changeset =
+            Changeset::new("feature/versions", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("package1");
+        changeset.add_package("package2");
+
+        storage.save(&changeset).await.unwrap();
+
+        let release_info = ReleaseInfo::new(
+            "ci-bot@example.com".to_string(),
+            "abc123def456".to_string(),
+            versions_map(vec![
+                ("package1".to_string(), "1.5.0".to_string()),
+                ("package2".to_string(), "2.3.0".to_string()),
+            ]),
+        );
+
+        storage.archive(&changeset, release_info).await.unwrap();
+
+        let history = ChangesetHistory::new(Box::new(storage));
+        let archived = history.get("feature/versions").await.unwrap();
+
+        // Verify version information
+        assert_eq!(archived.release_info.get_version("package1"), Some("1.5.0"));
+        assert_eq!(archived.release_info.get_version("package2"), Some("2.3.0"));
+        assert_eq!(archived.release_info.get_version("nonexistent"), None);
+        assert_eq!(archived.release_info.package_count(), 2);
     }
 }

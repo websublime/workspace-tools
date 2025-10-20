@@ -686,4 +686,72 @@ impl<S: ChangesetStorage> ChangesetManager<S> {
 
         Ok(UpdateSummary::new(commit_ids.len(), commit_ids, new_packages, existing_packages))
     }
+
+    /// Archives a changeset with release information.
+    ///
+    /// Moves a changeset from the pending state to the history archive, adding
+    /// release metadata such as when it was applied, who applied it, the git commit,
+    /// and the actual versions that were released.
+    ///
+    /// # Arguments
+    ///
+    /// * `branch` - The branch name of the changeset to archive
+    /// * `release_info` - Release metadata to attach to the archived changeset
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The changeset doesn't exist for the specified branch
+    /// - The changeset file cannot be read or moved
+    /// - The history directory cannot be written to
+    /// - The archived changeset cannot be serialized
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::changeset::ChangesetManager;
+    /// use sublime_pkg_tools::types::ReleaseInfo;
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// use std::path::PathBuf;
+    /// use std::collections::HashMap;
+    /// use chrono::Utc;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let workspace_root = PathBuf::from(".");
+    /// let fs = FileSystemManager::new();
+    /// let config = PackageToolsConfig::default();
+    ///
+    /// let manager = ChangesetManager::new(workspace_root, fs, config).await?;
+    ///
+    /// // Create release info with version mappings
+    /// let mut versions = HashMap::new();
+    /// versions.insert("@myorg/core".to_string(), "2.0.0".to_string());
+    /// versions.insert("@myorg/utils".to_string(), "1.5.0".to_string());
+    ///
+    /// let release_info = ReleaseInfo::new(
+    ///     Utc::now(),
+    ///     "ci-bot".to_string(),
+    ///     "abc123def456".to_string(),
+    ///     versions,
+    /// );
+    ///
+    /// // Archive the changeset
+    /// manager.archive("feature/new-api", release_info).await?;
+    ///
+    /// println!("Changeset archived successfully");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn archive(
+        &self,
+        branch: &str,
+        release_info: crate::types::ReleaseInfo,
+    ) -> ChangesetResult<()> {
+        // Load the changeset to ensure it exists
+        let changeset = self.load(branch).await?;
+
+        // Archive using storage
+        self.storage.archive(&changeset, release_info).await
+    }
 }
