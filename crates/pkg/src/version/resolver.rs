@@ -15,8 +15,10 @@
 
 use crate::config::PackageToolsConfig;
 use crate::error::{VersionError, VersionResult};
-use crate::types::{Changeset, PackageInfo, VersioningStrategy};
-use crate::version::resolution::{resolve_versions, VersionResolution};
+use crate::types::{Changeset, DependencyType, PackageInfo, VersioningStrategy};
+use crate::version::application::ApplyResult;
+use crate::version::resolution::{resolve_versions, PackageUpdate, VersionResolution};
+use package_json::PackageJson;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
@@ -576,5 +578,346 @@ impl<F: AsyncFileSystem + Clone + Send + Sync + 'static> VersionResolver<F> {
 
         // Delegate to the resolution module
         resolve_versions(changeset, &packages, self.strategy).await
+    }
+
+    /// Applies version changes from a changeset to package.json files.
+    ///
+    /// This method resolves versions for all packages in the changeset and optionally
+    /// writes the updated versions and dependency references to package.json files.
+    /// When `dry_run` is true, no files are modified and the method only returns
+    /// what would be changed.
+    ///
+    /// # Arguments
+    ///
+    /// * `changeset` - The changeset containing packages and version bump information
+    /// * `dry_run` - If true, only preview changes without modifying files (default: true)
+    ///
+    /// # Returns
+    ///
+    /// Returns an `ApplyResult` containing the resolution details, list of modified
+    /// files (empty for dry-run), and summary statistics.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if:
+    /// - Version resolution fails (package not found, invalid version, etc.)
+    /// - File reading or writing fails (dry_run = false)
+    /// - JSON serialization fails
+    /// - Backup or rollback operations fail
+    ///
+    /// # Examples
+    ///
+    /// ## Preview changes (dry-run)
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::version::VersionResolver;
+    /// use sublime_pkg_tools::types::{Changeset, VersionBump};
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let workspace_root = PathBuf::from(".");
+    /// let config = PackageToolsConfig::default();
+    /// let resolver = VersionResolver::new(workspace_root, config).await?;
+    ///
+    /// let mut changeset = Changeset::new(
+    ///     "main",
+    ///     VersionBump::Minor,
+    ///     vec!["production".to_string()],
+    /// );
+    /// changeset.add_package("@myorg/core");
+    ///
+    /// // Preview changes without modifying files
+    /// let result = resolver.apply_versions(&changeset, true).await?;
+    ///
+    /// assert!(result.dry_run);
+    /// assert!(result.modified_files.is_empty());
+    ///
+    /// println!("Would update {} packages:", result.summary.packages_updated);
+    /// for update in &result.resolution.updates {
+    ///     println!("  {}: {} -> {}",
+    ///         update.name,
+    ///         update.current_version,
+    ///         update.next_version
+    ///     );
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// ## Apply changes to files
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::version::VersionResolver;
+    /// use sublime_pkg_tools::types::{Changeset, VersionBump};
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let workspace_root = PathBuf::from(".");
+    /// let config = PackageToolsConfig::default();
+    /// let resolver = VersionResolver::new(workspace_root, config).await?;
+    ///
+    /// let mut changeset = Changeset::new(
+    ///     "main",
+    ///     VersionBump::Minor,
+    ///     vec!["production".to_string()],
+    /// );
+    /// changeset.add_package("@myorg/core");
+    ///
+    /// // Apply changes to package.json files
+    /// let result = resolver.apply_versions(&changeset, false).await?;
+    ///
+    /// assert!(!result.dry_run);
+    /// println!("Modified {} files:", result.modified_files.len());
+    /// for file in &result.modified_files {
+    ///     println!("  - {}", file.display());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn apply_versions(
+        &self,
+        changeset: &Changeset,
+        dry_run: bool,
+    ) -> VersionResult<ApplyResult> {
+        // First, resolve versions to get all the updates
+        let resolution = self.resolve_versions(changeset).await?;
+
+        // If dry-run, return early without modifying files
+        if dry_run {
+            return Ok(ApplyResult::new(true, resolution, vec![]));
+        }
+
+        // Discover all packages again to have full package info with paths
+        let package_list = self.discover_packages().await?;
+        let mut packages = HashMap::new();
+        for package_info in package_list {
+            let name = package_info.name().to_string();
+            packages.insert(name, package_info);
+        }
+
+        // Track modified files and backups for rollback
+        let mut modified_files = Vec::new();
+        let mut backups: Vec<(PathBuf, Vec<u8>)> = Vec::new();
+
+        // Apply updates to each package
+        let apply_result = self
+            .apply_updates_to_packages(&resolution, &packages, &mut modified_files, &mut backups)
+            .await;
+
+        // If there was an error, restore backups
+        if let Err(e) = apply_result {
+            self.restore_backups(&backups).await?;
+            return Err(e);
+        }
+
+        Ok(ApplyResult::new(false, resolution, modified_files))
+    }
+
+    /// Applies version updates to all packages in the resolution.
+    ///
+    /// This internal method iterates through all package updates and writes
+    /// the new versions and dependency references to package.json files.
+    ///
+    /// # Arguments
+    ///
+    /// * `resolution` - The version resolution containing all updates
+    /// * `packages` - Map of package names to package information
+    /// * `modified_files` - Vector to track modified file paths
+    /// * `backups` - Vector to store backup data for rollback
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if file operations fail.
+    async fn apply_updates_to_packages(
+        &self,
+        resolution: &VersionResolution,
+        packages: &HashMap<String, PackageInfo>,
+        modified_files: &mut Vec<PathBuf>,
+        backups: &mut Vec<(PathBuf, Vec<u8>)>,
+    ) -> VersionResult<()> {
+        for update in &resolution.updates {
+            let package_info =
+                packages.get(&update.name).ok_or_else(|| VersionError::PackageNotFound {
+                    name: update.name.clone(),
+                    workspace_root: self.workspace_root.clone(),
+                })?;
+
+            let package_json_path = self.write_package_json(package_info, update, backups).await?;
+
+            modified_files.push(package_json_path);
+        }
+
+        Ok(())
+    }
+
+    /// Writes updated version and dependencies to a package.json file.
+    ///
+    /// This method reads the current package.json, creates a backup, updates
+    /// the version field and dependency references, then writes the file back
+    /// with preserved formatting.
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - Information about the package to update
+    /// * `update` - The version update to apply
+    /// * `backups` - Vector storing backup data
+    ///
+    /// # Returns
+    ///
+    /// Returns the path to the modified package.json file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - File reading fails
+    /// - JSON parsing fails
+    /// - Backup creation fails
+    /// - File writing fails
+    async fn write_package_json(
+        &self,
+        package: &PackageInfo,
+        update: &PackageUpdate,
+        backups: &mut Vec<(PathBuf, Vec<u8>)>,
+    ) -> VersionResult<PathBuf> {
+        let package_json_path = package.path().join("package.json");
+
+        // Read current package.json content
+        let current_content = self.fs.read_file(&package_json_path).await.map_err(|e| {
+            VersionError::FileSystemError {
+                path: package_json_path.clone(),
+                reason: format!("Failed to read package.json: {}", e),
+            }
+        })?;
+
+        // Create backup before modifying
+        backups.push((package_json_path.clone(), current_content.clone()));
+
+        // Parse package.json
+        let mut pkg_json: PackageJson = serde_json::from_slice(&current_content).map_err(|e| {
+            VersionError::PackageJsonError {
+                path: package_json_path.clone(),
+                reason: format!("Failed to parse JSON: {}", e),
+            }
+        })?;
+
+        // Update version
+        pkg_json.version = update.next_version.to_string();
+
+        // Update dependency references
+        for dep_update in &update.dependency_updates {
+            // Skip workspace protocols and local references
+            if Self::is_skipped_version_spec(&dep_update.old_version_spec) {
+                continue;
+            }
+
+            match dep_update.dependency_type {
+                DependencyType::Regular => {
+                    if let Some(deps) = &mut pkg_json.dependencies {
+                        deps.insert(
+                            dep_update.dependency_name.clone(),
+                            dep_update.new_version_spec.clone(),
+                        );
+                    }
+                }
+                DependencyType::Dev => {
+                    if let Some(dev_deps) = &mut pkg_json.dev_dependencies {
+                        dev_deps.insert(
+                            dep_update.dependency_name.clone(),
+                            dep_update.new_version_spec.clone(),
+                        );
+                    }
+                }
+                DependencyType::Peer => {
+                    if let Some(peer_deps) = &mut pkg_json.peer_dependencies {
+                        peer_deps.insert(
+                            dep_update.dependency_name.clone(),
+                            dep_update.new_version_spec.clone(),
+                        );
+                    }
+                }
+                DependencyType::Optional => {
+                    if let Some(optional_deps) = &mut pkg_json.optional_dependencies {
+                        optional_deps.insert(
+                            dep_update.dependency_name.clone(),
+                            dep_update.new_version_spec.clone(),
+                        );
+                    }
+                }
+            }
+        }
+
+        // Serialize with pretty formatting
+        let json_string =
+            serde_json::to_string_pretty(&pkg_json).map_err(|e| VersionError::ApplyFailed {
+                path: package_json_path.clone(),
+                reason: format!("Failed to serialize JSON: {}", e),
+            })?;
+
+        // Write to file using filesystem manager
+        self.fs.write_file_string(&package_json_path, &json_string).await.map_err(|e| {
+            VersionError::ApplyFailed {
+                path: package_json_path.clone(),
+                reason: format!("Failed to write package.json: {}", e),
+            }
+        })?;
+
+        Ok(package_json_path)
+    }
+
+    /// Checks if a version spec should be skipped (workspace protocols and local references).
+    ///
+    /// This method identifies version specifications that should not be updated:
+    /// - `workspace:*` - workspace protocol
+    /// - `file:` - file protocol
+    /// - `link:` - link protocol
+    /// - `portal:` - portal protocol
+    ///
+    /// # Arguments
+    ///
+    /// * `version_spec` - The version specification string to check
+    ///
+    /// # Returns
+    ///
+    /// Returns true if the version spec should be skipped.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// assert!(VersionResolver::is_skipped_version_spec("workspace:*"));
+    /// assert!(VersionResolver::is_skipped_version_spec("file:../local-pkg"));
+    /// assert!(VersionResolver::is_skipped_version_spec("link:../linked"));
+    /// assert!(VersionResolver::is_skipped_version_spec("portal:../portal"));
+    /// assert!(!VersionResolver::is_skipped_version_spec("^1.2.3"));
+    /// assert!(!VersionResolver::is_skipped_version_spec("~2.0.0"));
+    /// ```
+    pub(crate) fn is_skipped_version_spec(version_spec: &str) -> bool {
+        version_spec.starts_with("workspace:")
+            || version_spec.starts_with("file:")
+            || version_spec.starts_with("link:")
+            || version_spec.starts_with("portal:")
+    }
+
+    /// Restores backed-up files after a failed operation.
+    ///
+    /// This method is called when an error occurs during version application
+    /// to roll back any files that were modified before the error occurred.
+    ///
+    /// # Arguments
+    ///
+    /// * `backups` - Vector of (path, content) tuples to restore
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any restore operation fails.
+    async fn restore_backups(&self, backups: &[(PathBuf, Vec<u8>)]) -> VersionResult<()> {
+        for (path, content) in backups {
+            self.fs.write_file(path, content).await.map_err(|e| VersionError::ApplyFailed {
+                path: path.clone(),
+                reason: format!("Failed to restore backup: {}", e),
+            })?;
+        }
+        Ok(())
     }
 }

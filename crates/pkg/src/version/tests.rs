@@ -2814,3 +2814,433 @@ mod snapshot_tests {
         assert!(snapshot.ends_with("a1b2c3d"));
     }
 }
+
+// ============================================================================
+// Story 5.7: Apply Versions with Dry-Run Tests
+// ============================================================================
+
+mod application_tests {
+    use super::*;
+    use crate::types::{Changeset, VersionBump};
+
+    /// Creates a test single-package workspace for version application testing.
+    async fn create_test_package_for_application(
+        name: &str,
+        version: &str,
+    ) -> (tempfile::TempDir, PathBuf) {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path().to_path_buf();
+
+        let package_json = serde_json::json!({
+            "name": name,
+            "version": version,
+            "dependencies": {
+                "external-lib": "^2.0.0"
+            },
+            "devDependencies": {
+                "jest": "^29.0.0"
+            }
+        });
+
+        std::fs::write(
+            root.join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Should serialize JSON"),
+        )
+        .expect("Should write package.json");
+
+        (temp_dir, root)
+    }
+
+    #[tokio::test]
+    async fn test_apply_versions_dry_run_no_files_modified() {
+        let (_temp, root) = create_test_package_for_application("@test/pkg-a", "1.0.0").await;
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("@test/pkg-a");
+
+        // Apply with dry_run = true
+        let result =
+            resolver.apply_versions(&changeset, true).await.expect("Should apply versions");
+
+        // Verify dry-run behavior
+        assert!(result.dry_run, "Should be dry-run mode");
+        assert!(result.modified_files.is_empty(), "No files should be modified in dry-run");
+        assert!(result.has_updates(), "Should have updates");
+        assert!(!result.has_modified_files(), "Should not have modified files");
+
+        // Verify original files unchanged
+        let pkg_path = root.join("package.json");
+        let content = tokio::fs::read_to_string(&pkg_path).await.expect("Should read file");
+        assert!(content.contains(r#""version": "1.0.0""#), "Version should remain unchanged");
+    }
+
+    #[tokio::test]
+    async fn test_apply_versions_actual_modifies_files() {
+        let (_temp, root) = create_test_package_for_application("@test/pkg-a", "1.0.0").await;
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("@test/pkg-a");
+
+        // Apply with dry_run = false
+        let result =
+            resolver.apply_versions(&changeset, false).await.expect("Should apply versions");
+
+        // Verify application behavior
+        assert!(!result.dry_run, "Should not be dry-run mode");
+        assert!(!result.modified_files.is_empty(), "Files should be modified");
+        assert!(result.has_modified_files(), "Should have modified files");
+        assert_eq!(result.summary.packages_updated, 1, "Should update one package");
+
+        // Verify file was actually modified
+        let pkg_path = root.join("package.json");
+        let content = tokio::fs::read_to_string(&pkg_path).await.expect("Should read file");
+        assert!(content.contains(r#""version": "1.1.0""#), "Version should be updated to 1.1.0");
+    }
+
+    #[tokio::test]
+    async fn test_apply_versions_preserves_json_formatting() {
+        let (_temp, root) = create_test_package_for_application("@test/pkg-b", "1.0.0").await;
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Patch, vec!["production".to_string()]);
+        changeset.add_package("@test/pkg-b");
+
+        // Apply versions
+        resolver.apply_versions(&changeset, false).await.expect("Should apply versions");
+
+        // Read and verify formatting
+        let pkg_path = root.join("package.json");
+        let content = tokio::fs::read_to_string(&pkg_path).await.expect("Should read file");
+
+        // Verify it's valid JSON
+        let parsed: serde_json::Value =
+            serde_json::from_str(&content).expect("Should be valid JSON");
+        assert_eq!(parsed["version"], "1.0.1", "Version should be updated");
+        assert_eq!(parsed["name"], "@test/pkg-b", "Name should be preserved");
+
+        // Verify pretty formatting (has newlines and indentation)
+        assert!(content.contains('\n'), "Should have newlines");
+        assert!(content.contains("  "), "Should have indentation");
+    }
+
+    #[tokio::test]
+    async fn test_apply_versions_no_dependency_updates_single_package() {
+        let (_temp, root) = create_test_package_for_application("@test/pkg-b", "1.0.0").await;
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("@test/pkg-b");
+
+        // Apply versions
+        let result =
+            resolver.apply_versions(&changeset, false).await.expect("Should apply versions");
+
+        // Verify version was updated
+        let pkg_path = root.join("package.json");
+        let content = tokio::fs::read_to_string(&pkg_path).await.expect("Should read file");
+        assert!(content.contains(r#""version": "1.1.0""#), "Version should be updated");
+
+        // Single package with no internal dependencies won't have dependency updates
+        assert_eq!(result.summary.packages_updated, 1, "Should update one package");
+    }
+
+    #[tokio::test]
+    async fn test_apply_versions_summary_statistics() {
+        let (_temp, root) = create_test_package_for_application("@test/pkg-a", "1.0.0").await;
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Major, vec!["production".to_string()]);
+        changeset.add_package("@test/pkg-a");
+
+        // Apply versions
+        let result =
+            resolver.apply_versions(&changeset, false).await.expect("Should apply versions");
+
+        // Verify summary
+        assert_eq!(result.summary.packages_updated, 1, "Should update 1 package");
+        assert_eq!(result.summary.direct_updates, 1, "Direct update");
+        assert_eq!(result.summary.propagated_updates, 0, "No propagated updates");
+        assert!(result.summary.has_updates(), "Should have updates");
+    }
+
+    #[tokio::test]
+    async fn test_apply_versions_single_package_project() {
+        let (_temp, root) = create_single_package_workspace().await;
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Patch, vec!["production".to_string()]);
+        changeset.add_package("my-package");
+
+        // Apply versions
+        let result =
+            resolver.apply_versions(&changeset, false).await.expect("Should apply versions");
+
+        // Verify
+        assert!(!result.dry_run, "Should not be dry-run");
+        assert_eq!(result.modified_files.len(), 1, "Should modify one file");
+        assert_eq!(result.summary.packages_updated, 1, "Should update one package");
+
+        // Verify file content
+        let pkg_path = root.join("package.json");
+        let content = tokio::fs::read_to_string(&pkg_path).await.expect("Should read file");
+        assert!(content.contains(r#""version": "1.0.1""#), "Version should be updated");
+    }
+
+    #[tokio::test]
+    async fn test_apply_versions_dry_run_then_actual() {
+        let (_temp, root) = create_test_package_for_application("@test/pkg-a", "1.0.0").await;
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("@test/pkg-a");
+
+        // First do dry-run
+        let dry_result =
+            resolver.apply_versions(&changeset, true).await.expect("Should do dry-run");
+        assert!(dry_result.dry_run, "Should be dry-run");
+        assert!(dry_result.modified_files.is_empty(), "No files modified");
+
+        // Verify nothing changed
+        let pkg_path = root.join("package.json");
+        let before_content = tokio::fs::read_to_string(&pkg_path).await.expect("Should read file");
+        assert!(
+            before_content.contains(r#""version": "1.0.0""#),
+            "Version unchanged after dry-run"
+        );
+
+        // Now apply for real
+        let actual_result = resolver.apply_versions(&changeset, false).await.expect("Should apply");
+        assert!(!actual_result.dry_run, "Should not be dry-run");
+        assert!(!actual_result.modified_files.is_empty(), "Files should be modified");
+
+        // Verify changes applied
+        let after_content = tokio::fs::read_to_string(&pkg_path).await.expect("Should read file");
+        assert!(after_content.contains(r#""version": "1.1.0""#), "Version should be updated");
+    }
+
+    #[tokio::test]
+    async fn test_apply_versions_empty_changeset() {
+        let (_temp, root) = create_test_package_for_application("@test/pkg", "1.0.0").await;
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let changeset = Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+        // No packages added
+
+        // Apply versions with empty changeset
+        let result = resolver
+            .apply_versions(&changeset, false)
+            .await
+            .expect("Should handle empty changeset");
+
+        // Verify no changes
+        assert_eq!(result.summary.packages_updated, 0, "No packages should be updated");
+        assert!(!result.has_updates(), "Should not have updates");
+        assert!(result.modified_files.is_empty(), "No files should be modified");
+    }
+
+    #[tokio::test]
+    async fn test_apply_versions_package_not_found_error() {
+        let (_temp, root) = create_test_package_for_application("@test/pkg", "1.0.0").await;
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("nonexistent-package");
+
+        // Should fail with package not found
+        let result = resolver.apply_versions(&changeset, false).await;
+        assert!(result.is_err(), "Should return error for nonexistent package");
+
+        if let Err(e) = result {
+            assert!(
+                matches!(e, VersionError::PackageNotFound { .. }),
+                "Should be PackageNotFound error"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_apply_result_methods() {
+        let (_temp, root) = create_test_package_for_application("@test/pkg-a", "1.0.0").await;
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("@test/pkg-a");
+
+        let result =
+            resolver.apply_versions(&changeset, false).await.expect("Should apply versions");
+
+        // Test all ApplyResult methods
+        assert!(result.has_updates(), "Should have updates");
+        assert!(result.has_modified_files(), "Should have modified files");
+        assert_eq!(result.update_count(), 1, "Should have 1 update");
+        assert!(!result.has_circular_dependencies(), "Should not have circular dependencies");
+    }
+
+    #[tokio::test]
+    async fn test_apply_summary_methods() {
+        let (_temp, root) = create_test_package_for_application("@test/pkg-b", "1.0.0").await;
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("@test/pkg-b");
+
+        let result =
+            resolver.apply_versions(&changeset, false).await.expect("Should apply versions");
+        let summary = &result.summary;
+
+        // Test ApplySummary methods
+        assert!(summary.has_updates(), "Should have updates");
+        assert!(!summary.has_circular_dependencies(), "Should not have circular dependencies");
+        assert_eq!(summary.direct_updates, 1, "Should have 1 direct update");
+        assert_eq!(summary.propagated_updates, 0, "Should have 0 propagated updates");
+    }
+
+    #[tokio::test]
+    async fn test_apply_versions_cross_platform_paths() {
+        let (_temp, root) = create_test_package_for_application("@test/pkg-a", "1.0.0").await;
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Patch, vec!["production".to_string()]);
+        changeset.add_package("@test/pkg-a");
+
+        // Apply versions
+        let result =
+            resolver.apply_versions(&changeset, false).await.expect("Should apply versions");
+
+        // Verify paths are canonical and work cross-platform
+        for path in &result.modified_files {
+            assert!(path.is_absolute(), "Path should be absolute");
+            assert!(path.exists(), "Modified file should exist");
+            assert!(path.ends_with("package.json"), "Should be package.json file");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_is_skipped_version_spec() {
+        use crate::version::VersionResolver;
+        use sublime_standard_tools::filesystem::FileSystemManager;
+
+        // Test workspace protocol
+        assert!(
+            VersionResolver::<FileSystemManager>::is_skipped_version_spec("workspace:*"),
+            "Should skip workspace:*"
+        );
+        assert!(
+            VersionResolver::<FileSystemManager>::is_skipped_version_spec("workspace:^1.0.0"),
+            "Should skip workspace:^1.0.0"
+        );
+
+        // Test file protocol
+        assert!(
+            VersionResolver::<FileSystemManager>::is_skipped_version_spec("file:../local-pkg"),
+            "Should skip file: protocol"
+        );
+
+        // Test link protocol
+        assert!(
+            VersionResolver::<FileSystemManager>::is_skipped_version_spec("link:../linked"),
+            "Should skip link: protocol"
+        );
+
+        // Test portal protocol
+        assert!(
+            VersionResolver::<FileSystemManager>::is_skipped_version_spec("portal:../portal"),
+            "Should skip portal: protocol"
+        );
+
+        // Test normal version specs (should not be skipped)
+        assert!(
+            !VersionResolver::<FileSystemManager>::is_skipped_version_spec("^1.2.3"),
+            "Should not skip normal semver"
+        );
+        assert!(
+            !VersionResolver::<FileSystemManager>::is_skipped_version_spec("~2.0.0"),
+            "Should not skip tilde range"
+        );
+        assert!(
+            !VersionResolver::<FileSystemManager>::is_skipped_version_spec(">=1.0.0 <2.0.0"),
+            "Should not skip range"
+        );
+    }
+
+    // Note: Monorepo tests are skipped until MonorepoDetector enhancement is complete
+    // This test validates the is_skipped_version_spec logic used in apply_versions
+    #[tokio::test]
+    async fn test_apply_versions_respects_skipped_specs() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path().to_path_buf();
+
+        // Create a single package with workspace protocol dependency
+        let package_json = serde_json::json!({
+            "name": "@test/pkg-a",
+            "version": "1.0.0",
+            "dependencies": {
+                "@test/internal": "workspace:*",
+                "external": "^1.0.0"
+            }
+        });
+
+        std::fs::write(
+            root.join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Should serialize JSON"),
+        )
+        .expect("Should write package.json");
+
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("@test/pkg-a");
+
+        // Apply versions
+        resolver.apply_versions(&changeset, false).await.expect("Should apply versions");
+
+        // Verify workspace: protocol was not modified
+        let pkg_path = root.join("package.json");
+        let content = tokio::fs::read_to_string(&pkg_path).await.expect("Should read file");
+        assert!(
+            content.contains(r#""@test/internal": "workspace:*""#),
+            "workspace: protocol should remain unchanged"
+        );
+        assert!(content.contains(r#""version": "1.1.0""#), "Version should be updated");
+    }
+}

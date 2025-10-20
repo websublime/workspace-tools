@@ -62,9 +62,9 @@
 //!     println!("{}: {} -> {}", update.name, update.current_version, update.next_version);
 //! }
 //!
-//! // TODO: Story 5.7 - Apply versions (not yet implemented)
-//! // let result = resolver.apply_versions(&changeset, false).await?;
-//! // println!("Updated {} packages", result.resolution.updates.len());
+//! // Story 5.7 - Apply versions (implemented)
+//! let result = resolver.apply_versions(&changeset, false).await?;
+//! println!("Updated {} packages", result.resolution.updates.len());
 //! # Ok(())
 //! # }
 //! ```
@@ -190,6 +190,7 @@
 
 #![allow(clippy::todo)]
 
+mod application;
 mod graph;
 mod propagation;
 mod resolution;
@@ -199,6 +200,7 @@ mod snapshot;
 #[cfg(test)]
 mod tests;
 
+pub use application::{ApplyResult, ApplySummary};
 pub use graph::DependencyGraph;
 pub use propagation::DependencyPropagator;
 pub use resolution::{PackageUpdate, VersionResolution};
