@@ -184,4 +184,13 @@
 
 #![allow(clippy::todo)]
 
+// Modules
+pub mod storage;
+
+#[cfg(test)]
+mod tests;
+
+// Re-exports
+pub use storage::ChangesetStorage;
+
 // Module will be implemented in subsequent stories (Epic 6)
