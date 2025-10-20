@@ -307,6 +307,18 @@ pub enum ChangesetError {
         /// Description of why the lock failed.
         reason: String,
     },
+
+    /// Git integration operation failed.
+    ///
+    /// This error occurs when git integration operations fail during package
+    /// detection, commit analysis, or other git-related operations.
+    #[error("Git integration failed during {operation}: {reason}")]
+    GitIntegration {
+        /// Description of the git integration operation that failed.
+        operation: String,
+        /// Detailed error message.
+        reason: String,
+    },
 }
 
 impl AsRef<str> for ChangesetError {
@@ -348,6 +360,7 @@ impl AsRef<str> for ChangesetError {
             Self::ConcurrentModification { .. } => "concurrent modification",
             Self::InvalidPath { .. } => "invalid changeset path",
             Self::LockFailed { .. } => "lock failed",
+            Self::GitIntegration { .. } => "git integration error",
         }
     }
 }

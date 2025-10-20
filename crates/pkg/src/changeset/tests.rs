@@ -13,6 +13,7 @@
 
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::panic)]
+#![allow(clippy::expect_used)]
 
 use crate::changeset::ChangesetStorage;
 use crate::error::{ChangesetError, ChangesetResult};
@@ -1051,12 +1052,13 @@ mod manager_tests {
     use crate::changeset::ChangesetManager;
     use crate::config::ChangesetConfig;
     use std::collections::HashMap;
+    use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
     use sublime_standard_tools::filesystem::FileSystemManager;
 
     /// Mock storage implementation for testing ChangesetManager.
     #[derive(Debug, Clone)]
-    struct MockManagerStorage {
+    pub(super) struct MockManagerStorage {
         changesets: Arc<Mutex<HashMap<String, Changeset>>>,
     }
 
@@ -1136,10 +1138,11 @@ mod manager_tests {
         }
     }
 
-    fn create_test_manager() -> ChangesetManager<MockManagerStorage> {
+    pub(super) fn create_test_manager() -> ChangesetManager<MockManagerStorage> {
         let storage = MockManagerStorage::new();
         let config = create_test_config();
-        ChangesetManager::with_storage(storage, None, config)
+        let workspace_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        ChangesetManager::with_storage(storage, workspace_root, None, config)
     }
 
     #[tokio::test]
@@ -1528,6 +1531,687 @@ mod manager_tests {
         for changeset in changesets {
             assert!(!changeset.branch.is_empty());
             assert!(!changeset.environments.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_manager_add_commits() {
+        let manager = create_test_manager();
+
+        // Create a changeset
+        let mut changeset = manager
+            .create("feature/test", VersionBump::Minor, vec!["production".to_string()])
+            .await
+            .unwrap();
+
+        // Add a package to satisfy validation
+        changeset.add_package("test-package");
+        manager.update(&changeset).await.unwrap();
+
+        // Add commits manually
+        let commits = vec!["abc123".to_string(), "def456".to_string()];
+        let summary = manager.add_commits("feature/test", commits).await.unwrap();
+
+        assert_eq!(summary.commits_added, 2);
+        assert_eq!(summary.commit_ids.len(), 2);
+        assert!(summary.new_packages.is_empty());
+
+        // Verify commits were added
+        let changeset = manager.load("feature/test").await.unwrap();
+        assert_eq!(changeset.changes.len(), 2);
+        assert!(changeset.has_commit("abc123"));
+        assert!(changeset.has_commit("def456"));
+    }
+
+    #[tokio::test]
+    async fn test_manager_add_commits_duplicate() {
+        let manager = create_test_manager();
+
+        // Create a changeset
+        let mut changeset = manager
+            .create("feature/test", VersionBump::Minor, vec!["production".to_string()])
+            .await
+            .unwrap();
+
+        // Add a package to satisfy validation
+        changeset.add_package("test-package");
+        manager.update(&changeset).await.unwrap();
+
+        // Add commits
+        let commits = vec!["abc123".to_string(), "def456".to_string()];
+        manager.add_commits("feature/test", commits).await.unwrap();
+
+        // Try to add same commits again
+        let commits = vec!["abc123".to_string(), "ghi789".to_string()];
+        let summary = manager.add_commits("feature/test", commits).await.unwrap();
+
+        // Only the new commit should be added
+        assert_eq!(summary.commits_added, 1);
+        assert_eq!(summary.commit_ids, vec!["ghi789".to_string()]);
+
+        let changeset = manager.load("feature/test").await.unwrap();
+        assert_eq!(changeset.changes.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_manager_add_commits_empty() {
+        let manager = create_test_manager();
+
+        // Create a changeset
+        let mut changeset = manager
+            .create("feature/test", VersionBump::Minor, vec!["production".to_string()])
+            .await
+            .unwrap();
+
+        // Add a package to satisfy validation
+        changeset.add_package("test-package");
+        manager.update(&changeset).await.unwrap();
+
+        // Add empty commit list
+        let summary = manager.add_commits("feature/test", vec![]).await.unwrap();
+
+        assert_eq!(summary.commits_added, 0);
+        assert!(summary.commit_ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_manager_add_commits_nonexistent_changeset() {
+        let manager = create_test_manager();
+
+        let result = manager.add_commits("nonexistent", vec!["abc123".to_string()]).await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ChangesetError::NotFound { branch } => {
+                assert_eq!(branch, "nonexistent");
+            }
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+}
+
+// ============================================================================
+// Git Integration Tests
+// ============================================================================
+
+mod git_integration_tests {
+    use crate::changeset::{ChangesetManager, FileBasedChangesetStorage, PackageDetector};
+    use crate::config::ChangesetConfig;
+    use crate::error::ChangesetError;
+    use crate::types::VersionBump;
+    use std::fs;
+    use sublime_git_tools::Repo;
+    use sublime_standard_tools::filesystem::FileSystemManager;
+    use tempfile::TempDir;
+
+    /// Helper to create a test git repository with commits.
+    fn setup_git_repo() -> (TempDir, Repo) {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+
+        // Initialize git repo
+        let repo = Repo::create(repo_path.to_str().unwrap()).unwrap();
+
+        // Configure git user
+        repo.config("user.name", "Test User").unwrap();
+        repo.config("user.email", "test@example.com").unwrap();
+
+        // Create initial commit
+        fs::write(repo_path.join("README.md"), "# Test Repo").unwrap();
+        repo.add("README.md").unwrap();
+        repo.commit("Initial commit").unwrap();
+
+        (temp_dir, repo)
+    }
+
+    /// Helper to create a monorepo structure with pnpm workspaces.
+    fn setup_monorepo(repo_path: &std::path::Path) {
+        // Create root package.json with private flag
+        let root_package = serde_json::json!({
+            "name": "@test/monorepo",
+            "version": "1.0.0",
+            "private": true,
+            "scripts": {
+                "build": "echo 'Building all packages...'"
+            }
+        });
+        fs::write(
+            repo_path.join("package.json"),
+            serde_json::to_string_pretty(&root_package).unwrap(),
+        )
+        .unwrap();
+
+        // Create pnpm-workspace.yaml (critical for pnpm monorepo detection)
+        let pnpm_workspace = "packages:\n  - 'packages/*'\n";
+        fs::write(repo_path.join("pnpm-workspace.yaml"), pnpm_workspace).unwrap();
+
+        // Create packages directory
+        fs::create_dir_all(repo_path.join("packages")).unwrap();
+
+        // Create package1
+        fs::create_dir_all(repo_path.join("packages/package1/src")).unwrap();
+        let pkg1 = serde_json::json!({
+            "name": "@test/package1",
+            "version": "1.0.0",
+            "main": "src/index.js",
+            "scripts": {
+                "build": "echo 'Building package1...'"
+            }
+        });
+        fs::write(
+            repo_path.join("packages/package1/package.json"),
+            serde_json::to_string_pretty(&pkg1).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            repo_path.join("packages/package1/src/index.js"),
+            "module.exports = { name: 'package1' };\n",
+        )
+        .unwrap();
+
+        // Create package2
+        fs::create_dir_all(repo_path.join("packages/package2/src")).unwrap();
+        let pkg2 = serde_json::json!({
+            "name": "@test/package2",
+            "version": "1.0.0",
+            "main": "src/index.js",
+            "scripts": {
+                "build": "echo 'Building package2...'"
+            },
+            "dependencies": {
+                "@test/package1": "workspace:*"
+            }
+        });
+        fs::write(
+            repo_path.join("packages/package2/package.json"),
+            serde_json::to_string_pretty(&pkg2).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            repo_path.join("packages/package2/src/index.js"),
+            "module.exports = { name: 'package2' };\n",
+        )
+        .unwrap();
+    }
+
+    /// Helper to create a single package structure.
+    fn setup_single_package(repo_path: &std::path::Path) {
+        let package = serde_json::json!({
+            "name": "single-package",
+            "version": "1.0.0",
+            "main": "src/index.js",
+            "scripts": {
+                "build": "echo 'Building...'"
+            }
+        });
+        fs::write(repo_path.join("package.json"), serde_json::to_string_pretty(&package).unwrap())
+            .unwrap();
+
+        // Create src directory and a source file
+        fs::create_dir_all(repo_path.join("src")).unwrap();
+        fs::write(repo_path.join("src/index.js"), "module.exports = { name: 'single-package' };\n")
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_package_detector_is_monorepo() {
+        let (temp_dir, repo) = setup_git_repo();
+        setup_monorepo(temp_dir.path());
+
+        // Commit the monorepo setup
+        repo.add_all().unwrap();
+        repo.commit("Setup monorepo").unwrap();
+
+        let detector =
+            PackageDetector::new(temp_dir.path().to_path_buf(), &repo, FileSystemManager::new());
+
+        let is_monorepo = detector.is_monorepo().await.unwrap();
+        assert!(is_monorepo);
+    }
+
+    #[tokio::test]
+    async fn test_package_detector_is_not_monorepo() {
+        let (temp_dir, repo) = setup_git_repo();
+        setup_single_package(temp_dir.path());
+
+        // Commit the single package setup
+        repo.add_all().unwrap();
+        repo.commit("Setup single package").unwrap();
+
+        let detector =
+            PackageDetector::new(temp_dir.path().to_path_buf(), &repo, FileSystemManager::new());
+
+        let is_monorepo = detector.is_monorepo().await.unwrap();
+        assert!(!is_monorepo);
+    }
+
+    #[tokio::test]
+    async fn test_package_detector_list_packages_monorepo() {
+        let (temp_dir, repo) = setup_git_repo();
+        setup_monorepo(temp_dir.path());
+
+        // Commit the monorepo setup
+        repo.add_all().unwrap();
+        repo.commit("Setup monorepo").unwrap();
+
+        let detector =
+            PackageDetector::new(temp_dir.path().to_path_buf(), &repo, FileSystemManager::new());
+
+        let packages = detector.list_packages().await.unwrap();
+        // With proper pnpm workspace setup, should find 2 packages
+        assert_eq!(packages.len(), 2, "Should detect both packages in monorepo");
+        assert!(packages.contains(&"@test/package1".to_string()));
+        assert!(packages.contains(&"@test/package2".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_package_detector_list_packages_single() {
+        let (temp_dir, repo) = setup_git_repo();
+        setup_single_package(temp_dir.path());
+
+        // Commit the single package setup
+        repo.add_all().unwrap();
+        repo.commit("Setup single package").unwrap();
+
+        let detector =
+            PackageDetector::new(temp_dir.path().to_path_buf(), &repo, FileSystemManager::new());
+
+        let packages = detector.list_packages().await.unwrap();
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0], "single-package");
+    }
+
+    #[tokio::test]
+    async fn test_package_detector_detect_affected_packages_monorepo() {
+        let (temp_dir, repo) = setup_git_repo();
+        setup_monorepo(temp_dir.path());
+
+        // Commit the monorepo setup
+        repo.add_all().unwrap();
+        repo.commit("Setup monorepo").unwrap();
+
+        // Make changes to package1
+        fs::write(temp_dir.path().join("packages/package1/src/index.js"), "console.log('hello');")
+            .unwrap();
+        repo.add("packages/package1/src/index.js").unwrap();
+        repo.commit("Update package1").unwrap();
+
+        // Get the last commit hash
+        let commits = repo.get_commits_since(None, &None).unwrap();
+        let last_commit = &commits[0].hash;
+
+        let detector =
+            PackageDetector::new(temp_dir.path().to_path_buf(), &repo, FileSystemManager::new());
+
+        let affected = detector.detect_affected_packages(&[last_commit.clone()]).await.unwrap();
+        // Should detect the affected package
+        assert!(!affected.is_empty(), "Should detect at least one affected package");
+        assert!(
+            affected.contains(&"@test/package1".to_string()),
+            "Should detect package1 was affected"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_package_detector_detect_affected_packages_multiple() {
+        let (temp_dir, repo) = setup_git_repo();
+        setup_monorepo(temp_dir.path());
+
+        // Commit the monorepo setup
+        repo.add_all().unwrap();
+        repo.commit("Setup monorepo").unwrap();
+
+        // Make changes to package1
+        fs::write(temp_dir.path().join("packages/package1/src/index.js"), "console.log('hello');")
+            .unwrap();
+        repo.add("packages/package1/src/index.js").unwrap();
+        repo.commit("Update package1").unwrap();
+        let commit1 = repo.get_current_sha().unwrap();
+
+        // Make changes to package2
+        fs::write(temp_dir.path().join("packages/package2/src/index.js"), "console.log('world');")
+            .unwrap();
+        repo.add("packages/package2/src/index.js").unwrap();
+        repo.commit("Update package2").unwrap();
+        let commit2 = repo.get_current_sha().unwrap();
+
+        let detector =
+            PackageDetector::new(temp_dir.path().to_path_buf(), &repo, FileSystemManager::new());
+
+        let affected = detector.detect_affected_packages(&[commit1, commit2]).await.unwrap();
+        // Should detect both affected packages from multiple commits
+        assert_eq!(affected.len(), 2, "Should detect both affected packages");
+        assert!(affected.contains(&"@test/package1".to_string()));
+        assert!(affected.contains(&"@test/package2".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_package_detector_detect_affected_packages_single() {
+        let (temp_dir, repo) = setup_git_repo();
+        setup_single_package(temp_dir.path());
+
+        // Commit the setup
+        repo.add_all().unwrap();
+        repo.commit("Setup single package").unwrap();
+
+        // Make changes
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        fs::write(temp_dir.path().join("src/index.js"), "console.log('test');").unwrap();
+        repo.add("src/index.js").unwrap();
+        repo.commit("Update code").unwrap();
+
+        let commits = repo.get_commits_since(None, &None).unwrap();
+        let last_commit = &commits[0].hash;
+
+        let detector =
+            PackageDetector::new(temp_dir.path().to_path_buf(), &repo, FileSystemManager::new());
+
+        let affected = detector.detect_affected_packages(&[last_commit.clone()]).await.unwrap();
+        // Should detect the single package
+        assert!(!affected.is_empty(), "Should detect the single package when files change");
+    }
+
+    #[tokio::test]
+    async fn test_package_detector_empty_commit_list() {
+        let (temp_dir, repo) = setup_git_repo();
+        setup_monorepo(temp_dir.path());
+
+        let detector =
+            PackageDetector::new(temp_dir.path().to_path_buf(), &repo, FileSystemManager::new());
+
+        let affected = detector.detect_affected_packages(&[]).await.unwrap();
+        assert_eq!(affected.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_package_detector_get_commits_since() {
+        let (temp_dir, repo) = setup_git_repo();
+
+        // Create a few commits
+        for i in 1..=3 {
+            fs::write(temp_dir.path().join(format!("file{}.txt", i)), format!("content {}", i))
+                .unwrap();
+            repo.add(&format!("file{}.txt", i)).unwrap();
+            repo.commit(&format!("Commit {}", i)).unwrap();
+        }
+
+        let detector =
+            PackageDetector::new(temp_dir.path().to_path_buf(), &repo, FileSystemManager::new());
+
+        // Get all commits
+        let commits = detector.get_commits_since(None).unwrap();
+        assert!(commits.len() >= 3, "Should have at least 3 commits plus initial");
+
+        // Get commits since first commit
+        if commits.len() > 1 {
+            let first_commit = commits.last().unwrap().hash.clone();
+            let recent_commits = detector.get_commits_since(Some(first_commit)).unwrap();
+            assert!(!recent_commits.is_empty(), "Should have commits since first commit");
+        }
+    }
+
+    #[allow(clippy::len_zero)]
+    #[tokio::test]
+    async fn test_package_detector_get_commits_between() {
+        let (temp_dir, repo) = setup_git_repo();
+
+        // Create commits and tag them
+        fs::write(temp_dir.path().join("file1.txt"), "content 1").unwrap();
+        repo.add("file1.txt").unwrap();
+        repo.commit("Commit 1").unwrap();
+        repo.create_tag("v1.0.0", Some("Version 1.0.0".to_string())).unwrap();
+
+        fs::write(temp_dir.path().join("file2.txt"), "content 2").unwrap();
+        repo.add("file2.txt").unwrap();
+        repo.commit("Commit 2").unwrap();
+
+        fs::write(temp_dir.path().join("file3.txt"), "content 3").unwrap();
+        repo.add("file3.txt").unwrap();
+        repo.commit("Commit 3").unwrap();
+        repo.create_tag("v2.0.0", Some("Version 2.0.0".to_string())).unwrap();
+
+        let detector =
+            PackageDetector::new(temp_dir.path().to_path_buf(), &repo, FileSystemManager::new());
+
+        let commits = detector.get_commits_between("v1.0.0", "v2.0.0").unwrap();
+        assert!(!commits.is_empty(), "Should have commits between tags");
+        assert!(commits.len() >= 1, "Should have at least one commit between v1.0.0 and v2.0.0");
+    }
+
+    #[tokio::test]
+    async fn test_package_detector_workspace_root() {
+        let (temp_dir, repo) = setup_git_repo();
+
+        let detector =
+            PackageDetector::new(temp_dir.path().to_path_buf(), &repo, FileSystemManager::new());
+
+        assert_eq!(detector.workspace_root(), temp_dir.path());
+    }
+
+    #[tokio::test]
+    async fn test_package_detector_repo_reference() {
+        let (temp_dir, repo) = setup_git_repo();
+
+        let detector =
+            PackageDetector::new(temp_dir.path().to_path_buf(), &repo, FileSystemManager::new());
+
+        let repo_ref = detector.repo();
+        // Just verify we can access the repo reference
+        let repo_path = repo_ref.get_repo_path();
+        // get_repo_path returns &Path directly
+        assert!(!repo_path.as_os_str().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_manager_add_commits_from_git_monorepo() {
+        let (temp_dir, repo) = setup_git_repo();
+        setup_monorepo(temp_dir.path());
+
+        // Commit the monorepo setup
+        repo.add_all().unwrap();
+        repo.commit("Setup monorepo").unwrap();
+
+        // Make changes to package1
+        fs::write(
+            temp_dir.path().join("packages/package1/src/index.js"),
+            "console.log('updated');",
+        )
+        .unwrap();
+        repo.add("packages/package1/src/index.js").unwrap();
+        repo.commit("Update package1").unwrap();
+        let commit1 = repo.get_current_sha().unwrap();
+
+        // Make changes to package2
+        fs::write(
+            temp_dir.path().join("packages/package2/src/index.js"),
+            "console.log('also updated');",
+        )
+        .unwrap();
+        repo.add("packages/package2/src/index.js").unwrap();
+        repo.commit("Update package2").unwrap();
+        let commit2 = repo.get_current_sha().unwrap();
+
+        // Create a changeset
+        let storage = FileBasedChangesetStorage::new(
+            temp_dir.path().to_path_buf(),
+            ".changesets".into(),
+            ".changesets/history".into(),
+            FileSystemManager::new(),
+        );
+
+        let config = ChangesetConfig {
+            path: ".changesets".into(),
+            history_path: ".changesets/history".into(),
+            available_environments: vec!["production".to_string()],
+            default_environments: vec!["production".to_string()],
+        };
+
+        let manager = ChangesetManager::with_storage(
+            storage,
+            temp_dir.path().to_path_buf(),
+            Some(repo),
+            config,
+        );
+
+        manager
+            .create("feature/test", VersionBump::Minor, vec!["production".to_string()])
+            .await
+            .unwrap();
+
+        // Add initial package and setup commit to changeset so get_commits_since knows where to start
+        let mut changeset = manager.load("feature/test").await.unwrap();
+        changeset.add_package("@test/package1");
+        // Get all commits and find the setup commit
+        let all_commits =
+            manager.git_repo().as_ref().unwrap().get_commits_since(None, &None).unwrap();
+        // Find the "Setup monorepo" commit
+        let setup_commit = all_commits
+            .iter()
+            .find(|c| c.message.contains("Setup monorepo"))
+            .map(|c| &c.hash)
+            .expect("Setup monorepo commit not found");
+        changeset.add_commit(setup_commit);
+        manager.update(&changeset).await.unwrap();
+
+        // Use add_commits_from_git to automatically detect and add commits
+        let summary = manager.add_commits_from_git("feature/test").await.unwrap();
+
+        // Verify summary - expect only the 2 update commits (package1 and package2)
+        assert_eq!(summary.commits_added, 2, "Should have added 2 commits");
+        let total_packages = summary.new_packages.len() + summary.existing_packages.len();
+        assert_eq!(total_packages, 2, "Should have affected 2 packages");
+
+        let all_packages: Vec<String> =
+            summary.new_packages.iter().chain(summary.existing_packages.iter()).cloned().collect();
+        assert!(all_packages.contains(&"@test/package1".to_string()));
+        assert!(all_packages.contains(&"@test/package2".to_string()));
+
+        // Verify changeset was updated
+        let changeset = manager.load("feature/test").await.unwrap();
+        assert_eq!(changeset.packages.len(), 2, "Should have 2 packages in changeset");
+        assert!(changeset.packages.contains(&"@test/package1".to_string()));
+        assert!(changeset.packages.contains(&"@test/package2".to_string()));
+
+        // Verify commits were added
+        assert!(changeset.changes.contains(&commit1));
+        assert!(changeset.changes.contains(&commit2));
+    }
+
+    #[tokio::test]
+    async fn test_manager_add_commits_from_git_single_package() {
+        let (temp_dir, repo) = setup_git_repo();
+        setup_single_package(temp_dir.path());
+
+        // Commit the setup
+        repo.add_all().unwrap();
+        repo.commit("Setup single package").unwrap();
+
+        // Make changes
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        fs::write(temp_dir.path().join("src/index.js"), "console.log('test');").unwrap();
+        repo.add("src/index.js").unwrap();
+        repo.commit("Update code").unwrap();
+        let commit_hash = repo.get_current_sha().unwrap();
+
+        // Create a changeset
+        let storage = FileBasedChangesetStorage::new(
+            temp_dir.path().to_path_buf(),
+            ".changesets".into(),
+            ".changesets/history".into(),
+            FileSystemManager::new(),
+        );
+
+        let config = ChangesetConfig {
+            path: ".changesets".into(),
+            history_path: ".changesets/history".into(),
+            available_environments: vec!["production".to_string()],
+            default_environments: vec!["production".to_string()],
+        };
+
+        let manager = ChangesetManager::with_storage(
+            storage,
+            temp_dir.path().to_path_buf(),
+            Some(repo),
+            config,
+        );
+
+        manager
+            .create("feature/test", VersionBump::Minor, vec!["production".to_string()])
+            .await
+            .unwrap();
+
+        // Add initial package and setup commit to changeset so get_commits_since knows where to start
+        let mut changeset = manager.load("feature/test").await.unwrap();
+        changeset.add_package("single-package");
+        // Get all commits and find the setup commit
+        let all_commits =
+            manager.git_repo().as_ref().unwrap().get_commits_since(None, &None).unwrap();
+        // Find the "Setup single package" commit
+        let setup_commit = all_commits
+            .iter()
+            .find(|c| c.message.contains("Setup single package"))
+            .map(|c| &c.hash)
+            .expect("Setup single package commit not found");
+        changeset.add_commit(setup_commit);
+        manager.update(&changeset).await.unwrap();
+
+        // Use add_commits_from_git
+        let summary = manager.add_commits_from_git("feature/test").await.unwrap();
+
+        // Verify summary - expect only the 1 update commit
+        assert_eq!(summary.commits_added, 1, "Should have added 1 commit");
+        let total_packages = summary.new_packages.len() + summary.existing_packages.len();
+        assert_eq!(total_packages, 1, "Should have affected 1 package");
+
+        let all_packages: Vec<String> =
+            summary.new_packages.iter().chain(summary.existing_packages.iter()).cloned().collect();
+        assert!(all_packages.contains(&"single-package".to_string()));
+
+        // Verify changeset was updated
+        let changeset = manager.load("feature/test").await.unwrap();
+        assert_eq!(changeset.packages.len(), 1, "Should have 1 package in changeset");
+        assert!(changeset.packages.contains(&"single-package".to_string()));
+
+        // Verify commit was added
+        assert!(changeset.changes.contains(&commit_hash));
+    }
+
+    #[tokio::test]
+    async fn test_manager_add_commits_from_git_no_git_repo() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let storage = FileBasedChangesetStorage::new(
+            temp_dir.path().to_path_buf(),
+            ".changesets".into(),
+            ".changesets/history".into(),
+            FileSystemManager::new(),
+        );
+
+        let config = ChangesetConfig {
+            path: ".changesets".into(),
+            history_path: ".changesets/history".into(),
+            available_environments: vec!["production".to_string()],
+            default_environments: vec!["production".to_string()],
+        };
+
+        // Create manager without Git repo
+        let manager =
+            ChangesetManager::with_storage(storage, temp_dir.path().to_path_buf(), None, config);
+
+        manager
+            .create("feature/test", VersionBump::Minor, vec!["production".to_string()])
+            .await
+            .unwrap();
+
+        // Attempt to use add_commits_from_git should fail
+        let result = manager.add_commits_from_git("feature/test").await;
+        assert!(result.is_err(), "Should fail when no Git repo is available");
+
+        if let Err(ChangesetError::GitIntegration { operation, reason }) = result {
+            assert_eq!(operation, "add commits from git");
+            assert!(reason.contains("Git repository not available"));
+        } else {
+            panic!("Expected GitIntegration error");
         }
     }
 }

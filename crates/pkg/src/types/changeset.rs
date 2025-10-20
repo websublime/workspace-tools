@@ -821,3 +821,162 @@ impl ReleaseInfo {
         self.versions.len()
     }
 }
+
+/// Summary of updates made when adding commits from Git.
+///
+/// This structure provides detailed information about what changed when commits
+/// were added to a changeset from Git, including newly discovered packages,
+/// commit counts, and the full list of affected packages.
+///
+/// # Examples
+///
+/// ```rust
+/// use sublime_pkg_tools::types::UpdateSummary;
+///
+/// let summary = UpdateSummary {
+///     commits_added: 3,
+///     commit_ids: vec!["abc123".to_string(), "def456".to_string(), "ghi789".to_string()],
+///     new_packages: vec!["@myorg/new-pkg".to_string()],
+///     existing_packages: vec!["@myorg/existing-pkg".to_string()],
+/// };
+///
+/// assert_eq!(summary.commits_added, 3);
+/// assert_eq!(summary.total_packages(), 2);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct UpdateSummary {
+    /// Number of commits that were added to the changeset.
+    pub commits_added: usize,
+
+    /// List of commit IDs that were added.
+    pub commit_ids: Vec<String>,
+
+    /// Packages that were newly added to the changeset.
+    pub new_packages: Vec<String>,
+
+    /// Packages that were already in the changeset before the update.
+    pub existing_packages: Vec<String>,
+}
+
+impl UpdateSummary {
+    /// Creates a new `UpdateSummary`.
+    ///
+    /// # Parameters
+    ///
+    /// * `commits_added` - Number of commits added
+    /// * `commit_ids` - List of commit IDs added
+    /// * `new_packages` - Newly discovered packages
+    /// * `existing_packages` - Packages that were already tracked
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::types::UpdateSummary;
+    ///
+    /// let summary = UpdateSummary::new(
+    ///     2,
+    ///     vec!["abc123".to_string(), "def456".to_string()],
+    ///     vec!["new-pkg".to_string()],
+    ///     vec!["old-pkg".to_string()],
+    /// );
+    ///
+    /// assert_eq!(summary.commits_added, 2);
+    /// ```
+    #[must_use]
+    pub fn new(
+        commits_added: usize,
+        commit_ids: Vec<String>,
+        new_packages: Vec<String>,
+        existing_packages: Vec<String>,
+    ) -> Self {
+        Self { commits_added, commit_ids, new_packages, existing_packages }
+    }
+
+    /// Creates an empty `UpdateSummary` indicating no changes.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::types::UpdateSummary;
+    ///
+    /// let summary = UpdateSummary::empty();
+    ///
+    /// assert_eq!(summary.commits_added, 0);
+    /// assert!(summary.commit_ids.is_empty());
+    /// assert!(summary.new_packages.is_empty());
+    /// ```
+    #[must_use]
+    pub fn empty() -> Self {
+        Self {
+            commits_added: 0,
+            commit_ids: Vec::new(),
+            new_packages: Vec::new(),
+            existing_packages: Vec::new(),
+        }
+    }
+
+    /// Returns the total number of packages in the changeset after the update.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::types::UpdateSummary;
+    ///
+    /// let summary = UpdateSummary::new(
+    ///     1,
+    ///     vec!["abc123".to_string()],
+    ///     vec!["new-pkg".to_string()],
+    ///     vec!["old-pkg1".to_string(), "old-pkg2".to_string()],
+    /// );
+    ///
+    /// assert_eq!(summary.total_packages(), 3);
+    /// ```
+    #[must_use]
+    pub fn total_packages(&self) -> usize {
+        self.new_packages.len() + self.existing_packages.len()
+    }
+
+    /// Checks if any new packages were discovered.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::types::UpdateSummary;
+    ///
+    /// let summary = UpdateSummary::new(
+    ///     1,
+    ///     vec!["abc123".to_string()],
+    ///     vec!["new-pkg".to_string()],
+    ///     vec![],
+    /// );
+    ///
+    /// assert!(summary.has_new_packages());
+    /// ```
+    #[must_use]
+    pub fn has_new_packages(&self) -> bool {
+        !self.new_packages.is_empty()
+    }
+
+    /// Checks if any commits were added.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::types::UpdateSummary;
+    ///
+    /// let empty = UpdateSummary::empty();
+    /// assert!(!empty.has_commits());
+    ///
+    /// let with_commits = UpdateSummary::new(
+    ///     1,
+    ///     vec!["abc123".to_string()],
+    ///     vec![],
+    ///     vec![],
+    /// );
+    /// assert!(with_commits.has_commits());
+    /// ```
+    #[must_use]
+    pub fn has_commits(&self) -> bool {
+        self.commits_added > 0
+    }
+}
