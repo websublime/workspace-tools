@@ -404,7 +404,11 @@ mod mapping_tests {
         let fs = FileSystemManager::new();
         let mapper = PackageMapper::new(workspace_root.clone(), fs);
 
-        let outside_path = PathBuf::from("/tmp/outside/file.ts");
+        // Create an absolute path that's definitely outside the workspace
+        // Use a different temp directory to ensure it's outside
+        let outside_temp = TempDir::new().expect("Failed to create outside temp dir");
+        let outside_path = outside_temp.path().join("outside/file.ts");
+
         let result = mapper.normalize_path(&outside_path);
 
         assert!(result.is_err());
