@@ -191,6 +191,6 @@ pub mod storage;
 mod tests;
 
 // Re-exports
-pub use storage::ChangesetStorage;
+pub use storage::{ChangesetStorage, FileBasedChangesetStorage};
 
 // Module will be implemented in subsequent stories (Epic 6)
