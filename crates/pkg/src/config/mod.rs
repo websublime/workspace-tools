@@ -162,4 +162,7 @@ pub use loader::{load_config, load_config_from_file, ConfigLoader};
 pub use types::PackageToolsConfig;
 pub use upgrade::{BackupConfig, RegistryConfig, UpgradeConfig};
 pub use validation::{path_exists, validate_config, validate_path_format, validate_url_format};
-pub use version::{VersionConfig, VersioningStrategy};
+pub use version::VersionConfig;
+
+// Re-export VersioningStrategy from types module for convenience
+pub use crate::types::VersioningStrategy;

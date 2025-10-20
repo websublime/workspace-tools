@@ -17,6 +17,8 @@ use crate::config::PackageToolsConfig;
 use crate::error::{VersionError, VersionResult};
 use crate::types::{Changeset, DependencyType, PackageInfo, VersioningStrategy};
 use crate::version::application::ApplyResult;
+use crate::version::graph::DependencyGraph;
+use crate::version::propagation::DependencyPropagator;
 use crate::version::resolution::{resolve_versions, PackageUpdate, VersionResolution};
 use package_json::PackageJson;
 use std::collections::HashMap;
@@ -569,15 +571,36 @@ impl<F: AsyncFileSystem + Clone + Send + Sync + 'static> VersionResolver<F> {
         // Discover all packages in the workspace
         let package_list = self.discover_packages().await?;
 
-        // Build a map of package name to package info
+        // Build dependency graph for propagation (before consuming package_list)
+        let (graph, circular_deps) = if self.config.dependency.propagation_bump != "none" {
+            let g = DependencyGraph::from_packages(&package_list)?;
+            let cycles = g.detect_cycles();
+            (Some(g), cycles)
+        } else {
+            (None, Vec::new())
+        };
+
+        // Build a map of package name to package info (consuming package_list)
         let mut packages = HashMap::new();
         for package_info in package_list {
             let name = package_info.name().to_string();
             packages.insert(name, package_info);
         }
 
-        // Delegate to the resolution module
-        resolve_versions(changeset, &packages, self.strategy).await
+        // Step 1: Resolve direct version changes from changeset
+        let mut resolution = resolve_versions(changeset, &packages, self.strategy).await?;
+
+        // Step 2: Add circular dependencies to resolution
+        resolution.circular_dependencies = circular_deps;
+
+        // Step 3: Apply dependency propagation if configured
+        if let Some(graph) = graph {
+            // Create propagator and apply propagation
+            let propagator = DependencyPropagator::new(&graph, &packages, &self.config.dependency);
+            propagator.propagate(&mut resolution)?;
+        }
+
+        Ok(resolution)
     }
 
     /// Applies version changes from a changeset to package.json files.

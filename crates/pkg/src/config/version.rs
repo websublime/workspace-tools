@@ -4,12 +4,12 @@
 //! and snapshot version formatting.
 //!
 //! **How**: This module provides the `VersionConfig` structure that controls how versions
-//! are calculated and applied, along with the `VersioningStrategy` enum that defines
-//! independent vs unified versioning.
+//! are calculated and applied, using the `VersioningStrategy` type from the types module.
 //!
 //! **Why**: To enable flexible versioning that supports both monorepo and single-package
 //! projects, with clear control over version resolution behavior.
 
+use crate::types::VersioningStrategy;
 use serde::{Deserialize, Serialize};
 use sublime_standard_tools::config::{ConfigResult, Configurable};
 
@@ -125,47 +125,6 @@ pub struct VersionConfig {
 /// # Example
 ///
 /// ```rust
-/// use sublime_pkg_tools::config::VersioningStrategy;
-///
-/// let strategy = VersioningStrategy::Independent;
-/// assert_eq!(strategy, VersioningStrategy::Independent);
-///
-/// let unified = VersioningStrategy::Unified;
-/// assert_eq!(unified, VersioningStrategy::Unified);
-/// ```
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum VersioningStrategy {
-    /// Each package maintains its own independent version.
-    ///
-    /// This is the default strategy and is most appropriate for monorepos where
-    /// packages have different release cycles and change frequencies.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use sublime_pkg_tools::config::VersioningStrategy;
-    ///
-    /// let strategy = VersioningStrategy::Independent;
-    /// ```
-    Independent,
-
-    /// All packages share a unified version number.
-    ///
-    /// When one package is bumped, all packages in the workspace receive the same
-    /// version number. This is appropriate for tightly-coupled monorepos where
-    /// packages are always released together.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use sublime_pkg_tools::config::VersioningStrategy;
-    ///
-    /// let strategy = VersioningStrategy::Unified;
-    /// ```
-    Unified,
-}
-
 impl Default for VersionConfig {
     /// Creates a new `VersionConfig` with default values.
     ///
