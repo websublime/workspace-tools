@@ -182,10 +182,18 @@ impl CommitInfo {
 
     /// Creates a `CommitInfo` from `sublime_git_tools::RepoCommit`.
     ///
+    /// This method converts a Git commit from the git tools crate into our domain model,
+    /// enriching it with package information and preparing it for analysis.
+    ///
     /// # Arguments
     ///
     /// * `commit` - The Git commit from sublime_git_tools
     /// * `affected_packages` - List of package names affected by this commit
+    ///
+    /// # Date Parsing
+    ///
+    /// The `author_date` field from `RepoCommit` is expected to be in RFC 2822 format
+    /// (e.g., "Mon, 1 Jan 2024 12:00:00 +0000"). If parsing fails, the current time is used.
     ///
     /// # Examples
     ///
@@ -194,34 +202,47 @@ impl CommitInfo {
     /// use sublime_git_tools::RepoCommit;
     ///
     /// let git_commit = RepoCommit {
-    ///     hash: "abc123".to_string(),
-    ///     author_name: "John".to_string(),
+    ///     hash: "abc123def456".to_string(),
+    ///     author_name: "John Doe".to_string(),
     ///     author_email: "john@example.com".to_string(),
-    ///     author_date: "2024-01-01".to_string(),
+    ///     author_date: "Mon, 1 Jan 2024 12:00:00 +0000".to_string(),
     ///     message: "feat: add feature".to_string(),
     /// };
     ///
     /// let commit_info = CommitInfo::from_git_commit(&git_commit, vec!["@myorg/core".to_string()]);
+    /// assert_eq!(commit_info.hash, "abc123def456");
+    /// assert_eq!(commit_info.short_hash, "abc123d");
     /// ```
-    ///
-    /// # Note
-    ///
-    /// This will be implemented in Story 7.4 when commit range analysis is added.
-    /// For now, this is a placeholder for working directory analysis.
     #[must_use]
     pub fn from_git_commit(
-        _commit: &sublime_git_tools::RepoCommit,
+        commit: &sublime_git_tools::RepoCommit,
         affected_packages: Vec<String>,
     ) -> Self {
-        // TODO: will be implemented on story 7.4
+        let short_hash =
+            if commit.hash.len() >= 7 { commit.hash[..7].to_string() } else { commit.hash.clone() };
+
+        // Parse the date from RFC 2822 format
+        // Git typically returns dates in RFC 2822 format like "Mon, 1 Jan 2024 12:00:00 +0000"
+        let date = chrono::DateTime::parse_from_rfc2822(&commit.author_date)
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(|_| {
+                // If parsing fails, try ISO 8601 format as fallback
+                chrono::DateTime::parse_from_rfc3339(&commit.author_date)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now())
+            });
+
+        // Extract first line for message, keep full message
+        let message = commit.message.lines().next().unwrap_or("").to_string();
+
         Self {
-            hash: String::new(),
-            short_hash: String::new(),
-            author: String::new(),
-            author_email: String::new(),
-            date: Utc::now(),
-            message: String::new(),
-            full_message: String::new(),
+            hash: commit.hash.clone(),
+            short_hash,
+            author: commit.author_name.clone(),
+            author_email: commit.author_email.clone(),
+            date,
+            message,
+            full_message: commit.message.clone(),
             affected_packages,
             files_changed: 0,
             lines_added: 0,

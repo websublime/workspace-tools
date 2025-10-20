@@ -102,6 +102,419 @@ mod analyzer_tests {
     }
 }
 
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod commit_range_tests {
+    use crate::changes::{AnalysisMode, ChangesAnalyzer};
+    use crate::config::PackageToolsConfig;
+    use std::fs;
+    use std::path::PathBuf;
+    use sublime_git_tools::Repo;
+    use sublime_standard_tools::filesystem::FileSystemManager;
+    use tempfile::TempDir;
+
+    /// Helper to create a test repository with multiple commits.
+    async fn create_test_repo_with_commits() -> (TempDir, PathBuf, Repo) {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path().to_path_buf();
+
+        // Initialize git repository
+        let repo = Repo::create(repo_path.to_str().unwrap()).unwrap();
+        repo.config("Test User", "test@example.com").unwrap();
+
+        // Create package.json
+        let package_json = r#"{
+            "name": "test-package",
+            "version": "1.0.0"
+        }"#;
+        fs::write(repo_path.join("package.json"), package_json).unwrap();
+
+        // Initial commit
+        repo.add_all().unwrap();
+        repo.commit("Initial commit").unwrap();
+
+        // Create a file and commit
+        fs::create_dir_all(repo_path.join("src")).unwrap();
+        fs::write(repo_path.join("src/index.js"), "console.log('hello');").unwrap();
+        repo.add_all().unwrap();
+        repo.commit("feat: add index.js").unwrap();
+
+        // Modify the file
+        fs::write(repo_path.join("src/index.js"), "console.log('hello world');").unwrap();
+        repo.add_all().unwrap();
+        repo.commit("fix: update message").unwrap();
+
+        (temp_dir, repo_path, repo)
+    }
+
+    /// Helper to create a monorepo with commits.
+    async fn create_monorepo_with_commits() -> (TempDir, PathBuf, Repo) {
+        let temp_dir = TempDir::new().unwrap();
+        let workspace_path = temp_dir.path().to_path_buf();
+
+        // Create monorepo structure
+        let root_package = r#"{
+            "name": "monorepo-root",
+            "version": "1.0.0",
+            "workspaces": ["packages/*"]
+        }"#;
+        fs::write(workspace_path.join("package.json"), root_package).unwrap();
+
+        // Create pnpm-workspace.yaml
+        let pnpm_workspace = "packages:\n  - 'packages/*'\n";
+        fs::write(workspace_path.join("pnpm-workspace.yaml"), pnpm_workspace).unwrap();
+
+        // Create packages
+        fs::create_dir_all(workspace_path.join("packages/pkg-a")).unwrap();
+        let pkg_a = r#"{"name": "@test/pkg-a", "version": "1.0.0"}"#;
+        fs::write(workspace_path.join("packages/pkg-a/package.json"), pkg_a).unwrap();
+
+        fs::create_dir_all(workspace_path.join("packages/pkg-b")).unwrap();
+        let pkg_b = r#"{"name": "@test/pkg-b", "version": "1.0.0"}"#;
+        fs::write(workspace_path.join("packages/pkg-b/package.json"), pkg_b).unwrap();
+
+        // Initialize git
+        let repo = Repo::create(workspace_path.to_str().unwrap()).unwrap();
+        repo.config("Test User", "test@example.com").unwrap();
+        repo.add_all().unwrap();
+        repo.commit("Initial monorepo").unwrap();
+
+        // Add files to pkg-a
+        fs::create_dir_all(workspace_path.join("packages/pkg-a/src")).unwrap();
+        fs::write(workspace_path.join("packages/pkg-a/src/index.js"), "export const a = 1;")
+            .unwrap();
+        repo.add_all().unwrap();
+        repo.commit("feat: add pkg-a index").unwrap();
+
+        // Add files to pkg-b
+        fs::create_dir_all(workspace_path.join("packages/pkg-b/src")).unwrap();
+        fs::write(workspace_path.join("packages/pkg-b/src/index.js"), "export const b = 2;")
+            .unwrap();
+        repo.add_all().unwrap();
+        repo.commit("feat: add pkg-b index").unwrap();
+
+        // Modify both packages
+        fs::write(workspace_path.join("packages/pkg-a/src/index.js"), "export const a = 10;")
+            .unwrap();
+        fs::write(workspace_path.join("packages/pkg-b/src/index.js"), "export const b = 20;")
+            .unwrap();
+        repo.add_all().unwrap();
+        repo.commit("fix: update both packages").unwrap();
+
+        (temp_dir, workspace_path, repo)
+    }
+
+    #[allow(clippy::len_zero)]
+    #[tokio::test]
+    async fn test_analyze_commit_range_single_package() {
+        let (_temp, repo_path, repo) = create_test_repo_with_commits().await;
+
+        // Get commit hashes
+        let commits = repo.get_commits_since(None, &None).unwrap();
+        assert!(commits.len() >= 2);
+
+        let first_commit = &commits[commits.len() - 1].hash;
+        let last_commit = "HEAD";
+
+        let git_repo = Repo::open(repo_path.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::new(repo_path.clone(), git_repo, fs, config).await.unwrap();
+
+        let report = analyzer.analyze_commit_range(first_commit, last_commit).await.unwrap();
+
+        assert_eq!(report.analysis_mode, AnalysisMode::CommitRange);
+        assert_eq!(report.base_ref, Some(first_commit.clone()));
+        assert_eq!(report.head_ref, Some(last_commit.to_string()));
+        assert!(report.has_changes());
+        assert!(report.packages_with_changes().len() > 0);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_commit_range_with_commits() {
+        let (_temp, repo_path, repo) = create_test_repo_with_commits().await;
+
+        let commits = repo.get_commits_since(None, &None).unwrap();
+        let first_commit = &commits[commits.len() - 1].hash;
+
+        let git_repo = Repo::open(repo_path.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::new(repo_path, git_repo, fs, config).await.unwrap();
+
+        let report = analyzer.analyze_commit_range(first_commit, "HEAD").await.unwrap();
+
+        // Check that commits are associated with packages
+        let packages_with_changes = report.packages_with_changes();
+        assert!(!packages_with_changes.is_empty());
+
+        for package in packages_with_changes {
+            assert!(!package.commits.is_empty(), "Package should have commits");
+            // Verify commit info is populated
+            for commit in &package.commits {
+                assert!(!commit.hash.is_empty());
+                assert!(!commit.short_hash.is_empty());
+                assert!(!commit.message.is_empty());
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_analyze_commit_range_monorepo() {
+        let (_temp, workspace_path, repo) = create_monorepo_with_commits().await;
+
+        let commits = repo.get_commits_since(None, &None).unwrap();
+        let first_commit = &commits[commits.len() - 1].hash;
+
+        let git_repo = Repo::open(workspace_path.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::new(workspace_path, git_repo, fs, config).await.unwrap();
+
+        let report = analyzer.analyze_commit_range(first_commit, "HEAD").await.unwrap();
+
+        assert!(report.is_monorepo);
+        assert!(report.has_changes());
+
+        // Should have multiple packages with changes
+        let packages_with_changes = report.packages_with_changes();
+        assert!(packages_with_changes.len() >= 2, "Should have at least 2 packages with changes");
+
+        // Verify each package has commits
+        for package in packages_with_changes {
+            if package.package_name().contains("pkg-a") || package.package_name().contains("pkg-b")
+            {
+                assert!(
+                    !package.commits.is_empty(),
+                    "Package {} should have commits",
+                    package.package_name()
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_analyze_commit_range_multi_package_commit() {
+        let (_temp, workspace_path, repo) = create_monorepo_with_commits().await;
+
+        // The last commit modified both packages
+        let commits = repo.get_commits_since(None, &None).unwrap();
+        let last_commit = &commits[0];
+        assert!(last_commit.message.contains("update both packages"));
+
+        let penultimate_commit = &commits[1].hash;
+
+        let git_repo = Repo::open(workspace_path.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::new(workspace_path, git_repo, fs, config).await.unwrap();
+
+        let report = analyzer.analyze_commit_range(penultimate_commit, "HEAD").await.unwrap();
+
+        // Find packages that were affected by the multi-package commit
+        let mut pkg_a_found = false;
+        let mut pkg_b_found = false;
+
+        for package in report.packages_with_changes() {
+            if package.package_name().contains("pkg-a") {
+                pkg_a_found = true;
+                // Check that the commit affecting both packages is listed
+                let affecting_commit =
+                    package.commits.iter().find(|c| c.message.contains("update both packages"));
+                assert!(affecting_commit.is_some(), "pkg-a should have the multi-package commit");
+
+                // Check that affected_packages includes both
+                if let Some(commit) = affecting_commit {
+                    assert!(
+                        commit.affected_packages.len() >= 2,
+                        "Commit should list multiple affected packages"
+                    );
+                }
+            }
+            if package.package_name().contains("pkg-b") {
+                pkg_b_found = true;
+            }
+        }
+
+        assert!(pkg_a_found && pkg_b_found, "Both packages should have changes");
+    }
+
+    #[tokio::test]
+    async fn test_analyze_commit_range_file_to_commit_association() {
+        let (_temp, repo_path, repo) = create_test_repo_with_commits().await;
+
+        let commits = repo.get_commits_since(None, &None).unwrap();
+        let first_commit = &commits[commits.len() - 1].hash;
+
+        let git_repo = Repo::open(repo_path.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::new(repo_path, git_repo, fs, config).await.unwrap();
+
+        let report = analyzer.analyze_commit_range(first_commit, "HEAD").await.unwrap();
+
+        let packages_with_changes = report.packages_with_changes();
+        assert!(!packages_with_changes.is_empty());
+
+        for package in packages_with_changes {
+            // Files should have associated commit hashes
+            for file in &package.files {
+                assert!(
+                    !file.commits.is_empty(),
+                    "File {} should have associated commits",
+                    file.path.display()
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_analyze_commit_range_empty_range() {
+        let (_temp, repo_path, repo) = create_test_repo_with_commits().await;
+
+        // Use the same commit for both from and to
+        let commits = repo.get_commits_since(None, &None).unwrap();
+        let commit = &commits[0].hash;
+
+        let git_repo = Repo::open(repo_path.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::new(repo_path, git_repo, fs, config).await.unwrap();
+
+        let result = analyzer.analyze_commit_range(commit, commit).await;
+
+        // Should return an error for empty range
+        assert!(result.is_err(), "Empty commit range should return an error");
+    }
+
+    #[tokio::test]
+    async fn test_analyze_commit_range_invalid_ref() {
+        let (_temp, repo_path, _repo) = create_test_repo_with_commits().await;
+
+        let git_repo = Repo::open(repo_path.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::new(repo_path, git_repo, fs, config).await.unwrap();
+
+        let result = analyzer.analyze_commit_range("invalid-ref", "HEAD").await;
+
+        assert!(result.is_err(), "Invalid ref should return an error");
+    }
+
+    #[tokio::test]
+    async fn test_analyze_commit_range_branch_comparison() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path().to_path_buf();
+
+        // Initialize repository
+        let repo = Repo::create(repo_path.to_str().unwrap()).unwrap();
+        repo.config("Test User", "test@example.com").unwrap();
+
+        // Create package.json
+        let package_json = r#"{"name": "test-pkg", "version": "1.0.0"}"#;
+        fs::write(repo_path.join("package.json"), package_json).unwrap();
+        repo.add_all().unwrap();
+        repo.commit("Initial commit").unwrap();
+
+        // Create a feature branch
+        repo.create_branch("feature").unwrap();
+        repo.checkout("feature").unwrap();
+
+        // Add a file on feature branch
+        fs::write(repo_path.join("feature.js"), "// feature").unwrap();
+        repo.add_all().unwrap();
+        repo.commit("feat: add feature").unwrap();
+
+        // Switch back to main
+        repo.checkout("main").unwrap();
+
+        let git_repo = Repo::open(repo_path.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::new(repo_path, git_repo, fs, config).await.unwrap();
+
+        // Compare main to feature branch
+        let report = analyzer.analyze_commit_range("main", "feature").await.unwrap();
+
+        assert_eq!(report.base_ref, Some("main".to_string()));
+        assert_eq!(report.head_ref, Some("feature".to_string()));
+        assert!(report.has_changes());
+
+        // Should have at least one file change
+        let packages = report.packages_with_changes();
+        assert!(!packages.is_empty());
+        assert!(!packages[0].files.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_commit_info_metadata() {
+        let (_temp, repo_path, _repo) = create_test_repo_with_commits().await;
+
+        let git_repo = Repo::open(repo_path.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::new(repo_path, git_repo, fs, config).await.unwrap();
+
+        // Analyze a range with commits
+        let commits = analyzer.git_repo().get_commits_since(None, &None).unwrap();
+        let first_commit = &commits[commits.len() - 1].hash;
+
+        let report = analyzer.analyze_commit_range(first_commit, "HEAD").await.unwrap();
+
+        let packages = report.packages_with_changes();
+        assert!(!packages.is_empty());
+
+        for package in packages {
+            for commit in &package.commits {
+                // Verify commit metadata is properly populated
+                assert!(!commit.hash.is_empty(), "Commit hash should not be empty");
+                assert_eq!(commit.short_hash.len(), 7, "Short hash should be 7 characters");
+                assert!(!commit.author.is_empty(), "Author should not be empty");
+                assert!(commit.author_email.contains('@'), "Email should contain @");
+                assert!(!commit.message.is_empty(), "Message should not be empty");
+                assert!(!commit.full_message.is_empty(), "Full message should not be empty");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_commit_range_statistics() {
+        let (_temp, repo_path, repo) = create_test_repo_with_commits().await;
+
+        let commits = repo.get_commits_since(None, &None).unwrap();
+        let first_commit = &commits[commits.len() - 1].hash;
+
+        let git_repo = Repo::open(repo_path.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer = ChangesAnalyzer::new(repo_path, git_repo, fs, config).await.unwrap();
+
+        let report = analyzer.analyze_commit_range(first_commit, "HEAD").await.unwrap();
+
+        // Verify summary statistics
+        assert!(report.summary.total_packages > 0);
+        assert!(report.summary.packages_with_changes > 0);
+        assert!(report.summary.total_files_changed > 0);
+        assert!(report.summary.total_commits > 0);
+
+        // Verify per-package statistics
+        for package in report.packages_with_changes() {
+            assert!(package.stats.commits > 0, "Package should have commit count");
+            assert!(package.stats.files_changed > 0, "Package should have file count");
+        }
+    }
+}
+
 /// Tests for the PackageMapper functionality.
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
