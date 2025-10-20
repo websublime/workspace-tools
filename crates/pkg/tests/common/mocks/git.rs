@@ -64,16 +64,19 @@ pub struct MockCommit {
     /// The commit hash
     pub hash: String,
     /// Short version of the hash (first 7 characters)
+    #[allow(dead_code)]
     pub short_hash: String,
     /// The commit message
     pub message: String,
     /// Full commit message (with body)
+    #[allow(dead_code)]
     pub full_message: String,
     /// The author name
     pub author: String,
     /// The author email
     pub author_email: String,
     /// The commit date
+    #[allow(dead_code)]
     pub date: DateTime<Utc>,
     /// Files changed in this commit
     pub files_changed: Vec<PathBuf>,
@@ -179,6 +182,7 @@ impl MockCommitBuilder {
     }
 
     /// Sets the full commit message
+    #[allow(dead_code)]
     pub fn full_message(mut self, message: impl Into<String>) -> Self {
         self.full_message = Some(message.into());
         self
@@ -197,12 +201,14 @@ impl MockCommitBuilder {
     }
 
     /// Sets the commit date
+    #[allow(dead_code)]
     pub fn date(mut self, date: DateTime<Utc>) -> Self {
         self.date = Some(date);
         self
     }
 
     /// Sets the files changed
+    #[allow(dead_code)]
     pub fn files(mut self, files: Vec<PathBuf>) -> Self {
         self.files_changed = files;
         self
@@ -232,7 +238,8 @@ impl MockCommitBuilder {
         self
     }
 
-    /// Adds a parent commit
+    /// Adds a parent commit hash
+    #[allow(dead_code)]
     pub fn add_parent(mut self, parent: impl Into<String>) -> Self {
         self.parents.push(parent.into());
         self
@@ -403,6 +410,7 @@ impl MockGitRepository {
     /// # Arguments
     ///
     /// * `branch` - The branch name
+    #[allow(dead_code)]
     pub fn set_current_branch(&self, branch: impl Into<String>) {
         let mut current = self.current_branch.lock().unwrap();
         *current = branch.into();
@@ -477,6 +485,7 @@ impl MockGitRepository {
     }
 
     /// Clears all commits from the repository
+    #[allow(dead_code)]
     pub fn clear_commits(&self) {
         let mut commits = self.commits.lock().unwrap();
         commits.clear();

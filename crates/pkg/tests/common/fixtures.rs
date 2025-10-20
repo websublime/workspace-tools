@@ -86,6 +86,7 @@ impl PackageJsonBuilder {
     }
 
     /// Sets the package description
+    #[allow(dead_code)]
     pub fn description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
@@ -98,12 +99,14 @@ impl PackageJsonBuilder {
     }
 
     /// Adds multiple dependencies
+    #[allow(dead_code)]
     pub fn add_dependencies(mut self, deps: HashMap<String, String>) -> Self {
         self.dependencies.extend(deps);
         self
     }
 
     /// Adds a dev dependency
+    #[allow(dead_code)]
     pub fn add_dev_dependency(
         mut self,
         name: impl Into<String>,
@@ -114,6 +117,7 @@ impl PackageJsonBuilder {
     }
 
     /// Adds a peer dependency
+    #[allow(dead_code)]
     pub fn add_peer_dependency(
         mut self,
         name: impl Into<String>,
@@ -124,6 +128,7 @@ impl PackageJsonBuilder {
     }
 
     /// Adds a script
+    #[allow(dead_code)]
     pub fn add_script(mut self, name: impl Into<String>, command: impl Into<String>) -> Self {
         self.scripts.insert(name.into(), command.into());
         self
@@ -239,6 +244,8 @@ impl MonorepoFixtureBuilder {
     }
 
     /// Sets custom workspace patterns
+    /// Sets workspace patterns
+    #[allow(dead_code)]
     pub fn workspace_patterns(mut self, patterns: Vec<String>) -> Self {
         self.workspace_patterns = patterns;
         self
@@ -262,6 +269,7 @@ impl MonorepoFixtureBuilder {
     }
 
     /// Adds a package with a builder
+    #[allow(dead_code)]
     pub fn add_package_with<F>(mut self, path: impl Into<PathBuf>, builder: F) -> Self
     where
         F: FnOnce(PackageFixtureBuilder) -> PackageFixture,
@@ -287,6 +295,7 @@ impl MonorepoFixtureBuilder {
 
 /// Builder for creating individual package fixtures
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct PackageFixtureBuilder {
     path: PathBuf,
     name: Option<String>,
@@ -297,6 +306,7 @@ pub struct PackageFixtureBuilder {
 
 impl PackageFixtureBuilder {
     /// Creates a new package fixture builder
+    #[allow(dead_code)]
     pub fn new(path: PathBuf) -> Self {
         Self {
             path,
@@ -308,30 +318,35 @@ impl PackageFixtureBuilder {
     }
 
     /// Sets the package name
+    #[allow(dead_code)]
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
 
     /// Sets the package version
+    #[allow(dead_code)]
     pub fn version(mut self, version: impl Into<String>) -> Self {
         self.version = version.into();
         self
     }
 
     /// Adds a dependency
+    #[allow(dead_code)]
     pub fn add_dependency(mut self, name: impl Into<String>, version: impl Into<String>) -> Self {
         self.dependencies.insert(name.into(), version.into());
         self
     }
 
     /// Adds a file to the package
+    #[allow(dead_code)]
     pub fn add_file(mut self, path: impl Into<PathBuf>, content: impl Into<String>) -> Self {
         self.files.insert(path.into(), content.into());
         self
     }
 
     /// Builds the package fixture
+    #[allow(dead_code)]
     pub fn build(self) -> PackageFixture {
         let name = self.name.unwrap_or_else(|| {
             self.path.file_name().and_then(|n| n.to_str()).unwrap_or("package").to_string()
@@ -416,6 +431,7 @@ impl MonorepoFixture {
     /// # Errors
     ///
     /// Returns an error if any file operations fail
+    #[allow(dead_code)]
     pub fn write_to_dir(&self, root: &Path) -> std::io::Result<()> {
         let files = self.generate_files();
 

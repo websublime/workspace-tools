@@ -125,6 +125,7 @@ pub fn assert_version_gte(actual: &str, expected_min: &str) {
 /// assert_path_exists(Path::new("/tmp")); // OK on Unix
 /// assert_path_exists(Path::new("/nonexistent")); // Panics
 /// ```
+#[allow(dead_code)]
 pub fn assert_path_exists(path: &Path) {
     assert!(path.exists(), "Path does not exist: {}", path.display());
 }
@@ -144,6 +145,7 @@ pub fn assert_path_exists(path: &Path) {
 /// ```rust,ignore
 /// assert_path_not_exists(Path::new("/nonexistent")); // OK
 /// ```
+#[allow(dead_code)]
 pub fn assert_path_not_exists(path: &Path) {
     assert!(!path.exists(), "Path exists but should not: {}", path.display());
 }
@@ -163,6 +165,7 @@ pub fn assert_path_not_exists(path: &Path) {
 /// ```rust,ignore
 /// assert_is_file(Path::new("/etc/hosts")); // OK on Unix
 /// ```
+#[allow(dead_code)]
 pub fn assert_is_file(path: &Path) {
     assert!(path.exists(), "Path does not exist: {}", path.display());
     assert!(path.is_file(), "Path is not a file: {}", path.display());
@@ -183,6 +186,7 @@ pub fn assert_is_file(path: &Path) {
 /// ```rust,ignore
 /// assert_is_dir(Path::new("/tmp")); // OK on Unix
 /// ```
+#[allow(dead_code)]
 pub fn assert_is_dir(path: &Path) {
     assert!(path.exists(), "Path does not exist: {}", path.display());
     assert!(path.is_dir(), "Path is not a directory: {}", path.display());
@@ -262,7 +266,7 @@ pub fn assert_json_field(json_str: &str, field: &str, expected: &str) {
     let value: serde_json::Value =
         serde_json::from_str(json_str).unwrap_or_else(|e| panic!("Invalid JSON: {}", e));
 
-    let actual = field.split('.').fold(Some(&value), |acc, key| acc.and_then(|v| v.get(key)));
+    let actual = field.split('.').try_fold(&value, |acc, key| acc.get(key));
 
     match actual {
         Some(actual_value) => {
@@ -351,7 +355,6 @@ pub fn assert_not_empty<T>(collection: &[T]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     #[test]
     fn test_assert_version_eq_success() {

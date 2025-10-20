@@ -1403,7 +1403,7 @@ mod context {
 
         let with_context = result.with_context_lazy(|| {
             // Simulate expensive computation
-            let data = vec!["package1", "package2", "package3"];
+            let data = ["package1", "package2", "package3"];
             format!("Failed to process {} packages", data.len())
         });
 

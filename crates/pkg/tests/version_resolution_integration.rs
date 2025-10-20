@@ -580,7 +580,7 @@ async fn test_integration_dry_run_then_apply() {
 
     assert!(dry_result.dry_run);
     assert_eq!(dry_result.modified_files.len(), 0);
-    let dry_summary = dry_result.summary.clone();
+    let dry_summary = dry_result.summary;
 
     // Verify no files were modified
     let original_content = tokio::fs::read_to_string(root.join("packages/pkg-d/package.json"))
@@ -1432,7 +1432,7 @@ async fn test_integration_full_workflow_end_to_end() {
     let resolution =
         resolver.resolve_versions(&changeset).await.expect("Failed to resolve versions");
 
-    assert!(resolution.updates.len() >= 1);
+    assert!(!resolution.updates.is_empty());
     assert_eq!(resolution.circular_dependencies.len(), 0);
 
     // Step 5: Preview (dry run)
@@ -1447,7 +1447,7 @@ async fn test_integration_full_workflow_end_to_end() {
         resolver.apply_versions(&changeset, false).await.expect("Failed to apply versions");
 
     assert!(!result.dry_run);
-    assert!(result.modified_files.len() > 0);
+    assert!(!result.modified_files.is_empty());
     assert_eq!(result.summary.packages_updated, preview.summary.packages_updated);
 
     // Step 7: Verify file system changes
