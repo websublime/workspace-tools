@@ -67,15 +67,28 @@
 //! changeset.add_package("my-package");
 //! manager.update(&changeset).await?;
 //!
-//! // Add commits from Git (TODO: will be implemented on story 6.4)
-//! // let summary = manager.add_commits_from_git("feature-branch", "main", "HEAD").await?;
-//! // println!("Added {} commits", summary.commits_added);
+//! // Add commits from Git
+//! let summary = manager.add_commits_from_git("feature-branch").await?;
+//! println!("Added {} commits", summary.commits_added);
 //!
-//! // Archive when released (TODO: will be implemented on story 6.5)
-//! // manager.archive("feature-branch", release_info).await?;
+//! // Archive when released
+//! use sublime_pkg_tools::types::ReleaseInfo;
+//! use std::collections::HashMap;
+//! use chrono::Utc;
+//!
+//! let mut versions = HashMap::new();
+//! versions.insert("my-package".to_string(), "1.2.0".to_string());
+//!
+//! let release_info = ReleaseInfo::new(
+//!     Utc::now(),
+//!     "ci-bot".to_string(),
+//!     "abc123".to_string(),
+//!     versions,
+//! );
+//!
+//! manager.archive("feature-branch", release_info).await?;
 //! # Ok(())
 //! # }
-//! ```</parameter>
 //! ```
 //!
 //! # Storage System
@@ -120,30 +133,35 @@
 //! Query archived changesets using flexible filters:
 //!
 //! ```rust,ignore
-//! # use sublime_pkg_tools::changeset::ChangesetHistory;
+//! # use sublime_pkg_tools::changeset::{ChangesetHistory, FileBasedChangesetStorage};
 //! # use sublime_standard_tools::filesystem::FileSystemManager;
 //! # use std::path::PathBuf;
 //! # use chrono::{Utc, Duration};
 //! #
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! # let workspace_root = PathBuf::from(".");
-//! # let fs = FileSystemManager::new();
-//! // TODO: will be implemented on story 6.5
-//! // let history = ChangesetHistory::new(workspace_root, fs).await?;
-//! //
-//! // // Query by date range
-//! // let start = Utc::now() - Duration::days(30);
-//! // let end = Utc::now();
-//! // let recent = history.query_by_date(start, end).await?;
-//! //
-//! // // Query by package
-//! // let pkg_history = history.query_by_package("my-package").await?;
-//! //
-//! // // Query by environment
-//! // let prod_releases = history.query_by_environment("production").await?;
+//! let workspace_root = PathBuf::from(".");
+//! let fs = FileSystemManager::new();
+//! let storage = FileBasedChangesetStorage::new(
+//!     workspace_root.clone(),
+//!     PathBuf::from(".changesets"),
+//!     PathBuf::from(".changesets/history"),
+//!     fs
+//! );
+//!
+//! let history = ChangesetHistory::new(Box::new(storage));
+//!
+//! // Query by date range
+//! let start = Utc::now() - Duration::days(30);
+//! let end = Utc::now();
+//! let recent = history.query_by_date(start, end).await?;
+//!
+//! // Query by package
+//! let pkg_history = history.query_by_package("my-package").await?;
+//!
+//! // Query by environment
+//! let prod_releases = history.query_by_environment("production").await?;
 //! # Ok(())
 //! # }
-//! ```</parameter>
 //! ```
 //!
 //! # Git Integration
@@ -162,31 +180,29 @@
 //! # let config = PackageToolsConfig::default();
 //! let manager = ChangesetManager::new(workspace_root, fs, config).await?;
 //!
-//! // TODO: will be implemented on story 6.4
-//! // // Automatically detect affected packages from commits
-//! // let summary = manager.add_commits_from_git("feature-branch", "main", "HEAD").await?;
-//! //
-//! // println!("Commits added: {}", summary.commits_added);
-//! // println!("New packages: {:?}", summary.new_packages);
-//! // println!("Existing packages: {:?}", summary.existing_packages);
+//! // Automatically detect affected packages from commits
+//! let summary = manager.add_commits_from_git("feature-branch").await?;
+//!
+//! println!("Commits added: {}", summary.commits_added);
+//! println!("New packages: {:?}", summary.new_packages);
+//! println!("Existing packages: {:?}", summary.existing_packages);
 //! # Ok(())
 //! # }
-//! ```</parameter>
 //! ```
 //!
 //! # Module Structure
 //!
-//! This module will contain:
+//! This module contains:
 //! - `manager`: The main `ChangesetManager` for orchestrating changeset operations
-//! - `storage`: Storage trait and implementations (file-based, in-memory)
+//! - `storage`: Storage trait and implementations (file-based)
 //! - `history`: History query API and archived changeset management
-//! - `update_summary`: Summary information for changeset updates
-//! - `package_detector`: Git integration for detecting affected packages
+//! - `git_integration`: Git integration for detecting affected packages and commits
 
 #![allow(clippy::todo)]
 
 // Internal modules
 mod git_integration;
+mod history;
 mod manager;
 mod storage;
 
@@ -195,9 +211,6 @@ mod tests;
 
 // Public API - re-exports
 pub use git_integration::PackageDetector;
+pub use history::ChangesetHistory;
 pub use manager::ChangesetManager;
 pub use storage::{ChangesetStorage, FileBasedChangesetStorage};
-
-// Additional modules will be implemented in subsequent stories (Epic 6)
-// - history: Story 6.5
-// - update_summary: Story 6.4</parameter>
