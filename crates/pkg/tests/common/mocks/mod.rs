@@ -30,6 +30,4 @@ pub mod git;
 pub mod registry;
 
 // Re-export commonly used mock types
-pub use filesystem::MockFileSystem;
-pub use git::MockGitRepository;
-pub use registry::MockRegistry;
+// Note: Specific items are exported from submodules as needed by individual tests

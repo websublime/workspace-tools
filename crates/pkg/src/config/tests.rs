@@ -13,12 +13,10 @@
 use sublime_standard_tools::config::Configurable;
 
 use crate::config::{
-    load_config, load_config_from_file, validate_config, validate_path_format, validate_url_format,
     AuditConfig, AuditSectionsConfig, BackupConfig, BreakingChangesAuditConfig, ChangelogConfig,
-    ChangelogFormat, ChangesetConfig, ConfigLoader, ConventionalConfig, DependencyAuditConfig,
-    DependencyConfig, ExcludeConfig, GitConfig, MonorepoMode, PackageToolsConfig, RegistryConfig,
-    TemplateConfig, UpgradeAuditConfig, UpgradeConfig, VersionConfig,
-    VersionConsistencyAuditConfig, VersioningStrategy,
+    ChangelogFormat, ChangesetConfig, ConventionalConfig, DependencyAuditConfig, DependencyConfig,
+    GitConfig, MonorepoMode, PackageToolsConfig, RegistryConfig, UpgradeAuditConfig, UpgradeConfig,
+    VersionConfig, VersionConsistencyAuditConfig, VersioningStrategy,
 };
 
 // =============================================================================
@@ -922,7 +920,7 @@ mod loader_tests {
     use std::fs;
     use tempfile::TempDir;
 
-    use crate::config::{load_config, ConfigLoader};
+    use crate::config::ConfigLoader;
 
     #[tokio::test]
     async fn test_load_defaults() {

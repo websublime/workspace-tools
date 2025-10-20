@@ -100,6 +100,7 @@ pub fn semver_with_prerelease_strategy() -> impl Strategy<Value = String> {
 ///     }
 /// }
 /// ```
+#[allow(dead_code)]
 pub fn semver_with_build_strategy() -> impl Strategy<Value = String> {
     (0u32..100, 0u32..100, 0u32..100, prop::option::of(0u32..1000)).prop_map(
         |(major, minor, patch, build)| {
@@ -247,6 +248,7 @@ pub fn file_path_strategy() -> impl Strategy<Value = String> {
 /// # Returns
 ///
 /// A proptest strategy that generates version bump types
+#[allow(dead_code)]
 pub fn version_bump_strategy() -> impl Strategy<Value = String> {
     prop::sample::select(vec![
         "major".to_string(),
@@ -314,6 +316,7 @@ pub fn short_commit_hash_strategy() -> impl Strategy<Value = String> {
 /// # Returns
 ///
 /// A proptest strategy that generates author names
+#[allow(dead_code)]
 pub fn author_name_strategy() -> impl Strategy<Value = String> {
     prop::string::string_regex("[A-Z][a-z]+ [A-Z][a-z]+").expect("valid regex")
 }
@@ -337,6 +340,7 @@ pub fn author_email_strategy() -> impl Strategy<Value = String> {
 /// # Returns
 ///
 /// A proptest strategy that generates Git branch names
+#[allow(dead_code)]
 pub fn branch_name_strategy() -> impl Strategy<Value = String> {
     proptest::prop_oneof![
         prop::sample::select(vec!["main".to_string(), "develop".to_string(), "master".to_string()]),
@@ -352,6 +356,7 @@ pub fn branch_name_strategy() -> impl Strategy<Value = String> {
 /// # Returns
 ///
 /// A proptest strategy that generates changeset IDs
+#[allow(dead_code)]
 pub fn changeset_id_strategy() -> impl Strategy<Value = String> {
     prop::string::string_regex("[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}")
         .expect("valid regex")
@@ -375,6 +380,7 @@ pub fn changeset_id_strategy() -> impl Strategy<Value = String> {
 ///     }
 /// }
 /// ```
+#[allow(dead_code)]
 pub fn version_spec_strategy() -> impl Strategy<Value = String> {
     (prop::sample::select(vec!["^", "~", ">=", "<=", "="]), 0u32..100, 0u32..100, 0u32..100)
         .prop_map(|(prefix, major, minor, patch)| {

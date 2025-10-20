@@ -223,6 +223,7 @@ impl MockRegistry {
     /// let metadata = PackageMetadata { /* ... */ };
     /// registry.add_package_metadata(metadata);
     /// ```
+    #[allow(dead_code)]
     pub fn add_package_metadata(&self, metadata: PackageMetadata) {
         let mut packages = self.packages.lock().unwrap();
         packages.insert(metadata.name.clone(), metadata);

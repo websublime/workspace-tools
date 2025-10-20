@@ -1,6 +1,6 @@
 # Test Infrastructure for sublime_pkg_tools
 
-This directory contains the test infrastructure and utilities for the `sublime_pkg_tools` crate.
+This directory contains comprehensive test infrastructure and integration tests for the `sublime_pkg_tools` crate, covering **Epics 1-5** (Foundation through Versioning Engine).
 
 ## Overview
 
@@ -10,6 +10,27 @@ The test infrastructure provides:
 - **Test Fixtures**: Pre-built test data structures (monorepos, single packages)
 - **Assertion Helpers**: Custom assertions for common test scenarios
 - **Property-Based Testing**: Generators for proptest-based testing
+- **Integration Tests**: Comprehensive end-to-end workflow tests
+
+## Test Coverage
+
+### Unit Tests (549 tests in src/)
+- Configuration system (`config/`)
+- Error handling (`error/`)
+- Core types (`types/`)
+- Version resolution (`version/`)
+
+### Integration Tests (198 tests in tests/)
+- **test_infrastructure.rs** (95 tests): Validates test utilities and fixtures
+- **version_resolution_integration.rs** (103 tests): Complete version resolution workflows
+  - Independent and unified strategies
+  - Dependency propagation
+  - Circular dependency detection
+  - Single-package and monorepo scenarios
+  - Dry-run and apply modes
+  - Performance and stress tests
+
+### Total: 747 tests with 100% pass rate
 
 ## Directory Structure
 
@@ -28,17 +49,67 @@ tests/
 ├── fixtures/
 │   ├── monorepo/           # Sample monorepo structure
 │   └── single-package/     # Sample single package
-└── test_infrastructure.rs  # Infrastructure validation tests
+├── test_infrastructure.rs        # Infrastructure validation tests (95 tests)
+└── version_resolution_integration.rs  # Version resolution workflows (103 tests)
 ```
 
+## Integration Test Scenarios
+
+### Single Package Repository
+- Basic version bumps (major, minor, patch)
+- Version application and file modification
+- Error handling for invalid scenarios
+
+### Monorepo Workflows
+
+#### Independent Strategy
+- Packages versioned independently
+- Dependency propagation between workspace packages
+- Selective package updates
+- Multi-depth dependency chains
+
+#### Unified Strategy
+- All packages maintain same version
+- Unified version bumps across workspace
+- Version synchronization
+
+### Advanced Scenarios
+- Circular dependency detection and prevention
+- Workspace protocol preservation (`workspace:*`)
+- Maximum depth propagation limits
+- Dev dependency propagation control
+- Dry-run vs actual application
+- JSON formatting preservation
+
+### Performance Tests
+- Large monorepo handling (50+ packages)
+- Deep dependency chains (10+ levels)
+- Resolution speed benchmarks
+- Apply operation performance
+
 ## Using the Test Infrastructure
+
+### Creating Test Fixtures
+
+```rust
+use crate::common::fixtures::MonorepoFixtureBuilder;
+
+let fixture = MonorepoFixtureBuilder::new("my-workspace")
+    .add_package("packages/core", "core", "1.0.0")
+    .add_package("packages/ui", "ui", "1.0.0")
+    .build();
+
+// Write to temporary directory
+let temp = create_temp_dir().unwrap();
+fixture.write_to_dir(temp.path()).unwrap();
+```
 
 ### Mock Filesystem
 
 The `MockFileSystem` provides an in-memory filesystem for testing without touching the real filesystem.
 
 ```rust
-use crate::common::MockFileSystem;
+use crate::common::mocks::filesystem::MockFileSystem;
 
 #[tokio::test]
 async fn test_with_mock_fs() {

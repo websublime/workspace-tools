@@ -98,6 +98,7 @@ impl MockFileSystem {
     /// let fs = MockFileSystem::with_files(files);
     /// ```
     #[must_use]
+    #[allow(dead_code)]
     pub fn with_files(files: HashMap<PathBuf, String>) -> Self {
         let mut entries = HashMap::new();
         for (path, content) in files {
@@ -221,6 +222,7 @@ impl MockFileSystem {
     /// assert!(fs.is_file(path));
     /// ```
     #[must_use]
+    #[allow(dead_code)]
     pub fn is_file(&self, path: &Path) -> bool {
         let files = self.files.lock().unwrap();
         matches!(files.get(path), Some(FileEntry::File(_)))
@@ -245,6 +247,7 @@ impl MockFileSystem {
     /// assert!(fs.is_dir(path));
     /// ```
     #[must_use]
+    #[allow(dead_code)]
     pub fn is_dir(&self, path: &Path) -> bool {
         let files = self.files.lock().unwrap();
         matches!(files.get(path), Some(FileEntry::Directory))
