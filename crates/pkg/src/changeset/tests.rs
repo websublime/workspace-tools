@@ -1041,3 +1041,493 @@ mod file_based_storage_tests {
         assert_eq!(pending[0].branch, "feature/valid");
     }
 }
+
+// ============================================================================
+// ChangesetManager Tests
+// ============================================================================
+
+mod manager_tests {
+    use super::*;
+    use crate::changeset::ChangesetManager;
+    use crate::config::ChangesetConfig;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+    use sublime_standard_tools::filesystem::FileSystemManager;
+
+    /// Mock storage implementation for testing ChangesetManager.
+    #[derive(Debug, Clone)]
+    struct MockManagerStorage {
+        changesets: Arc<Mutex<HashMap<String, Changeset>>>,
+    }
+
+    impl MockManagerStorage {
+        fn new() -> Self {
+            Self { changesets: Arc::new(Mutex::new(HashMap::new())) }
+        }
+
+        fn get_count(&self) -> usize {
+            self.changesets.lock().unwrap().len()
+        }
+    }
+
+    #[async_trait]
+    impl ChangesetStorage for MockManagerStorage {
+        async fn save(&self, changeset: &Changeset) -> ChangesetResult<()> {
+            self.changesets.lock().unwrap().insert(changeset.branch.clone(), changeset.clone());
+            Ok(())
+        }
+
+        async fn load(&self, branch: &str) -> ChangesetResult<Changeset> {
+            self.changesets
+                .lock()
+                .unwrap()
+                .get(branch)
+                .cloned()
+                .ok_or_else(|| ChangesetError::NotFound { branch: branch.to_string() })
+        }
+
+        async fn exists(&self, branch: &str) -> ChangesetResult<bool> {
+            Ok(self.changesets.lock().unwrap().contains_key(branch))
+        }
+
+        async fn delete(&self, branch: &str) -> ChangesetResult<()> {
+            self.changesets
+                .lock()
+                .unwrap()
+                .remove(branch)
+                .ok_or_else(|| ChangesetError::NotFound { branch: branch.to_string() })?;
+            Ok(())
+        }
+
+        async fn list_pending(&self) -> ChangesetResult<Vec<Changeset>> {
+            Ok(self.changesets.lock().unwrap().values().cloned().collect())
+        }
+
+        async fn archive(
+            &self,
+            _changeset: &Changeset,
+            _release_info: ReleaseInfo,
+        ) -> ChangesetResult<()> {
+            // TODO: will be implemented on story 6.5
+            Ok(())
+        }
+
+        async fn load_archived(&self, _id: &str) -> ChangesetResult<ArchivedChangeset> {
+            // TODO: will be implemented on story 6.5
+            Err(ChangesetError::NotFound { branch: "archived".to_string() })
+        }
+
+        async fn list_archived(&self) -> ChangesetResult<Vec<ArchivedChangeset>> {
+            // TODO: will be implemented on story 6.5
+            Ok(Vec::new())
+        }
+    }
+
+    fn create_test_config() -> ChangesetConfig {
+        ChangesetConfig {
+            path: ".changesets".into(),
+            history_path: ".changesets/history".into(),
+            available_environments: vec![
+                "development".to_string(),
+                "staging".to_string(),
+                "production".to_string(),
+            ],
+            default_environments: vec!["production".to_string()],
+        }
+    }
+
+    fn create_test_manager() -> ChangesetManager<MockManagerStorage> {
+        let storage = MockManagerStorage::new();
+        let config = create_test_config();
+        ChangesetManager::with_storage(storage, None, config)
+    }
+
+    #[tokio::test]
+    async fn test_create_changeset_success() {
+        let manager = create_test_manager();
+
+        let result = manager
+            .create("feature/test", VersionBump::Minor, vec!["production".to_string()])
+            .await;
+
+        assert!(result.is_ok());
+        let changeset = result.unwrap();
+        assert_eq!(changeset.branch, "feature/test");
+        assert_eq!(changeset.bump, VersionBump::Minor);
+        assert_eq!(changeset.environments, vec!["production".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn test_create_changeset_empty_branch() {
+        let manager = create_test_manager();
+
+        let result = manager.create("", VersionBump::Minor, vec!["production".to_string()]).await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ChangesetError::InvalidBranch { branch, reason } => {
+                assert_eq!(branch, "");
+                assert!(reason.contains("empty"));
+            }
+            _ => panic!("Expected InvalidBranch error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_changeset_already_exists() {
+        let manager = create_test_manager();
+
+        // Create first changeset
+        manager
+            .create("feature/test", VersionBump::Minor, vec!["production".to_string()])
+            .await
+            .unwrap();
+
+        // Try to create duplicate
+        let result = manager
+            .create("feature/test", VersionBump::Patch, vec!["production".to_string()])
+            .await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ChangesetError::AlreadyExists { branch, .. } => {
+                assert_eq!(branch, "feature/test");
+            }
+            _ => panic!("Expected AlreadyExists error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_changeset_invalid_environment() {
+        let manager = create_test_manager();
+
+        let result = manager
+            .create("feature/test", VersionBump::Minor, vec!["invalid-env".to_string()])
+            .await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ChangesetError::InvalidEnvironment { environment, available } => {
+                assert_eq!(environment, "invalid-env");
+                assert!(available.contains(&"production".to_string()));
+            }
+            _ => panic!("Expected InvalidEnvironment error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_load_changeset_success() {
+        let manager = create_test_manager();
+
+        // Create a changeset first
+        manager
+            .create("feature/test", VersionBump::Minor, vec!["production".to_string()])
+            .await
+            .unwrap();
+
+        // Load it
+        let result = manager.load("feature/test").await;
+        assert!(result.is_ok());
+
+        let changeset = result.unwrap();
+        assert_eq!(changeset.branch, "feature/test");
+        assert_eq!(changeset.bump, VersionBump::Minor);
+    }
+
+    #[tokio::test]
+    async fn test_load_changeset_not_found() {
+        let manager = create_test_manager();
+
+        let result = manager.load("nonexistent").await;
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            ChangesetError::NotFound { branch } => {
+                assert_eq!(branch, "nonexistent");
+            }
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_update_changeset_success() {
+        let manager = create_test_manager();
+
+        // Create a changeset
+        let changeset = manager
+            .create("feature/test", VersionBump::Minor, vec!["production".to_string()])
+            .await
+            .unwrap();
+
+        let original_updated_at = changeset.updated_at;
+
+        // Give a tiny delay to ensure timestamp changes
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        // Modify and update
+        let mut modified = changeset.clone();
+        modified.add_package("test-package");
+
+        let result = manager.update(&modified).await;
+        assert!(result.is_ok());
+
+        // Load and verify
+        let loaded = manager.load("feature/test").await.unwrap();
+        assert!(loaded.packages.contains(&"test-package".to_string()));
+        assert!(loaded.updated_at > original_updated_at);
+    }
+
+    #[tokio::test]
+    async fn test_update_changeset_validation_failure() {
+        let manager = create_test_manager();
+
+        // Create a changeset with invalid environment manually
+        let changeset =
+            Changeset::new("feature/test", VersionBump::Minor, vec!["invalid-env".to_string()]);
+
+        let result = manager.update(&changeset).await;
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            ChangesetError::ValidationFailed { .. } => {
+                // Expected
+            }
+            _ => panic!("Expected ValidationFailed error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_delete_changeset_success() {
+        let manager = create_test_manager();
+
+        // Create a changeset
+        manager
+            .create("feature/test", VersionBump::Minor, vec!["production".to_string()])
+            .await
+            .unwrap();
+
+        // Delete it
+        let result = manager.delete("feature/test").await;
+        assert!(result.is_ok());
+
+        // Verify it's gone
+        let load_result = manager.load("feature/test").await;
+        assert!(load_result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_changeset_not_found() {
+        let manager = create_test_manager();
+
+        let result = manager.delete("nonexistent").await;
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            ChangesetError::NotFound { branch } => {
+                assert_eq!(branch, "nonexistent");
+            }
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_pending_empty() {
+        let manager = create_test_manager();
+
+        let result = manager.list_pending().await;
+        assert!(result.is_ok());
+
+        let changesets = result.unwrap();
+        assert_eq!(changesets.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_list_pending_multiple() {
+        let manager = create_test_manager();
+
+        // Create multiple changesets
+        manager
+            .create("feature/one", VersionBump::Minor, vec!["production".to_string()])
+            .await
+            .unwrap();
+
+        manager
+            .create("feature/two", VersionBump::Patch, vec!["staging".to_string()])
+            .await
+            .unwrap();
+
+        manager
+            .create("feature/three", VersionBump::Major, vec!["development".to_string()])
+            .await
+            .unwrap();
+
+        // List them
+        let result = manager.list_pending().await;
+        assert!(result.is_ok());
+
+        let changesets = result.unwrap();
+        assert_eq!(changesets.len(), 3);
+
+        // Verify all branches are present
+        let branches: Vec<&str> = changesets.iter().map(|cs| cs.branch.as_str()).collect();
+        assert!(branches.contains(&"feature/one"));
+        assert!(branches.contains(&"feature/two"));
+        assert!(branches.contains(&"feature/three"));
+    }
+
+    #[tokio::test]
+    async fn test_manager_accessors() {
+        let manager = create_test_manager();
+
+        // Test storage accessor
+        let storage = manager.storage();
+        assert_eq!(storage.get_count(), 0);
+
+        // Test git_repo accessor
+        assert!(manager.git_repo().is_none());
+
+        // Test config accessor
+        let config = manager.config();
+        assert_eq!(config.path, ".changesets");
+        assert_eq!(config.available_environments.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_update_with_multiple_modifications() {
+        let manager = create_test_manager();
+
+        // Create a changeset
+        let changeset = manager
+            .create("feature/test", VersionBump::Minor, vec!["production".to_string()])
+            .await
+            .unwrap();
+
+        // Make multiple modifications
+        let mut modified = changeset.clone();
+        modified.add_package("package-1");
+        modified.add_package("package-2");
+        modified.add_commit("abc123");
+        modified.add_commit("def456");
+        modified.set_bump(VersionBump::Major);
+
+        // Update
+        manager.update(&modified).await.unwrap();
+
+        // Load and verify all changes
+        let loaded = manager.load("feature/test").await.unwrap();
+        assert_eq!(loaded.packages.len(), 2);
+        assert!(loaded.packages.contains(&"package-1".to_string()));
+        assert!(loaded.packages.contains(&"package-2".to_string()));
+        assert_eq!(loaded.changes.len(), 2);
+        assert!(loaded.changes.contains(&"abc123".to_string()));
+        assert!(loaded.changes.contains(&"def456".to_string()));
+        assert_eq!(loaded.bump, VersionBump::Major);
+    }
+
+    #[tokio::test]
+    async fn test_create_with_multiple_environments() {
+        let manager = create_test_manager();
+
+        let changeset = manager
+            .create(
+                "feature/test",
+                VersionBump::Minor,
+                vec!["development".to_string(), "staging".to_string(), "production".to_string()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(changeset.environments.len(), 3);
+        assert!(changeset.environments.contains(&"development".to_string()));
+        assert!(changeset.environments.contains(&"staging".to_string()));
+        assert!(changeset.environments.contains(&"production".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_manager_with_file_based_storage() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let fs = FileSystemManager::new();
+
+        let config = crate::config::PackageToolsConfig {
+            changeset: create_test_config(),
+            ..Default::default()
+        };
+
+        let manager =
+            ChangesetManager::new(temp_dir.path().to_path_buf(), fs, config).await.unwrap();
+
+        // Create a changeset
+        let changeset = manager
+            .create("feature/file-test", VersionBump::Minor, vec!["production".to_string()])
+            .await
+            .unwrap();
+
+        // Load it back
+        let loaded = manager.load("feature/file-test").await.unwrap();
+        assert_eq!(loaded.branch, changeset.branch);
+        assert_eq!(loaded.bump, changeset.bump);
+
+        // Update it
+        let mut modified = loaded.clone();
+        modified.add_package("test-package");
+        manager.update(&modified).await.unwrap();
+
+        // Verify update persisted
+        let updated = manager.load("feature/file-test").await.unwrap();
+        assert!(updated.packages.contains(&"test-package".to_string()));
+
+        // Delete it
+        manager.delete("feature/file-test").await.unwrap();
+
+        // Verify deletion
+        let result = manager.load("feature/file-test").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_validates_all_environments() {
+        let manager = create_test_manager();
+
+        // Try to create with mix of valid and invalid environments
+        let result = manager
+            .create(
+                "feature/test",
+                VersionBump::Minor,
+                vec!["production".to_string(), "invalid".to_string()],
+            )
+            .await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ChangesetError::InvalidEnvironment { environment, .. } => {
+                assert_eq!(environment, "invalid");
+            }
+            _ => panic!("Expected InvalidEnvironment error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_pending_returns_loaded_changesets() {
+        let manager = create_test_manager();
+
+        // Create changesets with different properties
+        manager
+            .create("feature/one", VersionBump::Major, vec!["production".to_string()])
+            .await
+            .unwrap();
+
+        manager
+            .create("feature/two", VersionBump::Minor, vec!["staging".to_string()])
+            .await
+            .unwrap();
+
+        // List and verify each is fully loaded
+        let changesets = manager.list_pending().await.unwrap();
+        assert_eq!(changesets.len(), 2);
+
+        for changeset in changesets {
+            assert!(!changeset.branch.is_empty());
+            assert!(!changeset.environments.is_empty());
+        }
+    }
+}

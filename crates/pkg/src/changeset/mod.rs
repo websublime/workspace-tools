@@ -53,30 +53,29 @@
 //! let fs = FileSystemManager::new();
 //! let config = PackageToolsConfig::default();
 //!
-//! // TODO: will be implemented on story 6.3
-//! // let manager = ChangesetManager::new(workspace_root, fs, config).await?;
-//! //
-//! // // Create a new changeset
-//! // let changeset = Changeset::new(
-//! //     "feature-branch",
-//! //     VersionBump::Minor,
-//! //     vec!["production".to_string()]
-//! // );
-//! // manager.create(changeset).await?;
-//! //
-//! // // Load and update
-//! // let mut changeset = manager.load("feature-branch").await?;
-//! // changeset.add_package("my-package");
-//! // manager.update(changeset).await?;
-//! //
-//! // // Add commits from Git
+//! let manager = ChangesetManager::new(workspace_root, fs, config).await?;
+//!
+//! // Create a new changeset
+//! let changeset = manager.create(
+//!     "feature-branch",
+//!     VersionBump::Minor,
+//!     vec!["production".to_string()]
+//! ).await?;
+//!
+//! // Load and update
+//! let mut changeset = manager.load("feature-branch").await?;
+//! changeset.add_package("my-package");
+//! manager.update(&changeset).await?;
+//!
+//! // Add commits from Git (TODO: will be implemented on story 6.4)
 //! // let summary = manager.add_commits_from_git("feature-branch", "main", "HEAD").await?;
 //! // println!("Added {} commits", summary.commits_added);
-//! //
-//! // // Archive when released
+//!
+//! // Archive when released (TODO: will be implemented on story 6.5)
 //! // manager.archive("feature-branch", release_info).await?;
 //! # Ok(())
 //! # }
+//! ```</parameter>
 //! ```
 //!
 //! # Storage System
@@ -144,6 +143,7 @@
 //! // let prod_releases = history.query_by_environment("production").await?;
 //! # Ok(())
 //! # }
+//! ```</parameter>
 //! ```
 //!
 //! # Git Integration
@@ -160,9 +160,9 @@
 //! # let workspace_root = PathBuf::from(".");
 //! # let fs = FileSystemManager::new();
 //! # let config = PackageToolsConfig::default();
+//! let manager = ChangesetManager::new(workspace_root, fs, config).await?;
+//!
 //! // TODO: will be implemented on story 6.4
-//! // let manager = ChangesetManager::new(workspace_root, fs, config).await?;
-//! //
 //! // // Automatically detect affected packages from commits
 //! // let summary = manager.add_commits_from_git("feature-branch", "main", "HEAD").await?;
 //! //
@@ -171,6 +171,7 @@
 //! // println!("Existing packages: {:?}", summary.existing_packages);
 //! # Ok(())
 //! # }
+//! ```</parameter>
 //! ```
 //!
 //! # Module Structure
@@ -184,13 +185,18 @@
 
 #![allow(clippy::todo)]
 
-// Modules
-pub mod storage;
+// Internal modules
+mod manager;
+mod storage;
 
 #[cfg(test)]
 mod tests;
 
-// Re-exports
+// Public API - re-exports
+pub use manager::ChangesetManager;
 pub use storage::{ChangesetStorage, FileBasedChangesetStorage};
 
-// Module will be implemented in subsequent stories (Epic 6)
+// Additional modules will be implemented in subsequent stories (Epic 6)
+// - history: Story 6.5
+// - package_detector: Story 6.4
+// - update_summary: Story 6.4</parameter>
