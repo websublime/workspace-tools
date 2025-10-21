@@ -1704,3 +1704,587 @@ mod version_preview_tests {
         }
     }
 }
+
+// ============================================================================
+// Statistics Tests
+// ============================================================================
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod stats_tests {
+    use crate::changes::{
+        ChangesSummary, FileChange, FileChangeType, PackageChangeStats, PackageChanges,
+    };
+    use std::path::PathBuf;
+    use sublime_standard_tools::monorepo::WorkspacePackage;
+
+    fn create_test_workspace_package(name: &str) -> WorkspacePackage {
+        WorkspacePackage {
+            name: name.to_string(),
+            version: "1.0.0".to_string(),
+            location: PathBuf::from(format!("packages/{}", name)),
+            absolute_path: PathBuf::from(format!("/workspace/packages/{}", name)),
+            workspace_dependencies: Vec::new(),
+            workspace_dev_dependencies: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn test_package_change_stats_new() {
+        let stats = PackageChangeStats::new();
+
+        assert_eq!(stats.files_changed, 0);
+        assert_eq!(stats.files_added, 0);
+        assert_eq!(stats.files_modified, 0);
+        assert_eq!(stats.files_deleted, 0);
+        assert_eq!(stats.commits, 0);
+        assert_eq!(stats.lines_added, 0);
+        assert_eq!(stats.lines_deleted, 0);
+        assert!(!stats.has_changes());
+    }
+
+    #[test]
+    fn test_package_change_stats_has_changes() {
+        let mut stats = PackageChangeStats::new();
+        assert!(!stats.has_changes());
+
+        stats.files_changed = 1;
+        assert!(stats.has_changes());
+    }
+
+    #[test]
+    fn test_package_change_stats_net_lines_changed() {
+        let stats = PackageChangeStats {
+            files_changed: 5,
+            files_added: 2,
+            files_modified: 3,
+            files_deleted: 0,
+            commits: 3,
+            lines_added: 150,
+            lines_deleted: 30,
+        };
+
+        assert_eq!(stats.net_lines_changed(), 120);
+    }
+
+    #[test]
+    fn test_package_change_stats_net_lines_negative() {
+        let stats = PackageChangeStats {
+            files_changed: 5,
+            files_added: 0,
+            files_modified: 3,
+            files_deleted: 2,
+            commits: 3,
+            lines_added: 30,
+            lines_deleted: 150,
+        };
+
+        assert_eq!(stats.net_lines_changed(), -120);
+    }
+
+    #[test]
+    fn test_package_change_stats_total_lines_changed() {
+        let stats = PackageChangeStats {
+            files_changed: 5,
+            files_added: 2,
+            files_modified: 3,
+            files_deleted: 0,
+            commits: 3,
+            lines_added: 150,
+            lines_deleted: 30,
+        };
+
+        assert_eq!(stats.total_lines_changed(), 180);
+    }
+
+    #[test]
+    fn test_package_change_stats_average_lines_per_file() {
+        let stats = PackageChangeStats {
+            files_changed: 5,
+            files_added: 2,
+            files_modified: 3,
+            files_deleted: 0,
+            commits: 3,
+            lines_added: 150,
+            lines_deleted: 30,
+        };
+
+        assert_eq!(stats.average_lines_per_file(), 36.0);
+    }
+
+    #[test]
+    fn test_package_change_stats_average_lines_zero_files() {
+        let stats = PackageChangeStats::new();
+        assert_eq!(stats.average_lines_per_file(), 0.0);
+    }
+
+    #[test]
+    fn test_package_change_stats_percentages() {
+        let stats = PackageChangeStats {
+            files_changed: 10,
+            files_added: 2,
+            files_modified: 6,
+            files_deleted: 2,
+            commits: 5,
+            lines_added: 100,
+            lines_deleted: 20,
+        };
+
+        assert_eq!(stats.added_percentage(), 20.0);
+        assert_eq!(stats.modified_percentage(), 60.0);
+        assert_eq!(stats.deleted_percentage(), 20.0);
+    }
+
+    #[test]
+    fn test_package_change_stats_percentages_zero_files() {
+        let stats = PackageChangeStats::new();
+
+        assert_eq!(stats.added_percentage(), 0.0);
+        assert_eq!(stats.modified_percentage(), 0.0);
+        assert_eq!(stats.deleted_percentage(), 0.0);
+    }
+
+    #[test]
+    fn test_changes_summary_new() {
+        let summary = ChangesSummary::new();
+
+        assert_eq!(summary.total_packages, 0);
+        assert_eq!(summary.packages_with_changes, 0);
+        assert_eq!(summary.packages_without_changes, 0);
+        assert_eq!(summary.total_files_changed, 0);
+        assert_eq!(summary.total_commits, 0);
+        assert_eq!(summary.total_lines_added, 0);
+        assert_eq!(summary.total_lines_deleted, 0);
+        assert!(!summary.has_changes());
+    }
+
+    #[test]
+    fn test_changes_summary_has_changes() {
+        let mut summary = ChangesSummary::new();
+        assert!(!summary.has_changes());
+
+        summary.packages_with_changes = 1;
+        assert!(summary.has_changes());
+
+        summary.packages_with_changes = 0;
+        summary.total_files_changed = 1;
+        assert!(summary.has_changes());
+    }
+
+    #[test]
+    fn test_changes_summary_change_percentage() {
+        let summary = ChangesSummary {
+            total_packages: 10,
+            packages_with_changes: 3,
+            packages_without_changes: 7,
+            total_files_changed: 15,
+            total_commits: 5,
+            total_lines_added: 100,
+            total_lines_deleted: 20,
+        };
+
+        assert_eq!(summary.change_percentage(), 30.0);
+    }
+
+    #[test]
+    fn test_changes_summary_change_percentage_zero_packages() {
+        let summary = ChangesSummary::new();
+        assert_eq!(summary.change_percentage(), 0.0);
+    }
+
+    #[test]
+    fn test_changes_summary_net_lines_changed() {
+        let summary = ChangesSummary {
+            total_packages: 5,
+            packages_with_changes: 2,
+            packages_without_changes: 3,
+            total_files_changed: 10,
+            total_commits: 4,
+            total_lines_added: 100,
+            total_lines_deleted: 20,
+        };
+
+        assert_eq!(summary.net_lines_changed(), 80);
+    }
+
+    #[test]
+    fn test_changes_summary_total_lines_changed() {
+        let summary = ChangesSummary {
+            total_packages: 5,
+            packages_with_changes: 2,
+            packages_without_changes: 3,
+            total_files_changed: 10,
+            total_commits: 4,
+            total_lines_added: 100,
+            total_lines_deleted: 20,
+        };
+
+        assert_eq!(summary.total_lines_changed(), 120);
+    }
+
+    #[test]
+    fn test_changes_summary_average_files_per_package() {
+        let summary = ChangesSummary {
+            total_packages: 5,
+            packages_with_changes: 2,
+            packages_without_changes: 3,
+            total_files_changed: 10,
+            total_commits: 4,
+            total_lines_added: 100,
+            total_lines_deleted: 20,
+        };
+
+        assert_eq!(summary.average_files_per_package(), 5.0);
+    }
+
+    #[test]
+    fn test_changes_summary_average_files_zero_packages() {
+        let summary = ChangesSummary::new();
+        assert_eq!(summary.average_files_per_package(), 0.0);
+    }
+
+    #[test]
+    fn test_package_changes_add_file_updates_stats() {
+        let workspace_pkg = create_test_workspace_package("core");
+        let mut changes = PackageChanges::new(workspace_pkg);
+
+        assert_eq!(changes.stats.files_changed, 0);
+        assert!(!changes.has_changes);
+
+        // Add an added file
+        changes.add_file(FileChange {
+            path: PathBuf::from("packages/core/src/new.ts"),
+            package_relative_path: PathBuf::from("src/new.ts"),
+            change_type: FileChangeType::Added,
+            lines_added: Some(50),
+            lines_deleted: Some(0),
+            commits: Vec::new(),
+        });
+
+        assert_eq!(changes.stats.files_changed, 1);
+        assert_eq!(changes.stats.files_added, 1);
+        assert_eq!(changes.stats.files_modified, 0);
+        assert_eq!(changes.stats.files_deleted, 0);
+        assert_eq!(changes.stats.lines_added, 50);
+        assert_eq!(changes.stats.lines_deleted, 0);
+        assert!(changes.has_changes);
+
+        // Add a modified file
+        changes.add_file(FileChange {
+            path: PathBuf::from("packages/core/src/index.ts"),
+            package_relative_path: PathBuf::from("src/index.ts"),
+            change_type: FileChangeType::Modified,
+            lines_added: Some(30),
+            lines_deleted: Some(10),
+            commits: Vec::new(),
+        });
+
+        assert_eq!(changes.stats.files_changed, 2);
+        assert_eq!(changes.stats.files_added, 1);
+        assert_eq!(changes.stats.files_modified, 1);
+        assert_eq!(changes.stats.files_deleted, 0);
+        assert_eq!(changes.stats.lines_added, 80);
+        assert_eq!(changes.stats.lines_deleted, 10);
+
+        // Add a deleted file
+        changes.add_file(FileChange {
+            path: PathBuf::from("packages/core/src/old.ts"),
+            package_relative_path: PathBuf::from("src/old.ts"),
+            change_type: FileChangeType::Deleted,
+            lines_added: Some(0),
+            lines_deleted: Some(20),
+            commits: Vec::new(),
+        });
+
+        assert_eq!(changes.stats.files_changed, 3);
+        assert_eq!(changes.stats.files_added, 1);
+        assert_eq!(changes.stats.files_modified, 1);
+        assert_eq!(changes.stats.files_deleted, 1);
+        assert_eq!(changes.stats.lines_added, 80);
+        assert_eq!(changes.stats.lines_deleted, 30);
+    }
+
+    #[test]
+    fn test_package_changes_add_file_with_no_line_info() {
+        let workspace_pkg = create_test_workspace_package("core");
+        let mut changes = PackageChanges::new(workspace_pkg);
+
+        changes.add_file(FileChange {
+            path: PathBuf::from("packages/core/src/binary.dat"),
+            package_relative_path: PathBuf::from("src/binary.dat"),
+            change_type: FileChangeType::Added,
+            lines_added: None,
+            lines_deleted: None,
+            commits: Vec::new(),
+        });
+
+        assert_eq!(changes.stats.files_changed, 1);
+        assert_eq!(changes.stats.files_added, 1);
+        assert_eq!(changes.stats.lines_added, 0);
+        assert_eq!(changes.stats.lines_deleted, 0);
+    }
+
+    #[test]
+    fn test_package_changes_add_file_renamed() {
+        let workspace_pkg = create_test_workspace_package("core");
+        let mut changes = PackageChanges::new(workspace_pkg);
+
+        changes.add_file(FileChange {
+            path: PathBuf::from("packages/core/src/renamed.ts"),
+            package_relative_path: PathBuf::from("src/renamed.ts"),
+            change_type: FileChangeType::Renamed,
+            lines_added: Some(5),
+            lines_deleted: Some(3),
+            commits: Vec::new(),
+        });
+
+        assert_eq!(changes.stats.files_changed, 1);
+        assert_eq!(changes.stats.files_added, 0);
+        assert_eq!(changes.stats.files_modified, 1);
+        assert_eq!(changes.stats.files_deleted, 0);
+        assert_eq!(changes.stats.lines_added, 5);
+        assert_eq!(changes.stats.lines_deleted, 3);
+    }
+
+    #[test]
+    fn test_package_changes_add_file_copied() {
+        let workspace_pkg = create_test_workspace_package("core");
+        let mut changes = PackageChanges::new(workspace_pkg);
+
+        changes.add_file(FileChange {
+            path: PathBuf::from("packages/core/src/copied.ts"),
+            package_relative_path: PathBuf::from("src/copied.ts"),
+            change_type: FileChangeType::Copied,
+            lines_added: Some(50),
+            lines_deleted: Some(0),
+            commits: Vec::new(),
+        });
+
+        assert_eq!(changes.stats.files_changed, 1);
+        assert_eq!(changes.stats.files_added, 1);
+        assert_eq!(changes.stats.files_modified, 0);
+        assert_eq!(changes.stats.files_deleted, 0);
+    }
+
+    #[test]
+    fn test_package_changes_add_file_untracked() {
+        let workspace_pkg = create_test_workspace_package("core");
+        let mut changes = PackageChanges::new(workspace_pkg);
+
+        changes.add_file(FileChange {
+            path: PathBuf::from("packages/core/src/untracked.ts"),
+            package_relative_path: PathBuf::from("src/untracked.ts"),
+            change_type: FileChangeType::Untracked,
+            lines_added: Some(25),
+            lines_deleted: Some(0),
+            commits: Vec::new(),
+        });
+
+        assert_eq!(changes.stats.files_changed, 1);
+        assert_eq!(changes.stats.files_added, 1);
+        assert_eq!(changes.stats.files_modified, 0);
+        assert_eq!(changes.stats.files_deleted, 0);
+    }
+
+    #[test]
+    fn test_package_changes_add_commit_updates_stats() {
+        use crate::changes::CommitInfo;
+        use chrono::Utc;
+
+        let workspace_pkg = create_test_workspace_package("core");
+        let mut changes = PackageChanges::new(workspace_pkg);
+
+        assert_eq!(changes.stats.commits, 0);
+
+        changes.add_commit(CommitInfo {
+            hash: "abc123".to_string(),
+            short_hash: "abc123".to_string(),
+            author: "John Doe".to_string(),
+            author_email: "john@example.com".to_string(),
+            date: Utc::now(),
+            message: "feat: add feature".to_string(),
+            full_message: "feat: add feature\n\nDetailed description".to_string(),
+            affected_packages: vec!["core".to_string()],
+            files_changed: 1,
+            lines_added: 10,
+            lines_deleted: 2,
+        });
+
+        assert_eq!(changes.stats.commits, 1);
+        assert_eq!(changes.commits.len(), 1);
+
+        changes.add_commit(CommitInfo {
+            hash: "def456".to_string(),
+            short_hash: "def456".to_string(),
+            author: "Jane Doe".to_string(),
+            author_email: "jane@example.com".to_string(),
+            date: Utc::now(),
+            message: "fix: bug fix".to_string(),
+            full_message: "fix: bug fix".to_string(),
+            affected_packages: vec!["core".to_string()],
+            files_changed: 2,
+            lines_added: 5,
+            lines_deleted: 8,
+        });
+
+        assert_eq!(changes.stats.commits, 2);
+        assert_eq!(changes.commits.len(), 2);
+    }
+
+    #[test]
+    fn test_stats_calculations_with_various_changes() {
+        let stats = PackageChangeStats {
+            files_changed: 15,
+            files_added: 5,
+            files_modified: 8,
+            files_deleted: 2,
+            commits: 10,
+            lines_added: 500,
+            lines_deleted: 200,
+        };
+
+        // Test all calculations
+        assert_eq!(stats.files_changed, 15);
+        assert_eq!(stats.files_added, 5);
+        assert_eq!(stats.files_modified, 8);
+        assert_eq!(stats.files_deleted, 2);
+        assert_eq!(stats.commits, 10);
+        assert_eq!(stats.lines_added, 500);
+        assert_eq!(stats.lines_deleted, 200);
+
+        // Derived calculations
+        assert!(stats.has_changes());
+        assert_eq!(stats.net_lines_changed(), 300);
+        assert_eq!(stats.total_lines_changed(), 700);
+        assert!((stats.average_lines_per_file() - 46.666).abs() < 0.01);
+        assert!((stats.added_percentage() - 33.333).abs() < 0.01);
+        assert!((stats.modified_percentage() - 53.333).abs() < 0.01);
+        assert!((stats.deleted_percentage() - 13.333).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_stats_edge_case_all_deletions() {
+        let stats = PackageChangeStats {
+            files_changed: 5,
+            files_added: 0,
+            files_modified: 0,
+            files_deleted: 5,
+            commits: 2,
+            lines_added: 0,
+            lines_deleted: 150,
+        };
+
+        assert_eq!(stats.deleted_percentage(), 100.0);
+        assert_eq!(stats.added_percentage(), 0.0);
+        assert_eq!(stats.modified_percentage(), 0.0);
+        assert_eq!(stats.net_lines_changed(), -150);
+    }
+
+    #[test]
+    fn test_stats_edge_case_all_additions() {
+        let stats = PackageChangeStats {
+            files_changed: 5,
+            files_added: 5,
+            files_modified: 0,
+            files_deleted: 0,
+            commits: 3,
+            lines_added: 200,
+            lines_deleted: 0,
+        };
+
+        assert_eq!(stats.added_percentage(), 100.0);
+        assert_eq!(stats.modified_percentage(), 0.0);
+        assert_eq!(stats.deleted_percentage(), 0.0);
+        assert_eq!(stats.net_lines_changed(), 200);
+    }
+
+    #[test]
+    fn test_summary_edge_case_no_packages_with_changes() {
+        let summary = ChangesSummary {
+            total_packages: 10,
+            packages_with_changes: 0,
+            packages_without_changes: 10,
+            total_files_changed: 0,
+            total_commits: 0,
+            total_lines_added: 0,
+            total_lines_deleted: 0,
+        };
+
+        assert!(!summary.has_changes());
+        assert_eq!(summary.change_percentage(), 0.0);
+        assert_eq!(summary.net_lines_changed(), 0);
+        assert_eq!(summary.total_lines_changed(), 0);
+        assert_eq!(summary.average_files_per_package(), 0.0);
+    }
+
+    #[test]
+    fn test_summary_edge_case_all_packages_with_changes() {
+        let summary = ChangesSummary {
+            total_packages: 5,
+            packages_with_changes: 5,
+            packages_without_changes: 0,
+            total_files_changed: 25,
+            total_commits: 10,
+            total_lines_added: 500,
+            total_lines_deleted: 100,
+        };
+
+        assert!(summary.has_changes());
+        assert_eq!(summary.change_percentage(), 100.0);
+        assert_eq!(summary.net_lines_changed(), 400);
+        assert_eq!(summary.total_lines_changed(), 600);
+        assert_eq!(summary.average_files_per_package(), 5.0);
+    }
+
+    #[test]
+    fn test_stats_serialization() {
+        use serde_json;
+
+        let stats = PackageChangeStats {
+            files_changed: 5,
+            files_added: 2,
+            files_modified: 3,
+            files_deleted: 0,
+            commits: 3,
+            lines_added: 150,
+            lines_deleted: 30,
+        };
+
+        // Test serialization
+        let json = serde_json::to_string(&stats).unwrap();
+        assert!(json.contains("\"files_changed\":5"));
+        assert!(json.contains("\"files_added\":2"));
+        assert!(json.contains("\"lines_added\":150"));
+
+        // Test deserialization
+        let deserialized: PackageChangeStats = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.files_changed, 5);
+        assert_eq!(deserialized.files_added, 2);
+        assert_eq!(deserialized.lines_added, 150);
+    }
+
+    #[test]
+    fn test_summary_serialization() {
+        use serde_json;
+
+        let summary = ChangesSummary {
+            total_packages: 10,
+            packages_with_changes: 3,
+            packages_without_changes: 7,
+            total_files_changed: 15,
+            total_commits: 5,
+            total_lines_added: 100,
+            total_lines_deleted: 20,
+        };
+
+        // Test serialization
+        let json = serde_json::to_string(&summary).unwrap();
+        assert!(json.contains("\"total_packages\":10"));
+        assert!(json.contains("\"packages_with_changes\":3"));
+
+        // Test deserialization
+        let deserialized: ChangesSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.total_packages, 10);
+        assert_eq!(deserialized.packages_with_changes, 3);
+    }
+}
