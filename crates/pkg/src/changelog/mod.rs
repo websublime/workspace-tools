@@ -81,6 +81,10 @@
 
 // Public modules
 pub mod conventional;
+pub mod generator;
+
+// Re-exports
+pub use generator::ChangelogGenerator;
 
 // Internal modules
 #[cfg(test)]

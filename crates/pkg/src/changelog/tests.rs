@@ -9,9 +9,18 @@
 //! and handles all edge cases properly.
 
 #![allow(clippy::unwrap_used)]
+#![allow(clippy::panic)]
+#![allow(clippy::field_reassign_with_default)]
+#![allow(clippy::bool_assert_comparison)]
+#![allow(clippy::unnecessary_to_owned)]
 
 use crate::changelog::conventional::{ConventionalCommit, SectionType};
+use crate::changelog::ChangelogGenerator;
+use crate::config::{ChangelogConfig, ChangelogFormat, MonorepoMode, PackageToolsConfig};
 use proptest::prelude::*;
+use sublime_git_tools::Repo;
+use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
+use tempfile::TempDir;
 
 // ============================================================================
 // Valid Format Tests
@@ -678,4 +687,398 @@ fn test_section_type_ordering() {
 fn test_section_type_display() {
     assert_eq!(format!("{}", SectionType::Features), "Features");
     assert_eq!(format!("{}", SectionType::Breaking), "Breaking Changes");
+}
+
+// ============================================================================
+// ChangelogGenerator Tests
+// ============================================================================
+
+/// Helper function to create a temporary Git repository for testing.
+fn create_test_repo() -> (TempDir, Repo) {
+    let temp_dir = TempDir::new().unwrap();
+    let repo = Repo::create(temp_dir.path().to_str().unwrap()).unwrap();
+    (temp_dir, repo)
+}
+
+#[tokio::test]
+async fn test_changelog_generator_new_success() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator = ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await;
+
+    assert!(generator.is_ok());
+    let generator = generator.unwrap();
+    assert_eq!(generator.workspace_root(), &temp_dir.path().to_path_buf());
+}
+
+#[tokio::test]
+async fn test_changelog_generator_new_with_custom_config() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+
+    let mut config = ChangelogConfig::default();
+    config.enabled = false;
+    config.format = ChangelogFormat::Conventional;
+    config.filename = "RELEASES.md".to_string();
+    config.include_commit_links = false;
+    config.include_issue_links = false;
+    config.monorepo_mode = MonorepoMode::Root;
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config.clone())
+            .await
+            .unwrap();
+
+    assert_eq!(generator.config().enabled, false);
+    assert_eq!(generator.config().format, ChangelogFormat::Conventional);
+    assert_eq!(generator.config().filename, "RELEASES.md");
+    assert_eq!(generator.config().include_commit_links, false);
+    assert_eq!(generator.config().include_issue_links, false);
+    assert_eq!(generator.config().monorepo_mode, MonorepoMode::Root);
+}
+
+#[tokio::test]
+async fn test_changelog_generator_invalid_workspace_root() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let non_existent_path = temp_dir.path().join("does_not_exist");
+
+    let result = ChangelogGenerator::new(non_existent_path.clone(), repo, fs, config).await;
+
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    match err {
+        crate::error::ChangelogError::InvalidPath { path, reason } => {
+            assert_eq!(path, non_existent_path);
+            assert!(reason.contains("does not exist"));
+        }
+        _ => panic!("Expected InvalidPath error, got: {:?}", err),
+    }
+}
+
+#[tokio::test]
+async fn test_changelog_generator_workspace_root_is_file() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    // Create a file instead of directory
+    let file_path = temp_dir.path().join("file.txt");
+    std::fs::write(&file_path, "test").unwrap();
+
+    let result = ChangelogGenerator::new(file_path.clone(), repo, fs, config).await;
+
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    match err {
+        crate::error::ChangelogError::InvalidPath { path, reason } => {
+            assert_eq!(path, file_path);
+            assert!(reason.contains("not a directory"));
+        }
+        _ => panic!("Expected InvalidPath error, got: {:?}", err),
+    }
+}
+
+#[tokio::test]
+async fn test_changelog_generator_workspace_root_accessor() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let workspace_root = generator.workspace_root();
+    assert_eq!(workspace_root, &temp_dir.path().to_path_buf());
+    assert!(workspace_root.exists());
+}
+
+#[tokio::test]
+async fn test_changelog_generator_git_repo_accessor() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let git_repo = generator.git_repo();
+    let current_sha = git_repo.get_current_sha();
+    assert!(current_sha.is_ok());
+}
+
+#[tokio::test]
+async fn test_changelog_generator_fs_accessor() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let fs = generator.fs();
+    let exists = fs.exists(&temp_dir.path().to_path_buf()).await;
+    assert!(exists);
+}
+
+#[tokio::test]
+async fn test_changelog_generator_config_accessor() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+
+    let mut config = ChangelogConfig::default();
+    config.format = ChangelogFormat::Conventional;
+    config.filename = "HISTORY.md".to_string();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let returned_config = generator.config();
+    assert_eq!(returned_config.format, ChangelogFormat::Conventional);
+    assert_eq!(returned_config.filename, "HISTORY.md");
+}
+
+#[tokio::test]
+async fn test_changelog_generator_is_enabled_true() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.enabled = true;
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    assert!(generator.is_enabled());
+}
+
+#[tokio::test]
+async fn test_changelog_generator_is_enabled_false() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.enabled = false;
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    assert!(!generator.is_enabled());
+}
+
+#[tokio::test]
+async fn test_changelog_generator_get_repository_url_from_config() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.repository_url = Some("https://github.com/user/repo".to_string());
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let url = generator.get_repository_url().unwrap();
+    assert_eq!(url, Some("https://github.com/user/repo".to_string()));
+}
+
+#[tokio::test]
+async fn test_changelog_generator_get_repository_url_none() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.repository_url = None;
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let url = generator.get_repository_url().unwrap();
+    assert_eq!(url, None);
+}
+
+#[tokio::test]
+async fn test_changelog_generator_with_keep_a_changelog_format() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.format = ChangelogFormat::KeepAChangelog;
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    assert_eq!(generator.config().format, ChangelogFormat::KeepAChangelog);
+}
+
+#[tokio::test]
+async fn test_changelog_generator_with_conventional_commits_format() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.format = ChangelogFormat::Conventional;
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    assert_eq!(generator.config().format, ChangelogFormat::Conventional);
+}
+
+#[tokio::test]
+async fn test_changelog_generator_with_custom_format() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.format = ChangelogFormat::Custom;
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    assert_eq!(generator.config().format, ChangelogFormat::Custom);
+}
+
+#[tokio::test]
+async fn test_changelog_generator_monorepo_mode_per_package() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.monorepo_mode = MonorepoMode::PerPackage;
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    assert_eq!(generator.config().monorepo_mode, MonorepoMode::PerPackage);
+}
+
+#[tokio::test]
+async fn test_changelog_generator_monorepo_mode_root() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.monorepo_mode = MonorepoMode::Root;
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    assert_eq!(generator.config().monorepo_mode, MonorepoMode::Root);
+}
+
+#[tokio::test]
+async fn test_changelog_generator_monorepo_mode_both() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.monorepo_mode = MonorepoMode::Both;
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    assert_eq!(generator.config().monorepo_mode, MonorepoMode::Both);
+}
+
+#[tokio::test]
+async fn test_changelog_generator_with_custom_filename() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.filename = "HISTORY.md".to_string();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    assert_eq!(generator.config().filename, "HISTORY.md");
+}
+
+#[tokio::test]
+async fn test_changelog_generator_link_configuration() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.include_commit_links = true;
+    config.include_issue_links = true;
+    config.include_authors = true;
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    assert!(generator.config().include_commit_links);
+    assert!(generator.config().include_issue_links);
+    assert!(generator.config().include_authors);
+}
+
+#[tokio::test]
+async fn test_changelog_generator_tag_formats() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.version_tag_format = "{name}-v{version}".to_string();
+    config.root_tag_format = "release-{version}".to_string();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    assert_eq!(generator.config().version_tag_format, "{name}-v{version}");
+    assert_eq!(generator.config().root_tag_format, "release-{version}");
+}
+
+#[tokio::test]
+async fn test_changelog_generator_conventional_config() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.conventional.enabled = true;
+    config.conventional.breaking_section = "💥 Breaking Changes".to_string();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    assert!(generator.config().conventional.enabled);
+    assert_eq!(generator.config().conventional.breaking_section, "💥 Breaking Changes");
+}
+
+#[tokio::test]
+async fn test_changelog_generator_exclusion_config() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.exclude.patterns = vec!["^chore:".to_string(), "^docs:".to_string()];
+    config.exclude.authors = vec!["bot@example.com".to_string()];
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    assert_eq!(generator.config().exclude.patterns.len(), 2);
+    assert_eq!(generator.config().exclude.authors.len(), 1);
+}
+
+#[tokio::test]
+async fn test_changelog_generator_template_config() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.template.header = "# Release Notes\n".to_string();
+    config.template.version_header = "## Version {version} ({date})".to_string();
+    config.template.section_header = "**{section}**".to_string();
+    config.template.entry_format = "* {description} - {hash}".to_string();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    assert_eq!(generator.config().template.header, "# Release Notes\n");
+    assert_eq!(generator.config().template.version_header, "## Version {version} ({date})");
+    assert_eq!(generator.config().template.section_header, "**{section}**");
+    assert_eq!(generator.config().template.entry_format, "* {description} - {hash}");
+}
+
+#[tokio::test]
+async fn test_changelog_generator_from_package_tools_config() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let package_config = PackageToolsConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, package_config.changelog)
+            .await
+            .unwrap();
+
+    assert!(generator.is_enabled());
+    assert_eq!(generator.config().format, ChangelogFormat::KeepAChangelog);
 }

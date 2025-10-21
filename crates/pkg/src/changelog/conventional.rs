@@ -1,7 +1,7 @@
 //! Conventional Commits parser implementation.
 //!
 //! **What**: Provides parsing and categorization of commit messages following the
-//! Conventional Commits specification (https://www.conventionalcommits.org/).
+//! Conventional Commits specification (<https://www.conventionalcommits.org/>).
 //!
 //! **How**: Uses regular expressions to parse the commit subject line, then processes
 //! the body and footers. Detects breaking changes through both the `!` indicator and
