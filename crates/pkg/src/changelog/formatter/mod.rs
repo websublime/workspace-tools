@@ -12,7 +12,7 @@
 //! # Available Formatters
 //!
 //! - **Keep a Changelog**: Standard format following https://keepachangelog.com
-//! - **Conventional Commits**: Automatic grouping by commit type (coming in story 8.6)
+//! - **Conventional Commits**: Automatic grouping by commit type
 //! - **Custom Template**: User-defined templates (coming in story 8.7)
 //!
 //! # Example
@@ -53,13 +53,12 @@
 //! // - Add new API endpoint (abc123) (#123)
 //! ```
 
+mod conventional;
 mod keep_a_changelog;
 
 // Public exports
+pub use conventional::ConventionalCommitsFormatter;
 pub use keep_a_changelog::KeepAChangelogFormatter;
-
-// TODO: will be implemented on story 8.6
-// pub use conventional_commits::ConventionalCommitsFormatter;
 
 // TODO: will be implemented on story 8.7
 // pub use custom::CustomTemplateFormatter;
