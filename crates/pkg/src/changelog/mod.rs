@@ -82,6 +82,7 @@
 // Internal modules
 mod collector;
 mod conventional;
+pub mod formatter;
 mod generator;
 mod types;
 mod version_detection;
@@ -89,6 +90,7 @@ mod version_detection;
 // Public re-exports
 pub use collector::ChangelogCollector;
 pub use conventional::{CommitFooter, ConventionalCommit, SectionType};
+pub use formatter::KeepAChangelogFormatter;
 pub use generator::ChangelogGenerator;
 pub use types::{Changelog, ChangelogEntry, ChangelogMetadata, ChangelogSection};
 pub use version_detection::VersionTag;
