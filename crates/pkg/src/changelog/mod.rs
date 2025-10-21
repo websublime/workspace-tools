@@ -79,4 +79,9 @@
 
 #![allow(clippy::todo)]
 
-// Module will be implemented in subsequent stories (Epic 8)
+// Public modules
+pub mod conventional;
+
+// Internal modules
+#[cfg(test)]
+mod tests;
