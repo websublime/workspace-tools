@@ -14,6 +14,7 @@
 use crate::changes::PackageMapper;
 use crate::config::PackageToolsConfig;
 use crate::error::{ChangesError, ChangesResult};
+
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use sublime_git_tools::Repo;
@@ -860,6 +861,233 @@ where
         }
 
         Ok(report)
+    }
+
+    /// Analyzes changes with version preview calculation.
+    ///
+    /// This method performs commit range analysis and enhances the report with next version
+    /// calculations based on the provided changeset. Only packages listed in the changeset
+    /// will have their versions calculated.
+    ///
+    /// # Arguments
+    ///
+    /// * `from_ref` - Starting Git reference (commit, branch, tag)
+    /// * `to_ref` - Ending Git reference (commit, branch, tag)
+    /// * `changeset` - Changeset containing bump type and affected packages
+    ///
+    /// # Returns
+    ///
+    /// Returns a `ChangesReport` with `next_version` and `bump_type` populated for
+    /// packages that are included in the changeset.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Git references cannot be resolved
+    /// - Commit range analysis fails
+    /// - Version parsing or bumping fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::changes::ChangesAnalyzer;
+    /// use sublime_pkg_tools::types::{Changeset, VersionBump};
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use sublime_git_tools::Repo;
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let workspace_root = PathBuf::from(".");
+    /// let git_repo = Repo::open(".")?;
+    /// let fs = FileSystemManager::new();
+    /// let config = PackageToolsConfig::default();
+    ///
+    /// let analyzer = ChangesAnalyzer::new(
+    ///     workspace_root,
+    ///     git_repo,
+    ///     fs,
+    ///     config
+    /// ).await?;
+    ///
+    /// // Create or load a changeset
+    /// let changeset = Changeset::new(
+    ///     "feature-branch",
+    ///     VersionBump::Minor,
+    ///     vec!["production".to_string()],
+    /// );
+    ///
+    /// // Analyze with version preview
+    /// let report = analyzer.analyze_with_versions(
+    ///     "main",
+    ///     "HEAD",
+    ///     &changeset
+    /// ).await?;
+    ///
+    /// for package in report.packages_with_changes() {
+    ///     if let (Some(current), Some(next)) = (&package.current_version, &package.next_version) {
+    ///         println!("Package {} will be bumped from {} to {}",
+    ///             package.package_name(),
+    ///             current,
+    ///             next);
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn analyze_with_versions(
+        &self,
+        from_ref: &str,
+        to_ref: &str,
+        changeset: &crate::types::Changeset,
+    ) -> ChangesResult<crate::changes::ChangesReport> {
+        // First, perform the regular commit range analysis
+        let mut report = self.analyze_commit_range(from_ref, to_ref).await?;
+
+        // Add version information to packages that are in the changeset
+        for package_changes in &mut report.packages {
+            // Only calculate versions for packages included in the changeset
+            if changeset.packages.contains(&package_changes.package_name) {
+                self.add_version_info(package_changes, changeset)?;
+            }
+        }
+
+        Ok(report)
+    }
+
+    /// Calculates the next version for a package based on the bump type.
+    ///
+    /// This is a helper method that applies the version bump to a current version.
+    /// It uses the `Version::bump` method which already handles all bump types correctly.
+    ///
+    /// # Arguments
+    ///
+    /// * `current_version` - The current version to bump
+    /// * `bump` - The type of version bump to apply
+    ///
+    /// # Returns
+    ///
+    /// Returns the next version after applying the bump.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the version bump fails (e.g., integer overflow).
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::types::{Version, VersionBump};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let current = Version::parse("1.2.3")?;
+    /// let next = current.bump(VersionBump::Minor)?;
+    /// assert_eq!(next.to_string(), "1.3.0");
+    /// # Ok(())
+    /// # }
+    /// ```
+    fn calculate_next_version(
+        &self,
+        current_version: &crate::types::Version,
+        bump: crate::types::VersionBump,
+    ) -> ChangesResult<crate::types::Version> {
+        current_version.bump(bump).map_err(|e| ChangesError::VersionCalculationFailed {
+            package: String::from("unknown"), // Will be set by caller
+            current_version: current_version.to_string(),
+            bump_type: format!("{:?}", bump),
+            reason: e.to_string(),
+        })
+    }
+
+    /// Adds version information to a package changes instance.
+    ///
+    /// This method populates the `next_version` and `bump_type` fields of a
+    /// `PackageChanges` based on the changeset's bump type. It requires that
+    /// the package already has a `current_version` set.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_changes` - The package changes to update with version info
+    /// * `changeset` - The changeset containing the bump type
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The package doesn't have a current version
+    /// - Version bumping fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::changes::PackageChanges;
+    /// use sublime_pkg_tools::types::{Changeset, Version, VersionBump};
+    /// use sublime_standard_tools::monorepo::WorkspacePackage;
+    /// use std::path::PathBuf;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let workspace_pkg = WorkspacePackage {
+    ///     name: "@myorg/core".to_string(),
+    ///     version: "1.0.0".to_string(),
+    ///     location: PathBuf::from("packages/core"),
+    ///     absolute_path: PathBuf::from("/workspace/packages/core"),
+    ///     workspace_dependencies: Vec::new(),
+    ///     workspace_dev_dependencies: Vec::new(),
+    /// };
+    ///
+    /// let mut package_changes = PackageChanges::new(workspace_pkg);
+    /// package_changes.current_version = Some(Version::parse("1.0.0")?);
+    ///
+    /// let changeset = Changeset::new(
+    ///     "feature-branch",
+    ///     VersionBump::Minor,
+    ///     vec!["production".to_string()],
+    /// );
+    ///
+    /// // add_version_info(&mut package_changes, &changeset)?;
+    ///
+    /// assert_eq!(
+    ///     package_changes.next_version.as_ref().map(|v| v.to_string()),
+    ///     Some("1.1.0".to_string())
+    /// );
+    /// assert_eq!(package_changes.bump_type, Some(VersionBump::Minor));
+    /// # Ok(())
+    /// # }
+    /// ```
+    fn add_version_info(
+        &self,
+        package_changes: &mut crate::changes::PackageChanges,
+        changeset: &crate::types::Changeset,
+    ) -> ChangesResult<()> {
+        if let Some(current) = &package_changes.current_version {
+            // Calculate next version based on changeset bump
+            let next = self.calculate_next_version(current, changeset.bump).map_err(|e| {
+                // Enhance error with package name
+                if let ChangesError::VersionCalculationFailed {
+                    package: _,
+                    current_version,
+                    bump_type,
+                    reason,
+                } = e
+                {
+                    ChangesError::VersionCalculationFailed {
+                        package: package_changes.package_name.clone(),
+                        current_version,
+                        bump_type,
+                        reason,
+                    }
+                } else {
+                    e
+                }
+            })?;
+
+            package_changes.next_version = Some(next);
+            package_changes.bump_type = Some(changeset.bump);
+        } else {
+            // If there's no current version, we can't calculate next version
+            // This is not necessarily an error - some packages might not have versions yet
+            // We'll just skip setting the next_version
+        }
+
+        Ok(())
     }
 
     /// Gets all packages in the workspace.

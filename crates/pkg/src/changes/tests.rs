@@ -1258,3 +1258,449 @@ mod working_directory_tests {
         assert!(package.next_version.is_none());
     }
 }
+
+/// Tests for version preview calculation (Story 7.5).
+///
+/// These tests verify that version preview calculation works correctly with different
+/// bump types, monorepo configurations, and changeset configurations.
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod version_preview_tests {
+    use crate::changes::ChangesAnalyzer;
+    use crate::config::PackageToolsConfig;
+    use crate::types::{Changeset, Version, VersionBump};
+    use std::fs;
+    use std::path::Path;
+    use sublime_git_tools::Repo;
+    use sublime_standard_tools::filesystem::FileSystemManager;
+
+    /// Creates a test repository with multiple commits for version preview testing.
+    fn create_test_repo_with_commits_for_versions(
+        temp_dir: &Path,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Initialize git repo
+        let repo = Repo::create(temp_dir.to_str().unwrap())?;
+        repo.config("Test User", "test@example.com")?;
+
+        // Create package.json
+        let package_json = serde_json::json!({
+            "name": "@myorg/core",
+            "version": "1.2.3",
+        });
+        let package_json_path = temp_dir.join("package.json");
+        fs::write(&package_json_path, serde_json::to_string_pretty(&package_json)?)?;
+
+        // Create a source file
+        let src_dir = temp_dir.join("src");
+        fs::create_dir_all(&src_dir)?;
+        fs::write(src_dir.join("index.ts"), "export const version = '1.2.3';")?;
+
+        // Commit files
+        repo.add_all()?;
+        repo.commit("Initial commit")?;
+
+        // Make changes and commit
+        fs::write(src_dir.join("index.ts"), "export const version = '1.2.4';")?;
+        repo.add_all()?;
+        repo.commit("Update version")?;
+
+        Ok(())
+    }
+
+    /// Creates a monorepo with multiple packages for version preview testing.
+    fn create_monorepo_for_versions(temp_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        // Initialize git repo
+        let repo = Repo::create(temp_dir.to_str().unwrap())?;
+        repo.config("Test User", "test@example.com")?;
+
+        // Create root package.json with workspaces
+        let root_package_json = serde_json::json!({
+            "name": "monorepo-root",
+            "version": "1.0.0",
+            "private": true,
+            "workspaces": ["packages/*"],
+        });
+        fs::write(
+            temp_dir.join("package.json"),
+            serde_json::to_string_pretty(&root_package_json)?,
+        )?;
+
+        // Create pnpm-workspace.yaml for monorepo detection
+        let pnpm_workspace = "packages:\n  - 'packages/*'\n";
+        fs::write(temp_dir.join("pnpm-workspace.yaml"), pnpm_workspace)?;
+
+        // Create packages directory
+        let packages_dir = temp_dir.join("packages");
+        fs::create_dir_all(&packages_dir)?;
+
+        // Create @myorg/core package
+        let core_dir = packages_dir.join("core");
+        fs::create_dir_all(&core_dir)?;
+        let core_package_json = serde_json::json!({
+            "name": "@myorg/core",
+            "version": "2.0.0",
+        });
+        fs::write(
+            core_dir.join("package.json"),
+            serde_json::to_string_pretty(&core_package_json)?,
+        )?;
+        fs::write(core_dir.join("index.ts"), "export const core = true;")?;
+
+        // Create @myorg/utils package
+        let utils_dir = packages_dir.join("utils");
+        fs::create_dir_all(&utils_dir)?;
+        let utils_package_json = serde_json::json!({
+            "name": "@myorg/utils",
+            "version": "0.5.0",
+        });
+        fs::write(
+            utils_dir.join("package.json"),
+            serde_json::to_string_pretty(&utils_package_json)?,
+        )?;
+        fs::write(utils_dir.join("index.ts"), "export const utils = true;")?;
+
+        // Initial commit
+        repo.add_all()?;
+        repo.commit("Initial monorepo setup")?;
+
+        // Make changes to core
+        fs::write(core_dir.join("index.ts"), "export const core = true; // updated")?;
+        repo.add_all()?;
+        repo.commit("Update core package")?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_analyze_with_versions_patch_bump() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace_root = temp_dir.path().to_path_buf();
+
+        create_test_repo_with_commits_for_versions(&workspace_root).unwrap();
+
+        let git_repo = Repo::open(workspace_root.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer =
+            ChangesAnalyzer::new(workspace_root.clone(), git_repo, fs, config).await.unwrap();
+
+        // Create a changeset with patch bump
+        let mut changeset =
+            Changeset::new("feature-branch", VersionBump::Patch, vec!["production".to_string()]);
+        changeset.packages.push("@myorg/core".to_string());
+
+        // Analyze with versions
+        let report = analyzer.analyze_with_versions("HEAD~1", "HEAD", &changeset).await.unwrap();
+
+        // Find the package
+        let package = report.packages.iter().find(|p| p.package_name() == "@myorg/core").unwrap();
+
+        // Verify version calculation
+        assert_eq!(package.current_version.as_ref().unwrap().to_string(), "1.2.3");
+        assert_eq!(package.next_version.as_ref().unwrap().to_string(), "1.2.4");
+        assert_eq!(package.bump_type, Some(VersionBump::Patch));
+    }
+
+    #[tokio::test]
+    async fn test_analyze_with_versions_minor_bump() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace_root = temp_dir.path().to_path_buf();
+
+        create_test_repo_with_commits_for_versions(&workspace_root).unwrap();
+
+        let git_repo = Repo::open(workspace_root.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer =
+            ChangesAnalyzer::new(workspace_root.clone(), git_repo, fs, config).await.unwrap();
+
+        // Create a changeset with minor bump
+        let mut changeset =
+            Changeset::new("feature-branch", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.packages.push("@myorg/core".to_string());
+
+        // Analyze with versions
+        let report = analyzer.analyze_with_versions("HEAD~1", "HEAD", &changeset).await.unwrap();
+
+        // Find the package
+        let package = report.packages.iter().find(|p| p.package_name() == "@myorg/core").unwrap();
+
+        // Verify version calculation: 1.2.3 -> 1.3.0
+        assert_eq!(package.current_version.as_ref().unwrap().to_string(), "1.2.3");
+        assert_eq!(package.next_version.as_ref().unwrap().to_string(), "1.3.0");
+        assert_eq!(package.bump_type, Some(VersionBump::Minor));
+    }
+
+    #[tokio::test]
+    async fn test_analyze_with_versions_major_bump() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace_root = temp_dir.path().to_path_buf();
+
+        create_test_repo_with_commits_for_versions(&workspace_root).unwrap();
+
+        let git_repo = Repo::open(workspace_root.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer =
+            ChangesAnalyzer::new(workspace_root.clone(), git_repo, fs, config).await.unwrap();
+
+        // Create a changeset with major bump
+        let mut changeset =
+            Changeset::new("feature-branch", VersionBump::Major, vec!["production".to_string()]);
+        changeset.packages.push("@myorg/core".to_string());
+
+        // Analyze with versions
+        let report = analyzer.analyze_with_versions("HEAD~1", "HEAD", &changeset).await.unwrap();
+
+        // Find the package
+        let package = report.packages.iter().find(|p| p.package_name() == "@myorg/core").unwrap();
+
+        // Verify version calculation: 1.2.3 -> 2.0.0
+        assert_eq!(package.current_version.as_ref().unwrap().to_string(), "1.2.3");
+        assert_eq!(package.next_version.as_ref().unwrap().to_string(), "2.0.0");
+        assert_eq!(package.bump_type, Some(VersionBump::Major));
+    }
+
+    #[tokio::test]
+    async fn test_analyze_with_versions_no_bump() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace_root = temp_dir.path().to_path_buf();
+
+        create_test_repo_with_commits_for_versions(&workspace_root).unwrap();
+
+        let git_repo = Repo::open(workspace_root.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer =
+            ChangesAnalyzer::new(workspace_root.clone(), git_repo, fs, config).await.unwrap();
+
+        // Create a changeset with no bump
+        let mut changeset =
+            Changeset::new("feature-branch", VersionBump::None, vec!["production".to_string()]);
+        changeset.packages.push("@myorg/core".to_string());
+
+        // Analyze with versions
+        let report = analyzer.analyze_with_versions("HEAD~1", "HEAD", &changeset).await.unwrap();
+
+        // Find the package
+        let package = report.packages.iter().find(|p| p.package_name() == "@myorg/core").unwrap();
+
+        // Verify version stays the same: 1.2.3 -> 1.2.3
+        assert_eq!(package.current_version.as_ref().unwrap().to_string(), "1.2.3");
+        assert_eq!(package.next_version.as_ref().unwrap().to_string(), "1.2.3");
+        assert_eq!(package.bump_type, Some(VersionBump::None));
+    }
+
+    #[tokio::test]
+    async fn test_analyze_with_versions_monorepo() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace_root = temp_dir.path().to_path_buf();
+
+        create_monorepo_for_versions(&workspace_root).unwrap();
+
+        let git_repo = Repo::open(workspace_root.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer =
+            ChangesAnalyzer::new(workspace_root.clone(), git_repo, fs, config).await.unwrap();
+
+        // Create a changeset with minor bump for core package only
+        let mut changeset =
+            Changeset::new("feature-branch", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.packages.push("@myorg/core".to_string());
+
+        // Analyze with versions
+        let report = analyzer.analyze_with_versions("HEAD~1", "HEAD", &changeset).await.unwrap();
+
+        // Find the core package
+        let core_package =
+            report.packages.iter().find(|p| p.package_name() == "@myorg/core").unwrap();
+
+        // Verify core version calculation: 2.0.0 -> 2.1.0
+        assert_eq!(core_package.current_version.as_ref().unwrap().to_string(), "2.0.0");
+        assert_eq!(core_package.next_version.as_ref().unwrap().to_string(), "2.1.0");
+        assert_eq!(core_package.bump_type, Some(VersionBump::Minor));
+
+        // Find the utils package
+        let utils_package =
+            report.packages.iter().find(|p| p.package_name() == "@myorg/utils").unwrap();
+
+        // Utils package should not have next_version because it's not in changeset
+        assert_eq!(utils_package.current_version.as_ref().unwrap().to_string(), "0.5.0");
+        assert!(utils_package.next_version.is_none());
+        assert!(utils_package.bump_type.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_analyze_with_versions_multiple_packages() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace_root = temp_dir.path().to_path_buf();
+
+        create_monorepo_for_versions(&workspace_root).unwrap();
+
+        let git_repo = Repo::open(workspace_root.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer =
+            ChangesAnalyzer::new(workspace_root.clone(), git_repo, fs, config).await.unwrap();
+
+        // Create a changeset with patch bump for both packages
+        let mut changeset =
+            Changeset::new("feature-branch", VersionBump::Patch, vec!["production".to_string()]);
+        changeset.packages.push("@myorg/core".to_string());
+        changeset.packages.push("@myorg/utils".to_string());
+
+        // Analyze with versions
+        let report = analyzer.analyze_with_versions("HEAD~1", "HEAD", &changeset).await.unwrap();
+
+        // Verify core package
+        let core_package =
+            report.packages.iter().find(|p| p.package_name() == "@myorg/core").unwrap();
+        assert_eq!(core_package.next_version.as_ref().unwrap().to_string(), "2.0.1");
+        assert_eq!(core_package.bump_type, Some(VersionBump::Patch));
+
+        // Verify utils package
+        let utils_package =
+            report.packages.iter().find(|p| p.package_name() == "@myorg/utils").unwrap();
+        assert_eq!(utils_package.next_version.as_ref().unwrap().to_string(), "0.5.1");
+        assert_eq!(utils_package.bump_type, Some(VersionBump::Patch));
+    }
+
+    #[tokio::test]
+    async fn test_analyze_with_versions_prerelease_versions() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace_root = temp_dir.path().to_path_buf();
+
+        // Initialize git repo
+        let repo = Repo::create(workspace_root.to_str().unwrap()).unwrap();
+        repo.config("Test User", "test@example.com").unwrap();
+
+        // Create package.json with prerelease version
+        let package_json = serde_json::json!({
+            "name": "@myorg/core",
+            "version": "1.0.0-beta.1",
+        });
+        let package_json_path = workspace_root.join("package.json");
+        fs::write(&package_json_path, serde_json::to_string_pretty(&package_json).unwrap())
+            .unwrap();
+
+        let src_dir = workspace_root.join("src");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::write(src_dir.join("index.ts"), "export const v = 1;").unwrap();
+
+        repo.add_all().unwrap();
+        repo.commit("Initial commit").unwrap();
+
+        fs::write(src_dir.join("index.ts"), "export const v = 2;").unwrap();
+        repo.add_all().unwrap();
+        repo.commit("Update").unwrap();
+
+        let git_repo = Repo::open(workspace_root.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer =
+            ChangesAnalyzer::new(workspace_root.clone(), git_repo, fs, config).await.unwrap();
+
+        // Create a changeset with patch bump
+        let mut changeset =
+            Changeset::new("feature-branch", VersionBump::Patch, vec!["production".to_string()]);
+        changeset.packages.push("@myorg/core".to_string());
+
+        // Analyze with versions
+        let report = analyzer.analyze_with_versions("HEAD~1", "HEAD", &changeset).await.unwrap();
+
+        let package = report.packages.iter().find(|p| p.package_name() == "@myorg/core").unwrap();
+
+        // Prerelease should be removed and patch applied: 1.0.0-beta.1 -> 1.0.1
+        assert_eq!(package.current_version.as_ref().unwrap().to_string(), "1.0.0-beta.1");
+        assert_eq!(package.next_version.as_ref().unwrap().to_string(), "1.0.1");
+    }
+
+    #[tokio::test]
+    async fn test_analyze_with_versions_empty_changeset_packages() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace_root = temp_dir.path().to_path_buf();
+
+        create_test_repo_with_commits_for_versions(&workspace_root).unwrap();
+
+        let git_repo = Repo::open(workspace_root.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer =
+            ChangesAnalyzer::new(workspace_root.clone(), git_repo, fs, config).await.unwrap();
+
+        // Create a changeset with no packages
+        let changeset =
+            Changeset::new("feature-branch", VersionBump::Minor, vec!["production".to_string()]);
+
+        // Analyze with versions
+        let report = analyzer.analyze_with_versions("HEAD~1", "HEAD", &changeset).await.unwrap();
+
+        // Package should not have version info since it's not in changeset.packages
+        let package = report.packages.iter().find(|p| p.package_name() == "@myorg/core").unwrap();
+
+        assert!(package.current_version.is_some());
+        assert!(package.next_version.is_none());
+        assert!(package.bump_type.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_analyze_with_versions_consistency_with_version_resolver() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace_root = temp_dir.path().to_path_buf();
+
+        create_test_repo_with_commits_for_versions(&workspace_root).unwrap();
+
+        let git_repo = Repo::open(workspace_root.to_str().unwrap()).unwrap();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        let analyzer =
+            ChangesAnalyzer::new(workspace_root.clone(), git_repo, fs, config).await.unwrap();
+
+        // Test all bump types to ensure consistency
+        let test_cases = vec![
+            (VersionBump::Major, "2.0.0"),
+            (VersionBump::Minor, "1.3.0"),
+            (VersionBump::Patch, "1.2.4"),
+            (VersionBump::None, "1.2.3"),
+        ];
+
+        for (bump_type, expected_version) in test_cases {
+            let mut changeset =
+                Changeset::new("feature-branch", bump_type, vec!["production".to_string()]);
+            changeset.packages.push("@myorg/core".to_string());
+
+            let report =
+                analyzer.analyze_with_versions("HEAD~1", "HEAD", &changeset).await.unwrap();
+
+            let package =
+                report.packages.iter().find(|p| p.package_name() == "@myorg/core").unwrap();
+
+            assert_eq!(
+                package.next_version.as_ref().unwrap().to_string(),
+                expected_version,
+                "Failed for bump type {:?}",
+                bump_type
+            );
+
+            // Verify it matches the direct Version::bump call
+            let current = Version::parse("1.2.3").unwrap();
+            let expected = current.bump(bump_type).unwrap();
+            assert_eq!(
+                package.next_version.as_ref().unwrap(),
+                &expected,
+                "Version calculation inconsistent with Version::bump for {:?}",
+                bump_type
+            );
+        }
+    }
+}
