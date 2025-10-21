@@ -40,6 +40,7 @@
 //! # }
 //! ```
 
+use crate::changelog::version_detection::{find_previous_version, parse_version_tag, VersionTag};
 use crate::config::ChangelogConfig;
 use crate::error::{ChangelogError, ChangelogResult};
 use std::path::PathBuf;
@@ -471,9 +472,247 @@ impl ChangelogGenerator {
             return Ok(Some(url.clone()));
         }
 
-        // TODO: will be implemented in story 8.3
+        // TODO: will be implemented in future story
         // Attempt to detect from git remote
         // This would call git_repo methods to get remote URLs
         Ok(None)
+    }
+
+    /// Detects the previous version tag for a package from Git tags.
+    ///
+    /// This method searches through Git tags to find the most recent version
+    /// that is less than the current version. It supports both monorepo
+    /// (per-package tags) and single-package (root tags) scenarios based on
+    /// the configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Optional package name for monorepo scenarios
+    /// * `current_version` - The current version to find the previous version for
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(Some(VersionTag))` if a previous version is found,
+    /// `Ok(None)` if this is the first version (no previous tags),
+    /// or an error if Git operations fail or the version is invalid.
+    ///
+    /// # Errors
+    ///
+    /// This method returns an error if:
+    /// - Git tag retrieval fails
+    /// - The current version string is invalid
+    /// - Git repository operations fail
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// # use sublime_pkg_tools::changelog::ChangelogGenerator;
+    /// # use sublime_pkg_tools::config::PackageToolsConfig;
+    /// # use sublime_git_tools::Repo;
+    /// # use sublime_standard_tools::filesystem::FileSystemManager;
+    /// # use std::path::PathBuf;
+    /// #
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let workspace_root = PathBuf::from(".");
+    /// # let git_repo = Repo::open(".")?;
+    /// # let fs = FileSystemManager::new();
+    /// # let config = PackageToolsConfig::default();
+    /// #
+    /// let generator = ChangelogGenerator::new(
+    ///     workspace_root,
+    ///     git_repo,
+    ///     fs,
+    ///     config.changelog,
+    /// ).await?;
+    ///
+    /// // Detect previous version for a package
+    /// let previous = generator.detect_previous_version(Some("mypackage"), "2.0.0").await?;
+    /// if let Some(tag) = previous {
+    ///     println!("Previous version: {}", tag.version());
+    ///     println!("Previous tag: {}", tag.tag_name());
+    /// } else {
+    ///     println!("This is the first release");
+    /// }
+    ///
+    /// // Detect previous version for root package
+    /// let previous = generator.detect_previous_version(None, "1.5.0").await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn detect_previous_version(
+        &self,
+        package_name: Option<&str>,
+        current_version: &str,
+    ) -> ChangelogResult<Option<VersionTag>> {
+        // Get all tags from Git repository
+        let git_tags = self.git_repo.get_remote_or_local_tags(Some(true)).map_err(|e| {
+            ChangelogError::GitError {
+                operation: "get tags".to_string(),
+                reason: e.as_ref().to_string(),
+            }
+        })?;
+
+        // Extract tag names
+        let tag_names: Vec<String> = git_tags.iter().map(|t| t.tag.clone()).collect();
+
+        // Determine which format to use based on package_name
+        let format = if package_name.is_some() {
+            &self.config.version_tag_format
+        } else {
+            &self.config.root_tag_format
+        };
+
+        // Find previous version
+        find_previous_version(&tag_names, current_version, package_name, format)
+    }
+
+    /// Parses a Git tag string into a version tag structure.
+    ///
+    /// This method attempts to parse a tag according to the configured format
+    /// (either monorepo or root format). It's useful for validating or extracting
+    /// version information from tag strings.
+    ///
+    /// # Arguments
+    ///
+    /// * `tag` - The Git tag string to parse
+    /// * `package_name` - Optional package name for monorepo tags
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(Some(VersionTag))` if the tag matches the expected format,
+    /// `Ok(None)` if the tag doesn't match the format,
+    /// or an error if the operation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// # use sublime_pkg_tools::changelog::ChangelogGenerator;
+    /// # use sublime_pkg_tools::config::PackageToolsConfig;
+    /// # use sublime_git_tools::Repo;
+    /// # use sublime_standard_tools::filesystem::FileSystemManager;
+    /// # use std::path::PathBuf;
+    /// #
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let workspace_root = PathBuf::from(".");
+    /// # let git_repo = Repo::open(".")?;
+    /// # let fs = FileSystemManager::new();
+    /// # let config = PackageToolsConfig::default();
+    /// #
+    /// let generator = ChangelogGenerator::new(
+    ///     workspace_root,
+    ///     git_repo,
+    ///     fs,
+    ///     config.changelog,
+    /// ).await?;
+    ///
+    /// // Parse monorepo tag
+    /// let tag = generator.parse_version_tag("mypackage@1.0.0", Some("mypackage"))?;
+    /// if let Some(version_tag) = tag {
+    ///     println!("Version: {}", version_tag.version());
+    /// }
+    ///
+    /// // Parse root tag
+    /// let tag = generator.parse_version_tag("v1.0.0", None)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn parse_version_tag(
+        &self,
+        tag: &str,
+        package_name: Option<&str>,
+    ) -> ChangelogResult<Option<VersionTag>> {
+        // Determine which format to use
+        let format = if package_name.is_some() {
+            &self.config.version_tag_format
+        } else {
+            &self.config.root_tag_format
+        };
+
+        Ok(parse_version_tag(tag, package_name, format))
+    }
+
+    /// Gets all version tags from the Git repository.
+    ///
+    /// This method retrieves all tags from Git and filters them to only
+    /// include valid version tags according to the configured format.
+    /// Optionally filters by package name for monorepo scenarios.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Optional package name to filter monorepo tags
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of `VersionTag` instances, sorted by version (newest first).
+    ///
+    /// # Errors
+    ///
+    /// This method returns an error if Git operations fail.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// # use sublime_pkg_tools::changelog::ChangelogGenerator;
+    /// # use sublime_pkg_tools::config::PackageToolsConfig;
+    /// # use sublime_git_tools::Repo;
+    /// # use sublime_standard_tools::filesystem::FileSystemManager;
+    /// # use std::path::PathBuf;
+    /// #
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let workspace_root = PathBuf::from(".");
+    /// # let git_repo = Repo::open(".")?;
+    /// # let fs = FileSystemManager::new();
+    /// # let config = PackageToolsConfig::default();
+    /// #
+    /// let generator = ChangelogGenerator::new(
+    ///     workspace_root,
+    ///     git_repo,
+    ///     fs,
+    ///     config.changelog,
+    /// ).await?;
+    ///
+    /// // Get all version tags for a package
+    /// let tags = generator.get_version_tags(Some("mypackage")).await?;
+    /// for tag in tags {
+    ///     println!("Tag: {} -> Version: {}", tag.tag_name(), tag.version());
+    /// }
+    ///
+    /// // Get all root version tags
+    /// let tags = generator.get_version_tags(None).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn get_version_tags(
+        &self,
+        package_name: Option<&str>,
+    ) -> ChangelogResult<Vec<VersionTag>> {
+        // Get all tags from Git repository
+        let git_tags = self.git_repo.get_remote_or_local_tags(Some(true)).map_err(|e| {
+            ChangelogError::GitError {
+                operation: "get tags".to_string(),
+                reason: e.as_ref().to_string(),
+            }
+        })?;
+
+        // Extract tag names
+        let tag_names: Vec<String> = git_tags.iter().map(|t| t.tag.clone()).collect();
+
+        // Determine which format to use
+        let format = if package_name.is_some() {
+            &self.config.version_tag_format
+        } else {
+            &self.config.root_tag_format
+        };
+
+        // Parse and filter tags
+        let mut version_tags: Vec<VersionTag> = tag_names
+            .iter()
+            .filter_map(|tag| parse_version_tag(tag, package_name, format))
+            .collect();
+
+        // Sort by version (newest first)
+        version_tags.sort_by(|a, b| b.cmp(a));
+
+        Ok(version_tags)
     }
 }

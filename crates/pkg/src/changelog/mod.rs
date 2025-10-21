@@ -79,12 +79,15 @@
 
 #![allow(clippy::todo)]
 
-// Public modules
-pub mod conventional;
-pub mod generator;
+// Internal modules
+mod conventional;
+mod generator;
+mod version_detection;
 
-// Re-exports
+// Public re-exports
+pub use conventional::{CommitFooter, ConventionalCommit, SectionType};
 pub use generator::ChangelogGenerator;
+pub use version_detection::VersionTag;
 
 // Internal modules
 #[cfg(test)]
