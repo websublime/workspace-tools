@@ -34,15 +34,19 @@
 //!     config.changelog
 //! ).await?;
 //!
-//! // TODO: will be implemented in story 8.4
-//! // let changelog = generator.generate_for_version("my-package", "2.0.0").await?;
+//! // Generate changelog for a specific version
+//! let changelog = generator.generate_for_version(Some("my-package"), "2.0.0", Some("1.0.0"), None).await?;
+//! println!("{}", changelog.to_markdown(&config.changelog));
 //! # Ok(())
 //! # }
 //! ```
 
 use crate::changelog::version_detection::{find_previous_version, parse_version_tag, VersionTag};
+use crate::changelog::{Changelog, ChangelogCollector, ChangelogMetadata};
 use crate::config::ChangelogConfig;
 use crate::error::{ChangelogError, ChangelogResult};
+use crate::types::VersionBump;
+use chrono::Utc;
 use std::path::PathBuf;
 use sublime_git_tools::Repo;
 use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
@@ -714,5 +718,257 @@ impl ChangelogGenerator {
         version_tags.sort_by(|a, b| b.cmp(a));
 
         Ok(version_tags)
+    }
+
+    /// Generates a changelog for a specific version.
+    ///
+    /// This method collects commits between the previous version and the current version,
+    /// parses them into changelog entries, groups them by section type, and creates
+    /// a complete `Changelog` structure.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Optional package name for monorepo scenarios
+    /// * `version` - The version to generate the changelog for
+    /// * `previous_version` - Optional previous version (auto-detected if None)
+    /// * `relative_path` - Optional path filter for monorepo packages
+    ///
+    /// # Returns
+    ///
+    /// A `Changelog` instance containing all changes for the specified version.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Git operations fail
+    /// - Version detection fails
+    /// - Commit retrieval fails
+    /// - No commits are found between versions
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::changelog::ChangelogGenerator;
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use sublime_git_tools::Repo;
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let workspace_root = PathBuf::from(".");
+    /// let git_repo = Repo::open(".")?;
+    /// let fs = FileSystemManager::new();
+    /// let config = PackageToolsConfig::default();
+    ///
+    /// let generator = ChangelogGenerator::new(
+    ///     workspace_root,
+    ///     git_repo,
+    ///     fs,
+    ///     config.changelog,
+    /// ).await?;
+    ///
+    /// // Generate for specific package with auto-detected previous version
+    /// let changelog = generator.generate_for_version(
+    ///     Some("my-package"),
+    ///     "2.0.0",
+    ///     None,
+    ///     Some("packages/my-package")
+    /// ).await?;
+    ///
+    /// // Generate for root with explicit previous version
+    /// let changelog = generator.generate_for_version(
+    ///     None,
+    ///     "1.5.0",
+    ///     Some("1.4.0"),
+    ///     None
+    /// ).await?;
+    ///
+    /// println!("Generated changelog with {} entries", changelog.entry_count());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn generate_for_version(
+        &self,
+        package_name: Option<&str>,
+        version: &str,
+        previous_version: Option<&str>,
+        relative_path: Option<&str>,
+    ) -> ChangelogResult<Changelog> {
+        // Determine previous version if not provided
+        let prev_version = if let Some(prev) = previous_version {
+            Some(prev.to_string())
+        } else {
+            self.detect_previous_version(package_name, version)
+                .await?
+                .map(|tag| tag.version().to_string())
+        };
+
+        // Determine Git references
+        let (from_ref, to_ref) =
+            self.build_git_refs(package_name, prev_version.as_deref(), version)?;
+
+        // Collect commits using the collector
+        let collector = ChangelogCollector::new(&self.git_repo, &self.config);
+        let sections =
+            collector.collect_between_versions(&from_ref, &to_ref, relative_path).await?;
+
+        // Build changelog metadata
+        let metadata = self.build_metadata(
+            package_name,
+            version,
+            prev_version.as_deref(),
+            &from_ref,
+            &to_ref,
+            &sections,
+        )?;
+
+        // Create changelog
+        let mut changelog =
+            Changelog::new(package_name, version, prev_version.as_deref(), Utc::now());
+
+        // Add sections
+        for section in sections {
+            changelog.add_section(section);
+        }
+
+        changelog.metadata = metadata;
+
+        Ok(changelog)
+    }
+
+    /// Builds Git references for changelog generation.
+    ///
+    /// Creates the from and to references based on the configured tag format.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Optional package name
+    /// * `previous_version` - Optional previous version
+    /// * `current_version` - Current version
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (from_ref, to_ref) strings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no previous version is available.
+    fn build_git_refs(
+        &self,
+        package_name: Option<&str>,
+        previous_version: Option<&str>,
+        current_version: &str,
+    ) -> ChangelogResult<(String, String)> {
+        let format = if package_name.is_some() {
+            &self.config.version_tag_format
+        } else {
+            &self.config.root_tag_format
+        };
+
+        // Build to_ref (current version tag)
+        let to_ref = if let Some(pkg_name) = package_name {
+            format.replace("{name}", pkg_name).replace("{version}", current_version)
+        } else {
+            format.replace("{version}", current_version)
+        };
+
+        // Build from_ref (previous version tag or HEAD)
+        let from_ref = if let Some(prev_version) = previous_version {
+            if let Some(pkg_name) = package_name {
+                format.replace("{name}", pkg_name).replace("{version}", prev_version)
+            } else {
+                format.replace("{version}", prev_version)
+            }
+        } else {
+            // No previous version - use first commit
+            return Err(ChangelogError::VersionNotFound {
+                reason: "No previous version found for changelog generation".to_string(),
+            });
+        };
+
+        Ok((from_ref, to_ref))
+    }
+
+    /// Builds changelog metadata from collected data.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Optional package name
+    /// * `version` - Current version
+    /// * `previous_version` - Optional previous version
+    /// * `from_ref` - Starting Git reference
+    /// * `to_ref` - Ending Git reference
+    /// * `sections` - Collected changelog sections
+    ///
+    /// # Returns
+    ///
+    /// A `ChangelogMetadata` instance.
+    fn build_metadata(
+        &self,
+        _package_name: Option<&str>,
+        _version: &str,
+        previous_version: Option<&str>,
+        from_ref: &str,
+        to_ref: &str,
+        sections: &[crate::changelog::ChangelogSection],
+    ) -> ChangelogResult<ChangelogMetadata> {
+        // Calculate total commits
+        let total_commits: usize = sections.iter().map(|s| s.entries.len()).sum();
+
+        // Build commit range
+        let commit_range = if previous_version.is_some() {
+            Some(format!("{}..{}", from_ref, to_ref))
+        } else {
+            None
+        };
+
+        // Determine bump type based on sections
+        let bump_type = self.infer_bump_type(sections);
+
+        // Get repository URL
+        let repository_url = self.get_repository_url()?;
+
+        Ok(ChangelogMetadata {
+            tag: Some(to_ref.to_string()),
+            commit_range,
+            total_commits,
+            repository_url,
+            bump_type: Some(bump_type),
+        })
+    }
+
+    /// Infers the version bump type from changelog sections.
+    ///
+    /// # Arguments
+    ///
+    /// * `sections` - Changelog sections
+    ///
+    /// # Returns
+    ///
+    /// The inferred `VersionBump`.
+    fn infer_bump_type(&self, sections: &[crate::changelog::ChangelogSection]) -> VersionBump {
+        use crate::changelog::SectionType;
+
+        // Breaking changes = major bump
+        for section in sections {
+            if section.section_type == SectionType::Breaking && !section.is_empty() {
+                return VersionBump::Major;
+            }
+        }
+
+        // Features = minor bump
+        for section in sections {
+            if section.section_type == SectionType::Features && !section.is_empty() {
+                return VersionBump::Minor;
+            }
+        }
+
+        // Any other changes = patch bump
+        if sections.iter().any(|s| !s.is_empty()) {
+            return VersionBump::Patch;
+        }
+
+        // No changes
+        VersionBump::None
     }
 }

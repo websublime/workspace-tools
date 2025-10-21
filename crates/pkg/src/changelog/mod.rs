@@ -80,13 +80,17 @@
 #![allow(clippy::todo)]
 
 // Internal modules
+mod collector;
 mod conventional;
 mod generator;
+mod types;
 mod version_detection;
 
 // Public re-exports
+pub use collector::ChangelogCollector;
 pub use conventional::{CommitFooter, ConventionalCommit, SectionType};
 pub use generator::ChangelogGenerator;
+pub use types::{Changelog, ChangelogEntry, ChangelogMetadata, ChangelogSection};
 pub use version_detection::VersionTag;
 
 // Internal modules

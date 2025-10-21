@@ -1686,3 +1686,755 @@ async fn test_get_version_tags_with_prerelease() {
     // All should be valid versions
     assert!(tags.iter().all(|t| t.version().to_string().contains('.')));
 }
+
+// ============================================================================
+// Story 8.4: Changelog Data Collection Tests
+// ============================================================================
+
+mod data_collection_tests {
+    use super::*;
+    use crate::changelog::SectionType;
+
+    #[tokio::test]
+    async fn test_generate_for_version_basic() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create version tags and commits
+        repo.create_tag("v1.0.0", Some("Initial release".to_string())).unwrap();
+        repo.commit_changes("feat: add new feature").unwrap();
+        repo.commit_changes("fix: fix a bug").unwrap();
+        repo.create_tag("v1.1.0", Some("Minor release".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let config = ChangelogConfig::default();
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+        let changelog =
+            generator.generate_for_version(None, "1.1.0", Some("1.0.0"), None).await.unwrap();
+
+        assert_eq!(changelog.version, "1.1.0");
+        assert_eq!(changelog.previous_version, Some("1.0.0".to_string()));
+        assert!(!changelog.is_empty());
+        assert!(changelog.entry_count() >= 2);
+    }
+
+    #[tokio::test]
+    async fn test_generate_for_version_with_conventional_commits() {
+        let (temp_dir, repo) = create_test_repo();
+
+        repo.create_tag("v1.0.0", Some("Initial".to_string())).unwrap();
+        repo.commit_changes("feat(core): add authentication").unwrap();
+        repo.commit_changes("fix(api): correct validation").unwrap();
+        repo.commit_changes("docs: update README").unwrap();
+        repo.create_tag("v1.1.0", Some("Release".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let config = ChangelogConfig::default();
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+        let changelog =
+            generator.generate_for_version(None, "1.1.0", Some("1.0.0"), None).await.unwrap();
+
+        assert_eq!(changelog.entry_count(), 3);
+
+        // Check that sections were created
+        assert!(!changelog.sections.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_generate_for_version_with_breaking_changes() {
+        let (temp_dir, repo) = create_test_repo();
+
+        repo.create_tag("v1.0.0", Some("Initial".to_string())).unwrap();
+        repo.commit_changes("feat!: breaking API change").unwrap();
+        repo.commit_changes("fix: small fix").unwrap();
+        repo.create_tag("v2.0.0", Some("Major".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let config = ChangelogConfig::default();
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+        let changelog =
+            generator.generate_for_version(None, "2.0.0", Some("1.0.0"), None).await.unwrap();
+
+        assert!(changelog.has_breaking_changes());
+        let breaking = changelog.breaking_changes();
+        assert!(!breaking.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_generate_for_version_auto_detect_previous() {
+        let (temp_dir, repo) = create_test_repo();
+
+        repo.create_tag("v1.0.0", Some("Initial".to_string())).unwrap();
+        repo.commit_changes("feat: new feature").unwrap();
+        repo.create_tag("v1.1.0", Some("Minor".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let config = ChangelogConfig::default();
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+        // Auto-detect previous version
+        let changelog = generator.generate_for_version(None, "1.1.0", None, None).await.unwrap();
+
+        assert_eq!(changelog.version, "1.1.0");
+        assert_eq!(changelog.previous_version, Some("1.0.0".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_changelog_metadata_population() {
+        let (temp_dir, repo) = create_test_repo();
+
+        repo.create_tag("v1.0.0", Some("Initial".to_string())).unwrap();
+        repo.commit_changes("feat: add feature").unwrap();
+        repo.commit_changes("fix: fix bug").unwrap();
+        repo.create_tag("v1.1.0", Some("Release".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let config = ChangelogConfig::default();
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+        let changelog =
+            generator.generate_for_version(None, "1.1.0", Some("1.0.0"), None).await.unwrap();
+
+        // Check metadata
+        assert!(changelog.metadata.tag.is_some());
+        assert!(changelog.metadata.commit_range.is_some());
+        assert!(changelog.metadata.total_commits >= 2);
+        assert!(changelog.metadata.bump_type.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_changelog_to_markdown() {
+        let (temp_dir, repo) = create_test_repo();
+
+        repo.create_tag("v1.0.0", Some("Initial".to_string())).unwrap();
+        repo.commit_changes("feat: add feature").unwrap();
+        repo.create_tag("v1.1.0", Some("Release".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let config = ChangelogConfig::default();
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config.clone())
+                .await
+                .unwrap();
+
+        let changelog =
+            generator.generate_for_version(None, "1.1.0", Some("1.0.0"), None).await.unwrap();
+
+        let markdown = changelog.to_markdown(&config);
+
+        assert!(markdown.contains("## [1.1.0]"));
+        assert!(!markdown.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_collector_filters_excluded_patterns() {
+        let (temp_dir, repo) = create_test_repo();
+
+        repo.create_tag("v1.0.0", Some("Initial".to_string())).unwrap();
+        repo.commit_changes("feat: add feature").unwrap();
+        repo.commit_changes("chore: update deps").unwrap();
+        repo.commit_changes("Merge branch 'main'").unwrap();
+        repo.create_tag("v1.1.0", Some("Release".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let mut config = ChangelogConfig::default();
+        config.exclude.patterns = vec!["^chore:".to_string(), "^Merge".to_string()];
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+        let changelog =
+            generator.generate_for_version(None, "1.1.0", Some("1.0.0"), None).await.unwrap();
+
+        // Should only include the feat commit
+        assert_eq!(changelog.entry_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_collector_groups_by_section() {
+        let (temp_dir, repo) = create_test_repo();
+
+        repo.create_tag("v1.0.0", Some("Initial".to_string())).unwrap();
+        repo.commit_changes("feat: feature 1").unwrap();
+        repo.commit_changes("feat: feature 2").unwrap();
+        repo.commit_changes("fix: fix 1").unwrap();
+        repo.commit_changes("docs: update docs").unwrap();
+        repo.create_tag("v1.1.0", Some("Release".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let config = ChangelogConfig::default();
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+        let changelog =
+            generator.generate_for_version(None, "1.1.0", Some("1.0.0"), None).await.unwrap();
+
+        // Should have multiple sections
+        assert!(changelog.sections.len() > 1);
+
+        // Check section types are present
+        let has_features =
+            changelog.sections.iter().any(|s| s.section_type == SectionType::Features);
+        let has_fixes = changelog.sections.iter().any(|s| s.section_type == SectionType::Fixes);
+        assert!(has_features);
+        assert!(has_fixes);
+    }
+
+    #[tokio::test]
+    async fn test_collector_extracts_references() {
+        let (temp_dir, repo) = create_test_repo();
+
+        repo.create_tag("v1.0.0", Some("Initial".to_string())).unwrap();
+        repo.commit_changes("feat: add feature\n\nCloses #123\nFixes #456").unwrap();
+        repo.create_tag("v1.1.0", Some("Release".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let config = ChangelogConfig::default();
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+        let changelog =
+            generator.generate_for_version(None, "1.1.0", Some("1.0.0"), None).await.unwrap();
+
+        // Check that references were extracted
+        let has_refs =
+            changelog.sections.iter().flat_map(|s| &s.entries).any(|e| !e.references.is_empty());
+
+        assert!(has_refs);
+    }
+
+    #[tokio::test]
+    async fn test_collector_sorts_entries_by_date() {
+        let (temp_dir, repo) = create_test_repo();
+
+        repo.create_tag("v1.0.0", Some("Initial".to_string())).unwrap();
+        repo.commit_changes("feat: oldest").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        repo.commit_changes("feat: middle").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        repo.commit_changes("feat: newest").unwrap();
+        repo.create_tag("v1.1.0", Some("Release".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let config = ChangelogConfig::default();
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+        let changelog =
+            generator.generate_for_version(None, "1.1.0", Some("1.0.0"), None).await.unwrap();
+
+        // Find Features section
+        let features_section =
+            changelog.sections.iter().find(|s| s.section_type == SectionType::Features);
+
+        assert!(features_section.is_some());
+        let section = features_section.unwrap();
+
+        // Entries should be sorted newest first
+        if section.entries.len() >= 2 {
+            assert!(section.entries[0].date >= section.entries[1].date);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_collector_handles_plain_commits() {
+        let (temp_dir, repo) = create_test_repo();
+
+        repo.create_tag("v1.0.0", Some("Initial".to_string())).unwrap();
+        repo.commit_changes("Add some feature").unwrap();
+        repo.commit_changes("Fix some bug").unwrap();
+        repo.create_tag("v1.1.0", Some("Release".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let mut config = ChangelogConfig::default();
+        config.conventional.enabled = false;
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+        let changelog =
+            generator.generate_for_version(None, "1.1.0", Some("1.0.0"), None).await.unwrap();
+
+        // Should still collect commits even without conventional format
+        assert!(changelog.entry_count() >= 2);
+    }
+
+    #[tokio::test]
+    async fn test_infer_bump_type_major() {
+        let (temp_dir, repo) = create_test_repo();
+
+        repo.create_tag("v1.0.0", Some("Initial".to_string())).unwrap();
+        repo.commit_changes("feat!: breaking change").unwrap();
+        repo.create_tag("v2.0.0", Some("Major".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let config = ChangelogConfig::default();
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+        let changelog =
+            generator.generate_for_version(None, "2.0.0", Some("1.0.0"), None).await.unwrap();
+
+        assert_eq!(changelog.metadata.bump_type, Some(crate::types::VersionBump::Major));
+    }
+
+    #[tokio::test]
+    async fn test_infer_bump_type_minor() {
+        let (temp_dir, repo) = create_test_repo();
+
+        repo.create_tag("v1.0.0", Some("Initial".to_string())).unwrap();
+        repo.commit_changes("feat: add feature").unwrap();
+        repo.create_tag("v1.1.0", Some("Minor".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let config = ChangelogConfig::default();
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+        let changelog =
+            generator.generate_for_version(None, "1.1.0", Some("1.0.0"), None).await.unwrap();
+
+        assert_eq!(changelog.metadata.bump_type, Some(crate::types::VersionBump::Minor));
+    }
+
+    #[tokio::test]
+    async fn test_infer_bump_type_patch() {
+        let (temp_dir, repo) = create_test_repo();
+
+        repo.create_tag("v1.0.0", Some("Initial".to_string())).unwrap();
+        repo.commit_changes("fix: fix bug").unwrap();
+        repo.create_tag("v1.0.1", Some("Patch".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let config = ChangelogConfig::default();
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+        let changelog =
+            generator.generate_for_version(None, "1.0.1", Some("1.0.0"), None).await.unwrap();
+
+        assert_eq!(changelog.metadata.bump_type, Some(crate::types::VersionBump::Patch));
+    }
+
+    #[tokio::test]
+    async fn test_changelog_entry_metadata() {
+        let (temp_dir, repo) = create_test_repo();
+
+        repo.create_tag("v1.0.0", Some("Initial".to_string())).unwrap();
+        repo.commit_changes("feat(core): add authentication\n\nFixes #123").unwrap();
+        repo.create_tag("v1.1.0", Some("Release".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let config = ChangelogConfig::default();
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+        let changelog =
+            generator.generate_for_version(None, "1.1.0", Some("1.0.0"), None).await.unwrap();
+
+        let entry = &changelog.sections[0].entries[0];
+
+        // Check all metadata is present
+        assert!(!entry.commit_hash.is_empty());
+        assert!(!entry.short_hash.is_empty());
+        assert!(!entry.author.is_empty());
+        assert!(entry.commit_type.is_some());
+        assert_eq!(entry.scope, Some("core".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_section_priority_ordering() {
+        let (temp_dir, repo) = create_test_repo();
+
+        repo.create_tag("v1.0.0", Some("Initial".to_string())).unwrap();
+        repo.commit_changes("fix: fix bug").unwrap();
+        repo.commit_changes("feat!: breaking change").unwrap();
+        repo.commit_changes("feat: add feature").unwrap();
+        repo.create_tag("v2.0.0", Some("Major".to_string())).unwrap();
+
+        let fs = FileSystemManager::new();
+        let config = ChangelogConfig::default();
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+        let changelog =
+            generator.generate_for_version(None, "2.0.0", Some("1.0.0"), None).await.unwrap();
+
+        // Breaking changes should be first
+        if !changelog.sections.is_empty() {
+            let first_non_empty = changelog.sections.iter().find(|s| !s.is_empty());
+            if let Some(section) = first_non_empty {
+                assert_eq!(section.section_type, SectionType::Breaking);
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Collector Unit Tests
+// ============================================================================
+
+mod collector_unit_tests {
+    use super::*;
+    use crate::changelog::{ChangelogCollector, ChangelogEntry, SectionType};
+    use chrono::Utc;
+    use sublime_git_tools::RepoCommit;
+
+    fn create_test_commit(hash: &str, message: &str, author: &str, date: &str) -> RepoCommit {
+        RepoCommit {
+            hash: hash.to_string(),
+            author_name: author.to_string(),
+            author_email: format!("{}@example.com", author),
+            author_date: date.to_string(),
+            message: message.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_extract_first_line() {
+        let (temp_dir, repo) = create_test_repo();
+        let config = ChangelogConfig::default();
+        let collector = ChangelogCollector::new(&repo, &config);
+
+        let message = "First line\n\nSecond line\nThird line";
+        let first = collector.extract_first_line(message);
+        assert_eq!(first, "First line");
+
+        drop(temp_dir);
+    }
+
+    #[test]
+    fn test_extract_references_from_text() {
+        let (temp_dir, repo) = create_test_repo();
+        let config = ChangelogConfig::default();
+        let collector = ChangelogCollector::new(&repo, &config);
+
+        let text = "Fix bug #123 and closes #456";
+        let refs = collector.extract_references_from_text(text);
+        assert_eq!(refs, vec!["#123", "#456"]);
+
+        let text2 = "Resolves #789";
+        let refs2 = collector.extract_references_from_text(text2);
+        assert_eq!(refs2, vec!["#789"]);
+
+        drop(temp_dir);
+    }
+
+    #[test]
+    fn test_parse_commit_conventional() {
+        let (temp_dir, repo) = create_test_repo();
+        let config = ChangelogConfig::default();
+        let collector = ChangelogCollector::new(&repo, &config);
+
+        let commit =
+            create_test_commit("abc123", "feat(core): add new feature", "John Doe", "2024-01-01");
+
+        let entry = collector.parse_commit(&commit);
+        assert_eq!(entry.description, "add new feature");
+        assert_eq!(entry.commit_type, Some("feat".to_string()));
+        assert_eq!(entry.scope, Some("core".to_string()));
+        assert!(!entry.breaking);
+
+        drop(temp_dir);
+    }
+
+    #[test]
+    fn test_parse_commit_plain() {
+        let (temp_dir, repo) = create_test_repo();
+        let mut config = ChangelogConfig::default();
+        config.conventional.enabled = false;
+        let collector = ChangelogCollector::new(&repo, &config);
+
+        let commit = create_test_commit("def456", "Fix a bug", "Jane Smith", "2024-01-02");
+
+        let entry = collector.parse_commit(&commit);
+        assert_eq!(entry.description, "Fix a bug");
+        assert!(entry.commit_type.is_none());
+        assert!(!entry.breaking);
+
+        drop(temp_dir);
+    }
+
+    #[test]
+    fn test_determine_section_type() {
+        let (temp_dir, repo) = create_test_repo();
+        let config = ChangelogConfig::default();
+        let collector = ChangelogCollector::new(&repo, &config);
+
+        let feat_entry = ChangelogEntry {
+            description: "test".to_string(),
+            commit_hash: "abc".to_string(),
+            short_hash: "abc".to_string(),
+            commit_type: Some("feat".to_string()),
+            scope: None,
+            breaking: false,
+            author: "test".to_string(),
+            references: vec![],
+            date: Utc::now(),
+        };
+
+        assert_eq!(collector.determine_section_type(&feat_entry), SectionType::Features);
+
+        let breaking_entry = ChangelogEntry {
+            description: "test".to_string(),
+            commit_hash: "def".to_string(),
+            short_hash: "def".to_string(),
+            commit_type: Some("feat".to_string()),
+            scope: None,
+            breaking: true,
+            author: "test".to_string(),
+            references: vec![],
+            date: Utc::now(),
+        };
+
+        assert_eq!(collector.determine_section_type(&breaking_entry), SectionType::Breaking);
+
+        drop(temp_dir);
+    }
+
+    #[test]
+    fn test_should_include_commit() {
+        let (temp_dir, repo) = create_test_repo();
+        let mut config = ChangelogConfig::default();
+        config.exclude.patterns = vec!["^chore:".to_string(), "^Merge".to_string()];
+        config.exclude.authors = vec!["bot".to_string()];
+
+        let collector = ChangelogCollector::new(&repo, &config);
+
+        let normal_commit = create_test_commit("abc", "feat: new feature", "John", "2024-01-01");
+        assert!(collector.should_include_commit(&normal_commit));
+
+        let chore_commit = create_test_commit("def", "chore: update deps", "John", "2024-01-01");
+        assert!(!collector.should_include_commit(&chore_commit));
+
+        let bot_commit = create_test_commit("ghi", "feat: automated", "bot", "2024-01-01");
+        assert!(!collector.should_include_commit(&bot_commit));
+
+        drop(temp_dir);
+    }
+
+    #[test]
+    fn test_group_entries_by_section() {
+        let (temp_dir, repo) = create_test_repo();
+        let config = ChangelogConfig::default();
+        let collector = ChangelogCollector::new(&repo, &config);
+
+        let entries = vec![
+            ChangelogEntry {
+                description: "feature 1".to_string(),
+                commit_hash: "abc".to_string(),
+                short_hash: "abc".to_string(),
+                commit_type: Some("feat".to_string()),
+                scope: None,
+                breaking: false,
+                author: "test".to_string(),
+                references: vec![],
+                date: Utc::now(),
+            },
+            ChangelogEntry {
+                description: "fix 1".to_string(),
+                commit_hash: "def".to_string(),
+                short_hash: "def".to_string(),
+                commit_type: Some("fix".to_string()),
+                scope: None,
+                breaking: false,
+                author: "test".to_string(),
+                references: vec![],
+                date: Utc::now(),
+            },
+            ChangelogEntry {
+                description: "breaking".to_string(),
+                commit_hash: "ghi".to_string(),
+                short_hash: "ghi".to_string(),
+                commit_type: Some("feat".to_string()),
+                scope: None,
+                breaking: true,
+                author: "test".to_string(),
+                references: vec![],
+                date: Utc::now(),
+            },
+        ];
+
+        let sections = collector.group_entries_by_section(entries);
+
+        // Should have 3 sections: Breaking, Features, Fixes
+        assert_eq!(sections.len(), 3);
+
+        // Breaking should be first (highest priority)
+        assert_eq!(sections[0].section_type, SectionType::Breaking);
+        assert_eq!(sections[0].entries.len(), 1);
+
+        drop(temp_dir);
+    }
+}
+
+// ============================================================================
+// Types Unit Tests
+// ============================================================================
+
+mod types_unit_tests {
+    use crate::changelog::{Changelog, ChangelogEntry, ChangelogSection, SectionType};
+    use chrono::Utc;
+
+    #[test]
+    fn test_changelog_new() {
+        let changelog = Changelog::new(Some("test-package"), "1.0.0", Some("0.9.0"), Utc::now());
+
+        assert_eq!(changelog.package_name, Some("test-package".to_string()));
+        assert_eq!(changelog.version, "1.0.0");
+        assert_eq!(changelog.previous_version, Some("0.9.0".to_string()));
+        assert!(changelog.is_empty());
+        assert_eq!(changelog.entry_count(), 0);
+    }
+
+    #[test]
+    fn test_changelog_add_section() {
+        let mut changelog = Changelog::new(Some("test"), "1.0.0", None, Utc::now());
+        let section = ChangelogSection::new(SectionType::Features);
+
+        changelog.add_section(section);
+        assert_eq!(changelog.sections.len(), 1);
+    }
+
+    #[test]
+    fn test_changelog_is_empty() {
+        let changelog = Changelog::new(Some("test"), "1.0.0", None, Utc::now());
+        assert!(changelog.is_empty());
+    }
+
+    #[test]
+    fn test_changelog_entry_count() {
+        let mut changelog = Changelog::new(Some("test"), "1.0.0", None, Utc::now());
+        let mut section = ChangelogSection::new(SectionType::Features);
+
+        let entry = ChangelogEntry {
+            description: "Test feature".to_string(),
+            commit_hash: "abc123".to_string(),
+            short_hash: "abc123".to_string(),
+            commit_type: Some("feat".to_string()),
+            scope: None,
+            breaking: false,
+            author: "Author".to_string(),
+            references: vec![],
+            date: Utc::now(),
+        };
+
+        section.add_entry(entry);
+        changelog.add_section(section);
+
+        assert_eq!(changelog.entry_count(), 1);
+        assert!(!changelog.is_empty());
+    }
+
+    #[test]
+    fn test_changelog_breaking_changes() {
+        let mut changelog = Changelog::new(Some("test"), "2.0.0", Some("1.0.0"), Utc::now());
+
+        let mut breaking_section = ChangelogSection::new(SectionType::Breaking);
+        breaking_section.add_entry(ChangelogEntry {
+            description: "Breaking change".to_string(),
+            commit_hash: "def456".to_string(),
+            short_hash: "def456".to_string(),
+            commit_type: Some("feat".to_string()),
+            scope: None,
+            breaking: true,
+            author: "Author".to_string(),
+            references: vec![],
+            date: Utc::now(),
+        });
+
+        changelog.add_section(breaking_section);
+
+        let breaking_changes = changelog.breaking_changes();
+        assert_eq!(breaking_changes.len(), 1);
+        assert!(changelog.has_breaking_changes());
+    }
+
+    #[test]
+    fn test_section_new() {
+        let section = ChangelogSection::new(SectionType::Fixes);
+        assert_eq!(section.section_type, SectionType::Fixes);
+        assert!(section.is_empty());
+    }
+
+    #[test]
+    fn test_section_add_entry() {
+        let mut section = ChangelogSection::new(SectionType::Features);
+        let entry = ChangelogEntry {
+            description: "New feature".to_string(),
+            commit_hash: "abc123".to_string(),
+            short_hash: "abc123".to_string(),
+            commit_type: Some("feat".to_string()),
+            scope: None,
+            breaking: false,
+            author: "Author".to_string(),
+            references: vec![],
+            date: Utc::now(),
+        };
+
+        section.add_entry(entry);
+        assert_eq!(section.entries.len(), 1);
+        assert!(!section.is_empty());
+    }
+
+    #[test]
+    fn test_entry_commit_link() {
+        let entry = ChangelogEntry {
+            description: "Test".to_string(),
+            commit_hash: "abc123def456".to_string(),
+            short_hash: "abc123d".to_string(),
+            commit_type: None,
+            scope: None,
+            breaking: false,
+            author: "Author".to_string(),
+            references: vec![],
+            date: Utc::now(),
+        };
+
+        let link = entry.commit_link("https://github.com/user/repo");
+        assert!(link.contains("abc123d"));
+        assert!(link.contains("abc123def456"));
+        assert!(link.contains("https://github.com/user/repo/commit/"));
+    }
+
+    #[test]
+    fn test_entry_issue_links() {
+        let entry = ChangelogEntry {
+            description: "Test".to_string(),
+            commit_hash: "abc123".to_string(),
+            short_hash: "abc123".to_string(),
+            commit_type: None,
+            scope: None,
+            breaking: false,
+            author: "Author".to_string(),
+            references: vec!["#123".to_string(), "#456".to_string()],
+            date: Utc::now(),
+        };
+
+        let links = entry.issue_links("https://github.com/user/repo");
+        assert_eq!(links.len(), 2);
+        assert!(links[0].contains("#123"));
+        assert!(links[1].contains("#456"));
+    }
+}
