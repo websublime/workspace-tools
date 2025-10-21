@@ -1082,3 +1082,607 @@ async fn test_changelog_generator_from_package_tools_config() {
     assert!(generator.is_enabled());
     assert_eq!(generator.config().format, ChangelogFormat::KeepAChangelog);
 }
+
+// ============================================================================
+// Version Detection - Unit Tests
+// ============================================================================
+
+mod version_detection_unit_tests {
+    use crate::changelog::version_detection::*;
+    use crate::types::Version;
+    use regex::Regex;
+
+    #[test]
+    fn test_version_tag_creation() {
+        let tag = VersionTag::new("v1.0.0".to_string(), Version::parse("1.0.0").unwrap(), None);
+
+        assert_eq!(tag.tag_name(), "v1.0.0");
+        assert_eq!(tag.version().to_string(), "1.0.0");
+        assert_eq!(tag.package_name(), None);
+    }
+
+    #[test]
+    fn test_version_tag_with_package() {
+        let tag = VersionTag::new(
+            "mypackage@1.0.0".to_string(),
+            Version::parse("1.0.0").unwrap(),
+            Some("mypackage".to_string()),
+        );
+
+        assert_eq!(tag.tag_name(), "mypackage@1.0.0");
+        assert_eq!(tag.version().to_string(), "1.0.0");
+        assert_eq!(tag.package_name(), Some("mypackage"));
+    }
+
+    #[test]
+    fn test_version_tag_matches_package() {
+        let tag = VersionTag::new(
+            "pkg@1.0.0".to_string(),
+            Version::parse("1.0.0").unwrap(),
+            Some("pkg".to_string()),
+        );
+
+        assert!(tag.matches_package(Some("pkg")));
+        assert!(!tag.matches_package(Some("other")));
+        assert!(!tag.matches_package(None));
+    }
+
+    #[test]
+    fn test_version_tag_matches_root() {
+        let tag = VersionTag::new("v1.0.0".to_string(), Version::parse("1.0.0").unwrap(), None);
+
+        assert!(tag.matches_package(None));
+        assert!(!tag.matches_package(Some("pkg")));
+    }
+
+    #[test]
+    fn test_version_tag_ordering() {
+        let tag1 = VersionTag::new("v1.0.0".to_string(), Version::parse("1.0.0").unwrap(), None);
+        let tag2 = VersionTag::new("v2.0.0".to_string(), Version::parse("2.0.0").unwrap(), None);
+
+        assert!(tag1 < tag2);
+        assert!(tag2 > tag1);
+    }
+
+    #[test]
+    fn test_build_tag_regex_root_format() {
+        let pattern = build_tag_regex("v{version}");
+        assert!(pattern.is_some());
+        let pattern = pattern.unwrap();
+
+        let re = Regex::new(&pattern).unwrap();
+        assert!(re.is_match("v1.0.0"));
+        assert!(re.is_match("v1.2.3"));
+        assert!(re.is_match("v1.0.0-alpha"));
+        assert!(re.is_match("v1.0.0+build123"));
+        assert!(!re.is_match("1.0.0"));
+        assert!(!re.is_match("v1.0"));
+    }
+
+    #[test]
+    fn test_build_tag_regex_monorepo_format() {
+        let pattern = build_tag_regex("{name}@{version}");
+        assert!(pattern.is_some());
+        let pattern = pattern.unwrap();
+
+        let re = Regex::new(&pattern).unwrap();
+        assert!(re.is_match("pkg@1.0.0"));
+        assert!(re.is_match("@org/pkg@1.0.0"));
+        assert!(!re.is_match("v1.0.0"));
+    }
+
+    #[test]
+    fn test_parse_version_tag_root() {
+        let tag = parse_version_tag("v1.2.3", None, "v{version}");
+        assert!(tag.is_some());
+
+        let tag = tag.unwrap();
+        assert_eq!(tag.tag_name(), "v1.2.3");
+        assert_eq!(tag.version().to_string(), "1.2.3");
+        assert_eq!(tag.package_name(), None);
+    }
+
+    #[test]
+    fn test_parse_version_tag_monorepo() {
+        let tag = parse_version_tag("mypackage@1.2.3", Some("mypackage"), "{name}@{version}");
+        assert!(tag.is_some());
+
+        let tag = tag.unwrap();
+        assert_eq!(tag.tag_name(), "mypackage@1.2.3");
+        assert_eq!(tag.version().to_string(), "1.2.3");
+        assert_eq!(tag.package_name(), Some("mypackage"));
+    }
+
+    #[test]
+    fn test_parse_version_tag_scoped_package() {
+        let tag = parse_version_tag("@org/pkg@2.0.0", Some("@org/pkg"), "{name}@{version}");
+        assert!(tag.is_some());
+
+        let tag = tag.unwrap();
+        assert_eq!(tag.tag_name(), "@org/pkg@2.0.0");
+        assert_eq!(tag.version().to_string(), "2.0.0");
+        assert_eq!(tag.package_name(), Some("@org/pkg"));
+    }
+
+    #[test]
+    fn test_parse_version_tag_with_prerelease() {
+        let tag = parse_version_tag("v1.0.0-alpha.1", None, "v{version}");
+        assert!(tag.is_some());
+
+        let tag = tag.unwrap();
+        assert_eq!(tag.version().to_string(), "1.0.0-alpha.1");
+    }
+
+    #[test]
+    fn test_parse_version_tag_invalid() {
+        assert!(parse_version_tag("invalid", None, "v{version}").is_none());
+        assert!(parse_version_tag("v1.0", None, "v{version}").is_none());
+        assert!(parse_version_tag("1.0.0", None, "v{version}").is_none());
+    }
+
+    #[test]
+    fn test_parse_version_tag_wrong_package() {
+        let tag = parse_version_tag("pkg1@1.0.0", Some("pkg2"), "{name}@{version}");
+        assert!(tag.is_none());
+    }
+
+    #[test]
+    fn test_find_version_tags() {
+        let tags = vec![
+            "v1.0.0".to_string(),
+            "v1.1.0".to_string(),
+            "v2.0.0".to_string(),
+            "other-tag".to_string(),
+            "v0.5.0".to_string(),
+        ];
+
+        let version_tags = find_version_tags(&tags, None, "v{version}");
+        assert_eq!(version_tags.len(), 4);
+
+        // Should be sorted newest first
+        assert_eq!(version_tags[0].version().to_string(), "2.0.0");
+        assert_eq!(version_tags[1].version().to_string(), "1.1.0");
+        assert_eq!(version_tags[2].version().to_string(), "1.0.0");
+        assert_eq!(version_tags[3].version().to_string(), "0.5.0");
+    }
+
+    #[test]
+    fn test_find_version_tags_monorepo() {
+        let tags = vec![
+            "pkg1@1.0.0".to_string(),
+            "pkg1@1.1.0".to_string(),
+            "pkg2@1.0.0".to_string(),
+            "pkg1@2.0.0".to_string(),
+        ];
+
+        let version_tags = find_version_tags(&tags, Some("pkg1"), "{name}@{version}");
+        assert_eq!(version_tags.len(), 3);
+        assert_eq!(version_tags[0].version().to_string(), "2.0.0");
+        assert_eq!(version_tags[1].version().to_string(), "1.1.0");
+        assert_eq!(version_tags[2].version().to_string(), "1.0.0");
+    }
+
+    #[test]
+    fn test_find_previous_version() {
+        let tags = vec!["v1.0.0".to_string(), "v1.1.0".to_string(), "v2.0.0".to_string()];
+
+        let previous = find_previous_version(&tags, "2.0.0", None, "v{version}").unwrap();
+        assert!(previous.is_some());
+        assert_eq!(previous.unwrap().version().to_string(), "1.1.0");
+    }
+
+    #[test]
+    fn test_find_previous_version_first_release() {
+        let tags = vec!["v1.0.0".to_string(), "v1.1.0".to_string(), "v2.0.0".to_string()];
+
+        let previous = find_previous_version(&tags, "1.0.0", None, "v{version}").unwrap();
+        assert!(previous.is_none());
+    }
+
+    #[test]
+    fn test_find_previous_version_no_tags() {
+        let tags: Vec<String> = vec![];
+
+        let previous = find_previous_version(&tags, "1.0.0", None, "v{version}").unwrap();
+        assert!(previous.is_none());
+    }
+
+    #[test]
+    fn test_find_previous_version_monorepo() {
+        let tags = vec![
+            "pkg1@1.0.0".to_string(),
+            "pkg1@1.1.0".to_string(),
+            "pkg2@1.0.0".to_string(),
+            "pkg1@2.0.0".to_string(),
+        ];
+
+        let previous =
+            find_previous_version(&tags, "2.0.0", Some("pkg1"), "{name}@{version}").unwrap();
+        assert!(previous.is_some());
+        assert_eq!(previous.unwrap().version().to_string(), "1.1.0");
+    }
+
+    #[test]
+    fn test_find_previous_version_invalid_current() {
+        let tags = vec!["v1.0.0".to_string()];
+
+        let result = find_previous_version(&tags, "invalid", None, "v{version}");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_is_monorepo_format() {
+        assert!(is_monorepo_format("{name}@{version}"));
+        assert!(is_monorepo_format("{name}-{version}"));
+        assert!(!is_monorepo_format("v{version}"));
+        assert!(!is_monorepo_format("{version}"));
+    }
+
+    #[test]
+    fn test_format_version_tag_root() {
+        let tag = format_version_tag(None, "1.0.0", "v{version}");
+        assert_eq!(tag, "v1.0.0");
+
+        let tag = format_version_tag(None, "2.5.3", "{version}");
+        assert_eq!(tag, "2.5.3");
+    }
+
+    #[test]
+    fn test_format_version_tag_monorepo() {
+        let tag = format_version_tag(Some("mypackage"), "1.0.0", "{name}@{version}");
+        assert_eq!(tag, "mypackage@1.0.0");
+
+        let tag = format_version_tag(Some("@org/pkg"), "2.0.0", "{name}@{version}");
+        assert_eq!(tag, "@org/pkg@2.0.0");
+    }
+
+    #[test]
+    fn test_format_version_tag_custom_format() {
+        let tag = format_version_tag(Some("pkg"), "1.0.0", "{name}-v{version}");
+        assert_eq!(tag, "pkg-v1.0.0");
+
+        let tag = format_version_tag(None, "1.0.0", "release-{version}");
+        assert_eq!(tag, "release-1.0.0");
+    }
+}
+
+// ============================================================================
+// Version Detection - Integration Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_detect_previous_version_no_tags() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let previous = generator.detect_previous_version(None, "1.0.0").await.unwrap();
+    assert!(previous.is_none());
+}
+
+#[tokio::test]
+async fn test_detect_previous_version_first_release() {
+    let (temp_dir, repo) = create_test_repo();
+
+    // Create a tag for v1.0.0
+    repo.create_tag("v1.0.0", Some("Release 1.0.0".to_string())).unwrap();
+
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    // Looking for previous of v1.0.0 should find nothing
+    let previous = generator.detect_previous_version(None, "1.0.0").await.unwrap();
+    assert!(previous.is_none());
+}
+
+#[tokio::test]
+async fn test_detect_previous_version_with_history() {
+    let (temp_dir, repo) = create_test_repo();
+
+    // Create tags for multiple versions
+    repo.create_tag("v1.0.0", Some("Release 1.0.0".to_string())).unwrap();
+    repo.commit_changes("Second commit").unwrap();
+    repo.create_tag("v1.1.0", Some("Release 1.1.0".to_string())).unwrap();
+    repo.commit_changes("Third commit").unwrap();
+    repo.create_tag("v2.0.0", Some("Release 2.0.0".to_string())).unwrap();
+
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    // Previous of 2.0.0 should be 1.1.0
+    let previous = generator.detect_previous_version(None, "2.0.0").await.unwrap();
+    assert!(previous.is_some());
+    let tag = previous.unwrap();
+    assert_eq!(tag.version().to_string(), "1.1.0");
+    assert_eq!(tag.tag_name(), "v1.1.0");
+}
+
+#[tokio::test]
+async fn test_detect_previous_version_monorepo() {
+    let (temp_dir, repo) = create_test_repo();
+
+    // Create tags for different packages
+    repo.create_tag("pkg1@1.0.0", Some("pkg1 1.0.0".to_string())).unwrap();
+    repo.commit_changes("Second commit").unwrap();
+    repo.create_tag("pkg2@1.0.0", Some("pkg2 1.0.0".to_string())).unwrap();
+    repo.commit_changes("Third commit").unwrap();
+    repo.create_tag("pkg1@1.1.0", Some("pkg1 1.1.0".to_string())).unwrap();
+    repo.commit_changes("Fourth commit").unwrap();
+    repo.create_tag("pkg1@2.0.0", Some("pkg1 2.0.0".to_string())).unwrap();
+
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    // Previous version of pkg1@2.0.0 should be pkg1@1.1.0
+    let previous = generator.detect_previous_version(Some("pkg1"), "2.0.0").await.unwrap();
+    assert!(previous.is_some());
+    let tag = previous.unwrap();
+    assert_eq!(tag.version().to_string(), "1.1.0");
+    assert_eq!(tag.package_name(), Some("pkg1"));
+    assert_eq!(tag.tag_name(), "pkg1@1.1.0");
+}
+
+#[tokio::test]
+async fn test_detect_previous_version_monorepo_filters_by_package() {
+    let (temp_dir, repo) = create_test_repo();
+
+    // Create tags for different packages
+    repo.create_tag("pkg1@1.0.0", Some("pkg1 1.0.0".to_string())).unwrap();
+    repo.commit_changes("Second commit").unwrap();
+    repo.create_tag("pkg2@2.0.0", Some("pkg2 2.0.0".to_string())).unwrap();
+    repo.commit_changes("Third commit").unwrap();
+    repo.create_tag("pkg1@1.5.0", Some("pkg1 1.5.0".to_string())).unwrap();
+
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    // Previous version of pkg1@2.0.0 should be pkg1@1.5.0, not pkg2@2.0.0
+    let previous = generator.detect_previous_version(Some("pkg1"), "2.0.0").await.unwrap();
+    assert!(previous.is_some());
+    let tag = previous.unwrap();
+    assert_eq!(tag.version().to_string(), "1.5.0");
+    assert_eq!(tag.package_name(), Some("pkg1"));
+}
+
+#[tokio::test]
+async fn test_detect_previous_version_with_custom_root_format() {
+    let (temp_dir, repo) = create_test_repo();
+
+    // Create tags without 'v' prefix
+    repo.create_tag("1.0.0", Some("Release 1.0.0".to_string())).unwrap();
+    repo.commit_changes("Second commit").unwrap();
+    repo.create_tag("1.1.0", Some("Release 1.1.0".to_string())).unwrap();
+
+    let fs = FileSystemManager::new();
+    let mut config = ChangelogConfig::default();
+    config.root_tag_format = "{version}".to_string();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let previous = generator.detect_previous_version(None, "1.1.0").await.unwrap();
+    assert!(previous.is_some());
+    let tag = previous.unwrap();
+    assert_eq!(tag.version().to_string(), "1.0.0");
+    assert_eq!(tag.tag_name(), "1.0.0");
+}
+
+#[tokio::test]
+async fn test_detect_previous_version_invalid_current_version() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let result = generator.detect_previous_version(None, "invalid").await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_parse_version_tag_root_format() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let tag = generator.parse_version_tag("v1.2.3", None).unwrap();
+    assert!(tag.is_some());
+    let tag = tag.unwrap();
+    assert_eq!(tag.tag_name(), "v1.2.3");
+    assert_eq!(tag.version().to_string(), "1.2.3");
+    assert_eq!(tag.package_name(), None);
+}
+
+#[tokio::test]
+async fn test_parse_version_tag_monorepo_format() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let tag = generator.parse_version_tag("mypackage@1.2.3", Some("mypackage")).unwrap();
+    assert!(tag.is_some());
+    let tag = tag.unwrap();
+    assert_eq!(tag.tag_name(), "mypackage@1.2.3");
+    assert_eq!(tag.version().to_string(), "1.2.3");
+    assert_eq!(tag.package_name(), Some("mypackage"));
+}
+
+#[tokio::test]
+async fn test_parse_version_tag_scoped_package() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let tag = generator.parse_version_tag("@org/pkg@2.0.0", Some("@org/pkg")).unwrap();
+    assert!(tag.is_some());
+    let tag = tag.unwrap();
+    assert_eq!(tag.tag_name(), "@org/pkg@2.0.0");
+    assert_eq!(tag.version().to_string(), "2.0.0");
+    assert_eq!(tag.package_name(), Some("@org/pkg"));
+}
+
+#[tokio::test]
+async fn test_parse_version_tag_invalid_format() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let tag = generator.parse_version_tag("invalid", None).unwrap();
+    assert!(tag.is_none());
+}
+
+#[tokio::test]
+async fn test_parse_version_tag_wrong_package() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let tag = generator.parse_version_tag("pkg1@1.0.0", Some("pkg2")).unwrap();
+    assert!(tag.is_none());
+}
+
+#[tokio::test]
+async fn test_get_version_tags_empty_repository() {
+    let (temp_dir, repo) = create_test_repo();
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let tags = generator.get_version_tags(None).await.unwrap();
+    assert_eq!(tags.len(), 0);
+}
+
+#[tokio::test]
+async fn test_get_version_tags_root_format() {
+    let (temp_dir, repo) = create_test_repo();
+
+    // Create multiple version tags
+    repo.create_tag("v1.0.0", Some("1.0.0".to_string())).unwrap();
+    repo.commit_changes("Second").unwrap();
+    repo.create_tag("v1.1.0", Some("1.1.0".to_string())).unwrap();
+    repo.commit_changes("Third").unwrap();
+    repo.create_tag("v2.0.0", Some("2.0.0".to_string())).unwrap();
+    repo.create_tag("other-tag", Some("other".to_string())).unwrap();
+
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let tags = generator.get_version_tags(None).await.unwrap();
+    assert_eq!(tags.len(), 3);
+
+    // Tags should be sorted newest first
+    assert_eq!(tags[0].version().to_string(), "2.0.0");
+    assert_eq!(tags[1].version().to_string(), "1.1.0");
+    assert_eq!(tags[2].version().to_string(), "1.0.0");
+}
+
+#[tokio::test]
+async fn test_get_version_tags_monorepo_format() {
+    let (temp_dir, repo) = create_test_repo();
+
+    // Create tags for multiple packages
+    repo.create_tag("pkg1@1.0.0", Some("pkg1 1.0.0".to_string())).unwrap();
+    repo.commit_changes("Second").unwrap();
+    repo.create_tag("pkg2@1.0.0", Some("pkg2 1.0.0".to_string())).unwrap();
+    repo.commit_changes("Third").unwrap();
+    repo.create_tag("pkg1@2.0.0", Some("pkg1 2.0.0".to_string())).unwrap();
+
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    // Get tags for pkg1 only
+    let tags = generator.get_version_tags(Some("pkg1")).await.unwrap();
+    assert_eq!(tags.len(), 2);
+    assert_eq!(tags[0].version().to_string(), "2.0.0");
+    assert_eq!(tags[1].version().to_string(), "1.0.0");
+    assert!(tags.iter().all(|t| t.package_name() == Some("pkg1")));
+}
+
+#[tokio::test]
+async fn test_get_version_tags_filters_non_version_tags() {
+    let (temp_dir, repo) = create_test_repo();
+
+    // Create mix of version and non-version tags
+    repo.create_tag("v1.0.0", Some("Release".to_string())).unwrap();
+    repo.commit_changes("Second").unwrap();
+    repo.create_tag("build-123", Some("Build".to_string())).unwrap();
+    repo.commit_changes("Third").unwrap();
+    repo.create_tag("v2.0.0", Some("Release".to_string())).unwrap();
+    repo.create_tag("docs-update", Some("Docs".to_string())).unwrap();
+
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let tags = generator.get_version_tags(None).await.unwrap();
+    assert_eq!(tags.len(), 2);
+    assert_eq!(tags[0].version().to_string(), "2.0.0");
+    assert_eq!(tags[1].version().to_string(), "1.0.0");
+}
+
+#[tokio::test]
+async fn test_get_version_tags_with_prerelease() {
+    let (temp_dir, repo) = create_test_repo();
+
+    // Create tags with prereleases
+    repo.create_tag("v1.0.0", Some("Release".to_string())).unwrap();
+    repo.commit_changes("Second").unwrap();
+    repo.create_tag("v1.1.0-alpha.1", Some("Alpha".to_string())).unwrap();
+    repo.commit_changes("Third").unwrap();
+    repo.create_tag("v1.1.0-beta.1", Some("Beta".to_string())).unwrap();
+    repo.commit_changes("Fourth").unwrap();
+    repo.create_tag("v1.1.0", Some("Release".to_string())).unwrap();
+
+    let fs = FileSystemManager::new();
+    let config = ChangelogConfig::default();
+
+    let generator =
+        ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs, config).await.unwrap();
+
+    let tags = generator.get_version_tags(None).await.unwrap();
+    assert_eq!(tags.len(), 4);
+
+    // All should be valid versions
+    assert!(tags.iter().all(|t| t.version().to_string().contains('.')));
+}
