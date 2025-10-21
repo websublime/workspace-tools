@@ -301,6 +301,23 @@ pub enum ChangesError {
         /// Duration in seconds before timeout.
         duration_secs: u64,
     },
+
+    /// Version calculation failed.
+    ///
+    /// This error occurs when calculating the next version for a package
+    /// based on a version bump fails, typically due to version overflow
+    /// or invalid version format.
+    #[error("Failed to calculate next version for package '{package}': cannot bump {current_version} with {bump_type} - {reason}")]
+    VersionCalculationFailed {
+        /// Name of the package.
+        package: String,
+        /// Current version string.
+        current_version: String,
+        /// Type of bump attempted.
+        bump_type: String,
+        /// Description of why the calculation failed.
+        reason: String,
+    },
 }
 
 impl AsRef<str> for ChangesError {
@@ -343,6 +360,7 @@ impl AsRef<str> for ChangesError {
             Self::MergeConflict { .. } => "merge conflict",
             Self::InvalidConfig { .. } => "invalid configuration",
             Self::Timeout { .. } => "analysis timeout",
+            Self::VersionCalculationFailed { .. } => "version calculation failed",
         }
     }
 }

@@ -80,18 +80,17 @@
 //! # let fs = FileSystemManager::new();
 //! # let config = PackageToolsConfig::default();
 //! # let git_repo = Repo::open(".")?;
-//! // TODO: will be implemented on story 7.5 - Version Preview Calculation
-//! // let analyzer = ChangesAnalyzer::new(workspace_root.clone(), git_repo, fs.clone(), config.clone()).await?;
-//! // let changeset_manager = ChangesetManager::new(workspace_root, fs, config).await?;
-//! //
-//! // let changeset = changeset_manager.load("my-changeset").await?;
-//! // let changes = analyzer.analyze_with_versions(&changeset).await?;
-//! //
-//! // for package_change in changes.packages {
-//! //     println!("Package: {} -> {}",
-//! //         package_change.current_version.unwrap(),
-//! //         package_change.next_version.unwrap());
-//! // }
+//! let analyzer = ChangesAnalyzer::new(workspace_root.clone(), git_repo.clone(), fs.clone(), config.clone()).await?;
+//! let changeset_manager = ChangesetManager::new(workspace_root, fs, config).await?;
+//!
+//! let changeset = changeset_manager.load("my-changeset").await?;
+//! let changes = analyzer.analyze_with_versions("main", "HEAD", &changeset).await?;
+//!
+//! for package_change in &changes.packages {
+//!     if let (Some(current), Some(next)) = (&package_change.current_version, &package_change.next_version) {
+//!         println!("Package: {} -> {}", current, next);
+//!     }
+//! }
 //! # Ok(())
 //! # }
 //! ```
@@ -104,8 +103,6 @@
 //! - `file_change`: Individual file change details
 //! - `commit_info`: Commit information and metadata
 //! - `stats`: Change statistics and summaries
-
-#![allow(clippy::todo)]
 
 // Analyzer module - Story 7.1
 mod analyzer;
@@ -138,5 +135,3 @@ pub use stats::{ChangesSummary, PackageChangeStats};
 // Tests module
 #[cfg(test)]
 mod tests;
-
-// TODO: will be implemented on story 7.5 - Version Preview Calculation
