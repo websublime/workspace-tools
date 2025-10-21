@@ -33,7 +33,7 @@
 //! - [`error`]: Error types and error handling utilities
 //! - [`types`]: Core data structures (Version, VersionBump, Changeset, etc.)
 //! - [`changeset`]: Changeset creation, management, storage, and history
-//! - [`version`]: Version resolution, dependency propagation, and application
+//! - [`version`](mod@version): Version resolution, dependency propagation, and application
 //! - [`changes`]: Analysis of file changes and commit ranges
 //! - [`changelog`]: Changelog generation with conventional commits support
 //! - [`upgrade`]: Dependency upgrade detection and application

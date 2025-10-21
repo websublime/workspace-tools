@@ -137,7 +137,7 @@ where
     pub(crate) cached_monorepo: Option<Option<MonorepoDescriptor>>,
 
     /// Cache mapping file paths to package names.
-    /// Value is Option<String> where None means file doesn't belong to any package.
+    /// Value is `Option<String>` where `None` means file doesn't belong to any package.
     pub(crate) file_cache: HashMap<PathBuf, Option<String>>,
 }
 

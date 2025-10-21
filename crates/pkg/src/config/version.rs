@@ -121,10 +121,6 @@ pub struct VersionConfig {
 ///
 /// - `Independent`: Each package maintains its own version
 /// - `Unified`: All packages share the same version number
-///
-/// # Example
-///
-/// ```rust
 impl Default for VersionConfig {
     /// Creates a new `VersionConfig` with default values.
     ///

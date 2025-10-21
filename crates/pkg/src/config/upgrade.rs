@@ -76,7 +76,7 @@ pub struct RegistryConfig {
     /// Scoped registry mappings.
     ///
     /// Maps scope names (without @) to registry URLs.
-    /// Example: "myorg" -> "https://npm.myorg.com"
+    /// Example: "myorg" -> "<https://npm.myorg.com>"
     ///
     /// # Default: empty
     pub scoped_registries: HashMap<String, String>,

@@ -36,20 +36,19 @@
 //! let config = PackageToolsConfig::default();
 //! let git_repo = Repo::open(".")?;
 //!
-//! // TODO: will be implemented on story 7.1
-//! // let analyzer = ChangesAnalyzer::new(workspace_root, git_repo, fs, config).await?;
-//! //
-//! // // Analyze working directory changes
-//! // let changes = analyzer.analyze_working_directory().await?;
-//! // for package_change in changes.packages {
-//! //     println!("Package: {}", package_change.package_info.name());
-//! //     println!("  Files changed: {}", package_change.files.len());
-//! //     println!("  Has changes: {}", package_change.has_changes);
-//! // }
-//! //
-//! // // Analyze commit range
-//! // let changes = analyzer.analyze_commit_range("main", "HEAD").await?;
-//! // println!("Total packages affected: {}", changes.summary.packages_with_changes);
+//! let analyzer = ChangesAnalyzer::new(workspace_root, git_repo, fs, config).await?;
+//!
+//! // Analyze working directory changes
+//! let changes = analyzer.analyze_working_directory().await?;
+//! for package_change in changes.packages {
+//!     println!("Package: {}", package_change.package_name());
+//!     println!("  Files changed: {}", package_change.files.len());
+//!     println!("  Has changes: {}", package_change.has_changes);
+//! }
+//!
+//! // Analyze commit range
+//! let changes = analyzer.analyze_commit_range("main", "HEAD").await?;
+//! println!("Total packages affected: {}", changes.summary.packages_with_changes);
 //! # Ok(())
 //! # }
 //! ```
@@ -81,7 +80,7 @@
 //! # let fs = FileSystemManager::new();
 //! # let config = PackageToolsConfig::default();
 //! # let git_repo = Repo::open(".")?;
-//! // TODO: will be implemented on story 7.5
+//! // TODO: will be implemented on story 7.5 - Version Preview Calculation
 //! // let analyzer = ChangesAnalyzer::new(workspace_root.clone(), git_repo, fs.clone(), config.clone()).await?;
 //! // let changeset_manager = ChangesetManager::new(workspace_root, fs, config).await?;
 //! //
@@ -90,8 +89,8 @@
 //! //
 //! // for package_change in changes.packages {
 //! //     println!("Package: {} -> {}",
-//! //         package_change.current_version,
-//! //         package_change.next_version);
+//! //         package_change.current_version.unwrap(),
+//! //         package_change.next_version.unwrap());
 //! // }
 //! # Ok(())
 //! # }
@@ -140,6 +139,4 @@ pub use stats::{ChangesSummary, PackageChangeStats};
 #[cfg(test)]
 mod tests;
 
-// Module will be implemented in subsequent stories (Epic 7)
-// TODO: will be implemented on story 7.4 - Commit Range Analysis
 // TODO: will be implemented on story 7.5 - Version Preview Calculation
