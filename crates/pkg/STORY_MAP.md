@@ -2629,7 +2629,7 @@ Implement automatic changeset creation when upgrades are applied.
 
 **Tasks**:
 1. Integrate with changeset manager
-   - Create changeset after apply
+   - Create or update changeset after apply
    - Add affected packages
    - Set bump type to patch
    - **Effort**: Low

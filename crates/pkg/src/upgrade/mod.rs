@@ -161,7 +161,9 @@
 mod registry;
 
 // Re-export registry public types
-pub use registry::{PackageMetadata, RegistryClient, RepositoryInfo, UpgradeType};
+pub use registry::{
+    npmrc::NpmrcConfig, PackageMetadata, RegistryClient, RepositoryInfo, UpgradeType,
+};
 
 // Remaining modules will be implemented in subsequent stories (Epic 9)
 // - npmrc: .npmrc parser (Story 9.2)
