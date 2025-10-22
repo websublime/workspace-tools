@@ -13,7 +13,7 @@
 //!
 //! - **Keep a Changelog**: Standard format following https://keepachangelog.com
 //! - **Conventional Commits**: Automatic grouping by commit type
-//! - **Custom Template**: User-defined templates (coming in story 8.7)
+//! - **Custom Template**: User-defined templates with variable substitution
 //!
 //! # Example
 //!
@@ -54,14 +54,13 @@
 //! ```
 
 mod conventional;
+mod custom;
 mod keep_a_changelog;
 
 // Public exports
 pub use conventional::ConventionalCommitsFormatter;
+pub use custom::CustomTemplateFormatter;
 pub use keep_a_changelog::KeepAChangelogFormatter;
-
-// TODO: will be implemented on story 8.7
-// pub use custom::CustomTemplateFormatter;
 
 // Tests module - located in tests.rs
 #[cfg(test)]
