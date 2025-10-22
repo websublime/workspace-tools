@@ -47,7 +47,7 @@ use crate::config::ChangelogConfig;
 use crate::error::{ChangelogError, ChangelogResult};
 use crate::types::VersionBump;
 use chrono::Utc;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use sublime_git_tools::Repo;
 use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
 
@@ -970,5 +970,284 @@ impl ChangelogGenerator {
 
         // No changes
         VersionBump::None
+    }
+
+    /// Updates or creates a CHANGELOG.md file with new changelog content.
+    ///
+    /// This method either creates a new changelog file with a header or updates an existing
+    /// one by prepending the new version section. The operation can be performed in dry-run
+    /// mode, which returns the content without writing to the file system.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_path` - The path to the package directory
+    /// * `changelog` - The changelog data to add
+    /// * `dry_run` - If `true`, returns content without writing to disk
+    ///
+    /// # Returns
+    ///
+    /// Returns the final changelog content (whether written or not).
+    ///
+    /// # Errors
+    ///
+    /// This method returns an error if:
+    /// - File system operations fail
+    /// - The existing changelog cannot be parsed
+    /// - The path is invalid
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::changelog::{Changelog, ChangelogGenerator};
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use sublime_git_tools::Repo;
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// use std::path::PathBuf;
+    /// use chrono::Utc;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let workspace_root = PathBuf::from(".");
+    /// let git_repo = Repo::open(".")?;
+    /// let fs = FileSystemManager::new();
+    /// let config = PackageToolsConfig::default();
+    ///
+    /// let generator = ChangelogGenerator::new(
+    ///     workspace_root,
+    ///     git_repo,
+    ///     fs,
+    ///     config.changelog,
+    /// ).await?;
+    ///
+    /// let changelog = Changelog::new(Some("my-package"), "1.0.0", None, Utc::now());
+    /// let package_path = PathBuf::from("packages/my-package");
+    ///
+    /// // Dry run - preview without writing
+    /// let content = generator.update_changelog(&package_path, &changelog, true).await?;
+    /// println!("Would write:\n{}", content);
+    ///
+    /// // Actually write the changelog
+    /// generator.update_changelog(&package_path, &changelog, false).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn update_changelog(
+        &self,
+        package_path: &Path,
+        changelog: &Changelog,
+        dry_run: bool,
+    ) -> ChangelogResult<String> {
+        let changelog_path = package_path.join(&self.config.filename);
+
+        // Render new content
+        let new_section = changelog.to_markdown(&self.config);
+
+        // Read existing changelog (if exists)
+        let existing_content = if self.fs.exists(&changelog_path).await {
+            self.fs.read_file_string(&changelog_path).await.map_err(|e| {
+                ChangelogError::FileSystemError {
+                    path: changelog_path.clone(),
+                    reason: e.as_ref().to_string(),
+                }
+            })?
+        } else {
+            // Create header for new changelog
+            let mut header = self.config.template.header.clone();
+            if !header.is_empty() && !header.ends_with('\n') {
+                header.push('\n');
+            }
+            header.push('\n');
+            header
+        };
+
+        // Prepend new section
+        let updated_content = self.prepend_changelog(&existing_content, &new_section);
+
+        // Write if not dry-run
+        if !dry_run {
+            // Ensure parent directory exists
+            if let Some(parent) = changelog_path.parent() {
+                self.fs.create_dir_all(parent).await.map_err(|e| {
+                    ChangelogError::FileSystemError {
+                        path: parent.to_path_buf(),
+                        reason: e.as_ref().to_string(),
+                    }
+                })?;
+            }
+
+            self.fs.write_file_string(&changelog_path, &updated_content).await.map_err(|e| {
+                ChangelogError::UpdateFailed {
+                    path: changelog_path.clone(),
+                    reason: e.as_ref().to_string(),
+                }
+            })?;
+        }
+
+        Ok(updated_content)
+    }
+
+    /// Parses an existing CHANGELOG.md file.
+    ///
+    /// This method reads and parses an existing changelog file, extracting version
+    /// information and content. It's useful for querying existing changelogs or
+    /// checking if a version already exists before updating.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_path` - The path to the package directory
+    ///
+    /// # Returns
+    ///
+    /// Returns a `ParsedChangelog` containing the structured changelog data.
+    ///
+    /// # Errors
+    ///
+    /// This method returns an error if:
+    /// - The changelog file doesn't exist
+    /// - The file cannot be read
+    /// - The changelog format is invalid
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::changelog::ChangelogGenerator;
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use sublime_git_tools::Repo;
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let workspace_root = PathBuf::from(".");
+    /// let git_repo = Repo::open(".")?;
+    /// let fs = FileSystemManager::new();
+    /// let config = PackageToolsConfig::default();
+    ///
+    /// let generator = ChangelogGenerator::new(
+    ///     workspace_root,
+    ///     git_repo,
+    ///     fs,
+    ///     config.changelog,
+    /// ).await?;
+    ///
+    /// let package_path = PathBuf::from("packages/my-package");
+    /// let parsed = generator.parse_changelog(&package_path).await?;
+    ///
+    /// println!("Found {} versions", parsed.versions.len());
+    /// if let Some(latest) = parsed.latest_version() {
+    ///     println!("Latest version: {}", latest.version);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn parse_changelog(
+        &self,
+        package_path: &Path,
+    ) -> ChangelogResult<crate::changelog::parser::ParsedChangelog> {
+        use crate::changelog::parser::ChangelogParser;
+
+        let changelog_path = package_path.join(&self.config.filename);
+
+        // Check if file exists
+        if !self.fs.exists(&changelog_path).await {
+            return Err(ChangelogError::NotFound { path: changelog_path });
+        }
+
+        // Read the file
+        let content = self.fs.read_file_string(&changelog_path).await.map_err(|e| {
+            ChangelogError::FileSystemError {
+                path: changelog_path.clone(),
+                reason: e.as_ref().to_string(),
+            }
+        })?;
+
+        // Parse the content
+        let parser = ChangelogParser::new();
+        parser.parse(&content)
+    }
+
+    /// Prepends a new changelog section to existing content.
+    ///
+    /// This method intelligently inserts the new version section after the header
+    /// but before any existing versions, preserving the overall structure of the
+    /// changelog.
+    ///
+    /// The insertion logic:
+    /// 1. Finds the first version header (## )
+    /// 2. Inserts the new section before it
+    /// 3. If no versions exist, appends to the header
+    ///
+    /// # Arguments
+    ///
+    /// * `existing` - The existing changelog content
+    /// * `new_section` - The new version section to prepend
+    ///
+    /// # Returns
+    ///
+    /// The updated changelog content with the new section prepended.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::changelog::ChangelogGenerator;
+    ///
+    /// # fn example(generator: &ChangelogGenerator) {
+    /// let existing = "# Changelog\n\n## [1.0.0] - 2024-01-15\n- Old feature";
+    /// let new_section = "## [2.0.0] - 2024-02-01\n\n### Features\n- New feature\n";
+    ///
+    /// let updated = generator.prepend_changelog(existing, new_section);
+    /// assert!(updated.contains("## [2.0.0]"));
+    /// assert!(updated.contains("## [1.0.0]"));
+    /// # }
+    /// ```
+    pub(crate) fn prepend_changelog(&self, existing: &str, new_section: &str) -> String {
+        let lines: Vec<&str> = existing.lines().collect();
+
+        // Find the position of the first version header (starts with "## ")
+        let insert_pos =
+            lines.iter().position(|line| line.starts_with("## ")).unwrap_or(lines.len());
+
+        let mut result = String::new();
+
+        // Add lines before insert position (header)
+        for (i, line) in lines.iter().enumerate().take(insert_pos) {
+            result.push_str(line);
+            result.push('\n');
+
+            // Add extra newline after header if this is the last header line
+            if i == insert_pos - 1 && insert_pos < lines.len() {
+                result.push('\n');
+            }
+        }
+
+        // If we're at the end (no existing versions), ensure proper spacing
+        if insert_pos == lines.len() && !result.is_empty() && !result.ends_with("\n\n") {
+            if !result.ends_with('\n') {
+                result.push('\n');
+            }
+            result.push('\n');
+        }
+
+        // Add new section
+        result.push_str(new_section);
+
+        // Ensure proper spacing before existing versions
+        if insert_pos < lines.len() && !new_section.ends_with("\n\n") {
+            if !new_section.ends_with('\n') {
+                result.push('\n');
+            }
+            result.push('\n');
+        }
+
+        // Add remaining lines (existing versions)
+        for line in lines.iter().skip(insert_pos) {
+            result.push_str(line);
+            result.push('\n');
+        }
+
+        // Remove trailing newlines beyond two
+        while result.ends_with("\n\n\n") {
+            result.pop();
+        }
+
+        result
     }
 }
