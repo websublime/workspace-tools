@@ -40,6 +40,8 @@ semver = { version = "1.0", features = ["serde"] }
 
 # HTTP client for registry
 reqwest = { version = "0.12", features = ["json"] }
+reqwest-middleware = "0.3"
+reqwest-retry = "0.6"
 
 # Graph algorithms for dependency analysis
 petgraph = "0.6"
@@ -70,3 +72,4 @@ tempfile.workspace = true
 tokio-test = "0.4"
 proptest = "1.4"
 pretty_assertions = "1.4"
+mockito = "1.2"
