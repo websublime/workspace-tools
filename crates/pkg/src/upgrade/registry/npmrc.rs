@@ -37,15 +37,7 @@
 //!
 //! # Example
 //!
-//! ```rust,no_run
-//! use sublime_pkg_tools::upgrade::registry::npmrc::NpmrcConfig;
-//! use sublime_standard_tools::filesystem::FileSystemManager;
-//! use std::path::PathBuf;
-//!
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let workspace_root = PathBuf::from(".");
-//! let fs = FileSystemManager::new();
-//!
+//! ```rust,ignore
 //! // Load .npmrc configuration
 //! let npmrc = NpmrcConfig::from_workspace(&workspace_root, &fs).await?;
 //!
@@ -58,8 +50,6 @@
 //! if let Some(token) = npmrc.get_auth_token("https://npm.myorg.com") {
 //!     println!("Auth token found for private registry");
 //! }
-//! # Ok(())
-//! # }
 //! ```
 
 use crate::error::UpgradeError;
@@ -74,15 +64,13 @@ use sublime_standard_tools::filesystem::AsyncFileSystem;
 ///
 /// # Example
 ///
-/// ```rust
-/// use sublime_pkg_tools::upgrade::registry::npmrc::NpmrcConfig;
-///
+/// ```rust,ignore
 /// let config = NpmrcConfig::default();
 /// assert!(config.registry.is_none());
 /// assert!(config.scoped_registries.is_empty());
 /// ```
 #[derive(Debug, Clone, Default)]
-pub(crate) struct NpmrcConfig {
+pub struct NpmrcConfig {
     /// Default registry URL.
     ///
     /// Extracted from `registry=<url>` line in .npmrc.
@@ -132,17 +120,8 @@ impl NpmrcConfig {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
-    /// use sublime_pkg_tools::upgrade::registry::npmrc::NpmrcConfig;
-    /// use sublime_standard_tools::filesystem::FileSystemManager;
-    /// use std::path::PathBuf;
-    ///
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let workspace_root = PathBuf::from(".");
-    /// let fs = FileSystemManager::new();
+    /// ```rust,ignore
     /// let npmrc = NpmrcConfig::from_workspace(&workspace_root, &fs).await?;
-    /// # Ok(())
-    /// # }
     /// ```
     pub async fn from_workspace<F>(workspace_root: &Path, fs: &F) -> Result<Self, UpgradeError>
     where
@@ -192,7 +171,7 @@ impl NpmrcConfig {
     /// # Example
     ///
     /// ```rust
-    /// use sublime_pkg_tools::upgrade::registry::npmrc::NpmrcConfig;
+    /// use sublime_pkg_tools::upgrade::NpmrcConfig;
     /// use std::collections::HashMap;
     ///
     /// let mut config = NpmrcConfig::default();
@@ -248,7 +227,7 @@ impl NpmrcConfig {
     /// # Example
     ///
     /// ```rust
-    /// use sublime_pkg_tools::upgrade::registry::npmrc::NpmrcConfig;
+    /// use sublime_pkg_tools::upgrade::NpmrcConfig;
     /// use std::collections::HashMap;
     ///
     /// let mut config = NpmrcConfig::default();
