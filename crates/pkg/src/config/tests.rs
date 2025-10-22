@@ -450,13 +450,19 @@ mod git_config {
     #[test]
     fn test_default_values() {
         let config = GitConfig::default();
-        assert_eq!(config.merge_commit_template, "chore(release): release version {version}");
+        assert_eq!(
+            config.merge_commit_template,
+            "chore(release): {version}\n\nRelease version {version}\n\n{changelog_summary}"
+        );
         assert_eq!(
             config.monorepo_merge_commit_template,
-            "chore(release): release packages\n\n{packages}"
+            "chore(release): {package_name}@{version}\n\nRelease {package_name} version {version}\n\n{changelog_summary}"
         );
         assert!(config.include_breaking_warning);
-        assert_eq!(config.breaking_warning_template, "⚠️ BREAKING CHANGES\n\n{changes}");
+        assert_eq!(
+            config.breaking_warning_template,
+            "\n⚠️  BREAKING CHANGES: {breaking_changes_count}\n"
+        );
     }
 
     #[test]
@@ -513,15 +519,25 @@ mod git_config {
     #[test]
     fn test_deserialization() {
         let json = r#"{
-            "merge_commit_template": "chore(release): release version {version}",
-            "monorepo_merge_commit_template": "chore(release): release packages\n\n{packages}",
+            "merge_commit_template": "chore(release): {version}\n\nRelease version {version}\n\n{changelog_summary}",
+            "monorepo_merge_commit_template": "chore(release): {package_name}@{version}\n\nRelease {package_name} version {version}\n\n{changelog_summary}",
             "include_breaking_warning": true,
-            "breaking_warning_template": "⚠️ BREAKING CHANGES\n\n{changes}"
+            "breaking_warning_template": "\n⚠️  BREAKING CHANGES: {breaking_changes_count}\n"
         }"#;
 
         let result: Result<GitConfig, _> = serde_json::from_str(json);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), GitConfig::default());
+    }
+
+    #[test]
+    fn test_template_placeholders() {
+        let config = GitConfig::default();
+        assert!(config.merge_commit_template.contains("{version}"));
+        assert!(config.merge_commit_template.contains("{changelog_summary}"));
+        assert!(config.monorepo_merge_commit_template.contains("{package_name}"));
+        assert!(config.monorepo_merge_commit_template.contains("{version}"));
+        assert!(config.breaking_warning_template.contains("{breaking_changes_count}"));
     }
 
     #[test]
@@ -539,14 +555,6 @@ mod git_config {
         assert_eq!(base.monorepo_merge_commit_template, "custom: {packages}");
         assert!(!base.include_breaking_warning);
         assert_eq!(base.breaking_warning_template, "BREAKING: {changes}");
-    }
-
-    #[test]
-    fn test_template_placeholders() {
-        let config = GitConfig::default();
-        assert!(config.merge_commit_template.contains("{version}"));
-        assert!(config.monorepo_merge_commit_template.contains("{packages}"));
-        assert!(config.breaking_warning_template.contains("{changes}"));
     }
 
     #[test]

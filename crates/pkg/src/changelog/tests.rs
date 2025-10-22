@@ -3093,4 +3093,491 @@ All notable changes to this project will be documented in this file.
             assert_eq!(result.versions[0].version, "1.0.0+20240115");
         }
     }
+
+    // ============================================================================
+    // Merge Message Generation Tests
+    // ============================================================================
+
+    mod merge_message_tests {
+        use super::*;
+        use crate::changelog::merge_message::{generate_merge_commit_message, MergeMessageContext};
+        use crate::changelog::{Changelog, ChangelogEntry, ChangelogSection};
+        use crate::config::GitConfig;
+        use chrono::Utc;
+
+        fn create_test_context() -> MergeMessageContext {
+            MergeMessageContext::new(None, "1.0.0", Some("0.9.0"), "Minor", Utc::now())
+        }
+
+        fn create_test_changelog() -> Changelog {
+            let mut changelog = Changelog::new(None, "1.0.0", Some("0.9.0"), Utc::now());
+
+            // Add features section
+            let mut features = ChangelogSection::new(SectionType::Features);
+            features.add_entry(ChangelogEntry {
+                description: "Add new feature".to_string(),
+                commit_hash: "abc123".to_string(),
+                short_hash: "abc123".to_string(),
+                commit_type: Some("feat".to_string()),
+                scope: None,
+                breaking: false,
+                author: "John".to_string(),
+                references: vec![],
+                date: Utc::now(),
+            });
+            changelog.add_section(features);
+
+            // Add fixes section
+            let mut fixes = ChangelogSection::new(SectionType::Fixes);
+            fixes.add_entry(ChangelogEntry {
+                description: "Fix bug".to_string(),
+                commit_hash: "def456".to_string(),
+                short_hash: "def456".to_string(),
+                commit_type: Some("fix".to_string()),
+                scope: None,
+                breaking: false,
+                author: "Jane".to_string(),
+                references: vec![],
+                date: Utc::now(),
+            });
+            changelog.add_section(fixes);
+
+            // Add breaking changes section
+            let mut breaking = ChangelogSection::new(SectionType::Breaking);
+            breaking.add_entry(ChangelogEntry {
+                description: "Breaking change".to_string(),
+                commit_hash: "ghi789".to_string(),
+                short_hash: "ghi789".to_string(),
+                commit_type: Some("feat".to_string()),
+                scope: None,
+                breaking: true,
+                author: "Bob".to_string(),
+                references: vec![],
+                date: Utc::now(),
+            });
+            changelog.add_section(breaking);
+
+            changelog
+        }
+
+        #[test]
+        fn test_context_creation() {
+            let context = create_test_context();
+            assert_eq!(context.version, "1.0.0");
+            assert_eq!(context.previous_version, Some("0.9.0".to_string()));
+            assert_eq!(context.bump_type, "Minor");
+            assert_eq!(context.package_name, None);
+            assert!(!context.is_monorepo());
+        }
+
+        #[test]
+        fn test_context_with_package_name() {
+            let context =
+                MergeMessageContext::new(Some("my-package"), "1.0.0", None, "Major", Utc::now());
+            assert_eq!(context.package_name, Some("my-package".to_string()));
+            assert!(context.is_monorepo());
+        }
+
+        #[test]
+        fn test_context_with_author() {
+            let context = create_test_context().with_author(Some("John Doe".to_string()));
+            assert_eq!(context.author, Some("John Doe".to_string()));
+        }
+
+        #[test]
+        fn test_context_with_changelog() {
+            let changelog = create_test_changelog();
+            let context = create_test_context().with_changelog(Some(changelog));
+            assert!(context.changelog.is_some());
+        }
+
+        #[test]
+        fn test_breaking_changes_count() {
+            let changelog = create_test_changelog();
+            let context = create_test_context().with_changelog(Some(changelog));
+            assert_eq!(context.breaking_changes_count(), 1);
+        }
+
+        #[test]
+        fn test_breaking_changes_count_no_changelog() {
+            let context = create_test_context();
+            assert_eq!(context.breaking_changes_count(), 0);
+        }
+
+        #[test]
+        fn test_features_count() {
+            let changelog = create_test_changelog();
+            let context = create_test_context().with_changelog(Some(changelog));
+            assert_eq!(context.features_count(), 1);
+        }
+
+        #[test]
+        fn test_fixes_count() {
+            let changelog = create_test_changelog();
+            let context = create_test_context().with_changelog(Some(changelog));
+            assert_eq!(context.fixes_count(), 1);
+        }
+
+        #[test]
+        fn test_changelog_summary_with_changes() {
+            let changelog = create_test_changelog();
+            let context = create_test_context().with_changelog(Some(changelog));
+            let summary = context.changelog_summary();
+
+            assert!(summary.contains("1 new feature"));
+            assert!(summary.contains("1 bug fix"));
+            assert!(summary.contains("1 breaking change"));
+        }
+
+        #[test]
+        fn test_changelog_summary_no_changelog() {
+            let context = create_test_context();
+            let summary = context.changelog_summary();
+            assert_eq!(summary, "No changelog available");
+        }
+
+        #[test]
+        fn test_changelog_summary_empty_changelog() {
+            let changelog = Changelog::new(None, "1.0.0", None, Utc::now());
+            let context = create_test_context().with_changelog(Some(changelog));
+            let summary = context.changelog_summary();
+            assert_eq!(summary, "No changes recorded");
+        }
+
+        #[test]
+        fn test_generate_merge_commit_message_single_package() {
+            let changelog = create_test_changelog();
+            let context = create_test_context().with_changelog(Some(changelog));
+            let config = GitConfig::default();
+
+            let message = generate_merge_commit_message(&context, &config);
+
+            assert!(message.contains("1.0.0"));
+            assert!(message.contains("1 new feature"));
+            assert!(message.contains("1 bug fix"));
+            assert!(message.contains("1 breaking change"));
+        }
+
+        #[test]
+        fn test_generate_merge_commit_message_monorepo() {
+            let changelog = create_test_changelog();
+            let context = MergeMessageContext::new(
+                Some("my-package"),
+                "1.0.0",
+                Some("0.9.0"),
+                "Minor",
+                Utc::now(),
+            )
+            .with_changelog(Some(changelog));
+            let config = GitConfig::default();
+
+            let message = generate_merge_commit_message(&context, &config);
+
+            assert!(message.contains("my-package"));
+            assert!(message.contains("1.0.0"));
+        }
+
+        #[test]
+        fn test_generate_merge_commit_message_with_breaking_warning() {
+            let changelog = create_test_changelog();
+            let context = create_test_context().with_changelog(Some(changelog));
+            let config = GitConfig::default();
+
+            let message = generate_merge_commit_message(&context, &config);
+
+            assert!(message.contains("⚠️  BREAKING CHANGES: 1"));
+        }
+
+        #[test]
+        fn test_generate_merge_commit_message_no_breaking_warning() {
+            let changelog = create_test_changelog();
+            let context = create_test_context().with_changelog(Some(changelog));
+            let mut config = GitConfig::default();
+            config.include_breaking_warning = false;
+
+            let message = generate_merge_commit_message(&context, &config);
+
+            assert!(!message.contains("⚠️  BREAKING CHANGES"));
+        }
+
+        #[test]
+        fn test_generate_merge_commit_message_no_breaking_changes() {
+            let mut changelog = Changelog::new(None, "1.0.0", Some("0.9.0"), Utc::now());
+            let mut features = ChangelogSection::new(SectionType::Features);
+            features.add_entry(ChangelogEntry {
+                description: "Add new feature".to_string(),
+                commit_hash: "abc123".to_string(),
+                short_hash: "abc123".to_string(),
+                commit_type: Some("feat".to_string()),
+                scope: None,
+                breaking: false,
+                author: "John".to_string(),
+                references: vec![],
+                date: Utc::now(),
+            });
+            changelog.add_section(features);
+
+            let context = create_test_context().with_changelog(Some(changelog));
+            let config = GitConfig::default();
+
+            let message = generate_merge_commit_message(&context, &config);
+
+            assert!(!message.contains("⚠️  BREAKING CHANGES"));
+        }
+
+        #[test]
+        fn test_generate_merge_commit_message_custom_template() {
+            let context = create_test_context();
+            let mut config = GitConfig::default();
+            config.merge_commit_template = "Release v{version} ({bump_type})".to_string();
+
+            let message = generate_merge_commit_message(&context, &config);
+
+            assert_eq!(message, "Release v1.0.0 (Minor)");
+        }
+
+        #[test]
+        fn test_generate_merge_commit_message_custom_breaking_template() {
+            let changelog = create_test_changelog();
+            let context = create_test_context().with_changelog(Some(changelog));
+            let mut config = GitConfig::default();
+            config.breaking_warning_template =
+                "\n⚠️  Warning: {breaking_changes_count} breaking changes!\n".to_string();
+
+            let message = generate_merge_commit_message(&context, &config);
+
+            assert!(message.contains("⚠️  Warning: 1 breaking changes!"));
+        }
+
+        #[test]
+        fn test_generate_merge_commit_message_all_variables() {
+            let changelog = create_test_changelog();
+            let context = MergeMessageContext::new(
+                Some("test-pkg"),
+                "2.0.0",
+                Some("1.5.0"),
+                "Major",
+                Utc::now(),
+            )
+            .with_author(Some("Test User".to_string()))
+            .with_changelog(Some(changelog));
+
+            let mut config = GitConfig::default();
+            // Use monorepo_merge_commit_template since context has package_name
+            config.monorepo_merge_commit_template = concat!(
+                "Package: {package_name}\n",
+                "Version: {previous_version} -> {version}\n",
+                "Bump: {bump_type}\n",
+                "Date: {date}\n",
+                "Author: {author}\n",
+                "Features: {features_count}\n",
+                "Fixes: {fixes_count}\n",
+                "Breaking: {breaking_changes_count}\n",
+                "Summary:\n{changelog_summary}"
+            )
+            .to_string();
+            config.include_breaking_warning = false;
+
+            let message = generate_merge_commit_message(&context, &config);
+
+            assert!(message.contains("Package: test-pkg"));
+            assert!(message.contains("Version: 1.5.0 -> 2.0.0"));
+            assert!(message.contains("Bump: Major"));
+            assert!(message.contains("Author: Test User"));
+            assert!(message.contains("Features: 1"));
+            assert!(message.contains("Fixes: 1"));
+            assert!(message.contains("Breaking: 1"));
+        }
+
+        #[test]
+        fn test_generate_merge_commit_message_with_multiple_features() {
+            let mut changelog = Changelog::new(None, "1.0.0", Some("0.9.0"), Utc::now());
+            let mut features = ChangelogSection::new(SectionType::Features);
+
+            for i in 1..=5 {
+                features.add_entry(ChangelogEntry {
+                    description: format!("Feature {}", i),
+                    commit_hash: format!("abc{}", i),
+                    short_hash: format!("abc{}", i),
+                    commit_type: Some("feat".to_string()),
+                    scope: None,
+                    breaking: false,
+                    author: "John".to_string(),
+                    references: vec![],
+                    date: Utc::now(),
+                });
+            }
+            changelog.add_section(features);
+
+            let context = create_test_context().with_changelog(Some(changelog));
+            let config = GitConfig::default();
+
+            let message = generate_merge_commit_message(&context, &config);
+
+            assert!(message.contains("5 new features"));
+        }
+
+        #[test]
+        fn test_generate_merge_commit_message_with_multiple_fixes() {
+            let mut changelog = Changelog::new(None, "1.0.0", Some("0.9.0"), Utc::now());
+            let mut fixes = ChangelogSection::new(SectionType::Fixes);
+
+            for i in 1..=3 {
+                fixes.add_entry(ChangelogEntry {
+                    description: format!("Fix {}", i),
+                    commit_hash: format!("def{}", i),
+                    short_hash: format!("def{}", i),
+                    commit_type: Some("fix".to_string()),
+                    scope: None,
+                    breaking: false,
+                    author: "Jane".to_string(),
+                    references: vec![],
+                    date: Utc::now(),
+                });
+            }
+            changelog.add_section(fixes);
+
+            let context = create_test_context().with_changelog(Some(changelog));
+            let config = GitConfig::default();
+
+            let message = generate_merge_commit_message(&context, &config);
+
+            assert!(message.contains("3 bug fixes"));
+        }
+
+        #[test]
+        fn test_generate_merge_commit_message_without_previous_version() {
+            let changelog = create_test_changelog();
+            let context = MergeMessageContext::new(None, "1.0.0", None, "Major", Utc::now())
+                .with_changelog(Some(changelog));
+            let mut config = GitConfig::default();
+            config.merge_commit_template =
+                "Release {version} (previous: {previous_version})".to_string();
+
+            let message = generate_merge_commit_message(&context, &config);
+
+            assert!(message.contains("Release 1.0.0 (previous: N/A)"));
+        }
+
+        #[test]
+        fn test_generate_merge_commit_message_without_author() {
+            let changelog = create_test_changelog();
+            let context = create_test_context().with_changelog(Some(changelog));
+            let mut config = GitConfig::default();
+            config.merge_commit_template = "Release {version} by {author}".to_string();
+
+            let message = generate_merge_commit_message(&context, &config);
+
+            assert!(message.contains("Release 1.0.0 by Unknown"));
+        }
+
+        #[test]
+        fn test_generate_merge_commit_message_date_format() {
+            let context = create_test_context();
+            let mut config = GitConfig::default();
+            config.merge_commit_template = "Release on {date}".to_string();
+
+            let message = generate_merge_commit_message(&context, &config);
+
+            assert!(message.starts_with("Release on "));
+            // Date should be in YYYY-MM-DD format
+            assert!(message.len() > 11); // "Release on " + date
+        }
+
+        #[test]
+        fn test_generate_merge_commit_message_with_performance_changes() {
+            let mut changelog = Changelog::new(None, "1.0.0", Some("0.9.0"), Utc::now());
+            let mut perf = ChangelogSection::new(SectionType::Performance);
+            perf.add_entry(ChangelogEntry {
+                description: "Improve performance".to_string(),
+                commit_hash: "perf123".to_string(),
+                short_hash: "perf123".to_string(),
+                commit_type: Some("perf".to_string()),
+                scope: None,
+                breaking: false,
+                author: "John".to_string(),
+                references: vec![],
+                date: Utc::now(),
+            });
+            changelog.add_section(perf);
+
+            let context = create_test_context().with_changelog(Some(changelog));
+            let summary = context.changelog_summary();
+
+            assert!(summary.contains("performance"));
+        }
+
+        #[test]
+        fn test_merge_message_context_builder_pattern() {
+            let changelog = create_test_changelog();
+            let context = MergeMessageContext::new(
+                Some("my-package"),
+                "2.0.0",
+                Some("1.0.0"),
+                "Major",
+                Utc::now(),
+            )
+            .with_author(Some("Jane Doe".to_string()))
+            .with_changelog(Some(changelog));
+
+            assert_eq!(context.package_name, Some("my-package".to_string()));
+            assert_eq!(context.author, Some("Jane Doe".to_string()));
+            assert!(context.changelog.is_some());
+            assert_eq!(context.breaking_changes_count(), 1);
+        }
+
+        #[test]
+        fn test_changelog_summary_multiple_sections() {
+            let mut changelog = Changelog::new(None, "1.0.0", Some("0.9.0"), Utc::now());
+
+            let mut features = ChangelogSection::new(SectionType::Features);
+            features.add_entry(ChangelogEntry {
+                description: "Feature".to_string(),
+                commit_hash: "a".to_string(),
+                short_hash: "a".to_string(),
+                commit_type: Some("feat".to_string()),
+                scope: None,
+                breaking: false,
+                author: "A".to_string(),
+                references: vec![],
+                date: Utc::now(),
+            });
+            changelog.add_section(features);
+
+            let mut fixes = ChangelogSection::new(SectionType::Fixes);
+            fixes.add_entry(ChangelogEntry {
+                description: "Fix".to_string(),
+                commit_hash: "b".to_string(),
+                short_hash: "b".to_string(),
+                commit_type: Some("fix".to_string()),
+                scope: None,
+                breaking: false,
+                author: "B".to_string(),
+                references: vec![],
+                date: Utc::now(),
+            });
+            changelog.add_section(fixes);
+
+            let mut docs = ChangelogSection::new(SectionType::Documentation);
+            docs.add_entry(ChangelogEntry {
+                description: "Doc".to_string(),
+                commit_hash: "c".to_string(),
+                short_hash: "c".to_string(),
+                commit_type: Some("docs".to_string()),
+                scope: None,
+                breaking: false,
+                author: "C".to_string(),
+                references: vec![],
+                date: Utc::now(),
+            });
+            changelog.add_section(docs);
+
+            let context = create_test_context().with_changelog(Some(changelog));
+            let summary = context.changelog_summary();
+
+            assert!(summary.contains("1 new feature"));
+            assert!(summary.contains("1 bug fix"));
+            assert!(summary.contains("documentation"));
+        }
+    }
 }
