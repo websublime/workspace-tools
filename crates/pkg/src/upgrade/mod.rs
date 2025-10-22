@@ -176,7 +176,7 @@ mod registry;
 mod detection;
 
 // Application module for applying upgrades (Story 9.4 - IMPLEMENTED)
-pub(crate) mod application;
+mod application;
 
 // Re-export registry public types
 pub use registry::{
