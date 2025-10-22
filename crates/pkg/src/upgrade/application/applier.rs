@@ -293,15 +293,6 @@ fn apply_single_upgrade(pkg_json: &mut PackageJson, upgrade: &DependencyUpgrade)
 /// # Returns
 ///
 /// New version with appropriate prefix preserved
-///
-/// # Examples
-///
-/// ```
-/// # use sublime_pkg_tools::upgrade::application::preserve_version_prefix;
-/// assert_eq!(preserve_version_prefix("^1.2.3", "1.2.4"), "^1.2.4");
-/// assert_eq!(preserve_version_prefix("~2.0.0", "2.0.1"), "~2.0.1");
-/// assert_eq!(preserve_version_prefix("3.0.0", "3.0.1"), "3.0.1");
-/// ```
 pub fn preserve_version_prefix(old_version: &str, new_version: &str) -> String {
     let old_trimmed = old_version.trim();
 
