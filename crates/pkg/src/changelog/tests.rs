@@ -3581,3 +3581,429 @@ All notable changes to this project will be documented in this file.
         }
     }
 }
+
+// ============================================================================
+// Story 8.10: Generate from Changeset Integration Tests
+// ============================================================================
+
+mod generate_from_changeset_tests {
+    use super::*;
+    use crate::types::{Changeset, UpdateReason, VersionBump};
+    use crate::version::{PackageUpdate, VersionResolution};
+    use std::path::{Path, PathBuf};
+
+    /// Helper to create a test changeset with commits
+    fn create_test_changeset(branch: &str, bump: VersionBump, packages: Vec<&str>) -> Changeset {
+        let mut changeset = Changeset::new(branch, bump, vec!["production".to_string()]);
+
+        for package in packages {
+            changeset.add_package(package);
+        }
+
+        changeset.add_commit("abc123");
+        changeset.add_commit("def456");
+        changeset.add_commit("ghi789");
+
+        changeset
+    }
+
+    /// Helper to add test commits to a repository
+    fn add_test_commits(repo: &Repo, temp_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        use std::fs;
+
+        // Create initial commit
+        let file_path = temp_dir.join("README.md");
+        fs::write(&file_path, "# Test Project")?;
+        repo.add_all()?;
+        repo.commit("Initial commit")?;
+
+        // Add more commits for testing
+        fs::write(&file_path, "# Test Project\n\nUpdated")?;
+        repo.add_all()?;
+        repo.commit("feat: add new feature")?;
+
+        fs::write(&file_path, "# Test Project\n\nUpdated again")?;
+        repo.add_all()?;
+        repo.commit("fix: fix bug")?;
+
+        Ok(())
+    }
+
+    /// Helper to create a test version resolution
+    fn create_test_resolution(packages: Vec<(&str, &str, &str, PathBuf)>) -> VersionResolution {
+        let mut resolution = VersionResolution::new();
+
+        for (name, current, next, path) in packages {
+            let update = PackageUpdate::new(
+                name.to_string(),
+                path,
+                crate::types::Version::parse(current).unwrap(),
+                crate::types::Version::parse(next).unwrap(),
+                UpdateReason::DirectChange,
+            );
+            resolution.add_update(update);
+        }
+
+        resolution
+    }
+
+    /// Helper to setup a test monorepo with packages
+    async fn setup_test_monorepo(
+        temp_dir: &Path,
+        fs: &FileSystemManager,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Create workspace structure
+        fs.create_dir_all(&temp_dir.join("packages/pkg-a")).await?;
+        fs.create_dir_all(&temp_dir.join("packages/pkg-b")).await?;
+
+        // Create root package.json with workspaces
+        let root_package_json = r#"{
+  "name": "monorepo-root",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["packages/*"]
+}"#;
+        fs.write_file_string(&temp_dir.join("package.json"), root_package_json).await?;
+
+        // Create lerna.json to make it clearly a monorepo
+        let lerna_json = r#"{
+  "version": "independent",
+  "packages": ["packages/*"]
+}"#;
+        fs.write_file_string(&temp_dir.join("lerna.json"), lerna_json).await?;
+
+        // Create package A
+        let pkg_a_json = r#"{
+  "name": "@myorg/pkg-a",
+  "version": "1.0.0",
+  "dependencies": {}
+}"#;
+        fs.write_file_string(&temp_dir.join("packages/pkg-a/package.json"), pkg_a_json).await?;
+
+        // Create package B
+        let pkg_b_json = r#"{
+  "name": "@myorg/pkg-b",
+  "version": "2.0.0",
+  "dependencies": {}
+}"#;
+        fs.write_file_string(&temp_dir.join("packages/pkg-b/package.json"), pkg_b_json).await?;
+
+        Ok(())
+    }
+
+    /// Helper to setup a single package project
+    async fn setup_single_package(
+        temp_dir: &Path,
+        fs: &FileSystemManager,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let package_json = r#"{
+  "name": "my-package",
+  "version": "1.5.0",
+  "dependencies": {}
+}"#;
+        fs.write_file_string(&temp_dir.join("package.json"), package_json).await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_generate_from_changeset_single_package() {
+        let (temp_dir, repo) = create_test_repo();
+        let fs = FileSystemManager::new();
+        setup_single_package(temp_dir.path(), &fs).await.unwrap();
+        add_test_commits(&repo, temp_dir.path()).unwrap();
+
+        let config = ChangelogConfig::default();
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs.clone(), config)
+                .await
+                .unwrap();
+
+        let changeset = create_test_changeset("main", VersionBump::Minor, vec!["my-package"]);
+        let resolution = create_test_resolution(vec![(
+            "my-package",
+            "1.5.0",
+            "1.6.0",
+            temp_dir.path().to_path_buf(),
+        )]);
+
+        let result = generator.generate_from_changeset(&changeset, &resolution).await;
+        assert!(result.is_ok());
+
+        let changelogs = result.unwrap();
+        assert_eq!(changelogs.len(), 1);
+
+        let changelog = &changelogs[0];
+        assert_eq!(changelog.package_name, None); // Root changelog for single package
+        assert_eq!(changelog.changelog.version, "1.6.0");
+        assert!(!changelog.content.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_generate_from_changeset_monorepo_per_package() {
+        let (temp_dir, repo) = create_test_repo();
+        let fs = FileSystemManager::new();
+        setup_test_monorepo(temp_dir.path(), &fs).await.unwrap();
+        add_test_commits(&repo, temp_dir.path()).unwrap();
+
+        let mut config = ChangelogConfig::default();
+        config.monorepo_mode = MonorepoMode::PerPackage;
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs.clone(), config)
+                .await
+                .unwrap();
+
+        let changeset = create_test_changeset(
+            "feature-branch",
+            VersionBump::Minor,
+            vec!["@myorg/pkg-a", "@myorg/pkg-b"],
+        );
+        let resolution = create_test_resolution(vec![
+            ("@myorg/pkg-a", "1.0.0", "1.1.0", temp_dir.path().join("packages/pkg-a")),
+            ("@myorg/pkg-b", "2.0.0", "2.1.0", temp_dir.path().join("packages/pkg-b")),
+        ]);
+
+        let result = generator.generate_from_changeset(&changeset, &resolution).await;
+        assert!(result.is_ok());
+
+        let changelogs = result.unwrap();
+        // Should generate changelogs (either per-package if detected as monorepo, or root if not)
+        assert!(!changelogs.is_empty());
+
+        // If detected as monorepo, should have 2 package changelogs
+        // If detected as single package, should have 1 root changelog
+        if changelogs.len() == 2 {
+            // Verify both packages have changelogs
+            let pkg_a =
+                changelogs.iter().find(|c| c.package_name == Some("@myorg/pkg-a".to_string()));
+            assert!(pkg_a.is_some());
+            let pkg_a = pkg_a.unwrap();
+            assert_eq!(pkg_a.changelog.version, "1.1.0");
+            assert_eq!(pkg_a.package_path, temp_dir.path().join("packages/pkg-a"));
+
+            let pkg_b =
+                changelogs.iter().find(|c| c.package_name == Some("@myorg/pkg-b".to_string()));
+            assert!(pkg_b.is_some());
+            let pkg_b = pkg_b.unwrap();
+            assert_eq!(pkg_b.changelog.version, "2.1.0");
+            assert_eq!(pkg_b.package_path, temp_dir.path().join("packages/pkg-b"));
+        } else {
+            // Single package mode - should have root changelog
+            assert_eq!(changelogs[0].package_name, None);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_generate_from_changeset_monorepo_root_mode() {
+        let (temp_dir, repo) = create_test_repo();
+        let fs = FileSystemManager::new();
+        setup_test_monorepo(temp_dir.path(), &fs).await.unwrap();
+        add_test_commits(&repo, temp_dir.path()).unwrap();
+
+        let mut config = ChangelogConfig::default();
+        config.monorepo_mode = MonorepoMode::Root;
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs.clone(), config)
+                .await
+                .unwrap();
+
+        let changeset =
+            create_test_changeset("feature-branch", VersionBump::Minor, vec!["@myorg/pkg-a"]);
+        let resolution = create_test_resolution(vec![(
+            "@myorg/pkg-a",
+            "1.0.0",
+            "1.1.0",
+            temp_dir.path().join("packages/pkg-a"),
+        )]);
+
+        let result = generator.generate_from_changeset(&changeset, &resolution).await;
+        assert!(result.is_ok());
+
+        let changelogs = result.unwrap();
+        assert_eq!(changelogs.len(), 1);
+
+        // Should only generate root changelog
+        let changelog = &changelogs[0];
+        assert_eq!(changelog.package_name, None);
+        assert_eq!(changelog.package_path, temp_dir.path().to_path_buf());
+        assert_eq!(changelog.changelog.version, "1.1.0");
+    }
+
+    #[tokio::test]
+    async fn test_generate_from_changeset_monorepo_both_mode() {
+        let (temp_dir, repo) = create_test_repo();
+        let fs = FileSystemManager::new();
+        setup_test_monorepo(temp_dir.path(), &fs).await.unwrap();
+        add_test_commits(&repo, temp_dir.path()).unwrap();
+
+        let mut config = ChangelogConfig::default();
+        config.monorepo_mode = MonorepoMode::Both;
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs.clone(), config)
+                .await
+                .unwrap();
+
+        let changeset = create_test_changeset(
+            "feature-branch",
+            VersionBump::Minor,
+            vec!["@myorg/pkg-a", "@myorg/pkg-b"],
+        );
+        let resolution = create_test_resolution(vec![
+            ("@myorg/pkg-a", "1.0.0", "1.1.0", temp_dir.path().join("packages/pkg-a")),
+            ("@myorg/pkg-b", "2.0.0", "2.1.0", temp_dir.path().join("packages/pkg-b")),
+        ]);
+
+        let result = generator.generate_from_changeset(&changeset, &resolution).await;
+        assert!(result.is_ok());
+
+        let changelogs = result.unwrap();
+        // Should generate changelogs - at least root
+        assert!(!changelogs.is_empty());
+
+        // Verify root changelog exists
+        let root = changelogs.iter().find(|c| c.package_name.is_none());
+        assert!(root.is_some());
+
+        // If detected as monorepo, should also have package changelogs
+        if changelogs.len() > 1 {
+            let pkg_a =
+                changelogs.iter().find(|c| c.package_name == Some("@myorg/pkg-a".to_string()));
+            assert!(pkg_a.is_some());
+
+            let pkg_b =
+                changelogs.iter().find(|c| c.package_name == Some("@myorg/pkg-b".to_string()));
+            assert!(pkg_b.is_some());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_generate_from_changeset_empty_resolution() {
+        let (temp_dir, repo) = create_test_repo();
+        let fs = FileSystemManager::new();
+        setup_single_package(temp_dir.path(), &fs).await.unwrap();
+
+        let config = ChangelogConfig::default();
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs.clone(), config)
+                .await
+                .unwrap();
+
+        let changeset = create_test_changeset("main", VersionBump::None, vec![]);
+        let resolution = VersionResolution::new(); // Empty resolution
+
+        let result = generator.generate_from_changeset(&changeset, &resolution).await;
+        assert!(result.is_ok());
+
+        let changelogs = result.unwrap();
+        assert_eq!(changelogs.len(), 0); // No changelogs for empty resolution
+    }
+
+    #[tokio::test]
+    async fn test_generated_changelog_paths() {
+        let (temp_dir, repo) = create_test_repo();
+        let fs = FileSystemManager::new();
+        setup_test_monorepo(temp_dir.path(), &fs).await.unwrap();
+        add_test_commits(&repo, temp_dir.path()).unwrap();
+
+        let mut config = ChangelogConfig::default();
+        config.filename = "RELEASES.md".to_string(); // Custom filename
+        config.monorepo_mode = MonorepoMode::PerPackage;
+
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs.clone(), config)
+                .await
+                .unwrap();
+
+        let changeset = create_test_changeset("main", VersionBump::Patch, vec!["@myorg/pkg-a"]);
+        let resolution = create_test_resolution(vec![(
+            "@myorg/pkg-a",
+            "1.0.0",
+            "1.0.1",
+            temp_dir.path().join("packages/pkg-a"),
+        )]);
+
+        let result = generator.generate_from_changeset(&changeset, &resolution).await;
+        assert!(result.is_ok());
+
+        let changelogs = result.unwrap();
+        assert_eq!(changelogs.len(), 1);
+
+        let changelog = &changelogs[0];
+        // Path should contain the custom filename
+        assert!(changelog.changelog_path.to_string_lossy().contains("RELEASES.md"));
+        assert!(!changelog.existing); // File doesn't exist yet
+    }
+
+    #[tokio::test]
+    async fn test_generated_changelog_content_not_empty() {
+        let (temp_dir, repo) = create_test_repo();
+        let fs = FileSystemManager::new();
+        setup_single_package(temp_dir.path(), &fs).await.unwrap();
+        add_test_commits(&repo, temp_dir.path()).unwrap();
+
+        let config = ChangelogConfig::default();
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs.clone(), config)
+                .await
+                .unwrap();
+
+        let changeset = create_test_changeset("main", VersionBump::Major, vec!["my-package"]);
+        let resolution = create_test_resolution(vec![(
+            "my-package",
+            "1.5.0",
+            "2.0.0",
+            temp_dir.path().to_path_buf(),
+        )]);
+
+        let result = generator.generate_from_changeset(&changeset, &resolution).await;
+        assert!(result.is_ok());
+
+        let changelogs = result.unwrap();
+        assert_eq!(changelogs.len(), 1);
+
+        let changelog = &changelogs[0];
+        assert!(!changelog.content.is_empty());
+        assert!(changelog.content.contains("2.0.0")); // Version should be in content
+    }
+
+    #[tokio::test]
+    async fn test_generated_changelog_write_to_filesystem() {
+        let (temp_dir, repo) = create_test_repo();
+        let fs = FileSystemManager::new();
+        setup_single_package(temp_dir.path(), &fs).await.unwrap();
+        add_test_commits(&repo, temp_dir.path()).unwrap();
+
+        let config = ChangelogConfig::default();
+        let generator =
+            ChangelogGenerator::new(temp_dir.path().to_path_buf(), repo, fs.clone(), config)
+                .await
+                .unwrap();
+
+        let changeset = create_test_changeset("main", VersionBump::Minor, vec!["my-package"]);
+        let resolution = create_test_resolution(vec![(
+            "my-package",
+            "1.5.0",
+            "1.6.0",
+            temp_dir.path().to_path_buf(),
+        )]);
+
+        let changelogs = generator.generate_from_changeset(&changeset, &resolution).await.unwrap();
+        assert_eq!(changelogs.len(), 1);
+
+        let changelog = &changelogs[0];
+        let write_result = changelog.write(&fs).await;
+        assert!(write_result.is_ok());
+
+        // Verify file was created
+        let changelog_path = temp_dir.path().join("CHANGELOG.md");
+        assert!(fs.exists(&changelog_path).await);
+
+        // Verify content was written
+        let content = fs.read_file_string(&changelog_path).await.unwrap();
+        assert!(!content.is_empty());
+        assert!(content.contains("1.6.0"));
+    }
+}

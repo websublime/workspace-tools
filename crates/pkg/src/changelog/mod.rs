@@ -98,7 +98,9 @@ pub use formatter::{
 pub use generator::ChangelogGenerator;
 pub use merge_message::{generate_merge_commit_message, MergeMessageContext};
 pub use parser::{ChangelogParser, ParsedChangelog, ParsedVersion};
-pub use types::{Changelog, ChangelogEntry, ChangelogMetadata, ChangelogSection};
+pub use types::{
+    Changelog, ChangelogEntry, ChangelogMetadata, ChangelogSection, GeneratedChangelog,
+};
 pub use version_detection::VersionTag;
 
 // Internal modules

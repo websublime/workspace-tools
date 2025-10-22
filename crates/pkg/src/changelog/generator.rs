@@ -1250,4 +1250,343 @@ impl ChangelogGenerator {
 
         result
     }
+
+    /// Generates changelogs from a changeset and version resolution.
+    ///
+    /// This method takes a changeset with commits and a version resolution with
+    /// package updates, then generates changelog entries for each affected package.
+    /// It respects the configured monorepo mode and generates changelogs accordingly.
+    ///
+    /// # Arguments
+    ///
+    /// * `changeset` - The changeset containing commits and package information
+    /// * `version_resolution` - Resolved versions for all affected packages
+    ///
+    /// # Returns
+    ///
+    /// A vector of `GeneratedChangelog` instances, one for each package that
+    /// needs a changelog update.
+    ///
+    /// # Errors
+    ///
+    /// This method returns an error if:
+    /// - Monorepo detection fails
+    /// - Package information cannot be loaded
+    /// - Commit collection fails
+    /// - Changelog generation fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::changelog::ChangelogGenerator;
+    /// use sublime_pkg_tools::changeset::ChangesetManager;
+    /// use sublime_pkg_tools::version::VersionResolver;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let generator = ChangelogGenerator::new(workspace_root, git_repo, fs, config).await?;
+    /// let changeset_manager = ChangesetManager::new(changeset_storage, git_repo).await?;
+    /// let version_resolver = VersionResolver::new(&workspace_root, &config).await?;
+    ///
+    /// // Load changeset
+    /// let changeset = changeset_manager.load("feature-branch").await?;
+    ///
+    /// // Resolve versions
+    /// let resolution = version_resolver.resolve_versions(&changeset).await?;
+    ///
+    /// // Generate changelogs
+    /// let changelogs = generator.generate_from_changeset(&changeset, &resolution).await?;
+    ///
+    /// for generated in &changelogs {
+    ///     println!("Generated changelog for: {:?}", generated.package_name);
+    ///     generated.write(&fs).await?;
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn generate_from_changeset(
+        &self,
+        changeset: &crate::types::Changeset,
+        version_resolution: &crate::version::VersionResolution,
+    ) -> ChangelogResult<Vec<crate::changelog::GeneratedChangelog>> {
+        use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
+
+        // Check if this is a monorepo
+        let monorepo_detector = MonorepoDetector::with_filesystem(self.fs.clone());
+        let is_monorepo = monorepo_detector
+            .is_monorepo_root(&self.workspace_root)
+            .await
+            .map_err(|e| ChangelogError::FileSystemError {
+                path: self.workspace_root.clone(),
+                reason: e.as_ref().to_string(),
+            })?
+            .is_some();
+
+        let mut generated_changelogs = Vec::new();
+
+        // Determine which packages need changelogs based on monorepo_mode
+        match self.config.monorepo_mode {
+            crate::config::MonorepoMode::PerPackage => {
+                // Generate changelog for each updated package
+                if is_monorepo {
+                    generated_changelogs.extend(
+                        self.generate_per_package_changelogs(changeset, version_resolution).await?,
+                    );
+                } else {
+                    // Single package - generate root changelog
+                    generated_changelogs
+                        .extend(self.generate_root_changelog(changeset, version_resolution).await?);
+                }
+            }
+            crate::config::MonorepoMode::Root => {
+                // Generate only root changelog
+                generated_changelogs
+                    .extend(self.generate_root_changelog(changeset, version_resolution).await?);
+            }
+            crate::config::MonorepoMode::Both => {
+                // Generate both per-package and root changelogs
+                if is_monorepo {
+                    generated_changelogs.extend(
+                        self.generate_per_package_changelogs(changeset, version_resolution).await?,
+                    );
+                }
+                generated_changelogs
+                    .extend(self.generate_root_changelog(changeset, version_resolution).await?);
+            }
+        }
+
+        Ok(generated_changelogs)
+    }
+
+    /// Generates changelogs for each package in a monorepo.
+    ///
+    /// # Arguments
+    ///
+    /// * `changeset` - The changeset with commits
+    /// * `version_resolution` - Resolved versions for packages
+    ///
+    /// # Returns
+    ///
+    /// A vector of generated changelogs, one per package.
+    async fn generate_per_package_changelogs(
+        &self,
+        _changeset: &crate::types::Changeset,
+        version_resolution: &crate::version::VersionResolution,
+    ) -> ChangelogResult<Vec<crate::changelog::GeneratedChangelog>> {
+        use crate::changelog::GeneratedChangelog;
+        use sublime_standard_tools::filesystem::AsyncFileSystem;
+
+        let mut changelogs = Vec::new();
+
+        for update in &version_resolution.updates {
+            // Load package.json to get package name
+            let package_json_path = update.path.join("package.json");
+            let package_json_content =
+                self.fs.read_file_string(&package_json_path).await.map_err(|_e| {
+                    ChangelogError::PackageNotFound { package: update.name.clone() }
+                })?;
+
+            let package_json: package_json::PackageJson =
+                serde_json::from_str(&package_json_content).map_err(|e| {
+                    ChangelogError::FileSystemError {
+                        path: package_json_path.clone(),
+                        reason: format!("Failed to parse package.json: {}", e),
+                    }
+                })?;
+
+            let package_name = package_json.name.clone();
+
+            // Determine relative path for commit filtering
+            let relative_path = update
+                .path
+                .strip_prefix(&self.workspace_root)
+                .ok()
+                .and_then(|p| p.to_str())
+                .map(String::from);
+
+            // Determine previous version for Git refs
+            let previous_version = if let Ok(prev_tag) = self
+                .detect_previous_version(Some(&package_name), &update.next_version.to_string())
+                .await
+            {
+                prev_tag.map(|t| t.version().to_string())
+            } else {
+                None
+            };
+
+            // Build Git refs and collect commits
+            let (sections, from_ref, to_ref) = if let Some(ref prev_version) = previous_version {
+                let (from_ref, to_ref) = self.build_git_refs(
+                    Some(&package_name),
+                    Some(prev_version.as_str()),
+                    &update.next_version.to_string(),
+                )?;
+
+                // Collect commits for this package
+                let collector = ChangelogCollector::new(&self.git_repo, &self.config);
+                let sections = collector
+                    .collect_between_versions(&from_ref, &to_ref, relative_path.as_deref())
+                    .await?;
+
+                (sections, from_ref, to_ref)
+            } else {
+                // No previous version - try to collect all commits using git log
+                // If that fails (empty repo), return empty sections
+                let collector = ChangelogCollector::new(&self.git_repo, &self.config);
+
+                // Try to get commits since the beginning
+                // Use get_commits_since with None to get all commits
+                let commits_result = self.git_repo.get_commits_since(None, &relative_path);
+
+                let sections = if let Ok(commits) = commits_result {
+                    collector.process_commits(commits)?
+                } else {
+                    // Empty repo or no commits accessible
+                    Vec::new()
+                };
+
+                // Use empty refs for metadata when no previous version
+                (sections, String::new(), "HEAD".to_string())
+            };
+
+            // Build metadata
+            let metadata = self.build_metadata(
+                Some(&package_name),
+                &update.next_version.to_string(),
+                previous_version.as_deref(),
+                &from_ref,
+                &to_ref,
+                &sections,
+            )?;
+
+            // Create changelog
+            let mut changelog = crate::changelog::Changelog::new(
+                Some(&package_name),
+                &update.next_version.to_string(),
+                previous_version.as_deref(),
+                chrono::Utc::now(),
+            );
+
+            for section in sections {
+                changelog.add_section(section);
+            }
+
+            changelog.metadata = metadata;
+
+            // Render to markdown
+            let content = changelog.to_markdown(&self.config);
+
+            // Determine changelog path
+            let changelog_path = update.path.join(&self.config.filename);
+            let existing = self.fs.exists(&changelog_path).await;
+
+            changelogs.push(GeneratedChangelog::new(
+                Some(package_name),
+                update.path.clone(),
+                changelog,
+                content,
+                existing,
+                changelog_path,
+            ));
+        }
+
+        Ok(changelogs)
+    }
+
+    /// Generates a root changelog for the entire workspace.
+    ///
+    /// # Arguments
+    ///
+    /// * `changeset` - The changeset with commits
+    /// * `version_resolution` - Resolved versions for packages
+    ///
+    /// # Returns
+    ///
+    /// A vector containing a single root changelog.
+    async fn generate_root_changelog(
+        &self,
+        _changeset: &crate::types::Changeset,
+        version_resolution: &crate::version::VersionResolution,
+    ) -> ChangelogResult<Vec<crate::changelog::GeneratedChangelog>> {
+        use crate::changelog::GeneratedChangelog;
+        use sublime_standard_tools::filesystem::AsyncFileSystem;
+
+        // For root changelog, we need to determine a version
+        // Use the highest version from the resolution, or construct one
+        let version = if let Some(first_update) = version_resolution.updates.first() {
+            first_update.next_version.to_string()
+        } else {
+            // No updates - shouldn't happen, but handle gracefully
+            return Ok(Vec::new());
+        };
+
+        // Determine previous version for Git refs
+        let previous_version =
+            if let Ok(prev_tag) = self.detect_previous_version(None, &version).await {
+                prev_tag.map(|t| t.version().to_string())
+            } else {
+                None
+            };
+
+        // Build Git refs and collect commits
+        let collector = ChangelogCollector::new(&self.git_repo, &self.config);
+        let (sections, from_ref, to_ref) = if let Some(ref prev_version) = previous_version {
+            let (from_ref, to_ref) =
+                self.build_git_refs(None, Some(prev_version.as_str()), &version)?;
+            let sections = collector.collect_between_versions(&from_ref, &to_ref, None).await?;
+            (sections, from_ref, to_ref)
+        } else {
+            // No previous version - try to collect all commits
+            let commits_result = self.git_repo.get_commits_since(None, &None);
+
+            let sections = if let Ok(commits) = commits_result {
+                collector.process_commits(commits)?
+            } else {
+                // Empty repo or no commits accessible
+                Vec::new()
+            };
+
+            // Use empty refs for metadata when no previous version
+            (sections, String::new(), "HEAD".to_string())
+        };
+
+        // Build metadata
+        let metadata = self.build_metadata(
+            None,
+            &version,
+            previous_version.as_deref(),
+            &from_ref,
+            &to_ref,
+            &sections,
+        )?;
+
+        // Create changelog
+        let mut changelog = crate::changelog::Changelog::new(
+            None,
+            &version,
+            previous_version.as_deref(),
+            chrono::Utc::now(),
+        );
+
+        for section in sections {
+            changelog.add_section(section);
+        }
+
+        changelog.metadata = metadata;
+
+        // Render to markdown
+        let content = changelog.to_markdown(&self.config);
+
+        // Determine changelog path (at workspace root)
+        let changelog_path = self.workspace_root.join(&self.config.filename);
+        let existing = self.fs.exists(&changelog_path).await;
+
+        Ok(vec![GeneratedChangelog::new(
+            None,
+            self.workspace_root.clone(),
+            changelog,
+            content,
+            existing,
+            changelog_path,
+        )])
+    }
 }

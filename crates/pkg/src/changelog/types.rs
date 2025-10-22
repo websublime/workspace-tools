@@ -15,6 +15,7 @@ use crate::config::ChangelogConfig;
 use crate::types::VersionBump;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sublime_standard_tools::filesystem::AsyncFileSystem;
 
 /// A complete changelog for a specific version.
 ///
@@ -523,5 +524,212 @@ impl ChangelogEntry {
                 format!("[{}]({}/issues/{})", ref_, url, issue_num)
             })
             .collect()
+    }
+}
+
+/// Result of generating a changelog for a package.
+///
+/// Contains the generated changelog along with metadata about where it should
+/// be written and whether it updates an existing changelog file.
+///
+/// # Fields
+///
+/// * `package_name` - Optional package name (None for root changelog)
+/// * `package_path` - Path to the package directory
+/// * `changelog` - The generated changelog data
+/// * `content` - Rendered markdown content
+/// * `existing` - Whether a changelog file already exists
+/// * `changelog_path` - Path where the changelog should be written
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sublime_pkg_tools::changelog::GeneratedChangelog;
+/// use std::path::PathBuf;
+///
+/// # async fn example(generated: GeneratedChangelog) -> Result<(), Box<dyn std::error::Error>> {
+/// println!("Generated changelog for: {:?}", generated.package_name);
+/// println!("Will be written to: {}", generated.changelog_path.display());
+/// println!("Existing file: {}", generated.existing);
+///
+/// // Write to filesystem
+/// generated.write(&fs).await?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, Clone)]
+pub struct GeneratedChangelog {
+    /// Package name (None for root changelog).
+    pub package_name: Option<String>,
+
+    /// Path to the package directory.
+    pub package_path: std::path::PathBuf,
+
+    /// Generated changelog data.
+    pub changelog: Changelog,
+
+    /// Rendered markdown content.
+    pub content: String,
+
+    /// Whether changelog file already exists.
+    pub existing: bool,
+
+    /// Path to the changelog file.
+    pub changelog_path: std::path::PathBuf,
+}
+
+impl GeneratedChangelog {
+    /// Creates a new `GeneratedChangelog` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Optional package name
+    /// * `package_path` - Path to the package directory
+    /// * `changelog` - The generated changelog
+    /// * `content` - Rendered markdown content
+    /// * `existing` - Whether changelog file exists
+    /// * `changelog_path` - Path to changelog file
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::changelog::{GeneratedChangelog, Changelog};
+    /// use std::path::PathBuf;
+    /// use chrono::Utc;
+    ///
+    /// let changelog = Changelog::new(Some("my-package"), "1.0.0", None, Utc::now());
+    /// let content = changelog.to_markdown(&config);
+    ///
+    /// let generated = GeneratedChangelog::new(
+    ///     Some("my-package".to_string()),
+    ///     PathBuf::from("/workspace/packages/my-package"),
+    ///     changelog,
+    ///     content,
+    ///     false,
+    ///     PathBuf::from("/workspace/packages/my-package/CHANGELOG.md"),
+    /// );
+    /// ```
+    #[must_use]
+    pub fn new(
+        package_name: Option<String>,
+        package_path: std::path::PathBuf,
+        changelog: Changelog,
+        content: String,
+        existing: bool,
+        changelog_path: std::path::PathBuf,
+    ) -> Self {
+        Self { package_name, package_path, changelog, content, existing, changelog_path }
+    }
+
+    /// Writes the changelog to the filesystem.
+    ///
+    /// If the changelog file already exists, this will prepend the new content
+    /// to the existing file. Otherwise, it creates a new file with the content.
+    ///
+    /// # Arguments
+    ///
+    /// * `fs` - Filesystem manager for file operations
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` on success, or an error if the write operation fails.
+    ///
+    /// # Errors
+    ///
+    /// This method returns an error if:
+    /// - The file cannot be written
+    /// - The existing file cannot be read
+    /// - The directory structure cannot be created
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::changelog::GeneratedChangelog;
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    ///
+    /// # async fn example(generated: GeneratedChangelog) -> Result<(), Box<dyn std::error::Error>> {
+    /// let fs = FileSystemManager::new();
+    /// generated.write(&fs).await?;
+    /// println!("Changelog written to: {}", generated.changelog_path.display());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn write(
+        &self,
+        fs: &sublime_standard_tools::filesystem::FileSystemManager,
+    ) -> Result<(), crate::error::ChangelogError> {
+        use crate::error::ChangelogError;
+
+        // Ensure parent directory exists
+        if let Some(parent) = self.changelog_path.parent() {
+            if !fs.exists(parent).await {
+                fs.create_dir_all(parent).await.map_err(|e| ChangelogError::FileSystemError {
+                    path: parent.to_path_buf(),
+                    reason: e.as_ref().to_string(),
+                })?;
+            }
+        }
+
+        // Determine final content
+        let final_content = if self.existing {
+            // Read existing content and prepend new content
+            let existing_content =
+                fs.read_file_string(&self.changelog_path).await.map_err(|e| {
+                    ChangelogError::FileSystemError {
+                        path: self.changelog_path.clone(),
+                        reason: e.as_ref().to_string(),
+                    }
+                })?;
+
+            format!("{}\n{}", self.content, existing_content)
+        } else {
+            self.content.clone()
+        };
+
+        // Write to file
+        fs.write_file_string(&self.changelog_path, &final_content).await.map_err(|e| {
+            ChangelogError::FileSystemError {
+                path: self.changelog_path.clone(),
+                reason: e.as_ref().to_string(),
+            }
+        })?;
+
+        Ok(())
+    }
+
+    /// Returns the merged content with existing changelog.
+    ///
+    /// This reads the existing changelog file (if it exists) and returns
+    /// the new content prepended to it without writing to disk.
+    ///
+    /// # Arguments
+    ///
+    /// * `fs` - Filesystem manager for file operations
+    ///
+    /// # Returns
+    ///
+    /// The merged changelog content as a string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the existing file cannot be read.
+    pub async fn merge_with_existing(
+        &self,
+        fs: &sublime_standard_tools::filesystem::FileSystemManager,
+    ) -> Result<String, crate::error::ChangelogError> {
+        use crate::error::ChangelogError;
+
+        if !self.existing {
+            return Ok(self.content.clone());
+        }
+
+        let existing_content = fs.read_file_string(&self.changelog_path).await.map_err(|e| {
+            ChangelogError::FileSystemError {
+                path: self.changelog_path.clone(),
+                reason: e.as_ref().to_string(),
+            }
+        })?;
+
+        Ok(format!("{}\n{}", self.content, existing_content))
     }
 }

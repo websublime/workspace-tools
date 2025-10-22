@@ -190,7 +190,10 @@ impl<'a> ChangelogCollector<'a> {
     /// # Returns
     ///
     /// A vector of `ChangelogSection` instances.
-    fn process_commits(&self, commits: Vec<RepoCommit>) -> ChangelogResult<Vec<ChangelogSection>> {
+    pub(crate) fn process_commits(
+        &self,
+        commits: Vec<RepoCommit>,
+    ) -> ChangelogResult<Vec<ChangelogSection>> {
         // Filter commits
         let filtered_commits: Vec<&RepoCommit> =
             commits.iter().filter(|commit| self.should_include_commit(commit)).collect();
