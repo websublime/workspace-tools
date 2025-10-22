@@ -48,12 +48,26 @@ pub struct GitConfig {
     ///
     /// This template is used when creating a release commit for a single package.
     /// Available placeholders:
-    /// - `{version}`: The version being released
-    /// - `{name}`: The package name
+    /// - `{version}`: The new version being released
+    /// - `{previous_version}`: The previous version (if available)
+    /// - `{package_name}`: The package name
+    /// - `{bump_type}`: The version bump type (Major, Minor, Patch, or None)
+    /// - `{date}`: Release date in YYYY-MM-DD format
+    /// - `{breaking_changes_count}`: Number of breaking changes
+    /// - `{features_count}`: Number of new features
+    /// - `{fixes_count}`: Number of bug fixes
+    /// - `{changelog_summary}`: Brief summary from changelog
+    /// - `{author}`: Current git user
     ///
     /// # Default
     ///
-    /// `"chore(release): release version {version}"`
+    /// ```text
+    /// chore(release): {version}
+    ///
+    /// Release version {version}
+    ///
+    /// {changelog_summary}
+    /// ```
     ///
     /// # Example
     ///
@@ -70,14 +84,28 @@ pub struct GitConfig {
 
     /// Template for monorepo release merge commits.
     ///
-    /// This template is used when creating a release commit for multiple packages
-    /// in a monorepo. Available placeholders:
-    /// - `{packages}`: List of packages being released with their versions
-    /// - `{count}`: Number of packages being released
+    /// This template is used when creating a release commit for a package in a monorepo.
+    /// Available placeholders:
+    /// - `{version}`: The new version being released
+    /// - `{previous_version}`: The previous version (if available)
+    /// - `{package_name}`: The package name
+    /// - `{bump_type}`: The version bump type (Major, Minor, Patch, or None)
+    /// - `{date}`: Release date in YYYY-MM-DD format
+    /// - `{breaking_changes_count}`: Number of breaking changes
+    /// - `{features_count}`: Number of new features
+    /// - `{fixes_count}`: Number of bug fixes
+    /// - `{changelog_summary}`: Brief summary from changelog
+    /// - `{author}`: Current git user
     ///
     /// # Default
     ///
-    /// `"chore(release): release packages\n\n{packages}"`
+    /// ```text
+    /// chore(release): {package_name}@{version}
+    ///
+    /// Release {package_name} version {version}
+    ///
+    /// {changelog_summary}
+    /// ```
     ///
     /// # Example
     ///
@@ -85,10 +113,10 @@ pub struct GitConfig {
     /// use sublime_pkg_tools::config::GitConfig;
     ///
     /// let config = GitConfig {
-    ///     monorepo_merge_commit_template: "release: {count} packages\n\n{packages}".to_string(),
+    ///     monorepo_merge_commit_template: "release: {package_name}@{version}".to_string(),
     ///     ..Default::default()
     /// };
-    /// assert!(config.monorepo_merge_commit_template.contains("{count}"));
+    /// assert!(config.monorepo_merge_commit_template.contains("{package_name}"));
     /// ```
     pub monorepo_merge_commit_template: String,
 
@@ -118,12 +146,13 @@ pub struct GitConfig {
     ///
     /// This template is used when `include_breaking_warning` is true and
     /// breaking changes are detected. Available placeholders:
-    /// - `{changes}`: Description of breaking changes
-    /// - `{count}`: Number of breaking changes
+    /// - `{breaking_changes_count}`: Number of breaking changes
     ///
     /// # Default
     ///
-    /// `"⚠️ BREAKING CHANGES\n\n{changes}"`
+    /// ```text
+    /// ⚠️  BREAKING CHANGES: {breaking_changes_count}
+    /// ```
     ///
     /// # Example
     ///
@@ -131,10 +160,10 @@ pub struct GitConfig {
     /// use sublime_pkg_tools::config::GitConfig;
     ///
     /// let config = GitConfig {
-    ///     breaking_warning_template: "BREAKING: {count} changes\n{changes}".to_string(),
+    ///     breaking_warning_template: "BREAKING: {breaking_changes_count} changes".to_string(),
     ///     ..Default::default()
     /// };
-    /// assert!(config.breaking_warning_template.contains("{changes}"));
+    /// assert!(config.breaking_warning_template.contains("{breaking_changes_count}"));
     /// ```
     pub breaking_warning_template: String,
 }
@@ -151,18 +180,15 @@ impl Default for GitConfig {
     /// use sublime_pkg_tools::config::GitConfig;
     ///
     /// let config = GitConfig::default();
-    /// assert_eq!(config.merge_commit_template, "chore(release): release version {version}");
-    /// assert_eq!(config.monorepo_merge_commit_template, "chore(release): release packages\n\n{packages}");
+    /// assert_eq!(config.merge_commit_template, "chore(release): {version}\n\nRelease version {version}\n\n{changelog_summary}");
     /// assert!(config.include_breaking_warning);
-    /// assert_eq!(config.breaking_warning_template, "⚠️ BREAKING CHANGES\n\n{changes}");
     /// ```
     fn default() -> Self {
         Self {
-            merge_commit_template: "chore(release): release version {version}".to_string(),
-            monorepo_merge_commit_template: "chore(release): release packages\n\n{packages}"
-                .to_string(),
+            merge_commit_template: "chore(release): {version}\n\nRelease version {version}\n\n{changelog_summary}".to_string(),
+            monorepo_merge_commit_template: "chore(release): {package_name}@{version}\n\nRelease {package_name} version {version}\n\n{changelog_summary}".to_string(),
             include_breaking_warning: true,
-            breaking_warning_template: "⚠️ BREAKING CHANGES\n\n{changes}".to_string(),
+            breaking_warning_template: "\n⚠️  BREAKING CHANGES: {breaking_changes_count}\n".to_string(),
         }
     }
 }
