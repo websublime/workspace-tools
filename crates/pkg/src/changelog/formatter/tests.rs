@@ -9,6 +9,7 @@
 //! **Why**: To ensure the formatter produces correct Keep a Changelog format output
 //! and handles all edge cases properly.
 
+use super::conventional::ConventionalCommitsFormatter;
 use super::keep_a_changelog::{KeepAChangelogFormatter, KeepAChangelogSection};
 use crate::changelog::{Changelog, ChangelogEntry, ChangelogSection, SectionType};
 use crate::config::ChangelogConfig;
@@ -721,4 +722,435 @@ fn test_mixed_sections_merged_correctly() {
 
     // Should only have one "Changed" section
     assert_eq!(formatted.matches("### Changed").count(), 1);
+}
+
+// ============================================================================
+// Conventional Commits Formatter Tests
+// ============================================================================
+
+#[test]
+fn test_conventional_format_version_header() {
+    let config = ChangelogConfig::default();
+    let formatter = ConventionalCommitsFormatter::new(&config);
+
+    let changelog = Changelog::new(Some("test-pkg"), "1.0.0", None, Utc::now());
+    let header = formatter.format_version_header(&changelog);
+
+    assert!(header.contains("1.0.0"));
+    assert!(header.starts_with("##"));
+}
+
+#[test]
+fn test_conventional_grouping_by_type() {
+    let config = ChangelogConfig::default();
+    let formatter = ConventionalCommitsFormatter::new(&config);
+
+    let mut changelog = create_changelog("test-pkg", "1.0.0");
+
+    // Add features section
+    let mut features = ChangelogSection::new(SectionType::Features);
+    features.add_entry(create_entry("Add new API", "feat", false, vec![]));
+    changelog.add_section(features);
+
+    // Add fixes section
+    let mut fixes = ChangelogSection::new(SectionType::Fixes);
+    fixes.add_entry(create_entry("Fix bug", "fix", false, vec![]));
+    changelog.add_section(fixes);
+
+    let formatted = formatter.format(&changelog);
+
+    assert!(formatted.contains("### Features"));
+    assert!(formatted.contains("### Bug Fixes"));
+    assert!(formatted.contains("Add new API"));
+    assert!(formatted.contains("Fix bug"));
+}
+
+#[test]
+fn test_conventional_breaking_changes_first() {
+    let config = ChangelogConfig::default();
+    let formatter = ConventionalCommitsFormatter::new(&config);
+
+    let mut changelog = create_changelog("test-pkg", "2.0.0");
+
+    // Add features section
+    let mut features = ChangelogSection::new(SectionType::Features);
+    features.add_entry(create_entry("Add new API", "feat", false, vec![]));
+    changelog.add_section(features);
+
+    // Add breaking changes section
+    let mut breaking = ChangelogSection::new(SectionType::Breaking);
+    breaking.add_entry(create_entry("Remove old API", "feat", true, vec![]));
+    changelog.add_section(breaking);
+
+    let formatted = formatter.format(&changelog);
+
+    // Breaking changes should appear before features
+    let breaking_pos = formatted.find("### Breaking Changes");
+    let features_pos = formatted.find("### Features");
+
+    assert!(breaking_pos.is_some(), "Breaking Changes section not found");
+    assert!(features_pos.is_some(), "Features section not found");
+
+    let breaking_pos = breaking_pos.unwrap_or(0);
+    let features_pos = features_pos.unwrap_or(0);
+    assert!(breaking_pos < features_pos, "Breaking Changes should appear before Features");
+}
+
+#[test]
+fn test_conventional_section_ordering() {
+    let config = ChangelogConfig::default();
+    let formatter = ConventionalCommitsFormatter::new(&config);
+
+    let mut changelog = create_changelog("test-pkg", "1.1.0");
+
+    // Add sections in non-priority order
+    let mut docs = ChangelogSection::new(SectionType::Documentation);
+    docs.add_entry(create_entry("Update docs", "docs", false, vec![]));
+    changelog.add_section(docs);
+
+    let mut features = ChangelogSection::new(SectionType::Features);
+    features.add_entry(create_entry("Add feature", "feat", false, vec![]));
+    changelog.add_section(features);
+
+    let mut fixes = ChangelogSection::new(SectionType::Fixes);
+    fixes.add_entry(create_entry("Fix bug", "fix", false, vec![]));
+    changelog.add_section(fixes);
+
+    let formatted = formatter.format(&changelog);
+
+    // Verify ordering based on priority
+    let features_pos = formatted.find("### Features");
+    let fixes_pos = formatted.find("### Bug Fixes");
+    let docs_pos = formatted.find("### Documentation");
+
+    assert!(features_pos.is_some());
+    assert!(fixes_pos.is_some());
+    assert!(docs_pos.is_some());
+
+    let features_pos = features_pos.unwrap_or(0);
+    let fixes_pos = fixes_pos.unwrap_or(0);
+    let docs_pos = docs_pos.unwrap_or(0);
+
+    assert!(features_pos < fixes_pos);
+    assert!(fixes_pos < docs_pos);
+}
+
+#[test]
+fn test_conventional_entry_with_scope() {
+    let config = ChangelogConfig {
+        include_commit_links: false,
+        include_issue_links: false,
+        include_authors: false,
+        ..ChangelogConfig::default()
+    };
+
+    let formatter = ConventionalCommitsFormatter::new(&config);
+
+    let entry = ChangelogEntry {
+        description: "Add authentication".to_string(),
+        commit_hash: "abc123".to_string(),
+        short_hash: "abc123".to_string(),
+        commit_type: Some("feat".to_string()),
+        scope: Some("auth".to_string()),
+        breaking: false,
+        author: "Test Author".to_string(),
+        references: vec![],
+        date: Utc::now(),
+    };
+
+    let formatted = formatter.format_entry(&entry);
+    assert_eq!(formatted, "- **auth**: Add authentication");
+}
+
+#[test]
+fn test_conventional_entry_without_scope() {
+    let config = ChangelogConfig {
+        include_commit_links: false,
+        include_issue_links: false,
+        include_authors: false,
+        ..ChangelogConfig::default()
+    };
+
+    let formatter = ConventionalCommitsFormatter::new(&config);
+    let entry = create_test_entry("Add new feature", false);
+
+    let formatted = formatter.format_entry(&entry);
+    assert_eq!(formatted, "- Add new feature");
+}
+
+#[test]
+fn test_conventional_entry_with_commit_link() {
+    let config = ChangelogConfig {
+        include_commit_links: true,
+        repository_url: Some("https://github.com/test/repo".to_string()),
+        include_issue_links: false,
+        include_authors: false,
+        ..ChangelogConfig::default()
+    };
+
+    let formatter = ConventionalCommitsFormatter::new(&config);
+    let entry = create_test_entry("Add feature", false);
+
+    let formatted = formatter.format_entry(&entry);
+    assert!(formatted.contains("Add feature"));
+    assert!(formatted.contains("[abcdef1]"));
+    assert!(formatted.contains("/commit/abcdef1234567890"));
+}
+
+#[test]
+fn test_conventional_entry_with_issue_links() {
+    let config = ChangelogConfig {
+        include_commit_links: false,
+        include_issue_links: true,
+        repository_url: Some("https://github.com/test/repo".to_string()),
+        include_authors: false,
+        ..ChangelogConfig::default()
+    };
+
+    let formatter = ConventionalCommitsFormatter::new(&config);
+    let mut entry = create_test_entry("Fix critical bug", false);
+    entry.references = vec!["#123".to_string(), "#456".to_string()];
+
+    let formatted = formatter.format_entry(&entry);
+    assert!(formatted.contains("Fix critical bug"));
+    assert!(formatted.contains("[#123]"));
+    assert!(formatted.contains("[#456]"));
+    assert!(formatted.contains("/issues/123"));
+    assert!(formatted.contains("/issues/456"));
+}
+
+#[test]
+fn test_conventional_entry_with_author() {
+    let config = ChangelogConfig {
+        include_commit_links: false,
+        include_issue_links: false,
+        include_authors: true,
+        ..ChangelogConfig::default()
+    };
+
+    let formatter = ConventionalCommitsFormatter::new(&config);
+    let entry = create_test_entry("Update documentation", false);
+
+    let formatted = formatter.format_entry(&entry);
+    assert!(formatted.contains("Update documentation"));
+    assert!(formatted.contains("by Test Author"));
+}
+
+#[test]
+fn test_conventional_custom_section_titles() {
+    use std::collections::HashMap;
+
+    let mut types = HashMap::new();
+    types.insert("feat".to_string(), "New Features".to_string());
+    types.insert("fix".to_string(), "Bug Fixes".to_string());
+    types.insert("perf".to_string(), "Performance".to_string());
+
+    let config = ChangelogConfig {
+        conventional: crate::config::ConventionalConfig {
+            enabled: true,
+            types,
+            breaking_section: "💥 Breaking Changes".to_string(),
+        },
+        ..ChangelogConfig::default()
+    };
+
+    let formatter = ConventionalCommitsFormatter::new(&config);
+
+    let mut changelog = create_changelog("test-pkg", "1.0.0");
+
+    let mut features = ChangelogSection::new(SectionType::Features);
+    features.add_entry(create_entry("Add API", "feat", false, vec![]));
+    changelog.add_section(features);
+
+    let mut performance = ChangelogSection::new(SectionType::Performance);
+    performance.add_entry(create_entry("Optimize queries", "perf", false, vec![]));
+    changelog.add_section(performance);
+
+    let formatted = formatter.format(&changelog);
+
+    assert!(formatted.contains("### New Features"));
+    assert!(formatted.contains("### Performance"));
+}
+
+#[test]
+fn test_conventional_custom_breaking_title() {
+    let config = ChangelogConfig {
+        conventional: crate::config::ConventionalConfig {
+            enabled: true,
+            types: std::collections::HashMap::new(),
+            breaking_section: "💥 Breaking Changes".to_string(),
+        },
+        ..ChangelogConfig::default()
+    };
+
+    let formatter = ConventionalCommitsFormatter::new(&config);
+
+    let mut changelog = create_changelog("test-pkg", "2.0.0");
+
+    let mut breaking = ChangelogSection::new(SectionType::Breaking);
+    breaking.add_entry(create_entry("Remove API", "feat", true, vec![]));
+    changelog.add_section(breaking);
+
+    let formatted = formatter.format(&changelog);
+
+    assert!(formatted.contains("### 💥 Breaking Changes"));
+}
+
+#[test]
+fn test_conventional_format_header() {
+    let config = ChangelogConfig::default();
+    let formatter = ConventionalCommitsFormatter::new(&config);
+
+    let header = formatter.format_header();
+    assert!(header.contains("# Changelog"));
+    assert!(header.contains("Conventional Commits"));
+    assert!(header.contains("Semantic Versioning"));
+}
+
+#[test]
+fn test_conventional_format_complete() {
+    let config = ChangelogConfig::default();
+    let formatter = ConventionalCommitsFormatter::new(&config);
+
+    let mut changelog1 = create_changelog("test-pkg", "1.1.0");
+    let mut features = ChangelogSection::new(SectionType::Features);
+    features.add_entry(create_entry("Add feature X", "feat", false, vec![]));
+    changelog1.add_section(features);
+
+    let mut changelog2 = create_changelog("test-pkg", "1.0.0");
+    let mut fixes = ChangelogSection::new(SectionType::Fixes);
+    fixes.add_entry(create_entry("Fix bug Y", "fix", false, vec![]));
+    changelog2.add_section(fixes);
+
+    let changelogs = vec![changelog1, changelog2];
+    let formatted = formatter.format_complete(&changelogs);
+
+    assert!(formatted.contains("# Changelog"));
+    assert!(formatted.contains("## [Unreleased]"));
+    assert!(formatted.contains("## [1.1.0]"));
+    assert!(formatted.contains("## [1.0.0]"));
+    assert!(formatted.contains("### Features"));
+    assert!(formatted.contains("### Bug Fixes"));
+}
+
+#[test]
+fn test_conventional_all_section_types() {
+    let config = ChangelogConfig::default();
+    let formatter = ConventionalCommitsFormatter::new(&config);
+
+    let mut changelog = create_changelog("test-pkg", "2.0.0");
+
+    // Add all section types
+    let mut breaking = ChangelogSection::new(SectionType::Breaking);
+    breaking.add_entry(create_entry("Breaking change", "feat", true, vec![]));
+    changelog.add_section(breaking);
+
+    let mut features = ChangelogSection::new(SectionType::Features);
+    features.add_entry(create_entry("New feature", "feat", false, vec![]));
+    changelog.add_section(features);
+
+    let mut fixes = ChangelogSection::new(SectionType::Fixes);
+    fixes.add_entry(create_entry("Bug fix", "fix", false, vec![]));
+    changelog.add_section(fixes);
+
+    let mut perf = ChangelogSection::new(SectionType::Performance);
+    perf.add_entry(create_entry("Performance improvement", "perf", false, vec![]));
+    changelog.add_section(perf);
+
+    let mut deprecations = ChangelogSection::new(SectionType::Deprecations);
+    deprecations.add_entry(create_entry("Deprecate old API", "deprecate", false, vec![]));
+    changelog.add_section(deprecations);
+
+    let mut docs = ChangelogSection::new(SectionType::Documentation);
+    docs.add_entry(create_entry("Update docs", "docs", false, vec![]));
+    changelog.add_section(docs);
+
+    let mut refactor = ChangelogSection::new(SectionType::Refactoring);
+    refactor.add_entry(create_entry("Refactor code", "refactor", false, vec![]));
+    changelog.add_section(refactor);
+
+    let mut build = ChangelogSection::new(SectionType::Build);
+    build.add_entry(create_entry("Update build", "build", false, vec![]));
+    changelog.add_section(build);
+
+    let mut ci = ChangelogSection::new(SectionType::CI);
+    ci.add_entry(create_entry("Update CI", "ci", false, vec![]));
+    changelog.add_section(ci);
+
+    let mut tests = ChangelogSection::new(SectionType::Tests);
+    tests.add_entry(create_entry("Add tests", "test", false, vec![]));
+    changelog.add_section(tests);
+
+    let mut other = ChangelogSection::new(SectionType::Other);
+    other.add_entry(create_entry("Other change", "chore", false, vec![]));
+    changelog.add_section(other);
+
+    let formatted = formatter.format(&changelog);
+
+    // Verify all sections are present
+    assert!(formatted.contains("### Breaking Changes"));
+    assert!(formatted.contains("### Features"));
+    assert!(formatted.contains("### Bug Fixes"));
+    assert!(formatted.contains("### Performance Improvements"));
+    assert!(formatted.contains("### Deprecations"));
+    assert!(formatted.contains("### Documentation"));
+    assert!(formatted.contains("### Code Refactoring"));
+    assert!(formatted.contains("### Build System"));
+    assert!(formatted.contains("### Continuous Integration"));
+    assert!(formatted.contains("### Tests"));
+    assert!(formatted.contains("### Chores"));
+}
+
+#[test]
+fn test_conventional_section_type_to_commit_type() {
+    let config = ChangelogConfig::default();
+    let formatter = ConventionalCommitsFormatter::new(&config);
+
+    assert_eq!(formatter.section_type_to_commit_type(&SectionType::Breaking), "breaking");
+    assert_eq!(formatter.section_type_to_commit_type(&SectionType::Features), "feat");
+    assert_eq!(formatter.section_type_to_commit_type(&SectionType::Fixes), "fix");
+    assert_eq!(formatter.section_type_to_commit_type(&SectionType::Performance), "perf");
+    assert_eq!(formatter.section_type_to_commit_type(&SectionType::Deprecations), "deprecate");
+    assert_eq!(formatter.section_type_to_commit_type(&SectionType::Documentation), "docs");
+    assert_eq!(formatter.section_type_to_commit_type(&SectionType::Refactoring), "refactor");
+    assert_eq!(formatter.section_type_to_commit_type(&SectionType::Build), "build");
+    assert_eq!(formatter.section_type_to_commit_type(&SectionType::CI), "ci");
+    assert_eq!(formatter.section_type_to_commit_type(&SectionType::Tests), "test");
+    assert_eq!(formatter.section_type_to_commit_type(&SectionType::Other), "chore");
+}
+
+#[test]
+fn test_conventional_empty_changelog() {
+    let config = ChangelogConfig::default();
+    let formatter = ConventionalCommitsFormatter::new(&config);
+    let changelog = create_changelog("test-pkg", "1.0.0");
+
+    let formatted = formatter.format(&changelog);
+
+    assert!(formatted.contains("## [1.0.0] - 2024-01-15"));
+    assert!(!formatted.contains("###")); // No sections
+}
+
+#[test]
+fn test_conventional_multiple_entries_per_section() {
+    let config = ChangelogConfig::default();
+    let formatter = ConventionalCommitsFormatter::new(&config);
+
+    let mut changelog = create_changelog("test-pkg", "1.0.0");
+
+    let mut features = ChangelogSection::new(SectionType::Features);
+    features.add_entry(create_entry("Add feature A", "feat", false, vec![]));
+    features.add_entry(create_entry("Add feature B", "feat", false, vec![]));
+    features.add_entry(create_entry("Add feature C", "feat", false, vec![]));
+    changelog.add_section(features);
+
+    let formatted = formatter.format(&changelog);
+
+    assert!(formatted.contains("### Features"));
+    assert!(formatted.contains("Add feature A"));
+    assert!(formatted.contains("Add feature B"));
+    assert!(formatted.contains("Add feature C"));
+
+    // Should only have one Features section
+    assert_eq!(formatted.matches("### Features").count(), 1);
 }
