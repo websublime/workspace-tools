@@ -10,6 +10,7 @@
 
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::panic)]
+#![allow(clippy::expect_used)]
 #![allow(clippy::field_reassign_with_default)]
 #![allow(clippy::bool_assert_comparison)]
 #![allow(clippy::unnecessary_to_owned)]
@@ -2436,5 +2437,660 @@ mod types_unit_tests {
         assert_eq!(links.len(), 2);
         assert!(links[0].contains("#123"));
         assert!(links[1].contains("#456"));
+    }
+}
+
+// =============================================================================
+// File Management Tests (Story 8.8)
+// =============================================================================
+
+mod file_management_tests {
+    use super::*;
+    use crate::changelog::{Changelog, ChangelogGenerator, ChangelogParser};
+    use crate::config::{ChangelogConfig, PackageToolsConfig};
+    use chrono::Utc;
+    use sublime_git_tools::Repo;
+    use sublime_standard_tools::filesystem::FileSystemManager;
+    use tempfile::TempDir;
+
+    async fn create_test_generator(temp_dir: &TempDir) -> ChangelogGenerator {
+        let workspace_root = temp_dir.path().to_path_buf();
+        let fs = FileSystemManager::new();
+        let config = PackageToolsConfig::default();
+
+        // Initialize git repository
+        std::process::Command::new("git")
+            .arg("init")
+            .arg(temp_dir.path())
+            .output()
+            .expect("Failed to initialize git repository");
+
+        let git_repo = Repo::open(workspace_root.to_str().expect("Invalid path"))
+            .expect("Failed to open repo");
+
+        ChangelogGenerator::new(workspace_root, git_repo, fs, config.changelog)
+            .await
+            .expect("Failed to create generator")
+    }
+
+    #[tokio::test]
+    async fn test_update_changelog_creates_new_file() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let generator = create_test_generator(&temp_dir).await;
+
+        let package_path = temp_dir.path().join("packages/my-package");
+        generator.fs().create_dir_all(&package_path).await.expect("Failed to create package dir");
+
+        let changelog = Changelog::new(Some("my-package"), "1.0.0", None, Utc::now());
+
+        // Create new changelog
+        let content = generator
+            .update_changelog(&package_path, &changelog, false)
+            .await
+            .expect("Failed to update changelog");
+
+        // Verify file was created
+        let changelog_path = package_path.join("CHANGELOG.md");
+        assert!(generator.fs().exists(&changelog_path).await);
+
+        // Verify content includes header and version
+        assert!(content.contains("# Changelog"));
+        assert!(content.contains("## [1.0.0]"));
+    }
+
+    #[tokio::test]
+    async fn test_update_changelog_dry_run() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let generator = create_test_generator(&temp_dir).await;
+
+        let package_path = temp_dir.path().join("packages/my-package");
+        generator.fs().create_dir_all(&package_path).await.expect("Failed to create package dir");
+
+        let changelog = Changelog::new(Some("my-package"), "1.0.0", None, Utc::now());
+
+        // Dry run
+        let content = generator
+            .update_changelog(&package_path, &changelog, true)
+            .await
+            .expect("Failed to update changelog");
+
+        // Verify file was NOT created
+        let changelog_path = package_path.join("CHANGELOG.md");
+        assert!(!generator.fs().exists(&changelog_path).await);
+
+        // But content was returned
+        assert!(content.contains("# Changelog"));
+        assert!(content.contains("## [1.0.0]"));
+    }
+
+    #[tokio::test]
+    async fn test_update_changelog_prepends_to_existing() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let generator = create_test_generator(&temp_dir).await;
+
+        let package_path = temp_dir.path().join("packages/my-package");
+        generator.fs().create_dir_all(&package_path).await.expect("Failed to create package dir");
+
+        // Create initial changelog
+        let changelog1 = Changelog::new(Some("my-package"), "1.0.0", None, Utc::now());
+        generator
+            .update_changelog(&package_path, &changelog1, false)
+            .await
+            .expect("Failed to create initial changelog");
+
+        // Add new version
+        let changelog2 = Changelog::new(Some("my-package"), "2.0.0", Some("1.0.0"), Utc::now());
+        let content = generator
+            .update_changelog(&package_path, &changelog2, false)
+            .await
+            .expect("Failed to update changelog");
+
+        // Verify both versions exist in correct order
+        assert!(content.contains("## [2.0.0]"));
+        assert!(content.contains("## [1.0.0]"));
+
+        let pos_2_0 = content.find("## [2.0.0]").expect("Should contain 2.0.0");
+        let pos_1_0 = content.find("## [1.0.0]").expect("Should contain 1.0.0");
+        assert!(pos_2_0 < pos_1_0, "2.0.0 should come before 1.0.0");
+    }
+
+    #[tokio::test]
+    async fn test_update_changelog_preserves_header() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let generator = create_test_generator(&temp_dir).await;
+
+        let package_path = temp_dir.path().join("packages/my-package");
+        generator.fs().create_dir_all(&package_path).await.expect("Failed to create package dir");
+
+        // Create initial changelog with custom header
+        let changelog_path = package_path.join("CHANGELOG.md");
+        let initial_content = r#"# Changelog
+
+All notable changes to this project will be documented in this file.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+"#;
+        generator
+            .fs()
+            .write_file_string(&changelog_path, initial_content)
+            .await
+            .expect("Failed to write initial changelog");
+
+        // Add version
+        let changelog = Changelog::new(Some("my-package"), "1.0.0", None, Utc::now());
+        let content = generator
+            .update_changelog(&package_path, &changelog, false)
+            .await
+            .expect("Failed to update changelog");
+
+        // Verify header is preserved
+        assert!(content.contains("# Changelog"));
+        assert!(content.contains("All notable changes"));
+        assert!(content.contains("Keep a Changelog"));
+        assert!(content.contains("## [1.0.0]"));
+    }
+
+    #[tokio::test]
+    async fn test_parse_changelog_success() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let generator = create_test_generator(&temp_dir).await;
+
+        let package_path = temp_dir.path().join("packages/my-package");
+        generator.fs().create_dir_all(&package_path).await.expect("Failed to create package dir");
+
+        // Create changelog with multiple versions
+        let changelog_path = package_path.join("CHANGELOG.md");
+        let content = r#"# Changelog
+
+## [2.0.0] - 2024-02-01
+
+### Features
+- Add new feature
+
+## [1.0.0] - 2024-01-15
+
+### Initial
+- Initial release
+"#;
+        generator
+            .fs()
+            .write_file_string(&changelog_path, content)
+            .await
+            .expect("Failed to write changelog");
+
+        // Parse it
+        let parsed =
+            generator.parse_changelog(&package_path).await.expect("Failed to parse changelog");
+
+        assert_eq!(parsed.versions.len(), 2);
+        assert_eq!(parsed.versions[0].version, "2.0.0");
+        assert_eq!(parsed.versions[1].version, "1.0.0");
+        assert!(parsed.header.contains("# Changelog"));
+    }
+
+    #[tokio::test]
+    async fn test_parse_changelog_not_found() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let generator = create_test_generator(&temp_dir).await;
+
+        let package_path = temp_dir.path().join("packages/my-package");
+        generator.fs().create_dir_all(&package_path).await.expect("Failed to create package dir");
+
+        // Try to parse non-existent changelog
+        let result = generator.parse_changelog(&package_path).await;
+
+        assert!(result.is_err());
+        match result {
+            Err(crate::error::ChangelogError::NotFound { .. }) => {}
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_prepend_changelog_with_existing_versions() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let generator = create_test_generator(&temp_dir).await;
+
+        let existing = r#"# Changelog
+
+## [1.0.0] - 2024-01-15
+
+### Features
+- Old feature
+"#;
+
+        let new_section = r#"## [2.0.0] - 2024-02-01
+
+### Features
+- New feature
+"#;
+
+        let result = generator.prepend_changelog(existing, new_section);
+
+        // Verify order
+        let pos_2_0 = result.find("## [2.0.0]").expect("Should contain 2.0.0");
+        let pos_1_0 = result.find("## [1.0.0]").expect("Should contain 1.0.0");
+        assert!(pos_2_0 < pos_1_0, "2.0.0 should come before 1.0.0");
+
+        // Verify header is preserved
+        assert!(result.contains("# Changelog"));
+    }
+
+    #[tokio::test]
+    async fn test_prepend_changelog_empty_changelog() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let generator = create_test_generator(&temp_dir).await;
+
+        let existing = r#"# Changelog
+
+All notable changes will be documented here.
+
+"#;
+
+        let new_section = r#"## [1.0.0] - 2024-01-15
+
+### Features
+- Initial release
+"#;
+
+        let result = generator.prepend_changelog(existing, new_section);
+
+        // Verify header comes first
+        assert!(result.starts_with("# Changelog"));
+
+        // Verify new section is added
+        assert!(result.contains("## [1.0.0]"));
+        assert!(result.contains("Initial release"));
+    }
+
+    #[tokio::test]
+    async fn test_prepend_changelog_maintains_spacing() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let generator = create_test_generator(&temp_dir).await;
+
+        let existing = r#"# Changelog
+
+## [1.0.0] - 2024-01-15
+- Feature
+"#;
+
+        let new_section = r#"## [2.0.0] - 2024-02-01
+- New feature
+"#;
+
+        let result = generator.prepend_changelog(existing, new_section);
+
+        // Verify proper spacing between sections
+        assert!(result.contains("## [2.0.0]"));
+        assert!(result.contains("## [1.0.0]"));
+
+        // Should have blank line between versions
+        let lines: Vec<&str> = result.lines().collect();
+        let mut found_2_0 = false;
+        let mut _found_blank_after = false;
+        for line in lines.iter() {
+            if line.contains("## [2.0.0]") {
+                found_2_0 = true;
+            } else if found_2_0 && line.is_empty() {
+                _found_blank_after = true;
+                break;
+            }
+        }
+        assert!(found_2_0, "Should find 2.0.0");
+    }
+
+    #[tokio::test]
+    async fn test_update_changelog_with_sections() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let generator = create_test_generator(&temp_dir).await;
+
+        let package_path = temp_dir.path().join("packages/my-package");
+        generator.fs().create_dir_all(&package_path).await.expect("Failed to create package dir");
+
+        // Create changelog with sections
+        let mut changelog = Changelog::new(Some("my-package"), "1.0.0", None, Utc::now());
+
+        let mut features_section =
+            crate::changelog::ChangelogSection::new(crate::changelog::SectionType::Features);
+        features_section.add_entry(crate::changelog::ChangelogEntry {
+            description: "Add new API".to_string(),
+            commit_hash: "abc123".to_string(),
+            short_hash: "abc123".to_string(),
+            commit_type: Some("feat".to_string()),
+            scope: None,
+            breaking: false,
+            author: "Developer".to_string(),
+            references: vec![],
+            date: Utc::now(),
+        });
+        changelog.add_section(features_section);
+
+        let content = generator
+            .update_changelog(&package_path, &changelog, false)
+            .await
+            .expect("Failed to update changelog");
+
+        // Verify sections are rendered
+        assert!(content.contains("## [1.0.0]"));
+        assert!(content.contains("### Features"));
+        assert!(content.contains("Add new API"));
+    }
+
+    #[tokio::test]
+    async fn test_update_changelog_custom_filename() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+
+        // Create generator with custom config
+        let workspace_root = temp_dir.path().to_path_buf();
+        let fs = FileSystemManager::new();
+
+        // Initialize git repository
+        std::process::Command::new("git")
+            .arg("init")
+            .arg(temp_dir.path())
+            .output()
+            .expect("Failed to initialize git repository");
+
+        let git_repo = Repo::open(workspace_root.to_str().expect("Invalid path"))
+            .expect("Failed to open repo");
+
+        let mut config = ChangelogConfig::default();
+        config.filename = "HISTORY.md".to_string();
+
+        let generator = ChangelogGenerator::new(workspace_root, git_repo, fs, config)
+            .await
+            .expect("Failed to create generator");
+
+        let package_path = temp_dir.path().join("packages/my-package");
+        generator.fs().create_dir_all(&package_path).await.expect("Failed to create package dir");
+
+        let changelog = Changelog::new(Some("my-package"), "1.0.0", None, Utc::now());
+
+        generator
+            .update_changelog(&package_path, &changelog, false)
+            .await
+            .expect("Failed to update changelog");
+
+        // Verify custom filename was used
+        let changelog_path = package_path.join("HISTORY.md");
+        assert!(generator.fs().exists(&changelog_path).await);
+    }
+
+    #[tokio::test]
+    async fn test_changelog_parser_integration() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let generator = create_test_generator(&temp_dir).await;
+
+        let package_path = temp_dir.path().join("packages/my-package");
+        generator.fs().create_dir_all(&package_path).await.expect("Failed to create package dir");
+
+        // Create changelog with parser directly
+        let parser = ChangelogParser::new();
+        let content = r#"# Changelog
+
+## [1.0.0] - 2024-01-15
+
+### Features
+- Feature 1
+- Feature 2
+
+## [0.9.0] - 2024-01-01
+
+### Fixes
+- Fix 1
+"#;
+
+        let parsed = parser.parse(content).expect("Failed to parse");
+
+        assert_eq!(parsed.version_count(), 2);
+        assert!(parsed.has_version("1.0.0"));
+        assert!(parsed.has_version("0.9.0"));
+
+        let versions = parsed.version_list();
+        assert_eq!(versions, vec!["1.0.0", "0.9.0"]);
+
+        let latest = parsed.latest_version().expect("Should have latest");
+        assert_eq!(latest.version, "1.0.0");
+        assert!(latest.date.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_update_and_parse_roundtrip() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let generator = create_test_generator(&temp_dir).await;
+
+        let package_path = temp_dir.path().join("packages/my-package");
+        generator.fs().create_dir_all(&package_path).await.expect("Failed to create package dir");
+
+        // Create and write changelog
+        let changelog = Changelog::new(Some("my-package"), "1.0.0", None, Utc::now());
+        generator
+            .update_changelog(&package_path, &changelog, false)
+            .await
+            .expect("Failed to update changelog");
+
+        // Parse it back
+        let parsed =
+            generator.parse_changelog(&package_path).await.expect("Failed to parse changelog");
+
+        assert_eq!(parsed.versions.len(), 1);
+        assert_eq!(parsed.versions[0].version, "1.0.0");
+    }
+
+    #[tokio::test]
+    async fn test_update_changelog_preserves_existing_content() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let generator = create_test_generator(&temp_dir).await;
+
+        let package_path = temp_dir.path().join("packages/my-package");
+        generator.fs().create_dir_all(&package_path).await.expect("Failed to create package dir");
+
+        // Create initial changelog
+        let changelog_path = package_path.join("CHANGELOG.md");
+        let initial_content = r#"# Changelog
+
+## [1.0.0] - 2024-01-15
+
+### Features
+- Feature A
+- Feature B
+
+### Fixes
+- Fix X
+"#;
+        generator
+            .fs()
+            .write_file_string(&changelog_path, initial_content)
+            .await
+            .expect("Failed to write initial changelog");
+
+        // Add new version
+        let changelog = Changelog::new(Some("my-package"), "2.0.0", Some("1.0.0"), Utc::now());
+        let content = generator
+            .update_changelog(&package_path, &changelog, false)
+            .await
+            .expect("Failed to update changelog");
+
+        // Verify old content is preserved
+        assert!(content.contains("Feature A"));
+        assert!(content.contains("Feature B"));
+        assert!(content.contains("Fix X"));
+        assert!(content.contains("## [1.0.0]"));
+        assert!(content.contains("## [2.0.0]"));
+    }
+
+    // =============================================================================
+    // Parser Tests (Story 8.8)
+    // =============================================================================
+
+    mod parser_tests {
+
+        use crate::changelog::ChangelogParser;
+
+        #[test]
+        fn test_parse_simple_changelog() {
+            let content = r#"# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [1.0.0] - 2024-01-15
+
+### Features
+- Add new feature
+
+## [0.9.0] - 2024-01-01
+
+### Fixes
+- Fix bug
+"#;
+
+            let parser = ChangelogParser::new();
+            let result = parser.parse(content).expect("Failed to parse");
+
+            assert_eq!(result.versions.len(), 2);
+            assert_eq!(result.versions[0].version, "1.0.0");
+            assert_eq!(result.versions[1].version, "0.9.0");
+            assert!(result.header.contains("# Changelog"));
+        }
+
+        #[test]
+        fn test_parse_version_without_brackets() {
+            let content = "# Changelog\n\n## 1.0.0 - 2024-01-15\n- Feature";
+
+            let parser = ChangelogParser::new();
+            let result = parser.parse(content).expect("Failed to parse");
+
+            assert_eq!(result.versions.len(), 1);
+            assert_eq!(result.versions[0].version, "1.0.0");
+        }
+
+        #[test]
+        fn test_parse_version_with_v_prefix() {
+            let content = "# Changelog\n\n## v1.0.0\n- Feature";
+
+            let parser = ChangelogParser::new();
+            let result = parser.parse(content).expect("Failed to parse");
+
+            assert_eq!(result.versions.len(), 1);
+            assert_eq!(result.versions[0].version, "1.0.0");
+        }
+
+        #[test]
+        fn test_parse_prerelease_version() {
+            let content = "# Changelog\n\n## [1.0.0-beta.1] - 2024-01-15\n- Feature";
+
+            let parser = ChangelogParser::new();
+            let result = parser.parse(content).expect("Failed to parse");
+
+            assert_eq!(result.versions.len(), 1);
+            assert_eq!(result.versions[0].version, "1.0.0-beta.1");
+        }
+
+        #[test]
+        fn test_date_extraction() {
+            let parser = ChangelogParser::new();
+
+            let date1 = parser.extract_date("## [1.0.0] - 2024-01-15");
+            assert!(date1.is_some());
+
+            let date2 = parser.extract_date("## [1.0.0] (2024/01/15)");
+            assert!(date2.is_some());
+
+            let date3 = parser.extract_date("## [1.0.0]");
+            assert!(date3.is_none());
+        }
+
+        #[test]
+        fn test_get_version() {
+            let content = "# Changelog\n\n## [1.0.0] - 2024-01-15\n- Feature";
+
+            let parser = ChangelogParser::new();
+            let result = parser.parse(content).expect("Failed to parse");
+
+            assert!(result.get_version("1.0.0").is_some());
+            assert!(result.get_version("2.0.0").is_none());
+        }
+
+        #[test]
+        fn test_latest_version() {
+            let content =
+                "# Changelog\n\n## [2.0.0] - 2024-02-01\n- New\n\n## [1.0.0] - 2024-01-15\n- Old";
+
+            let parser = ChangelogParser::new();
+            let result = parser.parse(content).expect("Failed to parse");
+
+            let latest = result.latest_version();
+            assert!(latest.is_some());
+            assert_eq!(latest.expect("Should have latest").version, "2.0.0");
+        }
+
+        #[test]
+        fn test_version_list() {
+            let content =
+                "# Changelog\n\n## [2.0.0] - 2024-02-01\n\n## [1.0.0] - 2024-01-15\n\n## [0.9.0] - 2024-01-01";
+
+            let parser = ChangelogParser::new();
+            let result = parser.parse(content).expect("Failed to parse");
+
+            let versions = result.version_list();
+            assert_eq!(versions, vec!["2.0.0", "1.0.0", "0.9.0"]);
+        }
+
+        #[test]
+        fn test_empty_changelog() {
+            let content = "# Changelog\n\nNo releases yet.";
+
+            let parser = ChangelogParser::new();
+            let result = parser.parse(content).expect("Failed to parse");
+
+            assert_eq!(result.versions.len(), 0);
+            assert!(result.header.contains("# Changelog"));
+        }
+
+        #[test]
+        fn test_parse_to_map() {
+            let content =
+                "# Changelog\n\n## [1.0.0] - 2024-01-15\n- Feature\n\n## [0.9.0] - 2024-01-01\n- Fix";
+
+            let parser = ChangelogParser::new();
+            let map = parser.parse_to_map(content).expect("Failed to parse");
+
+            assert_eq!(map.len(), 2);
+            assert!(map.contains_key("1.0.0"));
+            assert!(map.contains_key("0.9.0"));
+            assert!(map.get("1.0.0").expect("Should have 1.0.0").contains("Feature"));
+        }
+
+        #[test]
+        fn test_parsed_changelog_has_version() {
+            let content = "# Changelog\n\n## [1.0.0] - 2024-01-15\n- Feature";
+
+            let parser = ChangelogParser::new();
+            let result = parser.parse(content).expect("Failed to parse");
+
+            assert!(result.has_version("1.0.0"));
+            assert!(!result.has_version("2.0.0"));
+        }
+
+        #[test]
+        fn test_parsed_changelog_version_count() {
+            let content = "# Changelog\n\n## [3.0.0]\n\n## [2.0.0]\n\n## [1.0.0]";
+
+            let parser = ChangelogParser::new();
+            let result = parser.parse(content).expect("Failed to parse");
+
+            assert_eq!(result.version_count(), 3);
+        }
+
+        #[test]
+        fn test_parse_with_build_metadata() {
+            let content = "# Changelog\n\n## [1.0.0+20240115] - 2024-01-15\n- Feature";
+
+            let parser = ChangelogParser::new();
+            let result = parser.parse(content).expect("Failed to parse");
+
+            assert_eq!(result.versions.len(), 1);
+            assert_eq!(result.versions[0].version, "1.0.0+20240115");
+        }
     }
 }
