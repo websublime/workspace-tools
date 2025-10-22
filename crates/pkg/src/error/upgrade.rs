@@ -221,6 +221,18 @@ pub enum UpgradeError {
         reason: String,
     },
 
+    /// Invalid version string.
+    ///
+    /// This error occurs when a version string cannot be parsed as
+    /// a valid semantic version.
+    #[error("Invalid version '{version}': {message}")]
+    InvalidVersion {
+        /// The invalid version string.
+        version: String,
+        /// Description of why the version is invalid.
+        message: String,
+    },
+
     /// Version comparison failed.
     ///
     /// This error occurs when comparing two versions fails due to
@@ -315,6 +327,16 @@ pub enum UpgradeError {
         reason: String,
     },
 
+    /// No packages found in workspace.
+    ///
+    /// This error occurs when no package.json files can be found in the
+    /// workspace during upgrade detection.
+    #[error("No packages found in workspace at '{workspace_root}'")]
+    NoPackagesFound {
+        /// Path to the workspace root.
+        workspace_root: PathBuf,
+    },
+
     /// Concurrent modification detected.
     ///
     /// This error occurs when a package.json file is modified by another
@@ -402,14 +424,16 @@ impl AsRef<str> for UpgradeError {
             Self::NoUpgradesAvailable => "no upgrades available",
             Self::InvalidPackageName { .. } => "invalid package name",
             Self::InvalidVersionSpec { .. } => "invalid version spec",
+            Self::InvalidVersion { .. } => "invalid version",
             Self::VersionComparisonFailed { .. } => "version comparison failed",
             Self::NpmrcParseError { .. } => "npmrc parse error",
             Self::FileSystemError { .. } => "filesystem error",
             Self::PackageJsonError { .. } => "package.json error",
             Self::DeprecatedPackage { .. } => "deprecated package",
             Self::ChangesetCreationFailed { .. } => "changeset creation failed",
-            Self::InvalidConfig { .. } => "invalid configuration",
+            Self::InvalidConfig { .. } => "invalid config",
             Self::InvalidWorkspace { .. } => "invalid workspace",
+            Self::NoPackagesFound { .. } => "no packages found",
             Self::ConcurrentModification { .. } => "concurrent modification",
             Self::NetworkError { .. } => "network error",
             Self::RateLimitExceeded { .. } => "rate limit exceeded",
