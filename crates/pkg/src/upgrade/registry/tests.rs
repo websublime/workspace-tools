@@ -462,24 +462,27 @@ mod integration_tests {
             .expect("Failed to create client");
 
         // Major upgrade
-        let upgrade =
-            client.compare_versions("1.2.3", "2.0.0").expect("Failed to compare versions");
+        let upgrade = client
+            .compare_versions("test-package", "1.2.3", "2.0.0")
+            .expect("Failed to compare versions");
         assert_eq!(upgrade, UpgradeType::Major);
         assert!(upgrade.is_breaking());
         assert!(!upgrade.is_safe());
         assert_eq!(upgrade.priority(), 3);
 
         // Minor upgrade
-        let upgrade =
-            client.compare_versions("1.2.3", "1.3.0").expect("Failed to compare versions");
+        let upgrade = client
+            .compare_versions("test-package", "1.2.3", "1.3.0")
+            .expect("Failed to compare versions");
         assert_eq!(upgrade, UpgradeType::Minor);
         assert!(!upgrade.is_breaking());
         assert!(upgrade.is_safe());
         assert_eq!(upgrade.priority(), 2);
 
         // Patch upgrade
-        let upgrade =
-            client.compare_versions("1.2.3", "1.2.4").expect("Failed to compare versions");
+        let upgrade = client
+            .compare_versions("test-package", "1.2.3", "1.2.4")
+            .expect("Failed to compare versions");
         assert_eq!(upgrade, UpgradeType::Patch);
         assert!(!upgrade.is_breaking());
         assert!(upgrade.is_safe());
@@ -545,7 +548,7 @@ mod integration_tests {
             .await
             .expect("Failed to create client");
 
-        let result = client.compare_versions("1.2.3", "2.0.0");
+        let result = client.compare_versions("test-package", "1.2.3", "2.0.0");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), UpgradeType::Major);
     }
@@ -557,7 +560,7 @@ mod integration_tests {
             .await
             .expect("Failed to create client");
 
-        let result = client.compare_versions("1.2.3", "1.3.0");
+        let result = client.compare_versions("test-package", "1.2.3", "1.3.0");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), UpgradeType::Minor);
     }
@@ -569,7 +572,7 @@ mod integration_tests {
             .await
             .expect("Failed to create client");
 
-        let result = client.compare_versions("1.2.3", "1.2.4");
+        let result = client.compare_versions("test-package", "1.2.3", "1.2.4");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), UpgradeType::Patch);
     }
@@ -581,7 +584,7 @@ mod integration_tests {
             .await
             .expect("Failed to create client");
 
-        let result = client.compare_versions("invalid", "1.2.3");
+        let result = client.compare_versions("test-package", "invalid", "1.2.3");
         assert!(result.is_err());
     }
 
@@ -592,7 +595,7 @@ mod integration_tests {
             .await
             .expect("Failed to create client");
 
-        let result = client.compare_versions("1.2.3", "invalid");
+        let result = client.compare_versions("test-package", "1.2.3", "invalid");
         assert!(result.is_err());
     }
 
@@ -603,8 +606,49 @@ mod integration_tests {
             .await
             .expect("Failed to create client");
 
-        let result = client.compare_versions("2.0.0", "1.0.0");
+        let result = client.compare_versions("test-package", "2.0.0", "1.0.0");
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_error_messages_contain_package_name() {
+        let config = test_config();
+        let client = RegistryClient::new(std::path::Path::new("."), config)
+            .await
+            .expect("Failed to create client");
+
+        // Test invalid current version includes package name
+        let result = client.compare_versions("my-package", "invalid-version", "1.2.3");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let err_msg = format!("{}", err);
+        assert!(
+            err_msg.contains("my-package"),
+            "Error message should contain package name: {}",
+            err_msg
+        );
+
+        // Test invalid latest version includes package name
+        let result = client.compare_versions("another-package", "1.2.3", "not-a-version");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let err_msg = format!("{}", err);
+        assert!(
+            err_msg.contains("another-package"),
+            "Error message should contain package name: {}",
+            err_msg
+        );
+
+        // Test version comparison failed includes package name
+        let result = client.compare_versions("test-pkg", "2.0.0", "1.0.0");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let err_msg = format!("{}", err);
+        assert!(
+            err_msg.contains("test-pkg"),
+            "Error message should contain package name: {}",
+            err_msg
+        );
     }
 
     #[tokio::test]

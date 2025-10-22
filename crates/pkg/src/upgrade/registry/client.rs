@@ -310,6 +310,7 @@ impl RegistryClient {
     ///
     /// # Arguments
     ///
+    /// * `package_name` - Name of the package (for error reporting)
     /// * `current` - Current version string (e.g., "1.2.3")
     /// * `latest` - Latest version string (e.g., "2.0.0")
     ///
@@ -333,39 +334,40 @@ impl RegistryClient {
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = RegistryClient::new(&PathBuf::from("."), RegistryConfig::default()).await?;
     ///
-    /// let upgrade = client.compare_versions("1.2.3", "2.0.0")?;
+    /// let upgrade = client.compare_versions("express", "1.2.3", "2.0.0")?;
     /// assert_eq!(upgrade, UpgradeType::Major);
     ///
-    /// let upgrade = client.compare_versions("1.2.3", "1.3.0")?;
+    /// let upgrade = client.compare_versions("lodash", "1.2.3", "1.3.0")?;
     /// assert_eq!(upgrade, UpgradeType::Minor);
     ///
-    /// let upgrade = client.compare_versions("1.2.3", "1.2.4")?;
+    /// let upgrade = client.compare_versions("react", "1.2.3", "1.2.4")?;
     /// assert_eq!(upgrade, UpgradeType::Patch);
     /// # Ok(())
     /// # }
     /// ```
     pub fn compare_versions(
         &self,
+        package_name: &str,
         current: &str,
         latest: &str,
     ) -> Result<UpgradeType, UpgradeError> {
         let current_version =
             Version::parse(current).map_err(|e| UpgradeError::InvalidVersionSpec {
-                package: "unknown".to_string(),
+                package: package_name.to_string(),
                 spec: current.to_string(),
                 reason: format!("Invalid semver: {}", e),
             })?;
 
         let latest_version =
             Version::parse(latest).map_err(|e| UpgradeError::InvalidVersionSpec {
-                package: "unknown".to_string(),
+                package: package_name.to_string(),
                 spec: latest.to_string(),
                 reason: format!("Invalid semver: {}", e),
             })?;
 
         if latest_version <= current_version {
             return Err(UpgradeError::VersionComparisonFailed {
-                package: "unknown".to_string(),
+                package: package_name.to_string(),
                 reason: format!(
                     "Latest version '{}' is not greater than current version '{}'",
                     latest, current

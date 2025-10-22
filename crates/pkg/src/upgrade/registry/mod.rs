@@ -50,7 +50,7 @@
 //! println!("Latest lodash: {}", latest);
 //!
 //! // Compare versions
-//! let upgrade = client.compare_versions("1.2.3", "2.0.0")?;
+//! let upgrade = client.compare_versions("lodash", "1.2.3", "2.0.0")?;
 //! println!("Upgrade type: {}", upgrade);
 //! # Ok(())
 //! # }
