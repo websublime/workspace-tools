@@ -12,8 +12,8 @@
 
 use crate::config::RegistryConfig;
 use crate::error::UpgradeError;
+use crate::upgrade::registry::npmrc::NpmrcConfig;
 use crate::upgrade::registry::types::{PackageMetadata, RepositoryInfo, UpgradeType};
-// base64 will be used in story 9.2 for .npmrc authentication
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
@@ -54,17 +54,8 @@ pub struct RegistryClient {
     /// HTTP client with retry middleware
     http_client: ClientWithMiddleware,
 
-    /// .npmrc configuration (will be implemented in story 9.2)
-    #[allow(dead_code)]
+    /// .npmrc configuration loaded from workspace
     npmrc: Option<NpmrcConfig>,
-}
-
-/// .npmrc configuration (placeholder for story 9.2).
-///
-/// This will be fully implemented in story 9.2.
-#[derive(Debug, Clone)]
-struct NpmrcConfig {
-    // TODO: will be implemented on story 9.2
 }
 
 /// Internal structure for deserializing registry responses.
@@ -149,9 +140,24 @@ impl RegistryClient {
             .with(RetryTransientMiddleware::new_with_policy(retry_policy))
             .build();
 
-        // TODO: will be implemented on story 9.2
         // Load .npmrc if configured
-        let npmrc = None; // Will load from .npmrc file in story 9.2 when config.read_npmrc is true
+        let npmrc = if config.read_npmrc {
+            match NpmrcConfig::from_workspace(
+                _workspace_root,
+                &sublime_standard_tools::filesystem::FileSystemManager::new(),
+            )
+            .await
+            {
+                Ok(cfg) => Some(cfg),
+                Err(e) => {
+                    // Log but don't fail on .npmrc errors
+                    eprintln!("Warning: Failed to load .npmrc: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
         Ok(Self { config, http_client, npmrc })
     }
@@ -380,6 +386,7 @@ impl RegistryClient {
     /// Resolves the registry URL for a package.
     ///
     /// Handles scoped packages by checking the scoped_registries configuration.
+    /// If .npmrc is loaded, it takes precedence over config settings.
     /// Falls back to the default registry for unscoped packages.
     ///
     /// # Arguments
@@ -397,6 +404,13 @@ impl RegistryClient {
     ///
     /// For unscoped package "lodash", returns the default registry.
     pub(crate) fn resolve_registry_url(&self, package_name: &str) -> String {
+        // Try .npmrc first if available
+        if let Some(npmrc) = &self.npmrc {
+            if let Some(registry) = npmrc.resolve_registry(package_name) {
+                return registry.to_string();
+            }
+        }
+
         // Check if package is scoped (starts with @)
         if let Some(scope) = package_name.strip_prefix('@') {
             // Extract scope name (everything before the first '/')
@@ -417,6 +431,7 @@ impl RegistryClient {
     /// Resolves the authentication token for a registry URL.
     ///
     /// Checks the auth_tokens configuration for a matching token.
+    /// If .npmrc is loaded, it takes precedence over config settings.
     ///
     /// # Arguments
     ///
@@ -426,6 +441,13 @@ impl RegistryClient {
     ///
     /// The authentication token if one is configured, None otherwise.
     pub(crate) fn resolve_auth_token(&self, registry_url: &str) -> Option<String> {
+        // Try .npmrc first if available
+        if let Some(npmrc) = &self.npmrc {
+            if let Some(token) = npmrc.get_auth_token(registry_url) {
+                return Some(token.to_string());
+            }
+        }
+
         // Try exact match first
         if let Some(token) = self.config.auth_tokens.get(registry_url) {
             return Some(token.clone());

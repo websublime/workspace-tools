@@ -126,6 +126,7 @@
 //! Public API is accessed via `sublime_pkg_tools::upgrade::{RegistryClient, PackageMetadata, ...}`
 
 pub(crate) mod client;
+pub(crate) mod npmrc;
 pub(crate) mod types;
 
 #[cfg(test)]
