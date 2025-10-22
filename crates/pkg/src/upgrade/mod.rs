@@ -160,14 +160,21 @@
 // Registry module for NPM package metadata queries (Story 9.1 - IMPLEMENTED)
 mod registry;
 
+// Detection module for upgrade detection (Story 9.3 - IMPLEMENTED)
+mod detection;
+
 // Re-export registry public types
 pub use registry::{
     npmrc::NpmrcConfig, PackageMetadata, RegistryClient, RepositoryInfo, UpgradeType,
 };
 
+// Re-export detection public types and functions
+pub use detection::{
+    detect_upgrades, DependencyUpgrade, DetectionOptions, PackageUpgrades, UpgradePreview,
+    UpgradeSummary, VersionInfo,
+};
+
 // Remaining modules will be implemented in subsequent stories (Epic 9)
-// - npmrc: .npmrc parser (Story 9.2)
-// - detection: Upgrade detection logic (Story 9.3)
 // - application: Upgrade application (Story 9.4)
 // - backup: Backup and rollback (Story 9.5)
 // - manager: Main UpgradeManager (Story 9.7)
