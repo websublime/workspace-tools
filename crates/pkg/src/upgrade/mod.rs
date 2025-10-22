@@ -157,4 +157,15 @@
 
 #![allow(clippy::todo)]
 
-// Module will be implemented in subsequent stories (Epic 9)
+// Registry module for NPM package metadata queries (Story 9.1 - IMPLEMENTED)
+mod registry;
+
+// Re-export registry public types
+pub use registry::{PackageMetadata, RegistryClient, RepositoryInfo, UpgradeType};
+
+// Remaining modules will be implemented in subsequent stories (Epic 9)
+// - npmrc: .npmrc parser (Story 9.2)
+// - detection: Upgrade detection logic (Story 9.3)
+// - application: Upgrade application (Story 9.4)
+// - backup: Backup and rollback (Story 9.5)
+// - manager: Main UpgradeManager (Story 9.7)
