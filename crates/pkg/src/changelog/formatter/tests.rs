@@ -10,9 +10,10 @@
 //! and handles all edge cases properly.
 
 use super::conventional::ConventionalCommitsFormatter;
+use super::custom::CustomTemplateFormatter;
 use super::keep_a_changelog::{KeepAChangelogFormatter, KeepAChangelogSection};
 use crate::changelog::{Changelog, ChangelogEntry, ChangelogSection, SectionType};
-use crate::config::ChangelogConfig;
+use crate::config::{ChangelogConfig, TemplateConfig};
 use chrono::{TimeZone, Utc};
 
 /// Creates a test entry with common defaults.
@@ -1153,4 +1154,430 @@ fn test_conventional_multiple_entries_per_section() {
 
     // Should only have one Features section
     assert_eq!(formatted.matches("### Features").count(), 1);
+}
+
+// ============================================================================
+// Custom Template Formatter Tests
+// ============================================================================
+
+#[test]
+fn test_custom_format_version_header() {
+    let config = ChangelogConfig::default();
+    let formatter = CustomTemplateFormatter::new(&config);
+    let changelog = create_changelog("test-pkg", "1.0.0");
+
+    let header = formatter.format_version_header(&changelog);
+    assert!(header.contains("1.0.0"));
+    assert!(header.contains("2024-01-15"));
+}
+
+#[test]
+fn test_custom_format_version_header_with_package() {
+    let mut config = ChangelogConfig::default();
+    config.template.version_header = "## {package} v{version} ({date})".to_string();
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let changelog = create_changelog("my-package", "2.0.0");
+
+    let header = formatter.format_version_header(&changelog);
+    assert!(header.contains("my-package"));
+    assert!(header.contains("v2.0.0"));
+    assert!(header.contains("2024-01-15"));
+}
+
+#[test]
+fn test_custom_format_section_header() {
+    let config = ChangelogConfig::default();
+    let formatter = CustomTemplateFormatter::new(&config);
+    let section = ChangelogSection::new(SectionType::Features);
+
+    let header = formatter.format_section_header(&section);
+    assert!(header.contains("Features"));
+}
+
+#[test]
+fn test_custom_format_section_header_custom_template() {
+    let mut config = ChangelogConfig::default();
+    config.template.section_header = "## {title}:".to_string();
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let section = ChangelogSection::new(SectionType::Fixes);
+
+    let header = formatter.format_section_header(&section);
+    assert!(header.contains("## Bug Fixes:"));
+}
+
+#[test]
+fn test_custom_format_entry_basic() {
+    let config = ChangelogConfig::default();
+    let formatter = CustomTemplateFormatter::new(&config);
+    let entry = create_entry("Add new feature", "feat", false, vec![]);
+
+    let formatted = formatter.format_entry(&entry);
+    assert!(formatted.contains("Add new feature"));
+    assert!(formatted.contains("abcdef1"));
+}
+
+#[test]
+fn test_custom_format_entry_with_all_variables() {
+    let mut config = ChangelogConfig::default();
+    config.template.entry_format =
+        "{breaking}{type}({scope}): {description} - {author} [{short_hash}] {references} on {date}"
+            .to_string();
+    config.include_authors = true;
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let entry = create_entry("Fix critical bug", "fix", false, vec!["#123".to_string()]);
+
+    let formatted = formatter.format_entry(&entry);
+    assert!(formatted.contains("fix"));
+    assert!(formatted.contains("core"));
+    assert!(formatted.contains("Fix critical bug"));
+    assert!(formatted.contains("John Doe"));
+    assert!(formatted.contains("abcdef1"));
+    assert!(formatted.contains("#123"));
+    assert!(formatted.contains("2024-01-15"));
+}
+
+#[test]
+fn test_custom_format_entry_breaking_marker() {
+    let mut config = ChangelogConfig::default();
+    config.template.entry_format = "{breaking}{description}".to_string();
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let entry = create_entry("Change API signature", "feat", true, vec![]);
+
+    let formatted = formatter.format_entry(&entry);
+    assert!(formatted.contains("BREAKING: Change API signature"));
+}
+
+#[test]
+fn test_custom_format_entry_without_breaking_marker() {
+    let mut config = ChangelogConfig::default();
+    config.template.entry_format = "{breaking}{description}".to_string();
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let entry = create_entry("Add feature", "feat", false, vec![]);
+
+    let formatted = formatter.format_entry(&entry);
+    assert!(!formatted.contains("BREAKING"));
+    assert!(formatted.contains("Add feature"));
+}
+
+#[test]
+fn test_custom_format_entry_with_commit_link() {
+    let config = ChangelogConfig {
+        repository_url: Some("https://github.com/user/repo".to_string()),
+        include_commit_links: true,
+        ..Default::default()
+    };
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let entry = create_entry("Fix bug", "fix", false, vec![]);
+
+    let formatted = formatter.format_entry(&entry);
+    assert!(formatted.contains("[abcdef1]"));
+    assert!(formatted
+        .contains("https://github.com/user/repo/commit/abcdef1234567890abcdef1234567890abcdef12"));
+}
+
+#[test]
+fn test_custom_format_entry_without_commit_link() {
+    let config =
+        ChangelogConfig { repository_url: None, include_commit_links: false, ..Default::default() };
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let entry = create_entry("Fix bug", "fix", false, vec![]);
+
+    let formatted = formatter.format_entry(&entry);
+    assert!(formatted.contains("abcdef1"));
+    assert!(!formatted.contains("]("));
+}
+
+#[test]
+fn test_custom_format_entry_with_issue_links() {
+    let config = ChangelogConfig {
+        repository_url: Some("https://github.com/user/repo".to_string()),
+        include_issue_links: true,
+        template: TemplateConfig {
+            entry_format: "- {description} {references}".to_string(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let entry = create_entry("Fix bug", "fix", false, vec!["#123".to_string(), "#456".to_string()]);
+
+    let formatted = formatter.format_entry(&entry);
+    assert!(formatted.contains("[#123](https://github.com/user/repo/issues/123)"));
+    assert!(formatted.contains("[#456](https://github.com/user/repo/issues/456)"));
+}
+
+#[test]
+fn test_custom_format_entry_without_issue_links() {
+    let config = ChangelogConfig {
+        repository_url: None,
+        include_issue_links: false,
+        template: TemplateConfig {
+            entry_format: "- {description} {references}".to_string(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let entry = create_entry("Fix bug", "fix", false, vec!["#123".to_string()]);
+
+    let formatted = formatter.format_entry(&entry);
+    assert!(formatted.contains("#123"));
+    assert!(!formatted.contains("]("));
+}
+
+#[test]
+fn test_custom_format_entry_with_author() {
+    let mut config = ChangelogConfig::default();
+    config.template.entry_format = "- {description} by {author}".to_string();
+    config.include_authors = true;
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let entry = create_entry("Add feature", "feat", false, vec![]);
+
+    let formatted = formatter.format_entry(&entry);
+    assert!(formatted.contains("by John Doe"));
+}
+
+#[test]
+fn test_custom_format_entry_without_author() {
+    let mut config = ChangelogConfig::default();
+    config.template.entry_format = "- {description} by {author}".to_string();
+    config.include_authors = false;
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let entry = create_entry("Add feature", "feat", false, vec![]);
+
+    let formatted = formatter.format_entry(&entry);
+    assert!(!formatted.contains("John Doe"));
+    assert!(formatted.contains("by "));
+}
+
+#[test]
+fn test_custom_format_section() {
+    let config = ChangelogConfig::default();
+    let formatter = CustomTemplateFormatter::new(&config);
+
+    let mut section = ChangelogSection::new(SectionType::Features);
+    section.add_entry(create_entry("Add feature A", "feat", false, vec![]));
+    section.add_entry(create_entry("Add feature B", "feat", false, vec![]));
+
+    let formatted = formatter.format_section(&section);
+    assert!(formatted.contains("Features"));
+    assert!(formatted.contains("Add feature A"));
+    assert!(formatted.contains("Add feature B"));
+}
+
+#[test]
+fn test_custom_format_empty_section() {
+    let config = ChangelogConfig::default();
+    let formatter = CustomTemplateFormatter::new(&config);
+    let section = ChangelogSection::new(SectionType::Features);
+
+    let formatted = formatter.format_section(&section);
+    assert!(formatted.is_empty());
+}
+
+#[test]
+fn test_custom_format_changelog() {
+    let config = ChangelogConfig::default();
+    let formatter = CustomTemplateFormatter::new(&config);
+
+    let mut changelog = create_changelog("test-pkg", "1.0.0");
+    let mut section = ChangelogSection::new(SectionType::Features);
+    section.add_entry(create_entry("Add new feature", "feat", false, vec![]));
+    changelog.add_section(section);
+
+    let formatted = formatter.format(&changelog);
+    assert!(formatted.contains("1.0.0"));
+    assert!(formatted.contains("2024-01-15"));
+    assert!(formatted.contains("Features"));
+    assert!(formatted.contains("Add new feature"));
+}
+
+#[test]
+fn test_custom_format_changelog_multiple_sections() {
+    let config = ChangelogConfig::default();
+    let formatter = CustomTemplateFormatter::new(&config);
+
+    let mut changelog = create_changelog("test-pkg", "2.0.0");
+
+    let mut features = ChangelogSection::new(SectionType::Features);
+    features.add_entry(create_entry("Add feature", "feat", false, vec![]));
+    changelog.add_section(features);
+
+    let mut fixes = ChangelogSection::new(SectionType::Fixes);
+    fixes.add_entry(create_entry("Fix bug", "fix", false, vec![]));
+    changelog.add_section(fixes);
+
+    let formatted = formatter.format(&changelog);
+    assert!(formatted.contains("Features"));
+    assert!(formatted.contains("Bug Fixes"));
+    assert!(formatted.contains("Add feature"));
+    assert!(formatted.contains("Fix bug"));
+}
+
+#[test]
+fn test_custom_format_header() {
+    let config = ChangelogConfig::default();
+    let formatter = CustomTemplateFormatter::new(&config);
+
+    let header = formatter.format_header();
+    assert!(header.contains("Changelog"));
+}
+
+#[test]
+fn test_custom_format_complete() {
+    let config = ChangelogConfig::default();
+    let formatter = CustomTemplateFormatter::new(&config);
+
+    let mut changelog = create_changelog("test-pkg", "1.0.0");
+    let mut section = ChangelogSection::new(SectionType::Features);
+    section.add_entry(create_entry("Add feature", "feat", false, vec![]));
+    changelog.add_section(section);
+
+    let complete = formatter.format_complete(&changelog);
+    assert!(complete.contains("Changelog"));
+    assert!(complete.contains("1.0.0"));
+    assert!(complete.contains("Features"));
+    assert!(complete.contains("Add feature"));
+}
+
+#[test]
+fn test_custom_template_simple_format() {
+    let config = ChangelogConfig {
+        template: TemplateConfig {
+            header: "# Project Changelog\n".to_string(),
+            version_header: "Version {version} - {date}".to_string(),
+            section_header: "## {title}".to_string(),
+            entry_format: "* {description}".to_string(),
+        },
+        ..Default::default()
+    };
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let mut changelog = create_changelog("test-pkg", "1.0.0");
+    let mut section = ChangelogSection::new(SectionType::Features);
+    section.add_entry(create_entry("New feature", "feat", false, vec![]));
+    changelog.add_section(section);
+
+    let complete = formatter.format_complete(&changelog);
+    assert!(complete.contains("Project Changelog"));
+    assert!(complete.contains("Version 1.0.0"));
+    assert!(complete.contains("## Features"));
+    assert!(complete.contains("* New feature"));
+}
+
+#[test]
+fn test_custom_template_detailed_format() {
+    let config = ChangelogConfig {
+        template: TemplateConfig {
+            header: "# Release Notes\n\n".to_string(),
+            version_header: "# Release {version} ({date})".to_string(),
+            section_header: "## {title}".to_string(),
+            entry_format: "- {breaking}{description} - @{author} in {short_hash}".to_string(),
+        },
+        include_authors: true,
+        ..Default::default()
+    };
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let mut changelog = create_changelog("test-pkg", "2.0.0");
+    let mut section = ChangelogSection::new(SectionType::Breaking);
+    section.add_entry(create_entry("Change API", "feat", true, vec![]));
+    changelog.add_section(section);
+
+    let complete = formatter.format_complete(&changelog);
+    assert!(complete.contains("Release Notes"));
+    assert!(complete.contains("Release 2.0.0"));
+    assert!(complete.contains("BREAKING: Change API"));
+    assert!(complete.contains("@John Doe"));
+}
+
+#[test]
+fn test_custom_format_skip_empty_sections() {
+    let config = ChangelogConfig::default();
+    let formatter = CustomTemplateFormatter::new(&config);
+
+    let mut changelog = create_changelog("test-pkg", "1.0.0");
+    changelog.add_section(ChangelogSection::new(SectionType::Features));
+    changelog.add_section(ChangelogSection::new(SectionType::Fixes));
+
+    let formatted = formatter.format(&changelog);
+    assert!(formatted.contains("1.0.0"));
+    assert!(!formatted.contains("Features"));
+    assert!(!formatted.contains("Bug Fixes"));
+}
+
+#[test]
+fn test_custom_format_all_variable_types() {
+    let mut config = ChangelogConfig::default();
+    config.template.entry_format = "Type: {type}, Scope: {scope}, Breaking: {breaking}, Desc: {description}, Author: {author}, Hash: {hash}, Short: {short_hash}, Refs: {references}, Date: {date}".to_string();
+    config.include_authors = true;
+    config.repository_url = Some("https://github.com/test/repo".to_string());
+    config.include_commit_links = true;
+    config.include_issue_links = true;
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let entry = create_entry("Important fix", "fix", true, vec!["#999".to_string()]);
+
+    let formatted = formatter.format_entry(&entry);
+    assert!(formatted.contains("Type: fix"));
+    assert!(formatted.contains("Scope: core"));
+    assert!(formatted.contains("Breaking: BREAKING: "));
+    assert!(formatted.contains("Desc: Important fix"));
+    assert!(formatted.contains("Author: John Doe"));
+    assert!(formatted.contains("Hash: [abcdef1]"));
+    assert!(formatted.contains("Short: [abcdef1]"));
+    assert!(formatted.contains("Refs: [#999]"));
+    assert!(formatted.contains("Date: 2024-01-15"));
+}
+
+#[test]
+fn test_custom_format_section_alias() {
+    let mut config = ChangelogConfig::default();
+    config.template.section_header = "### {section}".to_string();
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let section = ChangelogSection::new(SectionType::Deprecations);
+
+    let header = formatter.format_section_header(&section);
+    assert!(header.contains("### Deprecations"));
+}
+
+#[test]
+fn test_custom_format_with_multiple_references() {
+    let config = ChangelogConfig {
+        repository_url: Some("https://github.com/test/repo".to_string()),
+        include_issue_links: true,
+        template: TemplateConfig {
+            entry_format: "- {description} {references}".to_string(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let formatter = CustomTemplateFormatter::new(&config);
+    let entry = create_entry(
+        "Fix multiple issues",
+        "fix",
+        false,
+        vec!["#100".to_string(), "#200".to_string(), "#300".to_string()],
+    );
+
+    let formatted = formatter.format_entry(&entry);
+    assert!(formatted.contains("[#100]"));
+    assert!(formatted.contains("[#200]"));
+    assert!(formatted.contains("[#300]"));
+    assert!(formatted.contains("/issues/100"));
+    assert!(formatted.contains("/issues/200"));
+    assert!(formatted.contains("/issues/300"));
 }
