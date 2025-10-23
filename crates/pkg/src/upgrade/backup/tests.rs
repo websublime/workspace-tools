@@ -161,6 +161,60 @@ fn create_test_manager(config: BackupConfig) -> BackupManager<MockFileSystem> {
 }
 
 #[tokio::test]
+async fn test_path_normalization() {
+    // Test that our normalization handles all edge cases
+    let fs = MockFileSystem::new();
+
+    // Test basic normalization
+    assert_eq!(
+        MockFileSystem::normalize_path(&PathBuf::from("/workspace/file.txt")),
+        "/workspace/file.txt"
+    );
+
+    // Test Windows-style separators
+    assert_eq!(
+        MockFileSystem::normalize_path(&PathBuf::from("/workspace\\file.txt")),
+        "/workspace/file.txt"
+    );
+
+    // Test mixed separators (what Windows creates)
+    assert_eq!(
+        MockFileSystem::normalize_path(&PathBuf::from("/workspace\\.pkg-backups\\file.txt")),
+        "/workspace/.pkg-backups/file.txt"
+    );
+
+    // Add files with different path formats and verify they're all accessible
+    fs.add_file(PathBuf::from("/workspace/test.txt"), "content");
+
+    // All these should refer to the same normalized file
+    assert!(fs.file_exists(&PathBuf::from("/workspace/test.txt")));
+    assert!(fs.file_exists(&PathBuf::from("/workspace\\test.txt")));
+}
+
+#[tokio::test]
+async fn test_directory_exists_edge_cases() {
+    let fs = MockFileSystem::new();
+
+    // Add files in nested directories
+    fs.add_file(PathBuf::from("/workspace/.pkg-backups/backup1/file1.txt"), "content1");
+    fs.add_file(PathBuf::from("/workspace/.pkg-backups/backup2/file2.txt"), "content2");
+    fs.add_file(PathBuf::from("/workspace/.pkg-backups-other/file3.txt"), "content3");
+
+    // Test directory existence with various path formats
+    assert!(fs.exists(&PathBuf::from("/workspace/.pkg-backups")).await);
+    assert!(fs.exists(&PathBuf::from("/workspace/.pkg-backups/")).await);
+    assert!(fs.exists(&PathBuf::from("/workspace/.pkg-backups/backup1")).await);
+    assert!(fs.exists(&PathBuf::from("/workspace/.pkg-backups/backup2")).await);
+
+    // Test that similar named directories don't match
+    assert!(fs.exists(&PathBuf::from("/workspace/.pkg-backups-other")).await);
+    assert!(!fs.exists(&PathBuf::from("/workspace/.pkg-backups-other/nonexistent")).await);
+
+    // Test with mixed separators (Windows scenario)
+    assert!(fs.exists(&PathBuf::from("/workspace\\.pkg-backups\\backup1")).await);
+}
+
+#[tokio::test]
 async fn test_create_backup_success() {
     let config = BackupConfig {
         enabled: true,
