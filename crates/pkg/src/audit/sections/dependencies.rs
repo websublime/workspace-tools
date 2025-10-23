@@ -84,7 +84,7 @@ impl DependencyAuditSection {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::audit::sections::dependencies::DependencyAuditSection;
+    /// use sublime_pkg_tools::audit::DependencyAuditSection;
     ///
     /// let section = DependencyAuditSection::empty();
     /// assert_eq!(section.circular_dependencies.len(), 0);
@@ -105,7 +105,7 @@ impl DependencyAuditSection {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::audit::sections::dependencies::DependencyAuditSection;
+    /// use sublime_pkg_tools::audit::DependencyAuditSection;
     ///
     /// let section = DependencyAuditSection::empty();
     /// assert!(!section.has_circular_dependencies());
@@ -120,7 +120,7 @@ impl DependencyAuditSection {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::audit::sections::dependencies::DependencyAuditSection;
+    /// use sublime_pkg_tools::audit::DependencyAuditSection;
     ///
     /// let section = DependencyAuditSection::empty();
     /// assert!(!section.has_version_conflicts());
@@ -135,7 +135,7 @@ impl DependencyAuditSection {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::audit::sections::dependencies::DependencyAuditSection;
+    /// use sublime_pkg_tools::audit::DependencyAuditSection;
     ///
     /// let section = DependencyAuditSection::empty();
     /// assert_eq!(section.critical_issue_count(), 0);
@@ -150,7 +150,7 @@ impl DependencyAuditSection {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::audit::sections::dependencies::DependencyAuditSection;
+    /// use sublime_pkg_tools::audit::DependencyAuditSection;
     ///
     /// let section = DependencyAuditSection::empty();
     /// assert_eq!(section.warning_issue_count(), 0);
@@ -165,7 +165,7 @@ impl DependencyAuditSection {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::audit::sections::dependencies::DependencyAuditSection;
+    /// use sublime_pkg_tools::audit::DependencyAuditSection;
     ///
     /// let section = DependencyAuditSection::empty();
     /// assert_eq!(section.info_issue_count(), 0);
@@ -184,7 +184,7 @@ impl DependencyAuditSection {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::audit::sections::dependencies::DependencyAuditSection;
+    /// use sublime_pkg_tools::audit::DependencyAuditSection;
     ///
     /// let section = DependencyAuditSection::empty();
     /// let cycles = section.circular_dependencies_for_package("my-package");
@@ -207,7 +207,7 @@ impl DependencyAuditSection {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::audit::sections::dependencies::DependencyAuditSection;
+    /// use sublime_pkg_tools::audit::DependencyAuditSection;
     ///
     /// let section = DependencyAuditSection::empty();
     /// let conflicts = section.version_conflicts_for_dependency("lodash");
@@ -230,7 +230,7 @@ impl DependencyAuditSection {
 /// # Examples
 ///
 /// ```rust
-/// use sublime_pkg_tools::audit::sections::dependencies::{VersionConflict, VersionUsage};
+/// use sublime_pkg_tools::audit::{VersionConflict, VersionUsage};
 ///
 /// let conflict = VersionConflict {
 ///     dependency_name: "lodash".to_string(),
@@ -264,7 +264,7 @@ impl VersionConflict {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::audit::sections::dependencies::{VersionConflict, VersionUsage};
+    /// use sublime_pkg_tools::audit::{VersionConflict, VersionUsage};
     ///
     /// let conflict = VersionConflict {
     ///     dependency_name: "lodash".to_string(),
@@ -292,7 +292,7 @@ impl VersionConflict {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_pkg_tools::audit::sections::dependencies::{VersionConflict, VersionUsage};
+    /// use sublime_pkg_tools::audit::{VersionConflict, VersionUsage};
     ///
     /// let conflict = VersionConflict {
     ///     dependency_name: "lodash".to_string(),
@@ -325,7 +325,7 @@ impl VersionConflict {
 /// # Examples
 ///
 /// ```rust
-/// use sublime_pkg_tools::audit::sections::dependencies::VersionUsage;
+/// use sublime_pkg_tools::audit::VersionUsage;
 ///
 /// let usage = VersionUsage {
 ///     package_name: "my-app".to_string(),
