@@ -1702,10 +1702,11 @@ mod dependency_tests {
     use super::*;
     use crate::types::dependency::{
         extract_protocol_path, is_local_protocol, is_workspace_protocol, parse_protocol,
-        should_skip_protocol, CircularDependency, DependencyUpdate, LocalLinkType, PackageUpdate,
-        UpdateReason, VersionProtocol,
+        should_skip_protocol, CircularDependency, DependencyUpdate, LocalLinkType, UpdateReason,
+        VersionProtocol,
     };
     use crate::types::DependencyType;
+    use crate::version::PackageUpdate;
 
     // =========================================================================
     // VersionProtocol Tests

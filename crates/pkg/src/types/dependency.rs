@@ -66,9 +66,8 @@
 //! };
 //! ```
 
-use crate::types::{DependencyType, Version};
+use crate::types::DependencyType;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 /// Version specification protocol type.
 ///
@@ -629,26 +628,9 @@ impl std::fmt::Display for UpdateReason {
 ///     dependency_updates: vec![],
 /// };
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PackageUpdate {
-    /// Package name
-    pub name: String,
-
-    /// Path to package directory
-    pub path: PathBuf,
-
-    /// Current version (from package.json)
-    pub current_version: Version,
-
-    /// Next version after bump
-    pub next_version: Version,
-
-    /// Why this package is being updated
-    pub reason: UpdateReason,
-
-    /// Dependency version updates in this package
-    pub dependency_updates: Vec<DependencyUpdate>,
-}
+// PackageUpdate is now defined in version::resolution module to avoid duplication.
+// It is re-exported from the types module for convenience.
+// See: src/version/resolution.rs for the canonical definition.
 
 // Helper functions for protocol detection
 
