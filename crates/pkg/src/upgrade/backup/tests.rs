@@ -224,17 +224,14 @@ async fn test_create_backup_success() {
     };
     let manager = create_test_manager(config);
 
-    // Add test files
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "test"}"#);
+    // Add test files - using normalized paths for cross-platform compatibility
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "test"}"#);
     manager.fs.add_file(
-        PathBuf::from("/workspace/packages/core/package.json"),
+        manager.workspace_root.join("packages/core/package.json"),
         r#"{"name": "@test/core"}"#,
     );
 
-    let files = vec![
-        PathBuf::from("/workspace/package.json"),
-        PathBuf::from("/workspace/packages/core/package.json"),
-    ];
+    let files = vec![PathBuf::from("package.json"), PathBuf::from("packages/core/package.json")];
 
     let backup_id = manager.create_backup(&files, "upgrade").await.unwrap();
 
@@ -280,7 +277,7 @@ async fn test_create_backup_disabled() {
     };
     let manager = create_test_manager(config);
 
-    let files = vec![PathBuf::from("/workspace/package.json")];
+    let files = vec![PathBuf::from("package.json")];
 
     let result = manager.create_backup(&files, "upgrade").await;
 
@@ -317,19 +314,19 @@ async fn test_restore_backup_success() {
     let manager = create_test_manager(config);
 
     // Add original files
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "test"}"#);
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "test"}"#);
 
-    let files = vec![PathBuf::from("/workspace/package.json")];
+    let files = vec![PathBuf::from("package.json")];
     let backup_id = manager.create_backup(&files, "upgrade").await.unwrap();
 
     // Modify the file
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "modified"}"#);
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "modified"}"#);
 
     // Restore backup
     manager.restore_backup(&backup_id).await.unwrap();
 
     // Verify file was restored
-    let content = manager.fs.get_file(&PathBuf::from("/workspace/package.json")).unwrap();
+    let content = manager.fs.get_file(&manager.workspace_root.join("package.json")).unwrap();
     assert!(content.contains(r#""name": "test""#));
 }
 
@@ -353,28 +350,24 @@ async fn test_restore_last_backup() {
     let manager = create_test_manager(config);
 
     // Add files and create multiple backups
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "v1"}"#);
-    let _backup1 = manager
-        .create_backup(&[PathBuf::from("/workspace/package.json")], "upgrade")
-        .await
-        .unwrap();
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "v1"}"#);
+    let _backup1 =
+        manager.create_backup(&[PathBuf::from("package.json")], "upgrade").await.unwrap();
 
     // Wait a bit to ensure different timestamps
     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "v2"}"#);
-    let _backup2 = manager
-        .create_backup(&[PathBuf::from("/workspace/package.json")], "upgrade")
-        .await
-        .unwrap();
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "v2"}"#);
+    let _backup2 =
+        manager.create_backup(&[PathBuf::from("package.json")], "upgrade").await.unwrap();
 
     // Modify file
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "v3"}"#);
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "modified"}"#);
 
     // Restore last backup (should be backup2)
     manager.restore_last_backup().await.unwrap();
 
-    let content = manager.fs.get_file(&PathBuf::from("/workspace/package.json")).unwrap();
+    let content = manager.fs.get_file(&manager.workspace_root.join("package.json")).unwrap();
     assert!(content.contains(r#""name": "v2""#));
 }
 
@@ -397,20 +390,15 @@ async fn test_list_backups() {
     let config = BackupConfig::default();
     let manager = create_test_manager(config);
 
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "test"}"#);
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "test"}"#);
 
     // Create multiple backups
-    let backup1 = manager
-        .create_backup(&[PathBuf::from("/workspace/package.json")], "upgrade")
-        .await
-        .unwrap();
+    let backup1 = manager.create_backup(&[PathBuf::from("package.json")], "upgrade").await.unwrap();
 
     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
-    let backup2 = manager
-        .create_backup(&[PathBuf::from("/workspace/package.json")], "rollback")
-        .await
-        .unwrap();
+    let backup2 =
+        manager.create_backup(&[PathBuf::from("package.json")], "rollback").await.unwrap();
 
     let backups = manager.list_backups().await.unwrap();
 
@@ -434,12 +422,10 @@ async fn test_delete_backup() {
     let config = BackupConfig::default();
     let manager = create_test_manager(config);
 
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "test"}"#);
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "test"}"#);
 
-    let backup_id = manager
-        .create_backup(&[PathBuf::from("/workspace/package.json")], "upgrade")
-        .await
-        .unwrap();
+    let backup_id =
+        manager.create_backup(&[PathBuf::from("package.json")], "upgrade").await.unwrap();
 
     // Verify backup exists
     let backups = manager.list_backups().await.unwrap();
@@ -472,12 +458,10 @@ async fn test_mark_success() {
     let config = BackupConfig::default();
     let manager = create_test_manager(config);
 
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "test"}"#);
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "test"}"#);
 
-    let backup_id = manager
-        .create_backup(&[PathBuf::from("/workspace/package.json")], "upgrade")
-        .await
-        .unwrap();
+    let backup_id =
+        manager.create_backup(&[PathBuf::from("package.json")], "upgrade").await.unwrap();
 
     // Initially marked as not successful
     let backups = manager.list_backups().await.unwrap();
@@ -515,13 +499,12 @@ async fn test_cleanup_removes_successful_backups() {
     };
     let manager = create_test_manager(config);
 
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "test"}"#);
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "test"}"#);
 
     // Create backup and mark as successful
-    let backup_id = manager
-        .create_backup(&[PathBuf::from("/workspace/package.json")], "upgrade")
-        .await
-        .unwrap();
+    // Create and mark successful
+    let backup_id =
+        manager.create_backup(&[PathBuf::from("package.json")], "upgrade").await.unwrap();
 
     manager.mark_success(&backup_id).await.unwrap();
 
@@ -546,12 +529,10 @@ async fn test_cleanup_keeps_successful_backups() {
     };
     let manager = create_test_manager(config);
 
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "test"}"#);
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "test"}"#);
 
-    let backup_id = manager
-        .create_backup(&[PathBuf::from("/workspace/package.json")], "upgrade")
-        .await
-        .unwrap();
+    let backup_id =
+        manager.create_backup(&[PathBuf::from("package.json")], "upgrade").await.unwrap();
 
     manager.mark_success(&backup_id).await.unwrap();
 
@@ -572,14 +553,11 @@ async fn test_cleanup_removes_old_backups() {
     };
     let manager = create_test_manager(config);
 
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "test"}"#);
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "test"}"#);
 
     // Create 5 backups
     for _ in 0..5 {
-        manager
-            .create_backup(&[PathBuf::from("/workspace/package.json")], "upgrade")
-            .await
-            .unwrap();
+        manager.create_backup(&[PathBuf::from("package.json")], "upgrade").await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
     }
 
@@ -597,29 +575,21 @@ async fn test_cleanup_priority_removes_successful_before_count() {
     };
     let manager = create_test_manager(config);
 
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "test"}"#);
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "test"}"#);
 
     // Create 3 backups, mark 2 as successful
-    let backup1 = manager
-        .create_backup(&[PathBuf::from("/workspace/package.json")], "upgrade")
-        .await
-        .unwrap();
+    let backup1 = manager.create_backup(&[PathBuf::from("package.json")], "backup1").await.unwrap();
     manager.mark_success(&backup1).await.unwrap();
 
     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
-    let backup2 = manager
-        .create_backup(&[PathBuf::from("/workspace/package.json")], "upgrade")
-        .await
-        .unwrap();
+    let backup2 = manager.create_backup(&[PathBuf::from("package.json")], "backup2").await.unwrap();
     manager.mark_success(&backup2).await.unwrap();
 
     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
-    let _backup3 = manager
-        .create_backup(&[PathBuf::from("/workspace/package.json")], "upgrade")
-        .await
-        .unwrap();
+    let _backup3 =
+        manager.create_backup(&[PathBuf::from("package.json")], "backup3").await.unwrap();
 
     // Cleanup should remove successful backups first
     manager.cleanup_old_backups().await.unwrap();
@@ -634,21 +604,21 @@ async fn test_relative_path_handling() {
     let config = BackupConfig::default();
     let manager = create_test_manager(config);
 
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "test"}"#);
+    // Add original file
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "test"}"#);
 
-    // Use relative path
     let files = vec![PathBuf::from("package.json")];
     let backup_id = manager.create_backup(&files, "upgrade").await.unwrap();
 
     // Verify backup was created with correct path
     let backups = manager.list_backups().await.unwrap();
-    assert_eq!(backups[0].files[0], PathBuf::from("/workspace/package.json"));
+    assert_eq!(backups[0].files[0], manager.workspace_root.join("package.json"));
 
     // Restore should work with the resolved path
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "modified"}"#);
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "modified"}"#);
     manager.restore_backup(&backup_id).await.unwrap();
 
-    let content = manager.fs.get_file(&PathBuf::from("/workspace/package.json")).unwrap();
+    let content = manager.fs.get_file(&manager.workspace_root.join("package.json")).unwrap();
     assert!(content.contains(r#""name": "test""#));
 }
 
@@ -659,11 +629,11 @@ async fn test_nested_directory_structure() {
 
     // Add deeply nested file
     manager.fs.add_file(
-        PathBuf::from("/workspace/packages/core/src/lib/package.json"),
+        manager.workspace_root.join("packages/core/src/lib/package.json"),
         r#"{"name": "@test/core"}"#,
     );
 
-    let files = vec![PathBuf::from("/workspace/packages/core/src/lib/package.json")];
+    let files = vec![PathBuf::from("packages/core/src/lib/package.json")];
     let backup_id = manager.create_backup(&files, "upgrade").await.unwrap();
 
     // Verify backup preserves directory structure
@@ -677,44 +647,44 @@ async fn test_multiple_files_backup_and_restore() {
     let manager = create_test_manager(config);
 
     // Add multiple files
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "root"}"#);
-    manager.fs.add_file(PathBuf::from("/workspace/packages/a/package.json"), r#"{"name": "a"}"#);
-    manager.fs.add_file(PathBuf::from("/workspace/packages/b/package.json"), r#"{"name": "b"}"#);
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "root"}"#);
+    manager.fs.add_file(manager.workspace_root.join("packages/a/package.json"), r#"{"name": "a"}"#);
+    manager.fs.add_file(manager.workspace_root.join("packages/b/package.json"), r#"{"name": "b"}"#);
 
     let files = vec![
-        PathBuf::from("/workspace/package.json"),
-        PathBuf::from("/workspace/packages/a/package.json"),
-        PathBuf::from("/workspace/packages/b/package.json"),
+        PathBuf::from("package.json"),
+        PathBuf::from("packages/a/package.json"),
+        PathBuf::from("packages/b/package.json"),
     ];
 
     let backup_id = manager.create_backup(&files, "upgrade").await.unwrap();
 
     // Modify all files
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "root-mod"}"#);
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "root-mod"}"#);
     manager
         .fs
-        .add_file(PathBuf::from("/workspace/packages/a/package.json"), r#"{"name": "a-mod"}"#);
+        .add_file(manager.workspace_root.join("packages/a/package.json"), r#"{"name": "a-mod"}"#);
     manager
         .fs
-        .add_file(PathBuf::from("/workspace/packages/b/package.json"), r#"{"name": "b-mod"}"#);
+        .add_file(manager.workspace_root.join("packages/b/package.json"), r#"{"name": "b-mod"}"#);
 
     // Restore
     manager.restore_backup(&backup_id).await.unwrap();
 
-    // Verify all files restored
+    // Verify all files were restored
     assert!(manager
         .fs
-        .get_file(&PathBuf::from("/workspace/package.json"))
+        .get_file(&manager.workspace_root.join("package.json"))
         .unwrap()
-        .contains("root"));
+        .contains(r#""name": "root""#));
     assert!(manager
         .fs
-        .get_file(&PathBuf::from("/workspace/packages/a/package.json"))
+        .get_file(&manager.workspace_root.join("packages/a/package.json"))
         .unwrap()
         .contains(r#""name": "a""#));
     assert!(manager
         .fs
-        .get_file(&PathBuf::from("/workspace/packages/b/package.json"))
+        .get_file(&manager.workspace_root.join("packages/b/package.json"))
         .unwrap()
         .contains(r#""name": "b""#));
 }
@@ -743,12 +713,10 @@ async fn test_backup_id_format() {
     let config = BackupConfig::default();
     let manager = create_test_manager(config);
 
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "test"}"#);
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "test"}"#);
 
-    let backup_id = manager
-        .create_backup(&[PathBuf::from("/workspace/package.json")], "upgrade")
-        .await
-        .unwrap();
+    let backup_id =
+        manager.create_backup(&[PathBuf::from("package.json")], "upgrade").await.unwrap();
 
     // Verify format: YYYY-MM-DDTHH-MM-SS-mmm-operation (with milliseconds)
     assert!(backup_id.ends_with("-upgrade"));
@@ -761,7 +729,7 @@ async fn test_concurrent_backups() {
     let config = BackupConfig::default();
     let manager = Arc::new(create_test_manager(config));
 
-    manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "test"}"#);
+    manager.fs.add_file(manager.workspace_root.join("package.json"), r#"{"name": "test"}"#);
 
     // Create multiple backups concurrently
     let mut handles = vec![];
@@ -769,9 +737,7 @@ async fn test_concurrent_backups() {
         let manager_clone = Arc::clone(&manager);
         let handle = tokio::spawn(async move {
             tokio::time::sleep(tokio::time::Duration::from_millis(i * 10)).await;
-            manager_clone
-                .create_backup(&[PathBuf::from("/workspace/package.json")], "upgrade")
-                .await
+            manager_clone.create_backup(&[PathBuf::from("package.json")], "upgrade").await
         });
         handles.push(handle);
     }
