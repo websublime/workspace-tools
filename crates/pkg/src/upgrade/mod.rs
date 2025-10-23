@@ -194,6 +194,11 @@ pub use application::{
     apply_upgrades, AppliedUpgrade, ApplySummary, UpgradeResult, UpgradeSelection,
 };
 
+// Backup module for backup and rollback (Story 9.5 - IMPLEMENTED)
+mod backup;
+
+// Re-export backup public types
+pub use backup::{BackupManager, BackupMetadata};
+
 // Remaining modules will be implemented in subsequent stories (Epic 9)
-// - backup: Backup and rollback (Story 9.5)
 // - manager: Main UpgradeManager (Story 9.7)
