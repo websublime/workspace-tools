@@ -633,7 +633,7 @@ impl<F: AsyncFileSystem> BackupManager<F> {
     /// Generates a unique backup ID.
     fn generate_backup_id(&self, operation: &str) -> String {
         let now = Utc::now();
-        format!("{}-{}", now.format("%Y-%m-%dT%H-%M-%S"), operation)
+        format!("{}-{}", now.format("%Y-%m-%dT%H-%M-%S-%3f"), operation)
     }
 
     /// Resolves a path to an absolute path.

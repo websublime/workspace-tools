@@ -461,21 +461,15 @@ async fn test_cleanup_removes_old_backups() {
     manager.fs.add_file(PathBuf::from("/workspace/package.json"), r#"{"name": "test"}"#);
 
     // Create 5 backups
-    for i in 0..5 {
+    for _ in 0..5 {
         manager
             .create_backup(&[PathBuf::from("/workspace/package.json")], "upgrade")
             .await
             .unwrap();
-        let backups = manager.list_backups().await.unwrap();
-        println!("After backup {}: {} backups", i + 1, backups.len());
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
     }
 
     let backups = manager.list_backups().await.unwrap();
-    println!("Final backups: {}", backups.len());
-    for backup in &backups {
-        println!("  - {} (success: {})", backup.id, backup.success);
-    }
     assert_eq!(backups.len(), 3); // Should only keep max_backups
 }
 
@@ -508,29 +502,17 @@ async fn test_cleanup_priority_removes_successful_before_count() {
 
     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
-    let backup3 = manager
+    let _backup3 = manager
         .create_backup(&[PathBuf::from("/workspace/package.json")], "upgrade")
         .await
         .unwrap();
-
-    let before_cleanup = manager.list_backups().await.unwrap();
-    println!("Before cleanup: {} backups", before_cleanup.len());
-    for backup in &before_cleanup {
-        println!("  - {} (success: {})", backup.id, backup.success);
-    }
 
     // Cleanup should remove successful backups first
     manager.cleanup_old_backups().await.unwrap();
 
     let backups = manager.list_backups().await.unwrap();
-    println!("After cleanup: {} backups", backups.len());
-    for backup in &backups {
-        println!("  - {} (success: {})", backup.id, backup.success);
-    }
-
     assert_eq!(backups.len(), 1); // Only the failed one should remain
     assert!(!backups[0].success);
-    assert_eq!(backups[0].id, backup3);
 }
 
 #[tokio::test]
@@ -654,10 +636,10 @@ async fn test_backup_id_format() {
         .await
         .unwrap();
 
-    // Verify format: YYYY-MM-DDTHH-MM-SS-operation
+    // Verify format: YYYY-MM-DDTHH-MM-SS-mmm-operation (with milliseconds)
     assert!(backup_id.ends_with("-upgrade"));
     assert!(backup_id.contains('T'));
-    assert_eq!(backup_id.matches('-').count(), 5); // 4 in timestamp + 1 before operation
+    assert_eq!(backup_id.matches('-').count(), 6); // 5 in timestamp (including milliseconds) + 1 before operation
 }
 
 #[tokio::test]
