@@ -70,7 +70,11 @@ impl AsyncFileSystem for MockFileSystem {
         // Remove the path itself and all children (simulates recursive removal)
         files.retain(|p, _| {
             let p_str = p.to_string_lossy();
-            p_str != path_str && !p_str.starts_with(&format!("{}/", path_str))
+            // Normalize paths for cross-platform comparison
+            let normalized_path = path_str.replace('\\', "/");
+            let normalized_p = p_str.replace('\\', "/");
+            normalized_p != normalized_path
+                && !normalized_p.starts_with(&format!("{}/", normalized_path))
         });
         Ok(())
     }
@@ -83,20 +87,27 @@ impl AsyncFileSystem for MockFileSystem {
         }
         // Check if path exists as a directory (has children)
         let path_str = path.to_string_lossy();
+        let normalized_path = path_str.replace('\\', "/");
         files.keys().any(|p| {
             let p_str = p.to_string_lossy();
-            p_str.starts_with(&format!("{}/", path_str))
+            let normalized_p = p_str.replace('\\', "/");
+            normalized_p.starts_with(&format!("{}/", normalized_path))
         })
     }
 
     async fn read_dir(&self, path: &Path) -> StandardResult<Vec<PathBuf>> {
         let path_str = path.to_string_lossy().to_string();
+        let normalized_path = path_str.replace('\\', "/");
         let files: Vec<PathBuf> = self
             .files
             .lock()
             .unwrap()
             .keys()
-            .filter(|p| p.to_string_lossy().starts_with(&path_str))
+            .filter(|p| {
+                let p_str = p.to_string_lossy();
+                let normalized_p = p_str.replace('\\', "/");
+                normalized_p.starts_with(&normalized_path)
+            })
             .cloned()
             .collect();
         Ok(files)
