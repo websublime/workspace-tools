@@ -656,4 +656,629 @@ mod tests {
         assert_eq!(deserialized_issue.severity, IssueSeverity::Warning);
         assert_eq!(deserialized_issue.metadata.get("key"), Some(&"value".to_string()));
     }
+
+    // Dependency Audit Section Tests (Story 10.3)
+
+    #[tokio::test]
+    async fn test_audit_dependencies_section_empty() {
+        use crate::audit::sections::dependencies::DependencyAuditSection;
+
+        let section = DependencyAuditSection::empty();
+
+        assert_eq!(section.circular_dependencies.len(), 0);
+        assert_eq!(section.version_conflicts.len(), 0);
+        assert_eq!(section.issues.len(), 0);
+        assert!(!section.has_circular_dependencies());
+        assert!(!section.has_version_conflicts());
+        assert_eq!(section.critical_issue_count(), 0);
+        assert_eq!(section.warning_issue_count(), 0);
+        assert_eq!(section.info_issue_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_audit_dependencies_no_circular_deps() {
+        use crate::audit::sections::dependencies::audit_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use package_json::PackageJson;
+        use std::path::PathBuf;
+
+        // Create a simple linear dependency chain: A -> B -> C
+        let package_a_json = PackageJson {
+            name: "pkg-a".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some([("pkg-b".to_string(), "^1.0.0".to_string())].into_iter().collect()),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let package_b_json = PackageJson {
+            name: "pkg-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some([("pkg-c".to_string(), "^1.0.0".to_string())].into_iter().collect()),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let package_c_json = PackageJson {
+            name: "pkg-c".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: None,
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a_json, None, PathBuf::from("packages/a")),
+            PackageInfo::new(package_b_json, None, PathBuf::from("packages/b")),
+            PackageInfo::new(package_c_json, None, PathBuf::from("packages/c")),
+        ];
+
+        let config = PackageToolsConfig::default();
+        let workspace_root = PathBuf::from(".");
+
+        let result = audit_dependencies(&workspace_root, &packages, &config).await;
+        assert!(result.is_ok());
+
+        let section = result.expect("Should succeed");
+        assert_eq!(section.circular_dependencies.len(), 0);
+        assert!(!section.has_circular_dependencies());
+        assert_eq!(section.critical_issue_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_audit_dependencies_with_circular_deps() {
+        use crate::audit::sections::dependencies::audit_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use package_json::PackageJson;
+        use std::path::PathBuf;
+
+        // Create a circular dependency: A -> B -> A
+        let package_a_json = PackageJson {
+            name: "pkg-a".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some([("pkg-b".to_string(), "^1.0.0".to_string())].into_iter().collect()),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let package_b_json = PackageJson {
+            name: "pkg-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some([("pkg-a".to_string(), "^1.0.0".to_string())].into_iter().collect()),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a_json, None, PathBuf::from("packages/a")),
+            PackageInfo::new(package_b_json, None, PathBuf::from("packages/b")),
+        ];
+
+        let config = PackageToolsConfig::default();
+        let workspace_root = PathBuf::from(".");
+
+        let result = audit_dependencies(&workspace_root, &packages, &config).await;
+        assert!(result.is_ok());
+
+        let section = result.expect("Should succeed");
+        assert!(section.has_circular_dependencies());
+        assert_eq!(section.circular_dependencies.len(), 1);
+
+        let circular_dep = &section.circular_dependencies[0];
+        assert!(circular_dep.involves("pkg-a"));
+        assert!(circular_dep.involves("pkg-b"));
+
+        // Should generate critical issue
+        assert_eq!(section.critical_issue_count(), 1);
+        let critical_issue =
+            section.issues.iter().find(|i| i.is_critical()).expect("Should have critical issue");
+        assert_eq!(critical_issue.title, "Circular dependency detected");
+        assert!(critical_issue.affected_packages.contains(&"pkg-a".to_string()));
+        assert!(critical_issue.affected_packages.contains(&"pkg-b".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_audit_dependencies_with_complex_circular_deps() {
+        use crate::audit::sections::dependencies::audit_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use package_json::PackageJson;
+        use std::path::PathBuf;
+
+        // Create a circular dependency: A -> B -> C -> A
+        let package_a_json = PackageJson {
+            name: "pkg-a".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some([("pkg-b".to_string(), "^1.0.0".to_string())].into_iter().collect()),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let package_b_json = PackageJson {
+            name: "pkg-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some([("pkg-c".to_string(), "^1.0.0".to_string())].into_iter().collect()),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let package_c_json = PackageJson {
+            name: "pkg-c".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some([("pkg-a".to_string(), "^1.0.0".to_string())].into_iter().collect()),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a_json, None, PathBuf::from("packages/a")),
+            PackageInfo::new(package_b_json, None, PathBuf::from("packages/b")),
+            PackageInfo::new(package_c_json, None, PathBuf::from("packages/c")),
+        ];
+
+        let config = PackageToolsConfig::default();
+        let workspace_root = PathBuf::from(".");
+
+        let result = audit_dependencies(&workspace_root, &packages, &config).await;
+        assert!(result.is_ok());
+
+        let section = result.expect("Should succeed");
+        assert!(section.has_circular_dependencies());
+        assert_eq!(section.circular_dependencies.len(), 1);
+
+        let circular_dep = &section.circular_dependencies[0];
+        assert_eq!(circular_dep.len(), 3);
+        assert!(circular_dep.involves("pkg-a"));
+        assert!(circular_dep.involves("pkg-b"));
+        assert!(circular_dep.involves("pkg-c"));
+    }
+
+    #[tokio::test]
+    async fn test_audit_dependencies_circular_deps_disabled() {
+        use crate::audit::sections::dependencies::audit_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use package_json::PackageJson;
+        use std::path::PathBuf;
+
+        // Create a circular dependency: A -> B -> A
+        let package_a_json = PackageJson {
+            name: "pkg-a".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some([("pkg-b".to_string(), "^1.0.0".to_string())].into_iter().collect()),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let package_b_json = PackageJson {
+            name: "pkg-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some([("pkg-a".to_string(), "^1.0.0".to_string())].into_iter().collect()),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a_json, None, PathBuf::from("packages/a")),
+            PackageInfo::new(package_b_json, None, PathBuf::from("packages/b")),
+        ];
+
+        let mut config = PackageToolsConfig::default();
+        config.audit.dependencies.check_circular = false;
+        let workspace_root = PathBuf::from(".");
+
+        let result = audit_dependencies(&workspace_root, &packages, &config).await;
+        assert!(result.is_ok());
+
+        let section = result.expect("Should succeed");
+        // Should not detect circular dependencies when disabled
+        assert_eq!(section.circular_dependencies.len(), 0);
+        assert_eq!(section.critical_issue_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_audit_dependencies_no_version_conflicts() {
+        use crate::audit::sections::dependencies::audit_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use package_json::PackageJson;
+        use std::path::PathBuf;
+
+        // Create packages with same external dependency version
+        let package_a_json = PackageJson {
+            name: "pkg-a".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(
+                [("lodash".to_string(), "^4.17.21".to_string())].into_iter().collect(),
+            ),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let package_b_json = PackageJson {
+            name: "pkg-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(
+                [("lodash".to_string(), "^4.17.21".to_string())].into_iter().collect(),
+            ),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a_json, None, PathBuf::from("packages/a")),
+            PackageInfo::new(package_b_json, None, PathBuf::from("packages/b")),
+        ];
+
+        let config = PackageToolsConfig::default();
+        let workspace_root = PathBuf::from(".");
+
+        let result = audit_dependencies(&workspace_root, &packages, &config).await;
+        assert!(result.is_ok());
+
+        let section = result.expect("Should succeed");
+        assert_eq!(section.version_conflicts.len(), 0);
+        assert!(!section.has_version_conflicts());
+        assert_eq!(section.warning_issue_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_audit_dependencies_with_version_conflicts() {
+        use crate::audit::sections::dependencies::audit_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use package_json::PackageJson;
+        use std::path::PathBuf;
+
+        // Create packages with different external dependency versions
+        let package_a_json = PackageJson {
+            name: "pkg-a".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(
+                [("lodash".to_string(), "^4.17.21".to_string())].into_iter().collect(),
+            ),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let package_b_json = PackageJson {
+            name: "pkg-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(
+                [("lodash".to_string(), "^3.10.1".to_string())].into_iter().collect(),
+            ),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a_json, None, PathBuf::from("packages/a")),
+            PackageInfo::new(package_b_json, None, PathBuf::from("packages/b")),
+        ];
+
+        let config = PackageToolsConfig::default();
+        let workspace_root = PathBuf::from(".");
+
+        let result = audit_dependencies(&workspace_root, &packages, &config).await;
+        assert!(result.is_ok());
+
+        let section = result.expect("Should succeed");
+        assert!(section.has_version_conflicts());
+        assert_eq!(section.version_conflicts.len(), 1);
+
+        let conflict = &section.version_conflicts[0];
+        assert_eq!(conflict.dependency_name, "lodash");
+        assert_eq!(conflict.version_count(), 2);
+        assert!(conflict.describe().contains("lodash"));
+
+        // Should generate warning issue
+        assert_eq!(section.warning_issue_count(), 1);
+        let warning_issue =
+            section.issues.iter().find(|i| i.is_warning()).expect("Should have warning issue");
+        assert!(warning_issue.title.contains("lodash"));
+        assert!(warning_issue.affected_packages.contains(&"pkg-a".to_string()));
+        assert!(warning_issue.affected_packages.contains(&"pkg-b".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_audit_dependencies_version_conflicts_disabled() {
+        use crate::audit::sections::dependencies::audit_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use package_json::PackageJson;
+        use std::path::PathBuf;
+
+        // Create packages with different external dependency versions
+        let package_a_json = PackageJson {
+            name: "pkg-a".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(
+                [("lodash".to_string(), "^4.17.21".to_string())].into_iter().collect(),
+            ),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let package_b_json = PackageJson {
+            name: "pkg-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(
+                [("lodash".to_string(), "^3.10.1".to_string())].into_iter().collect(),
+            ),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a_json, None, PathBuf::from("packages/a")),
+            PackageInfo::new(package_b_json, None, PathBuf::from("packages/b")),
+        ];
+
+        let mut config = PackageToolsConfig::default();
+        config.audit.dependencies.check_version_conflicts = false;
+        let workspace_root = PathBuf::from(".");
+
+        let result = audit_dependencies(&workspace_root, &packages, &config).await;
+        assert!(result.is_ok());
+
+        let section = result.expect("Should succeed");
+        // Should not detect version conflicts when disabled
+        assert_eq!(section.version_conflicts.len(), 0);
+        assert_eq!(section.warning_issue_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_audit_dependencies_ignores_workspace_protocol() {
+        use crate::audit::sections::dependencies::audit_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use package_json::PackageJson;
+        use std::path::PathBuf;
+
+        // Create packages with workspace protocol dependencies
+        let package_a_json = PackageJson {
+            name: "pkg-a".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(
+                [
+                    ("pkg-b".to_string(), "workspace:*".to_string()),
+                    ("lodash".to_string(), "^4.17.21".to_string()),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let package_b_json = PackageJson {
+            name: "pkg-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(
+                [("lodash".to_string(), "^4.17.21".to_string())].into_iter().collect(),
+            ),
+            dev_dependencies: None,
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a_json, None, PathBuf::from("packages/a")),
+            PackageInfo::new(package_b_json, None, PathBuf::from("packages/b")),
+        ];
+
+        let config = PackageToolsConfig::default();
+        let workspace_root = PathBuf::from(".");
+
+        let result = audit_dependencies(&workspace_root, &packages, &config).await;
+        assert!(result.is_ok());
+
+        let section = result.expect("Should succeed");
+        // No conflicts because lodash versions are the same
+        assert_eq!(section.version_conflicts.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_audit_dependencies_ignores_dev_dependencies() {
+        use crate::audit::sections::dependencies::audit_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use package_json::PackageJson;
+        use std::path::PathBuf;
+
+        // Create packages with different dev dependency versions
+        let package_a_json = PackageJson {
+            name: "pkg-a".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: None,
+            dev_dependencies: Some(
+                [("jest".to_string(), "^27.0.0".to_string())].into_iter().collect(),
+            ),
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let package_b_json = PackageJson {
+            name: "pkg-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: None,
+            dev_dependencies: Some(
+                [("jest".to_string(), "^26.0.0".to_string())].into_iter().collect(),
+            ),
+            peer_dependencies: None,
+            optional_dependencies: None,
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a_json, None, PathBuf::from("packages/a")),
+            PackageInfo::new(package_b_json, None, PathBuf::from("packages/b")),
+        ];
+
+        let config = PackageToolsConfig::default();
+        let workspace_root = PathBuf::from(".");
+
+        let result = audit_dependencies(&workspace_root, &packages, &config).await;
+        assert!(result.is_ok());
+
+        let section = result.expect("Should succeed");
+        // No conflicts because dev dependencies are ignored
+        assert_eq!(section.version_conflicts.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_audit_dependencies_section_disabled() {
+        use crate::audit::sections::dependencies::audit_dependencies;
+        use crate::config::PackageToolsConfig;
+        use std::path::PathBuf;
+
+        let packages = vec![];
+        let mut config = PackageToolsConfig::default();
+        config.audit.sections.dependencies = false;
+        let workspace_root = PathBuf::from(".");
+
+        let result = audit_dependencies(&workspace_root, &packages, &config).await;
+        assert!(result.is_ok());
+
+        let section = result.expect("Should succeed");
+        assert_eq!(section.circular_dependencies.len(), 0);
+        assert_eq!(section.version_conflicts.len(), 0);
+        assert_eq!(section.issues.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_version_conflict_accessors() {
+        use crate::audit::sections::dependencies::{VersionConflict, VersionUsage};
+
+        let conflict = VersionConflict {
+            dependency_name: "react".to_string(),
+            versions: vec![
+                VersionUsage {
+                    package_name: "pkg-a".to_string(),
+                    version_spec: "^17.0.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "pkg-b".to_string(),
+                    version_spec: "^16.0.0".to_string(),
+                },
+            ],
+        };
+
+        assert_eq!(conflict.version_count(), 2);
+        let description = conflict.describe();
+        assert!(description.contains("react"));
+        assert!(description.contains("pkg-a"));
+        assert!(description.contains("^17.0.0"));
+    }
+
+    #[tokio::test]
+    async fn test_dependency_audit_section_accessors() {
+        use crate::audit::sections::dependencies::{
+            DependencyAuditSection, VersionConflict, VersionUsage,
+        };
+        use crate::types::CircularDependency;
+
+        let mut section = DependencyAuditSection::empty();
+        section.circular_dependencies.push(CircularDependency::new(vec![
+            "pkg-a".to_string(),
+            "pkg-b".to_string(),
+            "pkg-a".to_string(),
+        ]));
+
+        section.version_conflicts.push(VersionConflict {
+            dependency_name: "lodash".to_string(),
+            versions: vec![
+                VersionUsage {
+                    package_name: "pkg-a".to_string(),
+                    version_spec: "^4.0.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "pkg-c".to_string(),
+                    version_spec: "^3.0.0".to_string(),
+                },
+            ],
+        });
+
+        assert_eq!(section.circular_dependencies.len(), 1);
+        assert_eq!(section.version_conflicts.len(), 1);
+        assert!(section.has_circular_dependencies());
+        assert!(section.has_version_conflicts());
+
+        let pkg_a_cycles = section.circular_dependencies_for_package("pkg-a");
+        assert_eq!(pkg_a_cycles.len(), 1);
+
+        let pkg_c_cycles = section.circular_dependencies_for_package("pkg-c");
+        assert_eq!(pkg_c_cycles.len(), 0);
+
+        let lodash_conflict = section.version_conflicts_for_dependency("lodash");
+        assert!(lodash_conflict.is_some());
+
+        let react_conflict = section.version_conflicts_for_dependency("react");
+        assert!(react_conflict.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_dependency_audit_section_serialization() {
+        use crate::audit::sections::dependencies::{
+            DependencyAuditSection, VersionConflict, VersionUsage,
+        };
+
+        let mut section = DependencyAuditSection::empty();
+        section.version_conflicts.push(VersionConflict {
+            dependency_name: "lodash".to_string(),
+            versions: vec![VersionUsage {
+                package_name: "pkg-a".to_string(),
+                version_spec: "^4.0.0".to_string(),
+            }],
+        });
+
+        let json_result = serde_json::to_string(&section);
+        assert!(json_result.is_ok(), "Should serialize to JSON");
+
+        let json = json_result.expect("JSON serialization succeeded");
+        let deserialized: Result<DependencyAuditSection, _> = serde_json::from_str(&json);
+        assert!(deserialized.is_ok(), "Should deserialize from JSON");
+
+        let deserialized_section = deserialized.expect("Deserialization succeeded");
+        assert_eq!(deserialized_section.version_conflicts.len(), 1);
+        assert_eq!(deserialized_section.version_conflicts[0].dependency_name, "lodash");
+    }
 }

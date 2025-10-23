@@ -13,10 +13,14 @@
 //! the complexity of coordinating multiple subsystems while presenting a clean,
 //! simple API for users.
 
-use crate::audit::sections::{audit_upgrades as audit_upgrades_impl, UpgradeAuditSection};
+use crate::audit::sections::{
+    audit_dependencies as audit_dependencies_impl, audit_upgrades as audit_upgrades_impl,
+    DependencyAuditSection, UpgradeAuditSection,
+};
 use crate::changes::ChangesAnalyzer;
 use crate::config::PackageToolsConfig;
 use crate::error::{AuditError, AuditResult};
+use crate::types::PackageInfo;
 use crate::upgrade::UpgradeManager;
 use std::path::PathBuf;
 use sublime_git_tools::Repo;
@@ -457,8 +461,163 @@ impl AuditManager {
         audit_upgrades_impl(&self.upgrade_manager, &self.config).await
     }
 
+    /// Audits dependency graph for circular dependencies and version conflicts.
+    ///
+    /// Performs comprehensive dependency analysis including:
+    /// - Detection of circular dependencies between workspace packages
+    /// - Identification of version conflicts for external dependencies
+    /// - Generation of audit issues based on severity
+    ///
+    /// # Returns
+    ///
+    /// A `DependencyAuditSection` containing all dependency analysis results.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AuditError` if:
+    /// - The dependencies section is disabled in configuration
+    /// - The dependency graph cannot be constructed
+    /// - Package discovery fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::audit::AuditManager;
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let workspace_root = PathBuf::from(".");
+    /// let config = PackageToolsConfig::default();
+    ///
+    /// let manager = AuditManager::new(workspace_root, config).await?;
+    /// let section = manager.audit_dependencies().await?;
+    ///
+    /// println!("Circular dependencies: {}", section.circular_dependencies.len());
+    /// println!("Version conflicts: {}", section.version_conflicts.len());
+    /// println!("Issues found: {}", section.issues.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// ## Checking for critical issues
+    ///
+    /// ```rust,ignore
+    /// # use sublime_pkg_tools::audit::AuditManager;
+    /// # use sublime_pkg_tools::config::PackageToolsConfig;
+    /// # use std::path::PathBuf;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let workspace_root = PathBuf::from(".");
+    /// # let config = PackageToolsConfig::default();
+    /// # let manager = AuditManager::new(workspace_root, config).await?;
+    /// let section = manager.audit_dependencies().await?;
+    ///
+    /// let critical = section.critical_issue_count();
+    /// if critical > 0 {
+    ///     println!("CRITICAL: {} circular dependencies found!", critical);
+    ///     for issue in section.issues.iter().filter(|i| i.is_critical()) {
+    ///         println!("  - {}", issue.title);
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn audit_dependencies(&self) -> AuditResult<DependencyAuditSection> {
+        // Discover all packages in the workspace
+        let packages = self.discover_packages().await?;
+
+        // Call the dependency audit implementation
+        audit_dependencies_impl(&self.workspace_root, &packages, &self.config).await
+    }
+
+    /// Discovers all packages in the workspace.
+    ///
+    /// Detects whether the workspace is a monorepo or single package and
+    /// returns information about all packages found.
+    ///
+    /// # Returns
+    ///
+    /// A vector of `PackageInfo` containing metadata for each package.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AuditError` if:
+    /// - Package.json files cannot be read or parsed
+    /// - The workspace structure is invalid
+    async fn discover_packages(&self) -> AuditResult<Vec<PackageInfo>> {
+        // Check if this is a monorepo
+        let monorepo_kind =
+            self.monorepo_detector.is_monorepo_root(&self.workspace_root).await.map_err(|e| {
+                AuditError::WorkspaceAnalysisFailed {
+                    reason: format!("Failed to detect monorepo: {}", e),
+                }
+            })?;
+
+        if monorepo_kind.is_some() {
+            // Detect the monorepo structure
+            let monorepo =
+                self.monorepo_detector.detect_monorepo(&self.workspace_root).await.map_err(
+                    |e| AuditError::WorkspaceAnalysisFailed {
+                        reason: format!("Failed to detect monorepo: {}", e),
+                    },
+                )?;
+
+            // Get all workspace packages
+            let workspace_packages = monorepo.packages();
+
+            if workspace_packages.is_empty() {
+                return Err(AuditError::PackageNotFound { package: "any package".to_string() });
+            }
+
+            // Convert workspace packages to PackageInfo
+            let mut packages = Vec::with_capacity(workspace_packages.len());
+            for workspace_package in workspace_packages {
+                let package_json_path = workspace_package.absolute_path.join("package.json");
+
+                // Read package.json file
+                let content = self.fs.read_file_string(&package_json_path).await.map_err(|e| {
+                    AuditError::FileSystemError {
+                        path: package_json_path.clone(),
+                        reason: format!("Failed to read file: {}", e),
+                    }
+                })?;
+
+                // Parse package.json
+                let package_json: package_json::PackageJson = serde_json::from_str(&content)
+                    .map_err(|e| AuditError::FileSystemError {
+                        path: package_json_path.clone(),
+                        reason: format!("Failed to parse JSON: {}", e),
+                    })?;
+
+                packages.push(PackageInfo::new(
+                    package_json,
+                    Some(workspace_package.clone()),
+                    workspace_package.absolute_path.clone(),
+                ));
+            }
+
+            Ok(packages)
+        } else {
+            // Single package project
+            let package_json_path = self.workspace_root.join("package.json");
+            let content = self.fs.read_file_string(&package_json_path).await.map_err(|e| {
+                AuditError::FileSystemError {
+                    path: package_json_path.clone(),
+                    reason: format!("Failed to read package.json: {}", e),
+                }
+            })?;
+
+            let package_json: package_json::PackageJson =
+                serde_json::from_str(&content).map_err(|e| AuditError::FileSystemError {
+                    path: package_json_path.clone(),
+                    reason: format!("Failed to parse package.json: {}", e),
+                })?;
+
+            Ok(vec![PackageInfo::new(package_json, None, self.workspace_root.clone())])
+        }
+    }
+
     // Future audit methods will be implemented in subsequent stories:
-    // - Story 10.3: audit_dependencies() -> DependencyAuditSection
     // - Story 10.4: categorize_dependencies() -> DependencyCategorization
     // - Story 10.5: audit_breaking_changes() -> BreakingChangesAuditSection
     // - Story 10.6: audit_version_consistency() -> VersionConsistencyAuditSection

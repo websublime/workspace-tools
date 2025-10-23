@@ -70,4 +70,7 @@ pub use manager::AuditManager;
 pub use issue::{AuditIssue, IssueCategory, IssueSeverity};
 
 // Section types and functions
-pub use sections::{audit_upgrades, DeprecatedPackage, UpgradeAuditSection};
+pub use sections::{
+    audit_dependencies, audit_upgrades, DependencyAuditSection, DeprecatedPackage,
+    UpgradeAuditSection, VersionConflict, VersionUsage,
+};
