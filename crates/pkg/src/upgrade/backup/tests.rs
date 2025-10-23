@@ -9,9 +9,11 @@ use std::sync::{Arc, Mutex};
 use sublime_standard_tools::error::{FileSystemError, Result as StandardResult};
 
 /// Mock filesystem for testing backup operations.
+///
+/// Uses normalized paths (forward slashes) internally for cross-platform compatibility.
 #[derive(Debug, Clone)]
 struct MockFileSystem {
-    files: Arc<Mutex<HashMap<PathBuf, Vec<u8>>>>,
+    files: Arc<Mutex<HashMap<String, Vec<u8>>>>,
 }
 
 impl MockFileSystem {
@@ -19,32 +21,46 @@ impl MockFileSystem {
         Self { files: Arc::new(Mutex::new(HashMap::new())) }
     }
 
+    /// Normalize path to use forward slashes for cross-platform compatibility
+    fn normalize_path(path: &Path) -> String {
+        path.to_string_lossy().replace('\\', "/")
+    }
+
     fn add_file(&self, path: PathBuf, content: &str) {
-        self.files.lock().unwrap().insert(path, content.as_bytes().to_vec());
+        let normalized = Self::normalize_path(&path);
+        self.files.lock().unwrap().insert(normalized, content.as_bytes().to_vec());
     }
 
     fn get_file(&self, path: &Path) -> Option<String> {
-        self.files.lock().unwrap().get(path).map(|bytes| String::from_utf8_lossy(bytes).to_string())
+        let normalized = Self::normalize_path(path);
+        self.files
+            .lock()
+            .unwrap()
+            .get(&normalized)
+            .map(|bytes| String::from_utf8_lossy(bytes).to_string())
     }
 
     fn file_exists(&self, path: &Path) -> bool {
-        self.files.lock().unwrap().contains_key(path)
+        let normalized = Self::normalize_path(path);
+        self.files.lock().unwrap().contains_key(&normalized)
     }
 }
 
 #[async_trait::async_trait]
 impl AsyncFileSystem for MockFileSystem {
     async fn read_file(&self, path: &Path) -> StandardResult<Vec<u8>> {
+        let normalized = Self::normalize_path(path);
         self.files
             .lock()
             .unwrap()
-            .get(path)
+            .get(&normalized)
             .cloned()
             .ok_or_else(|| FileSystemError::NotFound { path: path.to_path_buf() }.into())
     }
 
     async fn write_file(&self, path: &Path, contents: &[u8]) -> StandardResult<()> {
-        self.files.lock().unwrap().insert(path.to_path_buf(), contents.to_vec());
+        let normalized = Self::normalize_path(path);
+        self.files.lock().unwrap().insert(normalized, contents.to_vec());
         Ok(())
     }
 
@@ -65,50 +81,35 @@ impl AsyncFileSystem for MockFileSystem {
     }
 
     async fn remove(&self, path: &Path) -> StandardResult<()> {
-        let path_str = path.to_string_lossy().to_string();
+        let normalized_path = Self::normalize_path(path);
         let mut files = self.files.lock().unwrap();
         // Remove the path itself and all children (simulates recursive removal)
         files.retain(|p, _| {
-            let p_str = p.to_string_lossy();
-            // Normalize paths for cross-platform comparison
-            let normalized_path = path_str.replace('\\', "/");
-            let normalized_p = p_str.replace('\\', "/");
-            normalized_p != normalized_path
-                && !normalized_p.starts_with(&format!("{}/", normalized_path))
+            *p != normalized_path && !p.starts_with(&format!("{}/", normalized_path))
         });
         Ok(())
     }
 
     async fn exists(&self, path: &Path) -> bool {
+        let normalized_path = Self::normalize_path(path);
         let files = self.files.lock().unwrap();
         // Check if path exists as a file
-        if files.contains_key(path) {
+        if files.contains_key(&normalized_path) {
             return true;
         }
         // Check if path exists as a directory (has children)
-        let path_str = path.to_string_lossy();
-        let normalized_path = path_str.replace('\\', "/");
-        files.keys().any(|p| {
-            let p_str = p.to_string_lossy();
-            let normalized_p = p_str.replace('\\', "/");
-            normalized_p.starts_with(&format!("{}/", normalized_path))
-        })
+        files.keys().any(|p| p.starts_with(&format!("{}/", normalized_path)))
     }
 
     async fn read_dir(&self, path: &Path) -> StandardResult<Vec<PathBuf>> {
-        let path_str = path.to_string_lossy().to_string();
-        let normalized_path = path_str.replace('\\', "/");
+        let normalized_path = Self::normalize_path(path);
         let files: Vec<PathBuf> = self
             .files
             .lock()
             .unwrap()
             .keys()
-            .filter(|p| {
-                let p_str = p.to_string_lossy();
-                let normalized_p = p_str.replace('\\', "/");
-                normalized_p.starts_with(&normalized_path)
-            })
-            .cloned()
+            .filter(|p| p.starts_with(&normalized_path))
+            .map(PathBuf::from)
             .collect();
         Ok(files)
     }
