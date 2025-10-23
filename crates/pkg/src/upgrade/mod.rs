@@ -218,5 +218,8 @@ pub use backup::{BackupManager, BackupMetadata};
 // Automatic changeset creation (Story 9.6 - IMPLEMENTED)
 // Integrated in application module via apply_with_changeset function
 
-// Remaining modules will be implemented in subsequent stories (Epic 9)
-// - manager: Main UpgradeManager (Story 9.7)
+// Manager module for orchestrating upgrade operations (Story 9.7 - IMPLEMENTED)
+mod manager;
+
+// Re-export manager public types
+pub use manager::UpgradeManager;
