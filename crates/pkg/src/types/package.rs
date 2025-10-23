@@ -96,6 +96,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use sublime_standard_tools::monorepo::WorkspacePackage;
 
+use crate::types::traits::Named;
 use crate::types::Version;
 
 /// Information about a package in the workspace.
@@ -701,3 +702,29 @@ impl std::fmt::Display for DependencyType {
         f.write_str(self.as_str())
     }
 }
+
+// Trait implementations for PackageInfo (Audit Report - Phase 2, M2)
+
+impl Named for PackageInfo {
+    fn name(&self) -> &str {
+        PackageInfo::name(self)
+    }
+}
+
+// Note: Versionable and Identifiable traits are not implemented for PackageInfo
+// because the version() method returns Version by value (parsed from string),
+// and the trait requires &Version. To properly implement this, we would need to
+// store the parsed Version in PackageInfo's struct, which would require changes
+// to the struct definition and all its constructors.
+//
+// Users can still call PackageInfo::version() and manually create identifiers.
+
+// Note: HasDependencies trait implementation is not provided for PackageInfo
+// because package_json fields are Option<HashMap> and the trait expects &HashMap.
+// Users should use the existing PackageInfo methods instead:
+// - dependencies() returns filtered HashMap
+// - dev_dependencies() returns filtered HashMap
+// - peer_dependencies() returns filtered HashMap
+// - all_dependencies() returns combined filtered HashMap
+//
+// This avoids the complexity of storing empty HashMaps or dealing with lifetime issues.

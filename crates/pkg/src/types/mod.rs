@@ -119,6 +119,60 @@
 
 #![allow(clippy::todo)]
 
+// Prelude module for convenient imports (Audit Report - Phase 1)
+pub mod prelude;
+
+// Common traits (Audit Report - Phase 2, M2)
+pub mod traits;
+pub use traits::{HasDependencies, Identifiable, Named, Versionable};
+
+// Type aliases for common string types (Audit Report - Phase 2, M1)
+// These provide better type safety and self-documenting code
+
+/// Type alias for package names (e.g., "@myorg/core", "lodash").
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sublime_pkg_tools::types::PackageName;
+///
+/// let name: PackageName = "@myorg/core".to_string();
+/// ```
+pub type PackageName = String;
+
+/// Type alias for version specifications (e.g., "^1.2.3", "workspace:*").
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sublime_pkg_tools::types::VersionSpec;
+///
+/// let spec: VersionSpec = "^1.2.3".to_string();
+/// ```
+pub type VersionSpec = String;
+
+/// Type alias for Git commit hashes (full or short form).
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sublime_pkg_tools::types::CommitHash;
+///
+/// let hash: CommitHash = "abc123def456".to_string();
+/// ```
+pub type CommitHash = String;
+
+/// Type alias for Git branch names.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sublime_pkg_tools::types::BranchName;
+///
+/// let branch: BranchName = "main".to_string();
+/// ```
+pub type BranchName = String;
+
 // Version types (Story 4.1)
 mod version;
 pub use version::{Version, VersionBump, VersioningStrategy};
@@ -135,9 +189,13 @@ pub use changeset::{ArchivedChangeset, Changeset, ReleaseInfo, UpdateSummary};
 pub mod dependency;
 pub use dependency::{
     extract_protocol_path, is_local_protocol, is_workspace_protocol, parse_protocol,
-    should_skip_protocol, CircularDependency, DependencyUpdate, LocalLinkType, PackageUpdate,
-    UpdateReason, VersionProtocol,
+    should_skip_protocol, CircularDependency, DependencyUpdate, LocalLinkType, UpdateReason,
+    VersionProtocol,
 };
+
+// Re-export PackageUpdate from version module to avoid duplication
+// The canonical definition is in version::resolution
+pub use crate::version::PackageUpdate;
 
 // Tests module
 #[cfg(test)]
