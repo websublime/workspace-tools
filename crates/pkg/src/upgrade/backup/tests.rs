@@ -21,9 +21,26 @@ impl MockFileSystem {
         Self { files: Arc::new(Mutex::new(HashMap::new())) }
     }
 
-    /// Normalize path to use forward slashes for cross-platform compatibility
+    /// Normalize path to use forward slashes for cross-platform compatibility.
+    ///
+    /// On Windows, paths can have mixed separators (e.g., "/workspace\.pkg-backups\file.txt").
+    /// This function ensures all paths use forward slashes consistently.
     fn normalize_path(path: &Path) -> String {
-        path.to_string_lossy().replace('\\', "/")
+        // Convert to string and replace all backslashes with forward slashes
+        let path_str = path.to_string_lossy().replace('\\', "/");
+
+        // Handle Windows drive letters (C:/ -> /c/)
+        // This ensures compatibility with test paths that use Unix-style roots
+        if cfg!(windows) && path_str.len() >= 2 {
+            if let Some(second_char) = path_str.chars().nth(1) {
+                if second_char == ':' {
+                    let drive = path_str.chars().next().unwrap().to_ascii_lowercase();
+                    return format!("/{}{}", drive, &path_str[2..]);
+                }
+            }
+        }
+
+        path_str
     }
 
     fn add_file(&self, path: PathBuf, content: &str) {
@@ -43,6 +60,14 @@ impl MockFileSystem {
     fn file_exists(&self, path: &Path) -> bool {
         let normalized = Self::normalize_path(path);
         self.files.lock().unwrap().contains_key(&normalized)
+    }
+
+    /// Debug helper to list all files in the mock filesystem
+    fn list_all_files(&self) -> Vec<String> {
+        let files = self.files.lock().unwrap();
+        let mut keys: Vec<String> = files.keys().cloned().collect();
+        keys.sort();
+        keys
     }
 }
 
@@ -93,12 +118,20 @@ impl AsyncFileSystem for MockFileSystem {
     async fn exists(&self, path: &Path) -> bool {
         let normalized_path = Self::normalize_path(path);
         let files = self.files.lock().unwrap();
+
+        // Remove trailing slash if present for consistent comparison
+        let normalized_path = normalized_path.trim_end_matches('/');
+
         // Check if path exists as a file
-        if files.contains_key(&normalized_path) {
+        if files.contains_key(normalized_path) {
             return true;
         }
         // Check if path exists as a directory (has children)
-        files.keys().any(|p| p.starts_with(&format!("{}/", normalized_path)))
+        files.keys().any(|p| {
+            p.starts_with(normalized_path)
+                && p.len() > normalized_path.len()
+                && p.as_bytes().get(normalized_path.len()) == Some(&b'/')
+        })
     }
 
     async fn read_dir(&self, path: &Path) -> StandardResult<Vec<PathBuf>> {
@@ -156,8 +189,23 @@ async fn test_create_backup_success() {
 
     // Verify backup files exist
     let backup_path = manager.backup_path(&backup_id);
-    assert!(manager.fs.file_exists(&backup_path.join("package.json")));
-    assert!(manager.fs.file_exists(&backup_path.join("packages/core/package.json")));
+    let expected_file1 = backup_path.join("package.json");
+    let expected_file2 = backup_path.join("packages/core/package.json");
+
+    assert!(
+        manager.fs.file_exists(&expected_file1),
+        "Expected file not found: {}\nNormalized: {}\nAll files: {:?}",
+        expected_file1.display(),
+        MockFileSystem::normalize_path(&expected_file1),
+        manager.fs.list_all_files()
+    );
+    assert!(
+        manager.fs.file_exists(&expected_file2),
+        "Expected file not found: {}\nNormalized: {}\nAll files: {:?}",
+        expected_file2.display(),
+        MockFileSystem::normalize_path(&expected_file2),
+        manager.fs.list_all_files()
+    );
 
     // Verify metadata
     let backups = manager.list_backups().await.unwrap();
