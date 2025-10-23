@@ -56,9 +56,18 @@
 
 #![allow(clippy::todo)]
 
+mod issue;
 mod manager;
+mod sections;
+
 #[cfg(test)]
 mod tests;
 
 // Public exports
 pub use manager::AuditManager;
+
+// Issue types
+pub use issue::{AuditIssue, IssueCategory, IssueSeverity};
+
+// Section types and functions
+pub use sections::{audit_upgrades, DeprecatedPackage, UpgradeAuditSection};

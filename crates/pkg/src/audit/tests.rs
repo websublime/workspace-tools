@@ -369,4 +369,291 @@ mod tests {
             "Backup config should be preserved"
         );
     }
+
+    // ==================== Upgrade Audit Tests ====================
+
+    #[tokio::test]
+    async fn test_audit_upgrades_section_disabled() {
+        let (_temp_dir, workspace_path) = setup_test_workspace().await;
+
+        let mut config = PackageToolsConfig::default();
+        config.audit.sections.upgrades = false;
+
+        let manager =
+            AuditManager::new(workspace_path, config).await.expect("Manager should be initialized");
+
+        let result = manager.audit_upgrades().await;
+        assert!(result.is_err(), "audit_upgrades should fail when section is disabled");
+
+        if let Err(e) = result {
+            let error_string = e.to_string();
+            assert!(
+                error_string.contains("disabled") || error_string.contains("upgrades"),
+                "Error should indicate section is disabled, got: {}",
+                error_string
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_audit_upgrades_with_no_dependencies() {
+        let (_temp_dir, workspace_path) = setup_test_workspace().await;
+        let config = PackageToolsConfig::default();
+
+        let manager =
+            AuditManager::new(workspace_path, config).await.expect("Manager should be initialized");
+
+        let result = manager.audit_upgrades().await;
+        assert!(result.is_ok(), "audit_upgrades should succeed even with no dependencies");
+
+        let section = result.expect("Should have upgrade section");
+        assert_eq!(section.total_upgrades, 0, "Should have no upgrades");
+        assert_eq!(section.major_upgrades, 0, "Should have no major upgrades");
+        assert_eq!(section.minor_upgrades, 0, "Should have no minor upgrades");
+        assert_eq!(section.patch_upgrades, 0, "Should have no patch upgrades");
+        assert!(section.deprecated_packages.is_empty(), "Should have no deprecated packages");
+        assert!(section.issues.is_empty(), "Should have no issues");
+        assert!(!section.has_upgrades(), "has_upgrades should return false");
+        assert!(!section.has_deprecated_packages(), "has_deprecated_packages should return false");
+    }
+
+    #[tokio::test]
+    async fn test_upgrade_audit_section_empty() {
+        use crate::audit::UpgradeAuditSection;
+
+        let section = UpgradeAuditSection::empty();
+        assert_eq!(section.total_upgrades, 0);
+        assert_eq!(section.major_upgrades, 0);
+        assert_eq!(section.minor_upgrades, 0);
+        assert_eq!(section.patch_upgrades, 0);
+        assert!(section.deprecated_packages.is_empty());
+        assert!(section.upgrades_by_package.is_empty());
+        assert!(section.issues.is_empty());
+        assert!(!section.has_upgrades());
+        assert!(!section.has_deprecated_packages());
+        assert_eq!(section.critical_issue_count(), 0);
+        assert_eq!(section.warning_issue_count(), 0);
+        assert_eq!(section.info_issue_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_upgrade_audit_section_accessors() {
+        use crate::audit::UpgradeAuditSection;
+
+        let section = UpgradeAuditSection::empty();
+
+        // Test upgrades_for_package with non-existent package
+        let upgrades = section.upgrades_for_package("nonexistent");
+        assert!(upgrades.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_deprecated_package_structure() {
+        use crate::audit::DeprecatedPackage;
+
+        let deprecated = DeprecatedPackage {
+            name: "old-lib".to_string(),
+            current_version: "1.0.0".to_string(),
+            deprecation_message: "This package is deprecated, use new-lib instead".to_string(),
+            alternative: Some("new-lib".to_string()),
+        };
+
+        assert_eq!(deprecated.name, "old-lib");
+        assert_eq!(deprecated.current_version, "1.0.0");
+        assert!(deprecated.deprecation_message.contains("deprecated"));
+        assert_eq!(deprecated.alternative, Some("new-lib".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_audit_issue_creation() {
+        use crate::audit::{AuditIssue, IssueCategory, IssueSeverity};
+
+        let issue = AuditIssue::new(
+            IssueSeverity::Critical,
+            IssueCategory::Upgrades,
+            "Test issue".to_string(),
+            "Test description".to_string(),
+        );
+
+        assert_eq!(issue.severity, IssueSeverity::Critical);
+        assert_eq!(issue.category, IssueCategory::Upgrades);
+        assert_eq!(issue.title, "Test issue");
+        assert_eq!(issue.description, "Test description");
+        assert!(issue.affected_packages.is_empty());
+        assert!(issue.suggestion.is_none());
+        assert!(issue.metadata.is_empty());
+        assert!(issue.is_critical());
+        assert!(!issue.is_warning());
+        assert!(!issue.is_info());
+    }
+
+    #[tokio::test]
+    async fn test_audit_issue_mutations() {
+        use crate::audit::{AuditIssue, IssueCategory, IssueSeverity};
+
+        let mut issue = AuditIssue::new(
+            IssueSeverity::Warning,
+            IssueCategory::Upgrades,
+            "Test".to_string(),
+            "Desc".to_string(),
+        );
+
+        issue.add_affected_package("pkg-a".to_string());
+        issue.add_affected_package("pkg-b".to_string());
+        assert_eq!(issue.affected_packages.len(), 2);
+
+        issue.set_suggestion("Do something".to_string());
+        assert_eq!(issue.suggestion, Some("Do something".to_string()));
+
+        issue.add_metadata("key1".to_string(), "value1".to_string());
+        issue.add_metadata("key2".to_string(), "value2".to_string());
+        assert_eq!(issue.metadata.len(), 2);
+        assert_eq!(issue.metadata.get("key1"), Some(&"value1".to_string()));
+
+        assert!(!issue.is_critical());
+        assert!(issue.is_warning());
+        assert!(!issue.is_info());
+    }
+
+    #[tokio::test]
+    async fn test_issue_severity_ordering() {
+        use crate::audit::IssueSeverity;
+
+        assert!(IssueSeverity::Critical > IssueSeverity::Warning);
+        assert!(IssueSeverity::Warning > IssueSeverity::Info);
+        assert!(IssueSeverity::Critical > IssueSeverity::Info);
+
+        assert_eq!(IssueSeverity::Critical.as_str(), "critical");
+        assert_eq!(IssueSeverity::Warning.as_str(), "warning");
+        assert_eq!(IssueSeverity::Info.as_str(), "info");
+    }
+
+    #[tokio::test]
+    async fn test_issue_category_display() {
+        use crate::audit::IssueCategory;
+
+        assert_eq!(IssueCategory::Upgrades.as_str(), "upgrades");
+        assert_eq!(IssueCategory::Dependencies.as_str(), "dependencies");
+        assert_eq!(IssueCategory::BreakingChanges.as_str(), "breaking_changes");
+        assert_eq!(IssueCategory::VersionConsistency.as_str(), "version_consistency");
+        assert_eq!(IssueCategory::Security.as_str(), "security");
+        assert_eq!(IssueCategory::Other.as_str(), "other");
+    }
+
+    #[tokio::test]
+    async fn test_audit_upgrades_with_enabled_config() {
+        let (_temp_dir, workspace_path) = setup_test_workspace().await;
+
+        let mut config = PackageToolsConfig::default();
+        config.audit.sections.upgrades = true;
+        config.audit.upgrades.include_patch = true;
+        config.audit.upgrades.include_minor = true;
+        config.audit.upgrades.include_major = true;
+
+        let manager =
+            AuditManager::new(workspace_path, config).await.expect("Manager should be initialized");
+
+        let result = manager.audit_upgrades().await;
+        assert!(result.is_ok(), "audit_upgrades should succeed with enabled config");
+    }
+
+    #[tokio::test]
+    async fn test_extract_alternative_from_deprecation_message() {
+        use crate::audit::sections::upgrades::extract_alternative;
+
+        // Test "use X instead" pattern
+        let msg1 = "This package is deprecated, use new-package instead";
+        assert_eq!(extract_alternative(msg1), Some("new-package".to_string()));
+
+        // Test "migrate to X" pattern
+        let msg2 = "Please migrate to modern-lib for continued support";
+        assert_eq!(extract_alternative(msg2), Some("modern-lib".to_string()));
+
+        // Test "replaced by X" pattern
+        let msg3 = "This has been replaced by better-package.";
+        assert_eq!(extract_alternative(msg3), Some("better-package".to_string()));
+
+        // Test with no alternative
+        let msg4 = "This package is no longer maintained";
+        assert_eq!(extract_alternative(msg4), None);
+
+        // Test case insensitivity
+        let msg5 = "USE replacement-lib instead";
+        assert_eq!(extract_alternative(msg5), Some("replacement-lib".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_upgrade_audit_section_serialization() {
+        use crate::audit::UpgradeAuditSection;
+
+        let section = UpgradeAuditSection::empty();
+
+        // Test that it can be serialized to JSON
+        let json_result = serde_json::to_string(&section);
+        assert!(json_result.is_ok(), "Should serialize to JSON");
+
+        let json = json_result.expect("JSON serialization succeeded");
+        assert!(json.contains("total_upgrades"));
+        assert!(json.contains("major_upgrades"));
+        assert!(json.contains("deprecated_packages"));
+        assert!(json.contains("issues"));
+
+        // Test deserialization
+        let deserialized: Result<UpgradeAuditSection, _> = serde_json::from_str(&json);
+        assert!(deserialized.is_ok(), "Should deserialize from JSON");
+    }
+
+    #[tokio::test]
+    async fn test_deprecated_package_serialization() {
+        use crate::audit::DeprecatedPackage;
+
+        let deprecated = DeprecatedPackage {
+            name: "old-lib".to_string(),
+            current_version: "1.0.0".to_string(),
+            deprecation_message: "Deprecated".to_string(),
+            alternative: Some("new-lib".to_string()),
+        };
+
+        let json_result = serde_json::to_string(&deprecated);
+        assert!(json_result.is_ok(), "Should serialize to JSON");
+
+        let json = json_result.expect("JSON serialization succeeded");
+        let deserialized: Result<DeprecatedPackage, _> = serde_json::from_str(&json);
+        assert!(deserialized.is_ok(), "Should deserialize from JSON");
+
+        let dep = deserialized.expect("Deserialization succeeded");
+        assert_eq!(dep.name, "old-lib");
+        assert_eq!(dep.alternative, Some("new-lib".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_audit_issue_serialization() {
+        use crate::audit::{AuditIssue, IssueCategory, IssueSeverity};
+        use std::collections::HashMap;
+
+        let mut metadata = HashMap::new();
+        metadata.insert("key".to_string(), "value".to_string());
+
+        let issue = AuditIssue {
+            severity: IssueSeverity::Warning,
+            category: IssueCategory::Upgrades,
+            title: "Test".to_string(),
+            description: "Desc".to_string(),
+            affected_packages: vec!["pkg-a".to_string()],
+            suggestion: Some("Fix it".to_string()),
+            metadata,
+        };
+
+        let json_result = serde_json::to_string(&issue);
+        assert!(json_result.is_ok(), "Should serialize to JSON");
+
+        let json = json_result.expect("JSON serialization succeeded");
+        let deserialized: Result<AuditIssue, _> = serde_json::from_str(&json);
+        assert!(deserialized.is_ok(), "Should deserialize from JSON");
+
+        let deserialized_issue = deserialized.expect("Deserialization succeeded");
+        assert_eq!(deserialized_issue.title, "Test");
+        assert_eq!(deserialized_issue.severity, IssueSeverity::Warning);
+        assert_eq!(deserialized_issue.metadata.get("key"), Some(&"value".to_string()));
+    }
 }

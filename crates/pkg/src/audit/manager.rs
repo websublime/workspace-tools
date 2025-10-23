@@ -13,6 +13,7 @@
 //! the complexity of coordinating multiple subsystems while presenting a clean,
 //! simple API for users.
 
+use crate::audit::sections::{audit_upgrades as audit_upgrades_impl, UpgradeAuditSection};
 use crate::changes::ChangesAnalyzer;
 use crate::config::PackageToolsConfig;
 use crate::error::{AuditError, AuditResult};
@@ -385,8 +386,78 @@ impl AuditManager {
         &self.fs
     }
 
+    /// Audits available package upgrades.
+    ///
+    /// Performs a comprehensive analysis of available dependency upgrades, including:
+    /// - Detection of all available upgrades (major, minor, patch)
+    /// - Identification of deprecated packages
+    /// - Generation of audit issues based on severity
+    /// - Categorization of upgrades by package
+    ///
+    /// # Returns
+    ///
+    /// An `UpgradeAuditSection` containing all upgrade analysis results.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AuditError` if:
+    /// - The upgrades section is disabled in configuration
+    /// - Upgrade detection fails (network issues, registry errors, etc.)
+    /// - Package analysis fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::audit::AuditManager;
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let workspace_root = PathBuf::from(".");
+    /// let config = PackageToolsConfig::default();
+    ///
+    /// let manager = AuditManager::new(workspace_root, config).await?;
+    /// let section = manager.audit_upgrades().await?;
+    ///
+    /// println!("Total upgrades: {}", section.total_upgrades);
+    /// println!("Major: {}, Minor: {}, Patch: {}",
+    ///     section.major_upgrades,
+    ///     section.minor_upgrades,
+    ///     section.patch_upgrades
+    /// );
+    /// println!("Deprecated packages: {}", section.deprecated_packages.len());
+    /// println!("Issues found: {}", section.issues.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// ## Checking for critical issues
+    ///
+    /// ```rust,ignore
+    /// # use sublime_pkg_tools::audit::AuditManager;
+    /// # use sublime_pkg_tools::config::PackageToolsConfig;
+    /// # use std::path::PathBuf;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let workspace_root = PathBuf::from(".");
+    /// # let config = PackageToolsConfig::default();
+    /// # let manager = AuditManager::new(workspace_root, config).await?;
+    /// let section = manager.audit_upgrades().await?;
+    ///
+    /// let critical = section.critical_issue_count();
+    /// if critical > 0 {
+    ///     println!("WARNING: {} critical issues found!", critical);
+    ///     for issue in section.issues.iter().filter(|i| i.is_critical()) {
+    ///         println!("  - {}", issue.title);
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn audit_upgrades(&self) -> AuditResult<UpgradeAuditSection> {
+        audit_upgrades_impl(&self.upgrade_manager, &self.config).await
+    }
+
     // Future audit methods will be implemented in subsequent stories:
-    // - Story 10.2: audit_upgrades() -> UpgradeAuditSection
     // - Story 10.3: audit_dependencies() -> DependencyAuditSection
     // - Story 10.4: categorize_dependencies() -> DependencyCategorization
     // - Story 10.5: audit_breaking_changes() -> BreakingChangesAuditSection
