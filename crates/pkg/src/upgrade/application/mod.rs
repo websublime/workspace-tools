@@ -49,8 +49,9 @@
 //! # }
 //! ```
 
-mod applier;
-mod result;
+pub(crate) mod applier;
+mod changeset;
+pub(crate) mod result;
 mod selection;
 
 #[cfg(test)]
@@ -58,5 +59,6 @@ mod tests;
 
 // Re-export public API
 pub use applier::apply_upgrades;
+pub use changeset::apply_with_changeset;
 pub use result::{AppliedUpgrade, ApplySummary, UpgradeResult};
 pub use selection::UpgradeSelection;

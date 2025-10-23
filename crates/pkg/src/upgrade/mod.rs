@@ -110,21 +110,35 @@
 //!
 //! ```rust,ignore
 //! use sublime_pkg_tools::upgrade::{
-//!     detect_upgrades, apply_upgrades, DetectionOptions, UpgradeSelection
+//!     detect_upgrades, apply_with_changeset, DetectionOptions, UpgradeSelection
 //! };
+//! use sublime_pkg_tools::changeset::ChangesetManager;
+//! use sublime_pkg_tools::config::PackageToolsConfig;
 //! use sublime_standard_tools::filesystem::FileSystemManager;
 //! use std::path::PathBuf;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! # let workspace_root = PathBuf::from(".");
-//! # let fs = FileSystemManager::new();
-//! # let available = detect_upgrades(&workspace_root, DetectionOptions::all(), &fs).await?;
-//! // TODO: will be implemented on story 9.6
-//! // Apply upgrades and create changeset
-//! let selection = UpgradeSelection::patch_only();
-//! let result = apply_upgrades(available.packages, selection, false, &fs).await?;
+//! let workspace_root = PathBuf::from(".");
+//! let fs = FileSystemManager::new();
+//! let config = PackageToolsConfig::default();
 //!
-//! // Automatic changeset creation will be added in story 9.6
+//! // Detect upgrades
+//! let options = DetectionOptions::all();
+//! let available = detect_upgrades(&workspace_root, options, &fs).await?;
+//!
+//! // Apply upgrades with automatic changeset creation
+//! let manager = ChangesetManager::new(&workspace_root).await?;
+//! let selection = UpgradeSelection::patch_only();
+//! let result = apply_with_changeset(
+//!     available.packages,
+//!     selection,
+//!     false,
+//!     &workspace_root,
+//!     &config.upgrade,
+//!     Some(&manager),
+//!     &fs
+//! ).await?;
+//!
 //! if let Some(changeset_id) = result.changeset_id {
 //!     println!("Created changeset: {}", changeset_id);
 //! }
@@ -191,7 +205,8 @@ pub use detection::{
 
 // Re-export application public types and functions
 pub use application::{
-    apply_upgrades, AppliedUpgrade, ApplySummary, UpgradeResult, UpgradeSelection,
+    apply_upgrades, apply_with_changeset, AppliedUpgrade, ApplySummary, UpgradeResult,
+    UpgradeSelection,
 };
 
 // Backup module for backup and rollback (Story 9.5 - IMPLEMENTED)
@@ -199,6 +214,9 @@ mod backup;
 
 // Re-export backup public types
 pub use backup::{BackupManager, BackupMetadata};
+
+// Automatic changeset creation (Story 9.6 - IMPLEMENTED)
+// Integrated in application module via apply_with_changeset function
 
 // Remaining modules will be implemented in subsequent stories (Epic 9)
 // - manager: Main UpgradeManager (Story 9.7)
