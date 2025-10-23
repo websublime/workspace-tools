@@ -130,7 +130,7 @@ pub struct BackupManager<F: AsyncFileSystem> {
 /// # Example
 ///
 /// ```rust
-/// use sublime_pkg_tools::upgrade::backup::BackupMetadata;
+/// use sublime_pkg_tools::upgrade::BackupMetadata;
 /// use chrono::Utc;
 /// use std::path::PathBuf;
 ///
