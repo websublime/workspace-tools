@@ -71,8 +71,10 @@ pub use issue::{AuditIssue, IssueCategory, IssueSeverity};
 
 // Section types and functions
 pub use sections::{
-    audit_dependencies, audit_upgrades, categorize_dependencies, generate_categorization_issues,
-    CategorizationStats, DependencyAuditSection, DependencyCategorization, DeprecatedPackage,
-    ExternalPackage, InternalPackage, LocalLink, LocalLinkType, UpgradeAuditSection,
-    VersionConflict, VersionUsage, WorkspaceLink,
+    audit_breaking_changes, audit_dependencies, audit_upgrades, categorize_dependencies,
+    generate_categorization_issues, BreakingChange, BreakingChangeSource,
+    BreakingChangesAuditSection, CategorizationStats, DependencyAuditSection,
+    DependencyCategorization, DeprecatedPackage, ExternalPackage, InternalPackage, LocalLink,
+    LocalLinkType, PackageBreakingChanges, UpgradeAuditSection, VersionConflict, VersionUsage,
+    WorkspaceLink,
 };

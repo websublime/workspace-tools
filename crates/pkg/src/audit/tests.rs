@@ -1812,4 +1812,262 @@ mod tests {
         let categorization = result.expect("Categorization succeeded");
         assert_eq!(categorization.stats.total_packages, 1); // The test package
     }
+
+    // ===== Breaking Changes Audit Tests =====
+
+    #[test]
+    fn test_breaking_changes_section_empty() {
+        use crate::audit::BreakingChangesAuditSection;
+
+        let section = BreakingChangesAuditSection::empty();
+        assert_eq!(section.total_breaking_changes, 0);
+        assert!(section.packages_with_breaking.is_empty());
+        assert!(section.issues.is_empty());
+        assert!(!section.has_breaking_changes());
+        assert_eq!(section.affected_package_count(), 0);
+        assert_eq!(section.critical_issue_count(), 0);
+        assert_eq!(section.warning_issue_count(), 0);
+    }
+
+    #[test]
+    fn test_breaking_changes_section_accessors() {
+        use crate::audit::{
+            BreakingChange, BreakingChangeSource, BreakingChangesAuditSection,
+            PackageBreakingChanges,
+        };
+        use crate::types::Version;
+
+        let mut section = BreakingChangesAuditSection::empty();
+        section.total_breaking_changes = 3;
+        section.packages_with_breaking.push(PackageBreakingChanges {
+            package_name: "@myorg/core".to_string(),
+            current_version: Some(Version::parse("1.2.3").unwrap()),
+            next_version: Some(Version::parse("2.0.0").unwrap()),
+            breaking_changes: vec![
+                BreakingChange {
+                    description: "Removed deprecated API".to_string(),
+                    commit_hash: Some("abc123".to_string()),
+                    source: BreakingChangeSource::ConventionalCommit,
+                },
+                BreakingChange {
+                    description: "Changed function signature".to_string(),
+                    commit_hash: Some("def456".to_string()),
+                    source: BreakingChangeSource::ConventionalCommit,
+                },
+            ],
+        });
+
+        assert!(section.has_breaking_changes());
+        assert_eq!(section.affected_package_count(), 1);
+        assert!(section.breaking_changes_for_package("@myorg/core").is_some());
+        assert!(section.breaking_changes_for_package("@myorg/other").is_none());
+
+        let core_breaking = section.breaking_changes_for_package("@myorg/core").unwrap();
+        assert_eq!(core_breaking.breaking_change_count(), 2);
+        assert!(core_breaking.is_major_bump());
+    }
+
+    #[test]
+    fn test_package_breaking_changes_methods() {
+        use crate::audit::{BreakingChange, BreakingChangeSource, PackageBreakingChanges};
+        use crate::types::Version;
+
+        let major_bump = PackageBreakingChanges {
+            package_name: "@myorg/core".to_string(),
+            current_version: Some(Version::parse("1.2.3").unwrap()),
+            next_version: Some(Version::parse("2.0.0").unwrap()),
+            breaking_changes: vec![],
+        };
+        assert!(major_bump.is_major_bump());
+
+        let minor_bump = PackageBreakingChanges {
+            package_name: "@myorg/core".to_string(),
+            current_version: Some(Version::parse("1.2.3").unwrap()),
+            next_version: Some(Version::parse("1.3.0").unwrap()),
+            breaking_changes: vec![],
+        };
+        assert!(!minor_bump.is_major_bump());
+
+        let no_version = PackageBreakingChanges {
+            package_name: "@myorg/core".to_string(),
+            current_version: None,
+            next_version: None,
+            breaking_changes: vec![BreakingChange {
+                description: "Breaking change".to_string(),
+                commit_hash: None,
+                source: BreakingChangeSource::Changeset,
+            }],
+        };
+        assert!(!no_version.is_major_bump());
+        assert_eq!(no_version.breaking_change_count(), 1);
+    }
+
+    #[test]
+    fn test_breaking_change_methods() {
+        use crate::audit::{BreakingChange, BreakingChangeSource};
+
+        let commit_change = BreakingChange {
+            description: "API change".to_string(),
+            commit_hash: Some("abc123".to_string()),
+            source: BreakingChangeSource::ConventionalCommit,
+        };
+        assert!(commit_change.has_commit());
+        assert!(commit_change.is_from_conventional_commit());
+        assert!(!commit_change.is_from_changeset());
+        assert!(!commit_change.is_from_changelog());
+
+        let changeset_change = BreakingChange {
+            description: "Major refactor".to_string(),
+            commit_hash: None,
+            source: BreakingChangeSource::Changeset,
+        };
+        assert!(!changeset_change.has_commit());
+        assert!(!changeset_change.is_from_conventional_commit());
+        assert!(changeset_change.is_from_changeset());
+        assert!(!changeset_change.is_from_changelog());
+
+        let changelog_change = BreakingChange {
+            description: "Breaking API change".to_string(),
+            commit_hash: None,
+            source: BreakingChangeSource::Changelog,
+        };
+        assert!(!changelog_change.has_commit());
+        assert!(!changelog_change.is_from_conventional_commit());
+        assert!(!changelog_change.is_from_changeset());
+        assert!(changelog_change.is_from_changelog());
+    }
+
+    #[test]
+    fn test_breaking_change_source_serialization() {
+        use crate::audit::BreakingChangeSource;
+
+        let sources = vec![
+            BreakingChangeSource::ConventionalCommit,
+            BreakingChangeSource::Changelog,
+            BreakingChangeSource::Changeset,
+        ];
+
+        for source in sources {
+            let json_result = serde_json::to_string(&source);
+            assert!(json_result.is_ok(), "Should serialize BreakingChangeSource");
+
+            let json = json_result.unwrap();
+            let deserialized: Result<BreakingChangeSource, _> = serde_json::from_str(&json);
+            assert!(deserialized.is_ok(), "Should deserialize BreakingChangeSource");
+            assert_eq!(deserialized.unwrap(), source);
+        }
+    }
+
+    #[test]
+    fn test_breaking_changes_section_serialization() {
+        use crate::audit::{
+            BreakingChange, BreakingChangeSource, BreakingChangesAuditSection,
+            PackageBreakingChanges,
+        };
+        use crate::types::Version;
+
+        let mut section = BreakingChangesAuditSection::empty();
+        section.total_breaking_changes = 2;
+        section.packages_with_breaking.push(PackageBreakingChanges {
+            package_name: "@myorg/core".to_string(),
+            current_version: Some(Version::parse("1.0.0").unwrap()),
+            next_version: Some(Version::parse("2.0.0").unwrap()),
+            breaking_changes: vec![
+                BreakingChange {
+                    description: "Removed old API".to_string(),
+                    commit_hash: Some("abc123".to_string()),
+                    source: BreakingChangeSource::ConventionalCommit,
+                },
+                BreakingChange {
+                    description: "Major version bump".to_string(),
+                    commit_hash: None,
+                    source: BreakingChangeSource::Changeset,
+                },
+            ],
+        });
+
+        let json_result = serde_json::to_string(&section);
+        assert!(json_result.is_ok(), "Should serialize BreakingChangesAuditSection");
+
+        let json = json_result.unwrap();
+        let deserialized: Result<BreakingChangesAuditSection, _> = serde_json::from_str(&json);
+        assert!(deserialized.is_ok(), "Should deserialize BreakingChangesAuditSection");
+
+        let deserialized_section = deserialized.unwrap();
+        assert_eq!(deserialized_section.total_breaking_changes, 2);
+        assert_eq!(deserialized_section.packages_with_breaking.len(), 1);
+        assert_eq!(deserialized_section.packages_with_breaking[0].breaking_changes.len(), 2);
+    }
+
+    #[test]
+    fn test_breaking_changes_config_default() {
+        use crate::config::BreakingChangesAuditConfig;
+
+        let config = BreakingChangesAuditConfig::default();
+        assert!(config.check_conventional_commits);
+        assert!(config.check_changelog);
+    }
+
+    #[test]
+    fn test_breaking_changes_section_with_multiple_packages() {
+        use crate::audit::{
+            BreakingChange, BreakingChangeSource, BreakingChangesAuditSection,
+            PackageBreakingChanges,
+        };
+        use crate::types::Version;
+
+        let mut section = BreakingChangesAuditSection::empty();
+        section.total_breaking_changes = 4;
+
+        section.packages_with_breaking.push(PackageBreakingChanges {
+            package_name: "@myorg/core".to_string(),
+            current_version: Some(Version::parse("1.0.0").unwrap()),
+            next_version: Some(Version::parse("2.0.0").unwrap()),
+            breaking_changes: vec![
+                BreakingChange {
+                    description: "Breaking 1".to_string(),
+                    commit_hash: Some("abc".to_string()),
+                    source: BreakingChangeSource::ConventionalCommit,
+                },
+                BreakingChange {
+                    description: "Breaking 2".to_string(),
+                    commit_hash: Some("def".to_string()),
+                    source: BreakingChangeSource::ConventionalCommit,
+                },
+            ],
+        });
+
+        section.packages_with_breaking.push(PackageBreakingChanges {
+            package_name: "@myorg/utils".to_string(),
+            current_version: Some(Version::parse("0.5.0").unwrap()),
+            next_version: Some(Version::parse("1.0.0").unwrap()),
+            breaking_changes: vec![
+                BreakingChange {
+                    description: "Breaking 3".to_string(),
+                    commit_hash: None,
+                    source: BreakingChangeSource::Changeset,
+                },
+                BreakingChange {
+                    description: "Breaking 4".to_string(),
+                    commit_hash: None,
+                    source: BreakingChangeSource::Changelog,
+                },
+            ],
+        });
+
+        assert!(section.has_breaking_changes());
+        assert_eq!(section.affected_package_count(), 2);
+        assert_eq!(section.total_breaking_changes, 4);
+        assert!(section.breaking_changes_for_package("@myorg/core").is_some());
+        assert!(section.breaking_changes_for_package("@myorg/utils").is_some());
+        assert!(section.breaking_changes_for_package("@myorg/other").is_none());
+
+        let core = section.breaking_changes_for_package("@myorg/core").unwrap();
+        assert_eq!(core.breaking_change_count(), 2);
+        assert!(core.is_major_bump());
+
+        let utils = section.breaking_changes_for_package("@myorg/utils").unwrap();
+        assert_eq!(utils.breaking_change_count(), 2);
+        assert!(utils.is_major_bump());
+    }
 }
