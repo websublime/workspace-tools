@@ -25,11 +25,14 @@
 // Upgrades section (Story 10.2 - IMPLEMENTED)
 pub(crate) mod upgrades;
 
+// Dependencies section (Story 10.3 - IMPLEMENTED)
+pub(crate) mod dependencies;
+
 // Public exports
+pub use dependencies::{audit_dependencies, DependencyAuditSection, VersionConflict, VersionUsage};
 pub use upgrades::{audit_upgrades, DeprecatedPackage, UpgradeAuditSection};
 
 // Future sections will be added here:
-// - Story 10.3: Dependencies section
 // - Story 10.4: Categorization section
 // - Story 10.5: Breaking changes section
 // - Story 10.6: Version consistency section
