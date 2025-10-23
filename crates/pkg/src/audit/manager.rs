@@ -530,6 +530,58 @@ impl AuditManager {
         audit_dependencies_impl(&self.workspace_root, &packages, &self.config).await
     }
 
+    /// Categorizes all dependencies in the workspace.
+    ///
+    /// Analyzes all packages and their dependencies, categorizing them into:
+    /// - Internal packages: Workspace packages that are used by other packages
+    /// - External packages: Registry packages from npm, etc.
+    /// - Workspace links: Dependencies using workspace: protocol
+    /// - Local links: Dependencies using file:, link:, or portal: protocols
+    ///
+    /// # Returns
+    ///
+    /// A `DependencyCategorization` containing all categorized dependencies and statistics.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AuditError` if:
+    /// - Package detection fails
+    /// - Package.json files cannot be read or parsed
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::audit::AuditManager;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let manager = AuditManager::new(PathBuf::from("./my-workspace")).await?;
+    /// let categorization = manager.categorize_dependencies().await?;
+    ///
+    /// println!("Internal packages: {}", categorization.stats.internal_packages);
+    /// println!("External packages: {}", categorization.stats.external_packages);
+    /// println!("Workspace links: {}", categorization.stats.workspace_links);
+    /// println!("Local links: {}", categorization.stats.local_links);
+    ///
+    /// // Find highly-used internal packages
+    /// for pkg in &categorization.internal_packages {
+    ///     if pkg.used_by.len() > 5 {
+    ///         println!("{} is used by {} packages", pkg.name, pkg.used_by.len());
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn categorize_dependencies(
+        &self,
+    ) -> AuditResult<crate::audit::sections::DependencyCategorization> {
+        // Discover all packages in the workspace
+        let packages = self.discover_packages().await?;
+
+        // Call the categorization implementation
+        crate::audit::sections::categorize_dependencies(&packages, &self.config).await
+    }
+
     /// Discovers all packages in the workspace.
     ///
     /// Detects whether the workspace is a monorepo or single package and
@@ -618,7 +670,6 @@ impl AuditManager {
     }
 
     // Future audit methods will be implemented in subsequent stories:
-    // - Story 10.4: categorize_dependencies() -> DependencyCategorization
     // - Story 10.5: audit_breaking_changes() -> BreakingChangesAuditSection
     // - Story 10.6: audit_version_consistency() -> VersionConsistencyAuditSection
     // - Story 10.7: calculate_health_score() -> u8

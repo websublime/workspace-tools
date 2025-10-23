@@ -14,9 +14,10 @@
 //! # Available Sections
 //!
 //! - **Upgrades** (Story 10.2): Detects available package upgrades and deprecated packages
+//! - **Dependencies** (Story 10.3): Analyzes dependency graph for issues
+//! - **Categorization** (Story 10.4): Categorizes dependencies into internal, external, workspace, and local
 //!
 //! Future sections to be implemented:
-//! - **Dependencies** (Story 10.3): Analyzes dependency graph for issues
 //! - **Breaking Changes** (Story 10.5): Detects potential breaking changes
 //! - **Version Consistency** (Story 10.6): Checks version consistency across packages
 
@@ -28,11 +29,18 @@ pub(crate) mod upgrades;
 // Dependencies section (Story 10.3 - IMPLEMENTED)
 pub(crate) mod dependencies;
 
+// Categorization section (Story 10.4 - IMPLEMENTED)
+pub(crate) mod categorization;
+
 // Public exports
+pub use categorization::{
+    categorize_dependencies, generate_categorization_issues, CategorizationStats,
+    DependencyCategorization, ExternalPackage, InternalPackage, LocalLink, LocalLinkType,
+    WorkspaceLink,
+};
 pub use dependencies::{audit_dependencies, DependencyAuditSection, VersionConflict, VersionUsage};
 pub use upgrades::{audit_upgrades, DeprecatedPackage, UpgradeAuditSection};
 
 // Future sections will be added here:
-// - Story 10.4: Categorization section
 // - Story 10.5: Breaking changes section
 // - Story 10.6: Version consistency section
