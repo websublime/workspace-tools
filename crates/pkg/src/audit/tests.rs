@@ -11,6 +11,7 @@
 
 #[cfg(test)]
 #[allow(clippy::expect_used)]
+#[allow(clippy::unwrap_used)]
 #[allow(clippy::bool_assert_comparison)]
 #[allow(clippy::module_inception)]
 mod tests {
@@ -1280,5 +1281,535 @@ mod tests {
         let deserialized_section = deserialized.expect("Deserialization succeeded");
         assert_eq!(deserialized_section.version_conflicts.len(), 1);
         assert_eq!(deserialized_section.version_conflicts[0].dependency_name, "lodash");
+    }
+
+    // ============================================================================
+    // Dependency Categorization Tests (Story 10.4)
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_categorize_dependencies_empty_workspace() {
+        use crate::audit::sections::categorize_dependencies;
+        use crate::config::PackageToolsConfig;
+
+        let packages = vec![];
+        let config = PackageToolsConfig::default();
+
+        let result = categorize_dependencies(&packages, &config).await;
+        assert!(result.is_ok(), "Should handle empty workspace");
+
+        let categorization = result.expect("Categorization succeeded");
+        assert_eq!(categorization.stats.total_packages, 0);
+        assert_eq!(categorization.stats.internal_packages, 0);
+        assert_eq!(categorization.stats.external_packages, 0);
+        assert_eq!(categorization.stats.workspace_links, 0);
+        assert_eq!(categorization.stats.local_links, 0);
+    }
+
+    #[tokio::test]
+    async fn test_categorize_dependencies_single_package_no_deps() {
+        use crate::audit::sections::categorize_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+
+        let package_json = package_json::PackageJson {
+            name: "test-package".to_string(),
+            version: "1.0.0".to_string(),
+            ..Default::default()
+        };
+
+        let packages =
+            vec![PackageInfo::new(package_json, None, PathBuf::from("/workspace/packages/test"))];
+
+        let config = PackageToolsConfig::default();
+        let result = categorize_dependencies(&packages, &config).await;
+        assert!(result.is_ok(), "Should handle single package with no dependencies");
+
+        let categorization = result.expect("Categorization succeeded");
+        assert_eq!(categorization.stats.total_packages, 1);
+        assert_eq!(categorization.stats.internal_packages, 0);
+        assert_eq!(categorization.stats.external_packages, 0);
+    }
+
+    #[tokio::test]
+    async fn test_categorize_dependencies_with_external_packages() {
+        use crate::audit::sections::categorize_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use std::collections::HashMap;
+
+        let mut dependencies = HashMap::new();
+        dependencies.insert("lodash".to_string(), "^4.17.21".to_string());
+        dependencies.insert("express".to_string(), "^4.18.0".to_string());
+
+        let package_json = package_json::PackageJson {
+            name: "test-package".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(dependencies),
+            ..Default::default()
+        };
+
+        let packages =
+            vec![PackageInfo::new(package_json, None, PathBuf::from("/workspace/packages/test"))];
+
+        let config = PackageToolsConfig::default();
+        let result = categorize_dependencies(&packages, &config).await;
+        assert!(result.is_ok(), "Should categorize external packages");
+
+        let categorization = result.expect("Categorization succeeded");
+        assert_eq!(categorization.stats.total_packages, 1);
+        assert_eq!(categorization.stats.external_packages, 2);
+        assert_eq!(categorization.external_packages.len(), 2);
+
+        let lodash = categorization.external_packages.iter().find(|p| p.name == "lodash");
+        assert!(lodash.is_some(), "Should find lodash");
+        assert_eq!(lodash.unwrap().version_spec, "^4.17.21");
+        assert_eq!(lodash.unwrap().used_by, vec!["test-package"]);
+    }
+
+    #[tokio::test]
+    async fn test_categorize_dependencies_with_internal_packages() {
+        use crate::audit::sections::categorize_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use std::collections::HashMap;
+
+        // Create two packages where one depends on the other
+        let package_a_json = package_json::PackageJson {
+            name: "package-a".to_string(),
+            version: "1.0.0".to_string(),
+            ..Default::default()
+        };
+
+        let mut dependencies = HashMap::new();
+        dependencies.insert("package-a".to_string(), "^1.0.0".to_string());
+
+        let package_b_json = package_json::PackageJson {
+            name: "package-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(dependencies),
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a_json, None, PathBuf::from("/workspace/packages/a")),
+            PackageInfo::new(package_b_json, None, PathBuf::from("/workspace/packages/b")),
+        ];
+
+        let config = PackageToolsConfig::default();
+        let result = categorize_dependencies(&packages, &config).await;
+        assert!(result.is_ok(), "Should categorize internal packages");
+
+        let categorization = result.expect("Categorization succeeded");
+        assert_eq!(categorization.stats.total_packages, 2);
+        assert_eq!(categorization.stats.internal_packages, 1);
+        assert_eq!(categorization.internal_packages.len(), 1);
+
+        let internal_pkg = &categorization.internal_packages[0];
+        assert_eq!(internal_pkg.name, "package-a");
+        assert_eq!(internal_pkg.used_by, vec!["package-b"]);
+        assert_eq!(internal_pkg.version, Some("1.0.0".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_categorize_dependencies_with_workspace_protocol() {
+        use crate::audit::sections::categorize_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use std::collections::HashMap;
+
+        let package_a_json = package_json::PackageJson {
+            name: "package-a".to_string(),
+            version: "1.0.0".to_string(),
+            ..Default::default()
+        };
+
+        let mut dependencies = HashMap::new();
+        dependencies.insert("package-a".to_string(), "workspace:*".to_string());
+
+        let package_b_json = package_json::PackageJson {
+            name: "package-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(dependencies),
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a_json, None, PathBuf::from("/workspace/packages/a")),
+            PackageInfo::new(package_b_json, None, PathBuf::from("/workspace/packages/b")),
+        ];
+
+        let config = PackageToolsConfig::default();
+        let result = categorize_dependencies(&packages, &config).await;
+        assert!(result.is_ok(), "Should categorize workspace links");
+
+        let categorization = result.expect("Categorization succeeded");
+        assert_eq!(categorization.stats.workspace_links, 1);
+        assert_eq!(categorization.workspace_links.len(), 1);
+
+        let link = &categorization.workspace_links[0];
+        assert_eq!(link.package_name, "package-b");
+        assert_eq!(link.dependency_name, "package-a");
+        assert_eq!(link.version_spec, "workspace:*");
+    }
+
+    #[tokio::test]
+    async fn test_categorize_dependencies_with_local_protocols() {
+        use crate::audit::sections::categorize_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use std::collections::HashMap;
+
+        let mut dependencies = HashMap::new();
+        dependencies.insert("utils-lib".to_string(), "file:../utils".to_string());
+        dependencies.insert("core-lib".to_string(), "link:./core".to_string());
+        dependencies.insert("shared-lib".to_string(), "portal:../shared".to_string());
+
+        let package_json = package_json::PackageJson {
+            name: "test-package".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(dependencies),
+            ..Default::default()
+        };
+
+        let packages =
+            vec![PackageInfo::new(package_json, None, PathBuf::from("/workspace/packages/test"))];
+
+        let config = PackageToolsConfig::default();
+        let result = categorize_dependencies(&packages, &config).await;
+        assert!(result.is_ok(), "Should categorize local links");
+
+        let categorization = result.expect("Categorization succeeded");
+        assert_eq!(categorization.stats.local_links, 3);
+        assert_eq!(categorization.local_links.len(), 3);
+
+        // Check file: protocol
+        let file_link =
+            categorization.local_links.iter().find(|l| l.dependency_name == "utils-lib");
+        assert!(file_link.is_some(), "Should find file: link");
+        assert_eq!(file_link.unwrap().path, "../utils");
+
+        // Check link: protocol
+        let link_link = categorization.local_links.iter().find(|l| l.dependency_name == "core-lib");
+        assert!(link_link.is_some(), "Should find link: link");
+        assert_eq!(link_link.unwrap().path, "./core");
+
+        // Check portal: protocol
+        let portal_link =
+            categorization.local_links.iter().find(|l| l.dependency_name == "shared-lib");
+        assert!(portal_link.is_some(), "Should find portal: link");
+        assert_eq!(portal_link.unwrap().path, "../shared");
+    }
+
+    #[tokio::test]
+    async fn test_categorize_dependencies_mixed_dependency_types() {
+        use crate::audit::sections::categorize_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use std::collections::HashMap;
+
+        // Package A: library package
+        let package_a_json = package_json::PackageJson {
+            name: "package-a".to_string(),
+            version: "1.0.0".to_string(),
+            ..Default::default()
+        };
+
+        // Package B: depends on A internally, lodash externally, and uses workspace protocol
+        let mut dependencies_b = HashMap::new();
+        dependencies_b.insert("package-a".to_string(), "workspace:^".to_string());
+        dependencies_b.insert("lodash".to_string(), "^4.17.21".to_string());
+        dependencies_b.insert("local-utils".to_string(), "file:../utils".to_string());
+
+        let package_b_json = package_json::PackageJson {
+            name: "package-b".to_string(),
+            version: "2.0.0".to_string(),
+            dependencies: Some(dependencies_b),
+            ..Default::default()
+        };
+
+        // Package C: also depends on A
+        let mut dependencies_c = HashMap::new();
+        dependencies_c.insert("package-a".to_string(), "^1.0.0".to_string());
+        dependencies_c.insert("lodash".to_string(), "^4.17.0".to_string());
+
+        let package_c_json = package_json::PackageJson {
+            name: "package-c".to_string(),
+            version: "1.5.0".to_string(),
+            dependencies: Some(dependencies_c),
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a_json, None, PathBuf::from("/workspace/packages/a")),
+            PackageInfo::new(package_b_json, None, PathBuf::from("/workspace/packages/b")),
+            PackageInfo::new(package_c_json, None, PathBuf::from("/workspace/packages/c")),
+        ];
+
+        let config = PackageToolsConfig::default();
+        let result = categorize_dependencies(&packages, &config).await;
+        assert!(result.is_ok(), "Should categorize mixed dependencies");
+
+        let categorization = result.expect("Categorization succeeded");
+        assert_eq!(categorization.stats.total_packages, 3);
+        assert_eq!(categorization.stats.internal_packages, 1); // package-a
+        assert_eq!(categorization.stats.external_packages, 1); // lodash (unique)
+        assert_eq!(categorization.stats.workspace_links, 1); // package-b -> package-a
+        assert_eq!(categorization.stats.local_links, 1); // local-utils
+
+        // Verify internal package
+        let internal_pkg = &categorization.internal_packages[0];
+        assert_eq!(internal_pkg.name, "package-a");
+        assert_eq!(internal_pkg.used_by.len(), 1); // only package-c (workspace link doesn't count)
+        assert!(internal_pkg.used_by.contains(&"package-c".to_string()));
+
+        // Verify external package (lodash used by both B and C)
+        let lodash = categorization.external_packages.iter().find(|p| p.name == "lodash");
+        assert!(lodash.is_some(), "Should find lodash");
+        assert_eq!(lodash.unwrap().used_by.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_categorization_percentages() {
+        use crate::audit::sections::categorize_dependencies;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use std::collections::HashMap;
+
+        // Create a workspace with 2 internal and 3 external packages
+        let mut dependencies = HashMap::new();
+        dependencies.insert("internal-1".to_string(), "^1.0.0".to_string());
+        dependencies.insert("internal-2".to_string(), "^2.0.0".to_string());
+        dependencies.insert("lodash".to_string(), "^4.17.21".to_string());
+        dependencies.insert("express".to_string(), "^4.18.0".to_string());
+        dependencies.insert("react".to_string(), "^18.0.0".to_string());
+
+        let package_json = package_json::PackageJson {
+            name: "main-package".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(dependencies),
+            ..Default::default()
+        };
+
+        let internal_1_json = package_json::PackageJson {
+            name: "internal-1".to_string(),
+            version: "1.0.0".to_string(),
+            ..Default::default()
+        };
+
+        let internal_2_json = package_json::PackageJson {
+            name: "internal-2".to_string(),
+            version: "2.0.0".to_string(),
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_json, None, PathBuf::from("/workspace/main")),
+            PackageInfo::new(
+                internal_1_json,
+                None,
+                PathBuf::from("/workspace/packages/internal-1"),
+            ),
+            PackageInfo::new(
+                internal_2_json,
+                None,
+                PathBuf::from("/workspace/packages/internal-2"),
+            ),
+        ];
+
+        let config = PackageToolsConfig::default();
+        let result = categorize_dependencies(&packages, &config).await;
+        assert!(result.is_ok(), "Should calculate percentages");
+
+        let categorization = result.expect("Categorization succeeded");
+        assert_eq!(categorization.stats.internal_packages, 2);
+        assert_eq!(categorization.stats.external_packages, 3);
+
+        // 2 internal out of 5 total = 40%
+        let internal_pct = categorization.internal_percentage();
+        assert!((internal_pct - 40.0).abs() < 0.1, "Internal percentage should be ~40%");
+
+        // 3 external out of 5 total = 60%
+        let external_pct = categorization.external_percentage();
+        assert!((external_pct - 60.0).abs() < 0.1, "External percentage should be ~60%");
+    }
+
+    #[tokio::test]
+    async fn test_generate_categorization_issues() {
+        use crate::audit::sections::{categorize_dependencies, generate_categorization_issues};
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use std::collections::HashMap;
+
+        // Create a highly-used internal package
+        let mut dependencies = HashMap::new();
+        dependencies.insert("core-lib".to_string(), "workspace:*".to_string());
+
+        let mut packages = vec![PackageInfo::new(
+            package_json::PackageJson {
+                name: "core-lib".to_string(),
+                version: "1.0.0".to_string(),
+                ..Default::default()
+            },
+            None,
+            PathBuf::from("/workspace/packages/core"),
+        )];
+
+        // Create 6 packages that depend on core-lib
+        for i in 1..=6 {
+            let mut deps = HashMap::new();
+            deps.insert("core-lib".to_string(), "^1.0.0".to_string());
+
+            packages.push(PackageInfo::new(
+                package_json::PackageJson {
+                    name: format!("package-{}", i),
+                    version: "1.0.0".to_string(),
+                    dependencies: Some(deps),
+                    ..Default::default()
+                },
+                None,
+                PathBuf::from(format!("/workspace/packages/{}", i)),
+            ));
+        }
+
+        let config = PackageToolsConfig::default();
+        let categorization = categorize_dependencies(&packages, &config).await.unwrap();
+        let issues = generate_categorization_issues(&categorization);
+
+        assert!(!issues.is_empty(), "Should generate issues");
+
+        // Should have issue for highly-used package
+        let highly_used_issue = issues.iter().find(|i| i.title.contains("Highly-used"));
+        assert!(highly_used_issue.is_some(), "Should have highly-used package issue");
+
+        // Should have summary issue
+        let summary_issue = issues.iter().find(|i| i.title.contains("summary"));
+        assert!(summary_issue.is_some(), "Should have summary issue");
+    }
+
+    #[tokio::test]
+    async fn test_local_link_type_parsing() {
+        use crate::audit::sections::LocalLinkType;
+
+        assert_eq!(LocalLinkType::from_version_spec("file:../utils"), Some(LocalLinkType::File));
+        assert_eq!(LocalLinkType::from_version_spec("link:./core"), Some(LocalLinkType::Link));
+        assert_eq!(
+            LocalLinkType::from_version_spec("portal:../shared"),
+            Some(LocalLinkType::Portal)
+        );
+        assert_eq!(LocalLinkType::from_version_spec("^1.0.0"), None);
+        assert_eq!(LocalLinkType::from_version_spec("workspace:*"), None);
+    }
+
+    #[tokio::test]
+    async fn test_local_link_type_display() {
+        use crate::audit::sections::LocalLinkType;
+
+        assert_eq!(LocalLinkType::File.as_str(), "file");
+        assert_eq!(LocalLinkType::Link.as_str(), "link");
+        assert_eq!(LocalLinkType::Portal.as_str(), "portal");
+
+        assert_eq!(LocalLinkType::File.protocol_prefix(), "file:");
+        assert_eq!(LocalLinkType::Link.protocol_prefix(), "link:");
+        assert_eq!(LocalLinkType::Portal.protocol_prefix(), "portal:");
+
+        assert_eq!(format!("{}", LocalLinkType::File), "file");
+        assert_eq!(format!("{}", LocalLinkType::Link), "link");
+        assert_eq!(format!("{}", LocalLinkType::Portal), "portal");
+    }
+
+    #[tokio::test]
+    async fn test_local_link_type_edge_cases() {
+        use crate::audit::sections::LocalLinkType;
+
+        // Test case sensitivity
+        assert_eq!(LocalLinkType::from_version_spec("FILE:../utils"), None);
+        assert_eq!(LocalLinkType::from_version_spec("Link:./core"), None);
+        assert_eq!(LocalLinkType::from_version_spec("PORTAL:../shared"), None);
+
+        // Test partial matches
+        assert_eq!(LocalLinkType::from_version_spec("file"), None);
+        assert_eq!(LocalLinkType::from_version_spec("link"), None);
+        assert_eq!(LocalLinkType::from_version_spec("portal"), None);
+
+        // Test empty and whitespace
+        assert_eq!(LocalLinkType::from_version_spec(""), None);
+        assert_eq!(LocalLinkType::from_version_spec(" file:../utils"), None);
+
+        // Test mixed protocols
+        assert_eq!(
+            LocalLinkType::from_version_spec("file:link:../utils"),
+            Some(LocalLinkType::File)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_categorization_serialization() {
+        use crate::audit::sections::{
+            CategorizationStats, DependencyCategorization, ExternalPackage, InternalPackage,
+            LocalLink, LocalLinkType, WorkspaceLink,
+        };
+
+        let categorization = DependencyCategorization {
+            internal_packages: vec![InternalPackage {
+                name: "core".to_string(),
+                path: PathBuf::from("packages/core"),
+                version: Some("1.0.0".to_string()),
+                used_by: vec!["app".to_string()],
+            }],
+            external_packages: vec![ExternalPackage {
+                name: "lodash".to_string(),
+                version_spec: "^4.17.21".to_string(),
+                used_by: vec!["app".to_string()],
+                is_deprecated: false,
+            }],
+            workspace_links: vec![WorkspaceLink {
+                package_name: "app".to_string(),
+                dependency_name: "utils".to_string(),
+                version_spec: "workspace:*".to_string(),
+            }],
+            local_links: vec![LocalLink {
+                package_name: "app".to_string(),
+                dependency_name: "local-lib".to_string(),
+                link_type: LocalLinkType::File,
+                path: "../local".to_string(),
+            }],
+            stats: CategorizationStats {
+                total_packages: 2,
+                internal_packages: 1,
+                external_packages: 1,
+                workspace_links: 1,
+                local_links: 1,
+            },
+        };
+
+        let json_result = serde_json::to_string(&categorization);
+        assert!(json_result.is_ok(), "Should serialize to JSON");
+
+        let json = json_result.expect("JSON serialization succeeded");
+        let deserialized: Result<DependencyCategorization, _> = serde_json::from_str(&json);
+        assert!(deserialized.is_ok(), "Should deserialize from JSON");
+
+        let deserialized_cat = deserialized.expect("Deserialization succeeded");
+        assert_eq!(deserialized_cat.stats.total_packages, 2);
+        assert_eq!(deserialized_cat.internal_packages.len(), 1);
+        assert_eq!(deserialized_cat.external_packages.len(), 1);
+        assert_eq!(deserialized_cat.workspace_links.len(), 1);
+        assert_eq!(deserialized_cat.local_links.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_audit_manager_categorize_dependencies() {
+        let (_temp_dir, workspace_path) = setup_test_workspace().await;
+
+        let config = PackageToolsConfig::default();
+        let manager =
+            AuditManager::new(workspace_path, config).await.expect("Manager should initialize");
+
+        let result = manager.categorize_dependencies().await;
+        assert!(result.is_ok(), "Should categorize dependencies for workspace");
+
+        let categorization = result.expect("Categorization succeeded");
+        assert_eq!(categorization.stats.total_packages, 1); // The test package
     }
 }
