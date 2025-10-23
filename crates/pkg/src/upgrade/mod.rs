@@ -25,7 +25,9 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use sublime_pkg_tools::upgrade::{UpgradeManager, UpgradeSelection};
+//! use sublime_pkg_tools::upgrade::{
+//!     detect_upgrades, apply_upgrades, DetectionOptions, UpgradeSelection
+//! };
 //! use sublime_pkg_tools::config::PackageToolsConfig;
 //! use sublime_standard_tools::filesystem::FileSystemManager;
 //! use std::path::PathBuf;
@@ -35,21 +37,19 @@
 //! let fs = FileSystemManager::new();
 //! let config = PackageToolsConfig::default();
 //!
-//! // TODO: will be implemented on story 9.7
-//! // let manager = UpgradeManager::new(workspace_root, fs, config).await?;
-//! //
-//! // // Detect available upgrades
-//! // let available = manager.detect_upgrades().await?;
-//! // println!("Found {} available upgrades", available.len());
-//! //
-//! // // Apply patch upgrades only (dry run)
-//! // let selection = UpgradeSelection::patch_only();
-//! // let result = manager.apply_upgrades(selection, true).await?;
-//! // println!("Would upgrade {} packages", result.applied.len());
-//! //
-//! // // Apply for real
-//! // let result = manager.apply_upgrades(selection, false).await?;
-//! // println!("Upgraded {} packages", result.applied.len());
+//! // Detect available upgrades
+//! let options = DetectionOptions::all();
+//! let available = detect_upgrades(&workspace_root, options, &fs).await?;
+//! println!("Found {} available upgrades", available.packages.len());
+//!
+//! // Apply patch upgrades only (dry run)
+//! let selection = UpgradeSelection::patch_only();
+//! let result = apply_upgrades(available.packages.clone(), selection, true, &fs).await?;
+//! println!("Would upgrade {} dependencies", result.applied.len());
+//!
+//! // Apply for real
+//! let result = apply_upgrades(available.packages, selection, false, &fs).await?;
+//! println!("Upgraded {} dependencies", result.applied.len());
 //! # Ok(())
 //! # }
 //! ```
@@ -59,26 +59,31 @@
 //! Control which upgrades to apply using selection criteria:
 //!
 //! ```rust,ignore
-//! use sublime_pkg_tools::upgrade::{UpgradeManager, UpgradeSelection};
+//! use sublime_pkg_tools::upgrade::{
+//!     detect_upgrades, apply_upgrades, DetectionOptions, UpgradeSelection
+//! };
+//! use sublime_standard_tools::filesystem::FileSystemManager;
+//! use std::path::PathBuf;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! # let manager: UpgradeManager = todo!();
-//! // TODO: will be implemented on story 9.4
-//! // // Only patch upgrades
-//! // let selection = UpgradeSelection::patch_only();
-//! // manager.apply_upgrades(selection, false).await?;
-//! //
-//! // // Patch and minor upgrades
-//! // let selection = UpgradeSelection::minor_and_patch();
-//! // manager.apply_upgrades(selection, false).await?;
-//! //
-//! // // Specific packages only
-//! // let selection = UpgradeSelection::packages(vec!["express".to_string(), "lodash".to_string()]);
-//! // manager.apply_upgrades(selection, false).await?;
-//! //
-//! // // Specific dependencies only
-//! // let selection = UpgradeSelection::dependencies(vec!["react".to_string()]);
-//! // manager.apply_upgrades(selection, false).await?;
+//! # let workspace_root = PathBuf::from(".");
+//! # let fs = FileSystemManager::new();
+//! # let available = detect_upgrades(&workspace_root, DetectionOptions::all(), &fs).await?;
+//! // Only patch upgrades
+//! let selection = UpgradeSelection::patch_only();
+//! apply_upgrades(available.packages.clone(), selection, false, &fs).await?;
+//!
+//! // Patch and minor upgrades
+//! let selection = UpgradeSelection::minor_and_patch();
+//! apply_upgrades(available.packages.clone(), selection, false, &fs).await?;
+//!
+//! // Specific packages only
+//! let selection = UpgradeSelection::packages(vec!["express".to_string(), "lodash".to_string()]);
+//! apply_upgrades(available.packages.clone(), selection, false, &fs).await?;
+//!
+//! // Specific dependencies only
+//! let selection = UpgradeSelection::dependencies(vec!["react".to_string()]);
+//! apply_upgrades(available.packages, selection, false, &fs).await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -104,18 +109,25 @@
 //! Automatically create changesets for applied upgrades:
 //!
 //! ```rust,ignore
-//! use sublime_pkg_tools::upgrade::{UpgradeManager, UpgradeSelection};
+//! use sublime_pkg_tools::upgrade::{
+//!     detect_upgrades, apply_upgrades, DetectionOptions, UpgradeSelection
+//! };
+//! use sublime_standard_tools::filesystem::FileSystemManager;
+//! use std::path::PathBuf;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! # let manager: UpgradeManager = todo!();
+//! # let workspace_root = PathBuf::from(".");
+//! # let fs = FileSystemManager::new();
+//! # let available = detect_upgrades(&workspace_root, DetectionOptions::all(), &fs).await?;
 //! // TODO: will be implemented on story 9.6
-//! // // Apply upgrades and create changeset
-//! // let selection = UpgradeSelection::patch_only();
-//! // let result = manager.apply_upgrades(selection, false).await?;
-//! //
-//! // if let Some(changeset_id) = result.changeset_id {
-//! //     println!("Created changeset: {}", changeset_id);
-//! // }
+//! // Apply upgrades and create changeset
+//! let selection = UpgradeSelection::patch_only();
+//! let result = apply_upgrades(available.packages, selection, false, &fs).await?;
+//!
+//! // Automatic changeset creation will be added in story 9.6
+//! if let Some(changeset_id) = result.changeset_id {
+//!     println!("Created changeset: {}", changeset_id);
+//! }
 //! # Ok(())
 //! # }
 //! ```
@@ -163,6 +175,9 @@ mod registry;
 // Detection module for upgrade detection (Story 9.3 - IMPLEMENTED)
 mod detection;
 
+// Application module for applying upgrades (Story 9.4 - IMPLEMENTED)
+mod application;
+
 // Re-export registry public types
 pub use registry::{
     npmrc::NpmrcConfig, PackageMetadata, RegistryClient, RepositoryInfo, UpgradeType,
@@ -174,7 +189,11 @@ pub use detection::{
     UpgradeSummary, VersionInfo,
 };
 
+// Re-export application public types and functions
+pub use application::{
+    apply_upgrades, AppliedUpgrade, ApplySummary, UpgradeResult, UpgradeSelection,
+};
+
 // Remaining modules will be implemented in subsequent stories (Epic 9)
-// - application: Upgrade application (Story 9.4)
 // - backup: Backup and rollback (Story 9.5)
 // - manager: Main UpgradeManager (Story 9.7)
