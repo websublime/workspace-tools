@@ -56,6 +56,7 @@
 
 #![allow(clippy::todo)]
 
+mod health_score;
 mod issue;
 mod manager;
 mod sections;
@@ -65,6 +66,12 @@ mod tests;
 
 // Public exports
 pub use manager::AuditManager;
+
+// Health score calculation
+pub use health_score::{
+    calculate_diminishing_factor, calculate_health_score, calculate_health_score_detailed,
+    HealthScoreBreakdown, HealthScoreWeights,
+};
 
 // Issue types
 pub use issue::{AuditIssue, IssueCategory, IssueSeverity};

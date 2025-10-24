@@ -149,7 +149,7 @@ mod tests;
 // Re-export all configuration types
 pub use audit::{
     AuditConfig, AuditSectionsConfig, BreakingChangesAuditConfig, DependencyAuditConfig,
-    UpgradeAuditConfig, VersionConsistencyAuditConfig,
+    HealthScoreWeightsConfig, UpgradeAuditConfig, VersionConsistencyAuditConfig,
 };
 pub use changelog::{
     ChangelogConfig, ChangelogFormat, ConventionalConfig, ExcludeConfig, MonorepoMode,
