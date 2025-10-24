@@ -764,6 +764,7 @@ mod upgrade_config {
 
 mod audit_config {
     use super::*;
+    use crate::config::HealthScoreWeightsConfig;
 
     #[test]
     fn test_default_audit_config_is_valid() {
@@ -836,6 +837,17 @@ mod audit_config {
             "version_consistency": {
                 "fail_on_inconsistency": false,
                 "warn_on_inconsistency": true
+            },
+            "health_score_weights": {
+                "critical_weight": 15.0,
+                "warning_weight": 5.0,
+                "info_weight": 1.0,
+                "security_multiplier": 1.5,
+                "breaking_changes_multiplier": 1.3,
+                "dependencies_multiplier": 1.2,
+                "version_consistency_multiplier": 1.0,
+                "upgrades_multiplier": 0.8,
+                "other_multiplier": 1.0
             }
         }"#;
 
@@ -877,6 +889,7 @@ mod audit_config {
                 fail_on_inconsistency: true,
                 warn_on_inconsistency: false,
             },
+            health_score_weights: HealthScoreWeightsConfig::default(),
         };
 
         assert!(base.merge_with(override_config.clone()).is_ok());
@@ -915,6 +928,111 @@ mod audit_config {
             },
             ..Default::default()
         };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_health_score_weights_default() {
+        let config = HealthScoreWeightsConfig::default();
+        assert_eq!(config.critical_weight, 15.0);
+        assert_eq!(config.warning_weight, 5.0);
+        assert_eq!(config.info_weight, 1.0);
+        assert_eq!(config.security_multiplier, 1.5);
+        assert_eq!(config.breaking_changes_multiplier, 1.3);
+        assert_eq!(config.dependencies_multiplier, 1.2);
+        assert_eq!(config.version_consistency_multiplier, 1.0);
+        assert_eq!(config.upgrades_multiplier, 0.8);
+        assert_eq!(config.other_multiplier, 1.0);
+    }
+
+    #[test]
+    fn test_health_score_weights_validation_positive() {
+        let config = HealthScoreWeightsConfig::default();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_health_score_weights_validation_negative_critical() {
+        use sublime_standard_tools::config::Configurable;
+        let config = HealthScoreWeightsConfig { critical_weight: -1.0, ..Default::default() };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_health_score_weights_validation_negative_multiplier() {
+        use sublime_standard_tools::config::Configurable;
+        let config = HealthScoreWeightsConfig { security_multiplier: -0.5, ..Default::default() };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_health_score_weights_serialization() {
+        let config = HealthScoreWeightsConfig::default();
+        let serialized = serde_json::to_string(&config);
+        assert!(serialized.is_ok());
+        let json = serialized.unwrap();
+        assert!(json.contains("\"critical_weight\""));
+        assert!(json.contains("\"security_multiplier\""));
+    }
+
+    #[test]
+    fn test_health_score_weights_deserialization() {
+        let json = r#"{
+            "critical_weight": 20.0,
+            "warning_weight": 8.0,
+            "info_weight": 2.0,
+            "security_multiplier": 2.0,
+            "breaking_changes_multiplier": 1.5,
+            "dependencies_multiplier": 1.3,
+            "version_consistency_multiplier": 1.2,
+            "upgrades_multiplier": 1.0,
+            "other_multiplier": 1.1
+        }"#;
+
+        let result: Result<HealthScoreWeightsConfig, _> = serde_json::from_str(json);
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert_eq!(config.critical_weight, 20.0);
+        assert_eq!(config.security_multiplier, 2.0);
+    }
+
+    #[test]
+    fn test_health_score_weights_merge() {
+        use sublime_standard_tools::config::Configurable;
+        let mut base = HealthScoreWeightsConfig::default();
+        let override_config = HealthScoreWeightsConfig {
+            critical_weight: 20.0,
+            warning_weight: 8.0,
+            info_weight: 2.0,
+            security_multiplier: 2.0,
+            breaking_changes_multiplier: 1.5,
+            dependencies_multiplier: 1.3,
+            version_consistency_multiplier: 1.2,
+            upgrades_multiplier: 1.0,
+            other_multiplier: 1.1,
+        };
+
+        assert!(base.merge_with(override_config.clone()).is_ok());
+        assert_eq!(base.critical_weight, 20.0);
+        assert_eq!(base.warning_weight, 8.0);
+        assert_eq!(base.security_multiplier, 2.0);
+    }
+
+    #[test]
+    fn test_health_score_weights_zero_values() {
+        use sublime_standard_tools::config::Configurable;
+        let config = HealthScoreWeightsConfig {
+            critical_weight: 0.0,
+            warning_weight: 0.0,
+            info_weight: 0.0,
+            security_multiplier: 0.0,
+            breaking_changes_multiplier: 0.0,
+            dependencies_multiplier: 0.0,
+            version_consistency_multiplier: 0.0,
+            upgrades_multiplier: 0.0,
+            other_multiplier: 0.0,
+        };
+        // Zero values should be valid (non-negative)
         assert!(config.validate().is_ok());
     }
 }

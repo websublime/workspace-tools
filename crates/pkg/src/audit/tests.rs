@@ -2627,4 +2627,402 @@ mod tests {
         let result = manager.audit_version_consistency().await;
         assert!(result.is_ok(), "Should audit version consistency");
     }
+
+    // Health Score Tests
+
+    #[test]
+    fn test_health_score_weights_default() {
+        use crate::audit::HealthScoreWeights;
+
+        let weights = HealthScoreWeights::default();
+        assert_eq!(weights.critical_weight, 15.0);
+        assert_eq!(weights.warning_weight, 5.0);
+        assert_eq!(weights.info_weight, 1.0);
+        assert_eq!(weights.security_multiplier, 1.5);
+        assert_eq!(weights.breaking_changes_multiplier, 1.3);
+        assert_eq!(weights.dependencies_multiplier, 1.2);
+        assert_eq!(weights.version_consistency_multiplier, 1.0);
+        assert_eq!(weights.upgrades_multiplier, 0.8);
+        assert_eq!(weights.other_multiplier, 1.0);
+    }
+
+    #[test]
+    fn test_health_score_weights_strict() {
+        use crate::audit::HealthScoreWeights;
+
+        let weights = HealthScoreWeights::strict();
+        assert!(weights.critical_weight > 15.0);
+        assert!(weights.warning_weight > 5.0);
+        assert!(weights.info_weight > 1.0);
+        assert_eq!(weights.security_multiplier, 2.0);
+    }
+
+    #[test]
+    fn test_health_score_weights_lenient() {
+        use crate::audit::HealthScoreWeights;
+
+        let weights = HealthScoreWeights::lenient();
+        assert!(weights.critical_weight < 15.0);
+        assert!(weights.warning_weight < 5.0);
+        assert!(weights.info_weight < 1.0);
+    }
+
+    #[test]
+    fn test_health_score_perfect_score() {
+        use crate::audit::{calculate_health_score, AuditIssue, HealthScoreWeights};
+
+        let issues: Vec<AuditIssue> = vec![];
+        let weights = HealthScoreWeights::default();
+        let score = calculate_health_score(&issues, &weights);
+
+        assert_eq!(score, 100);
+    }
+
+    #[test]
+    fn test_health_score_single_critical_security_issue() {
+        use crate::audit::{
+            calculate_health_score_detailed, AuditIssue, HealthScoreWeights, IssueCategory,
+            IssueSeverity,
+        };
+
+        let issues = vec![AuditIssue::new(
+            IssueSeverity::Critical,
+            IssueCategory::Security,
+            "Security vulnerability".to_string(),
+            "CVE-2023-12345 detected".to_string(),
+        )];
+
+        let weights = HealthScoreWeights::default();
+        let breakdown = calculate_health_score_detailed(&issues, &weights);
+
+        // Critical (15) * Security (1.5) * First issue (1.0) = 22.5 points deducted
+        // 100 - 22.5 = 77.5 -> 77 or 78
+        assert_eq!(breakdown.total_issues, 1);
+        assert!(breakdown.score >= 77 && breakdown.score <= 78);
+        assert!((breakdown.total_deduction - 22.5).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_health_score_multiple_warnings_same_category() {
+        use crate::audit::{
+            calculate_health_score_detailed, AuditIssue, HealthScoreWeights, IssueCategory,
+            IssueSeverity,
+        };
+
+        let issues = vec![
+            AuditIssue::new(
+                IssueSeverity::Warning,
+                IssueCategory::Upgrades,
+                "Update available 1".to_string(),
+                "Major version available".to_string(),
+            ),
+            AuditIssue::new(
+                IssueSeverity::Warning,
+                IssueCategory::Upgrades,
+                "Update available 2".to_string(),
+                "Major version available".to_string(),
+            ),
+            AuditIssue::new(
+                IssueSeverity::Warning,
+                IssueCategory::Upgrades,
+                "Update available 3".to_string(),
+                "Major version available".to_string(),
+            ),
+        ];
+
+        let weights = HealthScoreWeights::default();
+        let breakdown = calculate_health_score_detailed(&issues, &weights);
+
+        // First: 5 * 0.8 * 1.0 = 4.0
+        // Second: 5 * 0.8 * 0.9 = 3.6
+        // Third: 5 * 0.8 * 0.8 = 3.2
+        // Total: 10.8
+        assert_eq!(breakdown.total_issues, 3);
+        assert!((breakdown.total_deduction - 10.8).abs() < 0.1);
+        assert_eq!(breakdown.score, 89); // 100 - 10.8 = 89.2 -> 89
+    }
+
+    #[test]
+    fn test_health_score_mixed_severities_and_categories() {
+        use crate::audit::{
+            calculate_health_score_detailed, AuditIssue, HealthScoreWeights, IssueCategory,
+            IssueSeverity,
+        };
+
+        let issues = vec![
+            AuditIssue::new(
+                IssueSeverity::Critical,
+                IssueCategory::Security,
+                "Critical security issue".to_string(),
+                "Security vulnerability".to_string(),
+            ),
+            AuditIssue::new(
+                IssueSeverity::Warning,
+                IssueCategory::Dependencies,
+                "Circular dependency".to_string(),
+                "Circular dependency detected".to_string(),
+            ),
+            AuditIssue::new(
+                IssueSeverity::Info,
+                IssueCategory::Upgrades,
+                "Patch available".to_string(),
+                "Patch update available".to_string(),
+            ),
+        ];
+
+        let weights = HealthScoreWeights::default();
+        let breakdown = calculate_health_score_detailed(&issues, &weights);
+
+        assert_eq!(breakdown.total_issues, 3);
+        assert!(breakdown.score < 100);
+        assert_eq!(*breakdown.issues_by_severity.get("critical").unwrap_or(&0), 1);
+        assert_eq!(*breakdown.issues_by_severity.get("warning").unwrap_or(&0), 1);
+        assert_eq!(*breakdown.issues_by_severity.get("info").unwrap_or(&0), 1);
+        assert_eq!(*breakdown.issues_by_category.get("security").unwrap_or(&0), 1);
+        assert_eq!(*breakdown.issues_by_category.get("dependencies").unwrap_or(&0), 1);
+        assert_eq!(*breakdown.issues_by_category.get("upgrades").unwrap_or(&0), 1);
+    }
+
+    #[test]
+    fn test_health_score_floor_at_zero() {
+        use crate::audit::{
+            calculate_health_score, AuditIssue, HealthScoreWeights, IssueCategory, IssueSeverity,
+        };
+
+        // Create enough critical security issues to exceed 100 points
+        let mut issues = Vec::new();
+        for i in 0..20 {
+            issues.push(AuditIssue::new(
+                IssueSeverity::Critical,
+                IssueCategory::Security,
+                format!("Critical issue {}", i),
+                "Critical security vulnerability".to_string(),
+            ));
+        }
+
+        let weights = HealthScoreWeights::default();
+        let score = calculate_health_score(&issues, &weights);
+        assert_eq!(score, 0);
+    }
+
+    #[test]
+    fn test_health_score_diminishing_returns() {
+        use crate::audit::calculate_diminishing_factor;
+
+        assert_eq!(calculate_diminishing_factor(0), 1.0); // First issue
+        assert_eq!(calculate_diminishing_factor(1), 0.9); // Second issue
+        assert_eq!(calculate_diminishing_factor(2), 0.8); // Third issue
+        assert_eq!(calculate_diminishing_factor(3), 0.7); // Fourth+ issue
+        assert_eq!(calculate_diminishing_factor(10), 0.7); // Still 0.7
+    }
+
+    #[test]
+    fn test_health_score_breakdown_summary() {
+        use crate::audit::{
+            calculate_health_score_detailed, AuditIssue, HealthScoreWeights, IssueCategory,
+            IssueSeverity,
+        };
+
+        let issues = vec![
+            AuditIssue::new(
+                IssueSeverity::Warning,
+                IssueCategory::Upgrades,
+                "Update available".to_string(),
+                "Major version available".to_string(),
+            ),
+            AuditIssue::new(
+                IssueSeverity::Info,
+                IssueCategory::VersionConsistency,
+                "Version inconsistency".to_string(),
+                "Inconsistent version detected".to_string(),
+            ),
+        ];
+
+        let weights = HealthScoreWeights::default();
+        let breakdown = calculate_health_score_detailed(&issues, &weights);
+        let summary = breakdown.summary();
+
+        assert!(summary.contains("Health Score:"));
+        assert!(summary.contains("Total Issues: 2"));
+        assert!(summary.contains("warning: 1"));
+        assert!(summary.contains("info: 1"));
+        assert!(summary.contains("upgrades: 1"));
+        assert!(summary.contains("version_consistency: 1"));
+    }
+
+    #[test]
+    fn test_health_score_empty_breakdown() {
+        use crate::audit::{calculate_health_score_detailed, AuditIssue, HealthScoreWeights};
+
+        let issues: Vec<AuditIssue> = vec![];
+        let weights = HealthScoreWeights::default();
+        let breakdown = calculate_health_score_detailed(&issues, &weights);
+
+        assert_eq!(breakdown.score, 100);
+        assert_eq!(breakdown.total_issues, 0);
+        assert_eq!(breakdown.total_deduction, 0.0);
+        assert!(breakdown.deductions_by_severity.is_empty());
+        assert!(breakdown.deductions_by_category.is_empty());
+        assert!(breakdown.issues_by_severity.is_empty());
+        assert!(breakdown.issues_by_category.is_empty());
+    }
+
+    #[test]
+    fn test_health_score_custom_weights() {
+        use crate::audit::{
+            calculate_health_score, AuditIssue, HealthScoreWeights, IssueCategory, IssueSeverity,
+        };
+
+        let issues = vec![AuditIssue::new(
+            IssueSeverity::Warning,
+            IssueCategory::Upgrades,
+            "Update available".to_string(),
+            "Update needed".to_string(),
+        )];
+
+        // Custom weights that penalize upgrades more heavily
+        let custom_weights = HealthScoreWeights {
+            critical_weight: 15.0,
+            warning_weight: 5.0,
+            info_weight: 1.0,
+            security_multiplier: 1.5,
+            breaking_changes_multiplier: 1.3,
+            dependencies_multiplier: 1.2,
+            version_consistency_multiplier: 1.0,
+            upgrades_multiplier: 1.5, // Increased from default 0.8
+            other_multiplier: 1.0,
+        };
+
+        let default_weights = HealthScoreWeights::default();
+
+        let custom_score = calculate_health_score(&issues, &custom_weights);
+        let default_score = calculate_health_score(&issues, &default_weights);
+
+        // Custom weights should result in lower score
+        assert!(custom_score < default_score);
+    }
+
+    #[test]
+    fn test_health_score_all_categories() {
+        use crate::audit::{
+            calculate_health_score_detailed, AuditIssue, HealthScoreWeights, IssueCategory,
+            IssueSeverity,
+        };
+
+        let issues = vec![
+            AuditIssue::new(
+                IssueSeverity::Critical,
+                IssueCategory::Security,
+                "Security".to_string(),
+                "Security issue".to_string(),
+            ),
+            AuditIssue::new(
+                IssueSeverity::Warning,
+                IssueCategory::BreakingChanges,
+                "Breaking".to_string(),
+                "Breaking change".to_string(),
+            ),
+            AuditIssue::new(
+                IssueSeverity::Warning,
+                IssueCategory::Dependencies,
+                "Circular".to_string(),
+                "Circular dependency".to_string(),
+            ),
+            AuditIssue::new(
+                IssueSeverity::Info,
+                IssueCategory::VersionConsistency,
+                "Version".to_string(),
+                "Version inconsistency".to_string(),
+            ),
+            AuditIssue::new(
+                IssueSeverity::Info,
+                IssueCategory::Upgrades,
+                "Update".to_string(),
+                "Update available".to_string(),
+            ),
+            AuditIssue::new(
+                IssueSeverity::Info,
+                IssueCategory::Other,
+                "Other".to_string(),
+                "Other issue".to_string(),
+            ),
+        ];
+
+        let weights = HealthScoreWeights::default();
+        let breakdown = calculate_health_score_detailed(&issues, &weights);
+
+        assert_eq!(breakdown.total_issues, 6);
+        assert_eq!(breakdown.issues_by_category.len(), 6);
+        assert!(breakdown.score < 100);
+    }
+
+    #[test]
+    fn test_health_score_category_multiplier() {
+        use crate::audit::{HealthScoreWeights, IssueCategory};
+
+        let weights = HealthScoreWeights::default();
+        assert_eq!(weights.category_multiplier(IssueCategory::Security), 1.5);
+        assert_eq!(weights.category_multiplier(IssueCategory::BreakingChanges), 1.3);
+        assert_eq!(weights.category_multiplier(IssueCategory::Dependencies), 1.2);
+        assert_eq!(weights.category_multiplier(IssueCategory::VersionConsistency), 1.0);
+        assert_eq!(weights.category_multiplier(IssueCategory::Upgrades), 0.8);
+        assert_eq!(weights.category_multiplier(IssueCategory::Other), 1.0);
+    }
+
+    #[test]
+    fn test_health_score_severity_weight() {
+        use crate::audit::{HealthScoreWeights, IssueSeverity};
+
+        let weights = HealthScoreWeights::default();
+        assert_eq!(weights.severity_weight(IssueSeverity::Critical), 15.0);
+        assert_eq!(weights.severity_weight(IssueSeverity::Warning), 5.0);
+        assert_eq!(weights.severity_weight(IssueSeverity::Info), 1.0);
+    }
+
+    #[test]
+    fn test_health_score_breakdown_serialization() {
+        use crate::audit::{
+            calculate_health_score_detailed, AuditIssue, HealthScoreWeights, IssueCategory,
+            IssueSeverity,
+        };
+
+        let issues = vec![AuditIssue::new(
+            IssueSeverity::Warning,
+            IssueCategory::Upgrades,
+            "Update".to_string(),
+            "Update available".to_string(),
+        )];
+
+        let weights = HealthScoreWeights::default();
+        let breakdown = calculate_health_score_detailed(&issues, &weights);
+
+        // Test JSON serialization
+        let json = serde_json::to_string(&breakdown).expect("Failed to serialize");
+        assert!(json.contains("\"score\""));
+        assert!(json.contains("\"total_issues\""));
+
+        // Test deserialization
+        let deserialized: crate::audit::HealthScoreBreakdown =
+            serde_json::from_str(&json).expect("Failed to deserialize");
+        assert_eq!(deserialized.score, breakdown.score);
+        assert_eq!(deserialized.total_issues, breakdown.total_issues);
+    }
+
+    #[test]
+    fn test_health_score_weights_serialization() {
+        use crate::audit::HealthScoreWeights;
+
+        let weights = HealthScoreWeights::default();
+
+        // Test JSON serialization
+        let json = serde_json::to_string(&weights).expect("Failed to serialize");
+        assert!(json.contains("\"critical_weight\""));
+        assert!(json.contains("\"security_multiplier\""));
+
+        // Test deserialization
+        let deserialized: HealthScoreWeights =
+            serde_json::from_str(&json).expect("Failed to deserialize");
+        assert_eq!(deserialized.critical_weight, weights.critical_weight);
+        assert_eq!(deserialized.security_multiplier, weights.security_multiplier);
+    }
 }

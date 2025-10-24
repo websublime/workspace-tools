@@ -1,13 +1,15 @@
 //! Audit configuration for health checks and dependency audits.
 //!
 //! **What**: Defines configuration for audit operations, including which audit sections
-//! to run, severity thresholds, and specific checks for each audit type.
+//! to run, severity thresholds, specific checks for each audit type, and health score weights.
 //!
 //! **How**: This module provides the `AuditConfig` structure that controls how dependency
-//! audits, health checks, and issue detection are performed.
+//! audits, health checks, and issue detection are performed, along with customizable weights
+//! for health score calculation.
 //!
-//! **Why**: To enable comprehensive project health monitoring with configurable checks
-//! and severity levels that can be tailored to project needs.
+//! **Why**: To enable comprehensive project health monitoring with configurable checks,
+//! severity levels, and scoring weights that can be tailored to project needs and deployment
+//! environments.
 
 use serde::{Deserialize, Serialize};
 use sublime_standard_tools::config::{ConfigResult, Configurable};
@@ -26,7 +28,7 @@ use sublime_standard_tools::config::{ConfigResult, Configurable};
 /// assert!(config.enabled);
 /// assert_eq!(config.min_severity, "warning");
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AuditConfig {
     /// Whether auditing is enabled.
     ///
@@ -54,6 +56,9 @@ pub struct AuditConfig {
 
     /// Configuration for version consistency audits.
     pub version_consistency: VersionConsistencyAuditConfig,
+
+    /// Configuration for health score calculation weights.
+    pub health_score_weights: HealthScoreWeightsConfig,
 }
 
 /// Configuration for which audit sections to execute.
@@ -231,6 +236,7 @@ impl Default for AuditConfig {
             dependencies: DependencyAuditConfig::default(),
             breaking_changes: BreakingChangesAuditConfig::default(),
             version_consistency: VersionConsistencyAuditConfig::default(),
+            health_score_weights: HealthScoreWeightsConfig::default(),
         }
     }
 }
@@ -281,6 +287,84 @@ impl Default for VersionConsistencyAuditConfig {
     }
 }
 
+/// Configuration for health score calculation weights.
+///
+/// These weights control how much each type of issue affects the overall health score.
+/// All weights should be positive numbers where higher values mean more impact.
+///
+/// # Example
+///
+/// ```rust
+/// use sublime_pkg_tools::config::HealthScoreWeightsConfig;
+///
+/// let config = HealthScoreWeightsConfig::default();
+/// assert_eq!(config.critical_weight, 15.0);
+/// assert_eq!(config.security_multiplier, 1.5);
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HealthScoreWeightsConfig {
+    /// Points deducted per critical issue.
+    ///
+    /// # Default: `15.0`
+    pub critical_weight: f64,
+
+    /// Points deducted per warning issue.
+    ///
+    /// # Default: `5.0`
+    pub warning_weight: f64,
+
+    /// Points deducted per info issue.
+    ///
+    /// # Default: `1.0`
+    pub info_weight: f64,
+
+    /// Multiplier for security issues.
+    ///
+    /// # Default: `1.5`
+    pub security_multiplier: f64,
+
+    /// Multiplier for breaking changes issues.
+    ///
+    /// # Default: `1.3`
+    pub breaking_changes_multiplier: f64,
+
+    /// Multiplier for dependency issues.
+    ///
+    /// # Default: `1.2`
+    pub dependencies_multiplier: f64,
+
+    /// Multiplier for version consistency issues.
+    ///
+    /// # Default: `1.0`
+    pub version_consistency_multiplier: f64,
+
+    /// Multiplier for upgrade issues.
+    ///
+    /// # Default: `0.8`
+    pub upgrades_multiplier: f64,
+
+    /// Multiplier for other issues.
+    ///
+    /// # Default: `1.0`
+    pub other_multiplier: f64,
+}
+
+impl Default for HealthScoreWeightsConfig {
+    fn default() -> Self {
+        Self {
+            critical_weight: 15.0,
+            warning_weight: 5.0,
+            info_weight: 1.0,
+            security_multiplier: 1.5,
+            breaking_changes_multiplier: 1.3,
+            dependencies_multiplier: 1.2,
+            version_consistency_multiplier: 1.0,
+            upgrades_multiplier: 0.8,
+            other_multiplier: 1.0,
+        }
+    }
+}
+
 impl Configurable for AuditConfig {
     fn validate(&self) -> ConfigResult<()> {
         // Validate min_severity
@@ -301,6 +385,7 @@ impl Configurable for AuditConfig {
         self.dependencies.validate()?;
         self.breaking_changes.validate()?;
         self.version_consistency.validate()?;
+        self.health_score_weights.validate()?;
 
         Ok(())
     }
@@ -313,6 +398,7 @@ impl Configurable for AuditConfig {
         self.dependencies.merge_with(other.dependencies)?;
         self.breaking_changes.merge_with(other.breaking_changes)?;
         self.version_consistency.merge_with(other.version_consistency)?;
+        self.health_score_weights.merge_with(other.health_score_weights)?;
         Ok(())
     }
 }
@@ -380,6 +466,49 @@ impl Configurable for VersionConsistencyAuditConfig {
     fn merge_with(&mut self, other: Self) -> ConfigResult<()> {
         self.fail_on_inconsistency = other.fail_on_inconsistency;
         self.warn_on_inconsistency = other.warn_on_inconsistency;
+        Ok(())
+    }
+}
+
+impl Configurable for HealthScoreWeightsConfig {
+    fn validate(&self) -> ConfigResult<()> {
+        // Validate that all weights are positive
+        let weights = [
+            ("critical_weight", self.critical_weight),
+            ("warning_weight", self.warning_weight),
+            ("info_weight", self.info_weight),
+            ("security_multiplier", self.security_multiplier),
+            ("breaking_changes_multiplier", self.breaking_changes_multiplier),
+            ("dependencies_multiplier", self.dependencies_multiplier),
+            ("version_consistency_multiplier", self.version_consistency_multiplier),
+            ("upgrades_multiplier", self.upgrades_multiplier),
+            ("other_multiplier", self.other_multiplier),
+        ];
+
+        for (name, value) in &weights {
+            if *value < 0.0 {
+                return Err(sublime_standard_tools::config::ConfigError::ValidationError {
+                    message: format!(
+                        "audit.health_score_weights.{}: Must be non-negative, got {}",
+                        name, value
+                    ),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    fn merge_with(&mut self, other: Self) -> ConfigResult<()> {
+        self.critical_weight = other.critical_weight;
+        self.warning_weight = other.warning_weight;
+        self.info_weight = other.info_weight;
+        self.security_multiplier = other.security_multiplier;
+        self.breaking_changes_multiplier = other.breaking_changes_multiplier;
+        self.dependencies_multiplier = other.dependencies_multiplier;
+        self.version_consistency_multiplier = other.version_consistency_multiplier;
+        self.upgrades_multiplier = other.upgrades_multiplier;
+        self.other_multiplier = other.other_multiplier;
         Ok(())
     }
 }
