@@ -1,0 +1,29 @@
+[package]
+name = "sublime_cli"
+version = "0.1.0"
+description = "CLI application for workspace node tools"
+documentation = "https://docs.rs/sublime_cli"
+readme = "README.md"
+keywords = ["cli", "nodejs", "workspace", "tools"]
+categories = ["development-tools", "command-line-utilities"]
+
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[[bin]]
+name = "wnt"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+
+[dev-dependencies]
