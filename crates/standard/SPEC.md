@@ -903,17 +903,11 @@ pub struct ProjectDetector<F: AsyncFileSystem = FileSystemManager> {
 impl ProjectDetector<FileSystemManager> {
     /// Creates a new ProjectDetector with the default async filesystem.
     pub fn new() -> Self;
-    
-    /// Creates a new ProjectDetector with project-specific configuration.
-    pub async fn new_with_project_config(project_root: &Path) -> Result<Self, Error>;
 }
 
 impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
     /// Creates a new ProjectDetector with a custom async filesystem.
     pub fn with_filesystem(fs: F) -> Self;
-    
-    /// Creates a new ProjectDetector with filesystem and configuration.
-    pub fn with_filesystem_and_config(fs: F, config: StandardConfig) -> Self;
 }
 
 impl<F: AsyncFileSystem + Clone + Send + Sync + 'static> ProjectDetector<F> {
@@ -952,17 +946,11 @@ pub struct ProjectManager<F: AsyncFileSystem = FileSystemManager> {
 impl ProjectManager<FileSystemManager> {
     /// Creates a new ProjectManager with the default filesystem.
     pub fn new() -> Self;
-    
-    /// Creates a new ProjectManager with project configuration.
-    pub async fn new_with_project_config(project_root: &Path) -> Result<Self, Error>;
 }
 
 impl<F: AsyncFileSystem + Clone> ProjectManager<F> {
     /// Creates a new ProjectManager with a custom filesystem.
     pub fn with_filesystem(fs: F) -> Self;
-    
-    /// Creates a new ProjectManager with filesystem and configuration.
-    pub fn with_filesystem_and_config(fs: F, config: StandardConfig) -> Self;
     
     /// Creates a project descriptor from a path with configuration.
     pub async fn create_project(
@@ -971,12 +959,27 @@ impl<F: AsyncFileSystem + Clone> ProjectManager<F> {
         config: Option<&StandardConfig>
     ) -> Result<ProjectDescriptor, Error>;
     
-    /// Updates an existing project with new information.
-    pub async fn update_project(
+    /// Validates a project descriptor.
+    pub async fn validate_project(&self, project: &mut ProjectDescriptor) -> Result<(), Error>;
+    
+    /// Checks if a path contains a valid Node.js project.
+    pub async fn is_valid_project(&self, path: impl AsRef<Path>) -> bool;
+    
+    /// Finds the project root by walking up from a starting path.
+    pub async fn find_project_root(&self, start_path: impl AsRef<Path>) -> Option<PathBuf>;
+    
+    /// Creates a project descriptor from a known root directory.
+    pub async fn create_project_from_root(
         &self,
-        project: &mut Project,
+        root: impl AsRef<Path>,
         config: Option<&StandardConfig>,
-    ) -> Result<(), Error>;
+    ) -> Result<ProjectDescriptor, Error>;
+    
+    /// Returns a reference to the internal ProjectDetector.
+    pub fn detector(&self) -> &ProjectDetector<F>;
+    
+    /// Returns a reference to the internal ProjectValidator.
+    pub fn validator(&self) -> &ProjectValidator<F>;
 }
 ```
 
@@ -1295,6 +1298,9 @@ pub struct MonorepoDetector<F: AsyncFileSystem = FileSystemManager> {
 impl MonorepoDetector<FileSystemManager> {
     /// Creates a new MonorepoDetector with the default filesystem.
     pub fn new() -> Self;
+    
+    /// Creates a new MonorepoDetector with custom configuration.
+    pub fn new_with_config(config: MonorepoConfig) -> Self;
     
     /// Creates a new MonorepoDetector with project-specific configuration.
     pub async fn new_with_project_config(project_root: &Path) -> Result<Self, Error>;
@@ -2016,10 +2022,19 @@ impl FileSystemManager {
     pub fn new() -> Self;
     
     /// Creates a new FileSystemManager with custom configuration.
-    pub fn new_with_config(config: AsyncFileSystemConfig) -> Self;
+    pub fn with_config(config: AsyncFileSystemConfig) -> Self;
+    
+    /// Creates a new FileSystemManager with standard filesystem configuration.
+    pub fn with_standard_config(fs_config: &FilesystemConfig) -> Self;
+    
+    /// Creates a new FileSystemManager with async I/O configuration.
+    pub fn with_async_io_config(async_io_config: &AsyncIoConfig) -> Self;
     
     /// Creates a new FileSystemManager with project configuration.
     pub async fn new_with_project_config(project_root: &Path) -> Result<Self, Error>;
+    
+    /// Returns the current configuration.
+    pub fn config(&self) -> &AsyncFileSystemConfig;
 }
 
 impl AsyncFileSystem for FileSystemManager {
