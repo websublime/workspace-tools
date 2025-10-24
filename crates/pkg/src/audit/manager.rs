@@ -15,13 +15,15 @@
 
 use crate::audit::sections::{
     audit_dependencies as audit_dependencies_impl, audit_upgrades as audit_upgrades_impl,
-    DependencyAuditSection, UpgradeAuditSection,
+    audit_version_consistency as audit_version_consistency_impl, DependencyAuditSection,
+    UpgradeAuditSection, VersionConsistencyAuditSection,
 };
 use crate::changes::ChangesAnalyzer;
 use crate::config::PackageToolsConfig;
 use crate::error::{AuditError, AuditResult};
 use crate::types::PackageInfo;
 use crate::upgrade::UpgradeManager;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use sublime_git_tools::Repo;
 use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
@@ -582,6 +584,61 @@ impl AuditManager {
         crate::audit::sections::categorize_dependencies(&packages, &self.config).await
     }
 
+    /// Audits version consistency of internal dependencies across packages.
+    ///
+    /// This method analyzes all internal dependencies across packages in the workspace
+    /// and identifies cases where the same internal package is depended upon with
+    /// different version specifications. This helps maintain consistency and prevents
+    /// potential runtime issues.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `VersionConsistencyAuditSection` containing:
+    /// - List of detected version inconsistencies
+    /// - Recommended version specifications for each inconsistency
+    /// - Generated audit issues based on configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns `AuditError` if:
+    /// - Package discovery fails
+    /// - The version consistency section is disabled in configuration
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::audit::AuditManager;
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let workspace_root = PathBuf::from(".");
+    /// let config = PackageToolsConfig::default();
+    /// let manager = AuditManager::new(workspace_root, config).await?;
+    ///
+    /// let section = manager.audit_version_consistency().await?;
+    /// println!("Found {} inconsistencies", section.inconsistencies.len());
+    ///
+    /// for inconsistency in &section.inconsistencies {
+    ///     println!("Package: {}", inconsistency.package_name);
+    ///     println!("  Recommended: {}", inconsistency.recommended_version);
+    ///     println!("  Used by {} packages", inconsistency.versions_used.len());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn audit_version_consistency(&self) -> AuditResult<VersionConsistencyAuditSection> {
+        // Discover all packages in the workspace
+        let packages = self.discover_packages().await?;
+
+        // Collect internal package names
+        let internal_package_names: HashSet<String> =
+            packages.iter().map(|p| p.name().to_string()).collect();
+
+        // Call the version consistency implementation
+        audit_version_consistency_impl(&packages, &internal_package_names, &self.config).await
+    }
+
     /// Discovers all packages in the workspace.
     ///
     /// Detects whether the workspace is a monorepo or single package and
@@ -670,8 +727,6 @@ impl AuditManager {
     }
 
     // Future audit methods will be implemented in subsequent stories:
-    // - Story 10.5: audit_breaking_changes() -> BreakingChangesAuditSection
-    // - Story 10.6: audit_version_consistency() -> VersionConsistencyAuditSection
     // - Story 10.7: calculate_health_score() -> u8
     // - Story 10.8: run_audit() -> AuditReport
 }

@@ -2070,4 +2070,561 @@ mod tests {
         assert_eq!(utils.breaking_change_count(), 2);
         assert!(utils.is_major_bump());
     }
+
+    // Version Consistency Tests (Story 10.6)
+
+    #[tokio::test]
+    async fn test_version_consistency_section_empty() {
+        use crate::audit::VersionConsistencyAuditSection;
+
+        let section = VersionConsistencyAuditSection::empty();
+        assert_eq!(section.inconsistencies.len(), 0);
+        assert_eq!(section.issues.len(), 0);
+        assert!(!section.has_inconsistencies());
+        assert_eq!(section.critical_issue_count(), 0);
+        assert_eq!(section.warning_issue_count(), 0);
+        assert_eq!(section.info_issue_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_audit_version_consistency_no_internal_deps() {
+        use crate::audit::sections::audit_version_consistency;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use std::collections::HashSet;
+
+        let package_json = package_json::PackageJson {
+            name: "test-package".to_string(),
+            version: "1.0.0".to_string(),
+            ..Default::default()
+        };
+
+        let packages = vec![PackageInfo::new(package_json, None, PathBuf::from("/workspace/test"))];
+
+        let internal_names: HashSet<String> =
+            packages.iter().map(|p| p.name().to_string()).collect();
+
+        let config = PackageToolsConfig::default();
+        let result = audit_version_consistency(&packages, &internal_names, &config).await;
+        assert!(result.is_ok(), "Should handle packages with no internal dependencies");
+
+        let section = result.expect("Audit succeeded");
+        assert_eq!(section.inconsistencies.len(), 0);
+        assert_eq!(section.issues.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_audit_version_consistency_consistent_versions() {
+        use crate::audit::sections::audit_version_consistency;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use std::collections::HashMap;
+        use std::collections::HashSet;
+
+        let mut deps_a = HashMap::new();
+        deps_a.insert("@myorg/core".to_string(), "workspace:*".to_string());
+
+        let mut deps_b = HashMap::new();
+        deps_b.insert("@myorg/core".to_string(), "workspace:*".to_string());
+
+        let package_a = package_json::PackageJson {
+            name: "@myorg/app-a".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(deps_a),
+            ..Default::default()
+        };
+
+        let package_b = package_json::PackageJson {
+            name: "@myorg/app-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(deps_b),
+            ..Default::default()
+        };
+
+        let package_core = package_json::PackageJson {
+            name: "@myorg/core".to_string(),
+            version: "1.0.0".to_string(),
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a, None, PathBuf::from("/workspace/app-a")),
+            PackageInfo::new(package_b, None, PathBuf::from("/workspace/app-b")),
+            PackageInfo::new(package_core, None, PathBuf::from("/workspace/core")),
+        ];
+
+        let internal_names: HashSet<String> =
+            packages.iter().map(|p| p.name().to_string()).collect();
+
+        let config = PackageToolsConfig::default();
+        let result = audit_version_consistency(&packages, &internal_names, &config).await;
+        assert!(result.is_ok(), "Should handle consistent versions");
+
+        let section = result.expect("Audit succeeded");
+        assert_eq!(section.inconsistencies.len(), 0);
+        assert_eq!(section.issues.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_audit_version_consistency_with_inconsistencies() {
+        use crate::audit::sections::audit_version_consistency;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use std::collections::HashMap;
+        use std::collections::HashSet;
+
+        let mut deps_a = HashMap::new();
+        deps_a.insert("@myorg/core".to_string(), "^1.0.0".to_string());
+
+        let mut deps_b = HashMap::new();
+        deps_b.insert("@myorg/core".to_string(), "^1.1.0".to_string());
+
+        let package_a = package_json::PackageJson {
+            name: "@myorg/app-a".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(deps_a),
+            ..Default::default()
+        };
+
+        let package_b = package_json::PackageJson {
+            name: "@myorg/app-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(deps_b),
+            ..Default::default()
+        };
+
+        let package_core = package_json::PackageJson {
+            name: "@myorg/core".to_string(),
+            version: "1.1.0".to_string(),
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a, None, PathBuf::from("/workspace/app-a")),
+            PackageInfo::new(package_b, None, PathBuf::from("/workspace/app-b")),
+            PackageInfo::new(package_core, None, PathBuf::from("/workspace/core")),
+        ];
+
+        let internal_names: HashSet<String> =
+            packages.iter().map(|p| p.name().to_string()).collect();
+
+        let config = PackageToolsConfig::default();
+        let result = audit_version_consistency(&packages, &internal_names, &config).await;
+        assert!(result.is_ok(), "Should detect inconsistencies");
+
+        let section = result.expect("Audit succeeded");
+        assert_eq!(section.inconsistencies.len(), 1);
+        assert!(section.has_inconsistencies());
+
+        let inconsistency = &section.inconsistencies[0];
+        assert_eq!(inconsistency.package_name, "@myorg/core");
+        assert_eq!(inconsistency.version_count(), 2);
+        assert_eq!(inconsistency.versions_used.len(), 2);
+
+        // Should generate warning issues by default
+        assert_eq!(section.warning_issue_count(), 1);
+        assert_eq!(section.critical_issue_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_audit_version_consistency_recommends_workspace_protocol() {
+        use crate::audit::sections::audit_version_consistency;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use std::collections::HashMap;
+        use std::collections::HashSet;
+
+        let mut deps_a = HashMap::new();
+        deps_a.insert("@myorg/core".to_string(), "workspace:*".to_string());
+
+        let mut deps_b = HashMap::new();
+        deps_b.insert("@myorg/core".to_string(), "^1.0.0".to_string());
+
+        let package_a = package_json::PackageJson {
+            name: "@myorg/app-a".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(deps_a),
+            ..Default::default()
+        };
+
+        let package_b = package_json::PackageJson {
+            name: "@myorg/app-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(deps_b),
+            ..Default::default()
+        };
+
+        let package_core = package_json::PackageJson {
+            name: "@myorg/core".to_string(),
+            version: "1.0.0".to_string(),
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a, None, PathBuf::from("/workspace/app-a")),
+            PackageInfo::new(package_b, None, PathBuf::from("/workspace/app-b")),
+            PackageInfo::new(package_core, None, PathBuf::from("/workspace/core")),
+        ];
+
+        let internal_names: HashSet<String> =
+            packages.iter().map(|p| p.name().to_string()).collect();
+
+        let config = PackageToolsConfig::default();
+        let result = audit_version_consistency(&packages, &internal_names, &config).await;
+        assert!(result.is_ok());
+
+        let section = result.expect("Audit succeeded");
+        assert_eq!(section.inconsistencies.len(), 1);
+
+        let inconsistency = &section.inconsistencies[0];
+        assert_eq!(inconsistency.recommended_version, "workspace:*");
+    }
+
+    #[tokio::test]
+    async fn test_audit_version_consistency_with_fail_on_inconsistency() {
+        use crate::audit::sections::audit_version_consistency;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use std::collections::HashMap;
+        use std::collections::HashSet;
+
+        let mut deps_a = HashMap::new();
+        deps_a.insert("@myorg/core".to_string(), "^1.0.0".to_string());
+
+        let mut deps_b = HashMap::new();
+        deps_b.insert("@myorg/core".to_string(), "^1.1.0".to_string());
+
+        let package_a = package_json::PackageJson {
+            name: "@myorg/app-a".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(deps_a),
+            ..Default::default()
+        };
+
+        let package_b = package_json::PackageJson {
+            name: "@myorg/app-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(deps_b),
+            ..Default::default()
+        };
+
+        let package_core = package_json::PackageJson {
+            name: "@myorg/core".to_string(),
+            version: "1.1.0".to_string(),
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a, None, PathBuf::from("/workspace/app-a")),
+            PackageInfo::new(package_b, None, PathBuf::from("/workspace/app-b")),
+            PackageInfo::new(package_core, None, PathBuf::from("/workspace/core")),
+        ];
+
+        let internal_names: HashSet<String> =
+            packages.iter().map(|p| p.name().to_string()).collect();
+
+        let mut config = PackageToolsConfig::default();
+        config.audit.version_consistency.fail_on_inconsistency = true;
+
+        let result = audit_version_consistency(&packages, &internal_names, &config).await;
+        assert!(result.is_ok());
+
+        let section = result.expect("Audit succeeded");
+        assert_eq!(section.inconsistencies.len(), 1);
+
+        // Should generate critical issues when fail_on_inconsistency is true
+        assert_eq!(section.critical_issue_count(), 1);
+        assert_eq!(section.warning_issue_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_audit_version_consistency_section_disabled() {
+        use crate::audit::sections::audit_version_consistency;
+        use crate::config::PackageToolsConfig;
+        use std::collections::HashSet;
+
+        let packages = vec![];
+        let internal_names = HashSet::new();
+
+        let mut config = PackageToolsConfig::default();
+        config.audit.sections.version_consistency = false;
+
+        let result = audit_version_consistency(&packages, &internal_names, &config).await;
+        assert!(result.is_err(), "Should return error when section is disabled");
+
+        if let Err(e) = result {
+            assert!(matches!(e, crate::error::AuditError::SectionDisabled { .. }));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_version_inconsistency_methods() {
+        use crate::audit::{VersionInconsistency, VersionUsage};
+
+        #[allow(clippy::too_many_lines)]
+        let inconsistency = VersionInconsistency {
+            package_name: "@myorg/core".to_string(),
+            versions_used: vec![
+                VersionUsage {
+                    package_name: "app-a".to_string(),
+                    version_spec: "^1.0.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "app-b".to_string(),
+                    version_spec: "^1.0.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "app-c".to_string(),
+                    version_spec: "^1.1.0".to_string(),
+                },
+            ],
+            recommended_version: "^1.1.0".to_string(),
+        };
+
+        assert_eq!(inconsistency.version_count(), 3);
+
+        let unique = inconsistency.unique_versions();
+        assert_eq!(unique.len(), 2);
+        assert!(unique.contains(&"^1.0.0".to_string()));
+        assert!(unique.contains(&"^1.1.0".to_string()));
+
+        let description = inconsistency.describe();
+        assert!(description.contains("@myorg/core"));
+        assert!(description.contains("3 different versions"));
+    }
+
+    #[tokio::test]
+    async fn test_version_consistency_section_accessors() {
+        use crate::audit::{AuditIssue, IssueCategory, IssueSeverity};
+        use crate::audit::{VersionConsistencyAuditSection, VersionInconsistency, VersionUsage};
+
+        #[allow(clippy::too_many_lines)]
+        let inconsistency1 = VersionInconsistency {
+            package_name: "@myorg/core".to_string(),
+            versions_used: vec![
+                VersionUsage {
+                    package_name: "app-a".to_string(),
+                    version_spec: "^1.0.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "app-b".to_string(),
+                    version_spec: "^1.1.0".to_string(),
+                },
+            ],
+            recommended_version: "^1.1.0".to_string(),
+        };
+
+        let inconsistency2 = VersionInconsistency {
+            package_name: "@myorg/utils".to_string(),
+            versions_used: vec![
+                VersionUsage {
+                    package_name: "app-a".to_string(),
+                    version_spec: "workspace:*".to_string(),
+                },
+                VersionUsage {
+                    package_name: "app-c".to_string(),
+                    version_spec: "^2.0.0".to_string(),
+                },
+            ],
+            recommended_version: "workspace:*".to_string(),
+        };
+
+        let section = VersionConsistencyAuditSection {
+            inconsistencies: vec![inconsistency1, inconsistency2],
+            issues: vec![
+                AuditIssue::new(
+                    IssueSeverity::Warning,
+                    IssueCategory::VersionConsistency,
+                    "Test issue 1".to_string(),
+                    "Description 1".to_string(),
+                ),
+                AuditIssue::new(
+                    IssueSeverity::Critical,
+                    IssueCategory::VersionConsistency,
+                    "Test issue 2".to_string(),
+                    "Description 2".to_string(),
+                ),
+            ],
+        };
+
+        assert_eq!(section.inconsistencies.len(), 2);
+        assert!(section.has_inconsistencies());
+        assert_eq!(section.warning_issue_count(), 1);
+        assert_eq!(section.critical_issue_count(), 1);
+        assert_eq!(section.info_issue_count(), 0);
+
+        assert!(section.inconsistency_for_package("@myorg/core").is_some());
+        assert!(section.inconsistency_for_package("@myorg/utils").is_some());
+        assert!(section.inconsistency_for_package("@myorg/other").is_none());
+
+        let core = section.inconsistency_for_package("@myorg/core").unwrap();
+        assert_eq!(core.version_count(), 2);
+        assert_eq!(core.recommended_version, "^1.1.0");
+    }
+
+    #[tokio::test]
+    async fn test_audit_version_consistency_multiple_inconsistencies() {
+        use crate::audit::sections::audit_version_consistency;
+        use crate::config::PackageToolsConfig;
+        use crate::types::PackageInfo;
+        use std::collections::HashMap;
+        use std::collections::HashSet;
+
+        let mut deps_a = HashMap::new();
+        deps_a.insert("@myorg/core".to_string(), "^1.0.0".to_string());
+        deps_a.insert("@myorg/utils".to_string(), "workspace:*".to_string());
+
+        let mut deps_b = HashMap::new();
+        deps_b.insert("@myorg/core".to_string(), "^1.1.0".to_string());
+        deps_b.insert("@myorg/utils".to_string(), "^2.0.0".to_string());
+
+        let package_a = package_json::PackageJson {
+            name: "@myorg/app-a".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(deps_a),
+            ..Default::default()
+        };
+
+        let package_b = package_json::PackageJson {
+            name: "@myorg/app-b".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(deps_b),
+            ..Default::default()
+        };
+
+        let package_core = package_json::PackageJson {
+            name: "@myorg/core".to_string(),
+            version: "1.1.0".to_string(),
+            ..Default::default()
+        };
+
+        let package_utils = package_json::PackageJson {
+            name: "@myorg/utils".to_string(),
+            version: "2.0.0".to_string(),
+            ..Default::default()
+        };
+
+        let packages = vec![
+            PackageInfo::new(package_a, None, PathBuf::from("/workspace/app-a")),
+            PackageInfo::new(package_b, None, PathBuf::from("/workspace/app-b")),
+            PackageInfo::new(package_core, None, PathBuf::from("/workspace/core")),
+            PackageInfo::new(package_utils, None, PathBuf::from("/workspace/utils")),
+        ];
+
+        let internal_names: HashSet<String> =
+            packages.iter().map(|p| p.name().to_string()).collect();
+
+        let config = PackageToolsConfig::default();
+        let result = audit_version_consistency(&packages, &internal_names, &config).await;
+        assert!(result.is_ok());
+
+        let section = result.expect("Audit succeeded");
+        assert_eq!(section.inconsistencies.len(), 2);
+
+        // Verify both packages have inconsistencies
+        assert!(section.inconsistency_for_package("@myorg/core").is_some());
+        assert!(section.inconsistency_for_package("@myorg/utils").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_version_consistency_serialization() {
+        use crate::audit::{VersionConsistencyAuditSection, VersionInconsistency, VersionUsage};
+
+        let inconsistency = VersionInconsistency {
+            package_name: "@myorg/core".to_string(),
+            versions_used: vec![
+                VersionUsage {
+                    package_name: "app-a".to_string(),
+                    version_spec: "^1.0.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "app-b".to_string(),
+                    version_spec: "^1.1.0".to_string(),
+                },
+            ],
+            recommended_version: "^1.1.0".to_string(),
+        };
+
+        let section =
+            VersionConsistencyAuditSection { inconsistencies: vec![inconsistency], issues: vec![] };
+
+        let json = serde_json::to_string(&section).expect("Should serialize to JSON");
+        assert!(json.contains("@myorg/core"));
+        assert!(json.contains("^1.0.0"));
+        assert!(json.contains("^1.1.0"));
+
+        let deserialized: VersionConsistencyAuditSection =
+            serde_json::from_str(&json).expect("Should deserialize from JSON");
+        assert_eq!(deserialized.inconsistencies.len(), 1);
+        assert_eq!(deserialized.inconsistencies[0].package_name, "@myorg/core");
+    }
+
+    #[tokio::test]
+    async fn test_audit_manager_version_consistency() {
+        use crate::audit::AuditManager;
+        use crate::config::PackageToolsConfig;
+        use std::collections::HashMap;
+
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let workspace_root = temp_dir.path().to_path_buf();
+
+        // Initialize git repository
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&workspace_root)
+            .output()
+            .expect("Failed to initialize git repo");
+
+        std::process::Command::new("git")
+            .args(["config", "user.email", "test@example.com"])
+            .current_dir(&workspace_root)
+            .output()
+            .expect("Failed to configure git");
+
+        std::process::Command::new("git")
+            .args(["config", "user.name", "Test User"])
+            .current_dir(&workspace_root)
+            .output()
+            .expect("Failed to configure git");
+
+        // Create a simple package with inconsistent dependencies
+        let mut deps = HashMap::new();
+        deps.insert("lodash".to_string(), "^4.17.20".to_string());
+
+        let package_json = package_json::PackageJson {
+            name: "test-package".to_string(),
+            version: "1.0.0".to_string(),
+            dependencies: Some(deps),
+            ..Default::default()
+        };
+
+        let package_json_content =
+            serde_json::to_string_pretty(&package_json).expect("Failed to serialize package.json");
+
+        let fs = sublime_standard_tools::filesystem::FileSystemManager::new();
+        fs.write_file_string(&workspace_root.join("package.json"), package_json_content.as_str())
+            .await
+            .expect("Failed to write package.json");
+
+        // Create initial commit
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(&workspace_root)
+            .output()
+            .expect("Failed to add files");
+
+        std::process::Command::new("git")
+            .args(["commit", "-m", "Initial commit"])
+            .current_dir(&workspace_root)
+            .output()
+            .expect("Failed to commit");
+
+        let config = PackageToolsConfig::default();
+        let manager = AuditManager::new(workspace_root.clone(), config)
+            .await
+            .expect("Failed to create audit manager");
+
+        let result = manager.audit_version_consistency().await;
+        assert!(result.is_ok(), "Should audit version consistency");
+    }
 }

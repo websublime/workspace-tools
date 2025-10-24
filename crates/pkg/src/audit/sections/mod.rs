@@ -18,9 +18,6 @@
 //! - **Categorization** (Story 10.4): Categorizes dependencies into internal, external, workspace, and local
 //! - **Breaking Changes** (Story 10.5): Detects potential breaking changes in commits and changesets
 //!
-//! Future sections to be implemented:
-//! - **Version Consistency** (Story 10.6): Checks version consistency across packages
-
 #![allow(clippy::todo)]
 
 // Upgrades section (Story 10.2 - IMPLEMENTED)
@@ -35,6 +32,9 @@ pub(crate) mod categorization;
 // Breaking changes section (Story 10.5 - IMPLEMENTED)
 pub(crate) mod breaking_changes;
 
+// Version consistency section (Story 10.6 - IMPLEMENTED)
+pub(crate) mod version_consistency;
+
 // Public exports
 pub use breaking_changes::{
     audit_breaking_changes, BreakingChange, BreakingChangeSource, BreakingChangesAuditSection,
@@ -47,6 +47,6 @@ pub use categorization::{
 };
 pub use dependencies::{audit_dependencies, DependencyAuditSection, VersionConflict, VersionUsage};
 pub use upgrades::{audit_upgrades, DeprecatedPackage, UpgradeAuditSection};
-
-// Future sections will be added here:
-// - Story 10.6: Version consistency section
+pub use version_consistency::{
+    audit_version_consistency, VersionConsistencyAuditSection, VersionInconsistency,
+};
