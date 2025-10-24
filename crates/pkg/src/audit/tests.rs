@@ -8,6 +8,9 @@
 //!
 //! **Why**: To ensure the audit manager foundation is robust and correctly
 //! initializes all dependencies under various conditions.
+//!
+//! This file also includes tests for report generation and formatting to verify
+//! that audit reports can be properly formatted as Markdown and JSON.
 
 #[cfg(test)]
 #[allow(clippy::expect_used)]
@@ -15,8 +18,18 @@
 #[allow(clippy::bool_assert_comparison)]
 #[allow(clippy::module_inception)]
 mod tests {
-    use crate::audit::AuditManager;
+    use crate::audit::issue::{AuditIssue, IssueCategory, IssueSeverity};
+    use crate::audit::sections::{
+        BreakingChangesAuditSection, CategorizationStats, DependencyAuditSection,
+        DependencyCategorization, DeprecatedPackage, UpgradeAuditSection,
+        VersionConsistencyAuditSection, VersionInconsistency, VersionUsage,
+    };
+    use crate::audit::{
+        format_json, format_json_compact, format_markdown, AuditManager, AuditReport,
+        AuditReportExt, AuditSections, FormatOptions, Verbosity,
+    };
     use crate::config::PackageToolsConfig;
+    use std::collections::HashMap;
     use std::path::PathBuf;
     use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
     use sublime_standard_tools::monorepo::MonorepoDetectorTrait;
@@ -97,6 +110,335 @@ mod tests {
 
     #[tokio::test]
     async fn test_audit_manager_new_with_custom_config() {
+        let (_temp_dir, workspace_path) = setup_test_workspace().await;
+        let mut config = PackageToolsConfig::default();
+        config.audit.enabled = true;
+
+        let result = AuditManager::new(workspace_path.clone(), config).await;
+        assert!(result.is_ok(), "AuditManager::new should succeed with custom config");
+
+        let manager = result.expect("Manager should be initialized");
+        assert!(manager.config().audit.enabled, "Audit should be enabled");
+    }
+
+    /// Helper to create a test audit report
+    fn create_test_audit_report() -> AuditReport {
+        let sections = AuditSections {
+            upgrades: UpgradeAuditSection {
+                total_upgrades: 10,
+                major_upgrades: 2,
+                minor_upgrades: 5,
+                patch_upgrades: 3,
+                deprecated_packages: vec![DeprecatedPackage {
+                    name: "old-lib".to_string(),
+                    current_version: "1.2.3".to_string(),
+                    deprecation_message: "This package is no longer maintained".to_string(),
+                    alternative: Some("new-lib".to_string()),
+                }],
+                upgrades_by_package: HashMap::new(),
+                issues: vec![AuditIssue {
+                    severity: IssueSeverity::Warning,
+                    category: IssueCategory::Upgrades,
+                    title: "Major upgrade available".to_string(),
+                    description: "Package foo has a major upgrade available".to_string(),
+                    affected_packages: vec!["foo".to_string()],
+                    suggestion: Some("Review breaking changes before upgrading".to_string()),
+                    metadata: HashMap::new(),
+                }],
+            },
+            dependencies: DependencyAuditSection {
+                circular_dependencies: vec![],
+                version_conflicts: vec![],
+                issues: vec![AuditIssue {
+                    severity: IssueSeverity::Critical,
+                    category: IssueCategory::Dependencies,
+                    title: "Circular dependency detected".to_string(),
+                    description: "Found circular dependency in project".to_string(),
+                    affected_packages: vec!["pkg-a".to_string(), "pkg-b".to_string()],
+                    suggestion: Some("Refactor to remove circular dependency".to_string()),
+                    metadata: HashMap::new(),
+                }],
+            },
+            breaking_changes: BreakingChangesAuditSection {
+                packages_with_breaking: vec![],
+                total_breaking_changes: 0,
+                issues: vec![],
+            },
+            categorization: DependencyCategorization {
+                internal_packages: vec![],
+                external_packages: vec![],
+                workspace_links: vec![],
+                local_links: vec![],
+                stats: CategorizationStats {
+                    total_packages: 15,
+                    internal_packages: 5,
+                    external_packages: 50,
+                    workspace_links: 3,
+                    local_links: 2,
+                },
+            },
+            version_consistency: VersionConsistencyAuditSection {
+                inconsistencies: vec![VersionInconsistency {
+                    package_name: "lodash".to_string(),
+                    versions_used: vec![
+                        VersionUsage {
+                            package_name: "pkg-a".to_string(),
+                            version_spec: "^4.17.0".to_string(),
+                        },
+                        VersionUsage {
+                            package_name: "pkg-b".to_string(),
+                            version_spec: "^4.16.0".to_string(),
+                        },
+                    ],
+                    recommended_version: "^4.17.0".to_string(),
+                }],
+                issues: vec![],
+            },
+        };
+
+        AuditReport::new(PathBuf::from("/test/workspace"), false, sections, 78)
+    }
+
+    #[test]
+    fn test_format_markdown_default() {
+        let report = create_test_audit_report();
+        let markdown = format_markdown(&report, &FormatOptions::default());
+
+        // Check header
+        assert!(markdown.contains("# Audit Report"));
+        assert!(markdown.contains("Health Score"));
+        assert!(markdown.contains("78/100"));
+
+        // Check summary section
+        assert!(markdown.contains("## Summary"));
+        assert!(markdown.contains("Packages Analyzed"));
+        assert!(markdown.contains("15"));
+
+        // Check upgrades section
+        assert!(markdown.contains("## Upgrades Available"));
+        assert!(markdown.contains("Total Upgrades"));
+        assert!(markdown.contains("10"));
+
+        // Check deprecated packages
+        assert!(markdown.contains("Deprecated Packages"));
+        assert!(markdown.contains("old-lib"));
+        assert!(markdown.contains("new-lib"));
+    }
+
+    #[test]
+    fn test_format_markdown_minimal_verbosity() {
+        let report = create_test_audit_report();
+        let options = FormatOptions::default().with_verbosity(Verbosity::Minimal);
+        let markdown = format_markdown(&report, &options);
+
+        // Should contain summary
+        assert!(markdown.contains("## Summary"));
+
+        // Should NOT contain detailed sections
+        assert!(!markdown.contains("## Upgrades Available"));
+        assert!(!markdown.contains("## Dependency Analysis"));
+    }
+
+    #[test]
+    fn test_format_markdown_detailed_verbosity() {
+        let report = create_test_audit_report();
+        let options = FormatOptions::default().with_verbosity(Verbosity::Detailed);
+        let markdown = format_markdown(&report, &options);
+
+        // Should contain all sections
+        assert!(markdown.contains("## Summary"));
+        assert!(markdown.contains("## Upgrades Available"));
+        assert!(markdown.contains("## Dependency Categorization"));
+        assert!(markdown.contains("## Version Consistency"));
+    }
+
+    #[test]
+    fn test_format_markdown_with_issues() {
+        let report = create_test_audit_report();
+        let markdown = format_markdown(&report, &FormatOptions::default());
+
+        // Should contain issues section
+        assert!(markdown.contains("## Issues"));
+        assert!(markdown.contains("Critical Issues"));
+        assert!(markdown.contains("Warnings"));
+    }
+
+    #[test]
+    fn test_format_markdown_with_suggestions() {
+        let report = create_test_audit_report();
+        let options = FormatOptions::default().with_suggestions(true);
+        let markdown = format_markdown(&report, &options);
+
+        // Should contain suggested actions
+        assert!(markdown.contains("Suggested Actions"));
+    }
+
+    #[test]
+    fn test_format_markdown_without_suggestions() {
+        let report = create_test_audit_report();
+        let options = FormatOptions::default().with_suggestions(false);
+        let markdown = format_markdown(&report, &options);
+
+        // Should NOT contain suggested actions
+        assert!(!markdown.contains("Suggested Actions"));
+    }
+
+    #[test]
+    fn test_format_json_valid() {
+        let report = create_test_audit_report();
+        let json_result = format_json(&report);
+
+        assert!(json_result.is_ok(), "JSON formatting should succeed");
+
+        let json = json_result.expect("JSON should be valid");
+
+        // Parse to verify it's valid JSON
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("Should parse as JSON");
+
+        // Check key fields exist
+        assert!(parsed.get("audited_at").is_some());
+        assert!(parsed.get("workspace_root").is_some());
+        assert!(parsed.get("health_score").is_some());
+        assert!(parsed.get("sections").is_some());
+        assert!(parsed.get("summary").is_some());
+
+        // Verify health score value
+        assert_eq!(parsed["health_score"], 78);
+    }
+
+    #[test]
+    fn test_format_json_compact() {
+        let report = create_test_audit_report();
+        let json_result = format_json_compact(&report);
+
+        assert!(json_result.is_ok(), "Compact JSON formatting should succeed");
+
+        let json = json_result.expect("JSON should be valid");
+
+        // Compact JSON should be single line (no pretty printing)
+        let line_count = json.lines().count();
+        assert_eq!(line_count, 1, "Compact JSON should be single line");
+
+        // Should still be valid JSON
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("Should parse as JSON");
+        assert_eq!(parsed["health_score"], 78);
+    }
+
+    #[test]
+    fn test_audit_report_ext_to_markdown() {
+        let report = create_test_audit_report();
+        let markdown = report.to_markdown();
+
+        assert!(markdown.contains("# Audit Report"));
+        assert!(markdown.contains("Health Score"));
+    }
+
+    #[test]
+    fn test_audit_report_ext_to_markdown_with_options() {
+        let report = create_test_audit_report();
+        let options = FormatOptions::default().with_verbosity(Verbosity::Minimal);
+        let markdown = report.to_markdown_with_options(&options);
+
+        assert!(markdown.contains("# Audit Report"));
+        assert!(!markdown.contains("## Upgrades Available"));
+    }
+
+    #[test]
+    fn test_audit_report_ext_to_json() {
+        let report = create_test_audit_report();
+        let json_result = report.to_json();
+
+        assert!(json_result.is_ok());
+        let json = json_result.expect("JSON should be valid");
+        assert!(json.contains("health_score"));
+    }
+
+    #[test]
+    fn test_audit_report_ext_to_json_compact() {
+        let report = create_test_audit_report();
+        let json_result = report.to_json_compact();
+
+        assert!(json_result.is_ok());
+        let json = json_result.expect("JSON should be valid");
+
+        // Verify it's compact
+        let line_count = json.lines().count();
+        assert_eq!(line_count, 1);
+    }
+
+    #[test]
+    fn test_format_options_builder() {
+        let options = FormatOptions::new()
+            .with_colors(true)
+            .with_verbosity(Verbosity::Detailed)
+            .with_suggestions(false)
+            .with_metadata(true);
+
+        assert!(options.colors);
+        assert_eq!(options.verbosity, Verbosity::Detailed);
+        assert!(!options.include_suggestions);
+        assert!(options.include_metadata);
+    }
+
+    #[test]
+    fn test_format_options_default() {
+        let options = FormatOptions::default();
+
+        assert!(!options.colors);
+        assert_eq!(options.verbosity, Verbosity::Normal);
+        assert!(options.include_suggestions);
+        assert!(!options.include_metadata);
+    }
+
+    #[test]
+    fn test_verbosity_equality() {
+        assert_eq!(Verbosity::Minimal, Verbosity::Minimal);
+        assert_eq!(Verbosity::Normal, Verbosity::Normal);
+        assert_eq!(Verbosity::Detailed, Verbosity::Detailed);
+
+        assert_ne!(Verbosity::Minimal, Verbosity::Normal);
+        assert_ne!(Verbosity::Normal, Verbosity::Detailed);
+        assert_ne!(Verbosity::Minimal, Verbosity::Detailed);
+    }
+
+    #[test]
+    fn test_audit_report_passed_status() {
+        let report = create_test_audit_report();
+
+        // Report has critical issues, so should not pass
+        assert!(!report.passed());
+    }
+
+    #[test]
+    fn test_audit_report_critical_issues() {
+        let report = create_test_audit_report();
+        let critical = report.critical_issues();
+
+        assert_eq!(critical.len(), 1);
+        assert_eq!(critical[0].severity, IssueSeverity::Critical);
+        assert_eq!(critical[0].title, "Circular dependency detected");
+    }
+
+    #[test]
+    fn test_audit_report_warnings() {
+        let report = create_test_audit_report();
+        let warnings = report.warnings();
+
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].severity, IssueSeverity::Warning);
+        assert_eq!(warnings[0].title, "Major upgrade available");
+    }
+
+    #[test]
+    fn test_audit_report_total_issues() {
+        let report = create_test_audit_report();
+
+        // 1 critical + 1 warning = 2 total
+        assert_eq!(report.total_issues(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_formatter_integration_with_real_manager() {
         let (_temp_dir, workspace_path) = setup_test_workspace().await;
 
         let mut config = PackageToolsConfig::default();
