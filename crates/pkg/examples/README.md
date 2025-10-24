@@ -62,6 +62,37 @@ cp examples/monorepo-config.toml package-tools.toml
 cargo run --example load_config
 ```
 
+### Audit Report Formatting
+
+[`audit_report_formatting.rs`](./audit_report_formatting.rs) - Demonstrates how to format audit reports in multiple formats (Markdown, JSON) with different verbosity levels and formatting options.
+
+**Features demonstrated:**
+- Creating audit reports with sample data
+- Formatting as Markdown (default, minimal, detailed)
+- Exporting as JSON (pretty and compact)
+- Querying report data (issues, health score, status)
+- Using custom formatting options
+- Filtering issues by severity
+
+**Run the example:**
+
+```bash
+cargo run --example audit_report_formatting
+```
+
+**Output examples:**
+
+```bash
+# Default markdown format
+cargo run --example audit_report_formatting | grep -A 50 "Default Markdown"
+
+# JSON export
+cargo run --example audit_report_formatting | grep -A 20 "JSON Format"
+
+# Report queries
+cargo run --example audit_report_formatting | grep -A 10 "Report Query"
+```
+
 ### Environment Variable Overrides
 
 [`env_override.rs`](./env_override.rs) - Shows how to override configuration settings using environment variables.
@@ -98,7 +129,11 @@ export SUBLIME_PKG_UPGRADE_REGISTRY_TIMEOUT_SECS="60"
 
 # Changelog settings
 export SUBLIME_PKG_CHANGELOG_FORMAT="conventional"
-export SUBLIME_PKG_CHANGELOG_REPOSITORY_URL="https://github.com/org/repo"
+SUBLIME_PKG_CHANGELOG_REPOSITORY_URL="https://github.com/org/repo"
+
+# Audit settings
+export SUBLIME_PKG_AUDIT_MIN_SEVERITY="warning"
+export SUBLIME_PKG_AUDIT_SECTIONS_UPGRADES="true"
 ```
 
 ## Quick Start
@@ -163,6 +198,7 @@ All examples demonstrate these configuration sections:
 - **Changelog** - Changelog generation format and behavior
 - **Git** - Git commit message templates
 - **Audit** - Dependency audits and health checks
+- **Report Formatting** - How to generate and format audit reports
 
 ## Testing Your Configuration
 
@@ -266,6 +302,29 @@ export SUBLIME_PKG_VERSION_STRATEGY="unified"
 export PKG_TOOLS_VERSION_STRATEGY="unified"  # Wrong prefix
 export sublime_pkg_version_strategy="unified"  # Not uppercase
 export SUBLIMEPKG_VERSION_STRATEGY="unified"  # Missing underscore
+```
+
+### Report Formatting
+
+For audit reports, you can customize the output format:
+
+```rust
+use sublime_pkg_tools::audit::{FormatOptions, Verbosity, AuditReportExt};
+
+// Minimal output (summary only)
+let options = FormatOptions::default()
+    .with_verbosity(Verbosity::Minimal);
+let markdown = report.to_markdown_with_options(&options);
+
+// Detailed output with metadata
+let options = FormatOptions::default()
+    .with_verbosity(Verbosity::Detailed)
+    .with_metadata(true);
+let markdown = report.to_markdown_with_options(&options);
+
+// JSON export
+let json = report.to_json()?;
+std::fs::write("audit-report.json", json)?;
 ```
 
 ### Validation Errors

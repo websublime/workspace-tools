@@ -48,17 +48,19 @@
 //!
 //! This module contains:
 //! - `manager`: The main `AuditManager` for orchestrating audit operations
-//!
-//! Additional components will be added in subsequent stories:
 //! - `sections`: Individual audit section implementations (upgrades, dependencies, etc.)
 //! - `issue`: Issue types and severity levels
-//! - `report`: Report formatting and export capabilities
+//! - `report`: Report structures and aggregation
+//! - `formatter`: Report formatting and export capabilities (Markdown, JSON)
+//! - `health_score`: Health score calculation utilities
 
 #![allow(clippy::todo)]
 
+mod formatter;
 mod health_score;
 mod issue;
 mod manager;
+mod report;
 mod sections;
 
 #[cfg(test)]
@@ -84,4 +86,12 @@ pub use sections::{
     DependencyCategorization, DeprecatedPackage, ExternalPackage, InternalPackage, LocalLink,
     LocalLinkType, PackageBreakingChanges, UpgradeAuditSection, VersionConflict,
     VersionConsistencyAuditSection, VersionInconsistency, VersionUsage, WorkspaceLink,
+};
+
+// Report types
+pub use report::{AuditReport, AuditSections, AuditSummary};
+
+// Formatter types and functions
+pub use formatter::{
+    format_json, format_json_compact, format_markdown, AuditReportExt, FormatOptions, Verbosity,
 };
