@@ -839,6 +839,34 @@ for file in files {
 - `ReferenceError`: Failed to resolve references
 - `DiffError`: Failed to perform diff operation
 
+#### `Repo::get_files_changed_in_commit`
+
+Gets files changed in a specific commit.
+
+```rust
+pub fn get_files_changed_in_commit(&self, commit_hash: &str) -> Result<Vec<GitChangedFile>, RepoError>
+```
+
+**Parameters:**
+- `commit_hash`: The commit hash to analyze
+
+**Returns:**
+- `Result<Vec<GitChangedFile>, RepoError>`: Vector of changed files with status or an error
+
+**Example:**
+```rust
+let files = repo.get_files_changed_in_commit("abc123")?;
+for file in files {
+    println!("File: {}, Status: {:?}", file.path, file.status);
+}
+```
+
+**Possible errors:**
+- `ReferenceError`: Failed to resolve commit reference
+- `CommitError`: Failed to access commit
+- `TreeError`: Failed to access tree
+- `DiffError`: Failed to perform diff operation
+
 ### Package-specific Changes
 
 #### `Repo::get_all_files_changed_since_branch`
