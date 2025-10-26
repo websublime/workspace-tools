@@ -412,7 +412,7 @@ Implement the main CLI structure using clap, including all command definitions, 
 **So that** I can start using changeset-based versioning
 
 **Description**:
-Implement the `wnt init` command that creates configuration, detects workspace structure, and sets up the .wnt directory.
+Implement the `wnt init` command that creates configuration, detects workspace structure, and sets up the changesets directory structure.
 
 **Tasks**:
 1. Create `src/commands/init.rs`
@@ -436,27 +436,31 @@ Implement the `wnt init` command that creates configuration, detects workspace s
    - **Effort**: High
 
 4. Implement configuration generation
-   - Generate wnt.toml with defaults
+   - Generate repo.config.toml with defaults
    - Apply user selections
    - Validate generated config
    - **Effort**: Medium
 
-5. Implement .wnt directory creation
-   - Create .wnt directory
-   - Create changesets subdirectory
-   - Create .gitkeep files
+5. Implement changesets directory creation
+   - Create .changesets directory (default, configurable)
+   - Create .changesets/history subdirectory for archived changesets
+   - Create .wnt-backups directory for upgrade backups
+   - Create .gitkeep files in history directory
    - Set proper permissions
    - **Effort**: Low
 
 6. Implement git integration setup
    - Check git repository exists
    - Optionally setup git hooks
-   - Add .wnt to .gitignore if needed
+   - Add .wnt-backups/ to .gitignore (backups are local only)
+   - Ensure .changesets/ is NOT in .gitignore (must be versioned)
+   - Add helpful comment explaining what should be versioned
    - **Effort**: Medium
 
 7. Create example changeset
-   - Generate example changeset file
-   - Add helpful comments
+   - Generate example changeset file in .changesets/
+   - Add helpful comments explaining the format
+   - Include note that changesets should be committed to git
    - **Effort**: Minimal
 
 8. Write comprehensive tests
@@ -468,12 +472,15 @@ Implement the `wnt init` command that creates configuration, detects workspace s
    - **Effort**: High
 
 **Acceptance Criteria**:
-- [ ] Command creates valid wnt.toml
+- [ ] Command creates valid repo.config.toml
 - [ ] Command detects workspace structure correctly
 - [ ] Interactive prompts have sensible defaults
-- [ ] .wnt directory created with correct structure
+- [ ] .changesets/ directory created with correct structure
+- [ ] .changesets/history/ subdirectory created
+- [ ] .wnt-backups/ directory created
+- [ ] .gitignore updated correctly (backups ignored, changesets versioned)
 - [ ] Git integration optional and working
-- [ ] Example changeset is helpful
+- [ ] Example changeset is helpful and explains git workflow
 - [ ] Force flag allows re-initialization
 - [ ] Error messages are clear
 - [ ] 100% test coverage
@@ -484,6 +491,33 @@ Implement the `wnt init` command that creates configuration, detects workspace s
 - [ ] All tests pass
 - [ ] Documentation complete
 - [ ] User guide updated
+
+**Important Notes**:
+
+**Git Versioning Strategy**:
+- ✅ **MUST version in git**: `.changesets/*.yaml` (active changesets)
+- ✅ **MUST version in git**: `.changesets/history/` (archived changesets for audit)
+- ✅ **MUST version in git**: `repo.config.toml` (project configuration)
+- ❌ **MUST NOT version**: `.wnt-backups/` (local upgrade backups only)
+
+**Why changesets must be versioned**:
+1. **Collaboration**: Team members need to see pending version bumps
+2. **CI/CD Integration**: Pipeline needs changesets to determine what to bump on merge
+3. **Release Planning**: All pending changes visible in PRs
+4. **Audit Trail**: History provides complete release timeline
+
+**Workflow**:
+```bash
+# Developer creates changeset
+wnt changeset add
+git add .changesets/feat-new-login.yaml
+git commit -m "feat: add login feature"
+git push
+
+# CI/CD on merge to main
+wnt bump --execute --git-tag --git-push
+# This consumes changesets, moves to history, creates release
+```
 
 **Dependencies**: Story 1.4, Story 3.1
 
@@ -511,7 +545,7 @@ Implement `wnt config show` to display current configuration in human-readable o
    - **Effort**: Low
 
 2. Implement configuration loading
-   - Load from wnt.toml
+   - Load from repo.config.toml
    - Apply environment variable overrides
    - Merge with defaults
    - **Effort**: Medium
@@ -920,7 +954,7 @@ Implement `wnt changeset add` with interactive prompts for package selection, bu
    - Generate changeset ID
    - Create changeset data structure
    - Validate changeset data
-   - Save to .wnt/changesets/
+   - Save to .changesets/ directory
    - **Effort**: Medium
 
 7. Implement output
@@ -1043,7 +1077,7 @@ Implement `wnt changeset list` to display all changesets in table or JSON format
    - **Effort**: Low
 
 2. Implement changeset loading
-   - Scan .wnt/changesets directory
+   - Scan .changesets/ directory
    - Parse changeset files
    - Handle corrupted files gracefully
    - **Effort**: Medium
@@ -1788,7 +1822,7 @@ Implement `wnt upgrade apply` to apply selected upgrades with backup.
 
 3. Implement backup creation
    - Backup all package.json files before changes
-   - Store in .wnt/backups/
+   - Store in .wnt-backups/ directory
    - Include timestamp
    - **Effort**: Medium
 

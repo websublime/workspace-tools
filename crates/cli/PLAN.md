@@ -418,8 +418,8 @@ pub async fn execute_init(args: InitArgs, output: &Output) -> Result<()> {
     // 1. Check if already initialized
     // 2. Prompt for configuration options
     // 3. Detect workspace structure
-    // 4. Create .wnt directory
-    // 5. Generate wnt.toml
+    // 4. Create .changesets directory and .wnt-backups directory
+    // 5. Generate repo.config.toml
     // 6. Initialize git integration
     // 7. Create example changeset
     // 8. Display success message
@@ -521,7 +521,7 @@ pub async fn execute_changeset_list(
     output: &Output,
 ) -> Result<()> {
     // 1. Load workspace configuration
-    // 2. Scan .wnt/changesets directory
+    // 2. Scan .changesets directory
     // 3. Apply filters (branch, package, etc.)
     // 4. Sort by specified criteria
     // 5. Format as table or JSON
@@ -1396,8 +1396,8 @@ async fn test_init_command_creates_config() {
 
     execute_init(args, &output).await.unwrap();
 
-    assert!(temp_dir.path().join(".wnt").exists());
-    assert!(temp_dir.path().join("wnt.toml").exists());
+    assert!(temp_dir.path().join(".changesets").exists());
+    assert!(temp_dir.path().join("repo.config.toml").exists());
 }
 ```
 
