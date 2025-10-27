@@ -30,7 +30,9 @@ O developer inicia o desenvolvimento de uma nova feature e cria uma nova branch,
 Feito isto cria o ficheiro de changeset na directoria definida no ficheiro de configuração. Mais uma vez pkg fornece api.
 
 ### C
-O developer vai trabalhando na feature branch a dada altura comita as alterações. O hook de git deve chamar o cli para competar o seguinte: o cli lê o ficheiro de changeset e verifica se o conteúdo está correcto, adiciona commit id á lista bem como o package que sofreu alteração. Isto é tudo automático sem necessidade de prompt do user usando as funcionalidades de changeset do crate pkg.
+O developer vai trabalhando na feature branch a dada altura comita as alterações. O hook de git deve chamar o cli para competar o seguinte: o cli executa `wnt changeset update` (sem ID) que automaticamente detecta a branch actual e procura por um ficheiro de changeset que corresponda ao nome da branch. Se encontrar, lê o ficheiro de changeset, verifica se o conteúdo está correcto, adiciona commit id á lista bem como o package que sofreu alteração. Se não encontrar nenhum changeset correspondente à branch, regista um erro a indicar que não foi encontrado nenhum changeset para a branch actual. Isto é tudo automático sem necessidade de prompt do user usando as funcionalidades de changeset do crate pkg.
+
+Nota: O comando também suporta um ID ou nome de branch explícito como parâmetro opcional: `wnt changeset update feature/my-branch`
 
 ### D
 O developer quer obter uma auditoria completa do projecto. Corre o comando audit e deve receber um prompt na qual lhe diz:

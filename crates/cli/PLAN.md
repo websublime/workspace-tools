@@ -279,15 +279,17 @@ impl CliError {
 - ✅ Error context includes helpful suggestions
 - ✅ 100% test coverage
 
-#### 1.3 Output Formatting Module
+#### 1.3 Output Formatting & Logging Module
 
 **Tasks:**
-- [ ] Create `OutputFormat` enum (Human, Json, Quiet)
+- [ ] Create `OutputFormat` enum (Human, Json, JsonCompact)
 - [ ] Implement table rendering with `comfy-table`
 - [ ] Create JSON serialization utilities
 - [ ] Implement progress bars with `indicatif`
 - [ ] Create color/style helpers with `console`
 - [ ] Add logging integration with `tracing`
+- [ ] Implement global options context (root, log-level, format, no-color)
+- [ ] Create logging macros/helpers for consistent logging across commands
 
 **Files:**
 ```
@@ -297,46 +299,434 @@ src/output/
 ├── json.rs                      # JSON output formatting
 ├── progress.rs                  # Progress indicators
 ├── style.rs                     # Color and styling
-├── logger.rs                    # Logging setup
+├── logger.rs                    # Logging setup and macros
+├── context.rs                   # Global options context
 └── tests.rs                     # Output tests
 ```
 
 **Key Components:**
 ```rust
 pub enum OutputFormat {
-    Human,
-    Json,
-    Quiet,
+    Human,      // Text with colors and tables
+    Json,       // Pretty-printed JSON
+    JsonCompact, // Compact JSON (for audit)
+    Quiet,      // Minimal output
 }
 
-pub struct TableBuilder { ... }
-pub struct ProgressBar { ... }
-pub struct Styled { ... }
+pub struct Output {
+    format: OutputFormat,
+    writer: Box<dyn Write>,
+}
 
 impl Output {
-    pub fn success(&self, message: &str) { ... }
-    pub fn error(&self, message: &str) { ... }
-    pub fn warning(&self, message: &str) { ... }
-    pub fn info(&self, message: &str) { ... }
-    pub fn table(&self, data: TableData) { ... }
-    pub fn json<T: Serialize>(&self, data: &T) { ... }
+    pub fn success(&self, message: &str) -> Result<()>;
+    pub fn error(&self, message: &str) -> Result<()>;
+    pub fn warning(&self, message: &str) -> Result<()>;
+    pub fn info(&self, message: &str) -> Result<()>;
+    pub fn table(&self, data: TableData) -> Result<()>;
+    
+    // Core JSON output method - ALL commands must use this
+    pub fn json<T: Serialize>(&self, data: &T) -> Result<()> {
+        match self.format {
+            OutputFormat::Json => {
+                let json = serde_json::to_string_pretty(data)
+                    .map_err(|e| CliError::Serialization(e.to_string()))?;
+                writeln!(self.writer, "{}", json)?;
+            }
+            OutputFormat::JsonCompact => {
+                let json = serde_json::to_string(data)
+                    .map_err(|e| CliError::Serialization(e.to_string()))?;
+                writeln!(self.writer, "{}", json)?;
+            }
+            _ => {
+                // In non-JSON modes, output methods handle formatting
+            }
+        }
+        Ok(())
+    }
+}
+
+// Standard JSON response structure for ALL commands
+#[derive(Serialize)]
+pub struct JsonResponse<T> {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl<T> JsonResponse<T> {
+    pub fn success(data: T) -> Self {
+        Self { success: true, data: Some(data), error: None }
+    }
+    
+    pub fn error(message: String) -> Self {
+        Self { success: false, data: None, error: Some(message) }
+    }
 }
 ```
+
+**JSON Output Implementation Rules:**
+
+1. **All commands MUST support `--format json`**:
+   - Check `output.format` at the start of command execution
+   - If JSON mode, collect data and output at the end via `output.json()`
+   - Never mix text output with JSON output
+
+2. **JSON Structure Consistency**:
+   - Always include `success: bool` field
+   - Include `data` field for successful operations
+   - Include `error` field for failures
+   - Use consistent field naming (camelCase)
+
+3. **Command-Specific JSON Output**:
+   ```rust
+   // Example for bump command
+   if matches!(output.format(), OutputFormat::Json | OutputFormat::JsonCompact) {
+       let response = BumpJsonResponse {
+           success: true,
+           strategy: strategy.to_string(),
+           packages: packages_data,
+           changesets: changesets_data,
+           summary: summary_data,
+       };
+       return output.json(&response);
+   }
+   ```
+
+4. **Error Handling in JSON Mode**:
+   ```rust
+   if let Err(e) = operation() {
+       if matches!(output.format(), OutputFormat::Json | OutputFormat::JsonCompact) {
+           let error_response = JsonResponse::<()>::error(e.to_string());
+           output.json(&error_response)?;
+           return Err(e);
+       }
+       // Regular error handling for text mode
+   }
+   ```
 
 **Quality Gates:**
 - ✅ All output modes work correctly
 - ✅ Tables render properly in all terminal sizes
-- ✅ JSON output is valid and complete
-- ✅ Progress bars update smoothly
+- ✅ JSON output is valid and parseable
+- ✅ JSON output is complete (no missing data)
+- ✅ No logs or text mixed with JSON output
+- ✅ Consistent JSON structure across all commands
+- ✅ Progress bars update smoothly (disabled in JSON mode)
 - ✅ Colors respect NO_COLOR environment variable
+- ✅ All 17+ commands listed in F-071 support JSON output
+- ✅ Logging works correctly at all levels
+- ✅ Logs go to stderr, output goes to stdout (separate streams)
+- ✅ Logging and format are completely independent
+- ✅ JSON output works with any log level (including silent)
+- ✅ No logs mixed with JSON output
 
-#### 1.4 CLI Framework
+#### 1.4 Logging Implementation
+
+**Critical Principle:** Logging and Output Format are **COMPLETELY INDEPENDENT**:
+- `--log-level` controls **stderr** (logs)
+- `--format` controls **stdout** (final output)
+- They work together but don't affect each other
+- You can have: JSON + no logs, JSON + debug logs, text + no logs, etc.
+
+**Global Context Structure:**
+
+```rust
+pub struct GlobalContext {
+    pub root: PathBuf,
+    pub log_level: LogLevel,    // Controls stderr (logs)
+    pub format: OutputFormat,    // Controls stdout (output)
+    pub no_color: bool,
+    pub config_path: Option<PathBuf>,
+}
+
+impl GlobalContext {
+    pub fn from_args(args: &Cli) -> Self {
+        Self {
+            root: args.root.clone().unwrap_or_else(|| env::current_dir().unwrap()),
+            log_level: args.log_level,
+            format: args.format,
+            no_color: args.no_color || env::var("NO_COLOR").is_ok(),
+            config_path: args.config.clone(),
+        }
+    }
+}
+```
+
+**Logging Macros (wrapping tracing):**
+
+```rust
+// src/output/logger.rs
+
+// Initialize logging based on global context
+// IMPORTANT: This only affects stderr - stdout is controlled by OutputFormat
+pub fn init_logging(level: LogLevel, no_color: bool) -> Result<()> {
+    use tracing_subscriber::FmtSubscriber;
+    
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(level.to_tracing_level())
+        .with_ansi(!no_color)
+        .with_writer(std::io::stderr) // ALWAYS stderr, never stdout
+        .finish();
+    
+    tracing::subscriber::set_global_default(subscriber)
+        .map_err(|e| CliError::Logging(e.to_string()))?;
+    
+    Ok(())
+}
+
+// Convenience macros for commands
+#[macro_export]
+macro_rules! log_info {
+    ($($arg:tt)*) => {
+        tracing::info!($($arg)*)
+    };
+}
+
+#[macro_export]
+macro_rules! log_debug {
+    ($($arg:tt)*) => {
+        tracing::debug!($($arg)*)
+    };
+}
+
+#[macro_export]
+macro_rules! log_trace {
+    ($($arg:tt)*) => {
+        tracing::trace!($($arg)*)
+    };
+}
+```
+
+**Command Implementation Pattern with Logging:**
+
+```rust
+pub async fn execute_bump(
+    args: BumpArgs,
+    ctx: &GlobalContext,
+    output: &Output,
+) -> Result<()> {
+    log_info!("Starting version bump");
+    log_debug!("Working directory: {:?}", ctx.root);
+    
+    // 1. Load configuration
+    log_info!("Loading configuration...");
+    log_debug!("Config path: {:?}", ctx.config_path);
+    let config = PackageToolsConfig::load(&ctx.root).await?;
+    log_debug!("Strategy: {:?}", config.version.strategy);
+    
+    // 2. Load changesets
+    log_info!("Loading active changesets...");
+    let changesets = changeset_manager.list_pending().await?;
+    log_info!("Found {} active changesets", changesets.len());
+    log_trace!("Changesets: {:?}", changesets);
+    
+    if changesets.is_empty() {
+        log_warn!("No active changesets found");
+        output.warning("No active changesets. No version bumps will be performed.")?;
+        return Ok(());
+    }
+    
+    // 3. Resolve versions
+    log_info!("Resolving versions...");
+    for cs in &changesets {
+        log_debug!("Processing changeset: {}", cs.branch);
+        log_trace!("Changeset packages: {:?}", cs.packages);
+    }
+    
+    let resolution = version_resolver.resolve_versions(&changesets).await?;
+    log_info!("Resolved {} package updates", resolution.updates.len());
+    
+    for update in &resolution.updates {
+        log_debug!(
+            "Package {}: {} -> {}",
+            update.name,
+            update.current_version,
+            update.next_version
+        );
+    }
+    
+    // 4. Output results
+    // Note: Format is independent of logging!
+    // Logs went to stderr, output goes to stdout
+    if matches!(ctx.format, OutputFormat::Json | OutputFormat::JsonCompact) {
+        log_trace!("Preparing JSON output");
+        let response = prepare_json_response(&resolution);
+        return output.json(&response); // Goes to stdout, logs already in stderr
+    }
+    
+    log_trace!("Preparing text output");
+    display_bump_preview(&resolution, output)?; // Goes to stdout
+    
+    log_info!("Version bump completed successfully");
+    Ok(())
+}
+```
+
+**Examples of Independence:**
+
+```rust
+// Example 1: JSON output with NO logs
+// CLI: wnt --format json --log-level silent bump --dry-run
+// stdout: {"success": true, ...}
+// stderr: (nothing)
+
+// Example 2: JSON output WITH debug logs
+// CLI: wnt --format json --log-level debug bump --dry-run
+// stdout: {"success": true, ...}
+// stderr: DEBUG: Loading config...
+//         DEBUG: Found 2 changesets...
+
+// Example 3: Text output with NO logs
+// CLI: wnt --format text --log-level silent bump --dry-run
+// stdout: Version Bump Preview...
+// stderr: (nothing)
+
+// The command doesn't care - it logs AND outputs independently!
+```
+
+**Logging Guidelines for Each Command:**
+
+1. **Info Level Logs** (Default user experience):
+   - Starting operation
+   - Major steps completion
+   - Counts and summaries
+   - Final result
+   ```rust
+   log_info!("Loading changesets...");
+   log_info!("Found {} changesets", count);
+   log_info!("Updating package.json files...");
+   log_info!("Done!");
+   ```
+
+2. **Debug Level Logs** (Troubleshooting):
+   - Configuration values
+   - File paths
+   - Intermediate calculations
+   - Decision points
+   ```rust
+   log_debug!("Config path: {:?}", path);
+   log_debug!("Strategy: independent");
+   log_debug!("Calculated version: {}", version);
+   ```
+
+3. **Trace Level Logs** (Deep debugging):
+   - Function entry/exit
+   - Loop iterations
+   - Data structure contents
+   - API calls and responses
+   ```rust
+   log_trace!("Entering function");
+   log_trace!("Processing package: {:?}", pkg);
+   log_trace!("Registry response: {:?}", response);
+   ```
+
+4. **Warning Logs** (Non-critical issues):
+   ```rust
+   log_warn!("Package '{}' has major version update", pkg);
+   log_warn!("No changeset found for current branch");
+   ```
+
+5. **Error Logs** (Critical issues):
+   ```rust
+   log_error!("Failed to read package.json: {}", err);
+   log_error!("Git operation failed: {}", err);
+   ```
+
+**Example: Full Command with Proper Logging:**
+
+```rust
+pub async fn execute_upgrade_check(
+    args: UpgradeCheckArgs,
+    ctx: &GlobalContext,
+    output: &Output,
+) -> Result<()> {
+    log_info!("Checking for dependency upgrades");
+    
+    // Load config
+    log_debug!("Loading configuration from {:?}", ctx.root);
+    let config = load_config(&ctx.root).await?;
+    log_trace!("Config loaded: {:?}", config);
+    
+    // Scan packages
+    log_info!("Scanning workspace packages...");
+    let packages = scan_packages(&ctx.root).await?;
+    log_info!("Found {} packages to check", packages.len());
+    
+    for pkg in &packages {
+        log_debug!("Checking package: {}", pkg.name);
+        log_trace!("Package path: {:?}", pkg.path);
+    }
+    
+    // Query registry
+    log_info!("Querying npm registry for updates...");
+    let mut upgrades = Vec::new();
+    
+    for pkg in &packages {
+        log_debug!("Querying dependencies for {}", pkg.name);
+        
+        for (dep_name, current_version) in &pkg.dependencies {
+            log_trace!("Checking {}: {}", dep_name, current_version);
+            
+            match registry.get_latest(dep_name).await {
+                Ok(latest) => {
+                    log_trace!("Latest version of {}: {}", dep_name, latest);
+                    
+                    if latest > current_version {
+                        log_debug!("Update available: {} {} -> {}", 
+                            dep_name, current_version, latest);
+                        upgrades.push(Upgrade { ... });
+                    }
+                }
+                Err(e) => {
+                    log_warn!("Failed to check {}: {}", dep_name, e);
+                }
+            }
+        }
+    }
+    
+    log_info!("Found {} available upgrades", upgrades.len());
+    
+    // Output
+    if matches!(ctx.format, OutputFormat::Json | OutputFormat::JsonCompact) {
+        log_trace!("Generating JSON output");
+        let json = UpgradeCheckResponse {
+            success: true,
+            upgrades,
+            summary: Summary { ... },
+        };
+        return output.json(&json);
+    }
+    
+    log_trace!("Generating text output");
+    display_upgrades_table(&upgrades, output)?;
+    
+    log_info!("Upgrade check completed");
+    Ok(())
+}
+```
+
+**Quality Gates:**
+- ✅ Every command implements proper logging at all levels
+- ✅ Logs go to stderr (never stdout)
+- ✅ Output goes to stdout (never stderr)
+- ✅ JSON output works with any log level (including silent)
+- ✅ Logging and format are completely independent
+- ✅ JSON output is never mixed with logs
+- ✅ Log messages are clear and contextual
+- ✅ Consistent logging patterns across all commands
+
+#### 1.5 CLI Framework
 
 **Tasks:**
 - [ ] Define main `Cli` struct with clap
 - [ ] Create `Commands` enum for all subcommands
-- [ ] Implement global arguments (verbose, format, color, etc.)
-- [ ] Create command dispatcher
+- [ ] Implement global arguments (root, log-level, format, no-color, config)
+- [ ] Create GlobalContext from CLI args
+- [ ] Initialize logging based on global options
+- [ ] Create command dispatcher that passes GlobalContext to all commands
 - [ ] Add version and help commands
 - [ ] Implement shell completion generation
 
@@ -383,8 +773,31 @@ pub enum Commands {
     Upgrade(UpgradeArgs),
     Audit(AuditArgs),
     Changes(ChangesArgs),
-    Version,
+    Version(VersionArgs),
+    #[command(subcommand)]
     Help { command: Option<String> },
+}
+
+pub enum LogLevel {
+    Silent,
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl LogLevel {
+    pub fn to_tracing_level(&self) -> tracing::Level {
+        match self {
+            LogLevel::Silent => tracing::Level::ERROR, // Will be filtered out
+            LogLevel::Error => tracing::Level::ERROR,
+            LogLevel::Warn => tracing::Level::WARN,
+            LogLevel::Info => tracing::Level::INFO,
+            LogLevel::Debug => tracing::Level::DEBUG,
+            LogLevel::Trace => tracing::Level::TRACE,
+        }
+    }
 }
 ```
 
@@ -394,7 +807,98 @@ pub enum Commands {
 - ✅ Shell completions generate for bash, zsh, fish
 - ✅ Global arguments work across all commands
 
-#### 1.5 Configuration Commands (`init`, `config`)
+#### 1.6 Main Entry Point with Global Options
+
+**Key Implementation Points:**
+1. Parse CLI args
+2. Create GlobalContext (contains all global options)
+3. Initialize logging (affects stderr only)
+4. Create Output handler (affects stdout only)
+5. Logging and Output work independently
+
+**Implementation:**
+
+```rust
+// src/main.rs
+
+async fn main() -> Result<()> {
+    // Parse CLI arguments
+    let cli = Cli::parse();
+    
+    // Create global context from args
+    let ctx = GlobalContext::from_args(&cli);
+    
+    // Initialize logging (BEFORE any operations)
+    // This ONLY affects stderr - stdout is controlled by Output
+    init_logging(ctx.log_level, ctx.no_color)?;
+    
+    log_debug!("CLI initialized with context: {:?}", ctx);
+    log_trace!("Command: {:?}", cli.command);
+    
+    // Change to root directory if specified
+    if let Some(root) = &ctx.root {
+        log_debug!("Changing directory to: {:?}", root);
+        std::env::set_current_dir(root)
+            .map_err(|e| CliError::Io(format!("Failed to change directory: {}", e)))?;
+    }
+    
+    // Create output handler
+    // This ONLY affects stdout - stderr is controlled by logging
+    let output = Output::new(ctx.format, ctx.no_color);
+    
+    // Now both systems are ready and independent:
+    // - Logging writes to stderr based on ctx.log_level
+    // - Output writes to stdout based on ctx.format
+    // They never interfere with each other!
+    
+    // Dispatch to command (passing context)
+    let result = match cli.command {
+        Commands::Init(args) => execute_init(args, &ctx, &output).await,
+        Commands::Config(args) => execute_config(args, &ctx, &output).await,
+        Commands::Changeset(args) => execute_changeset(args, &ctx, &output).await,
+        Commands::Bump(args) => execute_bump(args, &ctx, &output).await,
+        Commands::Upgrade(args) => execute_upgrade(args, &ctx, &output).await,
+        Commands::Audit(args) => execute_audit(args, &ctx, &output).await,
+        Commands::Changes(args) => execute_changes(args, &ctx, &output).await,
+        Commands::Version(args) => execute_version(args, &ctx, &output).await,
+        Commands::Help { command } => execute_help(command, &output),
+    };
+    
+    // Handle result
+    match result {
+        Ok(()) => {
+            log_info!("Command completed successfully");
+            Ok(())
+        }
+        Err(e) => {
+            log_error!("Command failed: {}", e);
+            
+            // Output error in appropriate format (to stdout)
+            // Note: Error logs already went to stderr via log_error! above
+            if matches!(ctx.format, OutputFormat::Json | OutputFormat::JsonCompact) {
+                let error_response = JsonResponse::<()>::error(e.to_string());
+                output.json(&error_response)?; // stdout
+            } else {
+                output.error(&e.to_string())?; // stdout
+            }
+            
+            Err(e)
+        }
+    }
+}
+```
+
+**Quality Gates:**
+- ✅ Global context properly initialized
+- ✅ Logging initialized before any operations (stderr only)
+- ✅ Output handler created (stdout only)
+- ✅ Logging and output are completely independent
+- ✅ Working directory changed before command execution
+- ✅ All commands receive GlobalContext
+- ✅ Errors handled consistently across formats
+- ✅ Stream separation maintained (stderr for logs, stdout for output)
+
+#### 1.7 Configuration Commands (`init`, `config`)
 
 **Tasks:**
 - [ ] Implement `wnt init` command
@@ -414,7 +918,28 @@ src/commands/
 
 **Command Implementations:**
 ```rust
-pub async fn execute_init(args: InitArgs, output: &Output) -> Result<()> {
+pub async fn execute_init(
+    args: InitArgs,
+    ctx: &GlobalContext,
+    output: &Output,
+) -> Result<()> {
+    log_info!("Initializing project configuration");
+    log_debug!("Working directory: {:?}", ctx.root);
+    
+    // Detect project type
+    log_info!("Detecting project type...");
+    let project_type = detect_project_type(&ctx.root).await?;
+    log_info!("Detected: {:?}", project_type);
+    
+    // Interactive or non-interactive
+    if args.non_interactive {
+        log_debug!("Non-interactive mode");
+    } else {
+        log_debug!("Interactive mode - prompting user");
+    }</parameter>
+
+<old_text line=474>
+pub async fn execute_config(args: ConfigArgs, output: &Output) -> Result<()> {
     // 1. Check if already initialized
     // 2. Prompt for configuration options
     // 3. Detect workspace structure
@@ -552,13 +1077,19 @@ pub async fn execute_changeset_list(
 #### 2.4 Changeset Update Command
 
 **Tasks:**
-- [ ] Implement `wnt changeset update` command
+- [ ] Implement `wnt changeset update [id]` command with optional ID parameter
+- [ ] Detect current branch when ID not provided
+- [ ] Search for changeset matching branch name
+- [ ] Log clear error when no changeset found for branch
 - [ ] Allow adding commits
 - [ ] Allow modifying bump types
 - [ ] Allow updating summary
 - [ ] Track modification history
 
 **Quality Gates:**
+- ✅ Works without ID (auto-detects branch)
+- ✅ Works with explicit ID or branch name
+- ✅ Clear error message when no changeset found
 - ✅ Updates preserve changeset integrity
 - ✅ Modification history is tracked
 - ✅ Validation prevents invalid states
@@ -617,6 +1148,83 @@ pub async fn execute_changeset_list(
 ### Objective
 Implement version bumping, dependency upgrades, and release workflows.
 
+### Version Bump Behavior Clarification
+
+**Critical Implementation Guidance:**
+
+The version bump behavior varies based on project type and versioning strategy. This must be correctly implemented:
+
+#### 1. Single Repository (Single Package)
+- Only one package exists in the project
+- Version bump applies to that single package
+- Changesets specify which commits are included in the version bump
+- **Implementation**: Check if `packages.len() == 1` in workspace
+- **Result**: One version, one tag (e.g., `v1.2.0` or `my-package@1.2.0`)
+
+#### 2. Monorepo with Independent Strategy (`VersioningStrategy::Independent`)
+- Each package maintains its own independent version
+- **Only packages listed in `changeset.packages: Vec<String>` receive version bumps**
+- Packages not in any active changeset remain at their current version
+- Dependency propagation: If package A depends on workspace package B, and B gets bumped:
+  - A's dependency reference is updated in package.json
+  - A's version only bumps if A is also in a changeset OR if configured to auto-propagate
+- **Implementation**: 
+  - Filter packages by `changeset.packages`
+  - Use `VersionResolver::resolve_versions(&changeset)` which respects the packages list
+  - Only create tags for bumped packages
+- **Result**: Multiple versions, one tag per bumped package (e.g., `@org/pkg-a@1.2.0`, `@org/pkg-b@2.0.0`)
+
+#### 3. Monorepo with Unified Strategy (`VersioningStrategy::Unified`)
+- All workspace packages share the same version number
+- When ANY package listed in changesets requires a bump, ALL workspace packages receive the same version bump
+- The highest bump type from all changesets is applied (major > minor > patch)
+- All packages move to the new unified version, regardless of whether they had code changes
+- **Implementation**:
+  - Collect all changesets
+  - Determine highest bump type
+  - Apply same version to ALL workspace packages
+  - Create one tag per package or one monorepo tag (configurable)
+- **Result**: One unified version applied to all packages
+
+#### Key API Usage
+
+```rust
+// Load configuration to get strategy
+let config = PackageToolsConfig::load(&workspace_root).await?;
+let strategy = config.version.strategy; // Independent or Unified
+
+// Load changesets - these contain packages: Vec<String>
+let changesets = changeset_manager.list_pending().await?;
+
+// The VersionResolver respects the changeset.packages field
+let resolver = VersionResolver::new(workspace_root.clone(), config).await?;
+
+for changeset in changesets {
+    // changeset.packages contains the affected packages
+    // resolve_versions() will only bump these packages (Independent)
+    // or all packages if strategy is Unified
+    let resolution = resolver.resolve_versions(&changeset).await?;
+    
+    // resolution.updates contains PackageUpdate for each affected package
+    for update in &resolution.updates {
+        // update.name, update.current_version, update.next_version
+        // Only packages that will actually bump are in this list
+    }
+}
+```
+
+#### Testing Requirements
+
+Tests MUST cover:
+- ✅ Single repo bumps only package
+- ✅ Independent strategy bumps only changeset packages
+- ✅ Unified strategy bumps all packages
+- ✅ Packages not in changeset remain unchanged (Independent)
+- ✅ Dependency propagation updates references
+- ✅ Highest bump type wins (Unified)
+
+---
+
 ### Deliverables
 
 #### 3.1 Bump Command
@@ -644,19 +1252,258 @@ src/commands/
 **Implementation:**
 ```rust
 pub async fn execute_bump(args: BumpArgs, output: &Output) -> Result<()> {
-    // 1. Load configuration and changesets
-    // 2. Calculate version bumps
-    // 3. Resolve dependency versions
-    // 4. Validate version consistency
-    // 5. Preview mode: display changes
-    // 6. Execute mode:
-    //    a. Update package.json files
-    //    b. Update changelog files
-    //    c. Archive changesets
-    //    d. Git commit (if --git-commit)
-    //    e. Git tag (if --git-tag)
-    //    f. Git push (if --git-push)
-    // 7. Display success report
+    // 1. Load configuration
+    let config = PackageToolsConfig::load(&args.workspace_root).await?;
+    let strategy = config.version.strategy;
+    
+    // 2. Load all active changesets
+    let changeset_manager = ChangesetManager::new(
+        args.workspace_root.clone(),
+        fs.clone(),
+        config.clone(),
+    ).await?;
+    let changesets = changeset_manager.list_pending().await?;
+    
+    if changesets.is_empty() {
+        output.warning("No active changesets found. No version bumps will be performed.")?;
+        return Ok(());
+    }
+    
+    // 3. Initialize version resolver
+    let version_resolver = VersionResolver::new(
+        args.workspace_root.clone(),
+        config.clone(),
+    ).await?;
+    
+    // 4. Resolve versions for all changesets
+    let mut all_updates = Vec::new();
+    for changeset in &changesets {
+        // This respects strategy and changeset.packages
+        let resolution = version_resolver.resolve_versions(changeset).await?;
+        all_updates.extend(resolution.updates);
+    }
+    
+    // 5. Filter updates based on strategy
+    let packages_to_bump = match strategy {
+        VersioningStrategy::Independent => {
+            // Only packages in changesets
+            all_updates.iter()
+                .filter(|u| changesets.iter().any(|cs| cs.packages.contains(&u.name)))
+                .collect::<Vec<_>>()
+        }
+        VersioningStrategy::Unified => {
+            // All workspace packages
+            all_updates.clone()
+        }
+    };
+    
+    // 6. Preview mode: display changes and exit
+    if args.dry_run {
+        display_bump_preview(&packages_to_bump, &changesets, strategy, output)?;
+        return Ok(());
+    }
+    
+    // 7. Execute mode: apply changes
+    if !args.execute {
+        return Err(CliError::Validation(
+            "Must specify --execute or --dry-run".to_string()
+        ));
+    }
+    
+    // 8. Apply version updates
+    let apply_result = version_resolver.apply_versions(&changesets, false).await?;
+    
+    // 9. Update changelogs (if enabled)
+    if !args.no_changelog {
+        let changelog_gen = ChangelogGenerator::new(
+            args.workspace_root.clone(),
+            git_repo,
+            fs.clone(),
+            config.clone(),
+        ).await?;
+        
+        for changeset in &changesets {
+            changelog_gen.generate_for_changeset(changeset).await?;
+        }
+    }
+    
+    // 10. Archive changesets (if enabled)
+    if !args.no_archive {
+        for changeset in changesets {
+            changeset_manager.archive(&changeset).await?;
+        }
+    }
+    
+    // 11. Git operations (if enabled)
+    if args.git_commit {
+        git_repo.commit("chore: bump versions")?;
+    }
+    if args.git_tag {
+        for update in &apply_result.resolution.updates {
+            let tag = format!("{}@{}", update.name, update.next_version);
+            git_repo.create_tag(&tag)?;
+        }
+    }
+    if args.git_push {
+        git_repo.push_tags()?;
+    }
+    
+    // 12. Display success report
+    display_bump_result(&apply_result, output)?;
+    
+    Ok(())
+}
+
+fn display_bump_preview(
+    packages: &[&PackageUpdate],
+    changesets: &[Changeset],
+    strategy: VersioningStrategy,
+    output: &Output,
+) -> Result<()> {
+    output.section("Version Bump Preview")?;
+    output.info(&format!("Strategy: {:?}", strategy))?;
+    output.newline()?;
+    
+    match strategy {
+        VersioningStrategy::Independent => {
+            output.subsection("Packages to bump (from changesets):")?;
+            for pkg in packages {
+                output.item(&format!(
+                    "{}: {} → {} ({}, {})",
+                    pkg.name,
+                    pkg.current_version,
+                    pkg.next_version,
+                    pkg.bump,
+                    if changesets.iter().any(|cs| cs.packages.contains(&pkg.name)) {
+                        "direct change"
+                    } else {
+                        "dependency propagation"
+                    }
+                ))?;
+            }
+        }
+        VersioningStrategy::Unified => {
+            output.subsection(&format!("All packages will be bumped to: {}", packages[0].next_version))?;
+            for pkg in packages {
+                output.item(&format!(
+                    "{}: {} → {}",
+                    pkg.name,
+                    pkg.current_version,
+                    pkg.next_version,
+                ))?;
+            }
+        }
+    }
+    
+    output.newline()?;
+    output.subsection("Changesets to process:")?;
+    for cs in changesets {
+        output.item(&format!(
+            "✓ {} ({}, {} commits, packages: {})",
+            cs.branch,
+            cs.bump,
+            cs.commits.len(),
+            cs.packages.join(", ")
+        ))?;
+    }
+    
+    Ok(())
+}
+```
+
+**Practical Test Examples:**
+
+```rust
+#[tokio::test]
+async fn test_bump_single_repo() {
+    // Setup: Single package project
+    let workspace = setup_single_package("my-pkg", "1.0.0").await;
+    let changeset = create_changeset("main", VersionBump::Minor, vec!["my-pkg"]);
+    
+    // Execute bump
+    let result = execute_bump(BumpArgs { dry_run: false, execute: true, .. }).await?;
+    
+    // Assert: Only one package bumped
+    assert_eq!(result.packages_updated, 1);
+    assert_eq!(get_version("my-pkg").await?, "1.1.0");
+}
+
+#[tokio::test]
+async fn test_bump_independent_only_changeset_packages() {
+    // Setup: Monorepo with independent strategy
+    let workspace = setup_monorepo(VersioningStrategy::Independent).await;
+    create_package("@org/core", "1.0.0").await;
+    create_package("@org/utils", "2.0.0").await;
+    create_package("@org/cli", "0.5.0").await;
+    
+    // Changeset only affects @org/core
+    let changeset = create_changeset("feature/api", VersionBump::Minor, vec!["@org/core"]);
+    
+    // Execute bump
+    let result = execute_bump(BumpArgs { dry_run: false, execute: true, .. }).await?;
+    
+    // Assert: Only @org/core bumped
+    assert_eq!(get_version("@org/core").await?, "1.1.0");
+    assert_eq!(get_version("@org/utils").await?, "2.0.0"); // unchanged
+    assert_eq!(get_version("@org/cli").await?, "0.5.0"); // unchanged
+    assert_eq!(result.packages_updated, 1);
+}
+
+#[tokio::test]
+async fn test_bump_unified_all_packages() {
+    // Setup: Monorepo with unified strategy
+    let workspace = setup_monorepo(VersioningStrategy::Unified).await;
+    create_package("@org/core", "1.0.0").await;
+    create_package("@org/utils", "1.0.0").await;
+    create_package("@org/cli", "1.0.0").await;
+    
+    // Changeset only mentions @org/core
+    let changeset = create_changeset("feature/api", VersionBump::Minor, vec!["@org/core"]);
+    
+    // Execute bump
+    let result = execute_bump(BumpArgs { dry_run: false, execute: true, .. }).await?;
+    
+    // Assert: ALL packages bumped to same version
+    assert_eq!(get_version("@org/core").await?, "1.1.0");
+    assert_eq!(get_version("@org/utils").await?, "1.1.0");
+    assert_eq!(get_version("@org/cli").await?, "1.1.0");
+    assert_eq!(result.packages_updated, 3);
+}
+
+#[tokio::test]
+async fn test_bump_unified_highest_bump_wins() {
+    // Setup: Monorepo with unified strategy
+    let workspace = setup_monorepo(VersioningStrategy::Unified).await;
+    create_package("@org/core", "1.0.0").await;
+    create_package("@org/utils", "1.0.0").await;
+    
+    // Multiple changesets with different bumps
+    create_changeset("feature/api", VersionBump::Minor, vec!["@org/core"]);
+    create_changeset("breaking/change", VersionBump::Major, vec!["@org/utils"]);
+    
+    // Execute bump
+    let result = execute_bump(BumpArgs { dry_run: false, execute: true, .. }).await?;
+    
+    // Assert: Major wins, all packages go to 2.0.0
+    assert_eq!(get_version("@org/core").await?, "2.0.0");
+    assert_eq!(get_version("@org/utils").await?, "2.0.0");
+}
+
+#[tokio::test]
+async fn test_bump_preview_shows_unchanged_packages() {
+    // Setup: Independent strategy with selective changes
+    let workspace = setup_monorepo(VersioningStrategy::Independent).await;
+    create_package("@org/core", "1.0.0").await;
+    create_package("@org/cli", "0.5.0").await;
+    
+    let changeset = create_changeset("feature/api", VersionBump::Minor, vec!["@org/core"]);
+    
+    // Execute preview
+    let preview = execute_bump(BumpArgs { dry_run: true, .. }).await?;
+    
+    // Assert: Preview shows both bumped and unchanged
+    assert!(preview.contains("@org/core: 1.0.0 → 1.1.0"));
+    assert!(preview.contains("@org/cli: 0.5.0 (no changeset)"));
 }
 ```
 
@@ -666,6 +1513,8 @@ pub async fn execute_bump(args: BumpArgs, output: &Output) -> Result<()> {
 - ✅ Git operations are atomic
 - ✅ Rollback works on failures
 - ✅ Performance < 1s for 100 packages
+- ✅ All strategy scenarios tested
+- ✅ Edge cases covered (empty changesets, multiple changesets)
 
 #### 3.2 Changes Command
 

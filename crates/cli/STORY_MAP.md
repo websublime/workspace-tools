@@ -1200,40 +1200,52 @@ Implement `wnt changeset show <id>` to display full details of a changeset.
 **So that** I can refine version bump information
 
 **Description**:
-Implement `wnt changeset update <id>` to modify changeset properties.
+Implement `wnt changeset update [id]` to modify changeset properties. The ID parameter is optional - when not provided, the command detects the current branch and searches for a matching changeset. If no changeset is found for the branch, it logs an appropriate error message.
 
 **Tasks**:
 1. Create `src/commands/changeset/update.rs`
-   - Define ChangesetUpdateArgs struct
+   - Define ChangesetUpdateArgs struct with optional ID parameter
    - Add flags for updating packages, bump, summary
    - Implement execute_changeset_update function
    - **Effort**: Low
 
-2. Implement changeset loading and updating
-   - Load existing changeset
+2. Implement branch detection and changeset lookup
+   - Detect current git branch when ID not provided
+   - Search for changeset matching branch name
+   - Log clear error when no changeset found for branch
+   - **Effort**: Low
+
+3. Implement changeset loading and updating
+   - Load existing changeset (by ID or detected branch)
    - Apply updates
    - Validate updated changeset
    - Save back to file
    - **Effort**: Medium
 
-3. Implement interactive update mode
+4. Implement interactive update mode
    - Show current values
    - Prompt for changes
    - Allow skipping fields
    - **Effort**: Medium
 
-4. Implement commit tracking
+5. Implement commit tracking
    - Add commits to changeset
    - Track modification history
    - **Effort**: Low
 
-5. Write tests
+6. Write tests
+   - Test updating with explicit ID
+   - Test updating with auto-detected branch
+   - Test error handling when no changeset found
    - Test updating each field
    - Test validation
    - Test interactive mode
    - **Effort**: Medium
 
 **Acceptance Criteria**:
+- [ ] Works without ID parameter (auto-detects current branch)
+- [ ] Works with explicit ID or branch name parameter
+- [ ] Logs clear error message when no changeset found for branch
 - [ ] Can update packages, bump, and summary
 - [ ] Interactive mode shows current values
 - [ ] Updates validated before saving
@@ -1435,7 +1447,9 @@ Implement `wnt changeset history` to show timeline of changeset operations.
 **So that** I can verify changes before applying them
 
 **Description**:
-Implement `wnt bump` in preview mode (default) to show what versions would be bumped.
+Implement `wnt bump` in preview mode (default) to show what versions would be bumped. Must correctly handle different versioning strategies:
+- **Independent**: Only show packages in changesets receiving bumps
+- **Unified**: Show all workspace packages receiving the same version
 
 **Tasks**:
 1. Create `src/commands/bump/mod.rs`
@@ -1445,31 +1459,40 @@ Implement `wnt bump` in preview mode (default) to show what versions would be bu
 
 2. Create `src/commands/bump/preview.rs`
    - Implement execute_bump_preview function
+   - Load configuration to determine strategy (Independent/Unified)
    - **Effort**: Low
 
 3. Implement changeset loading
    - Load all active changesets
    - Filter by branch if specified
    - Validate changesets
+   - Extract changeset.packages for filtering
    - **Effort**: Medium
 
 4. Implement version calculation
-   - Use sublime-package-tools for resolution
-   - Calculate next versions
+   - Use VersionResolver::resolve_versions() from sublime-package-tools
+   - For Independent: Only calculate versions for packages in changeset.packages
+   - For Unified: Calculate same version for all workspace packages
+   - Handle highest bump type selection (Unified)
    - Handle dependency propagation
    - **Effort**: High
 
-5. Create `src/commands/bump/report.rs`
+2. Create `src/commands/bump/snapshot.rs`
    - Design bump report structure
-   - Show packages with version changes
-   - Show changesets being consumed
+   - Display strategy being used (Independent/Unified)
+   - Show packages with version changes (with willBump flag)
+   - For Independent: Show packages that remain unchanged
+   - For Unified: Show that all packages receive same version
+   - Show changesets being consumed (with packages field)
    - Show dependency updates
    - **Effort**: High
 
 6. Implement table output
    - Create comprehensive bump table
    - Show current → next version
-   - Show bump reason
+   - Show bump reason (direct change, dependency propagation, unified, no changes)
+   - For Independent: Separate sections for bumped vs unchanged packages
+   - For Unified: Show highest bump type being applied
    - Highlight major/minor/patch
    - **Effort**: Medium
 
@@ -1482,14 +1505,18 @@ Implement `wnt bump` in preview mode (default) to show what versions would be bu
 
 **Acceptance Criteria**:
 - [ ] Shows all packages that would be bumped
-- [ ] Version calculations correct
+- [ ] Correctly handles Independent strategy (only changeset packages)
+- [ ] Correctly handles Unified strategy (all packages)
+- [ ] Shows packages that remain unchanged (Independent only)
+- [ ] Displays strategy in output
+- [ ] Version calculations correct for each strategy
 - [ ] Dependency propagation shown
-- [ ] Changesets listed
+- [ ] Changesets listed with packages field
 - [ ] Table output clear and informative
-- [ ] JSON output complete
+- [ ] JSON output complete with willBump field
 - [ ] No files modified in preview mode
 - [ ] Performance < 1s for 100 packages
-- [ ] 100% test coverage
+- [ ] 100% test coverage including both strategies
 
 **Definition of Done**:
 - [ ] Preview mode works correctly
@@ -1513,15 +1540,21 @@ Implement `wnt bump` in preview mode (default) to show what versions would be bu
 **So that** I can release new versions
 
 **Description**:
-Implement `wnt bump --execute` to actually apply version bumps, update files, and create git operations.
+Implement `wnt bump --execute` to actually apply version bumps, update files, and create git operations. Must respect versioning strategy when determining which packages to update.
 
 **Tasks**:
-1. Create `src/commands/bump/execute.rs`
+1. Implement strategy-aware package selection
+   - For Independent: Only update packages in changeset.packages
+   - For Unified: Update all workspace packages to same version
+   - Determine highest bump type for Unified strategy
+   - **Effort**: Medium
+
+2. Create `src/commands/bump/execute.rs`
    - Implement execute_bump_execute function
    - Add confirmation prompt
    - **Effort**: Low
 
-2. Implement version application
+4. Implement version application
    - Update package.json files
    - Use sublime-package-tools apply logic
    - Validate all updates
@@ -1533,12 +1566,12 @@ Implement `wnt bump --execute` to actually apply version bumps, update files, an
    - Use sublime-package-tools changelog logic
    - **Effort**: High
 
-4. Implement changeset archiving
+5. Implement changeset archival
    - Move changesets to archive
    - Maintain history
    - **Effort**: Low
 
-5. Create `src/commands/bump/git_integration.rs`
+6. Create `src/commands/bump/git_integration.rs`
    - Implement git staging (--git-commit)
    - Implement git commit creation
    - Implement git tagging (--git-tag)
@@ -1559,7 +1592,7 @@ Implement `wnt bump --execute` to actually apply version bumps, update files, an
    - Check git state
    - **Effort**: Medium
 
-8. Write comprehensive tests
+9. Write comprehensive tests
    - Test full execution flow
    - Test git operations
    - Test rollback scenarios
@@ -1569,16 +1602,23 @@ Implement `wnt bump --execute` to actually apply version bumps, update files, an
 
 **Acceptance Criteria**:
 - [ ] Updates all package.json files correctly
+- [ ] Independent strategy: Only updates packages in changesets
+- [ ] Unified strategy: Updates all workspace packages
+- [ ] Unified strategy: Applies highest bump type to all packages
 - [ ] Updates CHANGELOG.md files correctly
-- [ ] Archives changesets
+- [ ] Archives changesets with release metadata
 - [ ] Git commit created if flag set
-- [ ] Git tags created if flag set
+- [ ] Git tags created if flag set (only for bumped packages in Independent)
 - [ ] Git push executes if flag set
 - [ ] Rollback works on any failure
 - [ ] Confirmation prompt prevents accidents
 - [ ] All operations atomic
 - [ ] Performance < 2s for 100 packages
-- [ ] 100% test coverage
+- [ ] 100% test coverage including both strategies
+- [ ] Test: Single repo bumps only package
+- [ ] Test: Independent bumps only changeset packages
+- [ ] Test: Unified bumps all packages
+- [ ] Test: Unified applies highest bump type
 
 **Definition of Done**:
 - [ ] Execute mode works end-to-end
@@ -1604,7 +1644,9 @@ Implement `wnt bump --execute` to actually apply version bumps, update files, an
 **So that** I can test unreleased changes
 
 **Description**:
-Implement snapshot version generation for testing purposes.
+Implement snapshot version generation for testing purposes. Must respect versioning strategy:
+- **Independent**: Generate snapshots only for packages in changesets
+- **Unified**: Generate same snapshot version for all workspace packages
 
 **Tasks**:
 1. Extend BumpArgs
@@ -1615,6 +1657,8 @@ Implement snapshot version generation for testing purposes.
 2. Implement snapshot logic
    - Generate snapshot versions (e.g., 1.2.3-snapshot.abc123)
    - Use git commit hash in suffix
+   - For Independent: Only generate for packages in changesets
+   - For Unified: Generate same snapshot for all packages
    - Don't consume changesets
    - **Effort**: Medium
 
@@ -1626,9 +1670,13 @@ Implement snapshot version generation for testing purposes.
 
 **Acceptance Criteria**:
 - [ ] Generates valid snapshot versions
+- [ ] Independent strategy: Only generates snapshots for packages in changesets
+- [ ] Unified strategy: Generates same snapshot for all workspace packages
 - [ ] Includes git commit hash
 - [ ] Doesn't consume changesets
 - [ ] Can be used for testing
+- [ ] Test: Independent only snapshots changeset packages
+- [ ] Test: Unified snapshots all packages with same version
 - [ ] 100% test coverage
 
 **Definition of Done**:

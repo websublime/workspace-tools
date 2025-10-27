@@ -390,7 +390,10 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 **Description:** Update changeset with new commits and affected packages
 
 **Requirements:**
-- Detect current branch and load associated changeset
+- Accept optional changeset ID/branch parameter
+- When no ID provided, detect current branch automatically
+- Search for changeset matching the branch name
+- If no matching changeset found, log error message indicating no changeset exists for the branch
 - Analyze git diff to determine affected packages
 - Add commit hash to changeset
 - Add newly affected packages to changeset
@@ -399,6 +402,9 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 - Support manual package specification
 
 **Acceptance Criteria:**
+- ✓ Works without ID parameter (uses current branch)
+- ✓ Works with explicit ID/branch parameter
+- ✓ Clear error message when no changeset found for branch
 - ✓ Correctly detects affected packages in monorepo
 - ✓ Handles edge cases (deleted packages, renamed files)
 - ✓ Updates changeset atomically
@@ -507,10 +513,38 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 - Support snapshot versions for feature branches
 - Support pre-release versions (alpha, beta, rc)
 
+**Version Bump Behavior by Project Type:**
+
+1. **Single Repository (Single Package)**
+   - Only one package exists in the project
+   - Version bump applies to that single package
+   - Changesets specify which commits are included in the version bump
+   - Result: One version, one tag (e.g., `v1.2.0` or `my-package@1.2.0`)
+
+2. **Monorepo with Independent Strategy**
+   - Each package maintains its own independent version
+   - **Only packages listed in changesets receive version bumps**
+   - Packages not in any active changeset remain at their current version
+   - Dependency propagation: If package A depends on workspace package B, and B gets bumped, A's dependency reference is updated but A's version only bumps if A is also in a changeset OR if configured to auto-propagate
+   - Result: Multiple versions, one tag per bumped package (e.g., `@org/pkg-a@1.2.0`, `@org/pkg-b@2.0.0`)
+
+3. **Monorepo with Unified Strategy**
+   - All workspace packages share the same version number
+   - When ANY package listed in changesets requires a bump, ALL workspace packages receive the same version bump
+   - The highest bump type from all changesets is applied (major > minor > patch)
+   - All packages move to the new unified version, regardless of whether they had code changes
+   - Result: One unified version applied to all packages, one tag per package or one monorepo tag (configurable)
+
+**Key Principle:** 
+The changeset's `packages` field (Vec<String>) determines which packages are affected. Only packages explicitly listed in active changesets (or all packages in unified strategy) will have their versions bumped.
+
 **Acceptance Criteria:**
-- ✓ Correctly bumps all affected packages
+- ✓ Single repo: bumps only package version when changeset exists
+- ✓ Monorepo independent: bumps only packages listed in changesets
+- ✓ Monorepo unified: bumps all packages when any changeset exists
+- ✓ Correctly identifies affected packages from changesets
 - ✓ Dependency propagation works correctly
-- ✓ Dry-run mode produces accurate preview
+- ✓ Dry-run mode produces accurate preview showing which packages will bump
 - ✓ Git operations work when flags provided
 - ✓ Works without git operations when flags omitted
 - ✓ Git tags created with correct format (when --git-tag)
@@ -523,16 +557,23 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 
 **Requirements:**
 - Show current version → next version for all packages
+- Clearly indicate which packages will be bumped vs. which will remain unchanged
 - Display dependency propagation chain
 - Calculate and show dependency graph changes
 - Support JSON output for CI/CD
 - Show which changesets will be processed
 - Highlight circular dependencies if any
+- Show versioning strategy being used (independent/unified)
+- For independent strategy: show only affected packages
+- For unified strategy: show all workspace packages receiving new version
 
 **Acceptance Criteria:**
 - ✓ Accurately predicts all version changes
+- ✓ Clearly shows which packages are affected by changesets
+- ✓ Shows which packages remain unchanged
 - ✓ JSON output is machine-readable
 - ✓ Shows complete dependency impact
+- ✓ Displays strategy being used
 
 #### F-022: Snapshot Version Generation
 **Priority:** P1 (Should Have)  
@@ -544,9 +585,14 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 - Handle branch name sanitization
 - Generate unique snapshot identifiers
 - Support custom snapshot variables
+- Respect versioning strategy (independent vs unified)
+- Only generate snapshots for packages listed in changesets (independent)
+- Generate snapshots for all packages (unified) when any changeset exists
 
 **Acceptance Criteria:**
 - ✓ Generates valid semver-compatible versions
+- ✓ Respects independent vs unified strategy
+- ✓ Only affects packages that would be bumped in a normal release
 - ✓ Snapshots are unique and sortable
 - ✓ Works with all package managers
 
@@ -846,35 +892,159 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 
 #### F-070: Logging Levels
 **Priority:** P0 (Must Have)  
-**Description:** Configurable logging output
+**Description:** Configurable logging output for all commands
+
+**Important:** Logging and output format are **completely independent**. You can have:
+- JSON output with no logs (`--format json --log-level silent`)
+- JSON output with debug logs (`--format json --log-level debug`)
+- Text output with no logs (`--format text --log-level silent`)
+- Any combination you need
 
 **Requirements:**
 - Support log levels: silent, error, warn, info, debug, trace
 - Global flag for log level: `--log-level`
 - Default to 'info' level
 - Respect NO_COLOR environment variable
-- Write logs to stderr, output to stdout
+- **Write logs to stderr, output to stdout** (completely separate streams)
+- **Every subcommand must log its operations according to the configured level**
+- Log messages should be contextual and informative
+- Progress updates during long operations
+- Clear indication of what the command is doing
+- Logging works independently of output format
+
+**Logging by Level:**
+
+1. **silent**: No logs at all
+   ```bash
+   wnt --log-level silent bump --execute
+   # No progress output, only final result
+   ```
+
+2. **error**: Only critical errors
+   ```bash
+   wnt --log-level error bump --execute
+   # ERROR: Failed to update package.json: Permission denied
+   ```
+
+3. **warn**: Errors + warnings
+   ```bash
+   wnt --log-level warn upgrade check
+   # WARN: Package 'eslint' has major version update available
+   # WARN: Breaking changes detected
+   ```
+
+4. **info** (default): General progress
+   ```bash
+   wnt --log-level info bump --execute
+   # INFO: Loading configuration...
+   # INFO: Loading changesets...
+   # INFO: Found 2 active changesets
+   # INFO: Resolving versions...
+   # INFO: Updating package.json files...
+   # INFO: Creating git tags...
+   # INFO: Done!
+   ```
+
+5. **debug**: Detailed operations
+   ```bash
+   wnt --log-level debug bump --execute
+   # DEBUG: Reading config from repo.config.yaml
+   # DEBUG: Strategy: independent
+   # DEBUG: Loading changeset: feature/new-api
+   # DEBUG: Changeset packages: @org/core
+   # DEBUG: Calculating version for @org/core: 1.2.3 -> 1.3.0
+   # DEBUG: Writing to packages/core/package.json
+   # DEBUG: Creating tag @org/core@1.3.0
+   ```
+
+6. **trace**: Very verbose debugging
+   ```bash
+   wnt --log-level trace upgrade check
+   # TRACE: Entering upgrade check command
+   # TRACE: Loading workspace packages from packages/*/package.json
+   # TRACE: Found package: @org/core at packages/core
+   # TRACE: Reading dependencies from @org/core
+   # TRACE: Querying registry for typescript current: 5.0.0
+   # TRACE: Registry response: latest 5.3.3
+   # TRACE: Comparing versions: 5.0.0 < 5.3.3 = true
+   ```
+
+**Examples in Different Commands:**
+
+```bash
+# Init with info logging (default)
+wnt init
+# INFO: Detecting project type...
+# INFO: Found package.json at root
+# INFO: Detected: single package project
+# INFO: Creating configuration...
+
+# Changeset update with debug
+wnt --log-level debug changeset update
+# DEBUG: Detecting current branch: feature/new-api
+# DEBUG: Loading changeset: .changesets/feature-new-api.json
+# DEBUG: Analyzing git diff since last commit
+# DEBUG: Detected changes in: packages/core/src/index.ts
+# DEBUG: Mapped to package: @org/core
+# DEBUG: Adding package to changeset
+# DEBUG: Saving changeset
+
+# Audit with trace
+wnt --log-level trace audit
+# TRACE: Loading configuration
+# TRACE: Initializing audit manager
+# TRACE: Running upgrade audit...
+# TRACE: Querying registry for 45 dependencies...
+# (very detailed logs)
+```
 
 **Acceptance Criteria:**
-- ✓ All log levels work correctly
-- ✓ Appropriate default level
-- ✓ Output separation works
+- ✓ All log levels work correctly in ALL commands
+- ✓ Each subcommand logs appropriate operations at each level
+- ✓ Logs go to stderr, final output to stdout (separate streams)
+- ✓ JSON output works with any log level (including silent)
+- ✓ JSON output is never mixed with logs
+- ✓ Logging and format flags are completely independent
+- ✓ Appropriate default level (info)
+- ✓ Output separation works correctly
+- ✓ NO_COLOR environment variable respected
+- ✓ Log messages are clear and contextual
 
 #### F-071: JSON Output Mode
 **Priority:** P0 (Must Have)  
 **Description:** Machine-readable JSON output
 
 **Requirements:**
-- Global flag: `--format json`
+- Global flag: `--format json` (and `--format json-compact` for audit)
 - Consistent JSON structure across commands
-- Include success/error status
+- Include success/error status in all responses
 - Include all relevant data
 - Valid JSON always (no mixed output)
+- All commands must support JSON output:
+  - `wnt init`
+  - `wnt config show`
+  - `wnt config validate`
+  - `wnt changeset create`
+  - `wnt changeset update`
+  - `wnt changeset list`
+  - `wnt changeset show`
+  - `wnt changeset delete`
+  - `wnt changeset history`
+  - `wnt changeset check`
+  - `wnt bump` (all modes: dry-run, execute, snapshot)
+  - `wnt upgrade check`
+  - `wnt upgrade apply`
+  - `wnt upgrade backups list`
+  - `wnt audit` (all sections)
+  - `wnt changes`
+  - `wnt version`
 
 **Acceptance Criteria:**
-- ✓ All commands support JSON output
-- ✓ JSON is always valid
-- ✓ Structure is documented
+- ✓ All commands listed above support JSON output
+- ✓ JSON is always valid and parseable
+- ✓ Structure is consistent across commands (success, data, errors)
+- ✓ No logs or debug output mixed with JSON when --format json is used
+- ✓ Examples provided in documentation for each command
 
 #### F-072: Progress Indication
 **Priority:** P1 (Should Have)  
@@ -972,15 +1142,241 @@ wnt [GLOBAL_OPTIONS] <COMMAND> [COMMAND_OPTIONS] [ARGS]
 
 ### 7.2 Global Options
 
-| Flag | Short | Description | Default |
-|------|-------|-------------|---------|
-| `--root <PATH>` | `-r` | Project root directory | Current directory |
-| `--log-level <LEVEL>` | `-l` | Log level (silent\|error\|warn\|info\|debug\|trace) | info |
-| `--format <FORMAT>` | `-f` | Output format (text\|json\|json-compact) | text |
-| `--no-color` | | Disable colored output | false |
-| `--config <PATH>` | `-c` | Path to config file | Auto-detect |
-| `--help` | `-h` | Show help | |
-| `--version` | `-V` | Show version | |
+**Important:** All global options apply to ALL subcommands. Every subcommand MUST respect these settings.
+
+**Key Principle:** Global options are **completely independent** from each other:
+- **Logging** (`--log-level`) controls what goes to **stderr**
+- **Format** (`--format`) controls what goes to **stdout**
+- They work together but don't affect each other
+
+| Flag | Short | Description | Default | Output Stream |
+|------|-------|-------------|---------|---------------|
+| `--root <PATH>` | `-r` | Project root directory | Current directory | N/A |
+| `--log-level <LEVEL>` | `-l` | Log level (silent\|error\|warn\|info\|debug\|trace) | info | **stderr** |
+| `--format <FORMAT>` | `-f` | Output format (text\|json\|json-compact) | text | **stdout** |
+| `--no-color` | | Disable colored output | false | both |
+| `--config <PATH>` | `-c` | Path to config file | Auto-detect | N/A |
+| `--help` | `-h` | Show help | | stdout |
+| `--version` | `-V` | Show version | | stdout |
+
+---
+
+### Global Options Detailed Behavior
+
+#### 1. `--root <PATH>` - Working Directory
+
+Changes working directory before executing command.
+
+**Behavior:**
+- All file operations are relative to this path
+- Config file lookup starts from this directory
+- Git operations work in this directory
+
+**Examples:**
+```bash
+# Run from different directory
+wnt --root /path/to/project bump --dry-run
+
+# Multiple projects
+wnt --root ~/projects/app1 audit
+wnt --root ~/projects/app2 audit
+
+# Relative paths work too
+wnt --root ../other-project changeset list
+```
+
+---
+
+#### 2. `--log-level <LEVEL>` - Logging (stderr)
+
+Controls verbosity of operation logs written to **stderr**.
+
+**Levels:**
+- `silent`: No logs at all
+- `error`: Only critical errors
+- `warn`: Errors + warnings
+- `info`: General progress (default)
+- `debug`: Detailed operations
+- `trace`: Very verbose debugging
+
+**Key Points:**
+- ✅ Logs go to **stderr** only
+- ✅ Works with **any** output format
+- ✅ Can be completely disabled with `silent`
+- ✅ Does NOT affect stdout
+
+**Examples:**
+```bash
+# JSON output with NO logs (clean JSON only)
+wnt --format json --log-level silent bump --dry-run > result.json
+
+# JSON output WITH debug logs (logs to stderr, JSON to stdout)
+wnt --format json --log-level debug bump --dry-run > result.json 2> logs.txt
+
+# Text output with NO logs (clean output only)
+wnt --log-level silent changeset list
+
+# Debug logging with text output
+wnt --log-level debug upgrade check
+```
+
+---
+
+#### 3. `--format <FORMAT>` - Output Format (stdout)
+
+Controls output format written to **stdout**.
+
+**Formats:**
+- `text`: Human-readable with colors and tables (default)
+- `json`: Pretty-printed JSON
+- `json-compact`: Compact JSON (mainly for audit)
+
+**Key Points:**
+- ✅ Output goes to **stdout** only
+- ✅ Works with **any** log level
+- ✅ JSON is never mixed with logs
+- ✅ Does NOT affect stderr
+
+**Examples:**
+```bash
+# JSON with info logging (logs to stderr, JSON to stdout)
+wnt --format json bump --dry-run
+
+# JSON with silent logging (ONLY JSON, no logs at all)
+wnt --format json --log-level silent bump --dry-run
+
+# Text with debug logging
+wnt --format text --log-level debug changeset list
+
+# Separate streams to different files
+wnt --format json --log-level debug bump --execute > output.json 2> debug.log
+```
+
+---
+
+#### 4. `--no-color` - Disable Colors
+
+Disables ANSI color codes in both stderr and stdout.
+
+**Behavior:**
+- Removes colors from logs (stderr)
+- Removes colors from text output (stdout)
+- Respects NO_COLOR environment variable
+- Has no effect on JSON output (already no colors)
+
+**Examples:**
+```bash
+# No colors in output and logs
+wnt --no-color changeset list
+
+# Useful for CI/CD
+wnt --no-color --log-level info audit
+
+# Environment variable
+NO_COLOR=1 wnt bump --dry-run
+
+# File redirection (colors would appear as escape codes)
+wnt --no-color audit > report.txt
+```
+
+---
+
+#### 5. `--config <PATH>` - Config File Override
+
+Override default config file location.
+
+**Behavior:**
+- Uses specified config instead of auto-detected one
+- Path can be relative or absolute
+- Useful for testing different configurations
+
+**Examples:**
+```bash
+# Use specific config
+wnt --config ./test-config.yaml init
+
+# Test different strategies
+wnt --config ./independent-config.yaml bump --dry-run
+wnt --config ./unified-config.yaml bump --dry-run
+
+# Absolute path
+wnt --config /etc/myproject/config.json audit
+```
+
+---
+
+### Combining Global Options
+
+**Independence Examples:**
+
+```bash
+# 1. JSON output, NO logs (clean JSON only)
+wnt --format json --log-level silent bump --dry-run
+# stdout: {"success": true, ...}
+# stderr: (nothing)
+
+# 2. JSON output, DEBUG logs (logs separate from JSON)
+wnt --format json --log-level debug bump --dry-run
+# stdout: {"success": true, ...}
+# stderr: DEBUG: Loading config...
+#         DEBUG: Found 2 changesets...
+
+# 3. Text output, NO logs (clean text only)
+wnt --format text --log-level silent audit
+# stdout: Audit Results...
+# stderr: (nothing)
+
+# 4. Text output, INFO logs (default behavior)
+wnt --format text --log-level info bump --execute
+# stdout: Version Bump Preview...
+# stderr: INFO: Loading configuration...
+#         INFO: Found 2 changesets...
+
+# 5. All options combined
+wnt --root ~/project \
+    --config ./custom.yaml \
+    --format json \
+    --log-level debug \
+    --no-color \
+    bump --dry-run > output.json 2> debug.log
+
+# 6. Silent JSON for automation (most common CI/CD use case)
+wnt --format json --log-level silent bump --execute
+
+# 7. Debug everything for troubleshooting
+wnt --log-level trace --format text upgrade check
+
+# 8. Different directory, no colors, with logs
+wnt --root /other/project --no-color --log-level info audit
+```
+
+---
+
+### Stream Separation Guarantee
+
+**Always true regardless of options:**
+- **stderr**: Logs only (controlled by `--log-level`)
+- **stdout**: Final output only (controlled by `--format`)
+- **Never mixed**: JSON is always valid, logs never appear in stdout
+
+**Practical Examples:**
+
+```bash
+# Capture output and logs separately
+wnt --format json bump --execute > result.json 2> process.log
+
+# Discard logs, keep only output
+wnt --format json bump --execute 2>/dev/null > result.json
+
+# Discard output, keep only logs (unusual but possible)
+wnt --log-level debug bump --execute >/dev/null 2> debug.log
+
+# Everything to same file (not recommended)
+wnt --format json bump --execute &> combined.log
+
+# Silent mode - no logs, only output (best for scripting)
+wnt --log-level silent --format json bump --execute
+```
 
 ### 7.3 Commands
 
@@ -1007,6 +1403,8 @@ wnt init [OPTIONS]
 | `--force` | Overwrite existing config | false |
 | `--non-interactive` | No prompts, use defaults/flags | false |
 
+**Note:** Supports global `--format json` flag for machine-readable output.
+
 **Examples:**
 ```bash
 # Interactive mode
@@ -1017,11 +1415,35 @@ wnt init --non-interactive --strategy unified --format yaml --environments "dev,
 
 # Minimal non-interactive
 wnt init --non-interactive --format json
+
+# JSON output for automation
+wnt init --non-interactive --format json > init-result.json
 ```
 
-**Output:**
-- Success: Configuration file path and summary
-- Error: Validation errors with suggestions
+**Output (text format):**
+```
+✓ Configuration initialized successfully
+
+  Config file: repo.config.yaml
+  Strategy: independent
+  Changesets: .changesets/
+  Environments: dev, staging, production
+  Default: production
+```
+
+**Output (--format json):**
+```json
+{
+  "success": true,
+  "configFile": "repo.config.yaml",
+  "configFormat": "yaml",
+  "strategy": "independent",
+  "changesetPath": ".changesets/",
+  "environments": ["dev", "staging", "production"],
+  "defaultEnvironments": ["production"],
+  "registry": "https://registry.npmjs.org"
+}
+```
 
 ---
 
@@ -1046,11 +1468,78 @@ wnt config validate [OPTIONS]
 |------|-------------|
 | `--format <FORMAT>` | Output format (text\|json) |
 
+**Note:** Supports global `--format json` flag for machine-readable output.
+
 **Examples:**
 ```bash
+# Show configuration
 wnt config show
+
+# Show as JSON
 wnt config show --format json
+
+# Validate configuration
 wnt config validate
+
+# Validate with JSON output
+wnt config validate --format json
+```
+
+**Output (config show, text format):**
+```
+Configuration
+━━━━━━━━━━━━━
+
+Strategy: independent
+Changeset Path: .changesets/
+Environments: dev, staging, production
+Default Environments: production
+Registry: https://registry.npmjs.org
+```
+
+**Output (config show, --format json):**
+```json
+{
+  "success": true,
+  "config": {
+    "changeset": {
+      "path": ".changesets/",
+      "environments": ["dev", "staging", "production"],
+      "defaultEnvironments": ["production"]
+    },
+    "version": {
+      "strategy": "independent",
+      "defaultBump": "patch",
+      "snapshotFormat": "{version}-{branch}.{short_commit}"
+    },
+    "registry": "https://registry.npmjs.org"
+  }
+}
+```
+
+**Output (config validate, text format):**
+```
+✓ Configuration is valid
+
+All checks passed:
+  ✓ Config file exists
+  ✓ All required fields present
+  ✓ Environments valid
+  ✓ Changeset directory exists
+```
+
+**Output (config validate, --format json):**
+```json
+{
+  "success": true,
+  "valid": true,
+  "checks": [
+    { "name": "Config file exists", "passed": true },
+    { "name": "All required fields present", "passed": true },
+    { "name": "Environments valid", "passed": true },
+    { "name": "Changeset directory exists", "passed": true }
+  ]
+}
 ```
 
 ---
@@ -1071,7 +1560,7 @@ Manage changesets.
 **Usage:**
 ```bash
 wnt changeset create [OPTIONS]
-wnt changeset update [OPTIONS]
+wnt changeset update [ID] [OPTIONS]
 wnt changeset list [OPTIONS]
 wnt changeset show <BRANCH> [OPTIONS]
 wnt changeset delete <BRANCH> [OPTIONS]
@@ -1089,10 +1578,14 @@ wnt changeset check [OPTIONS]
 | `--packages <LIST>` | Comma-separated packages | Auto-detect |
 | `--non-interactive` | No prompts | false |
 
+**Arguments (update):**
+| Argument | Description |
+|----------|-------------|
+| `<ID>` | Changeset ID or branch name (optional, default: current branch) |
+
 **Options (update):**
 | Flag | Description |
 |------|-------------|
-| `--branch <NAME>` | Branch name (default: current) |
 | `--commit <HASH>` | Add specific commit |
 | `--packages <LIST>` | Add specific packages |
 
@@ -1114,6 +1607,8 @@ wnt changeset check [OPTIONS]
 | `--bump <TYPE>` | Filter by bump type |
 | `--limit <N>` | Limit results |
 
+**Note:** All changeset commands support global `--format json` flag for machine-readable output.
+
 **Examples:**
 ```bash
 # Create changeset interactively
@@ -1122,8 +1617,14 @@ wnt changeset create
 # Create with all options
 wnt changeset create --bump minor --env "staging,prod" --message "Add new feature"
 
-# Update current changeset
+# Create with JSON output
+wnt changeset create --bump minor --format json
+
+# Update current branch's changeset (auto-detects branch)
 wnt changeset update
+
+# Update specific changeset by ID or branch name
+wnt changeset update feature/my-feature
 
 # List all changesets
 wnt changeset list
@@ -1131,8 +1632,14 @@ wnt changeset list
 # List with filtering
 wnt changeset list --filter-bump major --sort date
 
+# List as JSON
+wnt changeset list --format json
+
 # Show specific changeset
 wnt changeset show feature/new-component
+
+# Show as JSON
+wnt changeset show feature/new-component --format json
 
 # Delete changeset with confirmation
 wnt changeset delete old-feature
@@ -1143,8 +1650,93 @@ wnt changeset delete old-feature --force
 # Query history
 wnt changeset history --package @myorg/core --since 2024-01-01
 
+# Query history as JSON
+wnt changeset history --format json
+
 # Check if changeset exists (for Git hooks)
 wnt changeset check
+
+# Check with JSON output
+wnt changeset check --format json
+```
+
+**Output (list, text format):**
+```
+Active Changesets
+━━━━━━━━━━━━━━━━━
+
+feature/new-api (minor)
+  Packages: @myorg/core
+  Environments: production
+  Commits: 5
+  Created: 2024-01-15
+
+hotfix/security (patch)
+  Packages: @myorg/utils, @myorg/cli
+  Environments: production, staging
+  Commits: 2
+  Created: 2024-01-14
+
+Total: 2 changesets
+```
+
+**Output (list, --format json):**
+```json
+{
+  "success": true,
+  "changesets": [
+    {
+      "id": "feature-new-api",
+      "branch": "feature/new-api",
+      "bump": "minor",
+      "packages": ["@myorg/core"],
+      "environments": ["production"],
+      "commits": ["abc123", "def456", "ghi789", "jkl012", "mno345"],
+      "createdAt": "2024-01-15T10:00:00Z",
+      "updatedAt": "2024-01-15T14:30:00Z"
+    },
+    {
+      "id": "hotfix-security",
+      "branch": "hotfix/security",
+      "bump": "patch",
+      "packages": ["@myorg/utils", "@myorg/cli"],
+      "environments": ["production", "staging"],
+      "commits": ["pqr678", "stu901"],
+      "createdAt": "2024-01-14T09:00:00Z",
+      "updatedAt": "2024-01-14T09:15:00Z"
+    }
+  ],
+  "total": 2
+}
+```
+
+**Output (show, --format json):**
+```json
+{
+  "success": true,
+  "changeset": {
+    "id": "feature-new-api",
+    "branch": "feature/new-api",
+    "bump": "minor",
+    "packages": ["@myorg/core"],
+    "environments": ["production"],
+    "commits": ["abc123", "def456"],
+    "createdAt": "2024-01-15T10:00:00Z",
+    "updatedAt": "2024-01-15T14:30:00Z"
+  }
+}
+```
+
+**Output (check, --format json):**
+```json
+{
+  "success": true,
+  "exists": true,
+  "changeset": {
+    "id": "feature-new-api",
+    "branch": "feature/new-api"
+  }
+}
 ```
 
 ---
@@ -1152,6 +1744,11 @@ wnt changeset check
 #### `wnt bump`
 
 Bump package versions based on changesets.
+
+**Behavior:**
+- **Single Repository**: Bumps the single package version based on active changesets
+- **Monorepo (Independent)**: Bumps only packages listed in active changesets
+- **Monorepo (Unified)**: Bumps all workspace packages to the same version when any changeset exists
 
 **Usage:**
 ```bash
@@ -1166,7 +1763,7 @@ wnt bump [OPTIONS]
 | `--snapshot` | Generate snapshot versions | false |
 | `--snapshot-format <FORMAT>` | Snapshot format template | From config |
 | `--prerelease <TAG>` | Pre-release tag (alpha\|beta\|rc) | None |
-| `--packages <LIST>` | Only bump specific packages | All affected |
+| `--packages <LIST>` | Only bump specific packages (overrides changeset packages) | All affected |
 | `--git-tag` | Create git tags for releases | false |
 | `--git-push` | Push git tags to remote (requires --git-tag) | false |
 | `--git-commit` | Commit version changes | false |
@@ -1204,24 +1801,54 @@ wnt bump --packages "@myorg/core,@myorg/utils" --execute --dry-run
 wnt bump --execute --git-commit --git-tag --git-push --force
 ```
 
-**Output (dry-run):**
+**Output (dry-run, Independent Strategy):**
 ```
 Version Bump Preview
 ━━━━━━━━━━━━━━━━━━━━
+Strategy: Independent
 
-Packages to bump:
-  @myorg/core: 1.2.3 → 1.3.0 (minor)
-  @myorg/utils: 2.0.1 → 2.1.0 (minor, propagated)
-  @myorg/cli: 0.5.0 → 0.5.1 (patch, propagated)
+Packages to bump (from changesets):
+  @myorg/core: 1.2.3 → 1.3.0 (minor, direct change)
+  @myorg/utils: 2.0.1 → 2.1.0 (minor, dependency propagation)
+
+Packages unchanged:
+  @myorg/cli: 0.5.0 (no changes)
+  @myorg/docs: 1.0.0 (no changes)
 
 Changesets to process:
-  ✓ feature/new-api (minor, 5 commits)
-  ✓ feature/fix-bug (patch, 2 commits)
+  ✓ feature/new-api (minor, 5 commits, packages: @myorg/core)
+  ✓ feature/fix-bug (patch, 2 commits, packages: @myorg/utils)
 
 Git tags to create:
   @myorg/core@1.3.0
   @myorg/utils@2.1.0
-  @myorg/cli@0.5.1
+
+Run with --execute to apply changes.
+```
+
+**Output (dry-run, Unified Strategy):**
+```
+Version Bump Preview
+━━━━━━━━━━━━━━━━━━━━
+Strategy: Unified
+
+All packages will be bumped to: 1.3.0
+  @myorg/core: 1.2.3 → 1.3.0 (minor bump applied)
+  @myorg/utils: 2.0.1 → 1.3.0 (unified version)
+  @myorg/cli: 0.5.0 → 1.3.0 (unified version)
+  @myorg/docs: 1.0.0 → 1.3.0 (unified version)
+
+Changesets to process:
+  ✓ feature/new-api (minor, 5 commits, packages: @myorg/core)
+  ✓ feature/fix-bug (patch, 2 commits, packages: @myorg/utils)
+
+Highest bump type: minor (determines unified version)
+
+Git tags to create:
+  @myorg/core@1.3.0
+  @myorg/utils@1.3.0
+  @myorg/cli@1.3.0
+  @myorg/docs@1.3.0
 
 Run with --execute to apply changes.
 ```
@@ -1230,6 +1857,7 @@ Run with --execute to apply changes.
 ```json
 {
   "success": true,
+  "strategy": "independent",
   "packages": [
     {
       "name": "@myorg/core",
@@ -1237,7 +1865,26 @@ Run with --execute to apply changes.
       "currentVersion": "1.2.3",
       "nextVersion": "1.3.0",
       "bump": "minor",
-      "reason": "direct"
+      "reason": "direct",
+      "willBump": true
+    },
+    {
+      "name": "@myorg/utils",
+      "path": "packages/utils",
+      "currentVersion": "2.0.1",
+      "nextVersion": "2.1.0",
+      "bump": "minor",
+      "reason": "dependency_propagation",
+      "willBump": true
+    },
+    {
+      "name": "@myorg/cli",
+      "path": "packages/cli",
+      "currentVersion": "0.5.0",
+      "nextVersion": "0.5.0",
+      "bump": "none",
+      "reason": "no_changes",
+      "willBump": false
     }
   ],
   "changesets": [
@@ -1300,10 +1947,15 @@ wnt upgrade backups clean [OPTIONS]
 | `--no-backup` | Skip backup creation | false |
 | `--force` | Skip confirmations | false |
 
+**Note:** All upgrade commands support global `--format json` flag for machine-readable output.
+
 **Examples:**
 ```bash
 # Check for all upgrades
 wnt upgrade check
+
+# Check with JSON output
+wnt upgrade check --format json
 
 # Check patch upgrades only
 wnt upgrade check --no-major --no-minor
@@ -1319,6 +1971,9 @@ wnt upgrade apply --packages "@types/node,typescript"
 
 # Dry-run to see what would be upgraded
 wnt upgrade apply --dry-run
+
+# Apply with JSON output
+wnt upgrade apply --format json
 
 # List backups
 wnt upgrade backups list
@@ -1349,6 +2004,69 @@ Summary:
   Major: 3
   Minor: 8
   Patch: 4
+```
+
+**Output (check, --format json):**
+```json
+{
+  "success": true,
+  "packages": [
+    {
+      "name": "@myorg/core",
+      "path": "packages/core",
+      "upgrades": [
+        {
+          "package": "typescript",
+          "currentVersion": "5.0.0",
+          "latestVersion": "5.3.3",
+          "type": "minor",
+          "breaking": false
+        },
+        {
+          "package": "eslint",
+          "currentVersion": "8.0.0",
+          "latestVersion": "9.0.0",
+          "type": "major",
+          "breaking": true
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "totalUpgrades": 15,
+    "major": 3,
+    "minor": 8,
+    "patch": 4
+  }
+}
+```
+
+**Output (apply, --format json):**
+```json
+{
+  "success": true,
+  "applied": [
+    {
+      "package": "typescript",
+      "from": "5.0.0",
+      "to": "5.3.3",
+      "type": "minor"
+    }
+  ],
+  "skipped": [
+    {
+      "package": "eslint",
+      "reason": "major_version",
+      "currentVersion": "8.0.0",
+      "latestVersion": "9.0.0"
+    }
+  ],
+  "summary": {
+    "totalApplied": 12,
+    "totalSkipped": 3,
+    "backupId": "backup_20240115_103045"
+  }
+}
 ```
 
 ---
@@ -1384,6 +2102,9 @@ wnt audit --sections upgrades,dependencies
 wnt audit --format markdown --output audit-report.md
 
 # JSON for CI/CD
+wnt audit --format json
+
+# JSON compact for CI/CD
 wnt audit --format json-compact
 
 # Only critical and high severity issues
@@ -1475,6 +2196,8 @@ wnt changes [OPTIONS]
 | `--unstaged` | Only unstaged changes | false |
 | `--packages <LIST>` | Filter by packages | All |
 
+**Note:** Supports global `--format json` flag for machine-readable output.
+
 **Examples:**
 ```bash
 # Analyze working directory changes
@@ -1491,9 +2214,12 @@ wnt changes --branch main
 
 # Only staged changes
 wnt changes --staged
+
+# JSON output for CI/CD
+wnt changes --format json
 ```
 
-**Output:**
+**Output (text format):**
 ```
 Changes Analysis
 ━━━━━━━━━━━━━━━━
@@ -1523,6 +2249,45 @@ Summary:
   Lines deleted: 44
 ```
 
+**Output (--format json):**
+```json
+{
+  "success": true,
+  "affectedPackages": [
+    {
+      "name": "@myorg/core",
+      "path": "packages/core",
+      "filesChanged": 5,
+      "linesAdded": 145,
+      "linesDeleted": 32,
+      "changes": [
+        { "type": "modified", "path": "src/index.ts" },
+        { "type": "modified", "path": "src/utils.ts" },
+        { "type": "added", "path": "src/new-feature.ts" },
+        { "type": "deleted", "path": "src/old-code.ts" }
+      ]
+    },
+    {
+      "name": "@myorg/utils",
+      "path": "packages/utils",
+      "filesChanged": 2,
+      "linesAdded": 45,
+      "linesDeleted": 12,
+      "changes": [
+        { "type": "modified", "path": "src/helper.ts" },
+        { "type": "modified", "path": "src/validator.ts" }
+      ]
+    }
+  ],
+  "summary": {
+    "totalFiles": 7,
+    "totalPackages": 3,
+    "linesAdded": 190,
+    "linesDeleted": 44
+  }
+}
+```
+
 ---
 
 #### `wnt version`
@@ -1549,6 +2314,48 @@ wnt --version
 
 # Detailed version info
 wnt version --verbose
+
+# JSON output
+wnt version --format json
+```
+
+**Output (text format):**
+```
+wnt 0.1.0
+```
+
+**Output (--verbose, text format):**
+```
+wnt 0.1.0
+
+  Rust version: 1.75.0
+  sublime-package-tools: 0.1.0
+  sublime-standard-tools: 0.1.0
+  sublime-git-tools: 0.1.0
+
+Build:
+  Profile: release
+  Target: x86_64-apple-darwin
+  Features: default
+```
+
+**Output (--format json):**
+```json
+{
+  "success": true,
+  "version": "0.1.0",
+  "rustVersion": "1.75.0",
+  "dependencies": {
+    "sublime-package-tools": "0.1.0",
+    "sublime-standard-tools": "0.1.0",
+    "sublime-git-tools": "0.1.0"
+  },
+  "build": {
+    "profile": "release",
+    "target": "x86_64-apple-darwin",
+    "features": ["default"]
+  }
+}
 ```
 
 **Output:**
