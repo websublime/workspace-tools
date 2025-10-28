@@ -353,11 +353,10 @@ impl AsyncFileSystem for FileSystemManager {
     async fn write_file(&self, path: &Path, contents: &[u8]) -> Result<()> {
         let operation = async {
             // Create parent directories if they don't exist
-            if let Some(parent) = path.parent() {
-                if !self.exists(parent).await {
+            if let Some(parent) = path.parent()
+                && !self.exists(parent).await {
                     self.create_dir_all(parent).await?;
                 }
-            }
 
             fs::write(path, contents)
                 .await
@@ -383,11 +382,10 @@ impl AsyncFileSystem for FileSystemManager {
     async fn write_file_string(&self, path: &Path, contents: &str) -> Result<()> {
         let operation = async {
             // Create parent directories if they don't exist
-            if let Some(parent) = path.parent() {
-                if !self.exists(parent).await {
+            if let Some(parent) = path.parent()
+                && !self.exists(parent).await {
                     self.create_dir_all(parent).await?;
                 }
-            }
 
             fs::write(path, contents)
                 .await

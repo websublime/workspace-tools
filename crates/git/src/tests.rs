@@ -8,7 +8,7 @@ mod tests {
     use crate::{GitFileStatus, Repo, RepoError};
     use std::{
         env::temp_dir,
-        fs::{canonicalize, create_dir, remove_dir_all, File},
+        fs::{File, canonicalize, create_dir, remove_dir_all},
         io::Write,
         path::PathBuf,
     };
@@ -925,7 +925,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Ignore by default because it requires a remote repository
+    #[ignore = "Requires a remote repository"]
     fn test_fetch() -> Result<(), RepoError> {
         // This test requires a Git repository with a remote
         let current_dir = std::env::current_dir().unwrap();

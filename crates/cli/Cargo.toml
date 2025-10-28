@@ -25,5 +25,40 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
+# Core CLI
+clap = { version = "4.5", features = ["derive", "env", "wrap_help"] }
+tokio = { version = "1.38.0", features = ["rt-multi-thread", "macros", "time"] }
+
+# Terminal & UI
+crossterm = "0.29"
+console = "0.16"
+dialoguer = "0.12"
+indicatif = "0.18"
+comfy-table = "7.2"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+serde_yaml = "0.9"
+
+# Error Handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# Utilities
+terminal_size = "0.4"
+clap_complete = "4.5"
+sysexits = "0.10"
+
+# Internal crates
+sublime_pkg_tools = { version = "0.1.0", path = "../pkg" }
+sublime_standard_tools = { version = "0.1.0", path = "../standard" }
+sublime_git_tools = { version = "0.1.0", path = "../git" }
 
 [dev-dependencies]
+tempfile = "3.8.1"

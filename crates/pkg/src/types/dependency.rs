@@ -628,12 +628,13 @@ impl std::fmt::Display for UpdateReason {
 ///     dependency_updates: vec![],
 /// };
 /// ```
-// PackageUpdate is now defined in version::resolution module to avoid duplication.
-// It is re-exported from the types module for convenience.
-// See: src/version/resolution.rs for the canonical definition.
-
-// Helper functions for protocol detection
-
+///
+/// PackageUpdate is now defined in version::resolution module to avoid duplication.
+/// It is re-exported from the types module for convenience.
+/// See: src/version/resolution.rs for the canonical definition.
+///
+/// Helper functions for protocol detection
+///
 /// Checks if a version specification uses the workspace protocol.
 ///
 /// Returns `true` if the version spec starts with "workspace:".

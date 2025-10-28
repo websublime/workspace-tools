@@ -13,8 +13,7 @@ mod tests {
         let not_found = FileSystemError::NotFound { path: "/test".into() };
         assert_eq!(not_found.to_string(), "Path not found: /test");
 
-        let io_error =
-            FileSystemError::from_io(io::Error::new(io::ErrorKind::Other, "disk full"), "/data");
+        let io_error = FileSystemError::from_io(io::Error::other("disk full"), "/data");
         assert_eq!(io_error.to_string(), "I/O error accessing path '/data': disk full");
     }
 
@@ -42,7 +41,7 @@ mod tests {
             matches!(fs_error, FileSystemError::PermissionDenied { path } if path == PathBuf::from("/protected/file.txt"))
         );
 
-        let other_error = io::Error::new(io::ErrorKind::Other, "unknown error");
+        let other_error = io::Error::other("unknown error");
         let fs_error = FileSystemError::from_io(other_error, "/some/file.txt");
         assert!(
             matches!(fs_error, FileSystemError::Io { path, .. } if path == PathBuf::from("/some/file.txt"))
@@ -64,7 +63,7 @@ mod tests {
             matches!(fs_error, FileSystemError::PermissionDenied { path } if path == PathBuf::from("<unknown>"))
         );
 
-        let other_error = io::Error::new(io::ErrorKind::Other, "unknown error");
+        let other_error = io::Error::other("unknown error");
         let fs_error: FileSystemError = other_error.into();
         assert!(
             matches!(fs_error, FileSystemError::Io { path, .. } if path == PathBuf::from("<unknown>"))
@@ -118,9 +117,11 @@ mod tests {
             path: "/test/file.txt".into(),
             message: utf8_error.to_string(),
         };
-        assert!(utf8_decode
-            .to_string()
-            .starts_with("Failed to decode UTF-8 content in file: /test/file.txt - invalid utf-8"));
+        assert!(
+            utf8_decode.to_string().starts_with(
+                "Failed to decode UTF-8 content in file: /test/file.txt - invalid utf-8"
+            )
+        );
 
         let permission_denied =
             FileSystemError::PermissionDenied { path: "/test/protected".into() };

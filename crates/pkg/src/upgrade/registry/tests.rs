@@ -39,10 +39,10 @@ mod integration_tests {
 
         for version in versions {
             let mut version_obj = serde_json::Map::new();
-            if let Some(dep_msg) = deprecated {
-                if *version == latest {
-                    version_obj.insert("deprecated".to_string(), serde_json::json!(dep_msg));
-                }
+            if let Some(dep_msg) = deprecated
+                && *version == latest
+            {
+                version_obj.insert("deprecated".to_string(), serde_json::json!(dep_msg));
             }
             versions_map.insert(version.to_string(), serde_json::json!(version_obj));
         }
@@ -773,7 +773,12 @@ mod npmrc_tests {
             _path: &Path,
             _data: &[u8],
         ) -> Result<(), sublime_standard_tools::error::Error> {
-            unimplemented!("Write not needed for tests")
+            Err(sublime_standard_tools::error::Error::FileSystem(
+                sublime_standard_tools::error::FileSystemError::Io {
+                    path: _path.to_path_buf(),
+                    message: "Write not needed for tests".to_string(),
+                },
+            ))
         }
 
         async fn read_file_string(
@@ -794,18 +799,33 @@ mod npmrc_tests {
             _path: &Path,
             _content: &str,
         ) -> Result<(), sublime_standard_tools::error::Error> {
-            unimplemented!("Write not needed for tests")
+            Err(sublime_standard_tools::error::Error::FileSystem(
+                sublime_standard_tools::error::FileSystemError::Io {
+                    path: _path.to_path_buf(),
+                    message: "Write not needed for tests".to_string(),
+                },
+            ))
         }
 
         async fn create_dir_all(
             &self,
             _path: &Path,
         ) -> Result<(), sublime_standard_tools::error::Error> {
-            unimplemented!("Create dir not needed for tests")
+            Err(sublime_standard_tools::error::Error::FileSystem(
+                sublime_standard_tools::error::FileSystemError::Io {
+                    path: _path.to_path_buf(),
+                    message: "Create dir not needed for tests".to_string(),
+                },
+            ))
         }
 
         async fn remove(&self, _path: &Path) -> Result<(), sublime_standard_tools::error::Error> {
-            unimplemented!("Remove not needed for tests")
+            Err(sublime_standard_tools::error::Error::FileSystem(
+                sublime_standard_tools::error::FileSystemError::Io {
+                    path: _path.to_path_buf(),
+                    message: "Remove not needed for tests".to_string(),
+                },
+            ))
         }
 
         async fn exists(&self, path: &Path) -> bool {
@@ -816,21 +836,36 @@ mod npmrc_tests {
             &self,
             _path: &Path,
         ) -> Result<Vec<PathBuf>, sublime_standard_tools::error::Error> {
-            unimplemented!("Read dir not needed for tests")
+            Err(sublime_standard_tools::error::Error::FileSystem(
+                sublime_standard_tools::error::FileSystemError::Io {
+                    path: _path.to_path_buf(),
+                    message: "Read dir not needed for tests".to_string(),
+                },
+            ))
         }
 
         async fn walk_dir(
             &self,
             _path: &Path,
         ) -> Result<Vec<PathBuf>, sublime_standard_tools::error::Error> {
-            unimplemented!("Walk dir not needed for tests")
+            Err(sublime_standard_tools::error::Error::FileSystem(
+                sublime_standard_tools::error::FileSystemError::Io {
+                    path: _path.to_path_buf(),
+                    message: "Walk dir not needed for tests".to_string(),
+                },
+            ))
         }
 
         async fn metadata(
             &self,
             _path: &Path,
         ) -> Result<std::fs::Metadata, sublime_standard_tools::error::Error> {
-            unimplemented!("Metadata not needed for tests")
+            Err(sublime_standard_tools::error::Error::FileSystem(
+                sublime_standard_tools::error::FileSystemError::Io {
+                    path: _path.to_path_buf(),
+                    message: "Metadata not needed for tests".to_string(),
+                },
+            ))
         }
     }
 
@@ -1026,7 +1061,9 @@ package-lock=false
 
     #[tokio::test]
     async fn test_environment_variable_substitution() {
-        std::env::set_var("TEST_NPM_TOKEN", "secret_token_123");
+        unsafe {
+            std::env::set_var("TEST_NPM_TOKEN", "secret_token_123");
+        }
 
         let mut fs = MockFileSystem::new();
         fs.add_file("/workspace/.npmrc", "//npm.myorg.com/:_authToken=${TEST_NPM_TOKEN}\n");
@@ -1037,7 +1074,9 @@ package-lock=false
 
         assert_eq!(config.auth_tokens.get("npm.myorg.com"), Some(&"secret_token_123".to_string()));
 
-        std::env::remove_var("TEST_NPM_TOKEN");
+        unsafe {
+            std::env::remove_var("TEST_NPM_TOKEN");
+        }
     }
 
     #[tokio::test]

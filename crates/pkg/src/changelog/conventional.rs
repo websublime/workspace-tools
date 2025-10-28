@@ -522,14 +522,13 @@ impl ConventionalCommit {
             }
 
             // This is a continuation line or non-footer content
-            if let Some(ref mut footer) = current {
-                if !trimmed.is_empty() {
+            if let Some(ref mut footer) = current
+                && !trimmed.is_empty() {
                     if !footer.value.is_empty() {
                         footer.value.push(' ');
                     }
                     footer.value.push_str(trimmed);
                 }
-            }
         }
 
         // Don't forget the last footer

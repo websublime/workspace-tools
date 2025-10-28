@@ -117,8 +117,8 @@ where
     let mut result = apply_upgrades(available_upgrades, selection, dry_run, fs).await?;
 
     // If not dry run and auto_changeset is enabled, create changeset
-    if !dry_run && config.auto_changeset {
-        if let Some(manager) = changeset_manager {
+    if !dry_run && config.auto_changeset
+        && let Some(manager) = changeset_manager {
             // Extract affected package names from the result
             let affected_packages = extract_affected_packages(&result);
 
@@ -136,7 +136,6 @@ where
                 result.changeset_id = changeset_id;
             }
         }
-    }
 
     Ok(result)
 }
@@ -179,13 +178,11 @@ fn extract_package_name(package_path: &Path) -> Option<String> {
     // Try to read package.json to get the actual package name
     let package_json_path = package_path.join("package.json");
 
-    if let Ok(content) = std::fs::read_to_string(&package_json_path) {
-        if let Ok(pkg_json) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(name) = pkg_json.get("name").and_then(|v| v.as_str()) {
+    if let Ok(content) = std::fs::read_to_string(&package_json_path)
+        && let Ok(pkg_json) = serde_json::from_str::<serde_json::Value>(&content)
+            && let Some(name) = pkg_json.get("name").and_then(|v| v.as_str()) {
                 return Some(name.to_string());
             }
-        }
-    }
 
     // Fallback to directory name
     package_path.file_name().and_then(|n| n.to_str()).map(String::from)

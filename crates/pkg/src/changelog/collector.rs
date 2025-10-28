@@ -260,8 +260,8 @@ impl<'a> ChangelogCollector<'a> {
         let date = self.parse_commit_date(&commit.author_date);
 
         // Try parsing as conventional commit
-        if self.config.conventional.enabled {
-            if let Ok(conventional) = ConventionalCommit::parse(&commit.message) {
+        if self.config.conventional.enabled
+            && let Ok(conventional) = ConventionalCommit::parse(&commit.message) {
                 return ChangelogEntry {
                     description: conventional.description().to_string(),
                     commit_hash: commit.hash.clone(),
@@ -274,7 +274,6 @@ impl<'a> ChangelogCollector<'a> {
                     date,
                 };
             }
-        }
 
         // Fallback to plain message
         let description = self.extract_first_line(&commit.message);
@@ -314,11 +313,10 @@ impl<'a> ChangelogCollector<'a> {
         }
 
         // Try parsing as Unix timestamp
-        if let Ok(timestamp) = date_str.parse::<i64>() {
-            if let Some(dt) = Utc.timestamp_opt(timestamp, 0).single() {
+        if let Ok(timestamp) = date_str.parse::<i64>()
+            && let Some(dt) = Utc.timestamp_opt(timestamp, 0).single() {
                 return dt;
             }
-        }
 
         // Fallback to current time if parsing fails
         Utc::now()

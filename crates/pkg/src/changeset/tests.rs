@@ -1925,7 +1925,8 @@ mod git_integration_tests {
         let detector =
             PackageDetector::new(temp_dir.path().to_path_buf(), &repo, FileSystemManager::new());
 
-        let affected = detector.detect_affected_packages(&[last_commit.clone()]).await.unwrap();
+        let affected =
+            detector.detect_affected_packages(std::slice::from_ref(last_commit)).await.unwrap();
         // Should detect the affected package
         assert!(!affected.is_empty(), "Should detect at least one affected package");
         assert!(
@@ -1988,7 +1989,8 @@ mod git_integration_tests {
         let detector =
             PackageDetector::new(temp_dir.path().to_path_buf(), &repo, FileSystemManager::new());
 
-        let affected = detector.detect_affected_packages(&[last_commit.clone()]).await.unwrap();
+        let affected =
+            detector.detect_affected_packages(std::slice::from_ref(last_commit)).await.unwrap();
         // Should detect the single package
         assert!(!affected.is_empty(), "Should detect the single package when files change");
     }

@@ -26,12 +26,12 @@ use tokio::{
 use crate::error::{Error, Result};
 
 use super::super::{
+    Command,
     executor::Executor,
     types::{
         CommandPriority, CommandQueue, CommandQueueConfig, CommandQueueResult, CommandStatus,
         DefaultCommandExecutor, QueueMessage, QueueProcessor, QueuedCommand,
     },
-    Command,
 };
 
 impl CommandQueue {
@@ -367,7 +367,7 @@ impl CommandQueue {
         match self.statuses.lock() {
             Ok(statuses) => statuses.get(id).copied(),
             Err(e) => {
-                log::error!("Failed to lock command statuses: {}", e);
+                log::error!("Failed to lock command statuses: {e}");
                 None
             }
         }
@@ -410,7 +410,7 @@ impl CommandQueue {
         match self.results.lock() {
             Ok(results) => results.get(id).cloned(),
             Err(e) => {
-                log::error!("Failed to lock command results: {}", e);
+                log::error!("Failed to lock command results: {e}");
                 None
             }
         }
@@ -600,7 +600,7 @@ impl CommandQueue {
                 match tokio::time::timeout(self.config.shutdown_timeout, handle).await {
                     Ok(result) => {
                         if let Err(e) = result {
-                            log::error!("Error during queue processor shutdown: {}", e);
+                            log::error!("Error during queue processor shutdown: {e}");
                         }
                     }
                     Err(_) => {

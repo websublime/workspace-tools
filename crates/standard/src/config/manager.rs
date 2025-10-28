@@ -9,12 +9,12 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::Arc;
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::sync::RwLock;
 
-use crate::filesystem::AsyncFileSystem;
 use crate::error::{ConfigError, ConfigResult};
+use crate::filesystem::AsyncFileSystem;
 
 use super::format::ConfigFormat;
 use super::source::{
@@ -70,7 +70,7 @@ use super::value::ConfigValue;
 ///         .with_file("config.toml")
 ///         .with_env_prefix("MY_APP")
 ///         .build()?;
-///     
+///
 ///     manager.load().await
 /// }
 /// ```
@@ -397,17 +397,19 @@ impl<T: Configurable + Clone> ConfigBuilder<T> {
     {
         if let Some(defaults) = T::default_values() {
             let value = match serde_json::to_value(defaults) {
-                Ok(serialized) => {
-                    match serde_json::from_value(serialized) {
-                        Ok(config_value) => config_value,
-                        Err(e) => {
-                            log::warn!("Failed to deserialize default configuration values: {}. Using empty defaults.", e);
-                            ConfigValue::Map(HashMap::default())
-                        }
+                Ok(serialized) => match serde_json::from_value(serialized) {
+                    Ok(config_value) => config_value,
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to deserialize default configuration values: {e}. Using empty defaults."
+                        );
+                        ConfigValue::Map(HashMap::default())
                     }
-                }
+                },
                 Err(e) => {
-                    log::warn!("Failed to serialize default configuration values: {}. Using empty defaults.", e);
+                    log::warn!(
+                        "Failed to serialize default configuration values: {e}. Using empty defaults."
+                    );
                     ConfigValue::Map(HashMap::default())
                 }
             };

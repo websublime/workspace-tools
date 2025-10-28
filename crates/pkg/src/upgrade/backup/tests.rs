@@ -31,13 +31,13 @@ impl MockFileSystem {
 
         // Handle Windows drive letters (C:/ -> /c/)
         // This ensures compatibility with test paths that use Unix-style roots
-        if cfg!(windows) && path_str.len() >= 2 {
-            if let Some(second_char) = path_str.chars().nth(1) {
-                if second_char == ':' {
-                    let drive = path_str.chars().next().unwrap().to_ascii_lowercase();
-                    return format!("/{}{}", drive, &path_str[2..]);
-                }
-            }
+        if cfg!(windows)
+            && path_str.len() >= 2
+            && let Some(second_char) = path_str.chars().nth(1)
+            && second_char == ':'
+        {
+            let drive = path_str.chars().next().unwrap().to_ascii_lowercase();
+            return format!("/{}{}", drive, &path_str[2..]);
         }
 
         path_str
@@ -672,21 +672,27 @@ async fn test_multiple_files_backup_and_restore() {
     manager.restore_backup(&backup_id).await.unwrap();
 
     // Verify all files were restored
-    assert!(manager
-        .fs
-        .get_file(&manager.workspace_root.join("package.json"))
-        .unwrap()
-        .contains(r#""name": "root""#));
-    assert!(manager
-        .fs
-        .get_file(&manager.workspace_root.join("packages/a/package.json"))
-        .unwrap()
-        .contains(r#""name": "a""#));
-    assert!(manager
-        .fs
-        .get_file(&manager.workspace_root.join("packages/b/package.json"))
-        .unwrap()
-        .contains(r#""name": "b""#));
+    assert!(
+        manager
+            .fs
+            .get_file(&manager.workspace_root.join("package.json"))
+            .unwrap()
+            .contains(r#""name": "root""#)
+    );
+    assert!(
+        manager
+            .fs
+            .get_file(&manager.workspace_root.join("packages/a/package.json"))
+            .unwrap()
+            .contains(r#""name": "a""#)
+    );
+    assert!(
+        manager
+            .fs
+            .get_file(&manager.workspace_root.join("packages/b/package.json"))
+            .unwrap()
+            .contains(r#""name": "b""#)
+    );
 }
 
 #[tokio::test]
