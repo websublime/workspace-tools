@@ -35,7 +35,7 @@
 #![allow(clippy::exit)] // Required for main entry point
 
 use std::process;
-use sublime_cli::error::Result;
+use sublime_cli_tools::error::Result;
 
 /// Main entry point for the CLI.
 ///

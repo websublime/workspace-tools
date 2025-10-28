@@ -32,7 +32,7 @@
 //! ## Examples
 //!
 //! ```rust,no_run
-//! use sublime_cli;
+//! use sublime_cli_tools;
 //!
 //! // The CLI is primarily used as a binary, but the library exports
 //! // command execution functions for testing and integration purposes.
