@@ -594,18 +594,15 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
         let yarn_lock_path = path.join("yarn.lock");
         if self.fs.exists(&yarn_lock_path).await {
             let package_json_path = path.join("package.json");
-            if self.fs.exists(&package_json_path).await {
-                if let Ok(content) = self.fs.read_file_string(&package_json_path).await {
+            if self.fs.exists(&package_json_path).await
+                && let Ok(content) = self.fs.read_file_string(&package_json_path).await {
                     // Try raw JSON parsing to check for workspaces field
-                    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&content) {
-                        if let Some(workspaces) = json_value.get("workspaces") {
-                            if !workspaces.is_null() {
+                    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&content)
+                        && let Some(workspaces) = json_value.get("workspaces")
+                            && !workspaces.is_null() {
                                 return Ok(Some(MonorepoKind::YarnWorkspaces));
                             }
-                        }
-                    }
                 }
-            }
         }
 
         // Check for pnpm-lock.yaml with workspaces
@@ -617,11 +614,10 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
                     Ok(content) => {
                         match serde_json::from_str::<serde_json::Value>(&content) {
                             Ok(json_value) => {
-                                if let Some(workspaces) = json_value.get("workspaces") {
-                                    if !workspaces.is_null() {
+                                if let Some(workspaces) = json_value.get("workspaces")
+                                    && !workspaces.is_null() {
                                         return Ok(Some(MonorepoKind::PnpmWorkspaces));
                                     }
-                                }
                             }
                             Err(e) => {
                                 log::warn!("Failed to parse package.json for pnpm workspace detection at {}: {}", package_json_path.display(), e);
@@ -662,11 +658,10 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
                 Ok(content) => {
                     match serde_json::from_str::<serde_json::Value>(&content) {
                         Ok(json_value) => {
-                            if let Some(workspaces) = json_value.get("workspaces") {
-                                if !workspaces.is_null() {
+                            if let Some(workspaces) = json_value.get("workspaces")
+                                && !workspaces.is_null() {
                                     return Ok(Some(MonorepoKind::NpmWorkSpace));
                                 }
-                            }
                         }
                         Err(e) => {
                             log::warn!("Failed to parse package.json for npm workspace detection at {}: {}", package_json_path.display(), e);
@@ -800,18 +795,16 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
                         continue;
                     }
 
-                    if let Ok(metadata) = self.fs.metadata(&dir_path).await {
-                        if metadata.is_dir() {
+                    if let Ok(metadata) = self.fs.metadata(&dir_path).await
+                        && metadata.is_dir() {
                             let package_json_path = dir_path.join("package.json");
-                            if self.fs.exists(&package_json_path).await {
-                                if let Ok(package) =
+                            if self.fs.exists(&package_json_path).await
+                                && let Ok(package) =
                                     self.load_workspace_package(&package_json_path, &discovered_scopes).await
                                 {
                                     packages.push(package);
                                 }
-                            }
                         }
-                    }
                 }
             }
         }
@@ -918,26 +911,21 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
                         continue;
                     }
 
-                    if let Ok(metadata) = self.fs.metadata(&dir_path).await {
-                        if metadata.is_dir() {
+                    if let Ok(metadata) = self.fs.metadata(&dir_path).await
+                        && metadata.is_dir() {
                             let package_json_path = dir_path.join("package.json");
-                            if self.fs.exists(&package_json_path).await {
-                                if let Ok(pkg_content) = self.fs.read_file_string(&package_json_path).await {
-                                    if let Ok(pkg_json) = serde_json::from_str::<serde_json::Value>(&pkg_content) {
-                                        if let Some(name) = pkg_json.get("name").and_then(|v| v.as_str()) {
+                            if self.fs.exists(&package_json_path).await
+                                && let Ok(pkg_content) = self.fs.read_file_string(&package_json_path).await
+                                    && let Ok(pkg_json) = serde_json::from_str::<serde_json::Value>(&pkg_content)
+                                        && let Some(name) = pkg_json.get("name").and_then(|v| v.as_str()) {
                                             // Extract scope from package name (e.g., "@scope/lib" -> "@scope/")
-                                            if name.starts_with('@') {
-                                                if let Some(slash_pos) = name.find('/') {
+                                            if name.starts_with('@')
+                                                && let Some(slash_pos) = name.find('/') {
                                                     let scope = format!("{}/", &name[..slash_pos]);
                                                     discovered_scopes.insert(scope);
                                                 }
-                                            }
                                         }
-                                    }
-                                }
-                            }
                         }
-                    }
                 }
             }
         }
@@ -973,11 +961,10 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
 
             // Component-based matching for directory-level exclusions
             for component in path.components() {
-                if let Some(component_str) = component.as_os_str().to_str() {
-                    if Self::matches_exclusion_pattern(component_str, exclude_pattern) {
+                if let Some(component_str) = component.as_os_str().to_str()
+                    && Self::matches_exclusion_pattern(component_str, exclude_pattern) {
                         return true;
                     }
-                }
             }
         }
 
@@ -1437,26 +1424,24 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
         let mut workspace_dev_dependencies = Vec::new();
 
         // Check regular dependencies - use custom workspace fields or detect by name patterns
-        if let Some(deps) = json_value.get("dependencies") {
-            if let Some(deps_obj) = deps.as_object() {
+        if let Some(deps) = json_value.get("dependencies")
+            && let Some(deps_obj) = deps.as_object() {
                 for (dep_name, _) in deps_obj {
                     if self.is_workspace_dependency(dep_name, discovered_scopes) {
                         workspace_dependencies.push(dep_name.clone());
                     }
                 }
             }
-        }
 
         // Check dev dependencies - use custom workspace fields or detect by name patterns
-        if let Some(dev_deps) = json_value.get("devDependencies") {
-            if let Some(dev_deps_obj) = dev_deps.as_object() {
+        if let Some(dev_deps) = json_value.get("devDependencies")
+            && let Some(dev_deps_obj) = dev_deps.as_object() {
                 for (dep_name, _) in dev_deps_obj {
                     if self.is_workspace_dependency(dep_name, discovered_scopes) {
                         workspace_dev_dependencies.push(dep_name.clone());
                     }
                 }
             }
-        }
 
         Ok(WorkspacePackage {
             name,

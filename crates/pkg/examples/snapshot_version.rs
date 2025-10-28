@@ -71,8 +71,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     for format in formats {
-        let gen = SnapshotGenerator::new(format)?;
-        let snap = gen.generate(&test_context)?;
+        let generator = SnapshotGenerator::new(format)?;
+        let snap = generator.generate(&test_context)?;
         println!("   Format: {}", format);
         println!("   Result: {}\n", snap);
     }

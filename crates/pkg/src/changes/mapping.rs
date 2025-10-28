@@ -481,7 +481,7 @@ where
     /// ```
     pub async fn is_monorepo(&mut self) -> ChangesResult<bool> {
         self.ensure_monorepo_detected().await?;
-        Ok(self.cached_monorepo.as_ref().map_or(false, |m| m.is_some()))
+        Ok(self.cached_monorepo.as_ref().is_some_and(|m| m.is_some()))
     }
 
     /// Ensures monorepo structure has been detected and cached.

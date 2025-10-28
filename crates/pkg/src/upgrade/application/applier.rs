@@ -265,15 +265,14 @@ fn apply_single_upgrade(pkg_json: &mut PackageJson, upgrade: &DependencyUpgrade)
         DependencyType::Optional => &mut pkg_json.optional_dependencies,
     };
 
-    if let Some(deps_map) = deps {
-        if let Some(version) = deps_map.get_mut(&upgrade.name) {
+    if let Some(deps_map) = deps
+        && let Some(version) = deps_map.get_mut(&upgrade.name) {
             // Preserve the version prefix (^, ~, etc.) if present
             let new_spec =
                 preserve_version_prefix(&upgrade.current_version, &upgrade.latest_version);
             *version = new_spec;
             return true;
         }
-    }
 
     false
 }

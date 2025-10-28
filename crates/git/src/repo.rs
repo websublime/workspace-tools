@@ -55,10 +55,10 @@
 //! ```
 
 use git2::{
-    build::CheckoutBuilder, BranchType, Commit, Cred, CredentialType, Delta, DiffOptions,
-    Direction, Error as Git2Error, FetchOptions, FetchPrune, IndexAddOption, MergeOptions, Oid,
-    PushOptions, RemoteCallbacks, Repository, RepositoryInitOptions, StatusOptions, TreeWalkMode,
-    TreeWalkResult,
+    BranchType, Commit, Cred, CredentialType, Delta, DiffOptions, Direction, Error as Git2Error,
+    FetchOptions, FetchPrune, IndexAddOption, MergeOptions, Oid, PushOptions, RemoteCallbacks,
+    Repository, RepositoryInitOptions, StatusOptions, TreeWalkMode, TreeWalkResult,
+    build::CheckoutBuilder,
 };
 use std::collections::HashMap;
 use std::fs::canonicalize;
@@ -112,7 +112,7 @@ impl Clone for RepoError {
         match self {
             RepoError::CanonicalPathFailure(_) => {
                 // We'll create a new IO error with the same message
-                let io_err = std::io::Error::new(std::io::ErrorKind::Other, format!("{self}"));
+                let io_err = std::io::Error::other(format!("{self}"));
                 RepoError::CanonicalPathFailure(io_err)
             }
             RepoError::GitFailure(_) => {
@@ -875,12 +875,12 @@ impl Repo {
 
         let mut entries = config.entries(None).map_err(RepoError::ConfigEntriesError)?;
         while let Some(entry_result) = entries.next() {
-            if let Ok(entry) = entry_result {
-                if let Some(name) = entry.name() {
-                    // Try to get the value as a string
-                    if let Ok(value) = config.get_string(name) {
-                        config_map.insert(name.to_string(), value);
-                    }
+            if let Ok(entry) = entry_result
+                && let Some(name) = entry.name()
+            {
+                // Try to get the value as a string
+                if let Ok(value) = config.get_string(name) {
+                    config_map.insert(name.to_string(), value);
                 }
             }
         }
@@ -1896,8 +1896,8 @@ impl Repo {
                 // The repo state is MERGING. `cleanup_state` would abort the merge.
                 // We return a specific error.
                 return Err(RepoError::MergeConflictError(Git2Error::from_str(&format!(
-                        "Merge conflict detected when merging '{branch_name}'. Resolve conflicts and commit."
-                    ))));
+                    "Merge conflict detected when merging '{branch_name}'. Resolve conflicts and commit."
+                ))));
             }
 
             // --- No Conflicts - Create Merge Commit ---
@@ -1933,8 +1933,8 @@ impl Repo {
         // -- Handle other analysis results if necessary (e.g., unborn HEAD) --
         if analysis.is_unborn() {
             return Err(RepoError::MergeError(Git2Error::from_str(
-                    "Cannot merge into an unborn HEAD (repository might be empty or branch doesn't exist)",
-                )));
+                "Cannot merge into an unborn HEAD (repository might be empty or branch doesn't exist)",
+            )));
         }
 
         // Default error if none of the above conditions were met (shouldn't usually happen)
@@ -3042,10 +3042,10 @@ impl Repo {
                 let pub_key_path = key_path.with_extension("pub");
                 if let Ok(content) = std::fs::read_to_string(&pub_key_path) {
                     // Public key format is typically: ssh-xxx AAAAB3Nza... username@host
-                    if let Some(username_part) = content.split_whitespace().nth(2) {
-                        if let Some(username) = username_part.split('@').next() {
-                            return Cred::ssh_key(username, None, key_path, None);
-                        }
+                    if let Some(username_part) = content.split_whitespace().nth(2)
+                        && let Some(username) = username_part.split('@').next()
+                    {
+                        return Cred::ssh_key(username, None, key_path, None);
                     }
                 }
             }
@@ -3065,7 +3065,7 @@ impl Repo {
                     &key_path, None, // passphrase (None if no passphrase)
                 ) {
                     Ok(cred) => return Ok(cred),
-                    Err(_) => continue, // Try the next key if this one fails
+                    Err(_) => {} // Try the next key if this one fails
                 }
             }
         }

@@ -60,9 +60,7 @@ tokio = { version = "1.0", features = ["full"] }
 ```rust
 use sublime_standard_tools;
 
-fn main() {
-    println!("Using sublime_standard_tools version: {}", sublime_standard_tools::version());
-}
+println!("Using sublime_standard_tools version: {}", sublime_standard_tools::version());
 ```
 
 ### Basic Project Detection

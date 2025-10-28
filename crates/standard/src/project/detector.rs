@@ -605,11 +605,10 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
         project.validation_status = metadata.validation_status;
 
         // If it's a monorepo, populate internal dependencies using config-aware detection
-        if project.is_monorepo() {
-            if let Ok(monorepo) = self.detect_monorepo_with_config(path, &effective_config).await {
+        if project.is_monorepo()
+            && let Ok(monorepo) = self.detect_monorepo_with_config(path, &effective_config).await {
                 project.internal_dependencies = monorepo.packages().to_vec();
             }
-        }
 
         Ok(ProjectDescriptor::NodeJs(project))
     }

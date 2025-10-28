@@ -564,8 +564,8 @@ pub(crate) fn extract_dependencies(
     let mut dependencies = Vec::new();
 
     // Regular dependencies
-    if options.include_dependencies {
-        if let Some(deps) = &package_json.dependencies {
+    if options.include_dependencies
+        && let Some(deps) = &package_json.dependencies {
             for (name, version) in deps {
                 if !is_internal_dependency(version) && options.matches_dependency_filter(name) {
                     dependencies.push(DependencyToCheck {
@@ -576,11 +576,10 @@ pub(crate) fn extract_dependencies(
                 }
             }
         }
-    }
 
     // Dev dependencies
-    if options.include_dev_dependencies {
-        if let Some(deps) = &package_json.dev_dependencies {
+    if options.include_dev_dependencies
+        && let Some(deps) = &package_json.dev_dependencies {
             for (name, version) in deps {
                 if !is_internal_dependency(version) && options.matches_dependency_filter(name) {
                     dependencies.push(DependencyToCheck {
@@ -591,11 +590,10 @@ pub(crate) fn extract_dependencies(
                 }
             }
         }
-    }
 
     // Peer dependencies
-    if options.include_peer_dependencies {
-        if let Some(deps) = &package_json.peer_dependencies {
+    if options.include_peer_dependencies
+        && let Some(deps) = &package_json.peer_dependencies {
             for (name, version) in deps {
                 if !is_internal_dependency(version) && options.matches_dependency_filter(name) {
                     dependencies.push(DependencyToCheck {
@@ -606,11 +604,10 @@ pub(crate) fn extract_dependencies(
                 }
             }
         }
-    }
 
     // Optional dependencies
-    if options.include_optional_dependencies {
-        if let Some(deps) = &package_json.optional_dependencies {
+    if options.include_optional_dependencies
+        && let Some(deps) = &package_json.optional_dependencies {
             for (name, version) in deps {
                 if !is_internal_dependency(version) && options.matches_dependency_filter(name) {
                     dependencies.push(DependencyToCheck {
@@ -621,7 +618,6 @@ pub(crate) fn extract_dependencies(
                 }
             }
         }
-    }
 
     dependencies
 }
@@ -790,11 +786,10 @@ pub(crate) fn find_latest_prerelease(versions: &[String]) -> Option<String> {
     let mut prerelease_versions: Vec<Version> = Vec::new();
 
     for version_str in versions {
-        if let Ok(version) = Version::parse(version_str) {
-            if !version.pre.is_empty() {
+        if let Ok(version) = Version::parse(version_str)
+            && !version.pre.is_empty() {
                 prerelease_versions.push(version);
             }
-        }
     }
 
     if prerelease_versions.is_empty() {

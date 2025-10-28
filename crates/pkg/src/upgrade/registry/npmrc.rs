@@ -372,13 +372,11 @@ impl NpmrcConfig {
             let absolute_pos = pos + idx;
 
             // Check if preceded by whitespace
-            if absolute_pos > 0 {
-                if let Some(prev_char) = value[..absolute_pos].chars().last() {
-                    if prev_char.is_whitespace() {
+            if absolute_pos > 0
+                && let Some(prev_char) = value[..absolute_pos].chars().last()
+                    && prev_char.is_whitespace() {
                         return Some(absolute_pos);
                     }
-                }
-            }
 
             // Move past this // and continue searching
             pos = absolute_pos + 2;
@@ -420,8 +418,8 @@ impl NpmrcConfig {
     /// Parses a single key-value pair and updates the config.
     fn parse_key_value(config: &mut Self, key: &str, value: &str) -> Result<(), String> {
         // Check for scoped registry: @scope:registry
-        if let Some(scope_key) = key.strip_prefix('@') {
-            if let Some(colon_pos) = scope_key.find(':') {
+        if let Some(scope_key) = key.strip_prefix('@')
+            && let Some(colon_pos) = scope_key.find(':') {
                 let scope_name = &scope_key[..colon_pos];
                 let property = &scope_key[colon_pos + 1..];
 
@@ -430,7 +428,6 @@ impl NpmrcConfig {
                     return Ok(());
                 }
             }
-        }
 
         // Check for auth token: //<registry>/:_authToken
         if key.starts_with("//") && key.contains(":_authToken") {

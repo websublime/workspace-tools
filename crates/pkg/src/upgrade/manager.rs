@@ -287,11 +287,10 @@ impl UpgradeManager {
                 }
 
                 // Clean up backup if configured
-                if self.config.backup.enabled && !self.config.backup.keep_after_success {
-                    if let Some(id) = backup_id {
+                if self.config.backup.enabled && !self.config.backup.keep_after_success
+                    && let Some(id) = backup_id {
                         let _ = self.backup_manager.delete_backup(&id).await;
                     }
-                }
 
                 // Clean up old backups
                 if self.config.backup.enabled {

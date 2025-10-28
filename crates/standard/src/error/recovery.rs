@@ -234,27 +234,19 @@ impl ErrorRecoveryManager {
                         match level {
                             LogLevel::Debug => log::debug!(
                                 target: "recovery",
-                                "Recovery executed - Context: {} | Error: {:?} | Strategy: LogAndContinue(Debug)",
-                                context,
-                                error
+                                "Recovery executed - Context: {context} | Error: {error:?} | Strategy: LogAndContinue(Debug)"
                             ),
                             LogLevel::Info => log::info!(
                                 target: "recovery", 
-                                "Recovery executed - Context: {} | Error: {:?} | Strategy: LogAndContinue(Info)",
-                                context,
-                                error
+                                "Recovery executed - Context: {context} | Error: {error:?} | Strategy: LogAndContinue(Info)"
                             ),
                             LogLevel::Warn => log::warn!(
                                 target: "recovery",
-                                "Recovery warning - Context: {} | Error: {:?} | Strategy: LogAndContinue(Warn)",
-                                context,
-                                error
+                                "Recovery warning - Context: {context} | Error: {error:?} | Strategy: LogAndContinue(Warn)"
                             ),
                             LogLevel::Error => log::error!(
                                 target: "recovery",
-                                "Recovery error - Context: {} | Error: {:?} | Strategy: LogAndContinue(Error)",
-                                context,
-                                error
+                                "Recovery error - Context: {context} | Error: {error:?} | Strategy: LogAndContinue(Error)"
                             ),
                         }
                         RecoveryResult::Recovered {
@@ -324,9 +316,7 @@ impl ErrorRecoveryManager {
         for (index, error_msg) in error_chain.iter().enumerate() {
             log::debug!(
                 target: "recovery.chain",
-                "Error Chain[{}]: {}",
-                index,
-                error_msg
+                "Error Chain[{index}]: {error_msg}"
             );
         }
     }

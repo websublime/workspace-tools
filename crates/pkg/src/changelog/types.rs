@@ -661,14 +661,13 @@ impl GeneratedChangelog {
         use crate::error::ChangelogError;
 
         // Ensure parent directory exists
-        if let Some(parent) = self.changelog_path.parent() {
-            if !fs.exists(parent).await {
+        if let Some(parent) = self.changelog_path.parent()
+            && !fs.exists(parent).await {
                 fs.create_dir_all(parent).await.map_err(|e| ChangelogError::FileSystemError {
                     path: parent.to_path_buf(),
                     reason: e.as_ref().to_string(),
                 })?;
             }
-        }
 
         // Determine final content
         let final_content = if self.existing {

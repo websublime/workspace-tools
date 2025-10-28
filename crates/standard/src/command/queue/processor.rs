@@ -19,7 +19,7 @@ use std::{
 };
 
 use tokio::{
-    sync::{mpsc::Receiver, Semaphore},
+    sync::{Semaphore, mpsc::Receiver},
     time::sleep,
 };
 
@@ -97,8 +97,8 @@ impl QueueProcessor {
             let mut collected_commands = false;
 
             // Try to collect messages for a configured window
-            let collect_deadline =
-                tokio::time::Instant::now() + tokio::time::Duration::from_millis(self.config.collection_window_ms);
+            let collect_deadline = tokio::time::Instant::now()
+                + tokio::time::Duration::from_millis(self.config.collection_window_ms);
 
             while tokio::time::Instant::now() < collect_deadline {
                 // Poll for messages (non-blocking)
@@ -133,7 +133,10 @@ impl QueueProcessor {
                 }
 
                 // Small sleep to prevent CPU spin while still collecting rapidly
-                tokio::time::sleep(tokio::time::Duration::from_micros(self.config.collection_sleep_us)).await;
+                tokio::time::sleep(tokio::time::Duration::from_micros(
+                    self.config.collection_sleep_us,
+                ))
+                .await;
             }
 
             // If we collected any commands or already had some, process the highest priority one
@@ -142,7 +145,8 @@ impl QueueProcessor {
             } else if self.running {
                 // No commands in queue and channel empty, wait a bit to avoid CPU spin
                 // We wait for a configured time here since we're idle
-                tokio::time::sleep(tokio::time::Duration::from_millis(self.config.idle_sleep_ms)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(self.config.idle_sleep_ms))
+                    .await;
             }
         }
 
@@ -167,12 +171,12 @@ impl QueueProcessor {
     #[allow(clippy::manual_let_else)]
     async fn process_next_command(&mut self) {
         // Apply rate limit
-        if let Some(rate_limit) = self.config.rate_limit {
-            if let Some(last_time) = self.last_execution {
-                let elapsed = last_time.elapsed();
-                if elapsed < rate_limit {
-                    sleep(rate_limit - elapsed).await;
-                }
+        if let Some(rate_limit) = self.config.rate_limit
+            && let Some(last_time) = self.last_execution
+        {
+            let elapsed = last_time.elapsed();
+            if elapsed < rate_limit {
+                sleep(rate_limit - elapsed).await;
             }
         }
 
@@ -190,7 +194,7 @@ impl QueueProcessor {
                 statuses.insert(id.clone(), CommandStatus::Running);
             }
             Err(e) => {
-                log::error!("Failed to acquire status lock for command {}: {:?}", id, e);
+                log::error!("Failed to acquire status lock for command {id}: {e:?}");
                 // Cannot proceed without status tracking
                 return;
             }
@@ -207,15 +211,17 @@ impl QueueProcessor {
             let permit = match semaphore.acquire().await {
                 Ok(permit) => permit,
                 Err(e) => {
-                    log::error!("Failed to acquire semaphore permit for command {}: {:?}", id, e);
-                    
+                    log::error!("Failed to acquire semaphore permit for command {id}: {e:?}");
+
                     // Update status with proper error handling
                     match statuses.lock() {
                         Ok(mut statuses) => {
                             statuses.insert(id.clone(), CommandStatus::Failed);
                         }
                         Err(lock_err) => {
-                            log::error!("Failed to acquire status lock while handling semaphore error for command {}: {:?}", id, lock_err);
+                            log::error!(
+                                "Failed to acquire status lock while handling semaphore error for command {id}: {lock_err:?}"
+                            );
                         }
                     }
 
@@ -230,7 +236,9 @@ impl QueueProcessor {
                             );
                         }
                         Err(lock_err) => {
-                            log::error!("Failed to acquire results lock while handling semaphore error for command {}: {:?}", id, lock_err);
+                            log::error!(
+                                "Failed to acquire results lock while handling semaphore error for command {id}: {lock_err:?}"
+                            );
                         }
                     }
                     return;
@@ -260,7 +268,9 @@ impl QueueProcessor {
                     statuses.insert(id.clone(), status);
                 }
                 Err(e) => {
-                    log::error!("Failed to acquire status lock for final status update of command {}: {:?}", id, e);
+                    log::error!(
+                        "Failed to acquire status lock for final status update of command {id}: {e:?}"
+                    );
                 }
             }
 
@@ -269,7 +279,9 @@ impl QueueProcessor {
                     results_map.insert(id.clone(), queue_result);
                 }
                 Err(e) => {
-                    log::error!("Failed to acquire results lock for final result storage of command {}: {:?}", id, e);
+                    log::error!(
+                        "Failed to acquire results lock for final result storage of command {id}: {e:?}"
+                    );
                 }
             }
 

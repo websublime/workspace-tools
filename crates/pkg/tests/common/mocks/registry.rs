@@ -339,10 +339,10 @@ impl MockRegistry {
     /// ```
     pub fn deprecate_version(&self, name: &str, version: &str, message: impl Into<String>) {
         let mut packages = self.packages.lock().unwrap();
-        if let Some(pkg) = packages.get_mut(name) {
-            if let Some(ver) = pkg.versions.get_mut(version) {
-                ver.deprecated = Some(message.into());
-            }
+        if let Some(pkg) = packages.get_mut(name)
+            && let Some(ver) = pkg.versions.get_mut(version)
+        {
+            ver.deprecated = Some(message.into());
         }
     }
 
@@ -393,10 +393,10 @@ impl MockRegistry {
         dependencies: HashMap<String, String>,
     ) {
         let mut packages = self.packages.lock().unwrap();
-        if let Some(pkg) = packages.get_mut(name) {
-            if let Some(ver) = pkg.versions.get_mut(version) {
-                ver.dependencies.extend(dependencies);
-            }
+        if let Some(pkg) = packages.get_mut(name)
+            && let Some(ver) = pkg.versions.get_mut(version)
+        {
+            ver.dependencies.extend(dependencies);
         }
     }
 

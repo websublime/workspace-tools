@@ -384,8 +384,8 @@ impl PackageManager {
         let path = path.as_ref();
 
         // Check for environment variable preference if configured
-        if config.detect_from_env {
-            if let Ok(env_manager) = std::env::var(&config.env_var_name) {
+        if config.detect_from_env
+            && let Ok(env_manager) = std::env::var(&config.env_var_name) {
                 let kind = match env_manager.to_lowercase().as_str() {
                     "npm" => Some(PackageManagerKind::Npm),
                     "yarn" => Some(PackageManagerKind::Yarn),
@@ -408,7 +408,6 @@ impl PackageManager {
                     }
                 }
             }
-        }
 
         // Check lock files in configured order
         for &kind in &config.detection_order {

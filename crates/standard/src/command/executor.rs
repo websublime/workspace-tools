@@ -19,15 +19,11 @@
 //! types establish the contracts between different components of the system and
 //! provide the necessary abstractions for flexible command processing.
 
-use std::{
-    process::Stdio,
-    time::Instant,
-    path::Path,
-};
+use std::{path::Path, process::Stdio, time::Instant};
 
 use crate::config::{ConfigManager, StandardConfig, traits::Configurable};
 use crate::error::{CommandError, Error, Result};
-use crate::filesystem::{FileSystemManager, AsyncFileSystem};
+use crate::filesystem::{AsyncFileSystem, FileSystemManager};
 
 use tokio::{
     process::{Child, Command},
@@ -134,9 +130,7 @@ impl DefaultCommandExecutor {
     /// ```
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            config: CommandConfig::default(),
-        }
+        Self { config: CommandConfig::default() }
     }
 
     /// Creates a new `DefaultCommandExecutor` with custom configuration.
@@ -156,8 +150,8 @@ impl DefaultCommandExecutor {
     /// use sublime_standard_tools::config::CommandConfig;
     /// use std::time::Duration;
     ///
-    /// let config = CommandConfig { 
-    ///     default_timeout: Duration::from_secs(120), 
+    /// let config = CommandConfig {
+    ///     default_timeout: Duration::from_secs(120),
     ///     ..CommandConfig::default()
     /// };
     /// let executor = DefaultCommandExecutor::new_with_config(config);
@@ -200,17 +194,15 @@ impl DefaultCommandExecutor {
     /// Returns an error if configuration files exist but cannot be parsed.
     pub async fn new_with_project_config(project_root: &Path) -> Result<Self> {
         let config = Self::load_project_config(project_root, None).await?;
-        
-        Ok(Self {
-            config: config.commands,
-        })
+
+        Ok(Self { config: config.commands })
     }
 
     /// Loads configuration from project files in the specified directory.
     ///
     /// This method searches for configuration files in the following order:
     /// - repo.config.toml
-    /// - repo.config.yml/yaml  
+    /// - repo.config.yml/yaml
     /// - repo.config.json
     ///
     /// # Arguments
@@ -236,7 +228,7 @@ impl DefaultCommandExecutor {
         // Check for repo.config.* files in order of preference
         let config_files = [
             project_root.join("repo.config.toml"),
-            project_root.join("repo.config.yml"), 
+            project_root.join("repo.config.yml"),
             project_root.join("repo.config.yaml"),
             project_root.join("repo.config.json"),
         ];
@@ -248,19 +240,20 @@ impl DefaultCommandExecutor {
             }
         }
 
-        let manager = builder.build(fs).map_err(|e| {
-            Error::operation(format!("Failed to create config manager: {e}"))
-        })?;
+        let manager = builder
+            .build(fs)
+            .map_err(|e| Error::operation(format!("Failed to create config manager: {e}")))?;
 
-        let mut config = manager.load().await.map_err(|e| {
-            Error::operation(format!("Failed to load configuration: {e}"))
-        })?;
+        let mut config = manager
+            .load()
+            .await
+            .map_err(|e| Error::operation(format!("Failed to load configuration: {e}")))?;
 
         // Merge with base config if provided
         if let Some(base) = base_config {
-            config.merge_with(base).map_err(|e| {
-                Error::operation(format!("Failed to merge configurations: {e}"))
-            })?;
+            config
+                .merge_with(base)
+                .map_err(|e| Error::operation(format!("Failed to merge configurations: {e}")))?;
         }
 
         Ok(config)
@@ -386,14 +379,11 @@ impl Executor for DefaultCommandExecutor {
                 // Timeout elapsed
                 if let Some(pid) = child_pid {
                     log::warn!(
-                        "Process (PID: {}) timed out after {:?}. Manual cleanup might be required.",
-                        pid,
-                        timeout_duration
+                        "Process (PID: {pid}) timed out after {timeout_duration:?}. Manual cleanup might be required."
                     );
                 } else {
                     log::warn!(
-                        "Process timed out after {:?}, but PID was unavailable.",
-                        timeout_duration
+                        "Process timed out after {timeout_duration:?}, but PID was unavailable."
                     );
                 }
                 return Err(Error::Command(CommandError::Timeout { duration: timeout_duration }));
@@ -587,10 +577,7 @@ impl SyncCommandExecutor {
             DefaultCommandExecutor::load_project_config(project_root, None).await
         })?;
 
-        Ok(Self { 
-            runtime, 
-            executor: DefaultCommandExecutor::new_with_config(config.commands) 
-        })
+        Ok(Self { runtime, executor: DefaultCommandExecutor::new_with_config(config.commands) })
     }
 
     /// Execute a command synchronously
@@ -678,13 +665,13 @@ impl SyncCommandExecutor {
 /// Use SyncCommandExecutor::new() instead for proper error handling.
 ///
 /// This implementation has been removed to enforce proper error handling patterns.
-
+///
 /// We cannot implement Clone for SyncCommandExecutor following NUNCA rules
 /// because runtime creation can fail and Clone trait cannot return errors.
 /// Use SyncCommandExecutor::new() instead for proper error handling.
 ///
 /// This implementation has been removed to enforce proper error handling patterns.
-
+///
 /// Implementation for shared synchronous executor
 impl SharedSyncExecutor {
     /// Get the shared synchronous executor instance with default configuration
@@ -777,7 +764,7 @@ impl SharedSyncExecutor {
     /// Use `try_instance()` instead for proper error handling.
     ///
     /// This method has been removed to enforce proper error handling patterns.
-
+    ///
     /// Execute a command using the shared executor
     ///
     /// Convenience method for executing commands with the shared instance.

@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::filesystem::AsyncFileSystem;
 use crate::error::{ConfigError, ConfigResult};
+use crate::filesystem::AsyncFileSystem;
 
 use super::format::ConfigFormat;
 use super::traits::ConfigProvider;
@@ -214,11 +214,9 @@ impl<FS: AsyncFileSystem> FileProvider<FS> {
 #[async_trait]
 impl<FS: AsyncFileSystem> ConfigProvider for FileProvider<FS> {
     async fn load(&self) -> ConfigResult<ConfigValue> {
-        let content =
-            self.fs.read_file_string(&self.path).await.map_err(|e| ConfigError::FileReadError {
-                path: self.path.clone(),
-                message: e.to_string(),
-            })?;
+        let content = self.fs.read_file_string(&self.path).await.map_err(|e| {
+            ConfigError::FileReadError { path: self.path.clone(), message: e.to_string() }
+        })?;
 
         self.format.parse(&content)
     }
@@ -226,10 +224,7 @@ impl<FS: AsyncFileSystem> ConfigProvider for FileProvider<FS> {
     async fn save(&self, value: &ConfigValue) -> ConfigResult<()> {
         let content = self.format.serialize(value)?;
         self.fs.write_file(&self.path, content.as_bytes()).await.map_err(|e| {
-            ConfigError::FileWriteError {
-                path: self.path.clone(),
-                message: e.to_string(),
-            }
+            ConfigError::FileWriteError { path: self.path.clone(), message: e.to_string() }
         })
     }
 
@@ -321,7 +316,7 @@ impl ConfigProvider for EnvironmentProvider {
         Ok(())
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "environment"
     }
 
@@ -363,7 +358,7 @@ impl ConfigProvider for DefaultProvider {
         Ok(())
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "defaults"
     }
 
@@ -405,7 +400,7 @@ impl ConfigProvider for MemoryProvider {
         Ok(())
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "memory"
     }
 

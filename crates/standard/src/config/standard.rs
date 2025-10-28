@@ -11,7 +11,7 @@
 //! - `SUBLIME_PACKAGE_MANAGER_ORDER`: Comma-separated list of package managers (npm,yarn,pnpm,bun,jsr)
 //! - `SUBLIME_PACKAGE_MANAGER`: Preferred package manager name
 //!
-//! ### Monorepo Configuration  
+//! ### Monorepo Configuration
 //! - `SUBLIME_WORKSPACE_PATTERNS`: Comma-separated workspace patterns (e.g., "packages/*,apps/*")
 //! - `SUBLIME_PACKAGE_DIRECTORIES`: Comma-separated package directory names
 //! - `SUBLIME_EXCLUDE_PATTERNS`: Comma-separated exclude patterns for monorepo detection
@@ -39,8 +39,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::node::PackageManagerKind;
 use crate::error::ConfigResult;
+use crate::node::PackageManagerKind;
 
 use super::traits::Configurable;
 
@@ -289,15 +289,15 @@ pub struct CommandConfig {
     /// Whether to inherit parent process environment
     #[serde(default = "default_true")]
     pub inherit_env: bool,
-    
+
     /// Queue collection window duration in milliseconds
     #[serde(default = "default_collection_window_ms")]
     pub queue_collection_window_ms: u64,
-    
+
     /// Queue collection sleep duration in microseconds
     #[serde(default = "default_collection_sleep_us")]
     pub queue_collection_sleep_us: u64,
-    
+
     /// Queue idle sleep duration in milliseconds
     #[serde(default = "default_idle_sleep_ms")]
     pub queue_idle_sleep_ms: u64,
@@ -561,7 +561,7 @@ fn default_detection_order() -> Vec<PackageManagerKind> {
             return order;
         }
     }
-    
+
     // Fallback to hardcoded default order
     vec![
         PackageManagerKind::Bun,
@@ -588,7 +588,7 @@ fn default_workspace_patterns() -> Vec<String> {
             return patterns;
         }
     }
-    
+
     // Fallback to hardcoded default patterns
     vec![
         "packages/*".to_string(),
@@ -603,16 +603,13 @@ fn default_workspace_patterns() -> Vec<String> {
 fn default_package_directories() -> Vec<String> {
     // Check environment variable for custom package directories
     if let Ok(env_dirs) = std::env::var("SUBLIME_PACKAGE_DIRECTORIES") {
-        let directories: Vec<String> = env_dirs
-            .split(',')
-            .map(|d| d.trim().to_string())
-            .filter(|d| !d.is_empty())
-            .collect();
+        let directories: Vec<String> =
+            env_dirs.split(',').map(|d| d.trim().to_string()).filter(|d| !d.is_empty()).collect();
         if !directories.is_empty() {
             return directories;
         }
     }
-    
+
     // Fallback to hardcoded default directories
     vec![
         "packages".to_string(),
@@ -639,7 +636,7 @@ fn default_exclude_patterns() -> Vec<String> {
             return patterns;
         }
     }
-    
+
     // Fallback to hardcoded default exclude patterns
     vec![
         "node_modules".to_string(),
@@ -655,42 +652,42 @@ fn default_exclude_patterns() -> Vec<String> {
 
 fn default_max_depth() -> usize {
     // Check environment variable for custom max search depth
-    if let Ok(env_depth) = std::env::var("SUBLIME_MAX_SEARCH_DEPTH") {
-        if let Ok(depth) = env_depth.trim().parse::<usize>() {
-            if (1..=20).contains(&depth) { // Reasonable bounds
-                return depth;
-            }
-        }
+    if let Ok(env_depth) = std::env::var("SUBLIME_MAX_SEARCH_DEPTH")
+        && let Ok(depth) = env_depth.trim().parse::<usize>()
+        && (1..=20).contains(&depth)
+    {
+        // Reasonable bounds
+        return depth;
     }
-    
+
     // Fallback to hardcoded default depth
     5
 }
 
 fn default_command_timeout() -> Duration {
     // Check environment variable for custom command timeout
-    if let Ok(env_timeout) = std::env::var("SUBLIME_COMMAND_TIMEOUT") {
-        if let Ok(seconds) = env_timeout.trim().parse::<u64>() {
-            if seconds > 0 && seconds <= 3600 { // Max 1 hour
-                return Duration::from_secs(seconds);
-            }
-        }
+    if let Ok(env_timeout) = std::env::var("SUBLIME_COMMAND_TIMEOUT")
+        && let Ok(seconds) = env_timeout.trim().parse::<u64>()
+        && seconds > 0
+        && seconds <= 3600
+    {
+        // Max 1 hour
+        return Duration::from_secs(seconds);
     }
-    
+
     // Fallback to hardcoded default timeout
     Duration::from_secs(30)
 }
 
 fn default_buffer_size() -> usize {
     // Check environment variable for custom buffer size
-    if let Ok(env_buffer) = std::env::var("SUBLIME_BUFFER_SIZE") {
-        if let Ok(buffer_size) = env_buffer.trim().parse::<usize>() {
-            if (256..=65536).contains(&buffer_size) { // Reasonable bounds: 256B to 64KB
+    if let Ok(env_buffer) = std::env::var("SUBLIME_BUFFER_SIZE")
+        && let Ok(buffer_size) = env_buffer.trim().parse::<usize>()
+            && (256..=65536).contains(&buffer_size) {
+                // Reasonable bounds: 256B to 64KB
                 return buffer_size;
             }
-        }
-    }
-    
+
     // Fallback to hardcoded default buffer size
     1024
 }
@@ -701,14 +698,13 @@ fn default_stream_timeout() -> Duration {
 
 fn default_max_concurrent() -> usize {
     // Check environment variable for custom max concurrent commands
-    if let Ok(env_concurrent) = std::env::var("SUBLIME_MAX_CONCURRENT") {
-        if let Ok(max_concurrent) = env_concurrent.trim().parse::<usize>() {
-            if (1..=100).contains(&max_concurrent) { // Reasonable bounds
+    if let Ok(env_concurrent) = std::env::var("SUBLIME_MAX_CONCURRENT")
+        && let Ok(max_concurrent) = env_concurrent.trim().parse::<usize>()
+            && (1..=100).contains(&max_concurrent) {
+                // Reasonable bounds
                 return max_concurrent;
             }
-        }
-    }
-    
+
     // Fallback to hardcoded default
     4
 }
@@ -725,7 +721,7 @@ fn default_ignore_patterns() -> Vec<String> {
             return patterns;
         }
     }
-    
+
     // Fallback to hardcoded default ignore patterns
     vec![
         ".git".to_string(),
@@ -738,42 +734,39 @@ fn default_ignore_patterns() -> Vec<String> {
 
 fn default_async_buffer_size() -> usize {
     // Check environment variable for custom async buffer size
-    if let Ok(env_buffer) = std::env::var("SUBLIME_ASYNC_BUFFER_SIZE") {
-        if let Ok(buffer_size) = env_buffer.trim().parse::<usize>() {
-            if (1024..=1_048_576).contains(&buffer_size) { // Reasonable bounds: 1KB to 1MB
+    if let Ok(env_buffer) = std::env::var("SUBLIME_ASYNC_BUFFER_SIZE")
+        && let Ok(buffer_size) = env_buffer.trim().parse::<usize>()
+            && (1024..=1_048_576).contains(&buffer_size) {
+                // Reasonable bounds: 1KB to 1MB
                 return buffer_size;
             }
-        }
-    }
-    
+
     // Fallback to hardcoded default async buffer size
     8192
 }
 
 fn default_max_concurrent_io() -> usize {
     // Check environment variable for custom max concurrent I/O operations
-    if let Ok(env_io) = std::env::var("SUBLIME_MAX_CONCURRENT_IO") {
-        if let Ok(max_io) = env_io.trim().parse::<usize>() {
-            if (1..=1000).contains(&max_io) { // Reasonable bounds
+    if let Ok(env_io) = std::env::var("SUBLIME_MAX_CONCURRENT_IO")
+        && let Ok(max_io) = env_io.trim().parse::<usize>()
+            && (1..=1000).contains(&max_io) {
+                // Reasonable bounds
                 return max_io;
             }
-        }
-    }
-    
+
     // Fallback to hardcoded default max concurrent I/O
     10
 }
 
 fn default_io_timeout() -> Duration {
     // Check environment variable for custom I/O timeout
-    if let Ok(env_timeout) = std::env::var("SUBLIME_IO_TIMEOUT") {
-        if let Ok(seconds) = env_timeout.trim().parse::<u64>() {
-            if seconds > 0 && seconds <= 300 { // Max 5 minutes
+    if let Ok(env_timeout) = std::env::var("SUBLIME_IO_TIMEOUT")
+        && let Ok(seconds) = env_timeout.trim().parse::<u64>()
+            && seconds > 0 && seconds <= 300 {
+                // Max 5 minutes
                 return Duration::from_secs(seconds);
             }
-        }
-    }
-    
+
     // Fallback to hardcoded default I/O timeout
     Duration::from_secs(5)
 }
@@ -801,60 +794,52 @@ fn default_true() -> bool {
 fn default_custom_workspace_fields() -> Vec<String> {
     // Check environment variable for custom workspace fields
     if let Ok(env_fields) = std::env::var("SUBLIME_CUSTOM_WORKSPACE_FIELDS") {
-        let fields: Vec<String> = env_fields
-            .split(',')
-            .map(|f| f.trim().to_string())
-            .filter(|f| !f.is_empty())
-            .collect();
+        let fields: Vec<String> =
+            env_fields.split(',').map(|f| f.trim().to_string()).filter(|f| !f.is_empty()).collect();
         if !fields.is_empty() {
             return fields;
         }
     }
-    
+
     // Fallback to common workspace field patterns
-    vec![
-        "@myorg/".to_string(),
-    ]
+    vec!["@myorg/".to_string()]
 }
 
 fn default_collection_window_ms() -> u64 {
     // Check environment variable for custom collection window
-    if let Ok(env_window) = std::env::var("SUBLIME_COLLECTION_WINDOW_MS") {
-        if let Ok(window_ms) = env_window.trim().parse::<u64>() {
-            if (1..=1000).contains(&window_ms) { // Reasonable bounds: 1ms to 1s
+    if let Ok(env_window) = std::env::var("SUBLIME_COLLECTION_WINDOW_MS")
+        && let Ok(window_ms) = env_window.trim().parse::<u64>()
+            && (1..=1000).contains(&window_ms) {
+                // Reasonable bounds: 1ms to 1s
                 return window_ms;
             }
-        }
-    }
-    
+
     // Fallback to hardcoded default
     5
 }
 
 fn default_collection_sleep_us() -> u64 {
     // Check environment variable for custom collection sleep
-    if let Ok(env_sleep) = std::env::var("SUBLIME_COLLECTION_SLEEP_US") {
-        if let Ok(sleep_us) = env_sleep.trim().parse::<u64>() {
-            if (10..=10_000).contains(&sleep_us) { // Reasonable bounds: 10μs to 10ms
+    if let Ok(env_sleep) = std::env::var("SUBLIME_COLLECTION_SLEEP_US")
+        && let Ok(sleep_us) = env_sleep.trim().parse::<u64>()
+            && (10..=10_000).contains(&sleep_us) {
+                // Reasonable bounds: 10μs to 10ms
                 return sleep_us;
             }
-        }
-    }
-    
+
     // Fallback to hardcoded default
     100
 }
 
 fn default_idle_sleep_ms() -> u64 {
     // Check environment variable for custom idle sleep
-    if let Ok(env_idle) = std::env::var("SUBLIME_IDLE_SLEEP_MS") {
-        if let Ok(idle_ms) = env_idle.trim().parse::<u64>() {
-            if (1..=1000).contains(&idle_ms) { // Reasonable bounds: 1ms to 1s
+    if let Ok(env_idle) = std::env::var("SUBLIME_IDLE_SLEEP_MS")
+        && let Ok(idle_ms) = env_idle.trim().parse::<u64>()
+            && (1..=1000).contains(&idle_ms) {
+                // Reasonable bounds: 1ms to 1s
                 return idle_ms;
             }
-        }
-    }
-    
+
     // Fallback to hardcoded default
     10
 }
