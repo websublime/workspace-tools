@@ -130,7 +130,7 @@ async fn async_main() -> Result<()> {
     // - Execute the command logic
     // - Return results
     // - Handle output formatting based on global --format option
-    dispatch_command(&cli.command).await?;
+    dispatch_command(&cli).await?;
 
     Ok(())
 }

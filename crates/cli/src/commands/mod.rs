@@ -38,9 +38,16 @@
 //! - `audit.rs` - Audit and health check commands
 //! - `changes.rs` - Change analysis commands
 
+// Module exports
+pub mod init;
+
+#[cfg(test)]
+mod tests;
+
 // TODO: will be implemented in subsequent stories
-// Story 1.7 will implement config commands
-// Story 2.x will implement changeset commands
-// Story 3.x will implement version management commands
+// Story 2.2 will implement config show command
+// Story 2.3 will implement config validate command
+// Story 4.x will implement changeset commands
+// Story 5.x will implement version management commands
 // Story 6.x will implement upgrade commands
 // Story 7.x will implement audit commands

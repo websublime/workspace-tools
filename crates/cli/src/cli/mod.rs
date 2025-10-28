@@ -40,7 +40,7 @@
 //! ```
 
 mod args;
-mod commands;
+pub mod commands;
 pub mod completions;
 mod dispatch;
 
