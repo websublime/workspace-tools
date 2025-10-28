@@ -36,7 +36,7 @@
 //! ## Examples
 //!
 //! ```rust
-//! use sublime_cli::output::OutputFormat;
+//! use sublime_cli_tools::output::OutputFormat;
 //!
 //! let format = OutputFormat::Json;
 //! assert!(format.is_json());
@@ -52,7 +52,7 @@ use serde::Serialize;
 /// # Examples
 ///
 /// ```rust
-/// use sublime_cli::output::OutputFormat;
+/// use sublime_cli_tools::output::OutputFormat;
 ///
 /// let format = OutputFormat::Human;
 /// assert!(!format.is_json());
@@ -90,7 +90,7 @@ impl OutputFormat {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_cli::output::OutputFormat;
+    /// use sublime_cli_tools::output::OutputFormat;
     ///
     /// assert!(OutputFormat::Json.is_json());
     /// assert!(OutputFormat::JsonCompact.is_json());
@@ -105,7 +105,7 @@ impl OutputFormat {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_cli::output::OutputFormat;
+    /// use sublime_cli_tools::output::OutputFormat;
     ///
     /// assert!(OutputFormat::Human.is_human());
     /// assert!(!OutputFormat::Json.is_human());
@@ -119,7 +119,7 @@ impl OutputFormat {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_cli::output::OutputFormat;
+    /// use sublime_cli_tools::output::OutputFormat;
     ///
     /// assert!(OutputFormat::Quiet.is_quiet());
     /// assert!(!OutputFormat::Human.is_quiet());
@@ -170,7 +170,7 @@ impl std::str::FromStr for OutputFormat {
 /// # Examples
 ///
 /// ```rust
-/// use sublime_cli::output::JsonResponse;
+/// use sublime_cli_tools::output::JsonResponse;
 /// use serde::Serialize;
 ///
 /// #[derive(Serialize)]
@@ -206,7 +206,7 @@ impl<T> JsonResponse<T> {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_cli::output::JsonResponse;
+    /// use sublime_cli_tools::output::JsonResponse;
     ///
     /// let response = JsonResponse::success("Hello");
     /// assert!(response.success);
@@ -222,7 +222,7 @@ impl<T> JsonResponse<T> {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_cli::output::JsonResponse;
+    /// use sublime_cli_tools::output::JsonResponse;
     ///
     /// let response: JsonResponse<()> = JsonResponse::error("Failed".to_string());
     /// assert!(!response.success);

@@ -1,5 +1,5 @@
 [package]
-name = "sublime_cli"
+name = "sublime_cli_tools"
 version = "0.1.0"
 description = "CLI application for workspace node tools"
 documentation = "https://docs.rs/sublime_cli"
