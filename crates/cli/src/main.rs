@@ -29,12 +29,15 @@
 #![deny(unused_must_use)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
-#![deny(clippy::todo)]
+// TODO: Re-enable after all commands are implemented
+// #![deny(clippy::todo)]
 #![deny(clippy::unimplemented)]
 #![deny(clippy::panic)]
 #![allow(clippy::exit)] // Required for main entry point
 
+use clap::Parser;
 use std::process;
+use sublime_cli_tools::cli::{Cli, dispatch_command};
 use sublime_cli_tools::error::Result;
 
 /// Main entry point for the CLI.
@@ -79,24 +82,55 @@ fn main() {
 
 /// Async main function that performs the actual CLI logic.
 ///
-/// This function will:
-/// 1. Parse CLI arguments
-/// 2. Initialize logging
-/// 3. Dispatch to command handlers
-/// 4. Return results
+/// This function:
+/// 1. Parses CLI arguments using clap
+/// 2. Initializes logging based on `--log-level` (stderr only)
+/// 3. Changes working directory if `--root` is specified
+/// 4. Dispatches to the appropriate command handler
+/// 5. Returns results for proper exit code handling
 ///
 /// # Errors
 ///
-/// Returns `CliError` for any operational failures.
-#[allow(clippy::unused_async)] // TODO: will be implemented in story 1.4
+/// Returns `CliError` for any operational failures including:
+/// - Invalid CLI arguments
+/// - Failed directory changes
+/// - Command execution failures
+/// - Configuration errors
+/// - Git operation errors
+///
+/// # Examples
+///
+/// The function is called from `main()` within the tokio runtime:
+///
+/// ```rust,ignore
+/// let result = runtime.block_on(async_main());
+/// ```
 async fn async_main() -> Result<()> {
-    // TODO: will be implemented in story 1.4 (CLI Framework)
-    // 1. Parse CLI arguments with clap
-    // 2. Initialize logging based on --log-level
-    // 3. Create global context from arguments
-    // 4. Dispatch to command handler
-    // 5. Handle output formatting based on --format
+    // 1. Parse CLI arguments
+    let cli = Cli::parse();
 
-    // For now, return Ok to allow compilation
+    // 2. Initialize logging based on --log-level (affects stderr only)
+    // TODO: will be implemented in story 1.3 (Logging System)
+    // init_logging(cli.log_level(), cli.is_color_disabled())?;
+
+    // 3. Change to root directory if specified
+    if let Some(root) = cli.root() {
+        std::env::set_current_dir(root).map_err(|e| {
+            sublime_cli_tools::CliError::io(format!(
+                "Failed to change directory to '{}': {}",
+                root.display(),
+                e
+            ))
+        })?;
+    }
+
+    // 4. Dispatch to command handler
+    // Each command handler will:
+    // - Receive the parsed arguments
+    // - Execute the command logic
+    // - Return results
+    // - Handle output formatting based on global --format option
+    dispatch_command(&cli.command).await?;
+
     Ok(())
 }

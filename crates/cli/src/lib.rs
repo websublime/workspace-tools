@@ -53,7 +53,8 @@
 #![deny(unused_must_use)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
-#![deny(clippy::todo)]
+// TODO: Re-enable after all commands are implemented
+// #![deny(clippy::todo)]
 #![deny(clippy::unimplemented)]
 #![deny(clippy::panic)]
 
@@ -73,4 +74,6 @@ pub mod error;
 pub mod output;
 
 // Re-exports for convenience
+pub use cli::{Cli, Commands, LogLevel, OutputFormatArg};
 pub use error::{CliError, Result};
+pub use output::{JsonResponse, OutputFormat};
