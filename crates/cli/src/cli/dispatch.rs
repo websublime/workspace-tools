@@ -37,18 +37,20 @@
 //! }
 //! ```
 
-use crate::cli::Commands;
+use crate::cli::{Cli, Commands};
+use crate::commands::init;
 use crate::error::Result;
+use std::path::Path;
 
 /// Dispatches a parsed command to its handler.
 ///
-/// This function takes the parsed CLI command and routes it to the
-/// appropriate handler function. All handlers are async and return
+/// This function takes the parsed CLI arguments and routes the command
+/// to the appropriate handler function. All handlers are async and return
 /// a `Result` for consistent error handling.
 ///
 /// # Arguments
 ///
-/// * `command` - The parsed command to dispatch
+/// * `cli` - The parsed CLI arguments including global options and command
 ///
 /// # Returns
 ///
@@ -67,25 +69,30 @@ use crate::error::Result;
 /// # Examples
 ///
 /// ```rust,ignore
-/// use sublime_cli_tools::cli::{Cli, Commands, dispatch_command};
+/// use sublime_cli_tools::cli::{Cli, dispatch_command};
 /// use clap::Parser;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let cli = Cli::parse();
-/// dispatch_command(&cli.command).await?;
+/// dispatch_command(&cli).await?;
 /// # Ok(())
 /// # }
 /// ```
 #[allow(clippy::todo)]
-pub async fn dispatch_command(command: &Commands) -> Result<()> {
-    match command {
-        Commands::Init(_args) => {
-            // TODO: will be implemented on story 2.1
-            todo!("Init command will be implemented in story 2.1")
+pub async fn dispatch_command(cli: &Cli) -> Result<()> {
+    use crate::cli::commands::{ConfigCommands, UpgradeBackupCommands, UpgradeCommands};
+
+    // Extract global options
+    let root = cli.root.as_deref().unwrap_or_else(|| Path::new("."));
+    let format = cli.output_format();
+
+    match &cli.command {
+        Commands::Init(args) => {
+            init::execute_init(args, root, format).await?;
         }
 
         Commands::Config(config_cmd) => {
-            use crate::cli::commands::ConfigCommands;
+            let _ = (root, format); // Will be used when implemented
             match config_cmd {
                 ConfigCommands::Show(_args) => {
                     // TODO: will be implemented on story 2.2
@@ -138,7 +145,6 @@ pub async fn dispatch_command(command: &Commands) -> Result<()> {
         }
 
         Commands::Upgrade(upgrade_cmd) => {
-            use crate::cli::commands::{UpgradeBackupCommands, UpgradeCommands};
             match upgrade_cmd {
                 UpgradeCommands::Check(_args) => {
                     // TODO: will be implemented on story 6.1
@@ -176,8 +182,11 @@ pub async fn dispatch_command(command: &Commands) -> Result<()> {
         }
 
         Commands::Version(_args) => {
+            let _ = (root, format); // Will be used when implemented
             // TODO: will be implemented on story 1.4 (basic version display)
             todo!("Version command will be implemented in story 1.4")
         }
     }
+
+    Ok(())
 }
