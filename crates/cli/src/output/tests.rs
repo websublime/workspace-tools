@@ -456,3 +456,325 @@ fn test_style_builder_creation() {
     let text = builder.text("test").build();
     assert_eq!(text, "test");
 }
+
+// ============================================================================
+// Table Tests
+// ============================================================================
+
+#[test]
+fn test_table_builder_creation() {
+    use crate::output::table::TableBuilder;
+
+    let builder = TableBuilder::new();
+    let table = builder.build();
+    assert!(table.is_empty());
+}
+
+#[test]
+fn test_table_with_columns() {
+    use crate::output::table::TableBuilder;
+
+    let table = TableBuilder::new().columns(&["Name", "Value", "Type"]).build();
+    assert!(table.is_empty());
+    assert_eq!(table.row_count(), 0);
+}
+
+#[test]
+fn test_table_add_single_row() {
+    use crate::output::table::TableBuilder;
+
+    let mut table = TableBuilder::new().columns(&["Name", "Value"]).build();
+    table.add_row(&["Item 1", "100"]);
+    assert!(!table.is_empty());
+    assert_eq!(table.row_count(), 1);
+}
+
+#[test]
+fn test_table_add_multiple_rows() {
+    use crate::output::table::TableBuilder;
+
+    let mut table = TableBuilder::new().columns(&["Package", "Version"]).build();
+    table.add_row(&["typescript", "5.3.3"]);
+    table.add_row(&["eslint", "9.0.0"]);
+    table.add_row(&["vitest", "1.2.1"]);
+    assert_eq!(table.row_count(), 3);
+}
+
+#[test]
+fn test_table_render_basic() {
+    use crate::output::table::TableBuilder;
+
+    let mut table = TableBuilder::new().columns(&["Name", "Value"]).build();
+    table.add_row(&["Package", "1.0.0"]);
+    let output = table.render(true);
+    assert!(!output.is_empty());
+    assert!(output.contains("Name"));
+    assert!(output.contains("Value"));
+    assert!(output.contains("Package"));
+    assert!(output.contains("1.0.0"));
+}
+
+#[test]
+fn test_table_render_with_color() {
+    use crate::output::table::TableBuilder;
+
+    let mut table = TableBuilder::new().columns(&["Status", "Message"]).build();
+    table.add_row(&["OK", "Success"]);
+    let output_no_color = table.render(true);
+    let output_with_color = table.render(false);
+
+    assert!(!output_no_color.is_empty());
+    assert!(!output_with_color.is_empty());
+}
+
+#[test]
+fn test_table_themes() {
+    use crate::output::table::{TableBuilder, TableTheme};
+
+    for theme in &[TableTheme::Default, TableTheme::Minimal, TableTheme::Compact, TableTheme::Plain]
+    {
+        let mut table = TableBuilder::new().theme(*theme).columns(&["A", "B"]).build();
+        table.add_row(&["1", "2"]);
+        let output = table.render(true);
+        assert!(!output.is_empty());
+    }
+}
+
+#[test]
+fn test_table_column_alignment() {
+    use crate::output::table::{ColumnAlignment, TableBuilder};
+
+    let mut table = TableBuilder::new()
+        .columns(&["Left", "Center", "Right"])
+        .alignment(0, ColumnAlignment::Left)
+        .alignment(1, ColumnAlignment::Center)
+        .alignment(2, ColumnAlignment::Right)
+        .build();
+
+    table.add_row(&["A", "B", "C"]);
+    let output = table.render(true);
+    assert!(output.contains("Left"));
+    assert!(output.contains("Center"));
+    assert!(output.contains("Right"));
+}
+
+#[test]
+fn test_table_max_width() {
+    use crate::output::table::TableBuilder;
+
+    let mut table = TableBuilder::new().columns(&["Name", "Description"]).max_width(50).build();
+    table.add_row(&["Package", "A very long description that might need wrapping"]);
+    let output = table.render(true);
+    assert!(!output.is_empty());
+}
+
+#[test]
+fn test_table_min_column_width() {
+    use crate::output::table::TableBuilder;
+
+    let mut table = TableBuilder::new().columns(&["A", "B"]).min_column_width(20).build();
+    table.add_row(&["x", "y"]);
+    let output = table.render(true);
+    assert!(!output.is_empty());
+}
+
+#[test]
+fn test_table_styled_rows() {
+    use crate::output::table::{TableBuilder, error_cell, success_cell};
+    use comfy_table::Cell;
+
+    let mut table = TableBuilder::new().columns(&["Status", "Message"]).build();
+
+    let cells = vec![success_cell("✓"), Cell::new("Success")];
+    table.add_styled_row(cells);
+
+    let cells = vec![error_cell("✗"), Cell::new("Failed")];
+    table.add_styled_row(cells);
+
+    assert_eq!(table.row_count(), 2);
+    let output = table.render(true);
+    assert!(output.contains("Status"));
+}
+
+#[test]
+fn test_table_empty() {
+    use crate::output::table::TableBuilder;
+
+    let table = TableBuilder::new().columns(&["Name", "Value"]).build();
+    assert!(table.is_empty());
+    assert_eq!(table.row_count(), 0);
+}
+
+#[test]
+fn test_truncate_text_short() {
+    use crate::output::table::truncate_text;
+
+    let result = truncate_text("short", 10);
+    assert_eq!(result, "short");
+}
+
+#[test]
+fn test_truncate_text_exact() {
+    use crate::output::table::truncate_text;
+
+    let result = truncate_text("exactly ten", 11);
+    assert_eq!(result, "exactly ten");
+}
+
+#[test]
+fn test_truncate_text_long() {
+    use crate::output::table::truncate_text;
+
+    let result = truncate_text("this is a very long text", 10);
+    assert_eq!(result, "this is...");
+}
+
+#[test]
+fn test_truncate_text_very_short() {
+    use crate::output::table::truncate_text;
+
+    let result = truncate_text("hello", 3);
+    assert_eq!(result, "hel");
+}
+
+#[test]
+fn test_styled_cell_helpers() {
+    use crate::output::table::{
+        bold_cell, dim_cell, error_cell, info_cell, success_cell, warning_cell,
+    };
+
+    let success = success_cell("✓");
+    let error = error_cell("✗");
+    let warning = warning_cell("⚠");
+    let info = info_cell("ℹ");
+    let bold = bold_cell("Bold");
+    let dim = dim_cell("Dim");
+
+    assert_eq!(success.content(), "✓");
+    assert_eq!(error.content(), "✗");
+    assert_eq!(warning.content(), "⚠");
+    assert_eq!(info.content(), "ℹ");
+    assert_eq!(bold.content(), "Bold");
+    assert_eq!(dim.content(), "Dim");
+}
+
+#[test]
+fn test_table_with_output_human_mode() {
+    use crate::output::table::TableBuilder;
+
+    let (output, buffer) = create_output_with_buffer(OutputFormat::Human, false);
+    let mut table = TableBuilder::new().columns(&["Package", "Version"]).build();
+    table.add_row(&["typescript", "5.3.3"]);
+
+    output.table(&mut table).unwrap();
+    let output_str = get_output_string(&buffer);
+    assert!(output_str.contains("Package"));
+    assert!(output_str.contains("typescript"));
+}
+
+#[test]
+fn test_table_with_output_json_mode() {
+    use crate::output::table::TableBuilder;
+
+    let (output, buffer) = create_output_with_buffer(OutputFormat::Json, false);
+    let mut table = TableBuilder::new().columns(&["Package", "Version"]).build();
+    table.add_row(&["typescript", "5.3.3"]);
+
+    output.table(&mut table).unwrap();
+    let output_str = get_output_string(&buffer);
+    // Tables are ignored in JSON mode
+    assert_eq!(output_str, "");
+}
+
+#[test]
+fn test_table_with_output_quiet_mode() {
+    use crate::output::table::TableBuilder;
+
+    let (output, buffer) = create_output_with_buffer(OutputFormat::Quiet, false);
+    let mut table = TableBuilder::new().columns(&["Package", "Version"]).build();
+    table.add_row(&["typescript", "5.3.3"]);
+
+    output.table(&mut table).unwrap();
+    let output_str = get_output_string(&buffer);
+    // Tables are suppressed in quiet mode
+    assert_eq!(output_str, "");
+}
+
+#[test]
+fn test_table_no_color_rendering() {
+    use crate::output::table::TableBuilder;
+
+    let (output, buffer) = create_output_with_buffer(OutputFormat::Human, true);
+    let mut table = TableBuilder::new().columns(&["Name", "Status"]).build();
+    table.add_row(&["Item", "OK"]);
+
+    output.table(&mut table).unwrap();
+    let output_str = get_output_string(&buffer);
+    assert!(output_str.contains("Name"));
+    assert!(output_str.contains("Item"));
+}
+
+#[test]
+fn test_table_complex_data() {
+    use crate::output::table::TableBuilder;
+
+    let mut table = TableBuilder::new().columns(&["Package", "Current", "Latest", "Type"]).build();
+
+    table.add_row(&["typescript", "5.0.0", "5.3.3", "minor"]);
+    table.add_row(&["eslint", "8.0.0", "9.0.0", "major"]);
+    table.add_row(&["vitest", "1.0.0", "1.2.1", "minor"]);
+
+    let output = table.render(true);
+    assert!(output.contains("typescript"));
+    assert!(output.contains("eslint"));
+    assert!(output.contains("vitest"));
+    assert!(output.contains("5.3.3"));
+    assert!(output.contains("9.0.0"));
+}
+
+#[test]
+fn test_column_alignment_enum() {
+    use crate::output::table::ColumnAlignment;
+    use comfy_table::CellAlignment;
+
+    let left: CellAlignment = ColumnAlignment::Left.into();
+    let right: CellAlignment = ColumnAlignment::Right.into();
+    let center: CellAlignment = ColumnAlignment::Center.into();
+
+    assert_eq!(left, CellAlignment::Left);
+    assert_eq!(right, CellAlignment::Right);
+    assert_eq!(center, CellAlignment::Center);
+}
+
+#[test]
+fn test_table_builder_fluent_api() {
+    use crate::output::table::{ColumnAlignment, TableBuilder, TableTheme};
+
+    let mut table = TableBuilder::new()
+        .theme(TableTheme::Minimal)
+        .columns(&["Name", "Count", "Status"])
+        .alignment(1, ColumnAlignment::Right)
+        .alignment(2, ColumnAlignment::Center)
+        .max_width(100)
+        .min_column_width(15)
+        .build();
+
+    table.add_row(&["Package A", "42", "✓"]);
+    table.add_row(&["Package B", "7", "✗"]);
+
+    assert_eq!(table.row_count(), 2);
+    let output = table.render(true);
+    assert!(!output.is_empty());
+}
+
+#[test]
+fn test_table_display_trait() {
+    use crate::output::table::TableBuilder;
+
+    let mut table = TableBuilder::new().columns(&["A", "B"]).build();
+    table.add_row(&["1", "2"]);
+
+    // Test that Display trait works
+    let display_output = format!("{table}");
+    assert!(!display_output.is_empty());
+}
