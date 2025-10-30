@@ -40,7 +40,7 @@
 use crate::cli::{Cli, Commands};
 use crate::commands::{config, init};
 use crate::error::Result;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Dispatches a parsed command to its handler.
 ///
@@ -85,23 +85,22 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
     // Extract global options
     let root = cli.root.as_deref().unwrap_or_else(|| Path::new("."));
     let format = cli.output_format();
+    let config_path = cli.config_path();
 
     match &cli.command {
         Commands::Init(args) => {
             init::execute_init(args, root, format).await?;
         }
 
-        Commands::Config(config_cmd) => {
-            match config_cmd {
-                ConfigCommands::Show(args) => {
-                    config::execute_show(args, root, format).await?;
-                }
-                ConfigCommands::Validate(_args) => {
-                    // TODO: will be implemented on story 2.3
-                    todo!("Config validate command will be implemented in story 2.3")
-                }
+        Commands::Config(config_cmd) => match config_cmd {
+            ConfigCommands::Show(args) => {
+                config::execute_show(args, root, config_path.map(PathBuf::as_path), format).await?;
             }
-        }
+            ConfigCommands::Validate(args) => {
+                config::execute_validate(args, root, config_path.map(PathBuf::as_path), format)
+                    .await?;
+            }
+        },
 
         Commands::Changeset(changeset_cmd) => {
             use crate::cli::commands::ChangesetCommands;
