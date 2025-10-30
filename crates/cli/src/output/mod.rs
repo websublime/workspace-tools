@@ -7,9 +7,11 @@
 //!
 //! Provides:
 //! - `OutputFormat` enum for different output modes
-//! - Output utilities for consistent formatting
-//! - Logging initialization and utilities
-//! - Progress indicators and table rendering
+//! - `Output` struct for consistent formatting across all commands
+//! - JSON response structure for API-like output
+//! - Styling and color utilities
+//! - Table rendering capabilities
+//! - Progress indicators
 //! - Separation of concerns: logs go to stderr, output goes to stdout
 //!
 //! # How
@@ -35,14 +37,48 @@
 //!
 //! ## Examples
 //!
-//! ```rust
-//! use sublime_cli_tools::output::OutputFormat;
+//! Creating an output instance:
 //!
-//! let format = OutputFormat::Json;
-//! assert!(format.is_json());
+//! ```rust
+//! use sublime_cli_tools::output::{Output, OutputFormat};
+//! use std::io;
+//!
+//! let output = Output::new(OutputFormat::Human, io::stdout(), false);
+//! output.success("Operation completed successfully").unwrap();
+//! ```
+//!
+//! Using JSON output:
+//!
+//! ```rust
+//! use sublime_cli_tools::output::{Output, OutputFormat, JsonResponse};
+//! use std::io;
+//! use serde::Serialize;
+//!
+//! #[derive(Serialize)]
+//! struct MyData {
+//!     value: String,
+//! }
+//!
+//! let output = Output::new(OutputFormat::Json, io::stdout(), false);
+//! let data = MyData { value: "test".to_string() };
+//! let response = JsonResponse::success(data);
+//! output.json(&response).unwrap();
 //! ```
 
+mod json;
+mod style;
+
+#[cfg(test)]
+mod tests;
+
+use crate::error::{CliError, Result};
 use serde::Serialize;
+use std::cell::RefCell;
+use std::io::Write;
+
+// Public re-exports
+pub use json::JsonResponse;
+pub use style::{Style, StyledText};
 
 /// Output format for CLI commands.
 ///
@@ -149,7 +185,7 @@ impl std::fmt::Display for OutputFormat {
 impl std::str::FromStr for OutputFormat {
     type Err = String;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "human" => Ok(Self::Human),
             "json" => Ok(Self::Json),
@@ -162,84 +198,350 @@ impl std::str::FromStr for OutputFormat {
     }
 }
 
-/// Standard JSON response structure for all commands.
+/// Main output handler for CLI commands.
 ///
-/// All commands must use this structure when outputting JSON to ensure
-/// consistency across the CLI.
+/// Provides consistent formatting across all commands with support for multiple
+/// output formats (human-readable, JSON, quiet). All output goes to stdout,
+/// while logs go to stderr independently.
 ///
 /// # Examples
 ///
+/// Basic usage:
+///
 /// ```rust
-/// use sublime_cli_tools::output::JsonResponse;
+/// use sublime_cli_tools::output::{Output, OutputFormat};
+/// use std::io;
+///
+/// let output = Output::new(OutputFormat::Human, io::stdout(), false);
+/// output.success("Operation completed").unwrap();
+/// output.info("Processing 3 files").unwrap();
+/// output.warning("Deprecated option used").unwrap();
+/// ```
+///
+/// JSON output:
+///
+/// ```rust
+/// use sublime_cli_tools::output::{Output, OutputFormat, JsonResponse};
+/// use std::io;
 /// use serde::Serialize;
 ///
 /// #[derive(Serialize)]
-/// struct MyData {
-///     value: String,
+/// struct Result {
+///     count: usize,
 /// }
 ///
-/// let success = JsonResponse::success(MyData {
-///     value: "test".to_string(),
-/// });
-/// assert!(success.success);
-///
-/// let error: JsonResponse<MyData> = JsonResponse::error("Something went wrong".to_string());
-/// assert!(!error.success);
+/// let output = Output::new(OutputFormat::Json, io::stdout(), false);
+/// let response = JsonResponse::success(Result { count: 42 });
+/// output.json(&response).unwrap();
 /// ```
-#[derive(Debug, Clone, Serialize)]
-pub struct JsonResponse<T> {
-    /// Whether the operation succeeded.
-    pub success: bool,
-
-    /// The data payload (only present on success).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<T>,
-
-    /// The error message (only present on failure).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
+pub struct Output {
+    format: OutputFormat,
+    writer: RefCell<Box<dyn Write + Send>>,
+    no_color: bool,
 }
 
-impl<T> JsonResponse<T> {
-    /// Creates a successful response with data.
+impl Output {
+    /// Creates a new Output instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `format` - The output format to use
+    /// * `writer` - The writer to output to (typically stdout)
+    /// * `no_color` - Whether to disable color output
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_cli_tools::output::JsonResponse;
+    /// use sublime_cli_tools::output::{Output, OutputFormat};
+    /// use std::io;
     ///
-    /// let response = JsonResponse::success("Hello");
-    /// assert!(response.success);
-    /// assert_eq!(response.data, Some("Hello"));
-    /// assert_eq!(response.error, None);
+    /// let output = Output::new(OutputFormat::Human, io::stdout(), false);
     /// ```
-    pub fn success(data: T) -> Self {
-        Self { success: true, data: Some(data), error: None }
+    pub fn new<W: Write + Send + 'static>(format: OutputFormat, writer: W, no_color: bool) -> Self {
+        Self { format, writer: RefCell::new(Box::new(writer)), no_color }
     }
 
-    /// Creates an error response with a message.
+    /// Returns the current output format.
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_cli_tools::output::JsonResponse;
+    /// use sublime_cli_tools::output::{Output, OutputFormat};
+    /// use std::io;
     ///
-    /// let response: JsonResponse<()> = JsonResponse::error("Failed".to_string());
-    /// assert!(!response.success);
-    /// assert_eq!(response.data, None);
-    /// assert_eq!(response.error, Some("Failed".to_string()));
+    /// let output = Output::new(OutputFormat::Json, io::stdout(), false);
+    /// assert_eq!(output.format(), OutputFormat::Json);
     /// ```
-    pub fn error(message: String) -> Self {
-        Self { success: false, data: None, error: Some(message) }
+    pub fn format(&self) -> OutputFormat {
+        self.format
+    }
+
+    /// Returns whether color output is disabled.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_cli_tools::output::{Output, OutputFormat};
+    /// use std::io;
+    ///
+    /// let output = Output::new(OutputFormat::Human, io::stdout(), true);
+    /// assert!(output.no_color());
+    /// ```
+    pub fn no_color(&self) -> bool {
+        self.no_color
+    }
+
+    /// Outputs a success message.
+    ///
+    /// In human mode, this is displayed with a green checkmark.
+    /// In JSON mode, this is ignored (use `json()` instead).
+    /// In quiet mode, this is suppressed.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_cli_tools::output::{Output, OutputFormat};
+    /// use std::io;
+    ///
+    /// let output = Output::new(OutputFormat::Human, io::stdout(), false);
+    /// output.success("Configuration saved successfully").unwrap();
+    /// ```
+    pub fn success(&self, message: &str) -> Result<()> {
+        match self.format {
+            OutputFormat::Human => {
+                let styled = if self.no_color {
+                    format!("✓ {message}")
+                } else {
+                    Style::success(&format!("✓ {message}"))
+                };
+                writeln!(self.writer.borrow_mut(), "{styled}")?;
+                Ok(())
+            }
+            OutputFormat::Json | OutputFormat::JsonCompact => {
+                // In JSON mode, success is part of the final JSON response
+                Ok(())
+            }
+            OutputFormat::Quiet => Ok(()),
+        }
+    }
+
+    /// Outputs an error message.
+    ///
+    /// In human mode, this is displayed with a red X.
+    /// In JSON mode, this is ignored (use `json()` with error response).
+    /// In quiet mode, this is still displayed as errors are critical.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_cli_tools::output::{Output, OutputFormat};
+    /// use std::io;
+    ///
+    /// let output = Output::new(OutputFormat::Human, io::stdout(), false);
+    /// output.error("Failed to read configuration file").unwrap();
+    /// ```
+    pub fn error(&self, message: &str) -> Result<()> {
+        match self.format {
+            OutputFormat::Human => {
+                let styled = if self.no_color {
+                    format!("✗ {message}")
+                } else {
+                    Style::error(&format!("✗ {message}"))
+                };
+                writeln!(self.writer.borrow_mut(), "{styled}")?;
+                Ok(())
+            }
+            OutputFormat::Quiet => {
+                // Errors are always shown even in quiet mode
+                writeln!(self.writer.borrow_mut(), "Error: {message}")?;
+                Ok(())
+            }
+            OutputFormat::Json | OutputFormat::JsonCompact => {
+                // In JSON mode, errors are part of the final JSON response
+                Ok(())
+            }
+        }
+    }
+
+    /// Outputs a warning message.
+    ///
+    /// In human mode, this is displayed with a yellow warning symbol.
+    /// In JSON mode, this is ignored (use `json()` instead).
+    /// In quiet mode, this is suppressed.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_cli_tools::output::{Output, OutputFormat};
+    /// use std::io;
+    ///
+    /// let output = Output::new(OutputFormat::Human, io::stdout(), false);
+    /// output.warning("Deprecated configuration option detected").unwrap();
+    /// ```
+    pub fn warning(&self, message: &str) -> Result<()> {
+        match self.format {
+            OutputFormat::Human => {
+                let styled = if self.no_color {
+                    format!("⚠ {message}")
+                } else {
+                    Style::warning(&format!("⚠ {message}"))
+                };
+                writeln!(self.writer.borrow_mut(), "{styled}")?;
+                Ok(())
+            }
+            OutputFormat::Json | OutputFormat::JsonCompact | OutputFormat::Quiet => Ok(()),
+        }
+    }
+
+    /// Outputs an informational message.
+    ///
+    /// In human mode, this is displayed with a blue info symbol.
+    /// In JSON mode, this is ignored (use `json()` instead).
+    /// In quiet mode, this is suppressed.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_cli_tools::output::{Output, OutputFormat};
+    /// use std::io;
+    ///
+    /// let output = Output::new(OutputFormat::Human, io::stdout(), false);
+    /// output.info("Found 3 packages in workspace").unwrap();
+    /// ```
+    pub fn info(&self, message: &str) -> Result<()> {
+        match self.format {
+            OutputFormat::Human => {
+                let styled = if self.no_color {
+                    format!("ℹ {message}")
+                } else {
+                    Style::info(&format!("ℹ {message}"))
+                };
+                writeln!(self.writer.borrow_mut(), "{styled}")?;
+                Ok(())
+            }
+            OutputFormat::Json | OutputFormat::JsonCompact | OutputFormat::Quiet => Ok(()),
+        }
+    }
+
+    /// Outputs plain text without formatting.
+    ///
+    /// This is useful for outputting raw data or content that should
+    /// not be modified. In JSON mode, this is ignored.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_cli_tools::output::{Output, OutputFormat};
+    /// use std::io;
+    ///
+    /// let output = Output::new(OutputFormat::Human, io::stdout(), false);
+    /// output.plain("Package: @org/core").unwrap();
+    /// output.plain("Version: 1.2.3").unwrap();
+    /// ```
+    pub fn plain(&self, message: &str) -> Result<()> {
+        match self.format {
+            OutputFormat::Human | OutputFormat::Quiet => {
+                writeln!(self.writer.borrow_mut(), "{message}")?;
+                Ok(())
+            }
+            OutputFormat::Json | OutputFormat::JsonCompact => {
+                // In JSON mode, plain text is ignored
+                Ok(())
+            }
+        }
+    }
+
+    /// Outputs data as JSON.
+    ///
+    /// This is the primary method for outputting structured data in JSON mode.
+    /// The data is serialized according to the current output format:
+    /// - `Json`: Pretty-printed with indentation
+    /// - `JsonCompact`: Single line, no whitespace
+    /// - `Human`/`Quiet`: Ignored (use other methods for human output)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_cli_tools::output::{Output, OutputFormat, JsonResponse};
+    /// use std::io;
+    /// use serde::Serialize;
+    ///
+    /// #[derive(Serialize)]
+    /// struct MyData {
+    ///     packages: Vec<String>,
+    ///     count: usize,
+    /// }
+    ///
+    /// let output = Output::new(OutputFormat::Json, io::stdout(), false);
+    /// let data = MyData {
+    ///     packages: vec!["@org/core".to_string()],
+    ///     count: 1,
+    /// };
+    /// let response = JsonResponse::success(data);
+    /// output.json(&response).unwrap();
+    /// ```
+    pub fn json<T: Serialize>(&self, data: &T) -> Result<()> {
+        match self.format {
+            OutputFormat::Json => {
+                let json = serde_json::to_string_pretty(data)
+                    .map_err(|e| CliError::execution(format!("JSON serialization failed: {e}")))?;
+                writeln!(self.writer.borrow_mut(), "{json}")?;
+                Ok(())
+            }
+            OutputFormat::JsonCompact => {
+                let json = serde_json::to_string(data)
+                    .map_err(|e| CliError::execution(format!("JSON serialization failed: {e}")))?;
+                writeln!(self.writer.borrow_mut(), "{json}")?;
+                Ok(())
+            }
+            OutputFormat::Human | OutputFormat::Quiet => {
+                // In non-JSON modes, json() is ignored
+                Ok(())
+            }
+        }
+    }
+
+    /// Writes raw bytes to the output stream.
+    ///
+    /// This is a low-level method that bypasses all formatting.
+    /// Use with caution and prefer the higher-level methods when possible.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_cli_tools::output::{Output, OutputFormat};
+    /// use std::io;
+    ///
+    /// let output = Output::new(OutputFormat::Human, io::stdout(), false);
+    /// output.write_raw(b"Raw data\n").unwrap();
+    /// ```
+    pub fn write_raw(&self, data: &[u8]) -> Result<()> {
+        self.writer.borrow_mut().write_all(data)?;
+        Ok(())
+    }
+
+    /// Flushes the output buffer.
+    ///
+    /// Ensures all buffered output is written to the underlying stream.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_cli_tools::output::{Output, OutputFormat};
+    /// use std::io;
+    ///
+    /// let output = Output::new(OutputFormat::Human, io::stdout(), false);
+    /// output.info("Processing...").unwrap();
+    /// output.flush().unwrap();
+    /// ```
+    pub fn flush(&self) -> Result<()> {
+        self.writer.borrow_mut().flush()?;
+        Ok(())
     }
 }
 
-// TODO: will be implemented in story 1.3 (Output Formatting & Logging)
-// Additional modules:
-// - table.rs: Table rendering utilities using comfy-table
-// - json.rs: JSON output formatting utilities
-// - progress.rs: Progress indicators using indicatif
-// - style.rs: Color and styling using console
-// - logger.rs: Logging setup and utilities using tracing
-// - context.rs: Global context for output and logging options
-// - tests.rs: Output module tests
+// TODO: will be implemented in story 3.2 (Table Rendering)
+// Table rendering utilities will be added in the next story
+
+// TODO: will be implemented in story 3.3 (Progress Indicators)
+// Progress bar functionality will be added in a subsequent story
