@@ -67,6 +67,7 @@
 
 mod json;
 mod style;
+pub mod table;
 
 #[cfg(test)]
 mod tests;
@@ -496,6 +497,39 @@ impl Output {
             }
             OutputFormat::Human | OutputFormat::Quiet => {
                 // In non-JSON modes, json() is ignored
+                Ok(())
+            }
+        }
+    }
+
+    /// Renders and outputs a table.
+    ///
+    /// In human mode, displays a formatted table.
+    /// In JSON mode, this is ignored (use `json()` with structured data instead).
+    /// In quiet mode, this is suppressed.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_cli_tools::output::{Output, OutputFormat, table::TableBuilder};
+    /// use std::io;
+    ///
+    /// let output = Output::new(OutputFormat::Human, io::stdout(), false);
+    /// let mut table = TableBuilder::new()
+    ///     .columns(&["Package", "Version"])
+    ///     .build();
+    /// table.add_row(&["typescript", "5.3.3"]);
+    /// output.table(&mut table).unwrap();
+    /// ```
+    pub fn table(&self, table: &mut table::Table) -> Result<()> {
+        match self.format {
+            OutputFormat::Human => {
+                let rendered = table.render(self.no_color);
+                writeln!(self.writer.borrow_mut(), "{rendered}")?;
+                Ok(())
+            }
+            OutputFormat::Json | OutputFormat::JsonCompact | OutputFormat::Quiet => {
+                // In JSON/quiet modes, tables are ignored
                 Ok(())
             }
         }
