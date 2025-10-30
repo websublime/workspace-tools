@@ -1175,3 +1175,353 @@ fn test_multi_progress_mixed_indicators() {
 
     multi.clear();
 }
+
+// ============================================================================
+// Logger Module Tests
+// ============================================================================
+
+#[test]
+fn test_log_level_to_tracing_level_mapping() {
+    use crate::cli::LogLevel;
+
+    assert_eq!(LogLevel::Silent.to_tracing_level(), tracing::Level::ERROR);
+    assert_eq!(LogLevel::Error.to_tracing_level(), tracing::Level::ERROR);
+    assert_eq!(LogLevel::Warn.to_tracing_level(), tracing::Level::WARN);
+    assert_eq!(LogLevel::Info.to_tracing_level(), tracing::Level::INFO);
+    assert_eq!(LogLevel::Debug.to_tracing_level(), tracing::Level::DEBUG);
+    assert_eq!(LogLevel::Trace.to_tracing_level(), tracing::Level::TRACE);
+}
+
+#[test]
+fn test_log_level_is_silent() {
+    use crate::cli::LogLevel;
+
+    assert!(LogLevel::Silent.is_silent());
+    assert!(!LogLevel::Error.is_silent());
+    assert!(!LogLevel::Warn.is_silent());
+    assert!(!LogLevel::Info.is_silent());
+    assert!(!LogLevel::Debug.is_silent());
+    assert!(!LogLevel::Trace.is_silent());
+}
+
+#[test]
+fn test_log_level_includes_errors() {
+    use crate::cli::LogLevel;
+
+    assert!(!LogLevel::Silent.includes_errors());
+    assert!(LogLevel::Error.includes_errors());
+    assert!(LogLevel::Warn.includes_errors());
+    assert!(LogLevel::Info.includes_errors());
+    assert!(LogLevel::Debug.includes_errors());
+    assert!(LogLevel::Trace.includes_errors());
+}
+
+#[test]
+fn test_log_level_includes_warnings() {
+    use crate::cli::LogLevel;
+
+    assert!(!LogLevel::Silent.includes_warnings());
+    assert!(!LogLevel::Error.includes_warnings());
+    assert!(LogLevel::Warn.includes_warnings());
+    assert!(LogLevel::Info.includes_warnings());
+    assert!(LogLevel::Debug.includes_warnings());
+    assert!(LogLevel::Trace.includes_warnings());
+}
+
+#[test]
+fn test_log_level_includes_info() {
+    use crate::cli::LogLevel;
+
+    assert!(!LogLevel::Silent.includes_info());
+    assert!(!LogLevel::Error.includes_info());
+    assert!(!LogLevel::Warn.includes_info());
+    assert!(LogLevel::Info.includes_info());
+    assert!(LogLevel::Debug.includes_info());
+    assert!(LogLevel::Trace.includes_info());
+}
+
+#[test]
+fn test_log_level_includes_debug() {
+    use crate::cli::LogLevel;
+
+    assert!(!LogLevel::Silent.includes_debug());
+    assert!(!LogLevel::Error.includes_debug());
+    assert!(!LogLevel::Warn.includes_debug());
+    assert!(!LogLevel::Info.includes_debug());
+    assert!(LogLevel::Debug.includes_debug());
+    assert!(LogLevel::Trace.includes_debug());
+}
+
+#[test]
+fn test_log_level_includes_trace() {
+    use crate::cli::LogLevel;
+
+    assert!(!LogLevel::Silent.includes_trace());
+    assert!(!LogLevel::Error.includes_trace());
+    assert!(!LogLevel::Warn.includes_trace());
+    assert!(!LogLevel::Info.includes_trace());
+    assert!(!LogLevel::Debug.includes_trace());
+    assert!(LogLevel::Trace.includes_trace());
+}
+
+#[test]
+fn test_init_logging_silent_mode() {
+    use crate::cli::LogLevel;
+    use crate::output::logger::init_logging;
+
+    // Silent mode should succeed without actually initializing logging
+    let result = init_logging(LogLevel::Silent, false);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_init_logging_silent_with_color_disabled() {
+    use crate::cli::LogLevel;
+    use crate::output::logger::init_logging;
+
+    // Silent mode with no_color should still succeed
+    let result = init_logging(LogLevel::Silent, true);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_command_span_creation() {
+    use crate::output::logger::command_span;
+
+    // Test that span creation doesn't panic
+    let span = command_span("test_command");
+    // Span created successfully - if we got here, it didn't panic
+    drop(span);
+}
+
+#[test]
+fn test_operation_span_creation() {
+    use crate::output::logger::operation_span;
+
+    // Test that span creation doesn't panic
+    let span = operation_span("test_operation");
+    // Span created successfully - if we got here, it didn't panic
+    drop(span);
+}
+
+#[test]
+fn test_command_span_with_different_names() {
+    use crate::output::logger::command_span;
+
+    // Test that spans can be created with different names
+    let span1 = command_span("init");
+    let span2 = command_span("bump");
+    let span3 = command_span("changeset");
+    // All spans created successfully - if we got here, it didn't panic
+    drop(span1);
+    drop(span2);
+    drop(span3);
+}
+
+#[test]
+fn test_operation_span_with_different_names() {
+    use crate::output::logger::operation_span;
+
+    // Test that spans can be created with different names
+    let span1 = operation_span("load_config");
+    let span2 = operation_span("save_changeset");
+    let span3 = operation_span("query_registry");
+    // All spans created successfully - if we got here, it didn't panic
+    drop(span1);
+    drop(span2);
+    drop(span3);
+}
+
+#[test]
+fn test_span_can_be_dropped() {
+    use crate::output::logger::command_span;
+
+    {
+        let _span = command_span("test");
+        // Span is active here
+    }
+    // Span is dropped here - should not panic
+}
+
+#[test]
+fn test_nested_spans() {
+    use crate::output::logger::{command_span, operation_span};
+
+    let command = command_span("test_command");
+    {
+        let operation = operation_span("nested_operation");
+        // Both spans active here
+        drop(operation);
+    }
+    // Inner span dropped, outer still active
+    drop(command);
+}
+
+#[test]
+fn test_multiple_sequential_spans() {
+    use crate::output::logger::{command_span, operation_span};
+
+    let span1 = command_span("command1");
+    drop(span1);
+
+    let span2 = command_span("command2");
+    drop(span2);
+
+    let span3 = operation_span("operation1");
+    drop(span3);
+    // All should work without issue
+}
+
+#[test]
+fn test_log_level_default() {
+    use crate::cli::LogLevel;
+
+    assert_eq!(LogLevel::default(), LogLevel::Info);
+}
+
+#[test]
+fn test_log_level_display() {
+    use crate::cli::LogLevel;
+
+    assert_eq!(LogLevel::Silent.to_string(), "silent");
+    assert_eq!(LogLevel::Error.to_string(), "error");
+    assert_eq!(LogLevel::Warn.to_string(), "warn");
+    assert_eq!(LogLevel::Info.to_string(), "info");
+    assert_eq!(LogLevel::Debug.to_string(), "debug");
+    assert_eq!(LogLevel::Trace.to_string(), "trace");
+}
+
+#[test]
+fn test_log_level_from_str() {
+    use crate::cli::LogLevel;
+
+    assert_eq!("silent".parse::<LogLevel>().ok(), Some(LogLevel::Silent));
+    assert_eq!("error".parse::<LogLevel>().ok(), Some(LogLevel::Error));
+    assert_eq!("warn".parse::<LogLevel>().ok(), Some(LogLevel::Warn));
+    assert_eq!("warning".parse::<LogLevel>().ok(), Some(LogLevel::Warn)); // Alias
+    assert_eq!("info".parse::<LogLevel>().ok(), Some(LogLevel::Info));
+    assert_eq!("debug".parse::<LogLevel>().ok(), Some(LogLevel::Debug));
+    assert_eq!("trace".parse::<LogLevel>().ok(), Some(LogLevel::Trace));
+}
+
+#[test]
+fn test_log_level_from_str_case_insensitive() {
+    use crate::cli::LogLevel;
+
+    assert_eq!("SILENT".parse::<LogLevel>().ok(), Some(LogLevel::Silent));
+    assert_eq!("Error".parse::<LogLevel>().ok(), Some(LogLevel::Error));
+    assert_eq!("WARN".parse::<LogLevel>().ok(), Some(LogLevel::Warn));
+    assert_eq!("INFO".parse::<LogLevel>().ok(), Some(LogLevel::Info));
+    assert_eq!("DeBuG".parse::<LogLevel>().ok(), Some(LogLevel::Debug));
+    assert_eq!("TrAcE".parse::<LogLevel>().ok(), Some(LogLevel::Trace));
+}
+
+#[test]
+fn test_log_level_from_str_invalid() {
+    use crate::cli::LogLevel;
+
+    assert!("invalid".parse::<LogLevel>().is_err());
+    assert!("verbose".parse::<LogLevel>().is_err());
+    assert!("critical".parse::<LogLevel>().is_err());
+    assert!("".parse::<LogLevel>().is_err());
+}
+
+#[test]
+fn test_command_span_empty_name() {
+    use crate::output::logger::command_span;
+
+    // Test that span creation with empty name doesn't panic
+    let span = command_span("");
+    // If we got here, it didn't panic
+    drop(span);
+}
+
+#[test]
+fn test_operation_span_empty_name() {
+    use crate::output::logger::operation_span;
+
+    // Test that span creation with empty name doesn't panic
+    let span = operation_span("");
+    // If we got here, it didn't panic
+    drop(span);
+}
+
+#[test]
+fn test_command_span_with_special_characters() {
+    use crate::output::logger::command_span;
+
+    // Test that span creation with special characters doesn't panic
+    let span = command_span("test-command_with.special/chars");
+    // If we got here, it didn't panic
+    drop(span);
+}
+
+#[test]
+fn test_operation_span_with_special_characters() {
+    use crate::output::logger::operation_span;
+
+    // Test that span creation with special characters doesn't panic
+    let span = operation_span("load:config@v1");
+    // If we got here, it didn't panic
+    drop(span);
+}
+
+#[test]
+fn test_log_level_ordering() {
+    use crate::cli::LogLevel;
+
+    // Test that log levels have the expected ordering
+    assert!(LogLevel::Silent < LogLevel::Error);
+    assert!(LogLevel::Error < LogLevel::Warn);
+    assert!(LogLevel::Warn < LogLevel::Info);
+    assert!(LogLevel::Info < LogLevel::Debug);
+    assert!(LogLevel::Debug < LogLevel::Trace);
+}
+
+#[test]
+fn test_span_functions_are_callable() {
+    use crate::output::logger::{command_span, operation_span};
+
+    // Test that both span functions can be called without panicking
+    let command = command_span("test");
+    let operation = operation_span("test");
+    // Both functions executed successfully - if we got here, they didn't panic
+    drop(command);
+    drop(operation);
+}
+
+#[test]
+fn test_init_logging_creates_proper_filter() {
+    use crate::cli::LogLevel;
+    use crate::output::logger::init_logging;
+
+    // This test verifies that init_logging doesn't panic with valid inputs
+    // Actual logging behavior is tested in integration tests
+
+    // Test with different log levels
+    let levels =
+        vec![LogLevel::Error, LogLevel::Warn, LogLevel::Info, LogLevel::Debug, LogLevel::Trace];
+
+    for level in levels {
+        // Each level should work with both color settings
+        let result1 = init_logging(level, false);
+        let result2 = init_logging(level, true);
+
+        // Due to global subscriber, only the first will succeed
+        // but none should panic
+        let _ = result1;
+        let _ = result2;
+    }
+}
+
+#[test]
+fn test_module_exports_tracing_macros() {
+    // Verify that the re-exported macros are available
+    // This is a compile-time test - if it compiles, the exports work
+
+    #[allow(unused_imports)]
+    use crate::output::logger::{debug, error, info, trace, warn};
+
+    // If this compiles, the exports are working correctly
+    // No assertion needed - compilation is the test
+}

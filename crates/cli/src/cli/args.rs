@@ -51,7 +51,7 @@ use crate::output::OutputFormat;
 /// let tracing_level = level.to_tracing_level();
 /// assert_eq!(tracing_level, tracing::Level::INFO);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 #[clap(rename_all = "lowercase")]
 pub enum LogLevel {
     /// No logs at all.

@@ -110,8 +110,7 @@ async fn async_main() -> Result<()> {
     let cli = Cli::parse();
 
     // 2. Initialize logging based on --log-level (affects stderr only)
-    // TODO: will be implemented in story 1.3 (Logging System)
-    // init_logging(cli.log_level(), cli.is_color_disabled())?;
+    sublime_cli_tools::output::logger::init_logging(cli.log_level(), cli.is_color_disabled())?;
 
     // 3. Change to root directory if specified
     if let Some(root) = cli.root() {
