@@ -778,3 +778,400 @@ fn test_table_display_trait() {
     let display_output = format!("{table}");
     assert!(!display_output.is_empty());
 }
+
+// ============================================================================
+// Progress Indicator Tests
+// ============================================================================
+
+#[test]
+fn test_progress_bar_creation() {
+    use crate::output::progress::ProgressBar;
+
+    let pb = ProgressBar::new(100);
+    pb.set_message("test");
+    pb.set_position(50);
+    pb.inc(1);
+    pb.finish();
+}
+
+#[test]
+fn test_progress_bar_with_json_format() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::ProgressBar;
+
+    let pb = ProgressBar::new_with_format(100, OutputFormat::Json);
+    assert!(!pb.is_active());
+
+    // All operations should be no-ops
+    pb.set_message("test");
+    pb.set_position(50);
+    pb.inc(1);
+    pb.finish();
+}
+
+#[test]
+fn test_progress_bar_with_quiet_format() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::ProgressBar;
+
+    let pb = ProgressBar::new_with_format(100, OutputFormat::Quiet);
+    assert!(!pb.is_active());
+}
+
+#[test]
+fn test_progress_bar_with_json_compact_format() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::ProgressBar;
+
+    let pb = ProgressBar::new_with_format(100, OutputFormat::JsonCompact);
+    assert!(!pb.is_active());
+}
+
+#[test]
+fn test_progress_bar_set_length() {
+    use crate::output::progress::ProgressBar;
+
+    let pb = ProgressBar::new(100);
+    pb.set_length(200);
+    pb.set_position(150);
+    pb.finish();
+}
+
+#[test]
+fn test_progress_bar_finish_with_message() {
+    use crate::output::progress::ProgressBar;
+
+    let pb = ProgressBar::new(100);
+    pb.set_position(100);
+    pb.finish_with_message("Done");
+}
+
+#[test]
+fn test_progress_bar_abandon() {
+    use crate::output::progress::ProgressBar;
+
+    let pb = ProgressBar::new(100);
+    pb.set_position(50);
+    pb.abandon();
+}
+
+#[test]
+fn test_progress_bar_abandon_with_message() {
+    use crate::output::progress::ProgressBar;
+
+    let pb = ProgressBar::new(100);
+    pb.set_position(50);
+    pb.abandon_with_message("Failed");
+}
+
+#[test]
+fn test_progress_bar_complete_workflow() {
+    use crate::output::progress::ProgressBar;
+
+    let pb = ProgressBar::new(10);
+    pb.set_message("Processing");
+
+    for i in 0..10 {
+        pb.set_position(i);
+        pb.inc(1);
+    }
+
+    pb.finish_with_message("Complete");
+}
+
+#[test]
+fn test_spinner_creation() {
+    use crate::output::progress::Spinner;
+
+    let spinner = Spinner::new("Loading...");
+    spinner.set_message("Still loading...");
+    spinner.tick();
+    spinner.finish();
+}
+
+#[test]
+fn test_spinner_with_json_format() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::Spinner;
+
+    let spinner = Spinner::new_with_format("Loading...", OutputFormat::Json);
+    assert!(!spinner.is_active());
+
+    // All operations should be no-ops
+    spinner.set_message("test");
+    spinner.tick();
+    spinner.finish();
+}
+
+#[test]
+fn test_spinner_with_quiet_format() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::Spinner;
+
+    let spinner = Spinner::new_with_format("Loading...", OutputFormat::Quiet);
+    assert!(!spinner.is_active());
+}
+
+#[test]
+fn test_spinner_with_json_compact_format() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::Spinner;
+
+    let spinner = Spinner::new_with_format("Loading...", OutputFormat::JsonCompact);
+    assert!(!spinner.is_active());
+}
+
+#[test]
+fn test_spinner_finish_with_message() {
+    use crate::output::progress::Spinner;
+
+    let spinner = Spinner::new("Loading...");
+    spinner.finish_with_message("Done");
+}
+
+#[test]
+fn test_spinner_abandon() {
+    use crate::output::progress::Spinner;
+
+    let spinner = Spinner::new("Loading...");
+    spinner.abandon();
+}
+
+#[test]
+fn test_spinner_abandon_with_message() {
+    use crate::output::progress::Spinner;
+
+    let spinner = Spinner::new("Loading...");
+    spinner.abandon_with_message("Failed");
+}
+
+#[test]
+fn test_spinner_complete_workflow() {
+    use crate::output::progress::Spinner;
+
+    let spinner = Spinner::new("Starting...");
+    spinner.set_message("Working...");
+    spinner.tick();
+    spinner.set_message("Almost done...");
+    spinner.finish_with_message("✓ Done");
+}
+
+#[test]
+fn test_multi_progress_creation() {
+    use crate::output::progress::MultiProgress;
+
+    let multi = MultiProgress::new();
+    let _pb1 = multi.add_progress_bar(100);
+    let _pb2 = multi.add_spinner("Loading...");
+    multi.clear();
+}
+
+#[test]
+fn test_multi_progress_with_json_format() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::MultiProgress;
+
+    let multi = MultiProgress::new_with_format(OutputFormat::Json);
+    assert!(!multi.is_active());
+
+    let pb = multi.add_progress_bar(100);
+    assert!(!pb.is_active());
+
+    let spinner = multi.add_spinner("Loading...");
+    assert!(!spinner.is_active());
+}
+
+#[test]
+fn test_multi_progress_with_quiet_format() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::MultiProgress;
+
+    let multi = MultiProgress::new_with_format(OutputFormat::Quiet);
+    assert!(!multi.is_active());
+}
+
+#[test]
+fn test_multi_progress_with_json_compact_format() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::MultiProgress;
+
+    let multi = MultiProgress::new_with_format(OutputFormat::JsonCompact);
+    assert!(!multi.is_active());
+}
+
+#[test]
+fn test_multi_progress_default() {
+    use crate::output::progress::MultiProgress;
+
+    let multi = MultiProgress::default();
+    let _pb = multi.add_progress_bar(100);
+}
+
+#[test]
+fn test_multi_progress_add_spinner() {
+    use crate::output::progress::MultiProgress;
+
+    let multi = MultiProgress::new();
+    let spinner = multi.add_spinner("Test");
+    spinner.set_message("Testing...");
+    spinner.finish();
+}
+
+#[test]
+fn test_multi_progress_multiple_bars() {
+    use crate::output::progress::MultiProgress;
+
+    let multi = MultiProgress::new();
+    let pb1 = multi.add_progress_bar(100);
+    let pb2 = multi.add_progress_bar(50);
+
+    pb1.set_message("Task 1");
+    pb2.set_message("Task 2");
+
+    pb1.inc(10);
+    pb2.inc(5);
+
+    pb1.finish();
+    pb2.finish();
+}
+
+#[test]
+fn test_multi_progress_clear() {
+    use crate::output::progress::MultiProgress;
+
+    let multi = MultiProgress::new();
+    let _pb1 = multi.add_progress_bar(100);
+    let _pb2 = multi.add_spinner("Loading...");
+    multi.clear();
+}
+
+#[test]
+fn test_should_show_progress_json() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::should_show_progress;
+
+    assert!(!should_show_progress(OutputFormat::Json));
+}
+
+#[test]
+fn test_should_show_progress_json_compact() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::should_show_progress;
+
+    assert!(!should_show_progress(OutputFormat::JsonCompact));
+}
+
+#[test]
+fn test_should_show_progress_quiet() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::should_show_progress;
+
+    assert!(!should_show_progress(OutputFormat::Quiet));
+}
+
+#[test]
+fn test_progress_bar_is_active_human_mode() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::ProgressBar;
+
+    let pb = ProgressBar::new_with_format(100, OutputFormat::Human);
+    // May or may not be active depending on TTY, but should not panic
+    let _ = pb.is_active();
+}
+
+#[test]
+fn test_spinner_is_active_human_mode() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::Spinner;
+
+    let spinner = Spinner::new_with_format("Loading...", OutputFormat::Human);
+    // May or may not be active depending on TTY, but should not panic
+    let _ = spinner.is_active();
+}
+
+#[test]
+fn test_multi_progress_is_active_human_mode() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::MultiProgress;
+
+    let multi = MultiProgress::new_with_format(OutputFormat::Human);
+    // May or may not be active depending on TTY, but should not panic
+    let _ = multi.is_active();
+}
+
+#[test]
+fn test_progress_bar_inc_multiple_times() {
+    use crate::output::progress::ProgressBar;
+
+    let pb = ProgressBar::new(100);
+    pb.inc(10);
+    pb.inc(20);
+    pb.inc(30);
+    pb.finish();
+}
+
+#[test]
+fn test_spinner_tick_multiple_times() {
+    use crate::output::progress::Spinner;
+
+    let spinner = Spinner::new("Loading...");
+    for _ in 0..5 {
+        spinner.tick();
+    }
+    spinner.finish();
+}
+
+#[test]
+fn test_progress_suppression_in_json_mode() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::{MultiProgress, ProgressBar, Spinner};
+
+    // Verify all progress types are suppressed in JSON mode
+    let pb = ProgressBar::new_with_format(100, OutputFormat::Json);
+    let spinner = Spinner::new_with_format("Test", OutputFormat::Json);
+    let multi = MultiProgress::new_with_format(OutputFormat::Json);
+
+    assert!(!pb.is_active());
+    assert!(!spinner.is_active());
+    assert!(!multi.is_active());
+}
+
+#[test]
+fn test_progress_suppression_in_quiet_mode() {
+    use crate::output::OutputFormat;
+    use crate::output::progress::{MultiProgress, ProgressBar, Spinner};
+
+    // Verify all progress types are suppressed in quiet mode
+    let pb = ProgressBar::new_with_format(100, OutputFormat::Quiet);
+    let spinner = Spinner::new_with_format("Test", OutputFormat::Quiet);
+    let multi = MultiProgress::new_with_format(OutputFormat::Quiet);
+
+    assert!(!pb.is_active());
+    assert!(!spinner.is_active());
+    assert!(!multi.is_active());
+}
+
+#[test]
+fn test_multi_progress_mixed_indicators() {
+    use crate::output::progress::MultiProgress;
+
+    let multi = MultiProgress::new();
+
+    // Add multiple different types of indicators
+    let pb1 = multi.add_progress_bar(100);
+    let spinner1 = multi.add_spinner("Task 1");
+    let pb2 = multi.add_progress_bar(50);
+    let spinner2 = multi.add_spinner("Task 2");
+
+    pb1.set_message("Progress 1");
+    pb2.set_message("Progress 2");
+    spinner1.set_message("Spinner 1");
+    spinner2.set_message("Spinner 2");
+
+    pb1.finish();
+    spinner1.finish();
+    pb2.finish();
+    spinner2.finish();
+
+    multi.clear();
+}

@@ -76,4 +76,4 @@ pub mod output;
 // Re-exports for convenience
 pub use cli::{Cli, Commands, LogLevel, OutputFormatArg};
 pub use error::{CliError, Result};
-pub use output::{JsonResponse, OutputFormat};
+pub use output::{JsonResponse, MultiProgress, OutputFormat, ProgressBar, Spinner};

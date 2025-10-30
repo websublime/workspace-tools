@@ -149,7 +149,7 @@ pub struct InitArgs {
 
     /// NPM registry URL.
     ///
-    /// Default: https://registry.npmjs.org
+    /// Default: <https://registry.npmjs.org>
     #[arg(long, value_name = "URL", default_value = "https://registry.npmjs.org")]
     pub registry: String,
 
