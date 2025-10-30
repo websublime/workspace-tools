@@ -37,9 +37,11 @@
 //! }
 //! ```
 
+use super::branding;
 use crate::cli::{Cli, Commands};
 use crate::commands::{config, init, version};
 use crate::error::Result;
+use crate::output::OutputFormat;
 use std::path::{Path, PathBuf};
 
 /// Dispatches a parsed command to its handler.
@@ -86,6 +88,11 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
     let root = cli.root.as_deref().unwrap_or_else(|| Path::new("."));
     let format = cli.output_format();
     let config_path = cli.config_path();
+
+    // Display branded header for human-readable output (except for version command which handles its own header)
+    if should_show_header(&cli.command, format) {
+        branding::print_header(env!("CARGO_PKG_VERSION"));
+    }
 
     match &cli.command {
         Commands::Init(args) => {
@@ -184,4 +191,44 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Determines if the branded header should be displayed.
+///
+/// The header is shown when:
+/// - Output format is Human (not JSON, JSON-compact, or Quiet)
+/// - Command is not `version` (version command shows header always, even in quiet modes)
+///
+/// # Arguments
+///
+/// * `command` - The command being executed
+/// * `format` - The output format
+///
+/// # Returns
+///
+/// Returns `true` if the header should be displayed, `false` otherwise.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sublime_cli_tools::cli::Commands;
+/// use sublime_cli_tools::output::OutputFormat;
+///
+/// // Header shown for init command in human format
+/// assert!(should_show_header(&Commands::Init(...), OutputFormat::Human));
+///
+/// // Header not shown for version command (handles its own header display)
+/// assert!(!should_show_header(&Commands::Version(...), OutputFormat::Human));
+///
+/// // Header not shown for JSON output (prevents contamination)
+/// assert!(!should_show_header(&Commands::Init(...), OutputFormat::Json));
+/// ```
+fn should_show_header(command: &Commands, format: OutputFormat) -> bool {
+    // Only show header for human-readable output
+    if !matches!(format, OutputFormat::Human) {
+        return false;
+    }
+
+    // Version command shows header unconditionally (in its own implementation)
+    !matches!(command, Commands::Version(_))
 }

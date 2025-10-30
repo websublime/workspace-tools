@@ -670,13 +670,18 @@ struct ValidationResult {
 /// Displays configuration in organized sections with clear labels and formatting.
 /// Indicates if default configuration is being used.
 fn output_human_format(config: &PackageToolsConfig, is_default: bool) {
-    println!("Configuration");
-    println!("━━━━━━━━━━━━━━━━");
-    println!();
+    use crate::output::styling::{
+        Section, StatusSymbol, print_bullet, print_item, print_separator,
+    };
+    use console::Color;
+
+    // Main section
+    let section = Section::new("Configuration");
+    section.print();
 
     if is_default {
-        println!("⚠ No configuration file found. Showing default values.");
-        println!();
+        StatusSymbol::Warning.print_line("No configuration file found. Showing default values.");
+        print_separator();
     }
 
     // Strategy
@@ -684,44 +689,51 @@ fn output_human_format(config: &PackageToolsConfig, is_default: bool) {
         sublime_pkg_tools::types::VersioningStrategy::Independent => "independent",
         sublime_pkg_tools::types::VersioningStrategy::Unified => "unified",
     };
-    println!("Strategy: {strategy_str}");
+    let strategy_color = match config.version.strategy {
+        sublime_pkg_tools::types::VersioningStrategy::Independent => Color::Green,
+        sublime_pkg_tools::types::VersioningStrategy::Unified => Color::Blue,
+    };
+    print_bullet(&format!("Strategy: {strategy_str}"), strategy_color);
+    print_separator();
 
     // Changeset configuration
-    println!("Changeset Path: {}", config.changeset.path);
+    print_item("Changeset Path", &config.changeset.path, false);
     let envs = config.changeset.available_environments.join(", ");
-    println!("Environments: {envs}");
+    print_item("Environments", &envs, false);
     let default_envs = config.changeset.default_environments.join(", ");
-    println!("Default Environments: {default_envs}");
+    print_item("Default Environments", &default_envs, false);
 
     // Version configuration
     let default_bump = &config.version.default_bump;
-    println!("Default Bump: {default_bump}");
+    print_item("Default Bump", default_bump, false);
     let snapshot_format = &config.version.snapshot_format;
-    println!("Snapshot Format: {snapshot_format}");
+    print_item("Snapshot Format", snapshot_format, false);
 
     // Registry configuration
     let registry = &config.upgrade.registry.default_registry;
-    println!("Registry: {registry}");
+    print_item("Registry", registry, false);
 
     // Additional settings
-    println!();
-    println!("Additional Settings:");
+    let section = Section::new("Additional Settings");
+    section.print();
+
     let history_path = &config.changeset.history_path;
-    println!("  History Path: {history_path}");
+    print_item("History Path", history_path, false);
     let changelog_enabled = config.changelog.enabled;
-    println!("  Changelog Enabled: {changelog_enabled}");
+    print_item("Changelog Enabled", &changelog_enabled.to_string(), false);
     let audit_enabled = config.audit.enabled;
-    println!("  Audit Enabled: {audit_enabled}");
+    print_item("Audit Enabled", &audit_enabled.to_string(), false);
 
     // Dependency propagation settings
-    println!();
-    println!("Dependency Propagation:");
+    let section = Section::new("Dependency Propagation");
+    section.print();
+
     let prop_deps = config.dependency.propagate_dependencies;
-    println!("  Propagate Dependencies: {prop_deps}");
+    print_item("Propagate Dependencies", &prop_deps.to_string(), false);
     let prop_dev_deps = config.dependency.propagate_dev_dependencies;
-    println!("  Propagate Dev Dependencies: {prop_dev_deps}");
+    print_item("Propagate Dev Dependencies", &prop_dev_deps.to_string(), false);
     let max_depth = config.dependency.max_depth;
-    println!("  Max Depth: {max_depth}");
+    print_item("Max Depth", &max_depth.to_string(), true);
 }
 
 /// Output configuration in JSON format.

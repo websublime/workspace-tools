@@ -68,6 +68,7 @@
 mod json;
 pub mod progress;
 mod style;
+pub mod styling;
 pub mod table;
 
 #[cfg(test)]

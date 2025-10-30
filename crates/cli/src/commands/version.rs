@@ -44,6 +44,7 @@
 //! # }
 //! ```
 
+use crate::cli::branding;
 use crate::cli::commands::VersionArgs;
 use crate::error::Result;
 use crate::output::{JsonResponse, OutputFormat};
@@ -259,9 +260,9 @@ pub fn execute_version(args: &VersionArgs, _root: &Path, format: OutputFormat) -
 fn display_human_version(info: &VersionInfo, verbose: bool) {
     use console::style;
 
-    println!("{} {}", style("wnt").bold().cyan(), style(&info.version).bold());
-
     if verbose {
+        // Verbose mode: traditional compact display with detailed info
+        println!("{} {}", style("wnt").bold().cyan(), style(&info.version).bold());
         println!();
         println!("{}", style("Build Information:").bold().underlined());
         println!("  {} {}", style("Rust:").bold(), info.rust_version);
@@ -285,6 +286,9 @@ fn display_human_version(info: &VersionInfo, verbose: bool) {
             info.dependencies.standard_tools
         );
         println!("  {} {}", style("sublime-git-tools:").bold(), info.dependencies.git_tools);
+    } else {
+        // Normal mode: display branded ASCII art header
+        branding::print_header(&info.version);
     }
 }
 
