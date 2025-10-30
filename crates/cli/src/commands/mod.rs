@@ -41,12 +41,12 @@
 // Module exports
 pub mod config;
 pub mod init;
+pub mod version;
 
 #[cfg(test)]
 mod tests;
 
 // TODO: will be implemented in subsequent stories
-// Story 2.3 will implement config validate command
 // Story 4.x will implement changeset commands
 // Story 5.x will implement version management commands
 // Story 6.x will implement upgrade commands

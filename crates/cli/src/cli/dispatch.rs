@@ -38,7 +38,7 @@
 //! ```
 
 use crate::cli::{Cli, Commands};
-use crate::commands::{config, init};
+use crate::commands::{config, init, version};
 use crate::error::Result;
 use std::path::{Path, PathBuf};
 
@@ -178,10 +178,8 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
             todo!("Changes command will be implemented in story 5.4")
         }
 
-        Commands::Version(_args) => {
-            let _ = (root, format); // Will be used when implemented
-            // TODO: will be implemented on story 1.4 (basic version display)
-            todo!("Version command will be implemented in story 1.4")
+        Commands::Version(args) => {
+            version::execute_version(args, root, format)?;
         }
     }
 

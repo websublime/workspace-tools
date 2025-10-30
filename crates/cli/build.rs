@@ -16,6 +16,7 @@
 
 use std::env;
 use std::io::Error;
+use std::process::Command;
 
 fn main() -> Result<(), Error> {
     // Get the output directory for build artifacts
@@ -29,6 +30,34 @@ fn main() -> Result<(), Error> {
     println!("cargo:rerun-if-changed=src/cli/mod.rs");
     println!("cargo:rerun-if-changed=src/cli/commands.rs");
     println!("cargo:rerun-if-changed=src/cli/args.rs");
+
+    // Capture rustc version at build time
+    if let Ok(output) = Command::new("rustc").arg("--version").output()
+        && let Ok(version) = String::from_utf8(output.stdout)
+    {
+        let version = version.trim();
+        println!("cargo:rustc-env=RUSTC_VERSION={version}");
+    }
+
+    // Capture enabled cargo features
+    // CARGO_FEATURE_<name> environment variables are set by Cargo for each enabled feature
+    let features: Vec<String> = env::vars()
+        .filter_map(|(key, _)| {
+            if key.starts_with("CARGO_FEATURE_") {
+                // Extract feature name and convert back to kebab-case
+                let feature = key
+                    .strip_prefix("CARGO_FEATURE_")
+                    .map(|s| s.to_lowercase().replace('_', "-"))?;
+                Some(feature)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Set as comma-separated list
+    let features_list = features.join(",");
+    println!("cargo:rustc-env=CARGO_FEATURES={features_list}");
 
     // Note: Actual completion generation will be implemented when CLI structure is defined
     // This is a placeholder that compiles successfully
