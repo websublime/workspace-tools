@@ -66,6 +66,7 @@
 //! ```
 
 mod json;
+pub mod progress;
 mod style;
 pub mod table;
 
@@ -79,6 +80,7 @@ use std::io::Write;
 
 // Public re-exports
 pub use json::JsonResponse;
+pub use progress::{MultiProgress, ProgressBar, Spinner};
 pub use style::{Style, StyledText};
 
 /// Output format for CLI commands.
