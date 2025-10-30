@@ -66,6 +66,7 @@
 //! ```
 
 mod json;
+pub mod logger;
 pub mod progress;
 mod style;
 pub mod styling;
