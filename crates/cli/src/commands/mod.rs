@@ -39,13 +39,13 @@
 //! - `changes.rs` - Change analysis commands
 
 // Module exports
+pub mod config;
 pub mod init;
 
 #[cfg(test)]
 mod tests;
 
 // TODO: will be implemented in subsequent stories
-// Story 2.2 will implement config show command
 // Story 2.3 will implement config validate command
 // Story 4.x will implement changeset commands
 // Story 5.x will implement version management commands

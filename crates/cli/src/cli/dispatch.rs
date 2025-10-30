@@ -38,7 +38,7 @@
 //! ```
 
 use crate::cli::{Cli, Commands};
-use crate::commands::init;
+use crate::commands::{config, init};
 use crate::error::Result;
 use std::path::Path;
 
@@ -92,11 +92,9 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
         }
 
         Commands::Config(config_cmd) => {
-            let _ = (root, format); // Will be used when implemented
             match config_cmd {
-                ConfigCommands::Show(_args) => {
-                    // TODO: will be implemented on story 2.2
-                    todo!("Config show command will be implemented in story 2.2")
+                ConfigCommands::Show(args) => {
+                    config::execute_show(args, root, format).await?;
                 }
                 ConfigCommands::Validate(_args) => {
                     // TODO: will be implemented on story 2.3
