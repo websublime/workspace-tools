@@ -532,10 +532,8 @@ mod init_tests {
         assert!(result.is_ok(), "First init failed: {result:?}");
 
         let gitignore_path = temp_dir.path().join(".gitignore");
-        let gitignore_content = match fs::read_to_string(&gitignore_path) {
-            Ok(content) => content,
-            Err(e) => panic!("Failed to read .gitignore: {e}"),
-        };
+        let gitignore_content =
+            fs::read_to_string(&gitignore_path).expect("Failed to read .gitignore");
         let backup_count = gitignore_content.matches(".wnt-backups/").count();
 
         // Initialize again with force
@@ -544,14 +542,141 @@ mod init_tests {
         let result = execute_init(&args_force, temp_dir.path(), OutputFormat::Quiet).await;
         assert!(result.is_ok(), "Second init failed: {result:?}");
 
-        let gitignore_path_after = temp_dir.path().join(".gitignore");
-        let gitignore_content_after = match fs::read_to_string(&gitignore_path_after) {
-            Ok(content) => content,
-            Err(e) => panic!("Failed to read .gitignore after second init: {e}"),
-        };
+        let gitignore_content_after = fs::read_to_string(&gitignore_path)
+            .expect("Failed to read .gitignore after second init");
         let backup_count_after = gitignore_content_after.matches(".wnt-backups/").count();
 
         // Should still only have one entry
         assert_eq!(backup_count, backup_count_after, "Gitignore entries were duplicated");
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+#[allow(clippy::unwrap_used)]
+#[allow(clippy::panic)]
+mod config_tests {
+    use crate::cli::commands::ConfigShowArgs;
+    use crate::commands::config::execute_show;
+    use crate::output::OutputFormat;
+    use std::fs;
+    use tempfile::TempDir;
+
+    /// Helper to create a test workspace with package.json
+    fn create_test_workspace() -> TempDir {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let package_json = serde_json::json!({
+            "name": "test-project",
+            "version": "1.0.0"
+        });
+        fs::write(
+            temp_dir.path().join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Failed to serialize"),
+        )
+        .expect("Failed to write package.json");
+        temp_dir
+    }
+
+    /// Helper to create a config file
+    fn create_config_file(temp_dir: &TempDir, format: &str) {
+        let config = sublime_pkg_tools::config::PackageToolsConfig::default();
+        let config_content = match format {
+            "toml" => toml::to_string_pretty(&config).expect("Failed to serialize TOML"),
+            "json" => serde_json::to_string_pretty(&config).expect("Failed to serialize JSON"),
+            "yaml" => serde_yaml::to_string(&config).expect("Failed to serialize YAML"),
+            _ => panic!("Unsupported format: {format}"),
+        };
+        let config_filename = format!("repo.config.{format}");
+        fs::write(temp_dir.path().join(config_filename), config_content)
+            .expect("Failed to write config file");
+    }
+
+    #[tokio::test]
+    async fn test_config_show_with_existing_toml_config() {
+        let temp_dir = create_test_workspace();
+        create_config_file(&temp_dir, "toml");
+
+        let args = ConfigShowArgs {};
+        let result = execute_show(&args, temp_dir.path(), OutputFormat::Quiet).await;
+
+        assert!(result.is_ok(), "Config show failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_config_show_with_existing_json_config() {
+        let temp_dir = create_test_workspace();
+        create_config_file(&temp_dir, "json");
+
+        let args = ConfigShowArgs {};
+        let result = execute_show(&args, temp_dir.path(), OutputFormat::Quiet).await;
+
+        assert!(result.is_ok(), "Config show with JSON config failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_config_show_with_existing_yaml_config() {
+        let temp_dir = create_test_workspace();
+        create_config_file(&temp_dir, "yaml");
+
+        let args = ConfigShowArgs {};
+        let result = execute_show(&args, temp_dir.path(), OutputFormat::Quiet).await;
+
+        assert!(result.is_ok(), "Config show with YAML config failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_config_show_without_config_uses_defaults() {
+        let temp_dir = create_test_workspace();
+        // Don't create config file
+
+        let args = ConfigShowArgs {};
+        let result = execute_show(&args, temp_dir.path(), OutputFormat::Quiet).await;
+
+        // Should succeed with default config
+        assert!(result.is_ok(), "Config show without config should use defaults: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_config_show_human_format() {
+        let temp_dir = create_test_workspace();
+        create_config_file(&temp_dir, "toml");
+
+        let args = ConfigShowArgs {};
+        let result = execute_show(&args, temp_dir.path(), OutputFormat::Human).await;
+
+        assert!(result.is_ok(), "Config show in human format failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_config_show_json_format() {
+        let temp_dir = create_test_workspace();
+        create_config_file(&temp_dir, "toml");
+
+        let args = ConfigShowArgs {};
+        let result = execute_show(&args, temp_dir.path(), OutputFormat::Json).await;
+
+        assert!(result.is_ok(), "Config show in JSON format failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_config_show_json_compact_format() {
+        let temp_dir = create_test_workspace();
+        create_config_file(&temp_dir, "toml");
+
+        let args = ConfigShowArgs {};
+        let result = execute_show(&args, temp_dir.path(), OutputFormat::JsonCompact).await;
+
+        assert!(result.is_ok(), "Config show in JSON compact format failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_config_show_quiet_format() {
+        let temp_dir = create_test_workspace();
+        create_config_file(&temp_dir, "toml");
+
+        let args = ConfigShowArgs {};
+        let result = execute_show(&args, temp_dir.path(), OutputFormat::Quiet).await;
+
+        assert!(result.is_ok(), "Config show in quiet format failed: {result:?}");
     }
 }
