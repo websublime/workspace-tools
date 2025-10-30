@@ -73,7 +73,11 @@ pub mod error;
 /// Output formatting and logging
 pub mod output;
 
+/// Interactive prompts and user input
+pub mod interactive;
+
 // Re-exports for convenience
 pub use cli::{Cli, Commands, LogLevel, OutputFormatArg};
 pub use error::{CliError, Result};
+pub use interactive::prompts;
 pub use output::{JsonResponse, MultiProgress, OutputFormat, ProgressBar, Spinner};

@@ -39,6 +39,7 @@
 //! - `changes.rs` - Change analysis commands
 
 // Module exports
+pub mod changeset;
 pub mod config;
 pub mod init;
 pub mod version;
@@ -47,7 +48,7 @@ pub mod version;
 mod tests;
 
 // TODO: will be implemented in subsequent stories
-// Story 4.x will implement changeset commands
+// Story 4.2+ will implement remaining changeset commands (update, list, show, delete, history, check)
 // Story 5.x will implement version management commands
 // Story 6.x will implement upgrade commands
 // Story 7.x will implement audit commands
