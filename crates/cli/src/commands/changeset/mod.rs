@@ -59,6 +59,7 @@
 
 pub mod add;
 pub mod edit;
+pub mod history;
 pub mod list;
 pub mod remove;
 pub mod show;
@@ -74,14 +75,11 @@ mod tests;
 // Re-export command functions for convenience
 pub use add::execute_add;
 pub use edit::execute_edit;
+pub use history::execute_history;
 pub use list::execute_list;
 pub use remove::execute_remove;
 pub use show::execute_show;
 pub use update::execute_update;
-
-// TODO: will be implemented on story 4.8
-// pub mod history;
-// pub use history::execute_history;
 
 // TODO: check subcommand - not yet assigned to a story
 // Useful for Git hooks to verify changeset existence

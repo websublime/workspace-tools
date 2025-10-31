@@ -1398,4 +1398,590 @@ mod tests {
         assert!(update_parse_bump_type("MAJOR").is_ok());
         assert!(update_parse_bump_type("Major").is_ok());
     }
+
+    // ========================================================================
+    // Changeset History Command Tests (Story 4.8)
+    // ========================================================================
+
+    use crate::cli::commands::ChangesetHistoryArgs;
+
+    #[test]
+    fn test_history_args_defaults() {
+        let args = ChangesetHistoryArgs {
+            package: None,
+            since: None,
+            until: None,
+            env: None,
+            bump: None,
+            limit: None,
+        };
+
+        assert!(args.package.is_none());
+        assert!(args.since.is_none());
+        assert!(args.until.is_none());
+        assert!(args.env.is_none());
+        assert!(args.bump.is_none());
+        assert!(args.limit.is_none());
+    }
+
+    #[test]
+    fn test_history_args_with_package_filter() {
+        let args = ChangesetHistoryArgs {
+            package: Some("my-package".to_string()),
+            since: None,
+            until: None,
+            env: None,
+            bump: None,
+            limit: None,
+        };
+
+        assert_eq!(args.package.as_deref(), Some("my-package"));
+        assert!(args.since.is_none());
+        assert!(args.until.is_none());
+    }
+
+    #[test]
+    fn test_history_args_with_date_range() {
+        let args = ChangesetHistoryArgs {
+            package: None,
+            since: Some("2025-01-01".to_string()),
+            until: Some("2025-12-31".to_string()),
+            env: None,
+            bump: None,
+            limit: None,
+        };
+
+        assert_eq!(args.since.as_deref(), Some("2025-01-01"));
+        assert_eq!(args.until.as_deref(), Some("2025-12-31"));
+    }
+
+    #[test]
+    fn test_history_args_with_env_filter() {
+        let args = ChangesetHistoryArgs {
+            package: None,
+            since: None,
+            until: None,
+            env: Some("production".to_string()),
+            bump: None,
+            limit: None,
+        };
+
+        assert_eq!(args.env.as_deref(), Some("production"));
+    }
+
+    #[test]
+    fn test_history_args_with_bump_filter() {
+        let args = ChangesetHistoryArgs {
+            package: None,
+            since: None,
+            until: None,
+            env: None,
+            bump: Some("major".to_string()),
+            limit: None,
+        };
+
+        assert_eq!(args.bump.as_deref(), Some("major"));
+    }
+
+    #[test]
+    fn test_history_args_with_limit() {
+        let args = ChangesetHistoryArgs {
+            package: None,
+            since: None,
+            until: None,
+            env: None,
+            bump: None,
+            limit: Some(50),
+        };
+
+        assert_eq!(args.limit, Some(50));
+    }
+
+    #[test]
+    fn test_history_args_with_all_filters() {
+        let args = ChangesetHistoryArgs {
+            package: Some("core".to_string()),
+            since: Some("2025-01-01".to_string()),
+            until: Some("2025-10-31".to_string()),
+            env: Some("staging".to_string()),
+            bump: Some("minor".to_string()),
+            limit: Some(20),
+        };
+
+        assert!(args.package.is_some());
+        assert!(args.since.is_some());
+        assert!(args.until.is_some());
+        assert!(args.env.is_some());
+        assert!(args.bump.is_some());
+        assert!(args.limit.is_some());
+    }
+
+    #[test]
+    fn test_history_args_only_since_date() {
+        let args = ChangesetHistoryArgs {
+            package: None,
+            since: Some("2025-06-01".to_string()),
+            until: None,
+            env: None,
+            bump: None,
+            limit: None,
+        };
+
+        assert!(args.since.is_some());
+        assert!(args.until.is_none());
+    }
+
+    #[test]
+    fn test_history_args_only_until_date() {
+        let args = ChangesetHistoryArgs {
+            package: None,
+            since: None,
+            until: Some("2025-10-31".to_string()),
+            env: None,
+            bump: None,
+            limit: None,
+        };
+
+        assert!(args.since.is_none());
+        assert!(args.until.is_some());
+    }
+
+    #[test]
+    fn test_history_args_package_and_limit() {
+        let args = ChangesetHistoryArgs {
+            package: Some("my-pkg".to_string()),
+            since: None,
+            until: None,
+            env: None,
+            bump: None,
+            limit: Some(10),
+        };
+
+        assert!(args.package.is_some());
+        assert!(args.limit.is_some());
+    }
+
+    #[test]
+    fn test_history_args_date_and_bump() {
+        let args = ChangesetHistoryArgs {
+            package: None,
+            since: Some("2025-01-01".to_string()),
+            until: Some("2025-12-31".to_string()),
+            env: None,
+            bump: Some("patch".to_string()),
+            limit: None,
+        };
+
+        assert!(args.since.is_some());
+        assert!(args.until.is_some());
+        assert!(args.bump.is_some());
+    }
+
+    #[test]
+    fn test_archived_changeset_info_conversion() {
+        use crate::commands::changeset::types::ArchivedChangesetInfo;
+        use chrono::Utc;
+        use std::collections::HashMap;
+        use sublime_pkg_tools::types::{ArchivedChangeset, Changeset, ReleaseInfo, VersionBump};
+
+        let changeset = Changeset {
+            branch: "feature/test".to_string(),
+            bump: VersionBump::Minor,
+            packages: vec!["pkg-a".to_string()],
+            environments: vec!["production".to_string()],
+            changes: vec!["abc123".to_string()],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let mut versions = HashMap::new();
+        versions.insert("pkg-a".to_string(), "1.2.0".to_string());
+
+        let release_info = ReleaseInfo {
+            applied_at: Utc::now(),
+            applied_by: "ci-bot".to_string(),
+            git_commit: "abc123def456".to_string(),
+            versions,
+        };
+
+        let archived = ArchivedChangeset { changeset, release_info };
+
+        let info = ArchivedChangesetInfo::from(&archived);
+
+        assert_eq!(info.branch, "feature/test");
+        assert_eq!(info.bump, "minor");
+        assert!(info.versions.contains_key("pkg-a"));
+        assert_eq!(info.git_commit, "abc123def456");
+        assert_eq!(info.applied_by, "ci-bot");
+    }
+
+    #[test]
+    fn test_archived_changeset_info_with_single_package() {
+        use crate::commands::changeset::types::ArchivedChangesetInfo;
+        use chrono::Utc;
+        use std::collections::HashMap;
+        use sublime_pkg_tools::types::{ArchivedChangeset, Changeset, ReleaseInfo, VersionBump};
+
+        let changeset = Changeset {
+            branch: "hotfix/security".to_string(),
+            bump: VersionBump::Patch,
+            packages: vec!["pkg-b".to_string()],
+            environments: vec!["production".to_string()],
+            changes: vec!["def456".to_string()],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let mut versions = HashMap::new();
+        versions.insert("pkg-b".to_string(), "1.0.1".to_string());
+
+        let release_info = ReleaseInfo {
+            applied_at: Utc::now(),
+            applied_by: "manual".to_string(),
+            git_commit: "def456abc789".to_string(),
+            versions,
+        };
+
+        let archived = ArchivedChangeset { changeset, release_info };
+
+        let info = ArchivedChangesetInfo::from(&archived);
+
+        assert_eq!(info.branch, "hotfix/security");
+        assert_eq!(info.bump, "patch");
+        assert!(info.versions.contains_key("pkg-b"));
+        assert_eq!(info.git_commit, "def456abc789");
+        assert_eq!(info.applied_by, "manual");
+    }
+
+    #[test]
+    fn test_archived_changeset_info_with_multiple_packages() {
+        use crate::commands::changeset::types::ArchivedChangesetInfo;
+        use chrono::Utc;
+        use std::collections::HashMap;
+        use sublime_pkg_tools::types::{ArchivedChangeset, Changeset, ReleaseInfo, VersionBump};
+
+        let changeset = Changeset {
+            branch: "feature/multi".to_string(),
+            bump: VersionBump::Major,
+            packages: vec!["pkg-a".to_string(), "pkg-b".to_string(), "pkg-c".to_string()],
+            environments: vec!["dev".to_string(), "staging".to_string(), "prod".to_string()],
+            changes: vec!["abc".to_string(), "def".to_string(), "ghi".to_string()],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let mut versions = HashMap::new();
+        versions.insert("pkg-a".to_string(), "2.0.0".to_string());
+        versions.insert("pkg-b".to_string(), "2.0.0".to_string());
+        versions.insert("pkg-c".to_string(), "2.0.0".to_string());
+
+        let release_info = ReleaseInfo {
+            applied_at: Utc::now(),
+            applied_by: "release-bot".to_string(),
+            git_commit: "ghi789jkl012".to_string(),
+            versions,
+        };
+
+        let archived = ArchivedChangeset { changeset, release_info };
+
+        let info = ArchivedChangesetInfo::from(&archived);
+
+        assert_eq!(info.packages.len(), 3);
+        assert_eq!(info.environments.len(), 3);
+        assert_eq!(info.commits.len(), 3);
+        assert_eq!(info.bump, "major");
+        assert_eq!(info.versions.len(), 3);
+    }
+
+    #[test]
+    fn test_history_limit_zero() {
+        let args = ChangesetHistoryArgs {
+            package: None,
+            since: None,
+            until: None,
+            env: None,
+            bump: None,
+            limit: Some(0),
+        };
+
+        assert_eq!(args.limit, Some(0));
+    }
+
+    #[test]
+    fn test_history_limit_large_value() {
+        let args = ChangesetHistoryArgs {
+            package: None,
+            since: None,
+            until: None,
+            env: None,
+            bump: None,
+            limit: Some(1000),
+        };
+
+        assert_eq!(args.limit, Some(1000));
+    }
+
+    #[test]
+    fn test_history_date_format_variations() {
+        // Test different valid date formats
+        let iso_date = ChangesetHistoryArgs {
+            package: None,
+            since: Some("2025-01-15".to_string()),
+            until: None,
+            env: None,
+            bump: None,
+            limit: None,
+        };
+        assert_eq!(iso_date.since.as_deref(), Some("2025-01-15"));
+
+        let rfc3339 = ChangesetHistoryArgs {
+            package: None,
+            since: Some("2025-01-15T10:30:00Z".to_string()),
+            until: None,
+            env: None,
+            bump: None,
+            limit: None,
+        };
+        assert_eq!(rfc3339.since.as_deref(), Some("2025-01-15T10:30:00Z"));
+    }
+
+    #[test]
+    fn test_history_multiple_filter_combinations() {
+        // Test package + environment
+        let combo1 = ChangesetHistoryArgs {
+            package: Some("core".to_string()),
+            since: None,
+            until: None,
+            env: Some("production".to_string()),
+            bump: None,
+            limit: None,
+        };
+        assert!(combo1.package.is_some() && combo1.env.is_some());
+
+        // Test date range + bump
+        let combo2 = ChangesetHistoryArgs {
+            package: None,
+            since: Some("2025-01-01".to_string()),
+            until: Some("2025-12-31".to_string()),
+            env: None,
+            bump: Some("major".to_string()),
+            limit: None,
+        };
+        assert!(combo2.since.is_some() && combo2.until.is_some() && combo2.bump.is_some());
+
+        // Test all filters except limit
+        let combo3 = ChangesetHistoryArgs {
+            package: Some("pkg".to_string()),
+            since: Some("2025-01-01".to_string()),
+            until: Some("2025-12-31".to_string()),
+            env: Some("staging".to_string()),
+            bump: Some("minor".to_string()),
+            limit: None,
+        };
+        assert!(combo3.package.is_some());
+        assert!(combo3.since.is_some());
+        assert!(combo3.until.is_some());
+        assert!(combo3.env.is_some());
+        assert!(combo3.bump.is_some());
+    }
+
+    #[test]
+    fn test_archived_changeset_info_timestamp_formats() {
+        use crate::commands::changeset::types::ArchivedChangesetInfo;
+        use chrono::{DateTime, Utc};
+        use std::collections::HashMap;
+        use sublime_pkg_tools::types::{ArchivedChangeset, Changeset, ReleaseInfo, VersionBump};
+
+        let created_at = DateTime::parse_from_rfc3339("2025-01-01T10:00:00Z")
+            .ok()
+            .map(|dt| dt.with_timezone(&Utc));
+        let updated_at = DateTime::parse_from_rfc3339("2025-01-15T14:30:00Z")
+            .ok()
+            .map(|dt| dt.with_timezone(&Utc));
+        let applied_at = DateTime::parse_from_rfc3339("2025-01-20T16:00:00Z")
+            .ok()
+            .map(|dt| dt.with_timezone(&Utc));
+
+        if let (Some(created), Some(updated), Some(applied)) =
+            (created_at, updated_at, applied_at)
+        {
+            let changeset = Changeset {
+                branch: "test".to_string(),
+                bump: VersionBump::Minor,
+                packages: vec![],
+                environments: vec![],
+                changes: vec![],
+                created_at: created,
+                updated_at: updated,
+            };
+
+            let mut versions = HashMap::new();
+            versions.insert("test-pkg".to_string(), "1.1.0".to_string());
+
+            let release_info = ReleaseInfo {
+                applied_at: applied,
+                applied_by: "bot".to_string(),
+                git_commit: "abc123".to_string(),
+                versions,
+            };
+
+            let archived = ArchivedChangeset { changeset, release_info };
+            let info = ArchivedChangesetInfo::from(&archived);
+
+            // Timestamps should be in RFC3339 format
+            assert!(info.created_at.contains("2025-01-01"));
+            assert!(info.updated_at.contains("2025-01-15"));
+            assert!(info.applied_at.contains("2025-01-20"));
+        }
+    }
+
+    // Integration tests for execute_history
+
+    #[test]
+    #[ignore = "requires filesystem and history setup"]
+    fn test_execute_history_no_archived_changesets() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create workspace with config but empty history directory
+        // 2. Execute history command
+        // 3. Verify appropriate "no archived changesets" message
+        // 4. Verify zero results in output
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and history setup"]
+    fn test_execute_history_with_package_filter() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create workspace with multiple archived changesets for different packages
+        // 2. Execute history command with --package filter
+        // 3. Verify only changesets affecting that package are returned
+        // 4. Verify other packages' changesets are excluded
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and history setup"]
+    fn test_execute_history_with_date_range() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create archived changesets with various release dates
+        // 2. Execute history command with --since and --until
+        // 3. Verify only changesets within date range are returned
+        // 4. Verify changesets outside range are excluded
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and history setup"]
+    fn test_execute_history_with_env_filter() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create archived changesets for different environments
+        // 2. Execute history command with --env filter
+        // 3. Verify only changesets for that environment are returned
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and history setup"]
+    fn test_execute_history_with_bump_filter() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create archived changesets with different bump types
+        // 2. Execute history command with --bump filter
+        // 3. Verify only changesets with that bump type are returned
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and history setup"]
+    fn test_execute_history_with_limit() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create 50 archived changesets
+        // 2. Execute history command with --limit 10
+        // 3. Verify exactly 10 results are returned
+        // 4. Verify results are most recent ones
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and history setup"]
+    fn test_execute_history_json_output() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create archived changesets
+        // 2. Execute history command with --format json
+        // 3. Verify JSON is valid
+        // 4. Verify JSON structure matches ArchivedChangesetInfo schema
+        // 5. Verify all fields are present (including release info)
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and history setup"]
+    fn test_execute_history_table_output() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create archived changesets
+        // 2. Execute history command with default (human) format
+        // 3. Verify table is properly formatted
+        // 4. Verify columns include: Branch, Bump, Version, Packages, Environments, Released
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and history setup"]
+    fn test_execute_history_invalid_date_format() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Execute history command with invalid date format
+        // 2. Verify error message is clear and helpful
+        // 3. Verify suggests correct format (ISO 8601 or RFC3339)
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and history setup"]
+    fn test_execute_history_invalid_bump_type() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Execute history command with invalid bump type
+        // 2. Verify error message lists valid options
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and history setup"]
+    fn test_execute_history_multiple_filters() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create diverse set of archived changesets
+        // 2. Execute history with multiple filters (package + date + env)
+        // 3. Verify only changesets matching all filters are returned
+        // 4. Verify AND logic is applied correctly
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and history setup"]
+    fn test_execute_history_sorted_by_date() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create archived changesets with different release dates
+        // 2. Execute history command
+        // 3. Verify results are sorted by release date (most recent first)
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and history setup"]
+    fn test_execute_history_without_workspace_init() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create temp directory without config
+        // 2. Execute history command
+        // 3. Verify error message suggests running 'wnt init'
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and history setup"]
+    fn test_execute_history_performance_large_dataset() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create 1000+ archived changesets
+        // 2. Execute history command with various filters
+        // 3. Verify performance is acceptable (< 2 seconds)
+        // 4. Verify memory usage is reasonable
+    }
 }

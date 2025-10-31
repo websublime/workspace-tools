@@ -167,9 +167,14 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
                     changeset::execute_remove(args, &output, Some(root), config_path.map(|v| &**v))
                         .await?;
                 }
-                ChangesetCommands::History(_args) => {
-                    // TODO: will be implemented on story 4.8
-                    todo!("Changeset history command will be implemented in story 4.8")
+                ChangesetCommands::History(args) => {
+                    changeset::execute_history(
+                        args,
+                        &output,
+                        Some(root),
+                        config_path.as_ref().map(|p| p.as_path()),
+                    )
+                    .await?;
                 }
                 ChangesetCommands::Check(_args) => {
                     // TODO: will be implemented on story 4.3
