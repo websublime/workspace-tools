@@ -71,6 +71,8 @@
 //! # }
 //! ```
 
+pub mod execute;
+pub mod git_integration;
 pub mod preview;
 pub mod snapshot;
 
@@ -78,8 +80,5 @@ pub mod snapshot;
 mod tests;
 
 // Re-export command functions for convenience
+pub use execute::execute_bump_apply;
 pub use preview::execute_bump_preview;
-
-// TODO: will be implemented in story 5.2
-// pub mod execute;
-// pub use execute::execute_bump_apply;
