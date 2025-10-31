@@ -58,20 +58,18 @@
 //! ```
 
 pub mod add;
+pub mod list;
 
 #[cfg(test)]
 mod tests;
 
 // Re-export command functions for convenience
 pub use add::execute_add;
+pub use list::execute_list;
 
 // TODO: will be implemented on story 4.2
 // pub mod update;
 // pub use update::execute_update;
-
-// TODO: will be implemented on story 4.3
-// pub mod list;
-// pub use list::execute_list;
 
 // TODO: will be implemented on story 4.4
 // pub mod show;

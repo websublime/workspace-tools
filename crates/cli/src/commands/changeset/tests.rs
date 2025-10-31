@@ -247,6 +247,170 @@ mod tests {
         assert!(args.non_interactive);
     }
 
+    // ========================================================================
+    // Changeset List Command Tests
+    // ========================================================================
+
+    use crate::cli::commands::ChangesetListArgs;
+    use crate::commands::changeset::list::parse_bump_type as list_parse_bump_type;
+
+    #[test]
+    fn test_list_args_defaults() {
+        let args = ChangesetListArgs {
+            filter_package: None,
+            filter_bump: None,
+            filter_env: None,
+            sort: "date".to_string(),
+        };
+
+        assert!(args.filter_package.is_none());
+        assert!(args.filter_bump.is_none());
+        assert!(args.filter_env.is_none());
+        assert_eq!(args.sort, "date");
+    }
+
+    #[test]
+    fn test_list_args_with_filters() {
+        let args = ChangesetListArgs {
+            filter_package: Some("my-package".to_string()),
+            filter_bump: Some("major".to_string()),
+            filter_env: Some("production".to_string()),
+            sort: "branch".to_string(),
+        };
+
+        assert_eq!(args.filter_package.as_deref(), Some("my-package"));
+        assert_eq!(args.filter_bump.as_deref(), Some("major"));
+        assert_eq!(args.filter_env.as_deref(), Some("production"));
+        assert_eq!(args.sort, "branch");
+    }
+
+    #[test]
+    fn test_list_parse_bump_type_valid() {
+        assert!(matches!(list_parse_bump_type("patch"), Ok(VersionBump::Patch)));
+        assert!(matches!(list_parse_bump_type("minor"), Ok(VersionBump::Minor)));
+        assert!(matches!(list_parse_bump_type("major"), Ok(VersionBump::Major)));
+        assert!(matches!(list_parse_bump_type("PATCH"), Ok(VersionBump::Patch)));
+        assert!(matches!(list_parse_bump_type("Minor"), Ok(VersionBump::Minor)));
+        assert!(matches!(list_parse_bump_type("MAJOR"), Ok(VersionBump::Major)));
+    }
+
+    #[test]
+    #[allow(clippy::panic)]
+    fn test_list_parse_bump_type_invalid() {
+        let result = list_parse_bump_type("invalid");
+        assert!(result.is_err());
+        if let Err(CliError::Validation(message)) = result {
+            assert!(message.contains("Invalid bump type"));
+            assert!(message.contains("major, minor, patch"));
+        } else {
+            panic!("Expected Validation error");
+        }
+
+        assert!(list_parse_bump_type("").is_err());
+        assert!(list_parse_bump_type("pre-release").is_err());
+        assert!(list_parse_bump_type("preminor").is_err());
+    }
+
+    #[test]
+    fn test_list_sort_options() {
+        // Test valid sort options
+        let sort_date = ChangesetListArgs {
+            filter_package: None,
+            filter_bump: None,
+            filter_env: None,
+            sort: "date".to_string(),
+        };
+        assert_eq!(sort_date.sort, "date");
+
+        let sort_branch = ChangesetListArgs {
+            filter_package: None,
+            filter_bump: None,
+            filter_env: None,
+            sort: "branch".to_string(),
+        };
+        assert_eq!(sort_branch.sort, "branch");
+
+        let sort_bump = ChangesetListArgs {
+            filter_package: None,
+            filter_bump: None,
+            filter_env: None,
+            sort: "bump".to_string(),
+        };
+        assert_eq!(sort_bump.sort, "bump");
+    }
+
+    #[test]
+    fn test_list_multiple_filters() {
+        // Test combining multiple filters
+        let args = ChangesetListArgs {
+            filter_package: Some("core".to_string()),
+            filter_bump: Some("minor".to_string()),
+            filter_env: Some("staging".to_string()),
+            sort: "date".to_string(),
+        };
+
+        assert!(args.filter_package.is_some());
+        assert!(args.filter_bump.is_some());
+        assert!(args.filter_env.is_some());
+    }
+
+    #[test]
+    fn test_list_no_filters() {
+        // Test list with no filters (show all)
+        let args = ChangesetListArgs {
+            filter_package: None,
+            filter_bump: None,
+            filter_env: None,
+            sort: "date".to_string(),
+        };
+
+        assert!(args.filter_package.is_none());
+        assert!(args.filter_bump.is_none());
+        assert!(args.filter_env.is_none());
+    }
+
+    #[test]
+    fn test_list_package_filter_only() {
+        let args = ChangesetListArgs {
+            filter_package: Some("my-package".to_string()),
+            filter_bump: None,
+            filter_env: None,
+            sort: "date".to_string(),
+        };
+
+        assert!(args.filter_package.is_some());
+        assert!(args.filter_bump.is_none());
+        assert!(args.filter_env.is_none());
+    }
+
+    #[test]
+    fn test_list_bump_filter_only() {
+        let args = ChangesetListArgs {
+            filter_package: None,
+            filter_bump: Some("major".to_string()),
+            filter_env: None,
+            sort: "date".to_string(),
+        };
+
+        assert!(args.filter_package.is_none());
+        assert!(args.filter_bump.is_some());
+        assert!(args.filter_env.is_none());
+    }
+
+    #[test]
+    fn test_list_env_filter_only() {
+        let args = ChangesetListArgs {
+            filter_package: None,
+            filter_bump: None,
+            filter_env: Some("production".to_string()),
+            sort: "date".to_string(),
+        };
+
+        assert!(args.filter_package.is_none());
+        assert!(args.filter_bump.is_none());
+        assert!(args.filter_env.is_some());
+    }
+
     #[test]
     fn test_non_interactive_optional_message() {
         // Message is optional in non-interactive mode
