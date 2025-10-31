@@ -558,6 +558,33 @@ impl Output {
         Ok(())
     }
 
+    /// Outputs a blank line.
+    ///
+    /// In human mode, outputs a blank line for spacing.
+    /// In JSON mode, this is ignored.
+    /// In quiet mode, this is suppressed.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_cli_tools::output::{Output, OutputFormat};
+    /// use std::io;
+    ///
+    /// let output = Output::new(OutputFormat::Human, io::stdout(), false);
+    /// output.info("First section").unwrap();
+    /// output.blank_line().unwrap();
+    /// output.info("Second section").unwrap();
+    /// ```
+    pub fn blank_line(&self) -> Result<()> {
+        match self.format {
+            OutputFormat::Human => {
+                writeln!(self.writer.borrow_mut())?;
+                Ok(())
+            }
+            OutputFormat::Json | OutputFormat::JsonCompact | OutputFormat::Quiet => Ok(()),
+        }
+    }
+
     /// Flushes the output buffer.
     ///
     /// Ensures all buffered output is written to the underlying stream.

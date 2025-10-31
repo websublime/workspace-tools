@@ -39,9 +39,9 @@
 
 use super::branding;
 use crate::cli::{Cli, Commands};
-use crate::commands::{config, init, version};
+use crate::commands::{changeset, config, init, version};
 use crate::error::Result;
-use crate::output::OutputFormat;
+use crate::output::{Output, OutputFormat};
 use std::path::{Path, PathBuf};
 
 /// Dispatches a parsed command to its handler.
@@ -111,10 +111,16 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
 
         Commands::Changeset(changeset_cmd) => {
             use crate::cli::commands::ChangesetCommands;
+            let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
             match changeset_cmd {
-                ChangesetCommands::Create(_args) => {
-                    // TODO: will be implemented on story 4.1
-                    todo!("Changeset create command will be implemented in story 4.1")
+                ChangesetCommands::Create(args) => {
+                    changeset::execute_add(
+                        args,
+                        &output,
+                        Some(root.to_path_buf()),
+                        config_path.map(PathBuf::from),
+                    )
+                    .await?;
                 }
                 ChangesetCommands::Update(_args) => {
                     // TODO: will be implemented on story 4.5
