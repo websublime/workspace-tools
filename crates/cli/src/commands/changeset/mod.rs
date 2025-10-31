@@ -60,6 +60,7 @@
 pub mod add;
 pub mod edit;
 pub mod list;
+pub mod remove;
 pub mod show;
 pub mod update;
 
@@ -70,12 +71,9 @@ mod tests;
 pub use add::execute_add;
 pub use edit::execute_edit;
 pub use list::execute_list;
+pub use remove::execute_remove;
 pub use show::execute_show;
 pub use update::execute_update;
-
-// TODO: will be implemented on story 4.7
-// pub mod delete;
-// pub use delete::execute_delete;
 
 // TODO: will be implemented on story 4.8
 // pub mod history;
