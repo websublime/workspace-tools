@@ -58,6 +58,7 @@
 //! ```
 
 pub mod add;
+pub mod edit;
 pub mod list;
 pub mod show;
 pub mod update;
@@ -67,6 +68,7 @@ mod tests;
 
 // Re-export command functions for convenience
 pub use add::execute_add;
+pub use edit::execute_edit;
 pub use list::execute_list;
 pub use show::execute_show;
 pub use update::execute_update;

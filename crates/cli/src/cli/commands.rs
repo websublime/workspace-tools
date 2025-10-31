@@ -249,6 +249,11 @@ pub enum ChangesetCommands {
     /// Displays detailed information about a specific changeset.
     Show(ChangesetShowArgs),
 
+    /// Edit a changeset in the user's editor.
+    ///
+    /// Opens the changeset file in $EDITOR for manual editing.
+    Edit(ChangesetEditArgs),
+
     /// Delete a changeset.
     ///
     /// Removes a changeset from the active changesets.
@@ -372,10 +377,20 @@ pub struct ChangesetShowArgs {
     pub branch: String,
 }
 
+/// Arguments for the `changeset edit` command.
+#[derive(Debug, Args)]
+pub struct ChangesetEditArgs {
+    /// Branch name to edit changeset for.
+    ///
+    /// Defaults to current Git branch if not provided.
+    #[arg(value_name = "BRANCH")]
+    pub branch: Option<String>,
+}
+
 /// Arguments for the `changeset delete` command.
 #[derive(Debug, Args)]
 pub struct ChangesetDeleteArgs {
-    /// Branch name or changeset ID.
+    /// Branch name to delete changeset for.
     #[arg(value_name = "BRANCH")]
     pub branch: String,
 

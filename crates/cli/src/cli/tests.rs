@@ -296,6 +296,28 @@ fn test_changeset_update_command() {
 }
 
 #[test]
+fn test_changeset_edit_command() {
+    let cli = Cli::parse_from(["wnt", "changeset", "edit", "feature/branch"]);
+
+    if let Commands::Changeset(ChangesetCommands::Edit(args)) = cli.command {
+        assert_eq!(args.branch, Some("feature/branch".to_string()));
+    } else {
+        panic!("Expected Changeset Edit command");
+    }
+}
+
+#[test]
+fn test_changeset_edit_command_no_branch() {
+    let cli = Cli::parse_from(["wnt", "changeset", "edit"]);
+
+    if let Commands::Changeset(ChangesetCommands::Edit(args)) = cli.command {
+        assert_eq!(args.branch, None);
+    } else {
+        panic!("Expected Changeset Edit command");
+    }
+}
+
+#[test]
 fn test_changeset_update_with_id() {
     let cli = Cli::parse_from(["wnt", "changeset", "update", "feature/branch"]);
 

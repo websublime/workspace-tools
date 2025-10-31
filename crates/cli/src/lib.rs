@@ -76,6 +76,9 @@ pub mod output;
 /// Interactive prompts and user input
 pub mod interactive;
 
+/// Utility modules
+pub(crate) mod utils;
+
 // Re-exports for convenience
 pub use cli::{Cli, Commands, LogLevel, OutputFormatArg};
 pub use error::{CliError, Result};

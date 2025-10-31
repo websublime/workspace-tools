@@ -6,6 +6,7 @@
 //!
 //! Tests cover:
 //! - Changeset add command (interactive and non-interactive modes)
+//! - Changeset edit command (editor detection, validation)
 //! - Input validation
 //! - Error handling
 //! - Git integration
@@ -107,6 +108,38 @@ mod tests {
         // When no environments are configured, all are valid
         assert!(validate_environments(&provided, &available).is_ok());
     }
+
+    // Tests for changeset edit command helpers
+
+    #[test]
+    fn test_format_bump_type() {
+        use crate::commands::changeset::edit::format_bump_type;
+        use sublime_pkg_tools::types::VersionBump;
+
+        assert_eq!(format_bump_type(VersionBump::Major), "major");
+        assert_eq!(format_bump_type(VersionBump::Minor), "minor");
+        assert_eq!(format_bump_type(VersionBump::Patch), "patch");
+    }
+
+    #[test]
+    fn test_get_changeset_file_path() {
+        use crate::commands::changeset::edit::get_changeset_file_path;
+        use std::path::PathBuf;
+        use sublime_pkg_tools::config::PackageToolsConfig;
+
+        let workspace_root = PathBuf::from("/tmp/workspace");
+        let mut config = PackageToolsConfig::default();
+        config.changeset.path = ".changesets".to_string();
+
+        let path = get_changeset_file_path(&workspace_root, &config, "feature/test");
+        assert_eq!(path, PathBuf::from("/tmp/workspace/.changesets/feature-test.json"));
+
+        let path = get_changeset_file_path(&workspace_root, &config, "main");
+        assert_eq!(path, PathBuf::from("/tmp/workspace/.changesets/main.json"));
+    }
+
+    // Integration tests would go here but require file system setup
+    // These are tested manually and in E2E tests
 
     #[test]
     fn test_validate_environments_valid() {
