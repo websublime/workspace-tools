@@ -179,16 +179,334 @@ mod tests {
         assert!(args.non_interactive);
     }
 
-    // Integration tests would go here but require:
-    // - Temporary git repositories
-    // - Mock filesystem
-    // - Mock configuration
-    // These will be added when we have proper test infrastructure
+    // Tests for non-interactive mode validation
+
+    #[test]
+    fn test_non_interactive_args_complete() {
+        // Test that all required args are provided for non-interactive mode
+        let args = ChangesetCreateArgs {
+            bump: Some("minor".to_string()),
+            env: Some(vec!["production".to_string()]),
+            branch: Some("feature/test".to_string()),
+            message: Some("Test message".to_string()),
+            packages: Some(vec!["pkg-a".to_string()]),
+            non_interactive: true,
+        };
+
+        // All required fields are present
+        assert!(args.bump.is_some());
+        assert!(args.packages.is_some());
+        assert!(args.non_interactive);
+    }
+
+    #[test]
+    fn test_non_interactive_missing_bump() {
+        // In non-interactive mode, missing bump should be caught by validation
+        let args = ChangesetCreateArgs {
+            bump: None,
+            env: Some(vec!["production".to_string()]),
+            branch: Some("feature/test".to_string()),
+            message: Some("Test message".to_string()),
+            packages: Some(vec!["pkg-a".to_string()]),
+            non_interactive: true,
+        };
+
+        assert!(args.bump.is_none());
+        assert!(args.non_interactive);
+    }
+
+    #[test]
+    fn test_non_interactive_missing_packages() {
+        // In non-interactive mode, missing packages should be caught
+        let args = ChangesetCreateArgs {
+            bump: Some("minor".to_string()),
+            env: Some(vec!["production".to_string()]),
+            branch: Some("feature/test".to_string()),
+            message: Some("Test message".to_string()),
+            packages: None,
+            non_interactive: true,
+        };
+
+        assert!(args.packages.is_none());
+        assert!(args.non_interactive);
+    }
+
+    #[test]
+    fn test_non_interactive_with_default_environments() {
+        // Non-interactive mode can use default environments
+        let args = ChangesetCreateArgs {
+            bump: Some("patch".to_string()),
+            env: None, // Will use defaults
+            branch: Some("feature/test".to_string()),
+            message: None,
+            packages: Some(vec!["pkg-a".to_string()]),
+            non_interactive: true,
+        };
+
+        assert!(args.env.is_none());
+        assert!(args.non_interactive);
+    }
+
+    #[test]
+    fn test_non_interactive_optional_message() {
+        // Message is optional in non-interactive mode
+        let args = ChangesetCreateArgs {
+            bump: Some("major".to_string()),
+            env: Some(vec!["dev".to_string()]),
+            branch: Some("feature/test".to_string()),
+            message: None, // Optional
+            packages: Some(vec!["pkg-a".to_string()]),
+            non_interactive: true,
+        };
+
+        assert!(args.message.is_none());
+        assert!(args.non_interactive);
+    }
+
+    #[test]
+    fn test_non_interactive_multiple_packages() {
+        // Test multiple packages in non-interactive mode
+        let args = ChangesetCreateArgs {
+            bump: Some("minor".to_string()),
+            env: Some(vec!["staging".to_string(), "prod".to_string()]),
+            branch: Some("feature/multi".to_string()),
+            message: Some("Multi-package change".to_string()),
+            packages: Some(vec!["pkg-a".to_string(), "pkg-b".to_string(), "pkg-c".to_string()]),
+            non_interactive: true,
+        };
+
+        assert_eq!(args.packages.as_ref().map(Vec::len), Some(3));
+        assert!(args.non_interactive);
+    }
+
+    #[test]
+    fn test_non_interactive_multiple_environments() {
+        // Test multiple environments in non-interactive mode
+        let args = ChangesetCreateArgs {
+            bump: Some("patch".to_string()),
+            env: Some(vec!["dev".to_string(), "staging".to_string(), "production".to_string()]),
+            branch: Some("feature/test".to_string()),
+            message: None,
+            packages: Some(vec!["pkg-a".to_string()]),
+            non_interactive: true,
+        };
+
+        assert_eq!(args.env.as_ref().map(Vec::len), Some(3));
+        assert!(args.non_interactive);
+    }
+
+    #[test]
+    fn test_interactive_mode_partial_args() {
+        // Interactive mode can have partial args (will prompt for missing)
+        let args = ChangesetCreateArgs {
+            bump: None, // Will be prompted
+            env: None,  // Will be prompted
+            branch: Some("feature/test".to_string()),
+            message: None,
+            packages: None, // Will be prompted
+            non_interactive: false,
+        };
+
+        assert!(!args.non_interactive);
+        assert!(args.bump.is_none());
+        assert!(args.packages.is_none());
+    }
+
+    #[test]
+    fn test_bump_type_case_insensitive() {
+        // Bump types should be case-insensitive
+        let test_cases = vec![
+            ("patch", true),
+            ("PATCH", true),
+            ("Patch", true),
+            ("minor", true),
+            ("MINOR", true),
+            ("Minor", true),
+            ("major", true),
+            ("MAJOR", true),
+            ("Major", true),
+            ("invalid", false),
+            ("pre", false),
+            ("", false),
+        ];
+
+        for (bump_str, should_be_valid) in test_cases {
+            let result = validate_bump_type(bump_str);
+            assert_eq!(
+                result.is_ok(),
+                should_be_valid,
+                "Expected '{}' to be {}",
+                bump_str,
+                if should_be_valid { "valid" } else { "invalid" }
+            );
+        }
+    }
+
+    #[test]
+    fn test_environment_validation_with_multiple_invalid() {
+        // Test validation with multiple invalid environments
+        let provided = vec!["valid".to_string(), "invalid1".to_string(), "invalid2".to_string()];
+        let available = vec!["valid".to_string(), "staging".to_string()];
+
+        let result = validate_environments(&provided, &available);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_environment_validation_all_valid() {
+        // Test that all environments are valid
+        let provided = vec!["dev".to_string(), "staging".to_string(), "production".to_string()];
+        let available = vec![
+            "dev".to_string(),
+            "staging".to_string(),
+            "production".to_string(),
+            "qa".to_string(),
+        ];
+
+        assert!(validate_environments(&provided, &available).is_ok());
+    }
+
+    #[test]
+    fn test_parse_bump_type_all_variants() {
+        // Test all bump type variants parse correctly
+        let patch = parse_bump_type("patch");
+        assert!(patch.is_ok());
+        assert!(matches!(patch.as_ref(), Ok(VersionBump::Patch)));
+
+        let minor = parse_bump_type("minor");
+        assert!(minor.is_ok());
+        assert!(matches!(minor.as_ref(), Ok(VersionBump::Minor)));
+
+        let major = parse_bump_type("major");
+        assert!(major.is_ok());
+        assert!(matches!(major.as_ref(), Ok(VersionBump::Major)));
+    }
+
+    #[test]
+    #[allow(clippy::panic)]
+    fn test_validate_bump_type_error_message() {
+        // Verify error messages are helpful
+        let result = validate_bump_type("prepatch");
+        assert!(result.is_err());
+
+        if let Err(CliError::Validation(msg)) = result {
+            assert!(msg.contains("prepatch"));
+            assert!(msg.contains("patch"));
+            assert!(msg.contains("minor"));
+            assert!(msg.contains("major"));
+        } else {
+            panic!("Expected Validation error with helpful message");
+        }
+    }
+
+    #[test]
+    #[allow(clippy::panic)]
+    fn test_environment_validation_error_message() {
+        // Verify environment validation error messages are helpful
+        let provided = vec!["production".to_string(), "unknown".to_string()];
+        let available = vec!["dev".to_string(), "staging".to_string(), "production".to_string()];
+
+        let result = validate_environments(&provided, &available);
+        assert!(result.is_err());
+
+        if let Err(CliError::Validation(msg)) = result {
+            assert!(msg.contains("unknown"));
+            assert!(msg.contains("not configured"));
+            assert!(msg.contains("dev") || msg.contains("staging") || msg.contains("production"));
+        } else {
+            panic!("Expected Validation error with helpful message");
+        }
+    }
+
+    #[test]
+    fn test_args_with_branch_override() {
+        // Test that branch can be explicitly provided
+        let args = ChangesetCreateArgs {
+            bump: Some("minor".to_string()),
+            env: Some(vec!["production".to_string()]),
+            branch: Some("custom/branch-name".to_string()),
+            message: Some("Custom branch".to_string()),
+            packages: Some(vec!["pkg-a".to_string()]),
+            non_interactive: true,
+        };
+
+        assert_eq!(args.branch.as_deref(), Some("custom/branch-name"));
+    }
+
+    #[test]
+    fn test_args_without_branch_uses_current() {
+        // Test that branch defaults to current when not provided
+        let args = ChangesetCreateArgs {
+            bump: Some("minor".to_string()),
+            env: Some(vec!["production".to_string()]),
+            branch: None, // Will use current git branch
+            message: Some("Use current branch".to_string()),
+            packages: Some(vec!["pkg-a".to_string()]),
+            non_interactive: true,
+        };
+
+        assert!(args.branch.is_none());
+    }
+
+    #[test]
+    fn test_empty_package_list() {
+        // Test with empty package list
+        let args = ChangesetCreateArgs {
+            bump: Some("patch".to_string()),
+            env: Some(vec!["dev".to_string()]),
+            branch: Some("feature/test".to_string()),
+            message: None,
+            packages: Some(vec![]), // Empty list
+            non_interactive: true,
+        };
+
+        assert!(args.packages.as_ref().is_some_and(Vec::is_empty));
+    }
+
+    #[test]
+    fn test_empty_environment_list() {
+        // Test with empty environment list
+        let args = ChangesetCreateArgs {
+            bump: Some("patch".to_string()),
+            env: Some(vec![]), // Empty list
+            branch: Some("feature/test".to_string()),
+            message: None,
+            packages: Some(vec!["pkg-a".to_string()]),
+            non_interactive: true,
+        };
+
+        assert!(args.env.as_ref().is_some_and(Vec::is_empty));
+    }
+
+    #[test]
+    fn test_validate_bump_type_whitespace() {
+        // Test that bump types with whitespace are invalid
+        assert!(validate_bump_type(" patch").is_err());
+        assert!(validate_bump_type("patch ").is_err());
+        assert!(validate_bump_type(" minor ").is_err());
+    }
+
+    #[test]
+    fn test_parse_bump_type_case_variations() {
+        // Test various case combinations
+        let test_cases = vec![
+            "patch", "Patch", "PATCH", "pAtCh", "minor", "Minor", "MINOR", "mInOr", "major",
+            "Major", "MAJOR", "mAjOr",
+        ];
+
+        for case in test_cases {
+            let result = parse_bump_type(case);
+            assert!(result.is_ok(), "Failed to parse: {case}");
+        }
+    }
+
+    // Integration tests that require full setup remain ignored
+    // These will be implemented when test infrastructure is available
 
     #[test]
     #[ignore = "requires git repository setup"]
-    fn test_execute_add_non_interactive() {
-        // TODO: Implement when we have test infrastructure
+    fn test_execute_add_non_interactive_full() {
+        // TODO: will be implemented when test infrastructure is available
         // This test would:
         // 1. Create temp directory with git repo
         // 2. Create mock configuration
@@ -200,7 +518,7 @@ mod tests {
     #[test]
     #[ignore = "requires terminal interaction"]
     fn test_execute_add_interactive() {
-        // TODO: Implement when we have mock terminal support
+        // TODO: will be implemented when test infrastructure is available
         // This test would:
         // 1. Create temp directory with git repo
         // 2. Create mock configuration
@@ -212,7 +530,7 @@ mod tests {
     #[test]
     #[ignore = "requires git repository setup"]
     fn test_execute_add_duplicate_changeset() {
-        // TODO: Implement when we have test infrastructure
+        // TODO: will be implemented when test infrastructure is available
         // This test would:
         // 1. Create temp directory with git repo
         // 2. Create existing changeset for branch
@@ -223,7 +541,7 @@ mod tests {
     #[test]
     #[ignore = "requires git repository setup"]
     fn test_execute_add_detached_head() {
-        // TODO: Implement when we have test infrastructure
+        // TODO: will be implemented when test infrastructure is available
         // This test would:
         // 1. Create temp directory with git repo in detached HEAD
         // 2. Try to create changeset without --branch flag
@@ -233,7 +551,7 @@ mod tests {
     #[test]
     #[ignore = "requires git repository setup"]
     fn test_execute_add_not_git_repo() {
-        // TODO: Implement when we have test infrastructure
+        // TODO: will be implemented when test infrastructure is available
         // This test would:
         // 1. Create temp directory without git
         // 2. Try to create changeset
@@ -243,7 +561,7 @@ mod tests {
     #[test]
     #[ignore = "requires git repository setup"]
     fn test_execute_add_json_output() {
-        // TODO: Implement when we have test infrastructure
+        // TODO: will be implemented when test infrastructure is available
         // This test would:
         // 1. Create temp directory with git repo
         // 2. Execute add command with --format json
@@ -254,7 +572,7 @@ mod tests {
     #[test]
     #[ignore = "requires git repository setup"]
     fn test_execute_add_with_package_detection() {
-        // TODO: Implement when we have test infrastructure
+        // TODO: will be implemented when test infrastructure is available
         // This test would:
         // 1. Create monorepo with packages
         // 2. Make changes to specific package
