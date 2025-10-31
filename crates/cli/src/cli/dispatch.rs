@@ -126,9 +126,14 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
                     // TODO: will be implemented on story 4.5
                     todo!("Changeset update command will be implemented in story 4.5")
                 }
-                ChangesetCommands::List(_args) => {
-                    // TODO: will be implemented on story 4.3
-                    todo!("Changeset list command will be implemented in story 4.3")
+                ChangesetCommands::List(args) => {
+                    changeset::execute_list(
+                        args,
+                        &output,
+                        Some(root),
+                        config_path.as_ref().map(|p| p.as_path()),
+                    )
+                    .await?;
                 }
                 ChangesetCommands::Show(_args) => {
                     // TODO: will be implemented on story 4.4
