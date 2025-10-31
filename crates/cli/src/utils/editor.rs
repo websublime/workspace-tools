@@ -115,7 +115,7 @@ pub fn open_in_editor(file_path: &Path) -> Result<()> {
         return Err(CliError::execution(format!(
             "Editor '{}' exited with status code: {}",
             editor,
-            status.code().unwrap_or(-1)
+            status.code().map_or(-1, |code| code)
         )));
     }
 
@@ -252,8 +252,7 @@ pub(crate) fn is_command_available(command: &str) -> bool {
         Command::new("which")
             .arg(command)
             .output()
-            .map(|output| output.status.success())
-            .unwrap_or(false)
+            .is_ok_and(|output| output.status.success())
     }
 
     #[cfg(windows)]
@@ -261,8 +260,7 @@ pub(crate) fn is_command_available(command: &str) -> bool {
         Command::new("where")
             .arg(command)
             .output()
-            .map(|output| output.status.success())
-            .unwrap_or(false)
+            .is_ok_and(|output| output.status.success())
     }
 
     #[cfg(not(any(unix, windows)))]

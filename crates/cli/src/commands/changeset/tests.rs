@@ -36,9 +36,10 @@
 #[cfg(test)]
 mod tests {
     use crate::cli::commands::{ChangesetCreateArgs, ChangesetShowArgs};
-    use crate::commands::changeset::add::{
-        parse_bump_type, validate_bump_type, validate_environments,
+    use crate::commands::changeset::common::{
+        get_changeset_file_path, parse_bump_type, validate_bump_type, validate_environments,
     };
+    use crate::commands::changeset::types::format_bump_type;
     use crate::error::CliError;
     use crate::output::{Output, OutputFormat};
     use std::io::Cursor;
@@ -114,17 +115,14 @@ mod tests {
 
     #[test]
     fn test_format_bump_type() {
-        use crate::commands::changeset::edit::format_bump_type;
-        use sublime_pkg_tools::types::VersionBump;
-
         assert_eq!(format_bump_type(VersionBump::Major), "major");
         assert_eq!(format_bump_type(VersionBump::Minor), "minor");
         assert_eq!(format_bump_type(VersionBump::Patch), "patch");
+        assert_eq!(format_bump_type(VersionBump::None), "none");
     }
 
     #[test]
     fn test_get_changeset_file_path() {
-        use crate::commands::changeset::edit::get_changeset_file_path;
         use std::path::PathBuf;
         use sublime_pkg_tools::config::PackageToolsConfig;
 

@@ -68,13 +68,17 @@ use crate::interactive::prompts::{
 use crate::output::styling::{Section, StatusSymbol, TextStyle, print_item};
 use crate::output::{JsonResponse, Output};
 use serde::Serialize;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use sublime_git_tools::Repo;
 use sublime_pkg_tools::changeset::ChangesetManager;
-use sublime_pkg_tools::config::{ConfigLoader, PackageToolsConfig};
-use sublime_pkg_tools::types::{Changeset, VersionBump};
-use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
+use sublime_pkg_tools::config::PackageToolsConfig;
+use sublime_pkg_tools::types::Changeset;
+use sublime_standard_tools::filesystem::FileSystemManager;
 use tracing::{debug, info, warn};
+
+// Import shared functionality
+use super::common::{load_config, parse_bump_type, validate_bump_type, validate_environments};
+use super::types::ChangesetInfo;
 
 /// Response data for changeset add command (JSON output).
 ///
@@ -85,21 +89,6 @@ struct ChangesetAddResponse {
     success: bool,
     /// The created changeset details.
     changeset: ChangesetInfo,
-}
-
-/// Changeset information for JSON output.
-#[derive(Debug, Serialize)]
-struct ChangesetInfo {
-    /// Changeset unique identifier.
-    id: String,
-    /// Branch name.
-    branch: String,
-    /// Version bump type.
-    bump: String,
-    /// List of affected packages.
-    packages: Vec<String>,
-    /// Target environments.
-    environments: Vec<String>,
     /// Optional summary message.
     message: Option<String>,
 }
@@ -169,7 +158,7 @@ pub async fn execute_add(
 
     // Load configuration
     debug!("Loading workspace configuration");
-    let config = load_config(&workspace_root, config_path).await?;
+    let config = load_config(&workspace_root, config_path.as_deref()).await?;
 
     // Open git repository
     debug!("Opening git repository");
@@ -349,68 +338,6 @@ pub async fn execute_add(
     Ok(())
 }
 
-/// Loads the workspace configuration.
-///
-/// Attempts to load configuration from the provided path or auto-detect it.
-/// Uses ConfigLoader to search for config files in standard locations.
-async fn load_config(
-    workspace_root: &Path,
-    config_path: Option<PathBuf>,
-) -> Result<PackageToolsConfig> {
-    debug!("Loading workspace configuration");
-
-    let fs = FileSystemManager::new();
-
-    // Try to find and load config file
-    let mut found_config = None;
-    if let Some(config) = config_path {
-        // Use the explicitly provided config file
-        let config_file = if config.is_absolute() { config } else { workspace_root.join(config) };
-
-        if fs.exists(&config_file).await {
-            found_config = Some(config_file);
-        } else {
-            return Err(CliError::configuration(format!(
-                "Config file not found: {}",
-                config_file.display()
-            )));
-        }
-    } else {
-        // Search for default config files
-        let config_files = vec![
-            workspace_root.join("repo.config.toml"),
-            workspace_root.join("repo.config.json"),
-            workspace_root.join("repo.config.yaml"),
-            workspace_root.join("repo.config.yml"),
-        ];
-
-        for config_file in &config_files {
-            if fs.exists(config_file).await {
-                found_config = Some(config_file.clone());
-                break;
-            }
-        }
-    }
-
-    // Load configuration
-    let config = if let Some(config_path) = found_config {
-        match ConfigLoader::load_from_file(&config_path).await {
-            Ok(config) => {
-                info!("Configuration loaded from: {}", config_path.display());
-                config
-            }
-            Err(e) => {
-                warn!("Failed to load config file, using defaults: {}", e);
-                PackageToolsConfig::default()
-            }
-        }
-    } else {
-        warn!("No configuration file found, using defaults");
-        PackageToolsConfig::default()
-    };
-
-    Ok(config)
-}
 
 /// Loads all packages from the workspace.
 ///
@@ -450,53 +377,6 @@ fn detect_affected_packages(
     vec![]
 }
 
-/// Validates a bump type string.
-///
-/// Ensures the bump type is one of: patch, minor, major.
-pub(crate) fn validate_bump_type(bump: &str) -> Result<()> {
-    match bump.to_lowercase().as_str() {
-        "patch" | "minor" | "major" => Ok(()),
-        _ => Err(CliError::validation(format!(
-            "Invalid bump type '{bump}'. Must be one of: patch, minor, major"
-        ))),
-    }
-}
-
-/// Parses a bump type string into a VersionBump enum.
-///
-/// Converts the string representation to the appropriate enum variant.
-pub(crate) fn parse_bump_type(bump: &str) -> Result<VersionBump> {
-    match bump.to_lowercase().as_str() {
-        "patch" => Ok(VersionBump::Patch),
-        "minor" => Ok(VersionBump::Minor),
-        "major" => Ok(VersionBump::Major),
-        _ => Err(CliError::validation(format!(
-            "Invalid bump type '{bump}'. Must be one of: patch, minor, major"
-        ))),
-    }
-}
-
-/// Validates that all provided environments are in the available list.
-///
-/// If available list is empty, all environments are considered valid.
-pub(crate) fn validate_environments(provided: &[String], available: &[String]) -> Result<()> {
-    if available.is_empty() {
-        // No validation needed if no environments configured
-        return Ok(());
-    }
-
-    for env in provided {
-        if !available.contains(env) {
-            return Err(CliError::validation(format!(
-                "Environment '{}' is not configured. Available: {}",
-                env,
-                available.join(", ")
-            )));
-        }
-    }
-
-    Ok(())
-}
 
 /// Outputs the command results based on the output format.
 ///
@@ -509,14 +389,8 @@ fn output_results(output: &Output, changeset: &Changeset, message: Option<&Strin
         // JSON output
         let response = ChangesetAddResponse {
             success: true,
-            changeset: ChangesetInfo {
-                id: changeset.branch.clone(), // Use branch as ID since there's no separate ID field
-                branch: changeset.branch.clone(),
-                bump: format!("{:?}", changeset.bump).to_lowercase(),
-                packages: changeset.packages.clone(),
-                environments: changeset.environments.clone(),
-                message: message.cloned(),
-            },
+            changeset: changeset.into(),
+            message: message.cloned(),
         };
 
         let json_response = JsonResponse::success(response);

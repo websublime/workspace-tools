@@ -64,6 +64,10 @@ pub mod remove;
 pub mod show;
 pub mod update;
 
+// Internal modules for shared functionality
+pub(crate) mod common;
+pub(crate) mod types;
+
 #[cfg(test)]
 mod tests;
 
