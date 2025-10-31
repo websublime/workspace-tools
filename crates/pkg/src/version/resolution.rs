@@ -523,16 +523,10 @@ async fn resolve_unified(
 ) -> VersionResult<VersionResolution> {
     let mut resolution = VersionResolution::new();
 
-    // Find the highest current version
+    // Find the highest current version across ALL workspace packages
     let mut highest_version: Option<Version> = None;
 
-    for package_name in &changeset.packages {
-        let package_info =
-            packages.get(package_name).ok_or_else(|| VersionError::PackageNotFound {
-                name: package_name.clone(),
-                workspace_root: PathBuf::from("."),
-            })?;
-
+    for package_info in packages.values() {
         let current_version = package_info.version();
 
         highest_version = match highest_version {
@@ -555,22 +549,25 @@ async fn resolve_unified(
         return Ok(resolution);
     };
 
-    // Apply unified version to all packages
-    for package_name in &changeset.packages {
-        let package_info =
-            packages.get(package_name).ok_or_else(|| VersionError::PackageNotFound {
-                name: package_name.clone(),
-                workspace_root: PathBuf::from("."),
-            })?;
-
+    // Apply unified version to ALL workspace packages (not just those in changeset)
+    // This is the core principle of unified strategy: all packages move together
+    for (package_name, package_info) in packages {
         let current_version = package_info.version();
+
+        // Determine update reason: packages in changeset are direct changes,
+        // others are unified strategy propagation
+        let reason = if changeset.packages.contains(package_name) {
+            UpdateReason::DirectChange
+        } else {
+            UpdateReason::UnifiedStrategy
+        };
 
         let update = PackageUpdate::new(
             package_name.clone(),
             package_info.path().to_path_buf(),
             current_version,
             unified_next_version.clone(),
-            UpdateReason::DirectChange,
+            reason,
         );
 
         resolution.add_update(update);
