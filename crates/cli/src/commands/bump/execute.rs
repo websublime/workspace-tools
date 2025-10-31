@@ -46,13 +46,31 @@
 //! - Highest bump type from all changesets is used
 //! - Each package gets a tag (or one monorepo tag if configured)
 //!
-//! ## Rollback on Failure
+//! ## Error Handling and Recovery
 //!
-//! If any step fails after version files are modified, the command attempts to:
-//! - Restore original package.json files (from backup created by VersionResolver)
-//! - Remove any created git commits (if possible)
-//! - Delete any created tags
-//! - Restore changesets from archive
+//! The command provides error handling at multiple levels:
+//!
+//! ### File Operations
+//! - `VersionResolver::apply_versions()` creates automatic backups before modifications
+//! - If file updates fail, the resolver's internal backup mechanism can restore files
+//! - This provides protection for package.json modifications
+//!
+//! ### Git Operations
+//! - Git operations (commit, tag, push) are performed atomically
+//! - Each operation validates prerequisites before executing
+//! - Failed git operations do not affect already-modified files
+//! - Manual recovery may be needed if git operations partially complete
+//!
+//! ### Changeset Archival
+//! - Changesets are only archived after all updates succeed
+//! - If archival is disabled (--no-archive), changesets remain in place
+//! - Archived changesets include full release metadata for audit trail
+//!
+//! **Note**: For full rollback capability including git operations, users should:
+//! 1. Use `--dry-run` mode first to preview changes
+//! 2. Test in a feature branch before applying to main
+//! 3. Use Git's own rollback mechanisms (git reset, git revert) if needed
+//! 4. Keep backups via the backup directory created by VersionResolver
 //!
 //! # Why
 //!
