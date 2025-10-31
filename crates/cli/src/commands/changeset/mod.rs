@@ -52,7 +52,7 @@
 //! };
 //!
 //! let output = Output::new(OutputFormat::Human, io::stdout(), false);
-//! execute_add(args, &output, None, None).await?;
+//! execute_add(&args, &output, None, None).await?;
 //! # Ok(())
 //! # }
 //! ```
