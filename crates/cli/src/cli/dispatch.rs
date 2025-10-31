@@ -154,6 +154,15 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
                     )
                     .await?;
                 }
+                ChangesetCommands::Edit(args) => {
+                    changeset::execute_edit(
+                        args,
+                        &output,
+                        Some(root),
+                        config_path.as_ref().map(|p| p.as_path()),
+                    )
+                    .await?;
+                }
                 ChangesetCommands::Delete(_args) => {
                     // TODO: will be implemented on story 4.7
                     todo!("Changeset delete command will be implemented in story 4.7")
