@@ -39,7 +39,7 @@
 
 use super::branding;
 use crate::cli::{Cli, Commands};
-use crate::commands::{changeset, config, init, version};
+use crate::commands::{bump, changeset, config, init, version};
 use crate::error::Result;
 use crate::output::{Output, OutputFormat};
 use std::path::{Path, PathBuf};
@@ -183,9 +183,23 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
             }
         }
 
-        Commands::Bump(_args) => {
-            // TODO: will be implemented on story 5.1 and 5.2
-            todo!("Bump command will be implemented in story 5.1 and 5.2")
+        Commands::Bump(args) => {
+            let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
+
+            // Default mode is preview (dry-run)
+            if args.execute {
+                // TODO: will be implemented in story 5.2
+                todo!("Bump execute mode will be implemented in story 5.2")
+            } else {
+                // Preview mode (default)
+                bump::execute_bump_preview(
+                    args,
+                    &output,
+                    root,
+                    config_path.as_ref().map(|p| p.as_path()),
+                )
+                .await?;
+            }
         }
 
         Commands::Upgrade(upgrade_cmd) => {
