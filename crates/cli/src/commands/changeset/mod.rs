@@ -60,6 +60,7 @@
 pub mod add;
 pub mod list;
 pub mod show;
+pub mod update;
 
 #[cfg(test)]
 mod tests;
@@ -68,10 +69,7 @@ mod tests;
 pub use add::execute_add;
 pub use list::execute_list;
 pub use show::execute_show;
-
-// TODO: will be implemented on story 4.2
-// pub mod update;
-// pub use update::execute_update;
+pub use update::execute_update;
 
 // TODO: will be implemented on story 4.7
 // pub mod delete;

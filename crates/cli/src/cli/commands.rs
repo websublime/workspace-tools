@@ -326,6 +326,18 @@ pub struct ChangesetUpdateArgs {
     /// Adds specific packages to the changeset.
     #[arg(long, value_name = "LIST", value_delimiter = ',')]
     pub packages: Option<Vec<String>>,
+
+    /// Update bump type.
+    ///
+    /// Options: major, minor, patch
+    #[arg(long, value_name = "TYPE")]
+    pub bump: Option<String>,
+
+    /// Comma-separated list of environments to add.
+    ///
+    /// Example: "staging,prod"
+    #[arg(long, value_name = "LIST", value_delimiter = ',')]
+    pub env: Option<Vec<String>>,
 }
 
 /// Arguments for the `changeset list` command.

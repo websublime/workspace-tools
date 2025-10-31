@@ -285,6 +285,56 @@ fn test_changeset_show_command() {
 }
 
 #[test]
+fn test_changeset_update_command() {
+    let cli = Cli::parse_from(["wnt", "changeset", "update"]);
+
+    if let Commands::Changeset(ChangesetCommands::Update(_)) = cli.command {
+        // Success
+    } else {
+        panic!("Expected Changeset Update command");
+    }
+}
+
+#[test]
+fn test_changeset_update_with_id() {
+    let cli = Cli::parse_from(["wnt", "changeset", "update", "feature/branch"]);
+
+    if let Commands::Changeset(ChangesetCommands::Update(args)) = cli.command {
+        assert_eq!(args.id, Some("feature/branch".to_string()));
+    } else {
+        panic!("Expected Changeset Update command");
+    }
+}
+
+#[test]
+fn test_changeset_update_with_options() {
+    let cli = Cli::parse_from([
+        "wnt",
+        "changeset",
+        "update",
+        "feature/branch",
+        "--commit",
+        "abc123",
+        "--packages",
+        "pkg-a,pkg-b",
+        "--bump",
+        "major",
+        "--env",
+        "staging,prod",
+    ]);
+
+    if let Commands::Changeset(ChangesetCommands::Update(args)) = cli.command {
+        assert_eq!(args.id, Some("feature/branch".to_string()));
+        assert_eq!(args.commit, Some("abc123".to_string()));
+        assert_eq!(args.packages, Some(vec!["pkg-a".to_string(), "pkg-b".to_string()]));
+        assert_eq!(args.bump, Some("major".to_string()));
+        assert_eq!(args.env, Some(vec!["staging".to_string(), "prod".to_string()]));
+    } else {
+        panic!("Expected Changeset Update command");
+    }
+}
+
+#[test]
 fn test_changeset_delete_command() {
     let cli = Cli::parse_from(["wnt", "changeset", "delete", "old-branch", "--force"]);
 
