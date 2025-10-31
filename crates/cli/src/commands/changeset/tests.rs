@@ -972,4 +972,333 @@ mod tests {
         // 3. Verify branch name is displayed correctly
         // 4. Verify no escaping issues in output
     }
+
+    // ========================================================================
+    // Changeset Update Command Tests
+    // ========================================================================
+
+    use crate::cli::commands::ChangesetUpdateArgs;
+    use crate::commands::changeset::update::{
+        parse_bump_type as update_parse_bump_type,
+        validate_environments as update_validate_environments,
+    };
+
+    #[test]
+    fn test_update_args_defaults() {
+        let args =
+            ChangesetUpdateArgs { id: None, commit: None, packages: None, bump: None, env: None };
+
+        assert!(args.id.is_none());
+        assert!(args.commit.is_none());
+        assert!(args.packages.is_none());
+        assert!(args.bump.is_none());
+        assert!(args.env.is_none());
+    }
+
+    #[test]
+    fn test_update_args_with_id() {
+        let args = ChangesetUpdateArgs {
+            id: Some("feature/my-branch".to_string()),
+            commit: None,
+            packages: None,
+            bump: None,
+            env: None,
+        };
+
+        assert_eq!(args.id.as_deref(), Some("feature/my-branch"));
+        assert!(args.commit.is_none());
+        assert!(args.packages.is_none());
+        assert!(args.bump.is_none());
+        assert!(args.env.is_none());
+    }
+
+    #[test]
+    fn test_update_args_without_id() {
+        // When ID is None, should auto-detect from current branch
+        let args = ChangesetUpdateArgs {
+            id: None,
+            commit: Some("abc123".to_string()),
+            packages: Some(vec!["pkg-a".to_string()]),
+            bump: None,
+            env: None,
+        };
+
+        assert!(args.id.is_none());
+        assert!(args.commit.is_some());
+        assert!(args.packages.is_some());
+    }
+
+    #[test]
+    fn test_update_args_add_commit() {
+        let args = ChangesetUpdateArgs {
+            id: Some("feature/test".to_string()),
+            commit: Some("abc123def456".to_string()),
+            packages: None,
+            bump: None,
+            env: None,
+        };
+
+        assert_eq!(args.commit.as_deref(), Some("abc123def456"));
+    }
+
+    #[test]
+    fn test_update_args_add_packages() {
+        let args = ChangesetUpdateArgs {
+            id: Some("feature/test".to_string()),
+            commit: None,
+            packages: Some(vec!["pkg-a".to_string(), "pkg-b".to_string()]),
+            bump: None,
+            env: None,
+        };
+
+        assert!(matches!(args.packages.as_ref(), Some(v) if v.len() == 2));
+        assert!(args.packages.as_ref().is_some_and(|p| p.contains(&"pkg-a".to_string())));
+        assert!(args.packages.as_ref().is_some_and(|p| p.contains(&"pkg-b".to_string())));
+    }
+
+    #[test]
+    fn test_update_args_update_bump() {
+        let args = ChangesetUpdateArgs {
+            id: Some("feature/test".to_string()),
+            commit: None,
+            packages: None,
+            bump: Some("major".to_string()),
+            env: None,
+        };
+
+        assert_eq!(args.bump.as_deref(), Some("major"));
+    }
+
+    #[test]
+    fn test_update_args_add_environments() {
+        let args = ChangesetUpdateArgs {
+            id: Some("feature/test".to_string()),
+            commit: None,
+            packages: None,
+            bump: None,
+            env: Some(vec!["staging".to_string(), "prod".to_string()]),
+        };
+
+        assert!(matches!(args.env.as_ref(), Some(v) if v.len() == 2));
+        assert!(args.env.as_ref().is_some_and(|e| e.contains(&"staging".to_string())));
+        assert!(args.env.as_ref().is_some_and(|e| e.contains(&"prod".to_string())));
+    }
+
+    #[test]
+    fn test_update_args_multiple_updates() {
+        // Test updating multiple fields at once
+        let args = ChangesetUpdateArgs {
+            id: Some("feature/test".to_string()),
+            commit: Some("abc123".to_string()),
+            packages: Some(vec!["pkg-a".to_string()]),
+            bump: Some("minor".to_string()),
+            env: Some(vec!["production".to_string()]),
+        };
+
+        assert!(args.id.is_some());
+        assert!(args.commit.is_some());
+        assert!(args.packages.is_some());
+        assert!(args.bump.is_some());
+        assert!(args.env.is_some());
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_update_parse_bump_type_valid() {
+        assert!(matches!(update_parse_bump_type("patch").unwrap(), VersionBump::Patch));
+        assert!(matches!(update_parse_bump_type("minor").unwrap(), VersionBump::Minor));
+        assert!(matches!(update_parse_bump_type("major").unwrap(), VersionBump::Major));
+        assert!(matches!(update_parse_bump_type("PATCH").unwrap(), VersionBump::Patch));
+        assert!(matches!(update_parse_bump_type("Minor").unwrap(), VersionBump::Minor));
+        assert!(matches!(update_parse_bump_type("MAJOR").unwrap(), VersionBump::Major));
+    }
+
+    #[test]
+    #[allow(clippy::panic)]
+    fn test_update_parse_bump_type_invalid() {
+        let result = update_parse_bump_type("invalid");
+        assert!(result.is_err());
+        if let Err(CliError::Validation(message)) = result {
+            assert!(message.contains("Invalid bump type"));
+            assert!(message.contains("patch, minor, major"));
+        } else {
+            panic!("Expected Validation error");
+        }
+
+        assert!(update_parse_bump_type("").is_err());
+        assert!(update_parse_bump_type("pre-release").is_err());
+        assert!(update_parse_bump_type("none").is_err());
+    }
+
+    #[test]
+    fn test_update_validate_environments_no_restrictions() {
+        let provided = vec!["dev".to_string(), "prod".to_string()];
+        let available: Vec<String> = vec![];
+
+        // When no environments are configured, all are valid
+        assert!(update_validate_environments(&provided, &available).is_ok());
+    }
+
+    #[test]
+    fn test_update_validate_environments_valid() {
+        let provided = vec!["dev".to_string(), "staging".to_string()];
+        let available = vec!["dev".to_string(), "staging".to_string(), "production".to_string()];
+
+        assert!(update_validate_environments(&provided, &available).is_ok());
+    }
+
+    #[test]
+    #[allow(clippy::panic)]
+    fn test_update_validate_environments_invalid() {
+        let provided = vec!["dev".to_string(), "invalid-env".to_string()];
+        let available = vec!["dev".to_string(), "staging".to_string(), "production".to_string()];
+
+        let result = update_validate_environments(&provided, &available);
+        assert!(result.is_err());
+        if let Err(CliError::Validation(message)) = result {
+            assert!(message.contains("invalid-env"));
+            assert!(message.contains("not configured"));
+        } else {
+            panic!("Expected Validation error");
+        }
+    }
+
+    #[test]
+    fn test_update_validate_environments_empty_provided() {
+        let provided: Vec<String> = vec![];
+        let available = vec!["dev".to_string(), "prod".to_string()];
+
+        // Empty list is valid (user chose not to add any environments)
+        assert!(update_validate_environments(&provided, &available).is_ok());
+    }
+
+    #[test]
+    fn test_update_validate_environments_single_valid() {
+        let provided = vec!["production".to_string()];
+        let available = vec!["dev".to_string(), "staging".to_string(), "production".to_string()];
+
+        assert!(update_validate_environments(&provided, &available).is_ok());
+    }
+
+    #[test]
+    #[allow(clippy::panic)]
+    fn test_update_validate_environments_multiple_invalid() {
+        let provided = vec!["invalid1".to_string(), "invalid2".to_string()];
+        let available = vec!["dev".to_string(), "staging".to_string()];
+
+        let result = update_validate_environments(&provided, &available);
+        assert!(result.is_err());
+        if let Err(CliError::Validation(..)) = result {
+            // Expected - should fail on first invalid environment
+        } else {
+            panic!("Expected Validation error");
+        }
+    }
+
+    #[test]
+    fn test_update_args_with_all_fields() {
+        // Test complete update with all possible fields
+        let args = ChangesetUpdateArgs {
+            id: Some("feature/complete".to_string()),
+            commit: Some("abc123def456".to_string()),
+            packages: Some(vec!["pkg-a".to_string(), "pkg-b".to_string(), "pkg-c".to_string()]),
+            bump: Some("major".to_string()),
+            env: Some(vec!["dev".to_string(), "staging".to_string(), "prod".to_string()]),
+        };
+
+        assert_eq!(args.id.as_deref(), Some("feature/complete"));
+        assert_eq!(args.commit.as_deref(), Some("abc123def456"));
+        assert_eq!(args.packages.as_ref().map(Vec::len), Some(3));
+        assert_eq!(args.bump.as_deref(), Some("major"));
+        assert_eq!(args.env.as_ref().map(Vec::len), Some(3));
+    }
+
+    #[test]
+    fn test_update_args_only_packages() {
+        // Test updating only packages
+        let args = ChangesetUpdateArgs {
+            id: None,
+            commit: None,
+            packages: Some(vec!["new-package".to_string()]),
+            bump: None,
+            env: None,
+        };
+
+        assert!(args.id.is_none());
+        assert!(args.commit.is_none());
+        assert!(args.packages.is_some());
+        assert!(args.bump.is_none());
+        assert!(args.env.is_none());
+    }
+
+    #[test]
+    fn test_update_args_only_bump() {
+        // Test updating only bump type
+        let args = ChangesetUpdateArgs {
+            id: Some("feature/test".to_string()),
+            commit: None,
+            packages: None,
+            bump: Some("patch".to_string()),
+            env: None,
+        };
+
+        assert!(args.id.is_some());
+        assert!(args.commit.is_none());
+        assert!(args.packages.is_none());
+        assert!(args.bump.is_some());
+        assert!(args.env.is_none());
+    }
+
+    #[test]
+    fn test_update_args_only_commit() {
+        // Test adding only a commit
+        let args = ChangesetUpdateArgs {
+            id: Some("feature/test".to_string()),
+            commit: Some("1234567890abcdef".to_string()),
+            packages: None,
+            bump: None,
+            env: None,
+        };
+
+        assert!(args.id.is_some());
+        assert_eq!(args.commit.as_deref(), Some("1234567890abcdef"));
+        assert!(args.packages.is_none());
+        assert!(args.bump.is_none());
+        assert!(args.env.is_none());
+    }
+
+    #[test]
+    fn test_update_args_only_environments() {
+        // Test adding only environments
+        let args = ChangesetUpdateArgs {
+            id: None,
+            commit: None,
+            packages: None,
+            bump: None,
+            env: Some(vec!["staging".to_string()]),
+        };
+
+        assert!(args.id.is_none());
+        assert!(args.commit.is_none());
+        assert!(args.packages.is_none());
+        assert!(args.bump.is_none());
+        assert!(args.env.is_some());
+    }
+
+    #[test]
+    fn test_update_bump_type_case_insensitive() {
+        // Verify all case variations work
+        assert!(update_parse_bump_type("patch").is_ok());
+        assert!(update_parse_bump_type("PATCH").is_ok());
+        assert!(update_parse_bump_type("Patch").is_ok());
+        assert!(update_parse_bump_type("pAtCh").is_ok());
+
+        assert!(update_parse_bump_type("minor").is_ok());
+        assert!(update_parse_bump_type("MINOR").is_ok());
+        assert!(update_parse_bump_type("Minor").is_ok());
+
+        assert!(update_parse_bump_type("major").is_ok());
+        assert!(update_parse_bump_type("MAJOR").is_ok());
+        assert!(update_parse_bump_type("Major").is_ok());
+    }
 }
