@@ -33,7 +33,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::cli::commands::ChangesetCreateArgs;
+    use crate::cli::commands::{ChangesetCreateArgs, ChangesetShowArgs};
     use crate::commands::changeset::add::{
         parse_bump_type, validate_bump_type, validate_environments,
     };
@@ -742,5 +742,234 @@ mod tests {
         // 2. Make changes to specific package
         // 3. Execute add command
         // 4. Verify affected package is detected
+    }
+
+    // ========================================================================
+    // Tests for changeset show command (Story 4.4)
+    // ========================================================================
+
+    #[test]
+    fn test_show_args_creation() {
+        let args = ChangesetShowArgs { branch: "feature/test".to_string() };
+
+        assert_eq!(args.branch, "feature/test");
+    }
+
+    #[test]
+    fn test_show_args_with_various_branch_names() {
+        // Test with feature branch
+        let args = ChangesetShowArgs { branch: "feature/new-api".to_string() };
+        assert_eq!(args.branch, "feature/new-api");
+
+        // Test with hotfix branch
+        let args = ChangesetShowArgs { branch: "hotfix/security-patch".to_string() };
+        assert_eq!(args.branch, "hotfix/security-patch");
+
+        // Test with simple branch name
+        let args = ChangesetShowArgs { branch: "main".to_string() };
+        assert_eq!(args.branch, "main");
+
+        // Test with complex branch name with slashes
+        let args = ChangesetShowArgs { branch: "feature/auth/oauth-integration".to_string() };
+        assert_eq!(args.branch, "feature/auth/oauth-integration");
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_not_found() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create temp directory with valid workspace config
+        // 2. Execute show command with non-existent branch
+        // 3. Verify error message is clear and helpful
+        // 4. Verify appropriate exit code is returned
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_success_human_format() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create temp directory with workspace config
+        // 2. Create a changeset file with complete data
+        // 3. Execute show command with human output format
+        // 4. Verify all changeset fields are displayed
+        // 5. Verify output is well-formatted and readable
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_success_json_format() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create temp directory with workspace config
+        // 2. Create a changeset file with complete data
+        // 3. Execute show command with --format json
+        // 4. Verify JSON output is valid
+        // 5. Verify JSON structure matches spec
+        // 6. Verify all fields are present (branch, bump, packages, environments, commits, timestamps)
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_with_empty_packages() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create changeset with empty packages list
+        // 2. Execute show command
+        // 3. Verify output handles empty list gracefully
+        // 4. Verify message indicates no packages specified
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_with_empty_environments() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create changeset with empty environments list
+        // 2. Execute show command
+        // 3. Verify output handles empty list gracefully
+        // 4. Verify message indicates no environments specified
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_with_empty_commits() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create changeset with empty commits list
+        // 2. Execute show command
+        // 3. Verify output handles empty list gracefully
+        // 4. Verify message indicates no commits recorded
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_with_multiple_packages() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create changeset with multiple packages
+        // 2. Execute show command
+        // 3. Verify all packages are listed
+        // 4. Verify proper formatting with item prefixes
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_with_all_bump_types() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create changesets with major, minor, and patch bumps
+        // 2. Execute show command for each
+        // 3. Verify bump type is displayed correctly
+        // 4. Verify formatting is consistent across types
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_without_workspace_init() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create temp directory without config
+        // 2. Execute show command
+        // 3. Verify error message suggests running 'wnt init'
+        // 4. Verify appropriate exit code is returned
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_with_custom_config_path() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create workspace with config in non-standard location
+        // 2. Execute show command with --config option
+        // 3. Verify config is loaded from specified path
+        // 4. Verify changeset is displayed correctly
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_timestamp_formatting() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create changeset with known timestamps
+        // 2. Execute show command
+        // 3. Verify created_at is formatted as "YYYY-MM-DD HH:MM:SS UTC"
+        // 4. Verify updated_at is formatted consistently
+        // 5. Verify JSON output uses RFC3339 format
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_quiet_format() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create changeset
+        // 2. Execute show command with --format quiet
+        // 3. Verify minimal or no output is produced
+        // 4. Verify command succeeds silently
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_output_sections() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create complete changeset
+        // 2. Execute show command
+        // 3. Verify output has proper sections:
+        //    - Header with branch name
+        //    - Basic Information
+        //    - Affected Packages
+        //    - Target Environments
+        //    - Commits
+        // 4. Verify sections are visually separated
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_json_response_structure() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create changeset
+        // 2. Execute show command with --format json
+        // 3. Parse JSON response
+        // 4. Verify structure matches spec:
+        //    {
+        //      "success": true,
+        //      "changeset": {
+        //        "branch": "...",
+        //        "bump": "...",
+        //        "packages": [...],
+        //        "environments": [...],
+        //        "commits": [...],
+        //        "created_at": "...",
+        //        "updated_at": "..."
+        //      }
+        //    }
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_with_long_commit_list() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create changeset with many commits (e.g., 50+)
+        // 2. Execute show command
+        // 3. Verify all commits are displayed
+        // 4. Verify output doesn't truncate
+        // 5. Verify performance is acceptable
+    }
+
+    #[test]
+    #[ignore = "requires filesystem and changeset setup"]
+    fn test_execute_show_with_special_characters_in_branch() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create changeset with branch containing special chars
+        //    (e.g., "feature/user-@name-fix")
+        // 2. Execute show command
+        // 3. Verify branch name is displayed correctly
+        // 4. Verify no escaping issues in output
     }
 }

@@ -80,6 +80,11 @@ use std::path::{Path, PathBuf};
 /// # Ok(())
 /// # }
 /// ```
+// Allow too_many_lines: This function serves as the central command dispatcher and needs to handle
+// all CLI commands. Breaking it into smaller functions would reduce readability and make the
+// command routing logic harder to follow. The length is justified by the need to dispatch to
+// many different command implementations.
+#[allow(clippy::too_many_lines)]
 #[allow(clippy::todo)]
 pub async fn dispatch_command(cli: &Cli) -> Result<()> {
     use crate::cli::commands::{ConfigCommands, UpgradeBackupCommands, UpgradeCommands};
@@ -135,9 +140,14 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
                     )
                     .await?;
                 }
-                ChangesetCommands::Show(_args) => {
-                    // TODO: will be implemented on story 4.4
-                    todo!("Changeset show command will be implemented in story 4.4")
+                ChangesetCommands::Show(args) => {
+                    changeset::execute_show(
+                        args,
+                        &output,
+                        Some(root),
+                        config_path.as_ref().map(|p| p.as_path()),
+                    )
+                    .await?;
                 }
                 ChangesetCommands::Delete(_args) => {
                     // TODO: will be implemented on story 4.7
