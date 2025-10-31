@@ -7,6 +7,7 @@
 //! Tests cover:
 //! - Changeset add command (interactive and non-interactive modes)
 //! - Changeset edit command (editor detection, validation)
+//! - Changeset remove command (with confirmation and force flag)
 //! - Input validation
 //! - Error handling
 //! - Git integration
@@ -35,9 +36,10 @@
 #[cfg(test)]
 mod tests {
     use crate::cli::commands::{ChangesetCreateArgs, ChangesetShowArgs};
-    use crate::commands::changeset::add::{
-        parse_bump_type, validate_bump_type, validate_environments,
+    use crate::commands::changeset::common::{
+        get_changeset_file_path, parse_bump_type, validate_bump_type, validate_environments,
     };
+    use crate::commands::changeset::types::format_bump_type;
     use crate::error::CliError;
     use crate::output::{Output, OutputFormat};
     use std::io::Cursor;
@@ -113,17 +115,14 @@ mod tests {
 
     #[test]
     fn test_format_bump_type() {
-        use crate::commands::changeset::edit::format_bump_type;
-        use sublime_pkg_tools::types::VersionBump;
-
         assert_eq!(format_bump_type(VersionBump::Major), "major");
         assert_eq!(format_bump_type(VersionBump::Minor), "minor");
         assert_eq!(format_bump_type(VersionBump::Patch), "patch");
+        assert_eq!(format_bump_type(VersionBump::None), "none");
     }
 
     #[test]
     fn test_get_changeset_file_path() {
-        use crate::commands::changeset::edit::get_changeset_file_path;
         use std::path::PathBuf;
         use sublime_pkg_tools::config::PackageToolsConfig;
 
@@ -192,6 +191,71 @@ mod tests {
         assert!(args.packages.is_none());
         assert!(!args.non_interactive);
     }
+
+    // Tests for changeset remove command
+
+    #[test]
+    fn test_create_deletion_release_info() {
+        use crate::commands::changeset::remove::create_deletion_release_info;
+
+        let release_info = create_deletion_release_info();
+
+        assert_eq!(release_info.applied_by, "manual-deletion");
+        assert_eq!(release_info.git_commit, "not-released");
+        assert!(release_info.versions.is_empty());
+    }
+
+    #[test]
+    fn test_removed_changeset_info_from_changeset() {
+        use crate::commands::changeset::remove::RemovedChangesetInfo;
+        use chrono::Utc;
+        use sublime_pkg_tools::types::{Changeset, VersionBump};
+
+        let changeset = Changeset {
+            branch: "feature/test".to_string(),
+            bump: VersionBump::Minor,
+            packages: vec!["pkg-a".to_string(), "pkg-b".to_string()],
+            environments: vec!["dev".to_string(), "staging".to_string()],
+            changes: vec!["abc123".to_string(), "def456".to_string(), "ghi789".to_string()],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let info = RemovedChangesetInfo::from(&changeset);
+
+        assert_eq!(info.branch, "feature/test");
+        assert_eq!(info.bump, "minor");
+        assert_eq!(info.packages.len(), 2);
+        assert_eq!(info.environments.len(), 2);
+        assert_eq!(info.commit_count, 3);
+    }
+
+    #[test]
+    fn test_delete_args_with_force() {
+        use crate::cli::commands::ChangesetDeleteArgs;
+
+        let args = ChangesetDeleteArgs { branch: "old-branch".to_string(), force: true };
+
+        assert_eq!(args.branch, "old-branch");
+        assert!(args.force);
+    }
+
+    #[test]
+    fn test_delete_args_without_force() {
+        use crate::cli::commands::ChangesetDeleteArgs;
+
+        let args = ChangesetDeleteArgs { branch: "feature/test".to_string(), force: false };
+
+        assert_eq!(args.branch, "feature/test");
+        assert!(!args.force);
+    }
+
+    // Note: Full integration tests for execute_remove require:
+    // - Workspace setup with configuration
+    // - Actual changeset files
+    // - File system operations
+    // These are better suited for E2E tests or manual testing
+    // The unit tests above cover the core logic and data structures
 
     #[test]
     fn test_create_args_with_values() {

@@ -64,13 +64,15 @@ use crate::output::styling::{Section, print_item};
 use crate::output::{JsonResponse, Output};
 use crate::utils::editor::open_in_editor;
 use serde::Serialize;
-use std::path::{Path, PathBuf};
-use sublime_git_tools::Repo;
+use std::path::Path;
 use sublime_pkg_tools::changeset::ChangesetManager;
-use sublime_pkg_tools::config::{ConfigLoader, PackageToolsConfig};
 use sublime_pkg_tools::types::Changeset;
-use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
+use sublime_standard_tools::filesystem::FileSystemManager;
 use tracing::{debug, info, warn};
+
+// Import shared functionality
+use super::common::{detect_current_branch, get_changeset_file_path, load_config};
+use super::types::{format_bump_type, ChangesetInfo};
 
 /// Response data for changeset edit command (JSON output).
 ///
@@ -83,39 +85,6 @@ struct ChangesetEditResponse {
     branch: String,
     /// The changeset details after editing.
     changeset: ChangesetInfo,
-}
-
-/// Changeset information for output.
-#[derive(Debug, Serialize)]
-struct ChangesetInfo {
-    /// Branch name (also serves as unique identifier).
-    branch: String,
-    /// Version bump type.
-    bump: String,
-    /// List of affected packages.
-    packages: Vec<String>,
-    /// Target environments.
-    environments: Vec<String>,
-    /// List of commit IDs.
-    commits: Vec<String>,
-    /// Creation timestamp (RFC3339 format).
-    created_at: String,
-    /// Last update timestamp (RFC3339 format).
-    updated_at: String,
-}
-
-impl From<Changeset> for ChangesetInfo {
-    fn from(changeset: Changeset) -> Self {
-        Self {
-            branch: changeset.branch,
-            bump: changeset.bump.to_string().to_lowercase(),
-            packages: changeset.packages,
-            environments: changeset.environments,
-            commits: changeset.changes,
-            created_at: changeset.created_at.to_rfc3339(),
-            updated_at: changeset.updated_at.to_rfc3339(),
-        }
-    }
 }
 
 /// Execute the changeset edit command.
@@ -172,8 +141,14 @@ pub async fn execute_edit(
     info!("Executing changeset edit command");
     debug!("Args: {:?}", args);
 
+    // Determine workspace root
+    let workspace_root = root.map_or_else(
+        || std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+        std::path::Path::to_path_buf,
+    );
+
     // Load configuration
-    let (config, workspace_root) = load_config(root, config_path).await?;
+    let config = load_config(&workspace_root, config_path).await?;
     debug!("Configuration loaded from: {}", workspace_root.display());
 
     // Determine branch
@@ -247,151 +222,6 @@ pub async fn execute_edit(
     }
 }
 
-/// Loads the workspace configuration.
-///
-/// # Arguments
-///
-/// * `root` - Optional workspace root directory
-/// * `config_path` - Optional path to configuration file
-///
-/// # Returns
-///
-/// Returns a tuple of (config, workspace_root) on success.
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - Configuration file cannot be found or loaded
-/// - Configuration is invalid
-/// - File system operations fail
-async fn load_config(
-    root: Option<&Path>,
-    config_path: Option<&Path>,
-) -> Result<(PackageToolsConfig, PathBuf)> {
-    let workspace_root = root.map_or_else(
-        || std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-        std::path::Path::to_path_buf,
-    );
-
-    debug!("Loading configuration from workspace root: {}", workspace_root.display());
-
-    let config = if let Some(config_file) = config_path {
-        debug!("Using specified config file: {}", config_file.display());
-        ConfigLoader::load_from_file(config_file)
-            .await
-            .map_err(|e| CliError::configuration(format!("Failed to load config file: {e}")))?
-    } else {
-        debug!("Auto-detecting configuration file");
-        let fs = FileSystemManager::new();
-
-        // Search for standard config file names
-        let candidates = vec![
-            workspace_root.join("repo.config.toml"),
-            workspace_root.join("repo.config.json"),
-            workspace_root.join("repo.config.yaml"),
-            workspace_root.join("repo.config.yml"),
-        ];
-
-        let mut found_config = None;
-        for candidate in candidates {
-            if fs.exists(&candidate).await {
-                found_config = Some(candidate);
-                break;
-            }
-        }
-
-        if let Some(config_path) = found_config {
-            ConfigLoader::load_from_file(&config_path).await.map_err(|e| {
-                CliError::configuration(format!(
-                    "Failed to load configuration from {}: {e}",
-                    config_path.display()
-                ))
-            })?
-        } else {
-            return Err(CliError::configuration(
-                "Workspace not initialized. Run 'wnt init' first.".to_string(),
-            ));
-        }
-    };
-
-    debug!("Configuration loaded successfully");
-    Ok((config, workspace_root))
-}
-
-/// Detects the current Git branch.
-///
-/// # Arguments
-///
-/// * `workspace_root` - The workspace root directory
-///
-/// # Returns
-///
-/// Returns the current branch name.
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - Not in a Git repository
-/// - Cannot determine current branch
-fn detect_current_branch(workspace_root: &Path) -> Result<String> {
-    debug!("Detecting current Git branch");
-
-    let workspace_str = workspace_root
-        .to_str()
-        .ok_or_else(|| CliError::io("Workspace path contains invalid UTF-8 characters"))?;
-
-    let repo = Repo::open(workspace_str).map_err(|e| {
-        CliError::git(format!(
-            "Failed to open Git repository at '{}': {e}",
-            workspace_root.display()
-        ))
-    })?;
-
-    let branch = repo.get_current_branch().map_err(|e| {
-        CliError::git(format!(
-            "Failed to detect current branch. Are you in a Git repository? Error: {e}"
-        ))
-    })?;
-
-    debug!("Current branch: {}", branch);
-    Ok(branch)
-}
-
-/// Gets the file path for a changeset.
-///
-/// # Arguments
-///
-/// * `workspace_root` - The workspace root directory
-/// * `config` - The package tools configuration
-/// * `branch` - The branch name
-///
-/// # Returns
-///
-/// Returns the path to the changeset file.
-pub(crate) fn get_changeset_file_path(
-    workspace_root: &Path,
-    config: &PackageToolsConfig,
-    branch: &str,
-) -> PathBuf {
-    let changeset_dir = workspace_root.join(&config.changeset.path);
-    let sanitized_branch = sanitize_branch_name(branch);
-    changeset_dir.join(format!("{sanitized_branch}.json"))
-}
-
-/// Sanitizes a branch name for use as a filename.
-///
-/// Replaces characters that are invalid in filenames with safe alternatives.
-///
-/// # Arguments
-///
-/// * `branch` - The branch name to sanitize
-///
-/// # Returns
-///
-/// Returns the sanitized branch name.
-fn sanitize_branch_name(branch: &str) -> String {
-    branch.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "-")
-}
 
 /// Validates an edited changeset by reloading it.
 ///
@@ -512,12 +342,3 @@ fn output_formatted(output: &Output, branch: &str, changeset: &Changeset) -> Res
     Ok(())
 }
 
-/// Formats a bump type for display.
-pub(crate) fn format_bump_type(bump: sublime_pkg_tools::types::VersionBump) -> String {
-    match bump {
-        sublime_pkg_tools::types::VersionBump::Major => "major".to_string(),
-        sublime_pkg_tools::types::VersionBump::Minor => "minor".to_string(),
-        sublime_pkg_tools::types::VersionBump::Patch => "patch".to_string(),
-        sublime_pkg_tools::types::VersionBump::None => "none".to_string(),
-    }
-}
