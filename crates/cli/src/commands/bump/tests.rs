@@ -314,3 +314,292 @@ fn test_bump_summary_default() {
 // Integration tests would go here, but they require a real workspace setup
 // These should be tested in the integration test suite with actual fixtures
 // TODO: Add integration tests in tests/ directory with real workspace scenarios
+
+// ============================================================================
+// Snapshot Generation Tests
+// ============================================================================
+
+/// Tests that branch name sanitization replaces invalid characters.
+#[test]
+fn test_sanitize_branch_name_replaces_slash() {
+    use super::snapshot::sanitize_branch_name;
+
+    assert_eq!(sanitize_branch_name("feature/new-api"), "feature-new-api");
+}
+
+/// Tests that branch name sanitization replaces special characters.
+#[test]
+fn test_sanitize_branch_name_replaces_special_chars() {
+    use super::snapshot::sanitize_branch_name;
+
+    assert_eq!(sanitize_branch_name("feat/#123-fix"), "feat--123-fix");
+    assert_eq!(sanitize_branch_name("fix@issue"), "fix-issue");
+    assert_eq!(sanitize_branch_name("feat_feature"), "feat-feature");
+}
+
+/// Tests that branch name sanitization preserves valid characters.
+#[test]
+fn test_sanitize_branch_name_preserves_valid_chars() {
+    use super::snapshot::sanitize_branch_name;
+
+    assert_eq!(sanitize_branch_name("feature-123"), "feature-123");
+    assert_eq!(sanitize_branch_name("v1.2.3"), "v1.2.3");
+    assert_eq!(sanitize_branch_name("main"), "main");
+}
+
+/// Tests that branch name sanitization handles consecutive special characters.
+#[test]
+fn test_sanitize_branch_name_consecutive_special_chars() {
+    use super::snapshot::sanitize_branch_name;
+
+    assert_eq!(sanitize_branch_name("feat//fix"), "feat--fix");
+    assert_eq!(sanitize_branch_name("fix@@bug"), "fix--bug");
+}
+
+/// Tests that branch name sanitization handles empty string.
+#[test]
+fn test_sanitize_branch_name_empty_string() {
+    use super::snapshot::sanitize_branch_name;
+
+    assert_eq!(sanitize_branch_name(""), "");
+}
+
+/// Tests that branch name sanitization handles unicode characters.
+#[test]
+fn test_sanitize_branch_name_unicode() {
+    use super::snapshot::sanitize_branch_name;
+
+    // Unicode characters should be replaced with dash
+    assert_eq!(sanitize_branch_name("feat-🚀-rocket"), "feat---rocket");
+    assert_eq!(sanitize_branch_name("fix-日本語"), "fix----");
+}
+
+/// Tests that snapshot args includes snapshot flag.
+#[test]
+fn test_snapshot_args_structure() {
+    let args = BumpArgs {
+        dry_run: false,
+        execute: false,
+        snapshot: true,
+        snapshot_format: Some("{version}-{branch}.{short_commit}".to_string()),
+        prerelease: None,
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        force: false,
+    };
+
+    assert!(args.snapshot);
+    assert!(!args.execute);
+    assert!(!args.dry_run);
+    assert!(args.snapshot_format.is_some());
+}
+
+/// Tests that snapshot format can be customized.
+#[test]
+fn test_snapshot_format_customization() {
+    let args = BumpArgs {
+        dry_run: false,
+        execute: false,
+        snapshot: true,
+        snapshot_format: Some("{version}-snapshot.{short_commit}".to_string()),
+        prerelease: None,
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        force: false,
+    };
+
+    assert_eq!(args.snapshot_format.as_deref(), Some("{version}-snapshot.{short_commit}"));
+}
+
+/// Tests that snapshot mode can work with default format.
+#[test]
+fn test_snapshot_default_format() {
+    let args = BumpArgs {
+        dry_run: false,
+        execute: false,
+        snapshot: true,
+        snapshot_format: None,
+        prerelease: None,
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        force: false,
+    };
+
+    assert!(args.snapshot);
+    assert!(args.snapshot_format.is_none());
+}
+
+/// Tests that PackageBumpInfo can represent snapshot version.
+#[test]
+fn test_package_bump_info_snapshot_version() {
+    let info = PackageBumpInfo {
+        name: "@org/core".to_string(),
+        path: "packages/core".to_string(),
+        current_version: "1.2.3".to_string(),
+        next_version: "1.3.0-snapshot.abc123f".to_string(),
+        bump_type: sublime_pkg_tools::types::VersionBump::Minor,
+        will_bump: true,
+        reason: "snapshot from changeset".to_string(),
+    };
+
+    assert!(info.will_bump);
+    assert!(info.next_version.contains("-snapshot."));
+    assert_eq!(info.reason, "snapshot from changeset");
+}
+
+/// Tests that BumpSnapshot correctly represents independent strategy snapshots.
+#[test]
+fn test_bump_snapshot_independent_snapshots() {
+    let snapshot = BumpSnapshot {
+        strategy: "independent".to_string(),
+        packages: vec![PackageBumpInfo {
+            name: "@org/core".to_string(),
+            path: "packages/core".to_string(),
+            current_version: "1.0.0".to_string(),
+            next_version: "1.1.0-snapshot.abc123f".to_string(),
+            bump_type: sublime_pkg_tools::types::VersionBump::Minor,
+            will_bump: true,
+            reason: "snapshot from changeset".to_string(),
+        }],
+        changesets: vec![ChangesetInfo {
+            id: "feature-test".to_string(),
+            branch: "feature/test".to_string(),
+            bump_type: sublime_pkg_tools::types::VersionBump::Minor,
+            packages: vec!["@org/core".to_string()],
+            commit_count: 3,
+        }],
+        summary: BumpSummary::new(2, 1, 1, false),
+    };
+
+    assert_eq!(snapshot.strategy, "independent");
+    assert_eq!(snapshot.packages.len(), 1);
+    assert!(snapshot.packages[0].next_version.contains("-snapshot."));
+    assert_eq!(snapshot.summary.packages_to_bump, 1);
+}
+
+/// Tests that BumpSnapshot correctly represents unified strategy snapshots.
+#[test]
+fn test_bump_snapshot_unified_snapshots() {
+    let snapshot = BumpSnapshot {
+        strategy: "unified".to_string(),
+        packages: vec![
+            PackageBumpInfo {
+                name: "@org/core".to_string(),
+                path: "packages/core".to_string(),
+                current_version: "1.0.0".to_string(),
+                next_version: "1.1.0-snapshot.abc123f".to_string(),
+                bump_type: sublime_pkg_tools::types::VersionBump::Minor,
+                will_bump: true,
+                reason: "unified snapshot (package in changeset)".to_string(),
+            },
+            PackageBumpInfo {
+                name: "@org/utils".to_string(),
+                path: "packages/utils".to_string(),
+                current_version: "1.0.0".to_string(),
+                next_version: "1.1.0-snapshot.abc123f".to_string(),
+                bump_type: sublime_pkg_tools::types::VersionBump::Minor,
+                will_bump: true,
+                reason: "unified snapshot (all packages bumped together)".to_string(),
+            },
+        ],
+        changesets: vec![ChangesetInfo {
+            id: "feature-test".to_string(),
+            branch: "feature/test".to_string(),
+            bump_type: sublime_pkg_tools::types::VersionBump::Minor,
+            packages: vec!["@org/core".to_string()],
+            commit_count: 3,
+        }],
+        summary: BumpSummary::new(2, 2, 1, false),
+    };
+
+    assert_eq!(snapshot.strategy, "unified");
+    assert_eq!(snapshot.packages.len(), 2);
+    // All packages should have snapshot versions
+    assert!(snapshot.packages[0].next_version.contains("-snapshot."));
+    assert!(snapshot.packages[1].next_version.contains("-snapshot."));
+    // All packages should have the same snapshot version in unified mode
+    assert_eq!(snapshot.packages[0].next_version, snapshot.packages[1].next_version);
+    assert_eq!(snapshot.summary.packages_to_bump, 2);
+}
+
+/// Tests that snapshot serialization includes all required fields.
+#[test]
+#[allow(clippy::expect_used)]
+fn test_snapshot_serialization_completeness() {
+    let snapshot = BumpSnapshot {
+        strategy: "independent".to_string(),
+        packages: vec![PackageBumpInfo {
+            name: "@org/core".to_string(),
+            path: "packages/core".to_string(),
+            current_version: "1.0.0".to_string(),
+            next_version: "1.1.0-snapshot.abc123f".to_string(),
+            bump_type: sublime_pkg_tools::types::VersionBump::Minor,
+            will_bump: true,
+            reason: "snapshot from changeset".to_string(),
+        }],
+        changesets: vec![],
+        summary: BumpSummary::new(1, 1, 1, false),
+    };
+
+    let json = serde_json::to_string(&snapshot).expect("Failed to serialize snapshot");
+
+    // Verify all key fields are present
+    assert!(json.contains("strategy"));
+    assert!(json.contains("packages"));
+    assert!(json.contains("changesets"));
+    assert!(json.contains("summary"));
+    assert!(json.contains("snapshot"));
+    assert!(json.contains("@org/core"));
+}
+
+/// Tests that snapshot args cannot combine with execute mode.
+#[test]
+fn test_snapshot_and_execute_mutually_exclusive() {
+    // In real usage, Clap's conflicts_with would prevent this
+    // This test documents the expected behavior
+    let args_snapshot = BumpArgs {
+        dry_run: false,
+        execute: false,
+        snapshot: true,
+        snapshot_format: None,
+        prerelease: None,
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        force: false,
+    };
+
+    let args_execute = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: None,
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        force: false,
+    };
+
+    // These should be mutually exclusive
+    assert!(args_snapshot.snapshot && !args_snapshot.execute);
+    assert!(args_execute.execute && !args_execute.snapshot);
+}

@@ -82,3 +82,4 @@ mod tests;
 // Re-export command functions for convenience
 pub use execute::execute_bump_apply;
 pub use preview::execute_bump_preview;
+pub use snapshot::execute_bump_snapshot;
