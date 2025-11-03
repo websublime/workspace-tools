@@ -255,6 +255,159 @@ fn test_upgrade_check_response_serialization() {
     assert_eq!(deserialized.summary.total_upgrades, 1);
 }
 
-// TODO: will be implemented on story 6.2
-// Mock-based integration tests will be added when we implement
-// a test harness for UpgradeManager
+// ============================================================================
+// Apply Type Tests
+// ============================================================================
+
+#[test]
+fn test_apply_summary_default() {
+    let summary = ApplySummary::default();
+
+    assert_eq!(summary.total_applied, 0);
+    assert_eq!(summary.total_skipped, 0);
+    assert!(summary.backup_id.is_none());
+    assert_eq!(summary.total_processed(), 0);
+}
+
+#[test]
+fn test_apply_summary_calculations() {
+    let summary = ApplySummary {
+        total_applied: 10,
+        total_skipped: 3,
+        backup_id: Some("backup_20240115_103045".to_string()),
+    };
+
+    assert_eq!(summary.total_applied, 10);
+    assert_eq!(summary.total_skipped, 3);
+    assert_eq!(summary.total_processed(), 13);
+    assert!(summary.backup_id.is_some());
+}
+
+#[test]
+fn test_applied_upgrade_info() {
+    let applied = AppliedUpgradeInfo {
+        package: "typescript".to_string(),
+        from: "5.0.0".to_string(),
+        to: "5.3.3".to_string(),
+        upgrade_type: "minor".to_string(),
+    };
+
+    assert_eq!(applied.package, "typescript");
+    assert_eq!(applied.from, "5.0.0");
+    assert_eq!(applied.to, "5.3.3");
+    assert_eq!(applied.upgrade_type, "minor");
+}
+
+#[test]
+fn test_skipped_upgrade_info() {
+    let skipped = SkippedUpgradeInfo {
+        package: "eslint".to_string(),
+        reason: "major_version".to_string(),
+        current_version: "8.0.0".to_string(),
+        latest_version: "9.0.0".to_string(),
+    };
+
+    assert_eq!(skipped.package, "eslint");
+    assert_eq!(skipped.reason, "major_version");
+    assert_eq!(skipped.current_version, "8.0.0");
+    assert_eq!(skipped.latest_version, "9.0.0");
+}
+
+#[test]
+fn test_upgrade_apply_response_serialization() {
+    let response = UpgradeApplyResponse {
+        success: true,
+        applied: vec![AppliedUpgradeInfo {
+            package: "typescript".to_string(),
+            from: "5.0.0".to_string(),
+            to: "5.3.3".to_string(),
+            upgrade_type: "minor".to_string(),
+        }],
+        skipped: vec![SkippedUpgradeInfo {
+            package: "eslint".to_string(),
+            reason: "major_version".to_string(),
+            current_version: "8.0.0".to_string(),
+            latest_version: "9.0.0".to_string(),
+        }],
+        summary: ApplySummary {
+            total_applied: 1,
+            total_skipped: 1,
+            backup_id: Some("backup_20240115_103045".to_string()),
+        },
+    };
+
+    // Test JSON serialization
+    let json = serde_json::to_string_pretty(&response).expect("Should serialize to JSON");
+
+    assert!(json.contains("\"success\": true"));
+    assert!(json.contains("\"typescript\""));
+    assert!(json.contains("\"from\": \"5.0.0\""));
+    assert!(json.contains("\"to\": \"5.3.3\""));
+    assert!(json.contains("\"type\": \"minor\""));
+    assert!(json.contains("\"eslint\""));
+    assert!(json.contains("\"reason\": \"major_version\""));
+    assert!(json.contains("\"currentVersion\": \"8.0.0\""));
+    assert!(json.contains("\"latestVersion\": \"9.0.0\""));
+    assert!(json.contains("\"totalApplied\": 1"));
+    assert!(json.contains("\"totalSkipped\": 1"));
+    assert!(json.contains("\"backupId\": \"backup_20240115_103045\""));
+
+    // Test deserialization
+    let deserialized: UpgradeApplyResponse =
+        serde_json::from_str(&json).expect("Should deserialize from JSON");
+
+    assert!(deserialized.success);
+    assert_eq!(deserialized.applied.len(), 1);
+    assert_eq!(deserialized.skipped.len(), 1);
+    assert_eq!(deserialized.summary.total_applied, 1);
+    assert_eq!(deserialized.summary.total_skipped, 1);
+    assert_eq!(deserialized.summary.backup_id, Some("backup_20240115_103045".to_string()));
+}
+
+#[test]
+fn test_upgrade_apply_response_empty() {
+    let response = UpgradeApplyResponse {
+        success: true,
+        applied: vec![],
+        skipped: vec![],
+        summary: ApplySummary::default(),
+    };
+
+    let json = serde_json::to_string_pretty(&response).expect("Should serialize to JSON");
+
+    assert!(json.contains("\"success\": true"));
+    assert!(json.contains("\"applied\": []"));
+    assert!(json.contains("\"skipped\": []"));
+    assert!(json.contains("\"totalApplied\": 0"));
+    assert!(json.contains("\"totalSkipped\": 0"));
+
+    // backupId should be omitted when None due to skip_serializing_if
+    assert!(!json.contains("backupId"));
+}
+
+#[test]
+fn test_upgrade_apply_response_no_backup() {
+    let response = UpgradeApplyResponse {
+        success: true,
+        applied: vec![AppliedUpgradeInfo {
+            package: "lodash".to_string(),
+            from: "4.17.0".to_string(),
+            to: "4.17.21".to_string(),
+            upgrade_type: "patch".to_string(),
+        }],
+        skipped: vec![],
+        summary: ApplySummary { total_applied: 1, total_skipped: 0, backup_id: None },
+    };
+
+    let json = serde_json::to_string_pretty(&response).expect("Should serialize to JSON");
+
+    assert!(json.contains("\"success\": true"));
+    assert!(json.contains("\"totalApplied\": 1"));
+
+    // backupId should be omitted when None
+    assert!(!json.contains("backupId"));
+}
+
+// TODO: Mock-based integration tests will be added when we implement
+// a test harness for UpgradeManager to test the full command execution
+// flow including detection, application, backup, and changeset creation.

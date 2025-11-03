@@ -223,9 +223,8 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
                 UpgradeCommands::Check(args) => {
                     upgrade::execute_upgrade_check(args, &output, root).await?;
                 }
-                UpgradeCommands::Apply(_args) => {
-                    // TODO: will be implemented on story 6.2
-                    todo!("Upgrade apply command will be implemented in story 6.2")
+                UpgradeCommands::Apply(args) => {
+                    upgrade::execute_upgrade_apply(args, &output, root).await?;
                 }
                 UpgradeCommands::Backups(backup_cmd) => match backup_cmd {
                     UpgradeBackupCommands::List(_args) => {
