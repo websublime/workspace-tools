@@ -81,7 +81,7 @@
 use crate::cli::commands::BumpArgs;
 use crate::commands::bump::snapshot::{BumpSnapshot, BumpSummary, ChangesetInfo, PackageBumpInfo};
 use crate::error::{CliError, Result};
-use crate::output::styling::{print_item, StatusSymbol};
+use crate::output::styling::{StatusSymbol, print_item};
 use crate::output::table::{ColumnAlignment, TableBuilder, TableTheme};
 use crate::output::{JsonResponse, Output};
 use std::collections::{HashMap, HashSet};
@@ -193,7 +193,9 @@ pub async fn execute_bump_preview(
     // Step 6: Resolve versions based on strategy
     // For Independent: Only packages in changesets bump
     // For Unified: All packages bump with the highest bump type
-    let snapshot = if config.version.strategy == sublime_pkg_tools::config::VersioningStrategy::Independent {
+    let snapshot = if config.version.strategy
+        == sublime_pkg_tools::config::VersioningStrategy::Independent
+    {
         build_independent_snapshot(&resolver, &changesets, &all_packages, workspace_root).await?
     } else {
         build_unified_snapshot(&resolver, &changesets, &all_packages, workspace_root).await?
@@ -246,11 +248,8 @@ async fn build_independent_snapshot(
     let mut packages_to_bump = 0;
 
     // Create a map of package updates for quick lookup
-    let update_map: HashMap<_, _> = resolution
-        .updates
-        .iter()
-        .map(|u| (u.name.clone(), u))
-        .collect();
+    let update_map: HashMap<_, _> =
+        resolution.updates.iter().map(|u| (u.name.clone(), u)).collect();
 
     for package in all_packages {
         let is_in_changeset = changeset_packages.contains(package.name());
@@ -366,11 +365,8 @@ async fn build_unified_snapshot(
     let mut packages_info = Vec::new();
 
     // Create a map of package updates for quick lookup
-    let update_map: HashMap<_, _> = resolution
-        .updates
-        .iter()
-        .map(|u| (u.name.clone(), u))
-        .collect();
+    let update_map: HashMap<_, _> =
+        resolution.updates.iter().map(|u| (u.name.clone(), u)).collect();
 
     // Check which packages are directly in changesets for better reason messages
     let mut changeset_packages: HashSet<String> = HashSet::new();
@@ -442,7 +438,7 @@ async fn build_unified_snapshot(
 ///
 /// Combines packages, commits, and environments from all changesets.
 /// Uses the highest bump type across all changesets.
-fn merge_changesets(changesets: &[Changeset]) -> Result<Changeset> {
+pub(crate) fn merge_changesets(changesets: &[Changeset]) -> Result<Changeset> {
     if changesets.is_empty() {
         return Err(CliError::execution("No changesets to merge"));
     }
@@ -506,7 +502,7 @@ fn calculate_bump_type(current: &Version, next: &Version) -> VersionBump {
 ///
 /// Attempts to load configuration from the workspace, with auto-detection
 /// of standard config file names.
-async fn load_config(
+pub(crate) async fn load_config(
     workspace_root: &Path,
     config_path: Option<&Path>,
 ) -> Result<sublime_pkg_tools::config::PackageToolsConfig> {
@@ -518,11 +514,8 @@ async fn load_config(
     let mut found_config = None;
     if let Some(config) = config_path {
         // Use the explicitly provided config file
-        let config_file = if config.is_absolute() {
-            config.to_path_buf()
-        } else {
-            workspace_root.join(config)
-        };
+        let config_file =
+            if config.is_absolute() { config.to_path_buf() } else { workspace_root.join(config) };
 
         if fs.exists(&config_file).await {
             found_config = Some(config_file);
@@ -584,7 +577,8 @@ fn output_table(output: &Output, snapshot: &BumpSnapshot) -> Result<()> {
 
     // Display changesets section
     if !snapshot.changesets.is_empty() {
-        StatusSymbol::Info.print_line(&format!("Active Changesets: {} changeset(s)", snapshot.changesets.len()));
+        StatusSymbol::Info
+            .print_line(&format!("Active Changesets: {} changeset(s)", snapshot.changesets.len()));
 
         let mut changeset_table = TableBuilder::new()
             .theme(TableTheme::Minimal)
@@ -606,7 +600,8 @@ fn output_table(output: &Output, snapshot: &BumpSnapshot) -> Result<()> {
     }
 
     // Display packages section
-    StatusSymbol::Info.print_line(&format!("Package Updates: {} package(s)", snapshot.packages.len()));
+    StatusSymbol::Info
+        .print_line(&format!("Package Updates: {} package(s)", snapshot.packages.len()));
 
     let mut package_table = TableBuilder::new()
         .theme(TableTheme::Minimal)
@@ -618,11 +613,8 @@ fn output_table(output: &Output, snapshot: &BumpSnapshot) -> Result<()> {
 
     for pkg in &snapshot.packages {
         let status = if pkg.will_bump { "✓ Will bump" } else { "○ No change" };
-        let bump_display = if pkg.will_bump {
-            pkg.bump_type.to_string().to_lowercase()
-        } else {
-            "-".to_string()
-        };
+        let bump_display =
+            if pkg.will_bump { pkg.bump_type.to_string().to_lowercase() } else { "-".to_string() };
 
         package_table.add_row(&[
             &pkg.name,
@@ -644,7 +636,8 @@ fn output_table(output: &Output, snapshot: &BumpSnapshot) -> Result<()> {
 
     if snapshot.summary.has_circular_dependencies {
         output.blank_line()?;
-        output.warning("Circular dependencies detected. Review dependency graph before bumping.")?;
+        output
+            .warning("Circular dependencies detected. Review dependency graph before bumping.")?;
     }
 
     Ok(())

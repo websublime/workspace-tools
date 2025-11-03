@@ -186,12 +186,18 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
         Commands::Bump(args) => {
             let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
 
-            // Default mode is preview (dry-run)
+            // Route to execute or preview mode based on flags
             if args.execute {
-                // TODO: will be implemented in story 5.2
-                todo!("Bump execute mode will be implemented in story 5.2")
+                // Execute mode - apply version bumps
+                bump::execute_bump_apply(
+                    args,
+                    &output,
+                    root,
+                    config_path.as_ref().map(|p| p.as_path()),
+                )
+                .await?;
             } else {
-                // Preview mode (default)
+                // Preview mode (default) - dry-run
                 bump::execute_bump_preview(
                     args,
                     &output,

@@ -530,6 +530,13 @@ pub enum UpdateReason {
         /// Depth in the dependency chain (1 = direct dependent)
         depth: usize,
     },
+
+    /// Package is updated due to unified versioning strategy
+    ///
+    /// In unified strategy, all workspace packages move to the same version
+    /// together, even if they don't have direct changes. This ensures all
+    /// packages in the monorepo maintain the same version number.
+    UnifiedStrategy,
 }
 
 impl UpdateReason {
@@ -545,6 +552,7 @@ impl UpdateReason {
     ///     triggered_by: "pkg".to_string(),
     ///     depth: 1,
     /// }.is_direct());
+    /// assert!(!UpdateReason::UnifiedStrategy.is_direct());
     /// ```
     #[must_use]
     pub fn is_direct(&self) -> bool {
@@ -563,13 +571,33 @@ impl UpdateReason {
     ///     triggered_by: "pkg".to_string(),
     ///     depth: 1,
     /// }.is_propagated());
+    /// assert!(!UpdateReason::UnifiedStrategy.is_propagated());
     /// ```
     #[must_use]
     pub fn is_propagated(&self) -> bool {
         matches!(self, Self::DependencyPropagation { .. })
     }
 
-    /// Returns the depth of propagation, or 0 for direct changes.
+    /// Returns `true` if this is a unified strategy update.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::types::dependency::UpdateReason;
+    ///
+    /// assert!(!UpdateReason::DirectChange.is_unified());
+    /// assert!(!UpdateReason::DependencyPropagation {
+    ///     triggered_by: "pkg".to_string(),
+    ///     depth: 1,
+    /// }.is_unified());
+    /// assert!(UpdateReason::UnifiedStrategy.is_unified());
+    /// ```
+    #[must_use]
+    pub fn is_unified(&self) -> bool {
+        matches!(self, Self::UnifiedStrategy)
+    }
+
+    /// Returns the depth of propagation, or 0 for direct changes and unified strategy.
     ///
     /// # Examples
     ///
@@ -584,11 +612,12 @@ impl UpdateReason {
     ///     }.depth(),
     ///     3
     /// );
+    /// assert_eq!(UpdateReason::UnifiedStrategy.depth(), 0);
     /// ```
     #[must_use]
     pub fn depth(&self) -> usize {
         match self {
-            Self::DirectChange => 0,
+            Self::DirectChange | Self::UnifiedStrategy => 0,
             Self::DependencyPropagation { depth, .. } => *depth,
         }
     }
@@ -601,6 +630,7 @@ impl std::fmt::Display for UpdateReason {
             Self::DependencyPropagation { triggered_by, depth } => {
                 write!(f, "dependency propagation (triggered by {}, depth {})", triggered_by, depth)
             }
+            Self::UnifiedStrategy => write!(f, "unified versioning strategy"),
         }
     }
 }
