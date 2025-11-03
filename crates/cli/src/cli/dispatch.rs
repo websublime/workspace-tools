@@ -227,17 +227,14 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
                     upgrade::execute_upgrade_apply(args, &output, root).await?;
                 }
                 UpgradeCommands::Backups(backup_cmd) => match backup_cmd {
-                    UpgradeBackupCommands::List(_args) => {
-                        // TODO: will be implemented on story 6.2
-                        todo!("Upgrade backups list command will be implemented in story 6.2")
+                    UpgradeBackupCommands::List(args) => {
+                        upgrade::execute_backup_list(args, &output, root).await?;
                     }
-                    UpgradeBackupCommands::Restore(_args) => {
-                        // TODO: will be implemented on story 6.3
-                        todo!("Upgrade backups restore command will be implemented in story 6.3")
+                    UpgradeBackupCommands::Restore(args) => {
+                        upgrade::execute_backup_restore(args, &output, root).await?;
                     }
-                    UpgradeBackupCommands::Clean(_args) => {
-                        // TODO: will be implemented on story 6.2
-                        todo!("Upgrade backups clean command will be implemented in story 6.2")
+                    UpgradeBackupCommands::Clean(args) => {
+                        upgrade::execute_backup_clean(args, &output, root).await?;
                     }
                 },
             }
