@@ -413,11 +413,34 @@ async fn test_integration_unified_strategy_workflow() {
     assert!(!result.dry_run);
     assert!(result.summary.packages_updated > 0);
 
-    // Verify all packages have versions bumped
+    // Verify all packages have unified version
+    // In unified strategy, all packages get the highest version bumped
+    // pkg-c has 2.0.0 (highest), Major bump -> 3.0.0, all packages get 3.0.0
     let pkg_a_content = tokio::fs::read_to_string(root.join("packages/pkg-a/package.json"))
         .await
         .expect("Failed to read pkg-a");
-    assert!(pkg_a_content.contains(r#""version": "2.0.0""#), "pkg-a should have major version");
+    assert!(
+        pkg_a_content.contains(r#""version": "3.0.0""#),
+        "pkg-a should have unified version 3.0.0"
+    );
+
+    // Verify other packages also have the same unified version
+    let pkg_c_content = tokio::fs::read_to_string(root.join("packages/pkg-c/package.json"))
+        .await
+        .expect("Failed to read pkg-c");
+    assert!(
+        pkg_c_content.contains(r#""version": "3.0.0""#),
+        "pkg-c should have unified version 3.0.0"
+    );
+
+    // All packages in the updates should have the same next version
+    let first_version = resolution.updates[0].next_version.clone();
+    for update in &resolution.updates {
+        assert_eq!(
+            update.next_version, first_version,
+            "All packages should have the same version in unified strategy"
+        );
+    }
 }
 
 #[tokio::test]
