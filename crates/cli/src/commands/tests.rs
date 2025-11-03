@@ -554,6 +554,574 @@ mod init_tests {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 #[allow(clippy::unwrap_used)]
+mod changes_tests {
+    use crate::cli::commands::ChangesArgs;
+    use crate::commands::changes::{AnalysisMode, determine_mode, format_change_types};
+    use sublime_pkg_tools::changes::PackageChangeStats;
+
+    #[test]
+    fn test_determine_mode_working_directory_default() {
+        let args = ChangesArgs {
+            since: None,
+            until: None,
+            branch: None,
+            staged: false,
+            unstaged: false,
+            packages: None,
+        };
+
+        let mode = determine_mode(&args);
+        assert_eq!(mode, AnalysisMode::WorkingDirectory { staged: false, unstaged: false });
+    }
+
+    #[test]
+    fn test_determine_mode_working_directory_staged() {
+        let args = ChangesArgs {
+            since: None,
+            until: None,
+            branch: None,
+            staged: true,
+            unstaged: false,
+            packages: None,
+        };
+
+        let mode = determine_mode(&args);
+        assert_eq!(mode, AnalysisMode::WorkingDirectory { staged: true, unstaged: false });
+    }
+
+    #[test]
+    fn test_determine_mode_working_directory_unstaged() {
+        let args = ChangesArgs {
+            since: None,
+            until: None,
+            branch: None,
+            staged: false,
+            unstaged: true,
+            packages: None,
+        };
+
+        let mode = determine_mode(&args);
+        assert_eq!(mode, AnalysisMode::WorkingDirectory { staged: false, unstaged: true });
+    }
+
+    #[test]
+    fn test_determine_mode_commit_range_with_both() {
+        let args = ChangesArgs {
+            since: Some("v1.0.0".to_string()),
+            until: Some("HEAD".to_string()),
+            branch: None,
+            staged: false,
+            unstaged: false,
+            packages: None,
+        };
+
+        let mode = determine_mode(&args);
+        assert_eq!(
+            mode,
+            AnalysisMode::CommitRange { from: "v1.0.0".to_string(), to: "HEAD".to_string() }
+        );
+    }
+
+    #[test]
+    fn test_determine_mode_commit_range_with_since_only() {
+        let args = ChangesArgs {
+            since: Some("v1.0.0".to_string()),
+            until: None,
+            branch: None,
+            staged: false,
+            unstaged: false,
+            packages: None,
+        };
+
+        let mode = determine_mode(&args);
+        assert_eq!(
+            mode,
+            AnalysisMode::CommitRange { from: "v1.0.0".to_string(), to: "HEAD".to_string() }
+        );
+    }
+
+    #[test]
+    fn test_determine_mode_commit_range_with_until_only() {
+        let args = ChangesArgs {
+            since: None,
+            until: Some("develop".to_string()),
+            branch: None,
+            staged: false,
+            unstaged: false,
+            packages: None,
+        };
+
+        let mode = determine_mode(&args);
+        assert_eq!(
+            mode,
+            AnalysisMode::CommitRange { from: "HEAD~1".to_string(), to: "develop".to_string() }
+        );
+    }
+
+    #[test]
+    fn test_determine_mode_branch_comparison() {
+        let args = ChangesArgs {
+            since: None,
+            until: None,
+            branch: Some("main".to_string()),
+            staged: false,
+            unstaged: false,
+            packages: None,
+        };
+
+        let mode = determine_mode(&args);
+        assert_eq!(mode, AnalysisMode::BranchComparison { target: "main".to_string() });
+    }
+
+    #[test]
+    fn test_determine_mode_branch_has_priority_over_since_until() {
+        let args = ChangesArgs {
+            since: Some("v1.0.0".to_string()),
+            until: Some("HEAD".to_string()),
+            branch: Some("main".to_string()),
+            staged: false,
+            unstaged: false,
+            packages: None,
+        };
+
+        let mode = determine_mode(&args);
+        assert_eq!(mode, AnalysisMode::BranchComparison { target: "main".to_string() });
+    }
+
+    #[test]
+    fn test_format_change_types_all_types() {
+        let stats = PackageChangeStats {
+            files_changed: 10,
+            files_added: 3,
+            files_modified: 5,
+            files_deleted: 2,
+            commits: 2,
+            lines_added: 150,
+            lines_deleted: 75,
+        };
+
+        let result = format_change_types(&stats);
+        assert_eq!(result, "M:5 A:3 D:2");
+    }
+
+    #[test]
+    fn test_format_change_types_only_modified() {
+        let stats = PackageChangeStats {
+            files_changed: 3,
+            files_added: 0,
+            files_modified: 3,
+            files_deleted: 0,
+            commits: 1,
+            lines_added: 50,
+            lines_deleted: 20,
+        };
+
+        let result = format_change_types(&stats);
+        assert_eq!(result, "M:3");
+    }
+
+    #[test]
+    fn test_format_change_types_only_added() {
+        let stats = PackageChangeStats {
+            files_changed: 2,
+            files_added: 2,
+            files_modified: 0,
+            files_deleted: 0,
+            commits: 1,
+            lines_added: 100,
+            lines_deleted: 0,
+        };
+
+        let result = format_change_types(&stats);
+        assert_eq!(result, "A:2");
+    }
+
+    #[test]
+    fn test_format_change_types_no_changes() {
+        let stats = PackageChangeStats {
+            files_changed: 0,
+            files_added: 0,
+            files_modified: 0,
+            files_deleted: 0,
+            commits: 0,
+            lines_added: 0,
+            lines_deleted: 0,
+        };
+
+        let result = format_change_types(&stats);
+        assert_eq!(result, "-");
+    }
+
+    #[test]
+    fn test_analysis_mode_equality() {
+        let mode1 = AnalysisMode::WorkingDirectory { staged: true, unstaged: false };
+        let mode2 = AnalysisMode::WorkingDirectory { staged: true, unstaged: false };
+        let mode3 = AnalysisMode::WorkingDirectory { staged: false, unstaged: true };
+
+        assert_eq!(mode1, mode2);
+        assert_ne!(mode1, mode3);
+    }
+
+    #[test]
+    fn test_analysis_mode_commit_range_equality() {
+        let mode1 =
+            AnalysisMode::CommitRange { from: "v1.0.0".to_string(), to: "HEAD".to_string() };
+        let mode2 =
+            AnalysisMode::CommitRange { from: "v1.0.0".to_string(), to: "HEAD".to_string() };
+        let mode3 =
+            AnalysisMode::CommitRange { from: "v1.0.0".to_string(), to: "v2.0.0".to_string() };
+
+        assert_eq!(mode1, mode2);
+        assert_ne!(mode1, mode3);
+    }
+
+    #[test]
+    fn test_analysis_mode_branch_comparison_equality() {
+        let mode1 = AnalysisMode::BranchComparison { target: "main".to_string() };
+        let mode2 = AnalysisMode::BranchComparison { target: "main".to_string() };
+        let mode3 = AnalysisMode::BranchComparison { target: "develop".to_string() };
+
+        assert_eq!(mode1, mode2);
+        assert_ne!(mode1, mode3);
+    }
+
+    #[test]
+    fn test_filter_report_by_packages_single_package() {
+        use crate::commands::changes::filter_report_by_packages;
+        use chrono::Utc;
+        use std::path::PathBuf;
+        use sublime_pkg_tools::changes::{
+            AnalysisMode, ChangesReport, ChangesSummary, PackageChangeStats, PackageChanges,
+        };
+        use sublime_standard_tools::monorepo::WorkspacePackage;
+
+        let default_pkg = || WorkspacePackage {
+            name: String::new(),
+            version: String::new(),
+            location: PathBuf::new(),
+            absolute_path: PathBuf::new(),
+            workspace_dependencies: Vec::new(),
+            workspace_dev_dependencies: Vec::new(),
+        };
+
+        let report = ChangesReport {
+            analyzed_at: Utc::now(),
+            analysis_mode: AnalysisMode::WorkingDirectory,
+            base_ref: None,
+            head_ref: None,
+            packages: vec![
+                PackageChanges {
+                    package_info: default_pkg(),
+                    package_name: "pkg1".to_string(),
+                    package_version: "1.0.0".to_string(),
+                    package_location: PathBuf::from("packages/pkg1"),
+                    current_version: None,
+                    next_version: None,
+                    bump_type: None,
+                    files: vec![],
+                    commits: vec![],
+                    has_changes: true,
+                    stats: PackageChangeStats {
+                        files_changed: 2,
+                        files_added: 1,
+                        files_modified: 1,
+                        files_deleted: 0,
+                        commits: 1,
+                        lines_added: 50,
+                        lines_deleted: 10,
+                    },
+                },
+                PackageChanges {
+                    package_info: default_pkg(),
+                    package_name: "pkg2".to_string(),
+                    package_version: "2.0.0".to_string(),
+                    package_location: PathBuf::from("packages/pkg2"),
+                    current_version: None,
+                    next_version: None,
+                    bump_type: None,
+                    files: vec![],
+                    commits: vec![],
+                    has_changes: true,
+                    stats: PackageChangeStats {
+                        files_changed: 3,
+                        files_added: 2,
+                        files_modified: 1,
+                        files_deleted: 0,
+                        commits: 2,
+                        lines_added: 100,
+                        lines_deleted: 20,
+                    },
+                },
+            ],
+            summary: ChangesSummary {
+                total_packages: 2,
+                packages_with_changes: 2,
+                packages_without_changes: 0,
+                total_files_changed: 5,
+                total_commits: 3,
+                total_lines_added: 150,
+                total_lines_deleted: 30,
+            },
+            is_monorepo: true,
+        };
+
+        let filter_names = vec!["pkg1".to_string()];
+        let filtered = filter_report_by_packages(report, &filter_names);
+
+        assert_eq!(filtered.packages.len(), 1);
+        assert_eq!(filtered.packages[0].package_name, "pkg1");
+        assert_eq!(filtered.summary.packages_with_changes, 1);
+        assert_eq!(filtered.summary.total_files_changed, 0); // 0 because files vec is empty
+        assert_eq!(filtered.summary.total_commits, 0); // 0 because commits vec is empty
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[test]
+    fn test_filter_report_by_packages_multiple_packages() {
+        use crate::commands::changes::filter_report_by_packages;
+        use chrono::Utc;
+        use std::path::PathBuf;
+        use sublime_pkg_tools::changes::{
+            AnalysisMode, ChangesReport, ChangesSummary, PackageChangeStats, PackageChanges,
+        };
+        use sublime_standard_tools::monorepo::WorkspacePackage;
+
+        let default_pkg = || WorkspacePackage {
+            name: String::new(),
+            version: String::new(),
+            location: PathBuf::new(),
+            absolute_path: PathBuf::new(),
+            workspace_dependencies: Vec::new(),
+            workspace_dev_dependencies: Vec::new(),
+        };
+
+        let report = ChangesReport {
+            analyzed_at: Utc::now(),
+            analysis_mode: AnalysisMode::WorkingDirectory,
+            base_ref: None,
+            head_ref: None,
+            packages: vec![
+                PackageChanges {
+                    package_info: default_pkg(),
+                    package_name: "pkg1".to_string(),
+                    package_version: "1.0.0".to_string(),
+                    package_location: PathBuf::from("packages/pkg1"),
+                    current_version: None,
+                    next_version: None,
+                    bump_type: None,
+                    files: vec![],
+                    commits: vec![],
+                    has_changes: true,
+                    stats: PackageChangeStats {
+                        files_changed: 2,
+                        files_added: 1,
+                        files_modified: 1,
+                        files_deleted: 0,
+                        commits: 1,
+                        lines_added: 50,
+                        lines_deleted: 10,
+                    },
+                },
+                PackageChanges {
+                    package_info: default_pkg(),
+                    package_name: "pkg2".to_string(),
+                    package_version: "2.0.0".to_string(),
+                    package_location: PathBuf::from("packages/pkg2"),
+                    current_version: None,
+                    next_version: None,
+                    bump_type: None,
+                    files: vec![],
+                    commits: vec![],
+                    has_changes: true,
+                    stats: PackageChangeStats {
+                        files_changed: 3,
+                        files_added: 2,
+                        files_modified: 1,
+                        files_deleted: 0,
+                        commits: 2,
+                        lines_added: 100,
+                        lines_deleted: 20,
+                    },
+                },
+                PackageChanges {
+                    package_info: default_pkg(),
+                    package_name: "pkg3".to_string(),
+                    package_version: "3.0.0".to_string(),
+                    package_location: PathBuf::from("packages/pkg3"),
+                    current_version: None,
+                    next_version: None,
+                    bump_type: None,
+                    files: vec![],
+                    commits: vec![],
+                    has_changes: true,
+                    stats: PackageChangeStats {
+                        files_changed: 1,
+                        files_added: 0,
+                        files_modified: 1,
+                        files_deleted: 0,
+                        commits: 1,
+                        lines_added: 25,
+                        lines_deleted: 5,
+                    },
+                },
+            ],
+            summary: ChangesSummary {
+                total_packages: 3,
+                packages_with_changes: 3,
+                packages_without_changes: 0,
+                total_files_changed: 6,
+                total_commits: 4,
+                total_lines_added: 175,
+                total_lines_deleted: 35,
+            },
+            is_monorepo: true,
+        };
+
+        let filter_names = vec!["pkg1".to_string(), "pkg3".to_string()];
+        let filtered = filter_report_by_packages(report, &filter_names);
+
+        assert_eq!(filtered.packages.len(), 2);
+        assert_eq!(filtered.packages[0].package_name, "pkg1");
+        assert_eq!(filtered.packages[1].package_name, "pkg3");
+        assert_eq!(filtered.summary.packages_with_changes, 2);
+        assert_eq!(filtered.summary.total_files_changed, 0); // 0 because files vec is empty
+        assert_eq!(filtered.summary.total_commits, 0); // 0 because commits vec is empty
+    }
+
+    #[test]
+    fn test_filter_report_by_packages_no_matches() {
+        use crate::commands::changes::filter_report_by_packages;
+        use chrono::Utc;
+        use std::path::PathBuf;
+        use sublime_pkg_tools::changes::{
+            AnalysisMode, ChangesReport, ChangesSummary, PackageChangeStats, PackageChanges,
+        };
+        use sublime_standard_tools::monorepo::WorkspacePackage;
+
+        let default_pkg = || WorkspacePackage {
+            name: String::new(),
+            version: String::new(),
+            location: PathBuf::new(),
+            absolute_path: PathBuf::new(),
+            workspace_dependencies: Vec::new(),
+            workspace_dev_dependencies: Vec::new(),
+        };
+
+        let report = ChangesReport {
+            analyzed_at: Utc::now(),
+            analysis_mode: AnalysisMode::WorkingDirectory,
+            base_ref: None,
+            head_ref: None,
+            packages: vec![PackageChanges {
+                package_info: default_pkg(),
+                package_name: "pkg1".to_string(),
+                package_version: "1.0.0".to_string(),
+                package_location: PathBuf::from("packages/pkg1"),
+                current_version: None,
+                next_version: None,
+                bump_type: None,
+                files: vec![],
+                commits: vec![],
+                has_changes: true,
+                stats: PackageChangeStats {
+                    files_changed: 2,
+                    files_added: 1,
+                    files_modified: 1,
+                    files_deleted: 0,
+                    commits: 1,
+                    lines_added: 50,
+                    lines_deleted: 10,
+                },
+            }],
+            summary: ChangesSummary {
+                total_packages: 1,
+                packages_with_changes: 1,
+                packages_without_changes: 0,
+                total_files_changed: 2,
+                total_commits: 1,
+                total_lines_added: 50,
+                total_lines_deleted: 10,
+            },
+            is_monorepo: true,
+        };
+
+        let filter_names = vec!["nonexistent".to_string()];
+        let filtered = filter_report_by_packages(report, &filter_names);
+
+        assert_eq!(filtered.packages.len(), 0);
+        assert_eq!(filtered.summary.packages_with_changes, 0);
+        assert_eq!(filtered.summary.total_files_changed, 0);
+        assert_eq!(filtered.summary.total_commits, 0);
+    }
+
+    #[test]
+    fn test_filter_report_by_packages_empty_filter() {
+        use crate::commands::changes::filter_report_by_packages;
+        use chrono::Utc;
+        use std::path::PathBuf;
+        use sublime_pkg_tools::changes::{
+            AnalysisMode, ChangesReport, ChangesSummary, PackageChangeStats, PackageChanges,
+        };
+        use sublime_standard_tools::monorepo::WorkspacePackage;
+
+        let default_pkg = || WorkspacePackage {
+            name: String::new(),
+            version: String::new(),
+            location: PathBuf::new(),
+            absolute_path: PathBuf::new(),
+            workspace_dependencies: Vec::new(),
+            workspace_dev_dependencies: Vec::new(),
+        };
+
+        let report = ChangesReport {
+            analyzed_at: Utc::now(),
+            analysis_mode: AnalysisMode::WorkingDirectory,
+            base_ref: None,
+            head_ref: None,
+            packages: vec![PackageChanges {
+                package_info: default_pkg(),
+                package_name: "pkg1".to_string(),
+                package_version: "1.0.0".to_string(),
+                package_location: PathBuf::from("packages/pkg1"),
+                current_version: None,
+                next_version: None,
+                bump_type: None,
+                files: vec![],
+                commits: vec![],
+                has_changes: true,
+                stats: PackageChangeStats {
+                    files_changed: 2,
+                    files_added: 1,
+                    files_modified: 1,
+                    files_deleted: 0,
+                    commits: 1,
+                    lines_added: 50,
+                    lines_deleted: 10,
+                },
+            }],
+            summary: ChangesSummary {
+                total_packages: 1,
+                packages_with_changes: 1,
+                packages_without_changes: 0,
+                total_files_changed: 2,
+                total_commits: 1,
+                total_lines_added: 50,
+                total_lines_deleted: 10,
+            },
+            is_monorepo: true,
+        };
+
+        let filter_names: Vec<String> = vec![];
+        let filtered = filter_report_by_packages(report, &filter_names);
+
+        assert_eq!(filtered.packages.len(), 0);
+        assert_eq!(filtered.summary.packages_with_changes, 0);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+#[allow(clippy::unwrap_used)]
 #[allow(clippy::panic)]
 mod config_tests {
     use crate::cli::commands::{ConfigShowArgs, ConfigValidateArgs};

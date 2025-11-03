@@ -40,6 +40,7 @@
 
 // Module exports
 pub mod bump;
+pub mod changes;
 pub mod changeset;
 pub mod config;
 pub mod init;

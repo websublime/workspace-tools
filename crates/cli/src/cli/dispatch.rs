@@ -249,9 +249,15 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
             todo!("Audit command will be implemented in story 7.1")
         }
 
-        Commands::Changes(_args) => {
-            // TODO: will be implemented on story 5.4
-            todo!("Changes command will be implemented in story 5.4")
+        Commands::Changes(args) => {
+            let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
+            crate::commands::changes::execute_changes(
+                args,
+                &output,
+                root,
+                config_path.as_ref().map(|p| p.as_path()),
+            )
+            .await?;
         }
 
         Commands::Version(args) => {
