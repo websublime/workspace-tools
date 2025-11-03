@@ -186,8 +186,17 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
         Commands::Bump(args) => {
             let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
 
-            // Route to execute or preview mode based on flags
-            if args.execute {
+            // Route to snapshot, execute, or preview mode based on flags
+            if args.snapshot {
+                // Snapshot mode - generate snapshot versions without consuming changesets
+                bump::execute_bump_snapshot(
+                    args,
+                    &output,
+                    root,
+                    config_path.as_ref().map(|p| p.as_path()),
+                )
+                .await?;
+            } else if args.execute {
                 // Execute mode - apply version bumps
                 bump::execute_bump_apply(
                     args,
