@@ -39,7 +39,7 @@
 
 use super::branding;
 use crate::cli::{Cli, Commands};
-use crate::commands::{bump, changeset, config, init, upgrade, version};
+use crate::commands::{audit, bump, changeset, config, init, upgrade, version};
 use crate::error::Result;
 use crate::output::{Output, OutputFormat};
 use std::path::{Path, PathBuf};
@@ -85,7 +85,6 @@ use std::path::{Path, PathBuf};
 // command routing logic harder to follow. The length is justified by the need to dispatch to
 // many different command implementations.
 #[allow(clippy::too_many_lines)]
-#[allow(clippy::todo)]
 pub async fn dispatch_command(cli: &Cli) -> Result<()> {
     use crate::cli::commands::{ConfigCommands, UpgradeBackupCommands, UpgradeCommands};
 
@@ -240,9 +239,10 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
             }
         }
 
-        Commands::Audit(_args) => {
-            // TODO: will be implemented on story 7.1
-            todo!("Audit command will be implemented in story 7.1")
+        Commands::Audit(args) => {
+            let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
+            audit::execute_audit(args, &output, root, config_path.as_ref().map(|p| p.as_path()))
+                .await?;
         }
 
         Commands::Changes(args) => {

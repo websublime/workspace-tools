@@ -39,6 +39,7 @@
 //! - `changes.rs` - Change analysis commands
 
 // Module exports
+pub mod audit;
 pub mod bump;
 pub mod changes;
 pub mod changeset;
@@ -55,4 +56,4 @@ mod tests;
 // Story 5.2 will implement version bump execution
 // Story 6.2 will implement upgrade apply command
 // Story 6.3 will implement upgrade backups commands
-// Story 7.x will implement audit commands
+// Story 7.2+ will implement specific audit sections (upgrades, dependencies, version-consistency, breaking-changes)
