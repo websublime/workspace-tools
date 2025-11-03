@@ -39,7 +39,7 @@
 
 use super::branding;
 use crate::cli::{Cli, Commands};
-use crate::commands::{bump, changeset, config, init, version};
+use crate::commands::{bump, changeset, config, init, upgrade, version};
 use crate::error::Result;
 use crate::output::{Output, OutputFormat};
 use std::path::{Path, PathBuf};
@@ -218,10 +218,10 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
         }
 
         Commands::Upgrade(upgrade_cmd) => {
+            let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
             match upgrade_cmd {
-                UpgradeCommands::Check(_args) => {
-                    // TODO: will be implemented on story 6.1
-                    todo!("Upgrade check command will be implemented in story 6.1")
+                UpgradeCommands::Check(args) => {
+                    upgrade::execute_upgrade_check(args, &output, root).await?;
                 }
                 UpgradeCommands::Apply(_args) => {
                     // TODO: will be implemented on story 6.2

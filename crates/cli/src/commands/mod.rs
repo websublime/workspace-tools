@@ -44,6 +44,7 @@ pub mod changes;
 pub mod changeset;
 pub mod config;
 pub mod init;
+pub mod upgrade;
 pub mod version;
 
 #[cfg(test)]
@@ -52,5 +53,6 @@ mod tests;
 // TODO: will be implemented in subsequent stories
 // Story 4.2+ will implement remaining changeset commands (update, list, show, delete, history, check)
 // Story 5.2 will implement version bump execution
-// Story 6.x will implement upgrade commands
+// Story 6.2 will implement upgrade apply command
+// Story 6.3 will implement upgrade backups commands
 // Story 7.x will implement audit commands
