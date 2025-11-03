@@ -411,3 +411,212 @@ fn test_upgrade_apply_response_no_backup() {
 // TODO: Mock-based integration tests will be added when we implement
 // a test harness for UpgradeManager to test the full command execution
 // flow including detection, application, backup, and changeset creation.
+
+// ============================================================================
+// Rollback/Backup Type Tests (Story 6.3)
+// ============================================================================
+
+use crate::commands::upgrade::rollback::*;
+use chrono::Utc;
+use std::path::PathBuf;
+
+#[test]
+fn test_backup_info_creation() {
+    let backup = BackupInfo {
+        id: "backup_20240115_103045".to_string(),
+        created_at: Utc::now(),
+        files: vec![
+            PathBuf::from("packages/core/package.json"),
+            PathBuf::from("packages/utils/package.json"),
+        ],
+        file_count: 2,
+    };
+
+    assert_eq!(backup.id, "backup_20240115_103045");
+    assert_eq!(backup.file_count, 2);
+    assert_eq!(backup.files.len(), 2);
+}
+
+#[test]
+fn test_backup_info_serialization() {
+    let backup = BackupInfo {
+        id: "backup_20240115_103045".to_string(),
+        created_at: Utc::now(),
+        files: vec![PathBuf::from("packages/core/package.json")],
+        file_count: 1,
+    };
+
+    let json = serde_json::to_string_pretty(&backup).expect("Should serialize to JSON");
+
+    assert!(json.contains("\"id\": \"backup_20240115_103045\""));
+    assert!(json.contains("\"createdAt\""));
+    assert!(json.contains("package.json"));
+    assert!(json.contains("\"fileCount\": 1"));
+
+    // Test deserialization
+    let deserialized: BackupInfo =
+        serde_json::from_str(&json).expect("Should deserialize from JSON");
+
+    assert_eq!(deserialized.id, backup.id);
+    assert_eq!(deserialized.files, backup.files);
+    assert_eq!(deserialized.file_count, backup.file_count);
+}
+
+#[test]
+fn test_backup_list_response_empty() {
+    let response = BackupListResponse { success: true, backups: vec![], total: 0 };
+
+    let json = serde_json::to_string_pretty(&response).expect("Should serialize to JSON");
+
+    assert!(json.contains("\"success\": true"));
+    assert!(json.contains("\"backups\": []"));
+    assert!(json.contains("\"total\": 0"));
+
+    // Test deserialization
+    let deserialized: BackupListResponse =
+        serde_json::from_str(&json).expect("Should deserialize from JSON");
+
+    assert!(deserialized.success);
+    assert_eq!(deserialized.backups.len(), 0);
+    assert_eq!(deserialized.total, 0);
+}
+
+#[test]
+fn test_backup_list_response_with_backups() {
+    let response = BackupListResponse {
+        success: true,
+        backups: vec![
+            BackupInfo {
+                id: "backup_20240115_103045".to_string(),
+                created_at: Utc::now(),
+                files: vec![
+                    PathBuf::from("packages/core/package.json"),
+                    PathBuf::from("packages/utils/package.json"),
+                ],
+                file_count: 2,
+            },
+            BackupInfo {
+                id: "backup_20240114_093022".to_string(),
+                created_at: Utc::now(),
+                files: vec![PathBuf::from("packages/web/package.json")],
+                file_count: 1,
+            },
+        ],
+        total: 2,
+    };
+
+    let json = serde_json::to_string_pretty(&response).expect("Should serialize to JSON");
+
+    assert!(json.contains("\"success\": true"));
+    assert!(json.contains("\"total\": 2"));
+    assert!(json.contains("backup_20240115_103045"));
+    assert!(json.contains("backup_20240114_093022"));
+    assert!(json.contains("package.json"));
+
+    // Test deserialization
+    let deserialized: BackupListResponse =
+        serde_json::from_str(&json).expect("Should deserialize from JSON");
+
+    assert!(deserialized.success);
+    assert_eq!(deserialized.backups.len(), 2);
+    assert_eq!(deserialized.total, 2);
+}
+
+#[test]
+fn test_backup_restore_response() {
+    let response = BackupRestoreResponse {
+        success: true,
+        backup_id: "backup_20240115_103045".to_string(),
+        files_restored: 2,
+    };
+
+    let json = serde_json::to_string_pretty(&response).expect("Should serialize to JSON");
+
+    assert!(json.contains("\"success\": true"));
+    assert!(json.contains("\"backupId\": \"backup_20240115_103045\""));
+    assert!(json.contains("\"filesRestored\": 2"));
+
+    // Test deserialization
+    let deserialized: BackupRestoreResponse =
+        serde_json::from_str(&json).expect("Should deserialize from JSON");
+
+    assert!(deserialized.success);
+    assert_eq!(deserialized.backup_id, "backup_20240115_103045");
+    assert_eq!(deserialized.files_restored, 2);
+}
+
+#[test]
+fn test_backup_clean_response() {
+    let response = BackupCleanResponse {
+        success: true,
+        message: "Cleaned 5 old backup(s), kept 10".to_string(),
+    };
+
+    let json = serde_json::to_string_pretty(&response).expect("Should serialize to JSON");
+
+    assert!(json.contains("\"success\": true"));
+    assert!(json.contains("\"message\""));
+    assert!(json.contains("Cleaned 5"));
+
+    // Test deserialization
+    let deserialized: BackupCleanResponse =
+        serde_json::from_str(&json).expect("Should deserialize from JSON");
+
+    assert!(deserialized.success);
+    assert!(deserialized.message.contains("Cleaned 5"));
+}
+
+#[test]
+fn test_backup_list_response_consistency() {
+    // Test that total matches backups length
+    let backups = vec![
+        BackupInfo {
+            id: "backup_1".to_string(),
+            created_at: Utc::now(),
+            files: vec![PathBuf::from("packages/pkg1/package.json")],
+            file_count: 1,
+        },
+        BackupInfo {
+            id: "backup_2".to_string(),
+            created_at: Utc::now(),
+            files: vec![PathBuf::from("packages/pkg2/package.json")],
+            file_count: 1,
+        },
+    ];
+
+    let response = BackupListResponse { success: true, backups: backups.clone(), total: 2 };
+
+    assert_eq!(response.total, response.backups.len());
+    assert_eq!(response.backups.len(), 2);
+}
+
+#[test]
+fn test_backup_restore_response_empty_files() {
+    let response = BackupRestoreResponse {
+        success: true,
+        backup_id: "backup_20240115_103045".to_string(),
+        files_restored: 0,
+    };
+
+    let json = serde_json::to_string_pretty(&response).expect("Should serialize to JSON");
+
+    assert!(json.contains("\"filesRestored\": 0"));
+
+    let deserialized: BackupRestoreResponse =
+        serde_json::from_str(&json).expect("Should deserialize from JSON");
+
+    assert_eq!(deserialized.files_restored, 0);
+}
+
+#[test]
+fn test_backup_clean_response_no_cleanup_needed() {
+    let response =
+        BackupCleanResponse { success: true, message: "No backups to clean".to_string() };
+
+    assert!(response.success);
+    assert!(response.message.contains("No backups"));
+}
+
+// TODO: Integration tests for execute_backup_list, execute_backup_restore,
+// and execute_backup_clean will be added when we have a proper test harness
+// with mock FileSystemManager and BackupManager.
