@@ -357,3 +357,182 @@ impl DependencyUpgradeInfo {
         self.upgrade_type == "patch"
     }
 }
+
+/// JSON response structure for upgrade apply command.
+///
+/// Wraps the upgrade apply results in a standard JSON format with success flag,
+/// applied/skipped upgrades, and summary statistics.
+///
+/// # Examples
+///
+/// ```rust
+/// use sublime_cli_tools::commands::upgrade::types::UpgradeApplyResponse;
+///
+/// let response = UpgradeApplyResponse {
+///     success: true,
+///     applied: vec![],
+///     skipped: vec![],
+///     summary: Default::default(),
+/// };
+///
+/// assert!(response.success);
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpgradeApplyResponse {
+    /// Whether the command succeeded
+    pub success: bool,
+
+    /// Upgrades that were applied
+    pub applied: Vec<AppliedUpgradeInfo>,
+
+    /// Upgrades that were skipped
+    pub skipped: Vec<SkippedUpgradeInfo>,
+
+    /// Summary statistics
+    pub summary: ApplySummary,
+}
+
+/// Information about a successfully applied upgrade.
+///
+/// Contains details about an upgrade that was applied to a package's dependencies.
+///
+/// # Examples
+///
+/// ```rust
+/// use sublime_cli_tools::commands::upgrade::types::AppliedUpgradeInfo;
+///
+/// let applied = AppliedUpgradeInfo {
+///     package: "typescript".to_string(),
+///     from: "5.0.0".to_string(),
+///     to: "5.3.3".to_string(),
+///     upgrade_type: "minor".to_string(),
+/// };
+///
+/// assert_eq!(applied.package, "typescript");
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppliedUpgradeInfo {
+    /// Dependency package name that was upgraded
+    pub package: String,
+
+    /// Version before upgrade
+    pub from: String,
+
+    /// Version after upgrade
+    pub to: String,
+
+    /// Upgrade type (major, minor, patch)
+    #[serde(rename = "type")]
+    pub upgrade_type: String,
+}
+
+/// Information about a skipped upgrade.
+///
+/// Contains details about an upgrade that was not applied and the reason why.
+///
+/// # Examples
+///
+/// ```rust
+/// use sublime_cli_tools::commands::upgrade::types::SkippedUpgradeInfo;
+///
+/// let skipped = SkippedUpgradeInfo {
+///     package: "eslint".to_string(),
+///     reason: "major_version".to_string(),
+///     current_version: "8.0.0".to_string(),
+///     latest_version: "9.0.0".to_string(),
+/// };
+///
+/// assert_eq!(skipped.reason, "major_version");
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkippedUpgradeInfo {
+    /// Dependency package name
+    pub package: String,
+
+    /// Reason for skipping (e.g., "major_version", "user_filter", "conflict")
+    pub reason: String,
+
+    /// Current version
+    #[serde(rename = "currentVersion")]
+    pub current_version: String,
+
+    /// Latest available version
+    #[serde(rename = "latestVersion")]
+    pub latest_version: String,
+}
+
+/// Summary statistics for an upgrade apply operation.
+///
+/// Provides counts and metadata about the apply operation including backup information.
+///
+/// # Examples
+///
+/// ```rust
+/// use sublime_cli_tools::commands::upgrade::types::ApplySummary;
+///
+/// let summary = ApplySummary {
+///     total_applied: 10,
+///     total_skipped: 2,
+///     backup_id: Some("backup_20240115_103045".to_string()),
+/// };
+///
+/// assert_eq!(summary.total_applied, 10);
+/// assert!(summary.backup_id.is_some());
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApplySummary {
+    /// Number of upgrades that were applied
+    #[serde(rename = "totalApplied")]
+    pub total_applied: usize,
+
+    /// Number of upgrades that were skipped
+    #[serde(rename = "totalSkipped")]
+    pub total_skipped: usize,
+
+    /// Backup ID if backup was created
+    #[serde(rename = "backupId", skip_serializing_if = "Option::is_none")]
+    pub backup_id: Option<String>,
+}
+
+impl ApplySummary {
+    /// Creates a new empty apply summary.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_cli_tools::commands::upgrade::types::ApplySummary;
+    ///
+    /// let summary = ApplySummary::new();
+    /// assert_eq!(summary.total_applied, 0);
+    /// assert_eq!(summary.total_skipped, 0);
+    /// assert!(summary.backup_id.is_none());
+    /// ```
+    pub fn new() -> Self {
+        Self { total_applied: 0, total_skipped: 0, backup_id: None }
+    }
+
+    /// Returns the total number of upgrades processed (applied + skipped).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_cli_tools::commands::upgrade::types::ApplySummary;
+    ///
+    /// let summary = ApplySummary {
+    ///     total_applied: 10,
+    ///     total_skipped: 2,
+    ///     backup_id: None,
+    /// };
+    ///
+    /// assert_eq!(summary.total_processed(), 12);
+    /// ```
+    pub fn total_processed(&self) -> usize {
+        self.total_applied + self.total_skipped
+    }
+}
+
+impl Default for ApplySummary {
+    fn default() -> Self {
+        Self::new()
+    }
+}

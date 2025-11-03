@@ -30,6 +30,7 @@
 //! This module provides a safe, controlled workflow for managing upgrades
 //! with visibility into what will change before applying updates.
 
+pub mod apply;
 pub mod check;
 pub mod types;
 
@@ -37,4 +38,5 @@ pub mod types;
 mod tests;
 
 // Re-export command implementations
+pub use apply::execute_upgrade_apply;
 pub use check::execute_upgrade_check;
