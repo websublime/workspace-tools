@@ -254,7 +254,7 @@ pub(crate) fn parse_verbosity(s: &str) -> Result<Verbosity> {
 ///
 /// let options = build_format_options(Verbosity::Normal, true);
 /// ```
-#[allow(dead_code)] // TODO: will be used when AuditManager::run_audit() is available in story 7.1
+#[allow(dead_code)] // TODO: will be used in story 7.6 for JSON report formatting
 pub(crate) fn build_format_options(
     verbosity: Verbosity,
     _include_health_score: bool,

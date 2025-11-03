@@ -108,6 +108,11 @@ pub async fn format_audit_report(
         display_section_results(results, &filtered_issues, verbosity, output)?;
     }
 
+    // Display actionable recommendations
+    if matches!(verbosity, Verbosity::Normal | Verbosity::Detailed) {
+        display_recommendations(results, health_score, output)?;
+    }
+
     // Write to file if requested
     if let Some(file_path) = output_file {
         write_report_to_file(results, health_score, file_path)?;
@@ -253,6 +258,93 @@ fn display_summary(
     }
 
     output.info("")?; // Empty line for spacing
+    Ok(())
+}
+
+/// Displays actionable recommendations based on audit results.
+///
+/// # Arguments
+///
+/// * `results` - The audit results
+/// * `health_score` - The overall health score
+/// * `output` - The output context
+///
+/// # Errors
+///
+/// Returns an error if output operations fail.
+pub(crate) fn display_recommendations(
+    results: &AuditResults,
+    health_score: Option<u8>,
+    output: &Output,
+) -> Result<()> {
+    let mut recommendations = Vec::new();
+
+    // Health score based recommendations
+    if let Some(score) = health_score {
+        if score < 60 {
+            recommendations
+                .push("🚨 Project health is critical - address high-severity issues immediately");
+        } else if score < 80 {
+            recommendations.push("⚠️  Project health needs attention - review and fix warnings");
+        }
+    }
+
+    // Upgrade recommendations
+    if let Some(ref upgrades) = results.upgrades {
+        if !upgrades.deprecated_packages.is_empty() {
+            recommendations
+                .push("📦 Replace deprecated packages to avoid future compatibility issues");
+            recommendations.push("   Run: wnt upgrade check --show-deprecated");
+        }
+        if upgrades.major_upgrades > 0 {
+            recommendations.push("🔄 Review major version upgrades for breaking changes");
+            recommendations.push("   Run: wnt upgrade check --filter major");
+        }
+    }
+
+    // Dependency recommendations - circular dependencies
+    if let Some(ref dependencies) = results.dependencies
+        && !dependencies.circular_dependencies.is_empty()
+    {
+        recommendations.push("🔁 Resolve circular dependencies to improve maintainability");
+        recommendations.push("   Consider extracting shared code into a separate package");
+    }
+
+    // Dependency recommendations - version conflicts
+    if let Some(ref dependencies) = results.dependencies
+        && !dependencies.version_conflicts.is_empty()
+    {
+        recommendations.push("⚡ Fix version conflicts to ensure consistent dependency resolution");
+    }
+
+    // Version consistency recommendations
+    if let Some(ref version_consistency) = results.version_consistency
+        && !version_consistency.inconsistencies.is_empty()
+    {
+        recommendations.push("📊 Align internal dependency versions across packages");
+        recommendations.push("   Run: wnt upgrade apply --internal-only");
+    }
+
+    // Display recommendations if any
+    if !recommendations.is_empty() {
+        output.info("")?;
+        output.info("━━━ Recommendations ━━━")?;
+        output.info("")?;
+
+        for (index, recommendation) in recommendations.iter().enumerate() {
+            if recommendation.starts_with("   ") {
+                // Indented command - show as code
+                output.info(recommendation)?;
+            } else {
+                // Main recommendation - show with number
+                output.info(&format!("{}. {}", index / 2 + 1, recommendation))?;
+            }
+        }
+
+        output.info("")?;
+        output.info("💡 Tip: Use --verbosity detailed for more specific guidance")?;
+    }
+
     Ok(())
 }
 

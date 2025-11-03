@@ -328,7 +328,8 @@ mod types_tests {
 mod report_tests {
     use crate::commands::audit::comprehensive::AuditResults;
     use crate::commands::audit::report::{
-        display_health_score, filter_issues_by_severity, write_report_to_file,
+        display_health_score, display_recommendations, filter_issues_by_severity,
+        write_report_to_file,
     };
     use crate::commands::audit::types::MinSeverity;
     use crate::output::{Output, OutputFormat};
@@ -380,5 +381,33 @@ mod report_tests {
         let path = Path::new("/tmp/test-report.json");
         let result = write_report_to_file(&results, Some(100), path);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_display_recommendations_no_issues() {
+        let results = AuditResults {
+            upgrades: None,
+            dependencies: None,
+            version_consistency: None,
+            breaking_changes: None,
+        };
+
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let result = display_recommendations(&results, Some(100), &output);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_display_recommendations_low_health_score() {
+        let results = AuditResults {
+            upgrades: None,
+            dependencies: None,
+            version_consistency: None,
+            breaking_changes: None,
+        };
+
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let result = display_recommendations(&results, Some(50), &output);
+        assert!(result.is_ok());
     }
 }
