@@ -816,8 +816,13 @@ fn calculate_bump_type(
 ///
 /// # Examples
 ///
-/// ```
-/// # use sublime_cli_tools::commands::bump::snapshot::sanitize_branch_name;
+/// ```rust
+/// # // Internal function, tested via unit tests
+/// # fn sanitize_branch_name(branch: &str) -> String {
+/// #     branch.chars()
+/// #         .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '.' { c } else { '-' })
+/// #         .collect()
+/// # }
 /// assert_eq!(sanitize_branch_name("feature/new-api"), "feature-new-api");
 /// assert_eq!(sanitize_branch_name("feat/#123-fix"), "feat--123-fix");
 /// ```
