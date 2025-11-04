@@ -2086,7 +2086,7 @@ wnt audit [OPTIONS]
 | `--sections <LIST>` | Sections to audit (all\|upgrades\|dependencies\|version-consistency\|breaking-changes) | all |
 | `--format <FORMAT>` | Output format (text\|markdown\|json\|json-compact) | text |
 | `--output <PATH>` | Write to file | stdout |
-| `--min-severity <LEVEL>` | Minimum severity (critical\|high\|medium\|low\|info) | info |
+| `--min-severity <LEVEL>` | Minimum severity (critical\|warning\|info) | info |
 | `--verbosity <LEVEL>` | Detail level (minimal\|normal\|detailed) | normal |
 | `--no-health-score` | Skip health score calculation | false |
 
@@ -2107,8 +2107,8 @@ wnt audit --format json
 # JSON compact for CI/CD
 wnt audit --format json-compact
 
-# Only critical and high severity issues
-wnt audit --min-severity high
+# Only critical and warning severity issues
+wnt audit --min-severity warning
 
 # Detailed output
 wnt audit --verbosity detailed
