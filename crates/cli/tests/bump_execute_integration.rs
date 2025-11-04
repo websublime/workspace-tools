@@ -411,6 +411,7 @@ async fn test_single_package_bumps_only_package() {
         no_changelog: true,
         no_archive: true,
         force: true, // Skip confirmation
+        show_diff: false,
     };
 
     // Create output
@@ -450,6 +451,7 @@ async fn test_independent_bumps_only_changeset_packages() {
         no_changelog: true,
         no_archive: true,
         force: true,
+        show_diff: false,
     };
 
     // Create output
@@ -500,6 +502,7 @@ async fn test_unified_bumps_all_packages() {
         no_changelog: true,
         no_archive: true,
         force: true,
+        show_diff: false,
     };
 
     // Create output
@@ -540,6 +543,7 @@ async fn test_unified_applies_highest_bump_type() {
         no_changelog: true,
         no_archive: true,
         force: true,
+        show_diff: false,
     };
 
     // Create output
@@ -582,6 +586,7 @@ async fn test_changesets_archived_on_success() {
         no_changelog: true,
         no_archive: false, // Enable archival
         force: true,
+        show_diff: false,
     };
 
     // Create output
@@ -655,6 +660,7 @@ async fn test_no_changesets_exits_gracefully() {
         no_changelog: true,
         no_archive: true,
         force: true,
+        show_diff: false,
     };
 
     let buffer = Cursor::new(Vec::new());
@@ -702,6 +708,7 @@ async fn test_uninitialized_workspace_fails() {
         no_changelog: true,
         no_archive: true,
         force: true,
+        show_diff: false,
     };
 
     let buffer = Cursor::new(Vec::new());
@@ -738,6 +745,7 @@ async fn test_json_output_complete() {
         no_changelog: true,
         no_archive: true,
         force: true,
+        show_diff: false,
     };
 
     // Create output in JSON format
@@ -825,6 +833,7 @@ async fn test_performance_50_packages() {
         no_changelog: true,
         no_archive: true,
         force: true,
+        show_diff: false,
     };
     let buffer = Cursor::new(Vec::new());
     let output = Output::new(OutputFormat::Json, buffer, false);
@@ -859,6 +868,7 @@ async fn test_performance_100_packages() {
         no_changelog: true,
         no_archive: true,
         force: true,
+        show_diff: false,
     };
     let buffer = Cursor::new(Vec::new());
     let output = Output::new(OutputFormat::Json, buffer, false);

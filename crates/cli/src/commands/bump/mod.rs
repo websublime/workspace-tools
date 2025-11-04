@@ -62,6 +62,7 @@
 //!     no_changelog: false,
 //!     no_archive: false,
 //!     force: false,
+//!     show_diff: false,
 //! };
 //!
 //! let output = Output::new(OutputFormat::Human, io::stdout(), false);

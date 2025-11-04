@@ -1099,6 +1099,601 @@ fn test_multi_progress_is_active_human_mode() {
     let _ = multi.is_active();
 }
 
+// ============================================================================
+// Diff Module Tests
+// ============================================================================
+
+#[test]
+fn test_diff_type_color() {
+    use crate::output::diff::DiffType;
+    use console::Color;
+
+    assert_eq!(DiffType::Added.color(), Color::Green);
+    assert_eq!(DiffType::Modified.color(), Color::Yellow);
+    assert_eq!(DiffType::Deleted.color(), Color::Red);
+    assert_eq!(DiffType::Unchanged.color(), Color::White);
+}
+
+#[test]
+fn test_diff_type_symbol() {
+    use crate::output::diff::DiffType;
+
+    assert_eq!(DiffType::Added.symbol(), "+");
+    assert_eq!(DiffType::Modified.symbol(), "~");
+    assert_eq!(DiffType::Deleted.symbol(), "-");
+    assert_eq!(DiffType::Unchanged.symbol(), " ");
+}
+
+#[test]
+fn test_diff_type_label() {
+    use crate::output::diff::DiffType;
+
+    assert_eq!(DiffType::Added.label(), "added");
+    assert_eq!(DiffType::Modified.label(), "modified");
+    assert_eq!(DiffType::Deleted.label(), "deleted");
+    assert_eq!(DiffType::Unchanged.label(), "unchanged");
+}
+
+#[test]
+fn test_diff_type_display() {
+    use crate::output::diff::DiffType;
+
+    assert_eq!(DiffType::Added.to_string(), "added");
+    assert_eq!(DiffType::Modified.to_string(), "modified");
+    assert_eq!(DiffType::Deleted.to_string(), "deleted");
+    assert_eq!(DiffType::Unchanged.to_string(), "unchanged");
+}
+
+#[test]
+fn test_diff_line_new() {
+    use crate::output::diff::{DiffLine, DiffType};
+
+    let line = DiffLine::new(DiffType::Added, "test content");
+    assert_eq!(line.diff_type, DiffType::Added);
+    assert_eq!(line.content, "test content");
+    assert_eq!(line.line_number, None);
+}
+
+#[test]
+fn test_diff_line_with_line_number() {
+    use crate::output::diff::{DiffLine, DiffType};
+
+    let line = DiffLine::with_line_number(DiffType::Modified, "test", 42);
+    assert_eq!(line.diff_type, DiffType::Modified);
+    assert_eq!(line.content, "test");
+    assert_eq!(line.line_number, Some(42));
+}
+
+#[test]
+fn test_diff_line_render_no_color() {
+    use crate::output::diff::{DiffLine, DiffType};
+
+    let line = DiffLine::new(DiffType::Added, "new line");
+    let rendered = line.render(true);
+    assert!(rendered.contains('+'));
+    assert!(rendered.contains("new line"));
+}
+
+#[test]
+fn test_diff_line_render_with_line_number_no_color() {
+    use crate::output::diff::{DiffLine, DiffType};
+
+    let line = DiffLine::with_line_number(DiffType::Deleted, "old line", 10);
+    let rendered = line.render(true);
+    assert!(rendered.contains("10"));
+    assert!(rendered.contains('-'));
+    assert!(rendered.contains("old line"));
+}
+
+#[test]
+fn test_diff_line_render_with_color() {
+    use crate::output::diff::{DiffLine, DiffType};
+
+    let line = DiffLine::new(DiffType::Modified, "changed");
+    let rendered = line.render(false);
+    assert!(rendered.contains("changed"));
+    // Color codes will be present, but we can't easily test for specific ANSI codes
+}
+
+#[test]
+fn test_version_diff_new() {
+    use crate::output::diff::VersionDiff;
+
+    let diff = VersionDiff::new("my-package", "1.0.0", "2.0.0");
+    assert_eq!(diff.package, "my-package");
+    assert_eq!(diff.from_version, "1.0.0");
+    assert_eq!(diff.to_version, "2.0.0");
+    assert_eq!(diff.reason, None);
+    assert!(diff.will_change);
+}
+
+#[test]
+fn test_version_diff_with_reason() {
+    use crate::output::diff::VersionDiff;
+
+    let diff = VersionDiff::new("pkg", "1.0.0", "2.0.0").with_reason("Breaking changes");
+    assert_eq!(diff.reason, Some("Breaking changes".to_string()));
+}
+
+#[test]
+fn test_version_diff_with_will_change() {
+    use crate::output::diff::VersionDiff;
+
+    let diff = VersionDiff::new("pkg", "1.0.0", "1.0.0").with_will_change(false);
+    assert!(!diff.will_change);
+}
+
+#[test]
+fn test_version_diff_has_change() {
+    use crate::output::diff::VersionDiff;
+
+    let diff = VersionDiff::new("pkg", "1.0.0", "2.0.0");
+    assert!(diff.has_change());
+
+    let no_change = VersionDiff::new("pkg", "1.0.0", "1.0.0");
+    assert!(!no_change.has_change());
+}
+
+#[test]
+fn test_file_diff_new() {
+    use crate::output::diff::{DiffType, FileDiff};
+
+    let diff = FileDiff::new("test.txt", DiffType::Modified);
+    assert_eq!(diff.path, "test.txt");
+    assert_eq!(diff.file_type, DiffType::Modified);
+    assert!(diff.lines.is_empty());
+    assert_eq!(diff.context, None);
+}
+
+#[test]
+fn test_file_diff_add_line() {
+    use crate::output::diff::{DiffLine, DiffType, FileDiff};
+
+    let mut diff = FileDiff::new("test.txt", DiffType::Modified);
+    diff.add_line(DiffLine::new(DiffType::Added, "new"));
+    assert_eq!(diff.lines.len(), 1);
+}
+
+#[test]
+fn test_file_diff_add_line_added() {
+    use crate::output::diff::{DiffType, FileDiff};
+
+    let diff = FileDiff::new("test.txt", DiffType::Modified)
+        .add_line_added("line 1")
+        .add_line_added("line 2");
+    assert_eq!(diff.lines.len(), 2);
+    assert!(diff.lines.iter().all(|l| l.diff_type == DiffType::Added));
+}
+
+#[test]
+fn test_file_diff_add_line_removed() {
+    use crate::output::diff::{DiffType, FileDiff};
+
+    let diff = FileDiff::new("test.txt", DiffType::Modified).add_line_removed("old line");
+    assert_eq!(diff.lines.len(), 1);
+    assert_eq!(diff.lines[0].diff_type, DiffType::Deleted);
+}
+
+#[test]
+fn test_file_diff_add_line_modified() {
+    use crate::output::diff::{DiffType, FileDiff};
+
+    let diff = FileDiff::new("test.txt", DiffType::Modified).add_line_modified("changed");
+    assert_eq!(diff.lines.len(), 1);
+    assert_eq!(diff.lines[0].diff_type, DiffType::Modified);
+}
+
+#[test]
+fn test_file_diff_add_line_context() {
+    use crate::output::diff::{DiffType, FileDiff};
+
+    let diff = FileDiff::new("test.txt", DiffType::Modified).add_line_context("unchanged");
+    assert_eq!(diff.lines.len(), 1);
+    assert_eq!(diff.lines[0].diff_type, DiffType::Unchanged);
+}
+
+#[test]
+fn test_file_diff_with_context() {
+    use crate::output::diff::{DiffType, FileDiff};
+
+    let diff = FileDiff::new("test.txt", DiffType::Modified).with_context("Version bump");
+    assert_eq!(diff.context, Some("Version bump".to_string()));
+}
+
+#[test]
+fn test_file_diff_added_count() {
+    use crate::output::diff::{DiffType, FileDiff};
+
+    let diff = FileDiff::new("test.txt", DiffType::Modified)
+        .add_line_added("line 1")
+        .add_line_added("line 2")
+        .add_line_removed("old");
+    assert_eq!(diff.added_count(), 2);
+}
+
+#[test]
+fn test_file_diff_removed_count() {
+    use crate::output::diff::{DiffType, FileDiff};
+
+    let diff = FileDiff::new("test.txt", DiffType::Modified)
+        .add_line_added("new")
+        .add_line_removed("old 1")
+        .add_line_removed("old 2");
+    assert_eq!(diff.removed_count(), 2);
+}
+
+#[test]
+fn test_file_diff_modified_count() {
+    use crate::output::diff::{DiffType, FileDiff};
+
+    let diff = FileDiff::new("test.txt", DiffType::Modified)
+        .add_line_modified("changed 1")
+        .add_line_modified("changed 2")
+        .add_line_added("new");
+    assert_eq!(diff.modified_count(), 2);
+}
+
+#[test]
+fn test_dependency_diff_new() {
+    use crate::output::diff::DependencyDiff;
+
+    let diff = DependencyDiff::new("lodash", "^4.0.0", "^5.0.0");
+    assert_eq!(diff.name, "lodash");
+    assert_eq!(diff.from_version, "^4.0.0");
+    assert_eq!(diff.to_version, "^5.0.0");
+    assert_eq!(diff.dep_type, None);
+    assert_eq!(diff.package_context, None);
+}
+
+#[test]
+fn test_dependency_diff_with_dep_type() {
+    use crate::output::diff::DependencyDiff;
+
+    let diff = DependencyDiff::new("jest", "^27.0.0", "^28.0.0").with_dep_type("devDependencies");
+    assert_eq!(diff.dep_type, Some("devDependencies".to_string()));
+}
+
+#[test]
+fn test_dependency_diff_with_package_context() {
+    use crate::output::diff::DependencyDiff;
+
+    let diff =
+        DependencyDiff::new("react", "^17.0.0", "^18.0.0").with_package_context("@org/frontend");
+    assert_eq!(diff.package_context, Some("@org/frontend".to_string()));
+}
+
+#[test]
+fn test_dependency_diff_has_change() {
+    use crate::output::diff::DependencyDiff;
+
+    let diff = DependencyDiff::new("pkg", "1.0.0", "2.0.0");
+    assert!(diff.has_change());
+
+    let no_change = DependencyDiff::new("pkg", "1.0.0", "1.0.0");
+    assert!(!no_change.has_change());
+}
+
+#[test]
+fn test_diff_renderer_new() {
+    use crate::output::diff::DiffRenderer;
+
+    let _renderer = DiffRenderer::new(false);
+    // Renderer created successfully
+}
+
+#[test]
+fn test_diff_renderer_with_line_numbers() {
+    use crate::output::diff::DiffRenderer;
+
+    let _renderer = DiffRenderer::new(false).with_line_numbers(true);
+    // Builder pattern works
+}
+
+#[test]
+fn test_diff_renderer_with_context_lines() {
+    use crate::output::diff::DiffRenderer;
+
+    let _renderer = DiffRenderer::new(false).with_context_lines(5);
+    // Builder pattern works
+}
+
+#[test]
+fn test_diff_renderer_default() {
+    use crate::output::diff::DiffRenderer;
+
+    let _renderer = DiffRenderer::default();
+    // Default renderer created successfully
+}
+
+#[test]
+fn test_diff_renderer_render_version_diff() {
+    use crate::output::diff::{DiffRenderer, VersionDiff};
+
+    let renderer = DiffRenderer::new(true); // No color for easier testing
+    let diff = VersionDiff::new("my-package", "1.0.0", "2.0.0");
+    let output = renderer.render_version_diff(&diff);
+
+    assert!(output.contains("my-package"));
+    assert!(output.contains("1.0.0"));
+    assert!(output.contains("2.0.0"));
+    assert!(output.contains('-'));
+    assert!(output.contains('+'));
+}
+
+#[test]
+fn test_diff_renderer_render_version_diff_with_reason() {
+    use crate::output::diff::{DiffRenderer, VersionDiff};
+
+    let renderer = DiffRenderer::new(true);
+    let diff = VersionDiff::new("pkg", "1.0.0", "2.0.0").with_reason("Major version bump");
+    let output = renderer.render_version_diff(&diff);
+
+    assert!(output.contains("pkg"));
+    assert!(output.contains("Reason"));
+    assert!(output.contains("Major version bump"));
+}
+
+#[test]
+fn test_diff_renderer_render_version_diff_no_change() {
+    use crate::output::diff::{DiffRenderer, VersionDiff};
+
+    let renderer = DiffRenderer::new(true);
+    let diff = VersionDiff::new("pkg", "1.0.0", "1.0.0").with_will_change(false);
+    let output = renderer.render_version_diff(&diff);
+
+    assert!(output.contains("pkg"));
+    assert!(output.contains("unchanged"));
+}
+
+#[test]
+fn test_diff_renderer_render_file_diff() {
+    use crate::output::diff::{DiffRenderer, DiffType, FileDiff};
+
+    let renderer = DiffRenderer::new(true);
+    let diff = FileDiff::new("test.txt", DiffType::Modified)
+        .add_line_removed("old line")
+        .add_line_added("new line");
+    let output = renderer.render_file_diff(&diff);
+
+    assert!(output.contains("test.txt"));
+    assert!(output.contains("old line"));
+    assert!(output.contains("new line"));
+    assert!(output.contains("+1"));
+    assert!(output.contains("-1"));
+}
+
+#[test]
+fn test_diff_renderer_render_file_diff_with_context() {
+    use crate::output::diff::{DiffRenderer, DiffType, FileDiff};
+
+    let renderer = DiffRenderer::new(true);
+    let diff = FileDiff::new("package.json", DiffType::Modified)
+        .with_context("Version bump")
+        .add_line_removed("  \"version\": \"1.0.0\",")
+        .add_line_added("  \"version\": \"2.0.0\",");
+    let output = renderer.render_file_diff(&diff);
+
+    assert!(output.contains("package.json"));
+    assert!(output.contains("Version bump"));
+}
+
+#[test]
+fn test_diff_renderer_render_dependency_diff() {
+    use crate::output::diff::{DependencyDiff, DiffRenderer};
+
+    let renderer = DiffRenderer::new(true);
+    let diff = DependencyDiff::new("lodash", "^4.0.0", "^5.0.0");
+    let output = renderer.render_dependency_diff(&diff);
+
+    assert!(output.contains("lodash"));
+    assert!(output.contains("^4.0.0"));
+    assert!(output.contains("^5.0.0"));
+}
+
+#[test]
+fn test_diff_renderer_render_dependency_diff_with_package_context() {
+    use crate::output::diff::{DependencyDiff, DiffRenderer};
+
+    let renderer = DiffRenderer::new(true);
+    let diff =
+        DependencyDiff::new("react", "^17.0.0", "^18.0.0").with_package_context("@org/frontend");
+    let output = renderer.render_dependency_diff(&diff);
+
+    assert!(output.contains("react"));
+    assert!(output.contains("@org/frontend"));
+}
+
+#[test]
+fn test_diff_renderer_render_dependency_diff_with_dep_type() {
+    use crate::output::diff::{DependencyDiff, DiffRenderer};
+
+    let renderer = DiffRenderer::new(true);
+    let diff = DependencyDiff::new("jest", "^27.0.0", "^28.0.0").with_dep_type("devDependencies");
+    let output = renderer.render_dependency_diff(&diff);
+
+    assert!(output.contains("jest"));
+    assert!(output.contains("devDependencies"));
+}
+
+#[test]
+fn test_diff_renderer_render_version_summary() {
+    use crate::output::diff::{DiffRenderer, VersionDiff};
+
+    let renderer = DiffRenderer::new(true);
+    let diffs = vec![
+        VersionDiff::new("pkg1", "1.0.0", "2.0.0"),
+        VersionDiff::new("pkg2", "3.0.0", "3.1.0"),
+        VersionDiff::new("pkg3", "5.0.0", "5.0.0").with_will_change(false),
+    ];
+    let output = renderer.render_version_summary(&diffs);
+
+    assert!(output.contains("Version Changes"));
+    assert!(output.contains("pkg1"));
+    assert!(output.contains("pkg2"));
+    assert!(output.contains("pkg3"));
+    assert!(output.contains("Total"));
+    assert!(output.contains("3 packages"));
+    assert!(output.contains("2 changed"));
+    assert!(output.contains("1 unchanged"));
+}
+
+#[test]
+fn test_diff_renderer_render_version_diff_with_color() {
+    use crate::output::diff::{DiffRenderer, VersionDiff};
+
+    let renderer = DiffRenderer::new(false); // Enable colors
+    let diff = VersionDiff::new("pkg", "1.0.0", "2.0.0");
+    let output = renderer.render_version_diff(&diff);
+
+    // Just ensure it doesn't panic with colors enabled
+    assert!(output.contains("pkg"));
+}
+
+#[test]
+fn test_diff_renderer_render_file_diff_with_color() {
+    use crate::output::diff::{DiffRenderer, DiffType, FileDiff};
+
+    let renderer = DiffRenderer::new(false); // Enable colors
+    let diff = FileDiff::new("file.txt", DiffType::Modified).add_line_added("new");
+    let output = renderer.render_file_diff(&diff);
+
+    // Just ensure it doesn't panic with colors enabled
+    assert!(output.contains("file.txt"));
+}
+
+#[test]
+fn test_version_diff_helper_function() {
+    use crate::output::diff::version_diff;
+
+    let diff = version_diff("pkg", "1.0.0", "2.0.0");
+    assert_eq!(diff.package, "pkg");
+    assert_eq!(diff.from_version, "1.0.0");
+    assert_eq!(diff.to_version, "2.0.0");
+}
+
+#[test]
+fn test_file_diff_modified_helper_function() {
+    use crate::output::diff::{DiffType, file_diff_modified};
+
+    let diff = file_diff_modified("test.txt");
+    assert_eq!(diff.path, "test.txt");
+    assert_eq!(diff.file_type, DiffType::Modified);
+}
+
+#[test]
+fn test_file_diff_added_helper_function() {
+    use crate::output::diff::{DiffType, file_diff_added};
+
+    let diff = file_diff_added("new.txt");
+    assert_eq!(diff.path, "new.txt");
+    assert_eq!(diff.file_type, DiffType::Added);
+}
+
+#[test]
+fn test_file_diff_deleted_helper_function() {
+    use crate::output::diff::{DiffType, file_diff_deleted};
+
+    let diff = file_diff_deleted("old.txt");
+    assert_eq!(diff.path, "old.txt");
+    assert_eq!(diff.file_type, DiffType::Deleted);
+}
+
+#[test]
+fn test_dependency_diff_helper_function() {
+    use crate::output::diff::dependency_diff;
+
+    let diff = dependency_diff("lodash", "^4.0.0", "^5.0.0");
+    assert_eq!(diff.name, "lodash");
+    assert_eq!(diff.from_version, "^4.0.0");
+    assert_eq!(diff.to_version, "^5.0.0");
+}
+
+#[test]
+fn test_diff_line_render_unchanged() {
+    use crate::output::diff::{DiffLine, DiffType};
+
+    let line = DiffLine::new(DiffType::Unchanged, "context line");
+    let rendered = line.render(true);
+    assert!(rendered.contains("context line"));
+}
+
+#[test]
+fn test_file_diff_empty_stats() {
+    use crate::output::diff::{DiffType, FileDiff};
+
+    let diff = FileDiff::new("test.txt", DiffType::Modified);
+    assert_eq!(diff.added_count(), 0);
+    assert_eq!(diff.removed_count(), 0);
+    assert_eq!(diff.modified_count(), 0);
+}
+
+#[test]
+fn test_file_diff_mixed_lines() {
+    use crate::output::diff::{DiffType, FileDiff};
+
+    let diff = FileDiff::new("test.txt", DiffType::Modified)
+        .add_line_context("line 1")
+        .add_line_removed("old line 2")
+        .add_line_added("new line 2")
+        .add_line_modified("changed line 3")
+        .add_line_context("line 4");
+
+    assert_eq!(diff.lines.len(), 5);
+    assert_eq!(diff.added_count(), 1);
+    assert_eq!(diff.removed_count(), 1);
+    assert_eq!(diff.modified_count(), 1);
+}
+
+#[test]
+fn test_version_diff_builder_pattern() {
+    use crate::output::diff::VersionDiff;
+
+    let diff = VersionDiff::new("pkg", "1.0.0", "2.0.0")
+        .with_reason("Breaking changes")
+        .with_will_change(true);
+
+    assert_eq!(diff.package, "pkg");
+    assert_eq!(diff.from_version, "1.0.0");
+    assert_eq!(diff.to_version, "2.0.0");
+    assert_eq!(diff.reason, Some("Breaking changes".to_string()));
+    assert!(diff.will_change);
+}
+
+#[test]
+fn test_dependency_diff_builder_pattern() {
+    use crate::output::diff::DependencyDiff;
+
+    let diff = DependencyDiff::new("react", "^17.0.0", "^18.0.0")
+        .with_dep_type("dependencies")
+        .with_package_context("@org/app");
+
+    assert_eq!(diff.name, "react");
+    assert_eq!(diff.dep_type, Some("dependencies".to_string()));
+    assert_eq!(diff.package_context, Some("@org/app".to_string()));
+}
+
+#[test]
+fn test_diff_renderer_builder_pattern() {
+    use crate::output::diff::DiffRenderer;
+
+    let _renderer = DiffRenderer::new(true).with_line_numbers(true).with_context_lines(5);
+
+    // Builder pattern chains successfully
+}
+
+#[test]
+fn test_file_diff_builder_pattern() {
+    use crate::output::diff::{DiffType, FileDiff};
+
+    let diff = FileDiff::new("test.txt", DiffType::Modified)
+        .with_context("Version update")
+        .add_line_removed("old")
+        .add_line_added("new");
+
+    assert_eq!(diff.context, Some("Version update".to_string()));
+    assert_eq!(diff.lines.len(), 2);
+}
+
 #[test]
 fn test_progress_bar_inc_multiple_times() {
     use crate::output::progress::ProgressBar;

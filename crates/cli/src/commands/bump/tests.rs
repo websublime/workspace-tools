@@ -124,6 +124,7 @@ fn test_bump_args_defaults() {
         no_changelog: false,
         no_archive: false,
         force: false,
+        show_diff: false,
     };
 
     // Default behavior should be preview mode (neither dry_run nor execute)
@@ -147,6 +148,7 @@ fn test_execute_bump_preview_args_structure() {
         no_changelog: false,
         no_archive: false,
         force: false,
+        show_diff: false,
     };
 
     // Verify args structure is valid
@@ -390,6 +392,7 @@ fn test_snapshot_args_structure() {
         no_changelog: false,
         no_archive: false,
         force: false,
+        show_diff: false,
     };
 
     assert!(args.snapshot);
@@ -414,6 +417,7 @@ fn test_snapshot_format_customization() {
         no_changelog: false,
         no_archive: false,
         force: false,
+        show_diff: false,
     };
 
     assert_eq!(args.snapshot_format.as_deref(), Some("{version}-snapshot.{short_commit}"));
@@ -435,6 +439,7 @@ fn test_snapshot_default_format() {
         no_changelog: false,
         no_archive: false,
         force: false,
+        show_diff: false,
     };
 
     assert!(args.snapshot);
@@ -582,6 +587,7 @@ fn test_snapshot_and_execute_mutually_exclusive() {
         no_changelog: false,
         no_archive: false,
         force: false,
+        show_diff: false,
     };
 
     let args_execute = BumpArgs {
@@ -597,9 +603,77 @@ fn test_snapshot_and_execute_mutually_exclusive() {
         no_changelog: false,
         no_archive: false,
         force: false,
+        show_diff: false,
     };
 
     // These should be mutually exclusive
     assert!(args_snapshot.snapshot && !args_snapshot.execute);
     assert!(args_execute.execute && !args_execute.snapshot);
+}
+
+/// Tests that show_diff flag defaults to false.
+#[test]
+fn test_show_diff_flag_default() {
+    let args = BumpArgs {
+        dry_run: false,
+        execute: false,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: None,
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        force: false,
+        show_diff: false,
+    };
+
+    assert!(!args.show_diff);
+}
+
+/// Tests that show_diff flag can be enabled.
+#[test]
+fn test_show_diff_flag_enabled() {
+    let args = BumpArgs {
+        dry_run: false,
+        execute: false,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: None,
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        force: false,
+        show_diff: true,
+    };
+
+    assert!(args.show_diff);
+}
+
+/// Tests that show_diff flag works with preview mode.
+#[test]
+fn test_show_diff_with_preview_mode() {
+    let args = BumpArgs {
+        dry_run: true,
+        execute: false,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: None,
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        force: false,
+        show_diff: true,
+    };
+
+    assert!(args.dry_run);
+    assert!(args.show_diff);
 }

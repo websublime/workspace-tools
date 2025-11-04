@@ -533,6 +533,13 @@ pub struct BumpArgs {
     /// Automatically confirms all prompts.
     #[arg(long)]
     pub force: bool,
+
+    /// Show detailed version diffs.
+    ///
+    /// Displays visual diffs for version changes with color-coded additions
+    /// and deletions. Only applies to preview mode.
+    #[arg(long)]
+    pub show_diff: bool,
 }
 
 // ============================================================================
