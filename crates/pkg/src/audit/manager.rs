@@ -14,11 +14,13 @@
 //! simple API for users.
 
 use crate::audit::sections::{
-    audit_dependencies as audit_dependencies_impl, audit_upgrades as audit_upgrades_impl,
-    audit_version_consistency as audit_version_consistency_impl, DependencyAuditSection,
-    UpgradeAuditSection, VersionConsistencyAuditSection,
+    BreakingChangesAuditSection, DependencyAuditSection, UpgradeAuditSection,
+    VersionConsistencyAuditSection, audit_dependencies as audit_dependencies_impl,
+    audit_upgrades as audit_upgrades_impl,
+    audit_version_consistency as audit_version_consistency_impl,
 };
 use crate::changes::ChangesAnalyzer;
+use crate::changeset::{ChangesetManager, FileBasedChangesetStorage};
 use crate::config::PackageToolsConfig;
 use crate::error::{AuditError, AuditResult};
 use crate::types::PackageInfo;
@@ -119,6 +121,9 @@ pub struct AuditManager {
 
     /// Changes analyzer for analyzing file and commit changes.
     changes_analyzer: ChangesAnalyzer<FileSystemManager>,
+
+    /// Changeset manager for loading pending changesets.
+    changeset_manager: ChangesetManager<FileBasedChangesetStorage<FileSystemManager>>,
 
     /// Filesystem abstraction for file operations.
     fs: FileSystemManager,
@@ -239,10 +244,19 @@ impl AuditManager {
                     reason: format!("Failed to initialize changes analyzer: {}", e),
                 })?;
 
+        // Initialize changeset manager
+        let changeset_manager =
+            ChangesetManager::new(workspace_root.clone(), fs.clone(), config.clone())
+                .await
+                .map_err(|e| AuditError::WorkspaceAnalysisFailed {
+                    reason: format!("Failed to initialize changeset manager: {}", e),
+                })?;
+
         Ok(Self {
             workspace_root,
             upgrade_manager,
             changes_analyzer,
+            changeset_manager,
             fs,
             monorepo_detector,
             config,
@@ -724,6 +738,108 @@ impl AuditManager {
 
             Ok(vec![PackageInfo::new(package_json, None, self.workspace_root.clone())])
         }
+    }
+
+    /// Audits for potential breaking changes in the workspace.
+    ///
+    /// Analyzes commits, changesets, and changelogs to detect breaking changes
+    /// using conventional commit markers and major version bumps.
+    ///
+    /// # Returns
+    ///
+    /// A `BreakingChangesAuditSection` containing:
+    /// - Packages with detected breaking changes
+    /// - Total count of breaking changes
+    /// - Audit issues generated from the analysis
+    ///
+    /// # Errors
+    ///
+    /// Returns `AuditError` if:
+    /// - Git operations fail
+    /// - Changes analysis fails
+    /// - Commit parsing fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::audit::AuditManager;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let manager = AuditManager::new(std::path::PathBuf::from("."), Default::default()).await?;
+    /// let breaking_changes = manager.audit_breaking_changes().await?;
+    ///
+    /// println!("Found {} breaking changes", breaking_changes.total_breaking_changes);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn audit_breaking_changes(&self) -> AuditResult<BreakingChangesAuditSection> {
+        use crate::audit::sections::audit_breaking_changes;
+
+        // Get HEAD commit
+        let head_commit = "HEAD";
+
+        // Determine the base commit using an intelligent strategy:
+        // 1. Try to use the last tag (compare against last release)
+        // 2. Try merge-base with main/master (compare against main branch)
+        // 3. Fallback to HEAD~10 (last 10 commits)
+        let base_commit = self.determine_base_commit()?;
+
+        // Load pending changesets to detect breaking changes from them
+        let pending_changesets = self.changeset_manager.list_pending().await.map_err(|e| {
+            AuditError::WorkspaceAnalysisFailed {
+                reason: format!("Failed to load pending changesets: {}", e),
+            }
+        })?;
+
+        // Use the first pending changeset if available
+        // Multiple changesets will be fully integrated in a future enhancement
+        let changeset = pending_changesets.first();
+
+        // Call the breaking changes audit implementation
+        audit_breaking_changes(
+            &self.changes_analyzer,
+            &base_commit,
+            head_commit,
+            changeset,
+            &self.config.audit.breaking_changes,
+        )
+        .await
+    }
+
+    /// Determines the base commit for breaking changes analysis.
+    ///
+    /// Uses an intelligent strategy to find the most appropriate base commit:
+    /// 1. Last Git tag (if available) - compares against last release
+    /// 2. Merge-base with main or master branch - compares against main branch
+    /// 3. HEAD~10 - last 10 commits as fallback
+    ///
+    /// # Returns
+    ///
+    /// The Git reference string to use as the base commit.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if Git operations fail critically.
+    fn determine_base_commit(&self) -> AuditResult<String> {
+        // Try to get the last tag
+        if let Ok(last_tag) = self.changes_analyzer.git_repo().get_last_tag() {
+            return Ok(last_tag);
+        }
+
+        // Try to get merge-base with main branch
+        if let Ok(current_branch) = self.changes_analyzer.git_repo().get_current_branch() {
+            // Try main first, then master
+            for main_branch in &["main", "master"] {
+                if let Ok(merge_base) =
+                    self.changes_analyzer.git_repo().get_merge_base(&current_branch, main_branch)
+                {
+                    return Ok(merge_base);
+                }
+            }
+        }
+
+        // Fallback to last 10 commits
+        Ok("HEAD~10".to_string())
     }
 
     // Future audit methods will be implemented in subsequent stories:

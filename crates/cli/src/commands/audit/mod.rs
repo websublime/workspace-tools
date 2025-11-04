@@ -34,6 +34,7 @@
 //! This module provides comprehensive visibility into project health with
 //! actionable insights for maintaining a healthy codebase.
 
+pub mod breaking;
 pub mod comprehensive;
 pub mod dependencies;
 pub mod report;
@@ -45,6 +46,7 @@ pub mod versions;
 mod tests;
 
 // Re-export command implementations
+pub use breaking::execute_breaking_changes_audit;
 pub use comprehensive::execute_audit;
 pub use dependencies::execute_dependency_audit;
 pub use upgrades::execute_upgrade_audit;
