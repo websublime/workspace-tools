@@ -39,6 +39,7 @@ pub mod dependencies;
 pub mod report;
 pub mod types;
 pub mod upgrades;
+pub mod versions;
 
 #[cfg(test)]
 mod tests;
@@ -47,3 +48,4 @@ mod tests;
 pub use comprehensive::execute_audit;
 pub use dependencies::execute_dependency_audit;
 pub use upgrades::execute_upgrade_audit;
+pub use versions::execute_version_consistency_audit;
