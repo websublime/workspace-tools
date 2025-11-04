@@ -303,9 +303,9 @@ pub fn confirm_with_items<T: std::fmt::Display>(
 ///
 /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let details = vec![
-///     "3 packages will be upgraded",
-///     "2 breaking changes detected",
-///     "5 files will be modified",
+///     "3 packages will be upgraded".to_string(),
+///     "2 breaking changes detected".to_string(),
+///     "5 files will be modified".to_string(),
 /// ];
 ///
 /// let confirmed = confirm_with_details("Apply upgrades", &details, false, false)?;
