@@ -39,6 +39,7 @@ use crate::commands::audit::report::format_audit_report;
 use crate::commands::audit::types::{AuditSection, MinSeverity, parse_sections, parse_verbosity};
 use crate::error::{CliError, Result};
 use crate::output::Output;
+use serde::Serialize;
 use std::path::Path;
 use sublime_pkg_tools::audit::AuditManager;
 use sublime_pkg_tools::audit::{AuditIssue, IssueSeverity};
@@ -197,6 +198,221 @@ impl AuditResults {
     }
 }
 
+/// Serializable structure for audit data export.
+///
+/// This structure contains all audit information in a format suitable
+/// for export to HTML, Markdown, or other formats.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let export_data = ExportableAuditData {
+///     title: "Project Audit Report".to_string(),
+///     health_score: Some(85),
+///     summary: ExportSummary {
+///         total_issues: 5,
+///         critical: 1,
+///         warnings: 2,
+///         info: 2,
+///     },
+///     sections: vec![],
+/// };
+/// ```
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportableAuditData {
+    /// Report title.
+    title: String,
+
+    /// Overall health score (0-100).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    health_score: Option<u8>,
+
+    /// Summary of all issues.
+    summary: ExportSummary,
+
+    /// Audit sections with detailed results.
+    sections: Vec<ExportSection>,
+}
+
+/// Summary information for the export.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportSummary {
+    /// Total number of issues found.
+    total_issues: usize,
+
+    /// Number of critical issues.
+    critical: usize,
+
+    /// Number of warnings.
+    warnings: usize,
+
+    /// Number of informational issues.
+    info: usize,
+}
+
+/// A single audit section in the export.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportSection {
+    /// Section name.
+    name: String,
+
+    /// Section description.
+    description: String,
+
+    /// Issues found in this section.
+    issues: Vec<ExportIssue>,
+}
+
+/// An individual issue in the export.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportIssue {
+    /// Issue severity.
+    severity: String,
+
+    /// Issue category.
+    category: String,
+
+    /// Issue description.
+    description: String,
+
+    /// Additional context or recommendation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recommendation: Option<String>,
+}
+
+/// Creates exportable data from audit results.
+///
+/// Converts internal audit results into a serializable structure
+/// suitable for export to various formats.
+///
+/// # Arguments
+///
+/// * `results` - The audit results to convert
+/// * `health_score` - Optional health score
+///
+/// # Returns
+///
+/// An `ExportableAuditData` structure ready for serialization.
+fn create_exportable_data(results: &AuditResults, health_score: Option<u8>) -> ExportableAuditData {
+    let all_issues = results.all_issues();
+
+    let summary = ExportSummary {
+        total_issues: all_issues.len(),
+        critical: results.count_by_severity(&IssueSeverity::Critical),
+        warnings: results.count_by_severity(&IssueSeverity::Warning),
+        info: results.count_by_severity(&IssueSeverity::Info),
+    };
+
+    let mut sections = Vec::new();
+
+    // Upgrades section
+    if let Some(ref upgrades) = results.upgrades {
+        let issues: Vec<ExportIssue> = upgrades
+            .issues
+            .iter()
+            .map(|issue| ExportIssue {
+                severity: format!("{:?}", issue.severity),
+                category: format!("{:?}", issue.category),
+                description: issue.description.clone(),
+                recommendation: issue.suggestion.clone(),
+            })
+            .collect();
+
+        sections.push(ExportSection {
+            name: "Upgrades".to_string(),
+            description: format!(
+                "Analysis of available dependency upgrades. Found {} major, {} minor, and {} patch upgrades available.",
+                upgrades.major_upgrades,
+                upgrades.minor_upgrades,
+                upgrades.patch_upgrades
+            ),
+            issues,
+        });
+    }
+
+    // Dependencies section
+    if let Some(ref dependencies) = results.dependencies {
+        let issues: Vec<ExportIssue> = dependencies
+            .issues
+            .iter()
+            .map(|issue| ExportIssue {
+                severity: format!("{:?}", issue.severity),
+                category: format!("{:?}", issue.category),
+                description: issue.description.clone(),
+                recommendation: issue.suggestion.clone(),
+            })
+            .collect();
+
+        sections.push(ExportSection {
+            name: "Dependencies".to_string(),
+            description: format!(
+                "Analysis of dependency health. Found {} circular dependencies and {} version conflicts.",
+                dependencies.circular_dependencies.len(),
+                dependencies.version_conflicts.len()
+            ),
+            issues,
+        });
+    }
+
+    // Version consistency section
+    if let Some(ref version_consistency) = results.version_consistency {
+        let issues: Vec<ExportIssue> = version_consistency
+            .issues
+            .iter()
+            .map(|issue| ExportIssue {
+                severity: format!("{:?}", issue.severity),
+                category: format!("{:?}", issue.category),
+                description: issue.description.clone(),
+                recommendation: issue.suggestion.clone(),
+            })
+            .collect();
+
+        sections.push(ExportSection {
+            name: "Version Consistency".to_string(),
+            description: format!(
+                "Analysis of version consistency across workspace. Found {} inconsistencies.",
+                version_consistency.inconsistencies.len()
+            ),
+            issues,
+        });
+    }
+
+    // Breaking changes section
+    if let Some(ref breaking_changes) = results.breaking_changes {
+        let issues: Vec<ExportIssue> = breaking_changes
+            .issues
+            .iter()
+            .map(|issue| ExportIssue {
+                severity: format!("{:?}", issue.severity),
+                category: format!("{:?}", issue.category),
+                description: issue.description.clone(),
+                recommendation: issue.suggestion.clone(),
+            })
+            .collect();
+
+        sections.push(ExportSection {
+            name: "Breaking Changes".to_string(),
+            description: format!(
+                "Analysis of potential breaking changes. Found {} packages with {} total breaking changes.",
+                breaking_changes.packages_with_breaking.len(),
+                breaking_changes.total_breaking_changes
+            ),
+            issues,
+        });
+    }
+
+    ExportableAuditData {
+        title: "Project Audit Report".to_string(),
+        health_score,
+        summary,
+        sections,
+    }
+}
+
 /// Executes the comprehensive audit command.
 ///
 /// This function orchestrates the entire audit process from configuration loading
@@ -236,6 +452,8 @@ impl AuditResults {
 ///     min_severity: "info".to_string(),
 ///     verbosity: "normal".to_string(),
 ///     no_health_score: false,
+///     export: None,
+///     export_file: None,
 /// };
 ///
 /// let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
@@ -327,6 +545,28 @@ pub async fn execute_audit(
         args.output.as_deref(),
     )
     .await?;
+
+    // Handle export if requested
+    if let (Some(export_format_str), Some(export_path)) = (&args.export, &args.export_file) {
+        use crate::output::export::{ExportFormat, export_data};
+        use std::str::FromStr;
+
+        // Parse export format
+        let export_format =
+            ExportFormat::from_str(export_format_str).map_err(CliError::validation)?;
+
+        // Create serializable export data
+        let export_data_struct = create_exportable_data(&results, health_score);
+
+        // Export to file
+        export_data(&export_data_struct, export_format, export_path)?;
+
+        output.success(&format!(
+            "Report exported to {} ({})",
+            export_path.display(),
+            export_format
+        ))?;
+    }
 
     Ok(())
 }

@@ -44,6 +44,8 @@ mod comprehensive_tests {
             min_severity: "info".to_string(),
             verbosity: "normal".to_string(),
             no_health_score: false,
+            export: None,
+            export_file: None,
         };
 
         let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
@@ -66,6 +68,8 @@ mod comprehensive_tests {
             min_severity: "info".to_string(),
             verbosity: "normal".to_string(),
             no_health_score: false,
+            export: None,
+            export_file: None,
         };
 
         let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
@@ -83,6 +87,8 @@ mod comprehensive_tests {
             min_severity: "invalid".to_string(),
             verbosity: "normal".to_string(),
             no_health_score: false,
+            export: None,
+            export_file: None,
         };
 
         let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
@@ -100,6 +106,8 @@ mod comprehensive_tests {
             min_severity: "info".to_string(),
             verbosity: "invalid".to_string(),
             no_health_score: false,
+            export: None,
+            export_file: None,
         };
 
         let output = Output::new(OutputFormat::Human, std::io::stdout(), false);

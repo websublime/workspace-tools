@@ -789,6 +789,21 @@ pub struct AuditArgs {
     /// Disables the overall health score in the output.
     #[arg(long)]
     pub no_health_score: bool,
+
+    /// Export format for the report.
+    ///
+    /// Options: html, markdown
+    /// When specified, the report will be exported in the given format.
+    /// Requires --export-file to be specified.
+    #[arg(long, value_name = "FORMAT", requires = "export_file")]
+    pub export: Option<String>,
+
+    /// File path for exported report.
+    ///
+    /// Path where the exported report will be written.
+    /// Requires --export to specify the format.
+    #[arg(long, value_name = "PATH", requires = "export")]
+    pub export_file: Option<PathBuf>,
 }
 
 // ============================================================================

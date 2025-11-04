@@ -66,6 +66,7 @@
 //! ```
 
 pub mod diff;
+pub mod export;
 mod json;
 pub mod logger;
 pub mod progress;
@@ -86,6 +87,7 @@ pub use diff::{
     DependencyDiff, DiffLine, DiffRenderer, DiffType, FileDiff, VersionDiff, dependency_diff,
     file_diff_added, file_diff_deleted, file_diff_modified, version_diff,
 };
+pub use export::{ExportFormat, Exporter, HtmlExporter, MarkdownExporter, export_data};
 pub use json::JsonResponse;
 pub use progress::{MultiProgress, ProgressBar, Spinner};
 pub use style::{Style, StyledText};
