@@ -1,30 +1,31 @@
 //! Interactive prompts for CLI commands.
 //!
-//! This module provides reusable interactive prompt functions using dialoguer
-//! for user input in interactive mode.
+//! This module provides reusable interactive prompt functions with enhanced
+//! features including fuzzy search, better validation, and improved visual feedback.
 //!
 //! # What
 //!
 //! Provides interactive prompts for:
-//! - Package selection (multi-select)
-//! - Bump type selection (single select)
-//! - Environment selection (multi-select)
-//! - Summary/message text input
-//! - Confirmation dialogs
+//! - Package selection (multi-select with fuzzy search)
+//! - Bump type selection (single select with descriptions)
+//! - Environment selection (multi-select with fuzzy search)
+//! - Summary/message text input (with validation)
+//! - Confirmation dialogs (with context and warnings)
 //!
 //! # How
 //!
-//! Uses the `dialoguer` crate to create interactive prompts with:
-//! - Clear labels and help text
-//! - Default values where appropriate
-//! - Input validation
-//! - Keyboard navigation support
-//! - Color-coded display (respecting NO_COLOR)
+//! Uses enhanced modules:
+//! - `select` for fuzzy search and multi-select
+//! - `confirm` for styled confirmation dialogs
+//! - `validation` for input validation with helpful messages
+//! - `theme` for consistent visual styling
 //!
 //! All prompts are designed to be:
 //! - User-friendly with clear instructions
-//! - Cancelable (Ctrl+C returns error)
+//! - Fast and responsive with fuzzy search
+//! - Visually appealing with custom theme
 //! - Accessible (work in various terminal environments)
+//! - Cancelable (Ctrl+C returns error)
 //!
 //! # Why
 //!
@@ -33,6 +34,7 @@
 //! - Reusable prompt implementations
 //! - Easy testing with mock implementations
 //! - Proper error handling for user cancellation
+//! - Better user experience through enhanced features
 //!
 //! # Examples
 //!
@@ -52,12 +54,14 @@
 //! ```
 
 use crate::error::{CliError, Result};
-use dialoguer::{Confirm, Input, MultiSelect, Select, theme::ColorfulTheme};
+use crate::interactive::{confirm, select, theme::WntTheme, validation};
+use dialoguer::Input;
 
-/// Prompts user to select a bump type.
+/// Prompts user to select a bump type with enhanced UI.
 ///
 /// Displays a single-select menu with the three bump types: patch, minor, and major.
 /// Includes helpful descriptions for each type following semantic versioning.
+/// Uses the custom theme for consistent styling.
 ///
 /// # Arguments
 ///
@@ -91,29 +95,22 @@ pub fn prompt_bump_type(no_color: bool) -> Result<String> {
         "major - Breaking changes (X.0.0)",
     ];
 
-    let selection = if no_color {
-        Select::new().with_prompt("Select bump type").items(&items).default(0).interact()
-    } else {
-        Select::with_theme(&ColorfulTheme::default())
-            .with_prompt("Select bump type")
-            .items(&items)
-            .default(0)
-            .interact()
-    };
+    let prompt_text = "Select bump type";
+    let selection = select::simple_select(prompt_text, &items, Some(0), no_color)?;
 
     match selection {
-        Ok(0) => Ok("patch".to_string()),
-        Ok(1) => Ok("minor".to_string()),
-        Ok(2) => Ok("major".to_string()),
-        Ok(_) => Err(CliError::user("Invalid selection")),
-        Err(e) => Err(CliError::user(format!("Prompt cancelled: {e}"))),
+        0 => Ok("patch".to_string()),
+        1 => Ok("minor".to_string()),
+        2 => Ok("major".to_string()),
+        _ => Err(CliError::user("Invalid selection")),
     }
 }
 
-/// Prompts user to select packages from a list.
+/// Prompts user to select packages from a list with fuzzy search.
 ///
-/// Displays a multi-select menu allowing the user to choose one or more packages.
-/// Pre-selects packages that are detected as changed from git if provided.
+/// Displays an enhanced multi-select menu with fuzzy search capability,
+/// allowing users to quickly find and select packages. Pre-selects packages
+/// that are detected as changed from git if provided.
 ///
 /// # Arguments
 ///
@@ -130,6 +127,9 @@ pub fn prompt_bump_type(no_color: bool) -> Result<String> {
 /// Returns `CliError::User` if:
 /// - User cancels the prompt (Ctrl+C)
 /// - Terminal interaction fails
+///
+/// Returns `CliError::Validation` if:
+/// - No packages are available
 /// - No packages are selected
 ///
 /// # Examples
@@ -154,9 +154,6 @@ pub fn prompt_packages(
         return Err(CliError::validation("No packages available to select"));
     }
 
-    // Create defaults array - mark detected packages as selected
-    let defaults: Vec<bool> = packages.iter().map(|pkg| detected_packages.contains(pkg)).collect();
-
     let prompt_text = if detected_packages.is_empty() {
         "Select packages (space to select, enter to confirm)".to_string()
     } else {
@@ -166,31 +163,17 @@ pub fn prompt_packages(
         )
     };
 
-    let selections = if no_color {
-        MultiSelect::new().with_prompt(&prompt_text).items(packages).defaults(&defaults).interact()
-    } else {
-        MultiSelect::with_theme(&ColorfulTheme::default())
-            .with_prompt(&prompt_text)
-            .items(packages)
-            .defaults(&defaults)
-            .interact()
-    };
+    let selected = select::select_packages(&prompt_text, packages, detected_packages, no_color)?;
 
-    match selections {
-        Ok(indices) => {
-            if indices.is_empty() {
-                Err(CliError::validation("At least one package must be selected"))
-            } else {
-                Ok(indices.iter().map(|&i| packages[i].clone()).collect())
-            }
-        }
-        Err(e) => Err(CliError::user(format!("Prompt cancelled: {e}"))),
-    }
+    // Validate selection
+    validation::validate_at_least_one_selected(&(0..selected.len()).collect::<Vec<_>>())?;
+
+    Ok(selected)
 }
 
-/// Prompts user to select environments from a list.
+/// Prompts user to select environments from a list with fuzzy search.
 ///
-/// Displays a multi-select menu allowing the user to choose one or more environments.
+/// Displays an enhanced multi-select menu with fuzzy search capability.
 /// Pre-selects default environments if provided.
 ///
 /// # Arguments
@@ -208,6 +191,9 @@ pub fn prompt_packages(
 /// Returns `CliError::User` if:
 /// - User cancels the prompt (Ctrl+C)
 /// - Terminal interaction fails
+///
+/// Returns `CliError::Validation` if:
+/// - No environments are available
 /// - No environments are selected
 ///
 /// # Examples
@@ -232,10 +218,6 @@ pub fn prompt_environments(
         return Err(CliError::validation("No environments available to select"));
     }
 
-    // Create defaults array - mark default environments as selected
-    let defaults: Vec<bool> =
-        environments.iter().map(|env| default_environments.contains(env)).collect();
-
     let prompt_text = if default_environments.is_empty() {
         "Select environments (space to select, enter to confirm)".to_string()
     } else {
@@ -245,36 +227,20 @@ pub fn prompt_environments(
         )
     };
 
-    let selections = if no_color {
-        MultiSelect::new()
-            .with_prompt(&prompt_text)
-            .items(environments)
-            .defaults(&defaults)
-            .interact()
-    } else {
-        MultiSelect::with_theme(&ColorfulTheme::default())
-            .with_prompt(&prompt_text)
-            .items(environments)
-            .defaults(&defaults)
-            .interact()
-    };
+    let selected =
+        select::select_environments(&prompt_text, environments, default_environments, no_color)?;
 
-    match selections {
-        Ok(indices) => {
-            if indices.is_empty() {
-                Err(CliError::validation("At least one environment must be selected"))
-            } else {
-                Ok(indices.iter().map(|&i| environments[i].clone()).collect())
-            }
-        }
-        Err(e) => Err(CliError::user(format!("Prompt cancelled: {e}"))),
-    }
+    // Validate selection
+    validation::validate_at_least_one_selected(&(0..selected.len()).collect::<Vec<_>>())?;
+
+    Ok(selected)
 }
 
-/// Prompts user to enter a summary message.
+/// Prompts user to enter a summary message with validation.
 ///
 /// Displays a text input prompt for entering a changeset summary or message.
 /// Provides a helpful placeholder and validates that input is not empty.
+/// The input is validated in real-time to provide immediate feedback.
 ///
 /// # Arguments
 ///
@@ -283,13 +249,15 @@ pub fn prompt_environments(
 ///
 /// # Returns
 ///
-/// * `Result<String>` - The entered summary text
+/// * `Result<String>` - The entered summary text (trimmed)
 ///
 /// # Errors
 ///
 /// Returns `CliError::User` if:
 /// - User cancels the prompt (Ctrl+C)
 /// - Terminal interaction fails
+///
+/// Returns `CliError::Validation` if:
 /// - Input is empty after trimming
 ///
 /// # Examples
@@ -304,39 +272,31 @@ pub fn prompt_environments(
 /// # }
 /// ```
 pub fn prompt_summary(placeholder: Option<&str>, no_color: bool) -> Result<String> {
+    let theme = WntTheme::new(no_color);
     let prompt_text = "Enter changeset summary";
     let default_placeholder = "Brief description of changes";
 
-    let input = if no_color {
-        Input::<String>::new()
-            .with_prompt(prompt_text)
-            .with_initial_text(placeholder.unwrap_or(default_placeholder))
-            .allow_empty(false)
-            .interact_text()
-    } else {
-        Input::<String>::with_theme(&ColorfulTheme::default())
-            .with_prompt(prompt_text)
-            .with_initial_text(placeholder.unwrap_or(default_placeholder))
-            .allow_empty(false)
-            .interact_text()
-    };
+    let input = Input::<String>::with_theme(&theme)
+        .with_prompt(prompt_text)
+        .with_initial_text(placeholder.unwrap_or(default_placeholder))
+        .allow_empty(false)
+        .validate_with(|input: &String| -> std::result::Result<(), String> {
+            validation::validate_non_empty(input).map_err(|e| e.to_string())
+        })
+        .interact_text()
+        .map_err(|e| CliError::user(format!("Prompt cancelled: {e}")))?;
 
-    match input {
-        Ok(text) => {
-            let trimmed = text.trim().to_string();
-            if trimmed.is_empty() {
-                Err(CliError::validation("Summary cannot be empty"))
-            } else {
-                Ok(trimmed)
-            }
-        }
-        Err(e) => Err(CliError::user(format!("Prompt cancelled: {e}"))),
-    }
+    let trimmed = input.trim().to_string();
+
+    // Final validation
+    validation::validate_non_empty(&trimmed)?;
+
+    Ok(trimmed)
 }
 
-/// Prompts user for a yes/no confirmation.
+/// Prompts user for a yes/no confirmation with enhanced styling.
 ///
-/// Displays a confirmation prompt with a default value.
+/// Displays a confirmation prompt with a default value using the custom theme.
 ///
 /// # Arguments
 ///
@@ -368,14 +328,88 @@ pub fn prompt_summary(placeholder: Option<&str>, no_color: bool) -> Result<Strin
 /// # }
 /// ```
 pub fn prompt_confirm(message: &str, default: bool, no_color: bool) -> Result<bool> {
-    let result = if no_color {
-        Confirm::new().with_prompt(message).default(default).interact()
-    } else {
-        Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt(message)
-            .default(default)
-            .interact()
-    };
+    confirm::confirm(message, default, no_color)
+}
 
-    result.map_err(|e| CliError::user(format!("Prompt cancelled: {e}")))
+/// Prompts user for confirmation with additional context.
+///
+/// Displays contextual information before asking for confirmation.
+///
+/// # Arguments
+///
+/// * `message` - The main confirmation message
+/// * `context` - Additional context or explanation
+/// * `default` - The default value if user just presses enter
+/// * `no_color` - Whether to disable colored output
+///
+/// # Returns
+///
+/// * `Result<bool>` - True if user confirmed, false otherwise
+///
+/// # Errors
+///
+/// Returns `CliError::User` if:
+/// - User cancels the prompt (Ctrl+C)
+/// - Terminal interaction fails
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use sublime_cli_tools::interactive::prompts::prompt_confirm_with_context;
+///
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let confirmed = prompt_confirm_with_context(
+///     "Apply upgrades?",
+///     "This will modify 3 package.json files",
+///     false,
+///     false,
+/// )?;
+/// # Ok(())
+/// # }
+/// ```
+pub fn prompt_confirm_with_context(
+    message: &str,
+    context: &str,
+    default: bool,
+    no_color: bool,
+) -> Result<bool> {
+    confirm::confirm_with_context(message, context, default, no_color)
+}
+
+/// Prompts user for confirmation of a dangerous operation.
+///
+/// Displays a prominent warning before asking for confirmation.
+///
+/// # Arguments
+///
+/// * `message` - The confirmation message
+/// * `warning` - The warning text to display
+/// * `no_color` - Whether to disable colored output
+///
+/// # Returns
+///
+/// * `Result<bool>` - True if user confirmed, false otherwise
+///
+/// # Errors
+///
+/// Returns `CliError::User` if:
+/// - User cancels the prompt (Ctrl+C)
+/// - Terminal interaction fails
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use sublime_cli_tools::interactive::prompts::prompt_confirm_dangerous;
+///
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let confirmed = prompt_confirm_dangerous(
+///     "Delete all changesets?",
+///     "This action cannot be undone",
+///     false,
+/// )?;
+/// # Ok(())
+/// # }
+/// ```
+pub fn prompt_confirm_dangerous(message: &str, warning: &str, no_color: bool) -> Result<bool> {
+    confirm::confirm_dangerous(message, warning, no_color)
 }
