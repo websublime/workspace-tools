@@ -65,6 +65,7 @@
 //! output.json(&response).unwrap();
 //! ```
 
+pub mod diff;
 mod json;
 pub mod logger;
 pub mod progress;
@@ -81,6 +82,10 @@ use std::cell::RefCell;
 use std::io::Write;
 
 // Public re-exports
+pub use diff::{
+    DependencyDiff, DiffLine, DiffRenderer, DiffType, FileDiff, VersionDiff, dependency_diff,
+    file_diff_added, file_diff_deleted, file_diff_modified, version_diff,
+};
 pub use json::JsonResponse;
 pub use progress::{MultiProgress, ProgressBar, Spinner};
 pub use style::{Style, StyledText};
