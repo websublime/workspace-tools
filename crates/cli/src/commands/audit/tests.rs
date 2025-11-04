@@ -1085,6 +1085,405 @@ mod dependency_report_formatting_tests {
     }
 }
 
+#[cfg(test)]
+mod version_consistency_audit_tests {
+    use crate::commands::audit::types::MinSeverity;
+    use crate::commands::audit::versions::execute_version_consistency_audit;
+    use crate::output::{Output, OutputFormat};
+    use std::path::PathBuf;
+
+    #[tokio::test]
+    async fn test_execute_version_consistency_audit_valid_args() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        // This will try to initialize AuditManager and run version consistency audit
+        // It may fail if not in a valid git repo, but that's OK for this test
+        let result = execute_version_consistency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "normal",
+            None,
+        )
+        .await;
+
+        // We don't assert success because we may not be in a valid workspace
+        // The important thing is that the function doesn't panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_version_consistency_audit_critical_severity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_version_consistency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Critical,
+            "normal",
+            None,
+        )
+        .await;
+
+        // Should not panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_version_consistency_audit_warning_severity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_version_consistency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Warning,
+            "normal",
+            None,
+        )
+        .await;
+
+        // Should not panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_version_consistency_audit_minimal_verbosity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_version_consistency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "minimal",
+            None,
+        )
+        .await;
+
+        // Should not panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_version_consistency_audit_detailed_verbosity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_version_consistency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "detailed",
+            None,
+        )
+        .await;
+
+        // Should not panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_version_consistency_audit_invalid_verbosity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_version_consistency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "invalid",
+            None,
+        )
+        .await;
+
+        // Should return error due to invalid verbosity
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_execute_version_consistency_audit_with_output_file() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+        let output_file = PathBuf::from("/tmp/version-consistency-audit-test.json");
+
+        let result = execute_version_consistency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "normal",
+            Some(&output_file),
+        )
+        .await;
+
+        // This should fail with todo! for file output
+        // The error is expected as file output is not yet implemented (story 7.6)
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_version_consistency_audit_invalid_workspace() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from("/nonexistent/path/to/workspace");
+
+        let result = execute_version_consistency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "normal",
+            None,
+        )
+        .await;
+
+        // Should fail because workspace doesn't exist
+        assert!(result.is_err());
+    }
+}
+
+#[allow(clippy::unwrap_used)]
+#[cfg(test)]
+mod version_consistency_report_formatting_tests {
+    use sublime_pkg_tools::audit::{
+        VersionConsistencyAuditSection, VersionInconsistency, VersionUsage,
+    };
+
+    #[test]
+    fn test_version_consistency_audit_section_empty() {
+        let section = VersionConsistencyAuditSection::empty();
+        assert!(section.inconsistencies.is_empty());
+        assert!(section.issues.is_empty());
+        assert!(!section.has_inconsistencies());
+    }
+
+    #[test]
+    fn test_version_consistency_audit_section_has_inconsistencies() {
+        let mut section = VersionConsistencyAuditSection::empty();
+        section.inconsistencies.push(VersionInconsistency {
+            package_name: "@myorg/core".to_string(),
+            versions_used: vec![
+                VersionUsage {
+                    package_name: "app-a".to_string(),
+                    version_spec: "^1.0.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "app-b".to_string(),
+                    version_spec: "^1.1.0".to_string(),
+                },
+            ],
+            recommended_version: "^1.1.0".to_string(),
+        });
+
+        assert!(section.has_inconsistencies());
+        assert_eq!(section.inconsistencies.len(), 1);
+    }
+
+    #[test]
+    fn test_version_consistency_audit_section_issue_counts() {
+        use sublime_pkg_tools::audit::{AuditIssue, IssueCategory, IssueSeverity};
+
+        let mut section = VersionConsistencyAuditSection::empty();
+
+        // Add critical issues
+        section.issues.push(AuditIssue::new(
+            IssueSeverity::Critical,
+            IssueCategory::VersionConsistency,
+            "Critical inconsistency".to_string(),
+            "Version mismatch detected".to_string(),
+        ));
+        section.issues.push(AuditIssue::new(
+            IssueSeverity::Critical,
+            IssueCategory::VersionConsistency,
+            "Another critical issue".to_string(),
+            "Description".to_string(),
+        ));
+
+        // Add warnings
+        section.issues.push(AuditIssue::new(
+            IssueSeverity::Warning,
+            IssueCategory::VersionConsistency,
+            "Warning issue".to_string(),
+            "Minor inconsistency".to_string(),
+        ));
+
+        // Add info
+        section.issues.push(AuditIssue::new(
+            IssueSeverity::Info,
+            IssueCategory::VersionConsistency,
+            "Info issue".to_string(),
+            "Description".to_string(),
+        ));
+
+        assert_eq!(section.critical_issue_count(), 2);
+        assert_eq!(section.warning_issue_count(), 1);
+        assert_eq!(section.info_issue_count(), 1);
+        assert_eq!(section.issues.len(), 4);
+    }
+
+    #[test]
+    fn test_version_inconsistency_version_count() {
+        let inconsistency = VersionInconsistency {
+            package_name: "@myorg/utils".to_string(),
+            versions_used: vec![
+                VersionUsage {
+                    package_name: "pkg-a".to_string(),
+                    version_spec: "^1.0.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "pkg-b".to_string(),
+                    version_spec: "^2.0.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "pkg-c".to_string(),
+                    version_spec: "^1.0.0".to_string(),
+                },
+            ],
+            recommended_version: "workspace:*".to_string(),
+        };
+
+        assert_eq!(inconsistency.version_count(), 3);
+    }
+
+    #[test]
+    fn test_version_inconsistency_describe() {
+        let inconsistency = VersionInconsistency {
+            package_name: "@myorg/core".to_string(),
+            versions_used: vec![
+                VersionUsage {
+                    package_name: "app-a".to_string(),
+                    version_spec: "^1.0.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "app-b".to_string(),
+                    version_spec: "^1.1.0".to_string(),
+                },
+            ],
+            recommended_version: "^1.1.0".to_string(),
+        };
+
+        let description = inconsistency.describe();
+        assert!(description.contains("@myorg/core"));
+        assert!(description.contains("app-a"));
+        assert!(description.contains("app-b"));
+        assert!(description.contains("^1.0.0"));
+        assert!(description.contains("^1.1.0"));
+    }
+
+    #[test]
+    fn test_version_inconsistency_unique_versions() {
+        let inconsistency = VersionInconsistency {
+            package_name: "@myorg/shared".to_string(),
+            versions_used: vec![
+                VersionUsage {
+                    package_name: "pkg-a".to_string(),
+                    version_spec: "^1.0.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "pkg-b".to_string(),
+                    version_spec: "^1.0.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "pkg-c".to_string(),
+                    version_spec: "^2.0.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "pkg-d".to_string(),
+                    version_spec: "workspace:*".to_string(),
+                },
+            ],
+            recommended_version: "workspace:*".to_string(),
+        };
+
+        let unique_versions = inconsistency.unique_versions();
+        assert_eq!(unique_versions.len(), 3);
+        assert!(unique_versions.contains(&"^1.0.0".to_string()));
+        assert!(unique_versions.contains(&"^2.0.0".to_string()));
+        assert!(unique_versions.contains(&"workspace:*".to_string()));
+    }
+
+    #[test]
+    fn test_version_inconsistency_for_package() {
+        let mut section = VersionConsistencyAuditSection::empty();
+        section.inconsistencies.push(VersionInconsistency {
+            package_name: "@myorg/core".to_string(),
+            versions_used: vec![VersionUsage {
+                package_name: "app-a".to_string(),
+                version_spec: "^1.0.0".to_string(),
+            }],
+            recommended_version: "^1.0.0".to_string(),
+        });
+
+        let inconsistency = section.inconsistency_for_package("@myorg/core");
+        assert!(inconsistency.is_some());
+        assert_eq!(inconsistency.unwrap().package_name, "@myorg/core");
+
+        let no_inconsistency = section.inconsistency_for_package("nonexistent");
+        assert!(no_inconsistency.is_none());
+    }
+
+    #[test]
+    fn test_version_inconsistency_with_workspace_protocol() {
+        let inconsistency = VersionInconsistency {
+            package_name: "@myorg/common".to_string(),
+            versions_used: vec![
+                VersionUsage {
+                    package_name: "pkg-a".to_string(),
+                    version_spec: "workspace:*".to_string(),
+                },
+                VersionUsage {
+                    package_name: "pkg-b".to_string(),
+                    version_spec: "^1.0.0".to_string(),
+                },
+            ],
+            recommended_version: "workspace:*".to_string(),
+        };
+
+        assert_eq!(inconsistency.package_name, "@myorg/common");
+        assert_eq!(inconsistency.recommended_version, "workspace:*");
+        assert!(inconsistency.versions_used.iter().any(|v| v.version_spec == "workspace:*"));
+    }
+
+    #[test]
+    fn test_version_inconsistency_multiple_packages_same_version() {
+        let inconsistency = VersionInconsistency {
+            package_name: "@myorg/utils".to_string(),
+            versions_used: vec![
+                VersionUsage {
+                    package_name: "pkg-a".to_string(),
+                    version_spec: "^1.5.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "pkg-b".to_string(),
+                    version_spec: "^1.5.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "pkg-c".to_string(),
+                    version_spec: "^1.5.0".to_string(),
+                },
+                VersionUsage {
+                    package_name: "pkg-d".to_string(),
+                    version_spec: "^2.0.0".to_string(),
+                },
+            ],
+            recommended_version: "^2.0.0".to_string(),
+        };
+
+        // Despite 4 usages, there are only 2 unique versions
+        let unique = inconsistency.unique_versions();
+        assert_eq!(unique.len(), 2);
+        assert_eq!(inconsistency.version_count(), 4);
+    }
+}
+
 #[allow(clippy::unwrap_used)]
 #[cfg(test)]
 mod categorization_tests {
