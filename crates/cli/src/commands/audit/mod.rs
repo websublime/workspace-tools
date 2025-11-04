@@ -35,6 +35,7 @@
 //! actionable insights for maintaining a healthy codebase.
 
 pub mod comprehensive;
+pub mod dependencies;
 pub mod report;
 pub mod types;
 pub mod upgrades;
@@ -44,4 +45,5 @@ mod tests;
 
 // Re-export command implementations
 pub use comprehensive::execute_audit;
+pub use dependencies::execute_dependency_audit;
 pub use upgrades::execute_upgrade_audit;
