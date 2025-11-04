@@ -257,6 +257,18 @@ fn display_summary(
         ))?;
     }
 
+    if let Some(ref breaking_changes) = results.breaking_changes
+        && breaking_changes.total_breaking_changes > 0
+    {
+        output.info("")?;
+        output.warning(&format!(
+            "Breaking Changes: {} detected across {} package{}",
+            breaking_changes.total_breaking_changes,
+            breaking_changes.packages_with_breaking.len(),
+            if breaking_changes.packages_with_breaking.len() == 1 { "" } else { "s" }
+        ))?;
+    }
+
     output.info("")?; // Empty line for spacing
     Ok(())
 }
@@ -323,6 +335,15 @@ pub(crate) fn display_recommendations(
     {
         recommendations.push("📊 Align internal dependency versions across packages");
         recommendations.push("   Run: wnt upgrade apply --internal-only");
+    }
+
+    // Breaking changes recommendations
+    if let Some(ref breaking_changes) = results.breaking_changes
+        && breaking_changes.total_breaking_changes > 0
+    {
+        recommendations.push("⚠️  Review breaking changes before release");
+        recommendations.push("   Run: wnt audit breaking-changes --verbosity detailed");
+        recommendations.push("   Ensure major version bump for packages with breaking changes");
     }
 
     // Display recommendations if any
@@ -409,6 +430,9 @@ fn display_section_results(
     if results.version_consistency.is_some() {
         sections_run.push("Version Consistency");
     }
+    if results.breaking_changes.is_some() {
+        sections_run.push("Breaking Changes");
+    }
 
     output.info("")?;
     output.info(&format!("Sections audited: {}", sections_run.join(", ")))?;
@@ -441,7 +465,7 @@ pub(crate) fn write_report_to_file(
     _health_score: Option<u8>,
     _file_path: &Path,
 ) -> Result<()> {
-    // TODO: will be implemented in story 7.6 (JSON output format)
+    // TODO: will be implemented in story 8.3 (Export Formats)
     // For now, we just acknowledge the file path parameter
-    Err(CliError::execution("File output not yet implemented (story 7.6)".to_string()))
+    Err(CliError::execution("File output not yet implemented (story 8.3)".to_string()))
 }

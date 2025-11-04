@@ -43,7 +43,8 @@ use std::path::Path;
 use sublime_pkg_tools::audit::AuditManager;
 use sublime_pkg_tools::audit::{AuditIssue, IssueSeverity};
 use sublime_pkg_tools::audit::{
-    DependencyAuditSection, UpgradeAuditSection, VersionConsistencyAuditSection,
+    BreakingChangesAuditSection, DependencyAuditSection, UpgradeAuditSection,
+    VersionConsistencyAuditSection,
 };
 use sublime_pkg_tools::config::ConfigLoader;
 
@@ -74,8 +75,7 @@ pub struct AuditResults {
     pub version_consistency: Option<VersionConsistencyAuditSection>,
 
     /// Results from breaking changes audit section.
-    /// TODO: will be implemented in story 7.5
-    pub breaking_changes: Option<()>,
+    pub breaking_changes: Option<BreakingChangesAuditSection>,
 }
 
 impl AuditResults {
@@ -105,6 +105,10 @@ impl AuditResults {
 
         if let Some(ref version_consistency) = self.version_consistency {
             issues.extend(version_consistency.issues.iter());
+        }
+
+        if let Some(ref breaking_changes) = self.breaking_changes {
+            issues.extend(breaking_changes.issues.iter());
         }
 
         issues
@@ -299,9 +303,14 @@ pub async fn execute_audit(
         results.version_consistency = Some(version_consistency);
     }
 
-    // Breaking changes section: TODO: will be implemented in story 7.5
+    // Run breaking changes audit if requested or all
     if run_all || sections.contains(&AuditSection::BreakingChanges) {
-        output.warning("Breaking changes audit not yet implemented (story 7.5)")?;
+        output.info("Running breaking changes audit...")?;
+        let breaking_changes = audit_manager
+            .audit_breaking_changes()
+            .await
+            .map_err(|e| CliError::execution(format!("Breaking changes audit failed: {e}")))?;
+        results.breaking_changes = Some(breaking_changes);
     }
 
     // Calculate health score

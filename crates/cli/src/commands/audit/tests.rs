@@ -553,7 +553,7 @@ mod upgrade_audit_tests {
         .await;
 
         // This should fail with todo! for file output
-        // The error is expected as file output is not yet implemented (story 7.6)
+        // The error is expected as file output is not yet implemented (story 8.3)
         let _ = result;
     }
 
@@ -870,7 +870,7 @@ mod dependency_audit_tests {
         .await;
 
         // This should fail with todo! for file output
-        // The error is expected as file output is not yet implemented (story 7.6)
+        // The error is expected as file output is not yet implemented (story 8.3)
         let _ = result;
     }
 
@@ -1226,7 +1226,7 @@ mod version_consistency_audit_tests {
         .await;
 
         // This should fail with todo! for file output
-        // The error is expected as file output is not yet implemented (story 7.6)
+        // The error is expected as file output is not yet implemented (story 8.3)
         let _ = result;
     }
 
@@ -1679,5 +1679,158 @@ mod categorization_tests {
         assert_eq!(categorization.stats.total_packages, 2);
         assert_eq!(categorization.stats.internal_packages, 1);
         assert_eq!(categorization.stats.external_packages, 1);
+    }
+}
+
+#[cfg(test)]
+mod breaking_changes_audit_tests {
+    use crate::commands::audit::breaking::execute_breaking_changes_audit;
+    use crate::commands::audit::types::MinSeverity;
+    use crate::output::{Output, OutputFormat};
+    use std::path::PathBuf;
+
+    #[tokio::test]
+    async fn test_execute_breaking_changes_audit_valid_args() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_breaking_changes_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "normal",
+            None,
+        )
+        .await;
+
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_breaking_changes_audit_critical_severity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_breaking_changes_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Critical,
+            "normal",
+            None,
+        )
+        .await;
+
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_breaking_changes_audit_warning_severity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_breaking_changes_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Warning,
+            "normal",
+            None,
+        )
+        .await;
+
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_breaking_changes_audit_minimal_verbosity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_breaking_changes_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "minimal",
+            None,
+        )
+        .await;
+
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_breaking_changes_audit_detailed_verbosity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_breaking_changes_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "detailed",
+            None,
+        )
+        .await;
+
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_breaking_changes_audit_invalid_verbosity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_breaking_changes_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "invalid",
+            None,
+        )
+        .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_execute_breaking_changes_audit_with_output_file() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+        let output_file = PathBuf::from("/tmp/breaking-changes-audit-test.json");
+
+        let result = execute_breaking_changes_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "normal",
+            Some(&output_file),
+        )
+        .await;
+
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_breaking_changes_audit_invalid_workspace() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from("/nonexistent/path/to/workspace");
+
+        let result = execute_breaking_changes_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "normal",
+            None,
+        )
+        .await;
+
+        assert!(result.is_err());
     }
 }

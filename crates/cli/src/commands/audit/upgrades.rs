@@ -465,8 +465,8 @@ fn write_upgrade_report_to_file(
     _upgrades: &sublime_pkg_tools::audit::UpgradeAuditSection,
     _file_path: &Path,
 ) -> Result<()> {
-    // TODO: will be implemented in story 7.6 (JSON output format)
-    todo!("File output will be implemented in story 7.6")
+    // TODO: will be implemented in story 8.3 (Export Formats)
+    todo!("File output will be implemented in story 8.3")
 }
 
 /// Loads audit configuration from workspace.
