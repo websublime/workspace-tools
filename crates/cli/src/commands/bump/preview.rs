@@ -81,6 +81,7 @@
 use crate::cli::commands::BumpArgs;
 use crate::commands::bump::snapshot::{BumpSnapshot, BumpSummary, ChangesetInfo, PackageBumpInfo};
 use crate::error::{CliError, Result};
+use crate::output::diff::{DiffRenderer, VersionDiff};
 use crate::output::styling::{StatusSymbol, print_item};
 use crate::output::table::{ColumnAlignment, TableBuilder, TableTheme};
 use crate::output::{JsonResponse, Output};
@@ -134,7 +135,7 @@ use tracing::{debug, info, warn};
 /// # }
 /// ```
 pub async fn execute_bump_preview(
-    _args: &BumpArgs,
+    args: &BumpArgs,
     output: &Output,
     root: &Path,
     config_path: Option<&Path>,
@@ -208,7 +209,7 @@ pub async fn execute_bump_preview(
         let response: JsonResponse<BumpSnapshot> = JsonResponse::success(snapshot);
         output.json(&response)?;
     } else {
-        output_table(output, &snapshot)?;
+        output_table(output, &snapshot, args.show_diff)?;
     }
 
     Ok(())
@@ -570,7 +571,13 @@ pub(crate) async fn load_config(
 ///
 /// Displays changesets being processed, packages with their version changes,
 /// and a summary section with statistics.
-fn output_table(output: &Output, snapshot: &BumpSnapshot) -> Result<()> {
+///
+/// # Arguments
+///
+/// * `output` - Output handler for formatting
+/// * `snapshot` - Bump snapshot with package and changeset information
+/// * `show_diff` - Whether to display visual diffs for version changes
+fn output_table(output: &Output, snapshot: &BumpSnapshot, show_diff: bool) -> Result<()> {
     // Display strategy
     StatusSymbol::Info.print_line(&format!("Strategy: {}", snapshot.strategy));
     output.blank_line()?;
@@ -603,29 +610,40 @@ fn output_table(output: &Output, snapshot: &BumpSnapshot) -> Result<()> {
     StatusSymbol::Info
         .print_line(&format!("Package Updates: {} package(s)", snapshot.packages.len()));
 
-    let mut package_table = TableBuilder::new()
-        .theme(TableTheme::Minimal)
-        .columns(&["Package", "Current", "Next", "Bump", "Status"])
-        .alignment(1, ColumnAlignment::Center)
-        .alignment(2, ColumnAlignment::Center)
-        .alignment(3, ColumnAlignment::Center)
-        .build();
+    if show_diff {
+        // Render detailed diffs for each package
+        output.blank_line()?;
+        render_package_diffs(output, &snapshot.packages)?;
+    } else {
+        // Render traditional table view
+        let mut package_table = TableBuilder::new()
+            .theme(TableTheme::Minimal)
+            .columns(&["Package", "Current", "Next", "Bump", "Status"])
+            .alignment(1, ColumnAlignment::Center)
+            .alignment(2, ColumnAlignment::Center)
+            .alignment(3, ColumnAlignment::Center)
+            .build();
 
-    for pkg in &snapshot.packages {
-        let status = if pkg.will_bump { "✓ Will bump" } else { "○ No change" };
-        let bump_display =
-            if pkg.will_bump { pkg.bump_type.to_string().to_lowercase() } else { "-".to_string() };
+        for pkg in &snapshot.packages {
+            let status = if pkg.will_bump { "✓ Will bump" } else { "○ No change" };
+            let bump_display = if pkg.will_bump {
+                pkg.bump_type.to_string().to_lowercase()
+            } else {
+                "-".to_string()
+            };
 
-        package_table.add_row(&[
-            &pkg.name,
-            &pkg.current_version,
-            &pkg.next_version,
-            &bump_display,
-            status,
-        ]);
+            package_table.add_row(&[
+                &pkg.name,
+                &pkg.current_version,
+                &pkg.next_version,
+                &bump_display,
+                status,
+            ]);
+        }
+
+        output.table(&mut package_table)?;
     }
 
-    output.table(&mut package_table)?;
     output.blank_line()?;
 
     // Display summary
@@ -638,6 +656,46 @@ fn output_table(output: &Output, snapshot: &BumpSnapshot) -> Result<()> {
         output.blank_line()?;
         output
             .warning("Circular dependencies detected. Review dependency graph before bumping.")?;
+    }
+
+    Ok(())
+}
+
+/// Renders package version diffs using the diff visualization module.
+///
+/// Displays detailed visual diffs for each package showing version changes
+/// with color-coded additions and deletions.
+///
+/// # Arguments
+///
+/// * `output` - Output handler for formatting
+/// * `packages` - List of package bump information
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success, or an error if rendering fails.
+fn render_package_diffs(output: &Output, packages: &[PackageBumpInfo]) -> Result<()> {
+    let renderer = DiffRenderer::new(output.no_color());
+
+    for pkg in packages {
+        if pkg.will_bump {
+            // Create version diff for packages that will bump
+            let diff =
+                VersionDiff::new(&pkg.name, &pkg.current_version, &pkg.next_version).with_reason(
+                    format!("{} bump: {}", pkg.bump_type.to_string().to_lowercase(), pkg.reason),
+                );
+
+            let rendered = renderer.render_version_diff(&diff);
+            output.plain(&rendered)?;
+        } else {
+            // Show unchanged packages in a dimmed style
+            let diff = VersionDiff::new(&pkg.name, &pkg.current_version, &pkg.next_version)
+                .with_will_change(false)
+                .with_reason(pkg.reason.clone());
+
+            let rendered = renderer.render_version_diff(&diff);
+            output.plain(&rendered)?;
+        }
     }
 
     Ok(())
