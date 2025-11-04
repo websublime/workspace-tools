@@ -37,9 +37,11 @@
 pub mod comprehensive;
 pub mod report;
 pub mod types;
+pub mod upgrades;
 
 #[cfg(test)]
 mod tests;
 
 // Re-export command implementations
 pub use comprehensive::execute_audit;
+pub use upgrades::execute_upgrade_audit;

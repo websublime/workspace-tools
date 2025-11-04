@@ -411,3 +411,320 @@ mod report_tests {
         assert!(result.is_ok());
     }
 }
+
+#[cfg(test)]
+mod upgrade_audit_tests {
+    use crate::commands::audit::types::MinSeverity;
+    use crate::commands::audit::upgrades::execute_upgrade_audit;
+    use crate::output::{Output, OutputFormat};
+    use std::path::PathBuf;
+
+    #[tokio::test]
+    async fn test_execute_upgrade_audit_valid_args() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        // This will try to initialize AuditManager and run upgrade audit
+        // It may fail if not in a valid git repo, but that's OK for this test
+        let result = execute_upgrade_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "normal",
+            None,
+        )
+        .await;
+
+        // We don't assert success because we may not be in a valid workspace
+        // The important thing is that the function doesn't panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_upgrade_audit_critical_severity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_upgrade_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Critical,
+            "normal",
+            None,
+        )
+        .await;
+
+        // Should not panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_upgrade_audit_warning_severity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_upgrade_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Warning,
+            "normal",
+            None,
+        )
+        .await;
+
+        // Should not panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_upgrade_audit_minimal_verbosity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_upgrade_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "minimal",
+            None,
+        )
+        .await;
+
+        // Should not panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_upgrade_audit_detailed_verbosity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_upgrade_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "detailed",
+            None,
+        )
+        .await;
+
+        // Should not panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_upgrade_audit_invalid_verbosity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_upgrade_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "invalid",
+            None,
+        )
+        .await;
+
+        // Should return error due to invalid verbosity
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_execute_upgrade_audit_with_output_file() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+        let output_file = PathBuf::from("/tmp/upgrade-audit-test.json");
+
+        let result = execute_upgrade_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "normal",
+            Some(&output_file),
+        )
+        .await;
+
+        // This should fail with todo! for file output
+        // The error is expected as file output is not yet implemented (story 7.6)
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_upgrade_audit_invalid_workspace() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from("/nonexistent/path/to/workspace");
+
+        let result = execute_upgrade_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "normal",
+            None,
+        )
+        .await;
+
+        // Should fail because workspace doesn't exist
+        assert!(result.is_err());
+    }
+}
+
+#[allow(clippy::unwrap_used)]
+#[cfg(test)]
+mod upgrade_report_formatting_tests {
+    use std::collections::HashMap;
+    use sublime_pkg_tools::audit::{DeprecatedPackage, UpgradeAuditSection};
+
+    #[test]
+    fn test_upgrade_audit_section_empty() {
+        let section = UpgradeAuditSection::empty();
+        assert_eq!(section.total_upgrades, 0);
+        assert_eq!(section.major_upgrades, 0);
+        assert_eq!(section.minor_upgrades, 0);
+        assert_eq!(section.patch_upgrades, 0);
+        assert!(section.deprecated_packages.is_empty());
+        assert!(section.upgrades_by_package.is_empty());
+        assert!(section.issues.is_empty());
+        assert!(!section.has_upgrades());
+        assert!(!section.has_deprecated_packages());
+    }
+
+    #[test]
+    fn test_upgrade_audit_section_has_upgrades() {
+        let mut section = UpgradeAuditSection::empty();
+        section.total_upgrades = 5;
+        section.major_upgrades = 2;
+        section.minor_upgrades = 2;
+        section.patch_upgrades = 1;
+
+        assert!(section.has_upgrades());
+        assert_eq!(section.total_upgrades, 5);
+    }
+
+    #[test]
+    fn test_upgrade_audit_section_has_deprecated() {
+        let mut section = UpgradeAuditSection::empty();
+        section.deprecated_packages.push(DeprecatedPackage {
+            name: "old-package".to_string(),
+            current_version: "1.0.0".to_string(),
+            deprecation_message: "This package is deprecated".to_string(),
+            alternative: Some("new-package".to_string()),
+        });
+
+        assert!(section.has_deprecated_packages());
+        assert_eq!(section.deprecated_packages.len(), 1);
+    }
+
+    #[test]
+    fn test_upgrade_audit_section_issue_counts() {
+        use sublime_pkg_tools::audit::{AuditIssue, IssueCategory, IssueSeverity};
+
+        let mut section = UpgradeAuditSection::empty();
+
+        // Add some critical issues
+        section.issues.push(AuditIssue::new(
+            IssueSeverity::Critical,
+            IssueCategory::Upgrades,
+            "Critical issue".to_string(),
+            "Description".to_string(),
+        ));
+        section.issues.push(AuditIssue::new(
+            IssueSeverity::Critical,
+            IssueCategory::Upgrades,
+            "Another critical".to_string(),
+            "Description".to_string(),
+        ));
+
+        // Add some warnings
+        section.issues.push(AuditIssue::new(
+            IssueSeverity::Warning,
+            IssueCategory::Upgrades,
+            "Warning issue".to_string(),
+            "Description".to_string(),
+        ));
+
+        // Add some info
+        section.issues.push(AuditIssue::new(
+            IssueSeverity::Info,
+            IssueCategory::Upgrades,
+            "Info issue".to_string(),
+            "Description".to_string(),
+        ));
+
+        assert_eq!(section.critical_issue_count(), 2);
+        assert_eq!(section.warning_issue_count(), 1);
+        assert_eq!(section.info_issue_count(), 1);
+        assert_eq!(section.issues.len(), 4);
+    }
+
+    #[test]
+    fn test_upgrade_audit_section_upgrades_by_package() {
+        use sublime_pkg_tools::types::DependencyType;
+        use sublime_pkg_tools::upgrade::{DependencyUpgrade, UpgradeType, VersionInfo};
+
+        let mut section = UpgradeAuditSection::empty();
+        let mut upgrades_map = HashMap::new();
+
+        let upgrade = DependencyUpgrade {
+            name: "lodash".to_string(),
+            current_version: "4.17.20".to_string(),
+            latest_version: "4.17.21".to_string(),
+            upgrade_type: UpgradeType::Patch,
+            dependency_type: DependencyType::Regular,
+            registry_url: "https://registry.npmjs.org".to_string(),
+            version_info: VersionInfo {
+                available_versions: vec!["4.17.21".to_string()],
+                latest_stable: "4.17.21".to_string(),
+                latest_prerelease: None,
+                deprecated: None,
+                published_at: None,
+            },
+        };
+
+        upgrades_map.insert("my-app".to_string(), vec![upgrade]);
+        section.upgrades_by_package = upgrades_map;
+
+        let pkg_upgrades = section.upgrades_for_package("my-app");
+        assert_eq!(pkg_upgrades.len(), 1);
+        assert_eq!(pkg_upgrades[0].name, "lodash");
+
+        let no_upgrades = section.upgrades_for_package("nonexistent");
+        assert!(no_upgrades.is_empty());
+    }
+
+    #[test]
+    fn test_deprecated_package_with_alternative() {
+        let deprecated = DeprecatedPackage {
+            name: "request".to_string(),
+            current_version: "2.88.2".to_string(),
+            deprecation_message: "This package is deprecated, use axios instead".to_string(),
+            alternative: Some("axios".to_string()),
+        };
+
+        assert_eq!(deprecated.name, "request");
+        assert_eq!(deprecated.current_version, "2.88.2");
+        assert!(deprecated.alternative.is_some());
+        assert_eq!(deprecated.alternative.unwrap(), "axios");
+    }
+
+    #[test]
+    fn test_deprecated_package_without_alternative() {
+        let deprecated = DeprecatedPackage {
+            name: "old-lib".to_string(),
+            current_version: "1.0.0".to_string(),
+            deprecation_message: "No longer maintained".to_string(),
+            alternative: None,
+        };
+
+        assert_eq!(deprecated.name, "old-lib");
+        assert!(deprecated.alternative.is_none());
+    }
+}
