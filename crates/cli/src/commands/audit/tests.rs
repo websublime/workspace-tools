@@ -728,3 +728,557 @@ mod upgrade_report_formatting_tests {
         assert!(deprecated.alternative.is_none());
     }
 }
+
+#[cfg(test)]
+mod dependency_audit_tests {
+    use crate::commands::audit::dependencies::execute_dependency_audit;
+    use crate::commands::audit::types::MinSeverity;
+    use crate::output::{Output, OutputFormat};
+    use std::path::PathBuf;
+
+    #[tokio::test]
+    async fn test_execute_dependency_audit_valid_args() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        // This will try to initialize AuditManager and run dependency audit
+        // It may fail if not in a valid git repo, but that's OK for this test
+        let result = execute_dependency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "normal",
+            None,
+        )
+        .await;
+
+        // We don't assert success because we may not be in a valid workspace
+        // The important thing is that the function doesn't panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_dependency_audit_critical_severity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_dependency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Critical,
+            "normal",
+            None,
+        )
+        .await;
+
+        // Should not panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_dependency_audit_warning_severity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_dependency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Warning,
+            "normal",
+            None,
+        )
+        .await;
+
+        // Should not panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_dependency_audit_minimal_verbosity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_dependency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "minimal",
+            None,
+        )
+        .await;
+
+        // Should not panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_dependency_audit_detailed_verbosity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_dependency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "detailed",
+            None,
+        )
+        .await;
+
+        // Should not panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_dependency_audit_invalid_verbosity() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+
+        let result = execute_dependency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "invalid",
+            None,
+        )
+        .await;
+
+        // Should return error due to invalid verbosity
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_execute_dependency_audit_with_output_file() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from(".");
+        let output_file = PathBuf::from("/tmp/dependency-audit-test.json");
+
+        let result = execute_dependency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "normal",
+            Some(&output_file),
+        )
+        .await;
+
+        // This should fail with todo! for file output
+        // The error is expected as file output is not yet implemented (story 7.6)
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_execute_dependency_audit_invalid_workspace() {
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let workspace_root = PathBuf::from("/nonexistent/path/to/workspace");
+
+        let result = execute_dependency_audit(
+            &output,
+            &workspace_root,
+            None,
+            MinSeverity::Info,
+            "normal",
+            None,
+        )
+        .await;
+
+        // Should fail because workspace doesn't exist
+        assert!(result.is_err());
+    }
+}
+
+#[allow(clippy::unwrap_used)]
+#[cfg(test)]
+mod dependency_report_formatting_tests {
+    use sublime_pkg_tools::audit::{DependencyAuditSection, VersionConflict, VersionUsage};
+    use sublime_pkg_tools::types::CircularDependency;
+
+    #[test]
+    fn test_dependency_audit_section_empty() {
+        let section = DependencyAuditSection::empty();
+        assert!(section.circular_dependencies.is_empty());
+        assert!(section.version_conflicts.is_empty());
+        assert!(section.issues.is_empty());
+        assert!(!section.has_circular_dependencies());
+        assert!(!section.has_version_conflicts());
+    }
+
+    #[test]
+    fn test_dependency_audit_section_has_circular_dependencies() {
+        let mut section = DependencyAuditSection::empty();
+        section
+            .circular_dependencies
+            .push(CircularDependency::new(vec!["pkg-a".to_string(), "pkg-b".to_string()]));
+
+        assert!(section.has_circular_dependencies());
+        assert_eq!(section.circular_dependencies.len(), 1);
+    }
+
+    #[test]
+    fn test_dependency_audit_section_has_version_conflicts() {
+        let mut section = DependencyAuditSection::empty();
+        section.version_conflicts.push(VersionConflict {
+            dependency_name: "lodash".to_string(),
+            versions: vec![
+                VersionUsage {
+                    package_name: "pkg-a".to_string(),
+                    version_spec: "^4.17.20".to_string(),
+                },
+                VersionUsage {
+                    package_name: "pkg-b".to_string(),
+                    version_spec: "^3.10.1".to_string(),
+                },
+            ],
+        });
+
+        assert!(section.has_version_conflicts());
+        assert_eq!(section.version_conflicts.len(), 1);
+    }
+
+    #[test]
+    fn test_dependency_audit_section_issue_counts() {
+        use sublime_pkg_tools::audit::{AuditIssue, IssueCategory, IssueSeverity};
+
+        let mut section = DependencyAuditSection::empty();
+
+        // Add critical issues
+        section.issues.push(AuditIssue::new(
+            IssueSeverity::Critical,
+            IssueCategory::Dependencies,
+            "Critical circular dependency".to_string(),
+            "Circular dependency detected".to_string(),
+        ));
+        section.issues.push(AuditIssue::new(
+            IssueSeverity::Critical,
+            IssueCategory::Dependencies,
+            "Another critical issue".to_string(),
+            "Description".to_string(),
+        ));
+
+        // Add warnings
+        section.issues.push(AuditIssue::new(
+            IssueSeverity::Warning,
+            IssueCategory::Dependencies,
+            "Version conflict".to_string(),
+            "Multiple versions detected".to_string(),
+        ));
+
+        // Add info
+        section.issues.push(AuditIssue::new(
+            IssueSeverity::Info,
+            IssueCategory::Dependencies,
+            "Info issue".to_string(),
+            "Description".to_string(),
+        ));
+
+        assert_eq!(section.critical_issue_count(), 2);
+        assert_eq!(section.warning_issue_count(), 1);
+        assert_eq!(section.info_issue_count(), 1);
+        assert_eq!(section.issues.len(), 4);
+    }
+
+    #[test]
+    fn test_circular_dependency_display() {
+        let circular_dep = CircularDependency::new(vec![
+            "pkg-a".to_string(),
+            "pkg-b".to_string(),
+            "pkg-a".to_string(),
+        ]);
+
+        assert_eq!(circular_dep.len(), 3);
+        assert!(circular_dep.involves("pkg-a"));
+        assert!(circular_dep.involves("pkg-b"));
+        assert!(!circular_dep.involves("pkg-c"));
+
+        let display = circular_dep.display_cycle();
+        assert!(display.contains("pkg-a"));
+        assert!(display.contains("pkg-b"));
+    }
+
+    #[test]
+    fn test_circular_dependencies_for_package() {
+        let mut section = DependencyAuditSection::empty();
+        section
+            .circular_dependencies
+            .push(CircularDependency::new(vec!["pkg-a".to_string(), "pkg-b".to_string()]));
+        section
+            .circular_dependencies
+            .push(CircularDependency::new(vec!["pkg-c".to_string(), "pkg-d".to_string()]));
+
+        let cycles_for_a = section.circular_dependencies_for_package("pkg-a");
+        assert_eq!(cycles_for_a.len(), 1);
+
+        let cycles_for_c = section.circular_dependencies_for_package("pkg-c");
+        assert_eq!(cycles_for_c.len(), 1);
+
+        let cycles_for_e = section.circular_dependencies_for_package("pkg-e");
+        assert_eq!(cycles_for_e.len(), 0);
+    }
+
+    #[test]
+    fn test_version_conflict_count() {
+        let conflict = VersionConflict {
+            dependency_name: "lodash".to_string(),
+            versions: vec![
+                VersionUsage {
+                    package_name: "pkg-a".to_string(),
+                    version_spec: "^4.17.20".to_string(),
+                },
+                VersionUsage {
+                    package_name: "pkg-b".to_string(),
+                    version_spec: "^3.10.1".to_string(),
+                },
+            ],
+        };
+
+        assert_eq!(conflict.version_count(), 2);
+    }
+
+    #[test]
+    fn test_version_conflict_describe() {
+        let conflict = VersionConflict {
+            dependency_name: "lodash".to_string(),
+            versions: vec![
+                VersionUsage {
+                    package_name: "pkg-a".to_string(),
+                    version_spec: "^4.17.20".to_string(),
+                },
+                VersionUsage {
+                    package_name: "pkg-b".to_string(),
+                    version_spec: "^3.10.1".to_string(),
+                },
+            ],
+        };
+
+        let description = conflict.describe();
+        assert!(description.contains("lodash"));
+        assert!(description.contains("pkg-a"));
+        assert!(description.contains("pkg-b"));
+        assert!(description.contains("^4.17.20"));
+        assert!(description.contains("^3.10.1"));
+    }
+
+    #[test]
+    fn test_version_conflicts_for_dependency() {
+        let mut section = DependencyAuditSection::empty();
+        section.version_conflicts.push(VersionConflict {
+            dependency_name: "lodash".to_string(),
+            versions: vec![VersionUsage {
+                package_name: "pkg-a".to_string(),
+                version_spec: "^4.17.20".to_string(),
+            }],
+        });
+
+        let conflict = section.version_conflicts_for_dependency("lodash");
+        assert!(conflict.is_some());
+        assert_eq!(conflict.unwrap().dependency_name, "lodash");
+
+        let no_conflict = section.version_conflicts_for_dependency("nonexistent");
+        assert!(no_conflict.is_none());
+    }
+}
+
+#[allow(clippy::unwrap_used)]
+#[cfg(test)]
+mod categorization_tests {
+    use std::path::PathBuf;
+    use sublime_pkg_tools::audit::{
+        CategorizationStats, DependencyCategorization, ExternalPackage, InternalPackage, LocalLink,
+        LocalLinkType, WorkspaceLink,
+    };
+
+    #[test]
+    fn test_categorization_stats_all_zero() {
+        let stats = CategorizationStats {
+            total_packages: 0,
+            internal_packages: 0,
+            external_packages: 0,
+            workspace_links: 0,
+            local_links: 0,
+        };
+
+        assert_eq!(stats.total_packages, 0);
+        assert_eq!(stats.internal_packages, 0);
+        assert_eq!(stats.external_packages, 0);
+        assert_eq!(stats.workspace_links, 0);
+        assert_eq!(stats.local_links, 0);
+    }
+
+    #[test]
+    fn test_categorization_stats_with_values() {
+        let stats = CategorizationStats {
+            total_packages: 10,
+            internal_packages: 5,
+            external_packages: 50,
+            workspace_links: 10,
+            local_links: 2,
+        };
+
+        assert_eq!(stats.total_packages, 10);
+        assert_eq!(stats.internal_packages, 5);
+        assert_eq!(stats.external_packages, 50);
+        assert_eq!(stats.workspace_links, 10);
+        assert_eq!(stats.local_links, 2);
+    }
+
+    #[test]
+    fn test_dependency_categorization_empty() {
+        let categorization = DependencyCategorization {
+            internal_packages: vec![],
+            external_packages: vec![],
+            workspace_links: vec![],
+            local_links: vec![],
+            stats: CategorizationStats {
+                total_packages: 0,
+                internal_packages: 0,
+                external_packages: 0,
+                workspace_links: 0,
+                local_links: 0,
+            },
+        };
+
+        assert!(categorization.internal_packages.is_empty());
+        assert!(categorization.external_packages.is_empty());
+        assert!(categorization.workspace_links.is_empty());
+        assert!(categorization.local_links.is_empty());
+        assert_eq!(categorization.stats.internal_packages, 0);
+    }
+
+    #[test]
+    fn test_internal_package_structure() {
+        let internal = InternalPackage {
+            name: "my-internal-package".to_string(),
+            path: PathBuf::from("packages/internal"),
+            version: Some("1.0.0".to_string()),
+            used_by: vec!["app-a".to_string(), "app-b".to_string()],
+        };
+
+        assert_eq!(internal.name, "my-internal-package");
+        assert_eq!(internal.version, Some("1.0.0".to_string()));
+        assert_eq!(internal.used_by.len(), 2);
+    }
+
+    #[test]
+    fn test_external_package_structure() {
+        let external = ExternalPackage {
+            name: "lodash".to_string(),
+            version_spec: "^4.17.21".to_string(),
+            used_by: vec!["pkg-a".to_string(), "pkg-b".to_string(), "pkg-c".to_string()],
+            is_deprecated: false,
+        };
+
+        assert_eq!(external.name, "lodash");
+        assert_eq!(external.version_spec, "^4.17.21");
+        assert_eq!(external.used_by.len(), 3);
+        assert!(!external.is_deprecated);
+    }
+
+    #[test]
+    fn test_workspace_link_structure() {
+        let workspace_link = WorkspaceLink {
+            package_name: "my-app".to_string(),
+            dependency_name: "shared-utils".to_string(),
+            version_spec: "workspace:*".to_string(),
+        };
+
+        assert_eq!(workspace_link.package_name, "my-app");
+        assert_eq!(workspace_link.dependency_name, "shared-utils");
+        assert_eq!(workspace_link.version_spec, "workspace:*");
+    }
+
+    #[test]
+    fn test_local_link_file_type() {
+        let local_link = LocalLink {
+            package_name: "app".to_string(),
+            dependency_name: "local-package".to_string(),
+            link_type: LocalLinkType::File,
+            path: "../local-package".to_string(),
+        };
+
+        assert_eq!(local_link.package_name, "app");
+        assert_eq!(local_link.dependency_name, "local-package");
+        assert!(matches!(local_link.link_type, LocalLinkType::File));
+        assert_eq!(local_link.path, "../local-package");
+    }
+
+    #[test]
+    fn test_local_link_portal_type() {
+        let local_link = LocalLink {
+            package_name: "app-a".to_string(),
+            dependency_name: "portal-package".to_string(),
+            link_type: LocalLinkType::Portal,
+            path: "~/portal-package".to_string(),
+        };
+
+        assert_eq!(local_link.package_name, "app-a");
+        assert_eq!(local_link.dependency_name, "portal-package");
+        assert!(matches!(local_link.link_type, LocalLinkType::Portal));
+        assert_eq!(local_link.path, "~/portal-package");
+    }
+
+    #[test]
+    fn test_local_link_symlink_type() {
+        let local_link = LocalLink {
+            package_name: "app".to_string(),
+            dependency_name: "link-package".to_string(),
+            link_type: LocalLinkType::Link,
+            path: "../link-package".to_string(),
+        };
+
+        assert_eq!(local_link.package_name, "app");
+        assert_eq!(local_link.dependency_name, "link-package");
+        assert!(matches!(local_link.link_type, LocalLinkType::Link));
+        assert_eq!(local_link.path, "../link-package");
+    }
+
+    #[test]
+    fn test_categorization_with_mixed_data() {
+        let categorization = DependencyCategorization {
+            internal_packages: vec![InternalPackage {
+                name: "pkg-a".to_string(),
+                path: PathBuf::from("packages/a"),
+                version: Some("1.0.0".to_string()),
+                used_by: vec!["pkg-b".to_string()],
+            }],
+            external_packages: vec![ExternalPackage {
+                name: "lodash".to_string(),
+                version_spec: "^4.17.21".to_string(),
+                used_by: vec!["pkg-a".to_string(), "pkg-b".to_string()],
+                is_deprecated: false,
+            }],
+            workspace_links: vec![WorkspaceLink {
+                package_name: "pkg-b".to_string(),
+                dependency_name: "shared".to_string(),
+                version_spec: "workspace:*".to_string(),
+            }],
+            local_links: vec![LocalLink {
+                package_name: "pkg-a".to_string(),
+                dependency_name: "local".to_string(),
+                link_type: LocalLinkType::File,
+                path: "../local".to_string(),
+            }],
+            stats: CategorizationStats {
+                total_packages: 2,
+                internal_packages: 1,
+                external_packages: 1,
+                workspace_links: 1,
+                local_links: 1,
+            },
+        };
+
+        assert_eq!(categorization.internal_packages.len(), 1);
+        assert_eq!(categorization.external_packages.len(), 1);
+        assert_eq!(categorization.workspace_links.len(), 1);
+        assert_eq!(categorization.local_links.len(), 1);
+        assert_eq!(categorization.stats.total_packages, 2);
+        assert_eq!(categorization.stats.internal_packages, 1);
+        assert_eq!(categorization.stats.external_packages, 1);
+    }
+}
