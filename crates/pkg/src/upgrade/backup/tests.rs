@@ -23,7 +23,7 @@ impl MockFileSystem {
 
     /// Normalize path to use forward slashes for cross-platform compatibility.
     ///
-    /// On Windows, paths can have mixed separators (e.g., "/workspace\.pkg-backups\file.txt").
+    /// On Windows, paths can have mixed separators (e.g., "/workspace\.wnt-backups\file.txt").
     /// This function ensures all paths use forward slashes consistently.
     fn normalize_path(path: &Path) -> String {
         // Convert to string and replace all backslashes with forward slashes
@@ -179,8 +179,8 @@ async fn test_path_normalization() {
 
     // Test mixed separators (what Windows creates)
     assert_eq!(
-        MockFileSystem::normalize_path(&PathBuf::from("/workspace\\.pkg-backups\\file.txt")),
-        "/workspace/.pkg-backups/file.txt"
+        MockFileSystem::normalize_path(&PathBuf::from("/workspace\\.wnt-backups\\file.txt")),
+        "/workspace/.wnt-backups/file.txt"
     );
 
     // Add files with different path formats and verify they're all accessible
@@ -196,29 +196,29 @@ async fn test_directory_exists_edge_cases() {
     let fs = MockFileSystem::new();
 
     // Add files in nested directories
-    fs.add_file(PathBuf::from("/workspace/.pkg-backups/backup1/file1.txt"), "content1");
-    fs.add_file(PathBuf::from("/workspace/.pkg-backups/backup2/file2.txt"), "content2");
-    fs.add_file(PathBuf::from("/workspace/.pkg-backups-other/file3.txt"), "content3");
+    fs.add_file(PathBuf::from("/workspace/.wnt-backups/backup1/file1.txt"), "content1");
+    fs.add_file(PathBuf::from("/workspace/.wnt-backups/backup2/file2.txt"), "content2");
+    fs.add_file(PathBuf::from("/workspace/.wnt-backups-other/file3.txt"), "content3");
 
     // Test directory existence with various path formats
-    assert!(fs.exists(&PathBuf::from("/workspace/.pkg-backups")).await);
-    assert!(fs.exists(&PathBuf::from("/workspace/.pkg-backups/")).await);
-    assert!(fs.exists(&PathBuf::from("/workspace/.pkg-backups/backup1")).await);
-    assert!(fs.exists(&PathBuf::from("/workspace/.pkg-backups/backup2")).await);
+    assert!(fs.exists(&PathBuf::from("/workspace/.wnt-backups")).await);
+    assert!(fs.exists(&PathBuf::from("/workspace/.wnt-backups/")).await);
+    assert!(fs.exists(&PathBuf::from("/workspace/.wnt-backups/backup1")).await);
+    assert!(fs.exists(&PathBuf::from("/workspace/.wnt-backups/backup2")).await);
 
     // Test that similar named directories don't match
-    assert!(fs.exists(&PathBuf::from("/workspace/.pkg-backups-other")).await);
-    assert!(!fs.exists(&PathBuf::from("/workspace/.pkg-backups-other/nonexistent")).await);
+    assert!(fs.exists(&PathBuf::from("/workspace/.wnt-backups-other")).await);
+    assert!(!fs.exists(&PathBuf::from("/workspace/.wnt-backups-other/nonexistent")).await);
 
     // Test with mixed separators (Windows scenario)
-    assert!(fs.exists(&PathBuf::from("/workspace\\.pkg-backups\\backup1")).await);
+    assert!(fs.exists(&PathBuf::from("/workspace\\.wnt-backups\\backup1")).await);
 }
 
 #[tokio::test]
 async fn test_create_backup_success() {
     let config = BackupConfig {
         enabled: true,
-        backup_dir: ".pkg-backups".to_string(),
+        backup_dir: ".wnt-backups".to_string(),
         keep_after_success: false,
         max_backups: 5,
     };
@@ -271,7 +271,7 @@ async fn test_create_backup_success() {
 async fn test_create_backup_disabled() {
     let config = BackupConfig {
         enabled: false,
-        backup_dir: ".pkg-backups".to_string(),
+        backup_dir: ".wnt-backups".to_string(),
         keep_after_success: false,
         max_backups: 5,
     };
@@ -493,7 +493,7 @@ async fn test_mark_success_nonexistent() {
 async fn test_cleanup_removes_successful_backups() {
     let config = BackupConfig {
         enabled: true,
-        backup_dir: ".pkg-backups".to_string(),
+        backup_dir: ".wnt-backups".to_string(),
         keep_after_success: false,
         max_backups: 5,
     };
@@ -523,7 +523,7 @@ async fn test_cleanup_removes_successful_backups() {
 async fn test_cleanup_keeps_successful_backups() {
     let config = BackupConfig {
         enabled: true,
-        backup_dir: ".pkg-backups".to_string(),
+        backup_dir: ".wnt-backups".to_string(),
         keep_after_success: true,
         max_backups: 5,
     };
@@ -547,7 +547,7 @@ async fn test_cleanup_keeps_successful_backups() {
 async fn test_cleanup_removes_old_backups() {
     let config = BackupConfig {
         enabled: true,
-        backup_dir: ".pkg-backups".to_string(),
+        backup_dir: ".wnt-backups".to_string(),
         keep_after_success: true,
         max_backups: 3,
     };
@@ -569,7 +569,7 @@ async fn test_cleanup_removes_old_backups() {
 async fn test_cleanup_priority_removes_successful_before_count() {
     let config = BackupConfig {
         enabled: true,
-        backup_dir: ".pkg-backups".to_string(),
+        backup_dir: ".wnt-backups".to_string(),
         keep_after_success: false,
         max_backups: 2,
     };

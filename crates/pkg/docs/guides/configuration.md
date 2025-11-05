@@ -291,7 +291,7 @@ read_npmrc = true
 
 [package_tools.upgrade.backup]
 enabled = true
-backup_dir = ".pkg-tools/backups"
+backup_dir = ".wnt-backups"
 keep_after_success = false
 max_backups = 5
 ```
@@ -334,7 +334,7 @@ max_backups = 5
   - Default: `true`
 
 - `backup_dir` (String): Backup storage directory
-  - Default: `".pkg-tools/backups"`
+  - Default: `".wnt-backups"`
 
 - `keep_after_success` (Boolean): Keep backups after successful upgrade
   - Default: `false`
