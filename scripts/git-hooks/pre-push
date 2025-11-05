@@ -68,29 +68,21 @@ if ! command -v wnt >/dev/null 2>&1; then
 fi
 
 # Display validation message
-printf "\n${BLUE}🔍 Validating changeset...${NC}\n" >&2
+printf "\n${BLUE}🔍 Checking changeset...${NC}\n" >&2
 
-# Run validation
-if wnt changeset validate --quiet 2>&1; then
-    printf "${GREEN}✓${NC} Changeset validation passed\n\n" >&2
+# Check if changeset exists
+if wnt changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
+    printf "${GREEN}✓${NC} Changeset exists for branch ${CYAN}${BRANCH}${NC}\n\n" >&2
     exit 0
 fi
 
-# Validation failed
-printf "\n${RED}✗${NC} ${BOLD}Changeset validation failed${NC}\n\n" >&2
+# Changeset missing
+printf "\n${RED}✗${NC} ${BOLD}No changeset found for branch ${CYAN}${BRANCH}${NC}\n\n" >&2
 
-# Get detailed error information
-printf "${YELLOW}Validation errors:${NC}\n" >&2
-wnt changeset validate 2>&1 | sed 's/^/  /' >&2 || true
-
-printf "\n${BOLD}How to fix:${NC}\n" >&2
-printf "  ${GREEN}1.${NC} Check your changeset: ${CYAN}wnt changeset show${NC}\n" >&2
-printf "  ${GREEN}2.${NC} Update if needed:     ${CYAN}wnt changeset update${NC}\n" >&2
-printf "  ${GREEN}3.${NC} Validate changes:     ${CYAN}wnt changeset validate${NC}\n" >&2
-printf "  ${GREEN}4.${NC} Commit and push:      ${CYAN}git commit -m 'chore: update changeset' && git push${NC}\n" >&2
-
-printf "\n${YELLOW}Or create changeset if missing:${NC}\n" >&2
-printf "  ${CYAN}wnt changeset create${NC}\n" >&2
+printf "${BOLD}How to fix:${NC}\n" >&2
+printf "  ${GREEN}1.${NC} Create changeset:     ${CYAN}wnt changeset create${NC}\n" >&2
+printf "  ${GREEN}2.${NC} Verify it was created: ${CYAN}wnt changeset show ${BRANCH}${NC}\n" >&2
+printf "  ${GREEN}3.${NC} Push again:           ${CYAN}git push${NC}\n" >&2
 
 printf "\n${BOLD}To skip this check once:${NC}\n" >&2
 printf "  ${CYAN}WNT_SKIP_HOOKS=1 git push${NC}\n\n" >&2

@@ -76,7 +76,7 @@ if ! command -v wnt >/dev/null 2>&1; then
 fi
 
 # Check if changeset already exists
-if wnt changeset show --quiet >/dev/null 2>&1; then
+if wnt changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
     # Changeset exists, nothing to do
     exit 0
 fi
@@ -117,15 +117,9 @@ if [ -t 0 ]; then
             ;;
     esac
 else
-    # Non-interactive mode: create with defaults silently
-    printf "${BLUE}ℹ${NC}  Creating changeset with defaults...\n" >&2
-
-    if wnt changeset create --auto --quiet 2>/dev/null; then
-        printf "${GREEN}✓${NC} Changeset created\n" >&2
-    else
-        printf "${YELLOW}⚠${NC} Could not auto-create changeset\n" >&2
-        printf "${CYAN}💡${NC} Create manually: ${GREEN}wnt changeset create${NC}\n" >&2
-    fi
+    # Non-interactive mode: inform user to create manually
+    printf "${BLUE}ℹ${NC}  Non-interactive mode detected\n" >&2
+    printf "${CYAN}💡${NC} Create changeset manually: ${GREEN}wnt changeset create${NC}\n" >&2
 fi
 
 exit 0

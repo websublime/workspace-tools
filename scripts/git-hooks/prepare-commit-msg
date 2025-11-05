@@ -61,20 +61,9 @@ if ! command -v wnt >/dev/null 2>&1; then
 fi
 
 # Check if changeset exists
-if ! wnt changeset show --quiet >/dev/null 2>&1; then
+if ! wnt changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
     exit 0
 fi
-
-# Get changeset info (format: packages|bump)
-CHANGESET_INFO=$(wnt changeset info --format template --template "{packages}|{bump}" 2>/dev/null || echo "")
-
-if [ -z "${CHANGESET_INFO}" ]; then
-    exit 0
-fi
-
-# Parse info
-PACKAGES=$(echo "${CHANGESET_INFO}" | cut -d'|' -f1)
-BUMP=$(echo "${CHANGESET_INFO}" | cut -d'|' -f2)
 
 # Check if message already has changeset info
 if grep -q "Changeset:" "${COMMIT_MSG_FILE}"; then
@@ -87,8 +76,7 @@ cat >> "${COMMIT_MSG_FILE}" << EOF
 # ──────────────────────────────────────────────────────────────
 # Changeset Info (added by wnt)
 # Branch: ${BRANCH}
-# Packages: ${PACKAGES}
-# Bump: ${BUMP}
+# Run 'wnt changeset show ${BRANCH}' to see details
 # ──────────────────────────────────────────────────────────────
 EOF
 

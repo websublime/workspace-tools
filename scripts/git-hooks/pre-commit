@@ -63,7 +63,7 @@ if ! command -v wnt >/dev/null 2>&1; then
 fi
 
 # Check if changeset exists for this branch
-if ! wnt changeset show --quiet >/dev/null 2>&1; then
+if ! wnt changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
     # No changeset exists, skip
     exit 0
 fi
@@ -71,7 +71,7 @@ fi
 # Update changeset
 printf "${BLUE}📝 Updating changeset...${NC}\n" >&2
 
-if wnt changeset update --auto --quiet 2>&1; then
+if wnt changeset update "${BRANCH}" --format quiet 2>&1; then
     # Stage the updated changeset file
     git add .changesets/*.json 2>/dev/null || true
 
@@ -79,7 +79,7 @@ if wnt changeset update --auto --quiet 2>&1; then
 else
     # Non-fatal: don't block the commit
     printf "${YELLOW}⚠${NC} Failed to update changeset (non-fatal)\n" >&2
-    printf "${BLUE}ℹ${NC} Run 'wnt changeset update' manually if needed\n" >&2
+    printf "${BLUE}ℹ${NC} Run 'wnt changeset update ${BRANCH}' manually if needed\n" >&2
 fi
 
 exit 0
