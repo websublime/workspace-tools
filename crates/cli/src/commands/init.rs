@@ -212,9 +212,21 @@ async fn validate_nodejs_project(root: &Path) -> Result<()> {
 }
 
 /// Detects the workspace type (monorepo or single package).
+///
+/// A project is considered a monorepo if:
+/// 1. The package.json contains a "workspaces" field (even if empty), OR
+/// 2. The detector finds multiple packages
+///
+/// This ensures that newly created monorepos with empty workspace arrays
+/// are correctly identified as monorepos.
 async fn detect_workspace_type(root: &Path) -> Result<WorkspaceInfo> {
     let detector = MonorepoDetector::new();
+    let fs = FileSystemManager::new();
 
+    // First, check if package.json explicitly declares workspaces
+    let has_workspace_field = check_has_workspace_field(root, &fs).await?;
+
+    // Then check with the detector
     match detector.is_monorepo_root(root).await {
         Ok(Some(kind)) => {
             // It's a monorepo, try to get descriptor for package count
@@ -235,11 +247,56 @@ async fn detect_workspace_type(root: &Path) -> Result<WorkspaceInfo> {
             }
         }
         Ok(None) => {
-            // Single package project
-            Ok(WorkspaceInfo { is_monorepo: false, monorepo_kind: None, package_count: 1 })
+            // Detector says not a monorepo, but check if workspaces field exists
+            if has_workspace_field {
+                // package.json has workspaces field, so it IS a monorepo
+                // (even if the array is empty - newly created monorepo)
+                debug!(
+                    "Detected monorepo from workspaces field in package.json (detector returned None)"
+                );
+                Ok(WorkspaceInfo {
+                    is_monorepo: true,
+                    monorepo_kind: Some(MonorepoKind::NpmWorkSpace), // Default to npm
+                    package_count: 0,                                // No packages yet
+                })
+            } else {
+                // Single package project
+                Ok(WorkspaceInfo { is_monorepo: false, monorepo_kind: None, package_count: 1 })
+            }
         }
         Err(e) => Err(CliError::execution(format!("Failed to detect workspace type: {e}"))),
     }
+}
+
+/// Checks if the package.json contains a "workspaces" field.
+///
+/// Returns true if the field exists, regardless of whether it's empty or not.
+/// This is critical for detecting newly created monorepos that don't have
+/// any packages defined yet.
+async fn check_has_workspace_field(root: &Path, fs: &FileSystemManager) -> Result<bool> {
+    let package_json_path = root.join("package.json");
+
+    if !fs.exists(&package_json_path).await {
+        return Ok(false);
+    }
+
+    let content = fs.read_file_string(&package_json_path).await.map_err(|e| {
+        CliError::io(format!(
+            "Failed to read package.json at {}: {}",
+            package_json_path.display(),
+            e
+        ))
+    })?;
+
+    let package_json: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+        CliError::validation(format!(
+            "Failed to parse package.json at {}: {}",
+            package_json_path.display(),
+            e
+        ))
+    })?;
+
+    Ok(package_json.get("workspaces").is_some())
 }
 
 /// Finds existing configuration file if present.
@@ -430,6 +487,25 @@ async fn generate_config_file(root: &Path, config: &InitConfig) -> Result<PathBu
     // Create PackageToolsConfig with user settings
     let mut pkg_config = PackageToolsConfig::default();
 
+    // Extract workspace patterns from package.json if it's a monorepo
+    let workspace_patterns = extract_workspace_patterns(root, &fs).await?;
+
+    // Set workspace config if this is a monorepo
+    if workspace_patterns.is_empty() {
+        // Check if it should be a monorepo (has workspaces field even if empty)
+        let has_workspace_field = check_has_workspace_field(root, &fs).await?;
+        if has_workspace_field {
+            // Monorepo with empty patterns - still need to include workspace config
+            pkg_config.workspace = Some(sublime_pkg_tools::config::WorkspaceConfig::empty());
+            debug!("Added empty workspace config for monorepo with no patterns yet");
+        }
+        // If no workspaces field, workspace remains None (single-package project)
+    } else {
+        pkg_config.workspace =
+            Some(sublime_pkg_tools::config::WorkspaceConfig::new(workspace_patterns.clone()));
+        debug!("Added workspace patterns to config: {:?}", workspace_patterns);
+    }
+
     // Set changeset config
     pkg_config.changeset.path.clone_from(&config.changeset_path);
     pkg_config.changeset.history_path = format!("{}/history", config.changeset_path);
@@ -469,6 +545,62 @@ async fn generate_config_file(root: &Path, config: &InitConfig) -> Result<PathBu
     })?;
 
     Ok(config_path)
+}
+
+/// Extracts workspace patterns from package.json.
+///
+/// Returns a vector of workspace patterns (e.g., `["packages/*", "apps/*"]`).
+/// Returns an empty vector if no patterns are found or if it's not a monorepo.
+///
+/// Supports multiple formats:
+/// - String array: `"workspaces": ["packages/*"]`
+/// - Object with packages: `"workspaces": { "packages": ["packages/*"] }`
+async fn extract_workspace_patterns(root: &Path, fs: &FileSystemManager) -> Result<Vec<String>> {
+    let package_json_path = root.join("package.json");
+
+    if !fs.exists(&package_json_path).await {
+        return Ok(vec![]);
+    }
+
+    let content = fs.read_file_string(&package_json_path).await.map_err(|e| {
+        CliError::io(format!(
+            "Failed to read package.json at {}: {}",
+            package_json_path.display(),
+            e
+        ))
+    })?;
+
+    let package_json: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+        CliError::validation(format!(
+            "Failed to parse package.json at {}: {}",
+            package_json_path.display(),
+            e
+        ))
+    })?;
+
+    // Check for workspaces field
+    if let Some(workspaces) = package_json.get("workspaces") {
+        // Handle array format: "workspaces": ["packages/*"]
+        if let Some(arr) = workspaces.as_array() {
+            let patterns: Vec<String> =
+                arr.iter().filter_map(|v| v.as_str().map(String::from)).collect();
+            debug!("Extracted workspace patterns (array format): {:?}", patterns);
+            return Ok(patterns);
+        }
+
+        // Handle object format: "workspaces": { "packages": ["packages/*"] }
+        if let Some(obj) = workspaces.as_object()
+            && let Some(packages) = obj.get("packages")
+            && let Some(arr) = packages.as_array()
+        {
+            let patterns: Vec<String> =
+                arr.iter().filter_map(|v| v.as_str().map(String::from)).collect();
+            debug!("Extracted workspace patterns (object format): {:?}", patterns);
+            return Ok(patterns);
+        }
+    }
+
+    Ok(vec![])
 }
 
 /// Creates the directory structure for changesets and backups.
