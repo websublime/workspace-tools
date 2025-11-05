@@ -552,14 +552,72 @@ fn display_dependency_recommendations(
 ///
 /// Currently a placeholder. Full JSON output will be implemented based on
 /// the OutputFormat from the global CLI args.
-#[allow(clippy::todo)]
 fn write_dependency_report_to_file(
-    _dependencies: &sublime_pkg_tools::audit::DependencyAuditSection,
-    _categorization: &sublime_pkg_tools::audit::DependencyCategorization,
-    _file_path: &Path,
+    dependencies: &sublime_pkg_tools::audit::DependencyAuditSection,
+    categorization: &sublime_pkg_tools::audit::DependencyCategorization,
+    file_path: &Path,
 ) -> Result<()> {
-    // TODO: will be implemented in story 8.3 (Export Formats)
-    todo!("File output will be implemented in story 8.3")
+    use crate::output::export::{ExportFormat, export_data};
+    use serde::Serialize;
+    use std::collections::HashMap;
+
+    #[derive(Serialize)]
+    struct DependencyExportData {
+        title: String,
+        summary: HashMap<String, serde_json::Value>,
+        circular_dependencies: Vec<Vec<String>>,
+        version_conflicts: Vec<HashMap<String, serde_json::Value>>,
+        categorization: HashMap<String, usize>,
+    }
+
+    let mut summary = HashMap::new();
+    summary.insert(
+        "circular_count".to_string(),
+        serde_json::json!(dependencies.circular_dependencies.len()),
+    );
+    summary.insert(
+        "conflict_count".to_string(),
+        serde_json::json!(dependencies.version_conflicts.len()),
+    );
+
+    let data = DependencyExportData {
+        title: "Dependency Audit Report".to_string(),
+        summary,
+        circular_dependencies: dependencies
+            .circular_dependencies
+            .iter()
+            .map(|cd| cd.cycle.clone())
+            .collect(),
+        version_conflicts: dependencies
+            .version_conflicts
+            .iter()
+            .map(|c| {
+                let mut map = HashMap::new();
+                map.insert(
+                    "dependency_name".to_string(),
+                    serde_json::json!(c.dependency_name.clone()),
+                );
+                map.insert("versions".to_string(), serde_json::json!(c.versions.clone()));
+                map
+            })
+            .collect(),
+        categorization: {
+            let mut cat_map = HashMap::new();
+            cat_map.insert("internal_packages".to_string(), categorization.internal_packages.len());
+            cat_map.insert("external_packages".to_string(), categorization.external_packages.len());
+            cat_map.insert("workspace_links".to_string(), categorization.workspace_links.len());
+            cat_map.insert("local_links".to_string(), categorization.local_links.len());
+            cat_map
+        },
+    };
+
+    let format = match file_path.extension().and_then(|s| s.to_str()) {
+        Some("md" | "markdown") => ExportFormat::Markdown,
+        _ => ExportFormat::Html, // default to HTML for .html, .htm, and unknown extensions
+    };
+
+    export_data(&data, format, file_path)?;
+    Ok(())
 }
 
 /// Loads audit configuration from workspace.

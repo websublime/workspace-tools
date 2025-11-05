@@ -460,13 +460,63 @@ fn display_upgrade_recommendations(
 ///
 /// Currently a placeholder. Full JSON output will be implemented based on
 /// the OutputFormat from the global CLI args.
-#[allow(clippy::todo)]
 fn write_upgrade_report_to_file(
-    _upgrades: &sublime_pkg_tools::audit::UpgradeAuditSection,
-    _file_path: &Path,
+    upgrades: &sublime_pkg_tools::audit::UpgradeAuditSection,
+    file_path: &Path,
 ) -> Result<()> {
-    // TODO: will be implemented in story 8.3 (Export Formats)
-    todo!("File output will be implemented in story 8.3")
+    use crate::output::export::{ExportFormat, export_data};
+    use serde::Serialize;
+    use std::collections::HashMap;
+
+    #[derive(Serialize)]
+    struct UpgradeExportData {
+        title: String,
+        summary: HashMap<String, serde_json::Value>,
+        upgrades_by_package: HashMap<String, serde_json::Value>,
+        deprecated_packages: Vec<HashMap<String, String>>,
+    }
+
+    let mut summary = HashMap::new();
+    summary.insert("total_upgrades".to_string(), serde_json::json!(upgrades.total_upgrades));
+    summary.insert("major_upgrades".to_string(), serde_json::json!(upgrades.major_upgrades));
+    summary.insert("minor_upgrades".to_string(), serde_json::json!(upgrades.minor_upgrades));
+    summary.insert("patch_upgrades".to_string(), serde_json::json!(upgrades.patch_upgrades));
+    summary.insert(
+        "deprecated_count".to_string(),
+        serde_json::json!(upgrades.deprecated_packages.len()),
+    );
+
+    let data = UpgradeExportData {
+        title: "Upgrade Audit Report".to_string(),
+        summary,
+        upgrades_by_package: upgrades
+            .upgrades_by_package
+            .iter()
+            .map(|(pkg, upg_list)| (pkg.clone(), serde_json::json!(upg_list)))
+            .collect(),
+        deprecated_packages: upgrades
+            .deprecated_packages
+            .iter()
+            .map(|d| {
+                let mut map = HashMap::new();
+                map.insert("name".to_string(), d.name.clone());
+                map.insert("current_version".to_string(), d.current_version.clone());
+                map.insert("deprecation_message".to_string(), d.deprecation_message.clone());
+                if let Some(ref alt) = d.alternative {
+                    map.insert("alternative".to_string(), alt.clone());
+                }
+                map
+            })
+            .collect(),
+    };
+
+    let format = match file_path.extension().and_then(|s| s.to_str()) {
+        Some("md" | "markdown") => ExportFormat::Markdown,
+        _ => ExportFormat::Html, // default to HTML for .html, .htm, and unknown extensions
+    };
+
+    export_data(&data, format, file_path)?;
+    Ok(())
 }
 
 /// Loads audit configuration from workspace.

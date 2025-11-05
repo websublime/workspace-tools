@@ -522,13 +522,65 @@ fn display_breaking_changes_recommendations(
 ///
 /// Currently a placeholder. Full JSON output will be implemented based on
 /// the OutputFormat from the global CLI args.
-#[allow(clippy::todo)]
 fn write_breaking_changes_report_to_file(
-    _breaking_changes: &sublime_pkg_tools::audit::BreakingChangesAuditSection,
-    _file_path: &Path,
+    breaking_changes: &sublime_pkg_tools::audit::BreakingChangesAuditSection,
+    file_path: &Path,
 ) -> Result<()> {
-    // TODO: will be implemented in story 8.3 (Export Formats)
-    todo!("File output will be implemented in story 8.3")
+    use crate::output::export::{ExportFormat, export_data};
+    use serde::Serialize;
+    use std::collections::HashMap;
+
+    #[derive(Serialize)]
+    struct BreakingChangesExportData {
+        title: String,
+        summary: HashMap<String, serde_json::Value>,
+        packages_with_breaking: Vec<HashMap<String, serde_json::Value>>,
+    }
+
+    let mut summary = HashMap::new();
+    summary.insert(
+        "total_breaking_changes".to_string(),
+        serde_json::json!(breaking_changes.total_breaking_changes),
+    );
+    summary.insert(
+        "packages_affected".to_string(),
+        serde_json::json!(breaking_changes.packages_with_breaking.len()),
+    );
+
+    let data = BreakingChangesExportData {
+        title: "Breaking Changes Audit Report".to_string(),
+        summary,
+        packages_with_breaking: breaking_changes
+            .packages_with_breaking
+            .iter()
+            .map(|p| {
+                let mut map = HashMap::new();
+                map.insert("package".to_string(), serde_json::json!(p.package_name.clone()));
+                map.insert(
+                    "current_version".to_string(),
+                    serde_json::json!(p.current_version.clone()),
+                );
+                map.insert("next_version".to_string(), serde_json::json!(p.next_version.clone()));
+                map.insert(
+                    "breaking_changes_count".to_string(),
+                    serde_json::json!(p.breaking_changes.len()),
+                );
+                map.insert(
+                    "breaking_changes".to_string(),
+                    serde_json::json!(p.breaking_changes.clone()),
+                );
+                map
+            })
+            .collect(),
+    };
+
+    let format = match file_path.extension().and_then(|s| s.to_str()) {
+        Some("md" | "markdown") => ExportFormat::Markdown,
+        _ => ExportFormat::Html, // default to HTML for .html, .htm, and unknown extensions
+    };
+
+    export_data(&data, format, file_path)?;
+    Ok(())
 }
 
 /// Loads audit configuration from workspace.

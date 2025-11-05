@@ -220,7 +220,7 @@ impl AuditResults {
 /// ```
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ExportableAuditData {
+pub(crate) struct ExportableAuditData {
     /// Report title.
     title: String,
 
@@ -297,7 +297,10 @@ struct ExportIssue {
 /// # Returns
 ///
 /// An `ExportableAuditData` structure ready for serialization.
-fn create_exportable_data(results: &AuditResults, health_score: Option<u8>) -> ExportableAuditData {
+pub(crate) fn create_exportable_data(
+    results: &AuditResults,
+    health_score: Option<u8>,
+) -> ExportableAuditData {
     let all_issues = results.all_issues();
 
     let summary = ExportSummary {

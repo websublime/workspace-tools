@@ -26,7 +26,7 @@
 //! - Enables easy testing of argument parsing
 
 use crate::error::{CliError, Result};
-use sublime_pkg_tools::audit::{FormatOptions, Verbosity};
+use sublime_pkg_tools::audit::Verbosity;
 
 /// Audit sections that can be executed.
 ///
@@ -233,36 +233,5 @@ pub(crate) fn parse_verbosity(s: &str) -> Result<Verbosity> {
         _ => Err(CliError::validation(format!(
             "Invalid verbosity level '{s}'. Valid options: minimal, normal, detailed"
         ))),
-    }
-}
-
-/// Builds format options for audit report generation.
-///
-/// # Arguments
-///
-/// * `verbosity` - The verbosity level
-/// * `include_health_score` - Whether to include health score in the report
-///
-/// # Returns
-///
-/// Returns configured `FormatOptions` for report generation.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use sublime_pkg_tools::audit::Verbosity;
-///
-/// let options = build_format_options(Verbosity::Normal, true);
-/// ```
-#[allow(dead_code)] // TODO: will be used in story 8.3 for export formats
-pub(crate) fn build_format_options(
-    verbosity: Verbosity,
-    _include_health_score: bool,
-) -> FormatOptions {
-    FormatOptions {
-        colors: false, // Colors are handled by CLI output system
-        verbosity,
-        include_suggestions: true,
-        include_metadata: true,
     }
 }
