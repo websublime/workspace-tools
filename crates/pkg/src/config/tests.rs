@@ -1098,7 +1098,7 @@ default_bump = "minor"
 #[cfg(test)]
 mod validation_tests {
     use crate::config::{
-        validate_config, validate_path_format, validate_url_format, PackageToolsConfig,
+        PackageToolsConfig, validate_config, validate_path_format, validate_url_format,
     };
 
     #[test]
@@ -1245,5 +1245,139 @@ mod validation_tests {
 
         let result = validate_config(&config);
         assert!(result.is_err());
+    }
+}
+
+// =============================================================================
+// WorkspaceConfig Tests
+// =============================================================================
+
+mod workspace_config {
+    use crate::config::WorkspaceConfig;
+
+    #[test]
+    fn test_workspace_config_default() {
+        let config = WorkspaceConfig::default();
+        assert!(config.patterns.is_empty());
+        assert!(config.is_empty());
+        assert_eq!(config.len(), 0);
+    }
+
+    #[test]
+    fn test_workspace_config_new() {
+        let patterns = vec!["packages/*".to_string(), "apps/*".to_string()];
+        let config = WorkspaceConfig::new(patterns.clone());
+
+        assert_eq!(config.patterns, patterns);
+        assert_eq!(config.len(), 2);
+        assert!(!config.is_empty());
+    }
+
+    #[test]
+    fn test_workspace_config_empty() {
+        let config = WorkspaceConfig::empty();
+        assert!(config.is_empty());
+        assert_eq!(config.len(), 0);
+    }
+
+    #[test]
+    fn test_workspace_config_validate_valid() {
+        let config = WorkspaceConfig::new(vec!["packages/*".to_string()]);
+        assert!(config.validate().is_ok());
+
+        let empty_config = WorkspaceConfig::empty();
+        assert!(empty_config.validate().is_ok());
+
+        let multi_pattern = WorkspaceConfig::new(vec![
+            "packages/*".to_string(),
+            "apps/*".to_string(),
+            "libs/**/*.js".to_string(),
+        ]);
+        assert!(multi_pattern.validate().is_ok());
+    }
+
+    #[test]
+    fn test_workspace_config_validate_empty_pattern() {
+        let config = WorkspaceConfig::new(vec!["".to_string()]);
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn test_workspace_config_validate_path_traversal() {
+        let config = WorkspaceConfig::new(vec!["../packages/*".to_string()]);
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("path traversal"));
+
+        let config2 = WorkspaceConfig::new(vec!["packages/../apps/*".to_string()]);
+        let result2 = config2.validate();
+        assert!(result2.is_err());
+    }
+
+    #[test]
+    fn test_workspace_config_validate_absolute_unix_path() {
+        let config = WorkspaceConfig::new(vec!["/usr/local/packages/*".to_string()]);
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("must be relative"));
+    }
+
+    #[test]
+    fn test_workspace_config_validate_absolute_windows_path() {
+        let config = WorkspaceConfig::new(vec!["C:\\packages\\*".to_string()]);
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("must be relative"));
+
+        let config2 = WorkspaceConfig::new(vec!["D:/packages/*".to_string()]);
+        let result2 = config2.validate();
+        assert!(result2.is_err());
+    }
+
+    #[test]
+    fn test_workspace_config_merge() {
+        let mut config = WorkspaceConfig::new(vec!["packages/*".to_string()]);
+        let other = WorkspaceConfig::new(vec!["apps/*".to_string(), "libs/*".to_string()]);
+
+        let result = config.merge_with(other);
+        assert!(result.is_ok());
+
+        assert_eq!(config.patterns.len(), 2);
+        assert_eq!(config.patterns[0], "apps/*");
+        assert_eq!(config.patterns[1], "libs/*");
+    }
+
+    #[test]
+    fn test_workspace_config_merge_empty() {
+        let mut config = WorkspaceConfig::new(vec!["packages/*".to_string()]);
+        let other = WorkspaceConfig::empty();
+
+        let result = config.merge_with(other);
+        assert!(result.is_ok());
+
+        // Empty patterns don't override
+        assert_eq!(config.patterns.len(), 1);
+        assert_eq!(config.patterns[0], "packages/*");
+    }
+
+    #[test]
+    fn test_workspace_config_equality() {
+        let config1 = WorkspaceConfig::new(vec!["packages/*".to_string(), "apps/*".to_string()]);
+        let config2 = WorkspaceConfig::new(vec!["packages/*".to_string(), "apps/*".to_string()]);
+        let config3 = WorkspaceConfig::new(vec!["libs/*".to_string()]);
+
+        assert_eq!(config1, config2);
+        assert_ne!(config1, config3);
+    }
+
+    #[test]
+    fn test_workspace_config_clone() {
+        let config1 = WorkspaceConfig::new(vec!["packages/*".to_string()]);
+        let config2 = config1.clone();
+
+        assert_eq!(config1, config2);
+        assert_eq!(config1.patterns, config2.patterns);
     }
 }
