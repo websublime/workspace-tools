@@ -17,10 +17,9 @@ Automated changeset management through git hooks for seamless developer workflow
 
 The wnt git hooks automate changeset management throughout your development workflow:
 
-- **pre-commit**: Validates that a changeset exists before allowing commit
-- **post-commit**: Automatically adds commit SHA to changeset after commit
+- **pre-commit**: Validates changeset exists, prompts to create if missing
 - **post-checkout**: Creates changesets when you start new feature branches
-- **pre-push**: Validates changesets before pushing to remote
+- **pre-push**: Adds all branch commits and creates a commit with updated changeset
 - **prepare-commit-msg**: Enhances commit messages with changeset info
 
 ### Benefits
@@ -49,29 +48,41 @@ That's it! The hooks are now active.
 git checkout -b feature/new-thing
 # → Hook prompts to create changeset
 
-# 2. Work and commit
+# 2. Make first commit
 git add file.js
 git commit -m "feat: add new feature"
-# → pre-commit validates changeset exists
-# → post-commit adds SHA to changeset automatically
+# → pre-commit: "No changeset found. Create one? [Y/n]"
+# → User: Y (creates changeset interactively)
+# → Commit proceeds
 
-# 3. Push
+# 3. Make more commits (as many as you want)
+git add another.js  
+git commit -m "feat: improve feature"
+# → pre-commit: ✓ Changeset exists
+
+# 4. Push (commits are added here)
 git push origin feature/new-thing
-# → Hook validates changeset before pushing
+# → pre-push: Adds ALL branch commits to changeset
+# → pre-push: Creates commit "chore: update changeset for feature/new-thing"
+# → Push includes all your commits + changeset commit
 ```
 
 ## Available Hooks
 
 ### pre-commit
 
-**Purpose**: Validate that a changeset exists before allowing commit
+**Purpose**: Ensure changeset exists, prompting to create interactively if missing
 
 **What it does:**
 1. Detects current branch
 2. Skips main/master branches
 3. Checks if changeset exists for the branch
-4. Prompts to create one if missing (interactive mode)
-5. Aborts commit if no changeset and user declines
+4. If missing (interactive mode):
+   - Prompts: "Create changeset now? [Y/n]"
+   - If yes (default): Runs `wnt changeset create` interactively
+   - If no: Asks if user wants to continue without changeset
+5. If missing (non-interactive mode): Warns but allows commit
+6. Allows commit to proceed
 
 **When it runs**: Before each `git commit`
 
@@ -80,12 +91,25 @@ git push origin feature/new-thing
 ✓ Changeset found for branch feature/my-branch
 ```
 
-**Example output (no changeset):**
+**Example output (no changeset - user creates):**
 ```
 ⚠ No changeset found for branch feature/my-branch
-ℹ Create one with: wnt changeset create
 
-? Continue commit without changeset? [y/N]
+? Create changeset now? [Y/n] 
+
+📝 Creating changeset...
+[Interactive prompts...]
+✓ Changeset created successfully
+ℹ Continuing with commit...
+```
+
+**Example output (user declines):**
+```
+⚠ No changeset found for branch feature/my-branch
+
+? Create changeset now? [Y/n] n
+? Continue commit without changeset? [y/N] y
+⚠ Proceeding without changeset
 ```
 
 **Skip once:**
@@ -146,23 +170,45 @@ WNT_SKIP_HOOKS=1 git checkout -b feature/branch
 
 ### pre-push
 
-**Purpose**: Validate changeset exists before pushing
+**Purpose**: Add all branch commits to changeset and create a commit with the update before pushing
 
 **What it does:**
 1. Detects current branch
 2. Skips main/master branches
-3. Checks if changeset exists for the branch
-4. Blocks push if changeset is missing
+3. Checks if changeset exists (blocks push if missing)
+4. Gets all commits from branch that aren't in main
+5. Adds each commit SHA to the changeset's changes array (bulk update)
+6. If changeset was modified:
+   - Stages the changeset file
+   - Creates a commit: `chore: update changeset for <branch-name>`
+   - This commit is included automatically in the push
+7. Allows push to continue
 
 **When it runs**: Before `git push`
 
-**Example output (success):**
+**Example output (with updates):**
 ```
 🔍 Checking changeset...
 ✓ Changeset exists for branch feature/my-branch
+📝 Adding branch commits to changeset...
+ℹ Found 3 commit(s)
+✓ Commits added to changeset
+📦 Committing updated changeset...
+✓ Changeset committed
+✓ Ready to push
 ```
 
-**Example output (failure):**
+**Example output (already up-to-date):**
+```
+🔍 Checking changeset...
+✓ Changeset exists for branch feature/my-branch
+📝 Adding branch commits to changeset...
+ℹ No commits to add
+ℹ Changeset already up-to-date
+✓ Ready to push
+```
+
+**Example output (no changeset):**
 ```
 ✗ No changeset found for branch feature/my-branch
 
@@ -174,6 +220,8 @@ How to fix:
 To skip this check once:
   WNT_SKIP_HOOKS=1 git push
 ```
+
+**Why bulk update on push?**: Adding commits in bulk before push (instead of per-commit) avoids issues with git commit amending and keeps the workflow simple. You can make multiple commits freely, and they're all tracked when you push. The automatic commit ensures the changeset is always included in the push.
 
 **Skip once:**
 ```bash

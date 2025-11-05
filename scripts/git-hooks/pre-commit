@@ -73,27 +73,63 @@ fi
 
 # No changeset exists - inform user
 printf "\n${YELLOW}⚠${NC} No changeset found for branch ${BLUE}${BRANCH}${NC}\n" >&2
-printf "${BLUE}ℹ${NC} Create one with: ${GREEN}wnt changeset create${NC}\n\n" >&2
 
-# Ask if user wants to continue without changeset
-if [ -t 0 ]; then
-    # Interactive mode: ask user
-    printf "${YELLOW}?${NC} Continue commit without changeset? ${BLUE}[y/N]${NC} " >&2
+# Try to use terminal directly for interactive prompts
+# This works even when stdin is redirected (like with git commit -m)
+if [ -e /dev/tty ]; then
+    exec < /dev/tty
+
+    # Prompt to create changeset
+    printf "${YELLOW}?${NC} Create changeset now? ${BLUE}[Y/n]${NC} " >&2
     read -r response
 
     case "${response}" in
-        [yY][eE][sS]|[yY])
-            printf "${BLUE}ℹ${NC} Proceeding without changeset\n" >&2
-            exit 0
+        [nN][oO]|[nN])
+            # User declined - ask if they want to continue anyway
+            printf "${YELLOW}?${NC} Continue commit without changeset? ${BLUE}[y/N]${NC} " >&2
+            read -r continue_response
+
+            case "${continue_response}" in
+                [yY][eE][sS]|[yY])
+                    printf "${YELLOW}⚠${NC} Proceeding without changeset\n" >&2
+                    exit 0
+                    ;;
+                *)
+                    printf "${RED}✗${NC} Commit aborted\n" >&2
+                    printf "${BLUE}ℹ${NC} Create changeset with: ${GREEN}wnt changeset create${NC}\n" >&2
+                    exit 1
+                    ;;
+            esac
             ;;
         *)
-            printf "${RED}✗${NC} Commit aborted\n" >&2
-            printf "${BLUE}ℹ${NC} Create changeset first: ${GREEN}wnt changeset create${NC}\n" >&2
-            exit 1
+            # User accepted (default) - create changeset interactively
+            printf "\n${BLUE}📝 Creating changeset...${NC}\n\n" >&2
+
+            if wnt changeset create; then
+                printf "\n${GREEN}✓${NC} Changeset created successfully\n" >&2
+                printf "${BLUE}ℹ${NC} Continuing with commit...\n" >&2
+                exit 0
+            else
+                printf "\n${RED}✗${NC} Failed to create changeset\n" >&2
+                printf "${YELLOW}?${NC} Continue commit anyway? ${BLUE}[y/N]${NC} " >&2
+                read -r fallback_response
+
+                case "${fallback_response}" in
+                    [yY][eE][sS]|[yY])
+                        printf "${YELLOW}⚠${NC} Proceeding without changeset\n" >&2
+                        exit 0
+                        ;;
+                    *)
+                        printf "${RED}✗${NC} Commit aborted\n" >&2
+                        exit 1
+                        ;;
+                esac
+            fi
             ;;
     esac
 else
-    # Non-interactive mode: allow commit without changeset
-    printf "${BLUE}ℹ${NC} Non-interactive mode - proceeding without changeset\n" >&2
+    # No terminal available (CI/CD, scripts, etc.) - warn but allow commit
+    printf "${YELLOW}⚠${NC} No terminal available - proceeding without changeset\n" >&2
+    printf "${BLUE}ℹ${NC} Create changeset later with: ${GREEN}wnt changeset create${NC}\n" >&2
     exit 0
 fi

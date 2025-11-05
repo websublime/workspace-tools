@@ -94,9 +94,11 @@ fi
 printf "\n${BLUE}📝 New feature branch detected: ${CYAN}%s${NC}\n" "${BRANCH}" >&2
 printf "${BLUE}ℹ${NC}  No changeset found for this branch\n\n" >&2
 
-# Check if running in interactive terminal
-if [ -t 0 ]; then
-    # Interactive mode: prompt user
+# Try to use terminal directly for interactive prompts
+if [ -e /dev/tty ]; then
+    exec < /dev/tty
+
+    # Prompt user to create changeset
     printf "${YELLOW}?${NC} Create changeset now? ${CYAN}[Y/n]${NC} " >&2
     read -r response
 
@@ -117,8 +119,8 @@ if [ -t 0 ]; then
             ;;
     esac
 else
-    # Non-interactive mode: inform user to create manually
-    printf "${BLUE}ℹ${NC}  Non-interactive mode detected\n" >&2
+    # No terminal available (CI/CD, scripts, etc.)
+    printf "${BLUE}ℹ${NC}  No terminal available\n" >&2
     printf "${CYAN}💡${NC} Create changeset manually: ${GREEN}wnt changeset create${NC}\n" >&2
 fi
 
