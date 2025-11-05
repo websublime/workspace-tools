@@ -1,33 +1,170 @@
 # Scripts Directory
 
-Utility scripts for building, installing, and testing the `wnt` CLI.
+Utility scripts for building, installing, testing, and managing the `wnt` CLI.
 
-## Scripts
+## Table of Contents
 
-### 📦 `install-local.sh`
+- [Installation Scripts](#installation-scripts)
+  - [install.sh - Production Installation](#-installsh---production-installation)
+  - [install-dev.sh - Development Installation](#-install-devsh---development-installation)
+  - [uninstall.sh - Uninstallation](#-uninstallsh---uninstallation)
+- [Testing Scripts](#testing-scripts)
+  - [test-in-demo.sh - Interactive Testing](#-test-in-demosh---interactive-testing)
+- [Quick Start](#quick-start)
+- [Development Workflow](#development-workflow)
+- [Troubleshooting](#troubleshooting)
 
-Install the `wnt` CLI binary locally for testing.
+## Installation Scripts
+
+### 🚀 `install.sh` - Production Installation
+
+Official installation script for `wnt` CLI. Downloads pre-built binaries from GitHub releases, verifies checksums, and installs system-wide or locally.
+
+**Usage:**
+```bash
+# Install latest version
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+
+# Install specific version
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --version v0.1.0
+
+# Custom installation directory
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --install-dir ~/.local/bin
+
+# Skip shell completions
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --no-shell-completions
+
+# Verbose output
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --verbose
+
+# Show help
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --help
+```
+
+**Options:**
+- `--version <VERSION>` - Install specific version (default: latest)
+- `--install-dir <DIR>` - Custom installation directory
+- `--no-shell-completions` - Skip shell completions installation
+- `--no-color` - Disable colored output
+- `--verbose` - Enable verbose output
+- `--help` - Show help message
+
+**Environment Variables:**
+- `WNT_VERSION` - Version to install (overridden by `--version`)
+- `WNT_INSTALL_DIR` - Installation directory (overridden by `--install-dir`)
+- `WNT_GITHUB_TOKEN` - GitHub token for private repositories
+- `NO_COLOR` - Disable colored output
+
+**What it does:**
+1. Detects operating system (macOS, Linux, Windows via Git Bash)
+2. Detects architecture (x86_64, aarch64, arm)
+3. Downloads appropriate pre-built binary from GitHub releases
+4. Downloads and verifies SHA256 checksum
+5. Extracts binary from archive
+6. Installs to `/usr/local/bin` (with sudo if needed) or `~/.local/bin`
+7. Installs shell completions (bash, zsh, fish)
+8. Shows post-installation instructions
+
+**Supported Platforms:**
+- macOS (Intel: x86_64, Apple Silicon: aarch64)
+- Linux (x86_64, aarch64, armv7)
+- Windows via Git Bash/WSL (x86_64)
+
+**Exit Codes:**
+- `0` - Success
+- `1` - General error
+- `2` - Invalid usage
+- `3` - Platform not supported
+- `4` - Download failed
+- `5` - Checksum verification failed
+- `6` - Installation failed
+
+### 📦 `install-dev.sh` - Development Installation
+
+Install the `wnt` CLI binary locally for development and testing. Builds from source and installs to specified location.
 
 **Usage:**
 ```bash
 # Install to default location (~/.local/bin)
-./scripts/install-local.sh
+./scripts/install-dev.sh
 
 # Install to custom location
-./scripts/install-local.sh ~/bin
+./scripts/install-dev.sh ~/bin
 
 # Install system-wide (requires sudo)
-sudo ./scripts/install-local.sh /usr/local/bin
+sudo ./scripts/install-dev.sh /usr/local/bin
 ```
 
 **What it does:**
-1. Builds the release binary if not present
-2. Copies binary to specified location
-3. Makes it executable
-4. Shows installation status and usage examples
-5. Warns if install location is not in PATH
+1. Checks for existing release binary
+2. Builds release binary if not present (`cargo build --release`)
+3. Copies binary to specified location
+4. Makes it executable
+5. Shows installation status and usage examples
+6. Warns if install location is not in PATH
 
-### 🧪 `test-in-demo.sh`
+**When to use:**
+- During active development
+- Testing local changes
+- When you have the source code
+- When pre-built binaries are not available
+
+### 🗑️ `uninstall.sh` - Uninstallation
+
+Removes `wnt` CLI binary, shell completions, and optionally configuration files.
+
+**Usage:**
+```bash
+# Basic uninstall
+./scripts/uninstall.sh
+
+# Uninstall with configuration removal
+./scripts/uninstall.sh --remove-config
+
+# Uninstall from custom directory
+./scripts/uninstall.sh --install-dir ~/.local/bin
+
+# Non-interactive uninstall
+./scripts/uninstall.sh --yes --remove-config
+
+# Show help
+./scripts/uninstall.sh --help
+```
+
+**Options:**
+- `--remove-config` - Remove configuration files
+- `--install-dir <DIR>` - Custom installation directory to remove from
+- `--no-color` - Disable colored output
+- `--verbose` - Enable verbose output
+- `--yes` - Skip confirmation prompts
+- `--help` - Show help message
+
+**Environment Variables:**
+- `WNT_INSTALL_DIR` - Installation directory (overridden by `--install-dir`)
+- `NO_COLOR` - Disable colored output
+
+**What it does:**
+1. Searches for `wnt` binary in common locations
+2. Displays found installation
+3. Asks for confirmation (unless `--yes` is used)
+4. Removes binary (with sudo if needed)
+5. Removes shell completions (bash, zsh, fish)
+6. Optionally removes configuration files (if `--remove-config`)
+7. Shows completion message
+
+**Configuration Files Searched:**
+- Project-level: `.wnt.toml`, `.wntrc`, `wnt.config.json` (in current directory and parents)
+- User-level: `~/.config/wnt/config.toml`, `~/.wnt.toml`
+
+**Exit Codes:**
+- `0` - Success
+- `1` - General error
+- `2` - Invalid usage
+- `3` - Binary not found
+
+## Testing Scripts
+
+### 🧪 `test-in-demo.sh` - Interactive Testing
 
 Create a temporary demo repository and test the CLI interactively.
 
@@ -56,20 +193,38 @@ Create a temporary demo repository and test the CLI interactively.
 
 ## Quick Start
 
-### Build and Install Locally
+### For End Users (Production)
 
 ```bash
-# 1. Build release binary
-cargo build --package sublime_cli_tools --release
+# Install latest version
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
 
-# 2. Install to ~/.local/bin
-./scripts/install-local.sh
+# Verify installation
+wnt version
+
+# Initialize your workspace
+cd /path/to/your/project
+wnt init
+```
+
+### For Developers (Development)
+
+```bash
+# 1. Clone repository
+git clone https://github.com/websublime/workspace-node-tools.git
+cd workspace-node-tools
+
+# 2. Build and install locally
+./scripts/install-dev.sh
 
 # 3. Verify installation
 wnt version
+
+# 4. Test in demo repository
+./scripts/test-in-demo.sh
 ```
 
-### Test in Demo Repository
+### Testing in Demo Repository
 
 ```bash
 # Run the demo script
@@ -80,7 +235,39 @@ cd /tmp/wnt-demo-XXXXXX  # Use the path shown in output
 wnt changeset edit
 ```
 
-## Manual Build and Copy
+## Development Workflow
+
+### Making Changes and Testing
+
+```bash
+# 1. Make changes to CLI code
+vim crates/cli/src/commands/changeset/edit.rs
+
+# 2. Build release
+cargo build --package sublime_cli_tools --release
+
+# 3. Install locally
+./scripts/install-dev.sh
+
+# 4. Test in demo
+./scripts/test-in-demo.sh
+
+# 5. Or test in real project
+cd ~/my-real-project
+wnt changeset edit
+```
+
+### Rapid Iteration
+
+```bash
+# Watch and rebuild on changes (requires cargo-watch)
+cargo watch -x 'build --package sublime_cli_tools --release' -s './scripts/install-dev.sh'
+
+# In another terminal, test your changes
+wnt --help
+```
+
+### Manual Build and Copy
 
 If you prefer to build and copy manually:
 
@@ -124,7 +311,7 @@ wnt changeset edit
 
 ```bash
 # Install CLI
-./scripts/install-local.sh
+./scripts/install-dev.sh
 
 # Navigate to your test repo
 cd /path/to/test-repo
@@ -147,27 +334,84 @@ wnt changeset edit feature/test
 
 The scripts respect these environment variables:
 
+### Installation Scripts
+- `WNT_VERSION` - Version to install (install.sh)
+- `WNT_INSTALL_DIR` - Installation directory (install.sh, uninstall.sh)
+- `WNT_GITHUB_TOKEN` - GitHub token for private repositories (install.sh)
+- `NO_COLOR` - Disable colored output (all scripts)
+
+### CLI Usage
 - `EDITOR` - Your preferred text editor (used by `wnt changeset edit`)
 - `VISUAL` - Alternative editor specification (higher priority than EDITOR)
 
-## Binary Size
+## Binary Information
 
+### Release Binary
 The release binary is optimized for size and performance:
-- **Size**: ~7MB
-- **Strip**: Symbols removed
-- **LTO**: Enabled
-- **Optimization**: Level 3
+- **Size**: ~7-10MB (varies by platform)
+- **Strip**: Debug symbols removed
+- **LTO**: Link Time Optimization enabled
+- **Optimization**: Level 3 (or z for size)
+
+### Build Configuration
+From `Cargo.toml`:
+```toml
+[profile.release]
+opt-level = "z"      # Optimize for size
+lto = true           # Enable Link Time Optimization
+codegen-units = 1    # Better optimization
+strip = true         # Strip symbols
+panic = "abort"      # Smaller binary
+```
 
 ## Troubleshooting
 
-### "Binary not found" error
+### Installation Issues
+
+#### "Platform not supported" error
+```bash
+# Check your platform
+uname -s  # OS
+uname -m  # Architecture
+
+# Supported platforms:
+# - macOS: x86_64, aarch64
+# - Linux: x86_64, aarch64, armv7
+# - Windows: x86_64 (via Git Bash/WSL)
+```
+
+#### "Download failed" error
+```bash
+# Check internet connection
+curl -I https://github.com
+
+# Use verbose mode to see details
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --verbose
+
+# For private repositories, provide GitHub token
+export WNT_GITHUB_TOKEN="your_token_here"
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+```
+
+#### "Checksum verification failed" error
+```bash
+# Download may be corrupted, try again
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+
+# If problem persists, report issue with verbose output
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --verbose
+```
+
+### Development Issues
+
+#### "Binary not found" error
 
 Run the install script, it will build automatically:
 ```bash
-./scripts/install-local.sh
+./scripts/install-dev.sh
 ```
 
-### "Command not found: wnt"
+#### "Command not found: wnt"
 
 Add the installation directory to your PATH:
 ```bash
@@ -178,15 +422,22 @@ export PATH="$HOME/.local/bin:$PATH"
 source ~/.bashrc  # or source ~/.zshrc
 ```
 
-### Editor doesn't open
+Or verify where wnt is installed:
+```bash
+which wnt
+ls -l ~/.local/bin/wnt
+ls -l /usr/local/bin/wnt
+```
+
+#### Editor doesn't open
 
 Set your EDITOR environment variable:
 ```bash
-export EDITOR=nano  # or vim, code, etc.
+export EDITOR=nano  # or vim, code, emacs, etc.
 wnt changeset edit
 ```
 
-### Demo script fails
+#### Demo script fails
 
 Ensure you have required tools:
 ```bash
@@ -198,29 +449,125 @@ jq --version
 
 # Check cargo
 cargo --version
+
+# Check Rust
+rustc --version
 ```
 
-## Development Workflow
+### Uninstallation Issues
 
+#### "Binary not found" error
+
+The binary may already be uninstalled or installed in a custom location:
 ```bash
-# 1. Make changes to CLI code
-vim crates/cli/src/commands/changeset/edit.rs
+# Search for wnt in common locations
+which wnt
+find ~ -name wnt -type f 2>/dev/null
 
-# 2. Build release
-cargo build --package sublime_cli_tools --release
+# Uninstall from custom directory
+./scripts/uninstall.sh --install-dir /path/to/custom/dir
+```
 
-# 3. Test in demo
-./scripts/test-in-demo.sh
+#### Permission denied errors
 
-# 4. Or install and test in real project
-./scripts/install-local.sh
-cd ~/my-real-project
-wnt changeset edit
+Use sudo for system-wide installations:
+```bash
+sudo ./scripts/uninstall.sh --install-dir /usr/local/bin
+```
+
+## Shell Completions
+
+Shell completions are automatically installed by `install.sh` to:
+
+### Bash
+```bash
+# Location
+~/.local/share/bash-completion/completions/wnt
+
+# Reload completions
+source ~/.bashrc
+```
+
+### Zsh
+```bash
+# Location
+~/.local/share/zsh/site-functions/_wnt
+
+# Reload completions
+source ~/.zshrc
+# or
+rm -f ~/.zcompdump; compinit
+```
+
+### Fish
+```bash
+# Location
+~/.config/fish/completions/wnt.fish
+
+# Completions are automatically loaded
+```
+
+### Manual Generation
+
+If you need to regenerate completions:
+```bash
+# Bash
+wnt completions bash > ~/.local/share/bash-completion/completions/wnt
+
+# Zsh
+wnt completions zsh > ~/.local/share/zsh/site-functions/_wnt
+
+# Fish
+wnt completions fish > ~/.config/fish/completions/wnt.fish
 ```
 
 ## Notes
 
-- The demo script creates temporary directories that are cleaned up on exit
-- The install script doesn't overwrite existing configurations
-- Both scripts work on macOS and Linux
-- Windows users should use WSL or adapt scripts for PowerShell
+### Security Considerations
+- The install script verifies SHA256 checksums to prevent tampering
+- Always use HTTPS when downloading scripts
+- Review scripts before piping to shell: `curl -fsSL <url> | less`
+- For production, pin specific versions: `--version v0.1.0`
+
+### Best Practices
+- Use `install.sh` for production installations (stable, tested binaries)
+- Use `install-dev.sh` for development (latest code, frequent changes)
+- Use `test-in-demo.sh` for testing features without affecting real projects
+- Always backup configuration before using `uninstall.sh --remove-config`
+
+### Platform-Specific Notes
+- **macOS**: Uses Apple's `shasum` for checksum verification
+- **Linux**: Uses GNU `sha256sum` for checksum verification
+- **Windows**: Use Git Bash or WSL for best compatibility
+- **ARM**: Supported on both macOS (Apple Silicon) and Linux
+
+### Performance
+- Installation script is optimized for minimal output (unless `--verbose`)
+- Binary downloads are typically 5-10MB compressed
+- Installation completes in seconds on modern hardware
+- Shell completions improve CLI usability
+
+### Cleanup
+- Temporary files are automatically cleaned up on script exit
+- The demo script cleans up on exit (Ctrl+C)
+- Uninstall script only removes wnt-related files, never user data (unless `--remove-config`)
+
+## Contributing
+
+When modifying installation scripts:
+
+1. **Test on all platforms**: macOS (Intel & Apple Silicon), Linux (multiple distros), Windows (Git Bash/WSL)
+2. **Verify exit codes**: Ensure proper exit codes are used
+3. **Update documentation**: Keep this README in sync with script changes
+4. **Test error scenarios**: Network failures, permission issues, missing dependencies
+5. **Follow shell best practices**: Use `set -e`, quote variables, handle errors gracefully
+6. **Maintain POSIX compatibility**: Use `sh` not `bash` for maximum compatibility (except install-dev.sh)
+
+## Additional Resources
+
+- [Main README](../README.md) - Project overview
+- [PRD](../crates/cli/PRD.md) - Product requirements
+- [PLAN](../crates/cli/PLAN.md) - Implementation plan
+- [STORY_MAP](../crates/cli/STORY_MAP.md) - Development roadmap
+- [Website](https://github.com/websublime/workspace-node-tools) - Official documentation
+- [GitHub](https://github.com/websublime/workspace-node-tools) - Source code and releases
