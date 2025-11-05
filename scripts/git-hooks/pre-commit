@@ -2,20 +2,22 @@
 #
 # pre-commit hook for wnt (Workspace Node Tools)
 #
-# This hook automatically updates the changeset file when you commit changes.
-# It detects which packages are affected and updates the changeset accordingly.
+# This hook validates that a changeset exists before allowing a commit.
+# It ensures proper changeset workflow is followed for feature branches.
 #
 # What it does:
 # 1. Detects current branch
 # 2. Skips main/master branches
-# 3. Updates changeset with affected packages
-# 4. Stages the updated changeset file
-# 5. Commit includes both your changes and updated changeset
+# 3. Checks if changeset exists for the branch
+# 4. Prompts to create one if missing (or aborts in non-interactive mode)
+# 5. Allows commit to proceed if changeset exists
+#
+# Note: The commit SHA is added to the changeset by the post-commit hook.
 #
 # Configuration (.wnt.toml):
 # [git_hooks]
 # enabled = true
-# auto_update_on_commit = true
+# require_changeset = true
 #
 # To disable: Set WNT_SKIP_HOOKS=1 environment variable
 # Example: WNT_SKIP_HOOKS=1 git commit -m "message"
@@ -63,23 +65,35 @@ if ! command -v wnt >/dev/null 2>&1; then
 fi
 
 # Check if changeset exists for this branch
-if ! wnt changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
-    # No changeset exists, skip
+if wnt changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
+    # Changeset exists - all good
+    printf "${GREEN}✓${NC} Changeset found for branch ${BLUE}${BRANCH}${NC}\n" >&2
     exit 0
 fi
 
-# Update changeset
-printf "${BLUE}📝 Updating changeset...${NC}\n" >&2
+# No changeset exists - inform user
+printf "\n${YELLOW}⚠${NC} No changeset found for branch ${BLUE}${BRANCH}${NC}\n" >&2
+printf "${BLUE}ℹ${NC} Create one with: ${GREEN}wnt changeset create${NC}\n\n" >&2
 
-if wnt changeset update "${BRANCH}" --format quiet 2>&1; then
-    # Stage the updated changeset file
-    git add .changesets/*.json 2>/dev/null || true
+# Ask if user wants to continue without changeset
+if [ -t 0 ]; then
+    # Interactive mode: ask user
+    printf "${YELLOW}?${NC} Continue commit without changeset? ${BLUE}[y/N]${NC} " >&2
+    read -r response
 
-    printf "${GREEN}✓${NC} Changeset updated and staged\n" >&2
+    case "${response}" in
+        [yY][eE][sS]|[yY])
+            printf "${BLUE}ℹ${NC} Proceeding without changeset\n" >&2
+            exit 0
+            ;;
+        *)
+            printf "${RED}✗${NC} Commit aborted\n" >&2
+            printf "${BLUE}ℹ${NC} Create changeset first: ${GREEN}wnt changeset create${NC}\n" >&2
+            exit 1
+            ;;
+    esac
 else
-    # Non-fatal: don't block the commit
-    printf "${YELLOW}⚠${NC} Failed to update changeset (non-fatal)\n" >&2
-    printf "${BLUE}ℹ${NC} Run 'wnt changeset update ${BRANCH}' manually if needed\n" >&2
+    # Non-interactive mode: allow commit without changeset
+    printf "${BLUE}ℹ${NC} Non-interactive mode - proceeding without changeset\n" >&2
+    exit 0
 fi
-
-exit 0

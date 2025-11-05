@@ -17,7 +17,8 @@ Automated changeset management through git hooks for seamless developer workflow
 
 The wnt git hooks automate changeset management throughout your development workflow:
 
-- **pre-commit**: Automatically updates changesets when you commit
+- **pre-commit**: Validates that a changeset exists before allowing commit
+- **post-commit**: Automatically adds commit SHA to changeset after commit
 - **post-checkout**: Creates changesets when you start new feature branches
 - **pre-push**: Validates changesets before pushing to remote
 - **prepare-commit-msg**: Enhances commit messages with changeset info
@@ -51,7 +52,8 @@ git checkout -b feature/new-thing
 # 2. Work and commit
 git add file.js
 git commit -m "feat: add new feature"
-# → Hook automatically updates changeset
+# → pre-commit validates changeset exists
+# → post-commit adds SHA to changeset automatically
 
 # 3. Push
 git push origin feature/new-thing
@@ -62,22 +64,55 @@ git push origin feature/new-thing
 
 ### pre-commit
 
-**Purpose**: Auto-update changeset on every commit
+**Purpose**: Validate that a changeset exists before allowing commit
 
 **What it does:**
 1. Detects current branch
-2. Finds changeset for branch
-3. Updates changeset with new commit info
-4. Stages updated changeset file
-5. Includes changeset in commit
+2. Skips main/master branches
+3. Checks if changeset exists for the branch
+4. Prompts to create one if missing (interactive mode)
+5. Aborts commit if no changeset and user declines
 
 **When it runs**: Before each `git commit`
 
+**Example output (changeset exists):**
+```
+✓ Changeset found for branch feature/my-branch
+```
+
+**Example output (no changeset):**
+```
+⚠ No changeset found for branch feature/my-branch
+ℹ Create one with: wnt changeset create
+
+? Continue commit without changeset? [y/N]
+```
+
+**Skip once:**
+```bash
+WNT_SKIP_HOOKS=1 git commit -m "message"
+```
+
+### post-commit
+
+**Purpose**: Automatically add commit SHA to changeset after commit is created
+
+**What it does:**
+1. Detects current branch
+2. Skips main/master branches
+3. Gets the SHA of the just-created commit
+4. Adds the SHA to the changeset's changes array
+5. Amends the commit to include the updated changeset
+
+**When it runs**: After each `git commit`
+
 **Example output:**
 ```
-📝 Updating changeset...
-✓ Changeset updated and staged
+📝 Adding commit to changeset...
+✓ Changeset updated and included in commit
 ```
+
+**Why amend?**: The commit is amended so that the changeset update is included in the same commit, keeping the history clean without extra "update changeset" commits.
 
 **Skip once:**
 ```bash
@@ -111,35 +146,33 @@ WNT_SKIP_HOOKS=1 git checkout -b feature/branch
 
 ### pre-push
 
-**Purpose**: Validate changeset before pushing
+**Purpose**: Validate changeset exists before pushing
 
 **What it does:**
 1. Detects current branch
-2. Validates changeset exists
-3. Validates changeset is properly formatted
-4. Blocks push if validation fails
+2. Skips main/master branches
+3. Checks if changeset exists for the branch
+4. Blocks push if changeset is missing
 
 **When it runs**: Before `git push`
 
 **Example output (success):**
 ```
-🔍 Validating changeset...
-✓ Changeset validation passed
+🔍 Checking changeset...
+✓ Changeset exists for branch feature/my-branch
 ```
 
 **Example output (failure):**
 ```
-✗ Changeset validation failed
-
-Validation errors:
-  - Missing package information
-  - Invalid bump type
+✗ No changeset found for branch feature/my-branch
 
 How to fix:
-  1. Check your changeset: wnt changeset show
-  2. Update if needed:     wnt changeset update
-  3. Validate changes:     wnt changeset validate
-  4. Commit and push:      git commit -m 'chore: update changeset' && git push
+  1. Create changeset:     wnt changeset create
+  2. Verify it was created: wnt changeset show feature/my-branch
+  3. Push again:           git push
+
+To skip this check once:
+  WNT_SKIP_HOOKS=1 git push
 ```
 
 **Skip once:**
@@ -152,9 +185,9 @@ WNT_SKIP_HOOKS=1 git push
 **Purpose**: Enhance commit messages with changeset info
 
 **What it does:**
-1. Reads changeset for current branch
-2. Appends changeset metadata to commit message
-3. Shows affected packages and bump type
+1. Detects current branch
+2. Checks if changeset exists for the branch
+3. Appends changeset reference to commit message
 
 **When it runs**: When preparing commit message
 
@@ -163,8 +196,7 @@ WNT_SKIP_HOOKS=1 git push
 # ──────────────────────────────────────────────────────────────
 # Changeset Info (added by wnt)
 # Branch: feature/my-branch
-# Packages: @myorg/api, @myorg/ui
-# Bump: minor
+# Run 'wnt changeset show feature/my-branch' to see details
 # ──────────────────────────────────────────────────────────────
 ```
 
@@ -187,11 +219,14 @@ WNT_SKIP_HOOKS=1 git commit -m "message"
 # Only pre-commit
 ./scripts/install-hooks.sh --pre-commit
 
+# Only post-commit
+./scripts/install-hooks.sh --post-commit
+
 # Only validation (pre-push)
 ./scripts/install-hooks.sh --pre-push
 
 # Multiple specific hooks
-./scripts/install-hooks.sh --pre-commit --pre-push
+./scripts/install-hooks.sh --pre-commit --post-commit --pre-push
 ```
 
 ### Force Reinstall
@@ -219,20 +254,17 @@ Add to `.wnt.toml`:
 # Enable/disable hooks
 enabled = true
 
-# Auto-update changeset on commit
-auto_update_on_commit = true
+# Require changeset before allowing commit (pre-commit)
+require_changeset = true
 
-# Prompt for changeset creation on checkout
+# Prompt for changeset creation on checkout (post-checkout)
 prompt_for_changeset = true
 
-# Validate on push
+# Validate changeset exists before push (pre-push)
 validate_on_push = true
 
-# Enhance commit messages
+# Enhance commit messages with changeset info (prepare-commit-msg)
 enhance_commit_messages = true
-
-# Strict validation (fail on warnings)
-strict_validation = false
 ```
 
 ### Environment Variables

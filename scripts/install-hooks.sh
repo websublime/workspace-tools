@@ -11,6 +11,7 @@
 # Options:
 #   --all                     Install all hooks (default)
 #   --pre-commit              Install only pre-commit hook
+#   --post-commit             Install only post-commit hook
 #   --post-checkout           Install only post-checkout hook
 #   --pre-push                Install only pre-push hook
 #   --prepare-commit-msg      Install only prepare-commit-msg hook
@@ -48,6 +49,7 @@ fi
 # Default options
 INSTALL_ALL=true
 INSTALL_PRE_COMMIT=false
+INSTALL_POST_COMMIT=false
 INSTALL_POST_CHECKOUT=false
 INSTALL_PRE_PUSH=false
 INSTALL_PREPARE_COMMIT_MSG=false
@@ -143,6 +145,11 @@ parse_args() {
                 INSTALL_PRE_COMMIT=true
                 shift
                 ;;
+            --post-commit)
+                INSTALL_ALL=false
+                INSTALL_POST_COMMIT=true
+                shift
+                ;;
             --post-checkout)
                 INSTALL_ALL=false
                 INSTALL_POST_CHECKOUT=true
@@ -193,6 +200,7 @@ main() {
     if [ "${UNINSTALL}" = "true" ]; then
         printf "${BLUE}Uninstalling wnt hooks...${NC}\n\n"
         uninstall_hook "pre-commit"
+        uninstall_hook "post-commit"
         uninstall_hook "post-checkout"
         uninstall_hook "pre-push"
         uninstall_hook "prepare-commit-msg"
@@ -205,12 +213,16 @@ main() {
     # Install hooks based on options
     if [ "${INSTALL_ALL}" = "true" ]; then
         install_hook "pre-commit"
+        install_hook "post-commit"
         install_hook "post-checkout"
         install_hook "pre-push"
         install_hook "prepare-commit-msg"
     else
         if [ "${INSTALL_PRE_COMMIT}" = "true" ]; then
             install_hook "pre-commit"
+        fi
+        if [ "${INSTALL_POST_COMMIT}" = "true" ]; then
+            install_hook "post-commit"
         fi
         if [ "${INSTALL_POST_CHECKOUT}" = "true" ]; then
             install_hook "post-checkout"
@@ -227,7 +239,8 @@ main() {
 
     # Show what each hook does
     printf "${BOLD}Installed hooks:${NC}\n"
-    printf "  ${CYAN}pre-commit${NC}           Auto-updates changeset on commit\n"
+    printf "  ${CYAN}pre-commit${NC}           Validates changeset exists\n"
+    printf "  ${CYAN}post-commit${NC}          Adds commit SHA to changeset\n"
     printf "  ${CYAN}post-checkout${NC}        Creates changeset for new branches\n"
     printf "  ${CYAN}pre-push${NC}             Validates changeset before push\n"
     printf "  ${CYAN}prepare-commit-msg${NC}   Enhances commit messages\n"
@@ -236,7 +249,7 @@ main() {
     printf "  Add to ${CYAN}.wnt.toml${NC} to customize:\n"
     printf "    ${YELLOW}[git_hooks]${NC}\n"
     printf "    ${YELLOW}enabled = true${NC}\n"
-    printf "    ${YELLOW}auto_update_on_commit = true${NC}\n"
+    printf "    ${YELLOW}require_changeset = true${NC}\n"
 
     printf "\n${BOLD}To disable temporarily:${NC}\n"
     printf "  ${GREEN}WNT_SKIP_HOOKS=1 git commit${NC}\n"
