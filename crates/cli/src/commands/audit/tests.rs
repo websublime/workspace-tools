@@ -44,6 +44,8 @@ mod comprehensive_tests {
             min_severity: "info".to_string(),
             verbosity: "normal".to_string(),
             no_health_score: false,
+            export: None,
+            export_file: None,
         };
 
         let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
@@ -66,6 +68,8 @@ mod comprehensive_tests {
             min_severity: "info".to_string(),
             verbosity: "normal".to_string(),
             no_health_score: false,
+            export: None,
+            export_file: None,
         };
 
         let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
@@ -83,6 +87,8 @@ mod comprehensive_tests {
             min_severity: "invalid".to_string(),
             verbosity: "normal".to_string(),
             no_health_score: false,
+            export: None,
+            export_file: None,
         };
 
         let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
@@ -100,6 +106,8 @@ mod comprehensive_tests {
             min_severity: "info".to_string(),
             verbosity: "invalid".to_string(),
             no_health_score: false,
+            export: None,
+            export_file: None,
         };
 
         let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
@@ -158,9 +166,19 @@ mod audit_results_tests {
 #[allow(clippy::expect_used)]
 mod types_tests {
     use crate::commands::audit::types::{
-        AuditSection, MinSeverity, build_format_options, parse_sections, parse_verbosity,
+        AuditSection, MinSeverity, parse_sections, parse_verbosity,
     };
-    use sublime_pkg_tools::audit::Verbosity;
+    use sublime_pkg_tools::audit::{FormatOptions, Verbosity};
+
+    /// Helper function to build format options for testing.
+    fn build_format_options(verbosity: Verbosity) -> FormatOptions {
+        FormatOptions {
+            colors: false, // Colors are handled by CLI output system
+            verbosity,
+            include_suggestions: true,
+            include_metadata: true,
+        }
+    }
 
     #[test]
     fn test_audit_section_parse_all() {
@@ -310,7 +328,7 @@ mod types_tests {
 
     #[test]
     fn test_build_format_options() {
-        let options = build_format_options(Verbosity::Normal, true);
+        let options = build_format_options(Verbosity::Normal);
         assert!(matches!(options.verbosity, Verbosity::Normal));
         assert!(!options.colors); // Colors handled by CLI
         assert!(options.include_suggestions);
@@ -333,7 +351,6 @@ mod report_tests {
     };
     use crate::commands::audit::types::MinSeverity;
     use crate::output::{Output, OutputFormat};
-    use std::path::Path;
 
     #[test]
     fn test_filter_issues_empty() {
@@ -370,7 +387,11 @@ mod report_tests {
     }
 
     #[test]
-    fn test_write_report_to_file_not_implemented() {
+    #[allow(clippy::panic)]
+    fn test_write_report_to_file_html() {
+        use std::fs;
+        use tempfile::TempDir;
+
         let results = AuditResults {
             upgrades: None,
             dependencies: None,
@@ -378,9 +399,25 @@ mod report_tests {
             breaking_changes: None,
         };
 
-        let path = Path::new("/tmp/test-report.json");
-        let result = write_report_to_file(&results, Some(100), path);
-        assert!(result.is_err());
+        let temp_dir = match TempDir::new() {
+            Ok(dir) => dir,
+            Err(e) => {
+                panic!("Failed to create temp dir: {e}");
+            }
+        };
+        let path = temp_dir.path().join("test-report.html");
+        let result = write_report_to_file(&results, Some(100), &path);
+        assert!(result.is_ok(), "write_report_to_file should succeed");
+        assert!(path.exists(), "Output file should be created");
+
+        let content = match fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                panic!("Failed to read file: {e}");
+            }
+        };
+        assert!(content.contains("<!DOCTYPE html>"), "Should generate HTML");
+        assert!(content.contains("Audit Report"), "Should contain title");
     }
 
     #[test]
@@ -552,8 +589,7 @@ mod upgrade_audit_tests {
         )
         .await;
 
-        // This should fail with todo! for file output
-        // The error is expected as file output is not yet implemented (story 8.3)
+        // File output should now work with the implemented export functionality
         let _ = result;
     }
 
@@ -869,8 +905,7 @@ mod dependency_audit_tests {
         )
         .await;
 
-        // This should fail with todo! for file output
-        // The error is expected as file output is not yet implemented (story 8.3)
+        // File output should now work with the implemented export functionality
         let _ = result;
     }
 
@@ -1225,8 +1260,7 @@ mod version_consistency_audit_tests {
         )
         .await;
 
-        // This should fail with todo! for file output
-        // The error is expected as file output is not yet implemented (story 8.3)
+        // File output should now work with the implemented export functionality
         let _ = result;
     }
 

@@ -404,13 +404,53 @@ fn display_version_consistency_recommendations(
 ///
 /// Currently a placeholder. Full JSON output will be implemented based on
 /// the OutputFormat from the global CLI args.
-#[allow(clippy::todo)]
 fn write_version_consistency_report_to_file(
-    _version_consistency: &sublime_pkg_tools::audit::VersionConsistencyAuditSection,
-    _file_path: &Path,
+    version_consistency: &sublime_pkg_tools::audit::VersionConsistencyAuditSection,
+    file_path: &Path,
 ) -> Result<()> {
-    // TODO: will be implemented in story 8.3 (Export Formats)
-    todo!("File output will be implemented in story 8.3")
+    use crate::output::export::{ExportFormat, export_data};
+    use serde::Serialize;
+    use std::collections::HashMap;
+
+    #[derive(Serialize)]
+    struct VersionConsistencyExportData {
+        title: String,
+        summary: HashMap<String, serde_json::Value>,
+        inconsistencies: Vec<HashMap<String, serde_json::Value>>,
+    }
+
+    let mut summary = HashMap::new();
+    summary.insert(
+        "total_inconsistencies".to_string(),
+        serde_json::json!(version_consistency.inconsistencies.len()),
+    );
+
+    let data = VersionConsistencyExportData {
+        title: "Version Consistency Audit Report".to_string(),
+        summary,
+        inconsistencies: version_consistency
+            .inconsistencies
+            .iter()
+            .map(|i| {
+                let mut map = HashMap::new();
+                map.insert("package_name".to_string(), serde_json::json!(i.package_name.clone()));
+                map.insert("versions_used".to_string(), serde_json::json!(i.versions_used.clone()));
+                map.insert(
+                    "recommended_version".to_string(),
+                    serde_json::json!(i.recommended_version.clone()),
+                );
+                map
+            })
+            .collect(),
+    };
+
+    let format = match file_path.extension().and_then(|s| s.to_str()) {
+        Some("md" | "markdown") => ExportFormat::Markdown,
+        _ => ExportFormat::Html, // default to HTML for .html, .htm, and unknown extensions
+    };
+
+    export_data(&data, format, file_path)?;
+    Ok(())
 }
 
 /// Loads audit configuration from workspace.

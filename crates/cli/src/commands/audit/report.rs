@@ -29,7 +29,7 @@
 
 use crate::commands::audit::comprehensive::AuditResults;
 use crate::commands::audit::types::MinSeverity;
-use crate::error::{CliError, Result};
+use crate::error::Result;
 use crate::output::Output;
 use std::path::Path;
 use sublime_pkg_tools::audit::{IssueSeverity, Verbosity};
@@ -440,13 +440,18 @@ fn display_section_results(
     Ok(())
 }
 
-/// Writes the audit report to a file.
+/// Writes the audit report to a file in the specified format.
+///
+/// The format is determined automatically from the file extension:
+/// - `.html`, `.htm` → HTML format with embedded styling
+/// - `.md`, `.markdown` → Markdown format
+/// - Other extensions → HTML format (default)
 ///
 /// # Arguments
 ///
-/// * `_results` - The audit results (currently unused, for future JSON output)
-/// * `_health_score` - The health score (currently unused, for future JSON output)
-/// * `_file_path` - Path to write the report file
+/// * `results` - The audit results to export
+/// * `health_score` - The overall health score
+/// * `file_path` - Path to write the report file
 ///
 /// # Returns
 ///
@@ -454,18 +459,39 @@ fn display_section_results(
 ///
 /// # Errors
 ///
-/// Returns an error if file I/O operations fail.
+/// Returns an error if:
+/// - File I/O operations fail
+/// - Serialization fails
+/// - The parent directory doesn't exist
 ///
-/// # Note
+/// # Examples
 ///
-/// Currently a placeholder. Full JSON output will be implemented based on
-/// the OutputFormat from the global CLI args.
+/// ```rust,ignore
+/// use sublime_cli_tools::commands::audit::report::write_report_to_file;
+/// use std::path::Path;
+///
+/// let results = AuditResults { /* ... */ };
+/// write_report_to_file(&results, Some(85), Path::new("report.html"))?;
+/// ```
 pub(crate) fn write_report_to_file(
-    _results: &AuditResults,
-    _health_score: Option<u8>,
-    _file_path: &Path,
+    results: &AuditResults,
+    health_score: Option<u8>,
+    file_path: &Path,
 ) -> Result<()> {
-    // TODO: will be implemented in story 8.3 (Export Formats)
-    // For now, we just acknowledge the file path parameter
-    Err(CliError::execution("File output not yet implemented (story 8.3)".to_string()))
+    use crate::commands::audit::comprehensive::create_exportable_data;
+    use crate::output::export::{ExportFormat, export_data};
+
+    // Create exportable data structure
+    let data = create_exportable_data(results, health_score);
+
+    // Determine format from file extension
+    let format = match file_path.extension().and_then(|s| s.to_str()) {
+        Some("md" | "markdown") => ExportFormat::Markdown,
+        _ => ExportFormat::Html, // default to HTML for .html, .htm, and unknown extensions
+    };
+
+    // Export the data to the file
+    export_data(&data, format, file_path)?;
+
+    Ok(())
 }
