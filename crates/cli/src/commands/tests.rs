@@ -86,6 +86,57 @@ mod init_tests {
         temp_dir
     }
 
+    /// Helper to create a monorepo with empty workspaces array
+    /// This simulates a newly created monorepo with no packages yet
+    fn create_test_monorepo_empty() -> TempDir {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let package_json = serde_json::json!({
+            "name": "test-monorepo-empty",
+            "version": "1.0.0",
+            "workspaces": []
+        });
+        fs::write(
+            temp_dir.path().join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Failed to serialize"),
+        )
+        .expect("Failed to write package.json");
+        temp_dir
+    }
+
+    /// Helper to create a monorepo with multiple workspace patterns
+    fn create_test_monorepo_multi_patterns() -> TempDir {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let package_json = serde_json::json!({
+            "name": "test-monorepo-multi",
+            "version": "1.0.0",
+            "workspaces": ["packages/*", "apps/*", "libs/*"]
+        });
+        fs::write(
+            temp_dir.path().join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Failed to serialize"),
+        )
+        .expect("Failed to write package.json");
+        temp_dir
+    }
+
+    /// Helper to create a monorepo with object-style workspaces
+    fn create_test_monorepo_object_format() -> TempDir {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let package_json = serde_json::json!({
+            "name": "test-monorepo-object",
+            "version": "1.0.0",
+            "workspaces": {
+                "packages": ["packages/*", "tools/*"]
+            }
+        });
+        fs::write(
+            temp_dir.path().join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Failed to serialize"),
+        )
+        .expect("Failed to write package.json");
+        temp_dir
+    }
+
     #[tokio::test]
     async fn test_init_fails_without_package_json() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -548,6 +599,224 @@ mod init_tests {
 
         // Should still only have one entry
         assert_eq!(backup_count, backup_count_after, "Gitignore entries were duplicated");
+    }
+
+    // ============================================================================
+    // Tests for Bug Fixes - Monorepo Detection and Workspace Patterns
+    // ============================================================================
+
+    /// Test that monorepo with empty workspaces array is detected as monorepo.
+    ///
+    /// BUG FIX: Previously, a package.json with "workspaces": [] was incorrectly
+    /// detected as a single package project. This test ensures we now correctly
+    /// identify it as a monorepo (even though it has no packages yet).
+    #[tokio::test]
+    async fn test_init_detects_monorepo_with_empty_workspaces() {
+        let temp_dir = create_test_monorepo_empty();
+
+        let args = InitArgs {
+            changeset_path: PathBuf::from(".changesets"),
+            environments: Some(vec!["dev".to_string(), "prod".to_string()]),
+            default_env: Some(vec!["prod".to_string()]),
+            strategy: None, // Let it auto-detect
+            registry: "https://registry.npmjs.org".to_string(),
+            config_format: Some("toml".to_string()),
+            force: false,
+            non_interactive: true,
+        };
+
+        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        assert!(result.is_ok(), "Init failed for empty monorepo: {result:?}");
+
+        // Read generated config
+        let config_path = temp_dir.path().join("repo.config.toml");
+        let config_content = fs::read_to_string(&config_path).expect("Failed to read config");
+
+        // CRITICAL: Config should contain [workspace] section for monorepo
+        assert!(
+            config_content.contains("[workspace]"),
+            "Config missing [workspace] section for monorepo with empty workspaces"
+        );
+
+        // Should have patterns = [] since workspaces is empty
+        assert!(config_content.contains("patterns = []"), "Config missing patterns field");
+
+        // Strategy should be for monorepo (independent or unified)
+        assert!(
+            config_content.contains("strategy = \"independent\"")
+                || config_content.contains("strategy = \"unified\""),
+            "Strategy should be set for monorepo"
+        );
+    }
+
+    /// Test that workspace patterns are extracted and saved to config.
+    ///
+    /// BUG FIX: Previously, workspace patterns from package.json were not
+    /// extracted and the config file was missing [workspace] section.
+    #[tokio::test]
+    async fn test_init_includes_workspace_patterns_in_config() {
+        let temp_dir = create_test_monorepo_multi_patterns();
+
+        let args = InitArgs {
+            changeset_path: PathBuf::from(".changesets"),
+            environments: Some(vec!["dev".to_string(), "prod".to_string()]),
+            default_env: Some(vec!["prod".to_string()]),
+            strategy: Some("independent".to_string()),
+            registry: "https://registry.npmjs.org".to_string(),
+            config_format: Some("toml".to_string()),
+            force: false,
+            non_interactive: true,
+        };
+
+        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        assert!(result.is_ok(), "Init failed for monorepo with patterns: {result:?}");
+
+        // Read generated config
+        let config_path = temp_dir.path().join("repo.config.toml");
+        let config_content = fs::read_to_string(&config_path).expect("Failed to read config");
+
+        // CRITICAL: Config must contain [workspace] section
+        assert!(
+            config_content.contains("[workspace]"),
+            "Config missing [workspace] section for monorepo"
+        );
+
+        // CRITICAL: All patterns from package.json must be in config
+        assert!(config_content.contains("packages/*"), "Config missing 'packages/*' pattern");
+        assert!(config_content.contains("apps/*"), "Config missing 'apps/*' pattern");
+        assert!(config_content.contains("libs/*"), "Config missing 'libs/*' pattern");
+
+        // Verify patterns array format
+        assert!(config_content.contains("patterns = ["), "Config missing patterns array");
+    }
+
+    /// Test that object-format workspaces are correctly parsed.
+    ///
+    /// Yarn workspaces can be defined as objects: { "packages": [...] }
+    /// We need to handle this format correctly.
+    #[tokio::test]
+    async fn test_init_handles_object_format_workspaces() {
+        let temp_dir = create_test_monorepo_object_format();
+
+        let args = InitArgs {
+            changeset_path: PathBuf::from(".changesets"),
+            environments: Some(vec!["dev".to_string(), "prod".to_string()]),
+            default_env: Some(vec!["prod".to_string()]),
+            strategy: Some("unified".to_string()),
+            registry: "https://registry.npmjs.org".to_string(),
+            config_format: Some("toml".to_string()),
+            force: false,
+            non_interactive: true,
+        };
+
+        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        assert!(result.is_ok(), "Init failed for object-format workspaces: {result:?}");
+
+        // Read generated config
+        let config_path = temp_dir.path().join("repo.config.toml");
+        let config_content = fs::read_to_string(&config_path).expect("Failed to read config");
+
+        // Must have [workspace] section
+        assert!(
+            config_content.contains("[workspace]"),
+            "Config missing [workspace] section for object-format workspaces"
+        );
+
+        // Patterns from the "packages" field should be extracted
+        assert!(
+            config_content.contains("packages/*"),
+            "Config missing 'packages/*' pattern from object format"
+        );
+        assert!(
+            config_content.contains("tools/*"),
+            "Config missing 'tools/*' pattern from object format"
+        );
+    }
+
+    /// Test that single package (no workspaces) doesn't get workspace config.
+    ///
+    /// Single-package projects should NOT have [workspace] section.
+    #[tokio::test]
+    async fn test_init_single_package_no_workspace_section() {
+        let temp_dir = create_test_workspace(); // No workspaces field
+
+        let args = InitArgs {
+            changeset_path: PathBuf::from(".changesets"),
+            environments: Some(vec!["dev".to_string(), "prod".to_string()]),
+            default_env: Some(vec!["prod".to_string()]),
+            strategy: Some("independent".to_string()),
+            registry: "https://registry.npmjs.org".to_string(),
+            config_format: Some("toml".to_string()),
+            force: false,
+            non_interactive: true,
+        };
+
+        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        assert!(result.is_ok(), "Init failed for single package: {result:?}");
+
+        // Read generated config
+        let config_path = temp_dir.path().join("repo.config.toml");
+        let config_content = fs::read_to_string(&config_path).expect("Failed to read config");
+
+        // Single package should NOT have [workspace] section
+        // because workspace field is None (skip_serializing_if)
+        assert!(
+            !config_content.contains("[workspace]"),
+            "Single package should not have [workspace] section in config"
+        );
+
+        // Verify it has other expected sections
+        assert!(
+            config_content.contains("[changeset]"),
+            "Config should have changeset section"
+        );
+    }
+
+    /// Integration test: Full workflow with empty monorepo.
+    ///
+    /// Tests the complete flow of initializing an empty monorepo,
+    /// then adding packages, ensuring everything works correctly.
+    #[tokio::test]
+    async fn test_init_empty_monorepo_workflow() {
+        let temp_dir = create_test_monorepo_empty();
+
+        // Step 1: Initialize empty monorepo
+        let args = InitArgs {
+            changeset_path: PathBuf::from(".changesets"),
+            environments: Some(vec!["dev".to_string(), "staging".to_string(), "prod".to_string()]),
+            default_env: Some(vec!["prod".to_string()]),
+            strategy: Some("independent".to_string()),
+            registry: "https://registry.npmjs.org".to_string(),
+            config_format: Some("toml".to_string()),
+            force: false,
+            non_interactive: true,
+        };
+
+        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        assert!(result.is_ok(), "Failed to initialize empty monorepo: {result:?}");
+
+        // Step 2: Verify all directories created
+        assert!(temp_dir.path().join(".changesets").exists());
+        assert!(temp_dir.path().join(".changesets/history").exists());
+        assert!(temp_dir.path().join(".wnt-backups").exists());
+
+        // Step 3: Verify config is complete
+        let config_path = temp_dir.path().join("repo.config.toml");
+        assert!(config_path.exists());
+
+        let config_content = fs::read_to_string(&config_path).expect("Failed to read config");
+        assert!(config_content.contains("[workspace]"));
+        assert!(config_content.contains("patterns = []"));
+        assert!(config_content.contains("[changeset]"));
+        assert!(config_content.contains("[version]"));
+        assert!(config_content.contains("[upgrade]"));
+
+        // Step 4: Verify gitignore updated
+        let gitignore = temp_dir.path().join(".gitignore");
+        assert!(gitignore.exists());
+        let gitignore_content = fs::read_to_string(&gitignore).expect("Failed to read .gitignore");
+        assert!(gitignore_content.contains(".wnt-backups/"));
+        assert!(gitignore_content.contains("Workspace Node Tools"));
     }
 }
 
