@@ -1,0 +1,85 @@
+#!/usr/bin/env sh
+#
+# pre-commit hook for wnt (Workspace Node Tools)
+#
+# This hook automatically updates the changeset file when you commit changes.
+# It detects which packages are affected and updates the changeset accordingly.
+#
+# What it does:
+# 1. Detects current branch
+# 2. Skips main/master branches
+# 3. Updates changeset with affected packages
+# 4. Stages the updated changeset file
+# 5. Commit includes both your changes and updated changeset
+#
+# Configuration (.wnt.toml):
+# [git_hooks]
+# enabled = true
+# auto_update_on_commit = true
+#
+# To disable: Set WNT_SKIP_HOOKS=1 environment variable
+# Example: WNT_SKIP_HOOKS=1 git commit -m "message"
+
+set -e
+
+# Check if hooks are disabled
+if [ -n "${WNT_SKIP_HOOKS}" ]; then
+    exit 0
+fi
+
+# Colors (only if terminal supports it)
+if [ -t 1 ]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m'
+else
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    NC=''
+fi
+
+# Get current branch
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+# Skip if not in a git repository
+if [ $? -ne 0 ]; then
+    exit 0
+fi
+
+# Skip for main/master branches
+if [ "${BRANCH}" = "main" ] || [ "${BRANCH}" = "master" ]; then
+    exit 0
+fi
+
+# Check if wnt is installed
+if ! command -v wnt >/dev/null 2>&1; then
+    printf "${YELLOW}⚠${NC} wnt not found. Changeset not updated.\n" >&2
+    printf "${BLUE}ℹ${NC} Install: curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh\n" >&2
+    exit 0
+fi
+
+# Check if changeset exists for this branch
+if ! wnt changeset show --quiet >/dev/null 2>&1; then
+    # No changeset exists, skip
+    exit 0
+fi
+
+# Update changeset
+printf "${BLUE}📝 Updating changeset...${NC}\n" >&2
+
+if wnt changeset update --auto --quiet 2>&1; then
+    # Stage the updated changeset file
+    git add .changesets/*.json 2>/dev/null || true
+
+    printf "${GREEN}✓${NC} Changeset updated and staged\n" >&2
+else
+    # Non-fatal: don't block the commit
+    printf "${YELLOW}⚠${NC} Failed to update changeset (non-fatal)\n" >&2
+    printf "${BLUE}ℹ${NC} Run 'wnt changeset update' manually if needed\n" >&2
+fi
+
+exit 0
