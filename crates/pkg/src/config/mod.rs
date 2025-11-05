@@ -141,6 +141,7 @@ mod types;
 mod upgrade;
 mod validation;
 mod version;
+mod workspace;
 
 // Tests module
 #[cfg(test)]
@@ -158,11 +159,12 @@ pub use changelog::{
 pub use changeset::ChangesetConfig;
 pub use dependency::DependencyConfig;
 pub use git::GitConfig;
-pub use loader::{load_config, load_config_from_file, ConfigLoader};
+pub use loader::{ConfigLoader, load_config, load_config_from_file};
 pub use types::PackageToolsConfig;
 pub use upgrade::{BackupConfig, RegistryConfig, UpgradeConfig};
 pub use validation::{path_exists, validate_config, validate_path_format, validate_url_format};
 pub use version::VersionConfig;
+pub use workspace::WorkspaceConfig;
 
 // Re-export VersioningStrategy from types module for convenience
 pub use crate::types::VersioningStrategy;

@@ -117,6 +117,17 @@ pub struct PackageToolsConfig {
     /// Settings for dependency audits and health score calculation.
     pub audit: AuditConfig,
 
+    /// Workspace configuration for monorepo projects.
+    ///
+    /// Contains project-specific workspace patterns extracted from package.json.
+    /// This represents the actual workspace configuration declared in THIS project,
+    /// as opposed to StandardConfig's generic search patterns used for package discovery.
+    ///
+    /// - `Some(WorkspaceConfig)` - Monorepo with workspace patterns
+    /// - `None` - Single-package project (no workspaces field in package.json)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<super::WorkspaceConfig>,
+
     /// Standard tools configuration.
     ///
     /// Configuration from sublime_standard_tools for filesystem, package managers, etc.
@@ -148,6 +159,7 @@ impl Default for PackageToolsConfig {
             changelog: ChangelogConfig::default(),
             git: GitConfig::default(),
             audit: AuditConfig::default(),
+            workspace: None,
             standard_config: StandardConfig::default(),
         }
     }
@@ -220,6 +232,16 @@ impl Configurable for PackageToolsConfig {
         self.changelog.merge_with(other.changelog)?;
         self.git.merge_with(other.git)?;
         self.audit.merge_with(other.audit)?;
+
+        // Merge workspace configuration
+        if let Some(other_workspace) = other.workspace {
+            if let Some(ref mut self_workspace) = self.workspace {
+                self_workspace.merge_with(other_workspace)?;
+            } else {
+                self.workspace = Some(other_workspace);
+            }
+        }
+
         self.standard_config.merge_with(other.standard_config)?;
 
         Ok(())
