@@ -204,9 +204,7 @@ pub async fn execute_add(
     }
 
     // Load packages from workspace
-    // TODO: will be implemented on story 5.x - workspace package loading
-    // For now, we'll use a placeholder that returns empty list
-    let all_packages = load_workspace_packages(&workspace_root, &config);
+    let all_packages = load_workspace_packages(&workspace_root, &config).await;
 
     // Detect affected packages from git if not provided
     let detected_packages = if args.packages.is_none() && !all_packages.is_empty() {
@@ -338,21 +336,43 @@ pub async fn execute_add(
     Ok(())
 }
 
-
 /// Loads all packages from the workspace.
 ///
+/// Uses the `VersionResolver` to discover all packages in the workspace,
+/// whether it's a monorepo or single package project.
+///
 /// Returns a list of all available package names in the workspace.
-fn load_workspace_packages(_workspace_root: &PathBuf, _config: &PackageToolsConfig) -> Vec<String> {
-    // TODO: will be implemented on story 5.x - workspace package detection
-    // For now, return an empty list as a placeholder
-    debug!("Loading workspace packages (placeholder - will be implemented in story 5.x)");
+async fn load_workspace_packages(
+    workspace_root: &PathBuf,
+    config: &PackageToolsConfig,
+) -> Vec<String> {
+    use sublime_pkg_tools::version::VersionResolver;
 
-    // In a real implementation, this would:
-    // 1. Detect if it's a monorepo or single package
-    // 2. Parse package.json files
-    // 3. Return list of package names
+    debug!("Loading workspace packages");
 
-    vec![]
+    // Create a VersionResolver to discover packages
+    let resolver = match VersionResolver::new(workspace_root.clone(), config.clone()).await {
+        Ok(r) => r,
+        Err(e) => {
+            warn!("Failed to create version resolver: {}", e);
+            return vec![];
+        }
+    };
+
+    // Discover all packages in the workspace
+    match resolver.discover_packages().await {
+        Ok(packages) => {
+            let package_names: Vec<String> =
+                packages.iter().map(|p| p.name().to_string()).collect();
+
+            debug!("Found {} package(s): {:?}", package_names.len(), package_names);
+            package_names
+        }
+        Err(e) => {
+            warn!("Failed to discover packages: {}", e);
+            vec![]
+        }
+    }
 }
 
 /// Detects affected packages from git changes.
@@ -376,7 +396,6 @@ fn detect_affected_packages(
 
     vec![]
 }
-
 
 /// Outputs the command results based on the output format.
 ///
