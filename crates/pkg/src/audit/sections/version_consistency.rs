@@ -603,10 +603,7 @@ fn generate_issues(
         let mut issue = AuditIssue::new(
             severity,
             IssueCategory::VersionConsistency,
-            format!(
-                "Inconsistent versions for internal package '{}'",
-                inconsistency.package_name
-            ),
+            format!("Inconsistent versions for internal package '{}'", inconsistency.package_name),
             format!(
                 "The internal package '{}' is referenced with {} different version specifications across the workspace. \
                  This can lead to confusion and potential runtime issues.",

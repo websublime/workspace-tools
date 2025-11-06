@@ -566,11 +566,7 @@ impl Changeset {
             }
         }
 
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(ChangesetError::ValidationFailed { errors })
-        }
+        if errors.is_empty() { Ok(()) } else { Err(ChangesetError::ValidationFailed { errors }) }
     }
 
     /// Marks the changeset as updated with the current timestamp.

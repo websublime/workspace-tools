@@ -19,7 +19,7 @@ use crate::types::{Changeset, DependencyType, PackageInfo, VersioningStrategy};
 use crate::version::application::ApplyResult;
 use crate::version::graph::DependencyGraph;
 use crate::version::propagation::DependencyPropagator;
-use crate::version::resolution::{resolve_versions, PackageUpdate, VersionResolution};
+use crate::version::resolution::{PackageUpdate, VersionResolution, resolve_versions};
 use package_json::PackageJson;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

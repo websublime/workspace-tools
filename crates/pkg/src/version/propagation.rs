@@ -92,8 +92,8 @@ use crate::types::dependency::{is_local_protocol, is_workspace_protocol};
 use crate::types::{
     DependencyType, DependencyUpdate, PackageInfo, UpdateReason, Version, VersionBump,
 };
-use crate::version::resolution::{PackageUpdate, VersionResolution};
 use crate::version::DependencyGraph;
+use crate::version::resolution::{PackageUpdate, VersionResolution};
 use std::collections::{HashMap, HashSet};
 
 /// Dependency propagator for version changes.

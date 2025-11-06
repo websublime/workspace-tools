@@ -41,13 +41,13 @@ use super::Error;
 pub enum RecoveryStrategy {
     /// Propagate error up (fail-fast approach).
     Fail,
-    
+
     /// Log the error at specified level and continue operation.
     LogAndContinue(LogLevel),
-    
+
     /// Use a default value with explanation.
     UseDefault(String),
-    
+
     /// Retry the operation with exponential backoff.
     Retry {
         /// Maximum number of retry attempts
@@ -55,7 +55,7 @@ pub enum RecoveryStrategy {
         /// Initial backoff in milliseconds
         backoff_ms: u64,
     },
-    
+
     /// Graceful degradation with explanation.
     Graceful(String),
 }
@@ -92,7 +92,7 @@ pub enum LogLevel {
 ///     RecoveryResult::Success("operation completed".to_string())
 ///     
 ///     // On recovery with default
-///     // RecoveryResult::Recovered { 
+///     // RecoveryResult::Recovered {
 ///     //     value: Some("default value".to_string()),
 ///     //     reason: "Using default due to config error".to_string()
 ///     // }
@@ -102,10 +102,10 @@ pub enum LogLevel {
 pub enum RecoveryResult<T> {
     /// Operation succeeded without error.
     Success(T),
-    
+
     /// Operation failed and error was propagated.
     Failed(Error),
-    
+
     /// Operation recovered using alternative approach.
     Recovered {
         /// The recovered value (if any)
@@ -113,7 +113,7 @@ pub enum RecoveryResult<T> {
         /// Explanation of the recovery
         reason: String,
     },
-    
+
     /// Operation will be retried.
     Retrying {
         /// Current attempt number
@@ -135,9 +135,9 @@ pub enum RecoveryResult<T> {
 /// use sublime_standard_tools::error::{ErrorRecoveryManager, RecoveryStrategy, LogLevel};
 ///
 /// let manager = ErrorRecoveryManager::new()
-///     .with_strategy("filesystem_error", RecoveryStrategy::Retry { 
-///         max_attempts: 3, 
-///         backoff_ms: 100 
+///     .with_strategy("filesystem_error", RecoveryStrategy::Retry {
+///         max_attempts: 3,
+///         backoff_ms: 100
 ///     })
 ///     .with_strategy("config_error", RecoveryStrategy::LogAndContinue(LogLevel::Warn))
 ///     .set_default(RecoveryStrategy::Fail);
@@ -159,12 +159,9 @@ impl Default for ErrorRecoveryManager {
 impl ErrorRecoveryManager {
     /// Creates a new error recovery manager with fail-fast default.
     pub fn new() -> Self {
-        Self {
-            strategies: HashMap::new(),
-            default_strategy: RecoveryStrategy::Fail,
-        }
+        Self { strategies: HashMap::new(), default_strategy: RecoveryStrategy::Fail }
     }
-    
+
     /// Adds a recovery strategy for a specific error type.
     ///
     /// # Arguments
@@ -176,7 +173,7 @@ impl ErrorRecoveryManager {
         self.strategies.insert(error_type.to_string(), strategy);
         self
     }
-    
+
     /// Sets the default recovery strategy.
     ///
     /// # Arguments
@@ -187,7 +184,7 @@ impl ErrorRecoveryManager {
         self.default_strategy = strategy;
         self
     }
-    
+
     /// Gets the recovery strategy for a given error type.
     ///
     /// # Arguments
@@ -200,7 +197,7 @@ impl ErrorRecoveryManager {
     pub fn get_strategy(&self, error_type: &str) -> &RecoveryStrategy {
         self.strategies.get(error_type).unwrap_or(&self.default_strategy)
     }
-    
+
     /// Handles an error result by applying the appropriate recovery strategy.
     ///
     /// # Arguments
@@ -211,11 +208,7 @@ impl ErrorRecoveryManager {
     /// # Returns
     ///
     /// A `RecoveryResult` indicating the outcome of applying the recovery strategy
-    pub fn handle<T, E>(
-        &self,
-        result: CoreResult<T, E>,
-        context: &str,
-    ) -> RecoveryResult<T>
+    pub fn handle<T, E>(&self, result: CoreResult<T, E>, context: &str) -> RecoveryResult<T>
     where
         E: AsRef<str> + std::fmt::Debug + Clone + Into<Error>,
     {
@@ -224,11 +217,9 @@ impl ErrorRecoveryManager {
             Err(error) => {
                 let error_type = error.as_ref();
                 let strategy = self.get_strategy(error_type);
-                
+
                 match strategy {
-                    RecoveryStrategy::Fail => {
-                        RecoveryResult::Failed(error.into())
-                    }
+                    RecoveryStrategy::Fail => RecoveryResult::Failed(error.into()),
                     RecoveryStrategy::LogAndContinue(level) => {
                         // Enterprise logging with structured context and comprehensive error analysis
                         match level {
@@ -237,7 +228,7 @@ impl ErrorRecoveryManager {
                                 "Recovery executed - Context: {context} | Error: {error:?} | Strategy: LogAndContinue(Debug)"
                             ),
                             LogLevel::Info => log::info!(
-                                target: "recovery", 
+                                target: "recovery",
                                 "Recovery executed - Context: {context} | Error: {error:?} | Strategy: LogAndContinue(Info)"
                             ),
                             LogLevel::Warn => log::warn!(
@@ -255,13 +246,10 @@ impl ErrorRecoveryManager {
                         }
                     }
                     RecoveryStrategy::UseDefault(reason) => {
-                        RecoveryResult::Recovered {
-                            value: None,
-                            reason: reason.clone(),
-                        }
+                        RecoveryResult::Recovered { value: None, reason: reason.clone() }
                     }
                     RecoveryStrategy::Retry { max_attempts: _, backoff_ms } => {
-                        // This is a simplified version - real implementation would 
+                        // This is a simplified version - real implementation would
                         // need to track attempt count and handle actual retries
                         RecoveryResult::Retrying {
                             attempt: 1,
@@ -269,10 +257,7 @@ impl ErrorRecoveryManager {
                         }
                     }
                     RecoveryStrategy::Graceful(message) => {
-                        RecoveryResult::Recovered {
-                            value: None,
-                            reason: message.clone(),
-                        }
+                        RecoveryResult::Recovered { value: None, reason: message.clone() }
                     }
                 }
             }
@@ -300,7 +285,7 @@ impl ErrorRecoveryManager {
         // Comprehensive error chain analysis for enterprise debugging
         let error_chain = Self::build_error_chain(error);
         let error_type = std::any::type_name::<E>();
-        
+
         // Structured logging for enterprise monitoring integration
         log::info!(
             target: "recovery.analysis",
@@ -311,7 +296,7 @@ impl ErrorRecoveryManager {
             error_chain.len(),
             error_chain.first().unwrap_or(&"Unknown".to_string())
         );
-        
+
         // Detailed error chain logging for debugging
         for (index, error_msg) in error_chain.iter().enumerate() {
             log::debug!(
@@ -336,7 +321,7 @@ impl ErrorRecoveryManager {
     fn build_error_chain<E: std::error::Error>(error: &E) -> Vec<String> {
         let mut chain = Vec::new();
         let mut current_error: &dyn std::error::Error = error;
-        
+
         // Traverse complete error chain for comprehensive analysis
         loop {
             chain.push(current_error.to_string());
@@ -345,7 +330,7 @@ impl ErrorRecoveryManager {
                 None => break,
             }
         }
-        
+
         chain
     }
 }

@@ -15,9 +15,9 @@
 //! monorepos where multiple projects need to be detected concurrently. This unified
 //! async-only approach eliminates confusion and provides consistent API.
 
-use super::types::{ProjectDescriptor, ProjectKind, ProjectValidationStatus};
 use super::Project;
-use crate::config::{ConfigManager, StandardConfig, Configurable};
+use super::types::{ProjectDescriptor, ProjectKind, ProjectValidationStatus};
+use crate::config::{ConfigManager, Configurable, StandardConfig};
 use crate::error::{Error, Result};
 use crate::filesystem::{AsyncFileSystem, FileSystemManager};
 use crate::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
@@ -117,7 +117,11 @@ pub trait ProjectDetectorTrait: Send + Sync {
     /// - No valid project is found at the path
     /// - Filesystem operations fail
     /// - Project structure is invalid
-    async fn detect(&self, path: &Path, config: Option<&StandardConfig>) -> Result<ProjectDescriptor>;
+    async fn detect(
+        &self,
+        path: &Path,
+        config: Option<&StandardConfig>,
+    ) -> Result<ProjectDescriptor>;
 
     /// Asynchronously detects only the project kind without full analysis.
     ///
@@ -382,8 +386,8 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
         &self,
         project_root: &Path,
         base_config: Option<StandardConfig>,
-    ) -> Result<StandardConfig> 
-    where 
+    ) -> Result<StandardConfig>
+    where
         F: 'static,
     {
         let mut builder = ConfigManager::<StandardConfig>::builder().with_defaults();
@@ -391,7 +395,7 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
         // Check for repo.config.* files in order of preference
         let config_files = [
             project_root.join("repo.config.toml"),
-            project_root.join("repo.config.yml"), 
+            project_root.join("repo.config.yml"),
             project_root.join("repo.config.yaml"),
             project_root.join("repo.config.json"),
         ];
@@ -403,19 +407,20 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
             }
         }
 
-        let manager = builder.build(self.fs.clone()).map_err(|e| {
-            Error::operation(format!("Failed to create config manager: {e}"))
-        })?;
+        let manager = builder
+            .build(self.fs.clone())
+            .map_err(|e| Error::operation(format!("Failed to create config manager: {e}")))?;
 
-        let mut config = manager.load().await.map_err(|e| {
-            Error::operation(format!("Failed to load configuration: {e}"))
-        })?;
+        let mut config = manager
+            .load()
+            .await
+            .map_err(|e| Error::operation(format!("Failed to load configuration: {e}")))?;
 
         // Merge with base config if provided
         if let Some(base) = base_config {
-            config.merge_with(base).map_err(|e| {
-                Error::operation(format!("Failed to merge configurations: {e}"))
-            })?;
+            config
+                .merge_with(base)
+                .map_err(|e| Error::operation(format!("Failed to merge configurations: {e}")))?;
         }
 
         Ok(config)
@@ -465,7 +470,7 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
             config.package_managers.detection_order,
             config.package_managers.detect_from_env
         );
-        
+
         if let Ok(pm) = PackageManager::detect_with_config(path, &config.package_managers) {
             metadata.package_manager = Some(pm);
         }
@@ -531,10 +536,8 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
         );
 
         // Create a config-aware monorepo detector for this specific operation
-        let config_aware_detector = MonorepoDetector::with_filesystem_and_config(
-            self.fs.clone(),
-            config.monorepo.clone(),
-        );
+        let config_aware_detector =
+            MonorepoDetector::with_filesystem_and_config(self.fs.clone(), config.monorepo.clone());
 
         // Use the config-aware detector
         config_aware_detector.detect_monorepo(path).await
@@ -573,7 +576,7 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
         // First validate basic path requirements
         self.validate_project_path(path).await?;
 
-        // Load or use provided configuration 
+        // Load or use provided configuration
         let effective_config = match config {
             Some(cfg) => cfg.clone(),
             None => self.load_project_config(path, None).await?,
@@ -606,9 +609,10 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
 
         // If it's a monorepo, populate internal dependencies using config-aware detection
         if project.is_monorepo()
-            && let Ok(monorepo) = self.detect_monorepo_with_config(path, &effective_config).await {
-                project.internal_dependencies = monorepo.packages().to_vec();
-            }
+            && let Ok(monorepo) = self.detect_monorepo_with_config(path, &effective_config).await
+        {
+            project.internal_dependencies = monorepo.packages().to_vec();
+        }
 
         Ok(ProjectDescriptor::NodeJs(project))
     }
@@ -633,10 +637,7 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
     ///
     /// * `Ok(ProjectKind)` - The type of project detected
     /// * `Err(Error)` - If detection failed
-    pub async fn detect_kind(
-        &self,
-        path: impl AsRef<Path>,
-    ) -> Result<ProjectKind> {
+    pub async fn detect_kind(&self, path: impl AsRef<Path>) -> Result<ProjectKind> {
         let default_config = StandardConfig::default();
         self.detect_kind_with_config(path, &default_config).await
     }
@@ -759,17 +760,23 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
         // Additional validation: ensure package.json can be parsed
         let package_json_path = path.join("package.json");
         match self.fs.read_file_string(&package_json_path).await {
-            Ok(content) => {
-                match serde_json::from_str::<PackageJson>(&content) {
-                    Ok(_) => true,
-                    Err(e) => {
-                        log::warn!("Failed to parse package.json at {}: {}", package_json_path.display(), e);
-                        false
-                    }
+            Ok(content) => match serde_json::from_str::<PackageJson>(&content) {
+                Ok(_) => true,
+                Err(e) => {
+                    log::warn!(
+                        "Failed to parse package.json at {}: {}",
+                        package_json_path.display(),
+                        e
+                    );
+                    false
                 }
-            }
+            },
             Err(e) => {
-                log::debug!("Could not read package.json at {} for validation: {}", package_json_path.display(), e);
+                log::debug!(
+                    "Could not read package.json at {} for validation: {}",
+                    package_json_path.display(),
+                    e
+                );
                 false
             }
         }
@@ -778,7 +785,11 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
 
 #[async_trait]
 impl<F: AsyncFileSystem + Clone + 'static> ProjectDetectorTrait for ProjectDetector<F> {
-    async fn detect(&self, path: &Path, config: Option<&StandardConfig>) -> Result<ProjectDescriptor> {
+    async fn detect(
+        &self,
+        path: &Path,
+        config: Option<&StandardConfig>,
+    ) -> Result<ProjectDescriptor> {
         self.detect(path, config).await
     }
 

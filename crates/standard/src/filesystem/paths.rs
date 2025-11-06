@@ -16,7 +16,7 @@
 //! and file locations. These utilities simplify working with these conventions
 //! and provide a consistent approach to path handling across the crate.
 
-use super::{types::PathExt, NodePathKind, PathUtils};
+use super::{NodePathKind, PathUtils, types::PathExt};
 use crate::error::{Error, FileSystemError, FileSystemResult, Result};
 use std::path::{Component, Path, PathBuf};
 

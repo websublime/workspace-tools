@@ -16,8 +16,8 @@ use super::creator::create_changeset_for_upgrades;
 use crate::changeset::ChangesetManager;
 use crate::config::UpgradeConfig;
 use crate::error::UpgradeResult;
-use crate::upgrade::detection::PackageUpgrades;
 use crate::upgrade::UpgradeSelection;
+use crate::upgrade::detection::PackageUpgrades;
 use std::collections::HashSet;
 use std::path::Path;
 use sublime_standard_tools::filesystem::AsyncFileSystem;
@@ -117,25 +117,27 @@ where
     let mut result = apply_upgrades(available_upgrades, selection, dry_run, fs).await?;
 
     // If not dry run and auto_changeset is enabled, create changeset
-    if !dry_run && config.auto_changeset
-        && let Some(manager) = changeset_manager {
-            // Extract affected package names from the result
-            let affected_packages = extract_affected_packages(&result);
+    if !dry_run
+        && config.auto_changeset
+        && let Some(manager) = changeset_manager
+    {
+        // Extract affected package names from the result
+        let affected_packages = extract_affected_packages(&result);
 
-            if !affected_packages.is_empty() {
-                // Create or update changeset
-                let changeset_id = create_changeset_for_upgrades(
-                    manager,
-                    affected_packages,
-                    workspace_root,
-                    &config.changeset_bump,
-                )
-                .await?;
+        if !affected_packages.is_empty() {
+            // Create or update changeset
+            let changeset_id = create_changeset_for_upgrades(
+                manager,
+                affected_packages,
+                workspace_root,
+                &config.changeset_bump,
+            )
+            .await?;
 
-                // Update result with changeset ID
-                result.changeset_id = changeset_id;
-            }
+            // Update result with changeset ID
+            result.changeset_id = changeset_id;
         }
+    }
 
     Ok(result)
 }
@@ -180,9 +182,10 @@ fn extract_package_name(package_path: &Path) -> Option<String> {
 
     if let Ok(content) = std::fs::read_to_string(&package_json_path)
         && let Ok(pkg_json) = serde_json::from_str::<serde_json::Value>(&content)
-            && let Some(name) = pkg_json.get("name").and_then(|v| v.as_str()) {
-                return Some(name.to_string());
-            }
+        && let Some(name) = pkg_json.get("name").and_then(|v| v.as_str())
+    {
+        return Some(name.to_string());
+    }
 
     // Fallback to directory name
     package_path.file_name().and_then(|n| n.to_str()).map(String::from)

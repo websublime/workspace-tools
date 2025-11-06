@@ -75,7 +75,9 @@ impl AsRef<str> for WorkspaceError {
     fn as_ref(&self) -> &str {
         match self {
             WorkspaceError::InvalidPackageJson(_) => "WorkspaceError::InvalidPackageJson",
-            WorkspaceError::InvalidWorkspacesPattern(_) => "WorkspaceError::InvalidWorkspacesPattern",
+            WorkspaceError::InvalidWorkspacesPattern(_) => {
+                "WorkspaceError::InvalidWorkspacesPattern"
+            }
             WorkspaceError::InvalidPnpmWorkspace(_) => "WorkspaceError::InvalidPnpmWorkspace",
             WorkspaceError::PackageNotFound(_) => "WorkspaceError::PackageNotFound",
             WorkspaceError::WorkspaceNotFound(_) => "WorkspaceError::WorkspaceNotFound",

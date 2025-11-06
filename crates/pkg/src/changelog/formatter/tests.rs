@@ -1277,8 +1277,11 @@ fn test_custom_format_entry_with_commit_link() {
 
     let formatted = formatter.format_entry(&entry);
     assert!(formatted.contains("[abcdef1]"));
-    assert!(formatted
-        .contains("https://github.com/user/repo/commit/abcdef1234567890abcdef1234567890abcdef12"));
+    assert!(
+        formatted.contains(
+            "https://github.com/user/repo/commit/abcdef1234567890abcdef1234567890abcdef12"
+        )
+    );
 }
 
 #[test]

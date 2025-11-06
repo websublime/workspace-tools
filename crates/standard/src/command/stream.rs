@@ -24,8 +24,8 @@ use super::types::{CommandStream, StreamConfig, StreamOutput};
 use crate::error::{CommandError, Error, Result};
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };

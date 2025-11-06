@@ -271,9 +271,10 @@ pub(crate) fn parse_version_tag(
 
     // Verify package matches if expected
     if let Some(expected) = expected_package
-        && package_name.as_deref() != Some(expected) {
-            return None;
-        }
+        && package_name.as_deref() != Some(expected)
+    {
+        return None;
+    }
 
     Some(VersionTag::new(tag.to_string(), version, package_name))
 }

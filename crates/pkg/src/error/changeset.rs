@@ -274,7 +274,9 @@ pub enum ChangesetError {
     ///
     /// This error occurs when a changeset file has been modified by another
     /// process between read and write operations.
-    #[error("Concurrent modification detected for changeset '{branch}': expected timestamp {expected}, found {actual}")]
+    #[error(
+        "Concurrent modification detected for changeset '{branch}': expected timestamp {expected}, found {actual}"
+    )]
     ConcurrentModification {
         /// The branch name of the changeset.
         branch: String,

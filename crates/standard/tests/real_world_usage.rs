@@ -41,10 +41,10 @@ use tempfile::TempDir;
 /// Helper function to detect if we're running in a CI environment on Windows
 /// where command execution through npm/pnpm might fail due to environment issues
 fn is_windows_ci() -> bool {
-    cfg!(target_os = "windows") && 
-    (std::env::var("CI").is_ok() || 
-     std::env::var("GITHUB_ACTIONS").is_ok() ||
-     std::env::var("RUNNER_OS").is_ok())
+    cfg!(target_os = "windows")
+        && (std::env::var("CI").is_ok()
+            || std::env::var("GITHUB_ACTIONS").is_ok()
+            || std::env::var("RUNNER_OS").is_ok())
 }
 
 /// Example analyzer for simple Node.js repositories
@@ -122,7 +122,7 @@ impl SimpleRepoAnalyzer {
     /// Analyzes a simple Node.js repository
     async fn analyze_simple_repo(&self, path: &Path) -> Result<SimpleRepoInfo> {
         println!("🔍 Analyzing simple repository at: {}", path.display());
-        
+
         // Demonstrate configuration usage
         if self.fs.exists(&path.join("repo.config.toml")).await {
             println!("📋 Found repo.config.toml - using project-specific configuration");
@@ -133,14 +133,15 @@ impl SimpleRepoAnalyzer {
         // Step 1: Detect project type
         let project = self.project_detector.detect(path, None).await?;
         let project_info = project.as_project_info();
-        
+
         println!("📦 Detected project type: {}", project_info.kind().name());
 
         // Step 2: Validate project structure
         let validation_config = None;
-        let project_descriptor = self.project_manager.create_project(path, validation_config).await?;
+        let project_descriptor =
+            self.project_manager.create_project(path, validation_config).await?;
         let validation_status = project_descriptor.as_project_info().validation_status();
-        
+
         println!("✅ Project validation status: {validation_status:?}");
 
         // Step 3: Read and parse package.json
@@ -154,39 +155,39 @@ impl SimpleRepoAnalyzer {
             .map_err(|e| Error::operation(format!("Invalid package.json: {e}")))?;
 
         // Step 4: Extract package information
-        let name = package_json.get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string();
+        let name =
+            package_json.get("name").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
 
-        let version = package_json.get("version")
-            .and_then(|v| v.as_str())
-            .unwrap_or("0.0.0")
-            .to_string();
+        let version =
+            package_json.get("version").and_then(|v| v.as_str()).unwrap_or("0.0.0").to_string();
 
         // Step 5: Detect package manager
         let package_manager = PackageManager::detect(path)?;
         println!("📋 Using package manager: {}", package_manager.kind().command());
 
         // Step 6: Check for TypeScript
-        let has_typescript = self.fs.exists(&path.join("tsconfig.json")).await ||
-            package_json.get("devDependencies")
+        let has_typescript = self.fs.exists(&path.join("tsconfig.json")).await
+            || package_json
+                .get("devDependencies")
                 .and_then(|deps| deps.get("typescript"))
                 .is_some();
 
         // Step 7: Extract scripts
-        let scripts = package_json.get("scripts")
+        let scripts = package_json
+            .get("scripts")
             .and_then(|s| s.as_object())
             .map(|obj| obj.keys().cloned().collect())
             .unwrap_or_default();
 
         // Step 8: Extract dependencies
-        let dependencies = package_json.get("dependencies")
+        let dependencies = package_json
+            .get("dependencies")
             .and_then(|deps| deps.as_object())
             .map(|obj| obj.keys().cloned().collect())
             .unwrap_or_default();
 
-        let dev_dependencies = package_json.get("devDependencies")
+        let dev_dependencies = package_json
+            .get("devDependencies")
             .and_then(|deps| deps.as_object())
             .map(|obj| obj.keys().cloned().collect())
             .unwrap_or_default();
@@ -204,7 +205,11 @@ impl SimpleRepoAnalyzer {
     }
 
     /// Demonstrates running scripts in a simple repository
-    async fn run_scripts(&self, repo_info: &SimpleRepoInfo, scripts_to_run: &[&str]) -> Result<Vec<(String, bool)>> {
+    async fn run_scripts(
+        &self,
+        repo_info: &SimpleRepoInfo,
+        scripts_to_run: &[&str],
+    ) -> Result<Vec<(String, bool)>> {
         println!("🚀 Running scripts in simple repository...");
 
         let mut results = Vec::new();
@@ -212,7 +217,7 @@ impl SimpleRepoAnalyzer {
         for script_name in scripts_to_run {
             if repo_info.scripts.contains(&(*script_name).to_string()) {
                 println!("  Running script: {script_name}");
-                
+
                 let command = CommandBuilder::new(repo_info.package_manager.kind().command())
                     .arg("run")
                     .arg(*script_name)
@@ -228,7 +233,9 @@ impl SimpleRepoAnalyzer {
                     match self.executor.execute(command).await {
                         Ok(output) => {
                             let success = output.success();
-                            println!("    ✅ Script '{script_name}' completed (success: {success})");
+                            println!(
+                                "    ✅ Script '{script_name}' completed (success: {success})"
+                            );
                             if !success {
                                 println!("    Output: {}", output.stderr().trim());
                             }
@@ -261,7 +268,7 @@ impl MonorepoAnalyzer {
     }
 
     /// Creates a new monorepo analyzer with project-specific configuration
-    async fn new_with_project_config(project_path: &Path) -> Result<Self> {        
+    async fn new_with_project_config(project_path: &Path) -> Result<Self> {
         Ok(Self {
             fs: FileSystemManager::new_with_project_config(project_path).await?,
             executor: DefaultCommandExecutor::new_with_project_config(project_path).await?,
@@ -272,7 +279,7 @@ impl MonorepoAnalyzer {
     /// Analyzes a monorepo structure
     async fn analyze_monorepo(&self, path: &Path) -> Result<MonorepoInfo> {
         println!("🔍 Analyzing monorepo at: {}", path.display());
-        
+
         // Demonstrate configuration usage
         if self.fs.exists(&path.join("repo.config.toml")).await {
             println!("📋 Found repo.config.toml - using monorepo-specific configuration");
@@ -283,7 +290,10 @@ impl MonorepoAnalyzer {
         }
 
         // Step 1: Check if this is actually a monorepo
-        let monorepo_kind = self.monorepo_detector.is_monorepo_root(path).await?
+        let monorepo_kind = self
+            .monorepo_detector
+            .is_monorepo_root(path)
+            .await?
             .ok_or_else(|| Error::operation("Directory is not a monorepo"))?;
 
         println!("📦 Detected monorepo type: {}", monorepo_kind.name());
@@ -304,14 +314,15 @@ impl MonorepoAnalyzer {
         let root_package_json: serde_json::Value = serde_json::from_str(&root_package_content)
             .map_err(|e| Error::operation(format!("Invalid root package.json: {e}")))?;
 
-        let monorepo_name = root_package_json.get("name")
+        let monorepo_name = root_package_json
+            .get("name")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown-monorepo")
             .to_string();
 
         // Step 5: Analyze each workspace package
         let mut workspace_packages = Vec::new();
-        
+
         for package in packages {
             let package_info = self.analyze_workspace_package(package).await?;
             workspace_packages.push(package_info);
@@ -334,21 +345,27 @@ impl MonorepoAnalyzer {
     }
 
     /// Analyzes a single workspace package
-    async fn analyze_workspace_package(&self, package: &sublime_standard_tools::monorepo::WorkspacePackage) -> Result<WorkspacePackageInfo> {
+    async fn analyze_workspace_package(
+        &self,
+        package: &sublime_standard_tools::monorepo::WorkspacePackage,
+    ) -> Result<WorkspacePackageInfo> {
         let package_json_path = package.absolute_path.join("package.json");
         let package_content = self.fs.read_file_string(&package_json_path).await?;
-        let package_json: serde_json::Value = serde_json::from_str(&package_content)
-            .map_err(|e| Error::operation(format!("Invalid package.json in {}: {}", package.name, e)))?;
-
+        let package_json: serde_json::Value =
+            serde_json::from_str(&package_content).map_err(|e| {
+                Error::operation(format!("Invalid package.json in {}: {}", package.name, e))
+            })?;
 
         // Extract scripts
-        let scripts = package_json.get("scripts")
+        let scripts = package_json
+            .get("scripts")
             .and_then(|s| s.as_object())
             .map(|obj| obj.keys().cloned().collect())
             .unwrap_or_default();
 
         // Extract dependencies
-        let dependencies = package_json.get("dependencies")
+        let dependencies = package_json
+            .get("dependencies")
             .and_then(|deps| deps.as_object())
             .map(|obj| obj.keys().cloned().collect())
             .unwrap_or_default();
@@ -364,7 +381,11 @@ impl MonorepoAnalyzer {
     }
 
     /// Demonstrates running scripts across monorepo packages
-    async fn run_workspace_scripts(&self, monorepo_info: &MonorepoInfo, script_name: &str) -> Result<Vec<(String, bool)>> {
+    async fn run_workspace_scripts(
+        &self,
+        monorepo_info: &MonorepoInfo,
+        script_name: &str,
+    ) -> Result<Vec<(String, bool)>> {
         println!("🚀 Running '{script_name}' script across workspace packages...");
 
         let mut results = Vec::new();
@@ -372,7 +393,7 @@ impl MonorepoAnalyzer {
         for package in &monorepo_info.workspace_packages {
             if package.scripts.contains(&script_name.to_string()) {
                 println!("  Running '{}' for package: {}", script_name, package.name);
-                
+
                 let command = CommandBuilder::new(monorepo_info.package_manager.kind().command())
                     .arg("run")
                     .arg(script_name)
@@ -382,13 +403,19 @@ impl MonorepoAnalyzer {
 
                 // On Windows CI, mock successful execution to avoid environment issues
                 if is_windows_ci() {
-                    println!("    ✅ '{}' simulated for {} (Windows CI mode)", script_name, package.name);
+                    println!(
+                        "    ✅ '{}' simulated for {} (Windows CI mode)",
+                        script_name, package.name
+                    );
                     results.push((package.name.clone(), true));
                 } else {
                     match self.executor.execute(command).await {
                         Ok(output) => {
                             let success = output.success();
-                            println!("    ✅ '{}' completed for {} (success: {})", script_name, package.name, success);
+                            println!(
+                                "    ✅ '{}' completed for {} (success: {})",
+                                script_name, package.name, success
+                            );
                             if !output.stdout().trim().is_empty() {
                                 println!("    Output: {}", output.stdout().trim());
                             }
@@ -442,7 +469,7 @@ impl MonorepoAnalyzer {
 
         // Step 4: Simulate running install to create lock file
         println!("  Running 'pnpm install' to recreate lock file...");
-        
+
         let install_command = CommandBuilder::new("echo")
             .arg("Simulating: pnpm install completed successfully")
             .current_dir(path)
@@ -450,18 +477,27 @@ impl MonorepoAnalyzer {
 
         // On Windows CI, mock the install simulation to avoid environment issues
         if is_windows_ci() {
-            println!("  ✅ Install simulation: Simulating: pnpm install completed successfully (Windows CI mode)");
-            
+            println!(
+                "  ✅ Install simulation: Simulating: pnpm install completed successfully (Windows CI mode)"
+            );
+
             // Create a mock lock file
-            self.fs.write_file_string(&lock_file_path, "# Mock pnpm lock file\nlockfileVersion: 5.4").await?;
+            self.fs
+                .write_file_string(&lock_file_path, "# Mock pnpm lock file\nlockfileVersion: 5.4")
+                .await?;
             println!("  ✅ Lock file recreated");
         } else {
             match self.executor.execute(install_command).await {
                 Ok(output) => {
                     println!("  ✅ Install simulation: {}", output.stdout().trim());
-                    
+
                     // Create a mock lock file
-                    self.fs.write_file_string(&lock_file_path, "# Mock pnpm lock file\nlockfileVersion: 5.4").await?;
+                    self.fs
+                        .write_file_string(
+                            &lock_file_path,
+                            "# Mock pnpm lock file\nlockfileVersion: 5.4",
+                        )
+                        .await?;
                     println!("  ✅ Lock file recreated");
                 }
                 Err(e) => {
@@ -473,7 +509,10 @@ impl MonorepoAnalyzer {
         // Step 5: Verify recovery
         match self.analyze_monorepo(path).await {
             Ok(info) => {
-                println!("  ✅ Recovery successful! Monorepo analysis working with {} packages", info.workspace_packages.len());
+                println!(
+                    "  ✅ Recovery successful! Monorepo analysis working with {} packages",
+                    info.workspace_packages.len()
+                );
             }
             Err(e) => {
                 println!("  ❌ Recovery failed: {e}");
@@ -517,7 +556,8 @@ async fn setup_simple_repo(temp_dir: &TempDir) -> Result<PathBuf> {
         &root.join("package.json"),
         &serde_json::to_string_pretty(&package_json)
             .map_err(|e| Error::operation(format!("Failed to serialize package.json: {e}")))?,
-    ).await?;
+    )
+    .await?;
 
     // Create TypeScript config
     let tsconfig = serde_json::json!({
@@ -539,7 +579,8 @@ async fn setup_simple_repo(temp_dir: &TempDir) -> Result<PathBuf> {
         &root.join("tsconfig.json"),
         &serde_json::to_string_pretty(&tsconfig)
             .map_err(|e| Error::operation(format!("Failed to serialize tsconfig.json: {e}")))?,
-    ).await?;
+    )
+    .await?;
 
     // Create src directory and main file
     let src_dir = root.node_path(NodePathKind::Src);
@@ -629,7 +670,11 @@ const result = await client.fetchData('/posts');
     fs.write_file_string(&root.join("README.md"), readme).await?;
 
     // Create npm lock file
-    fs.write_file_string(&root.join("package-lock.json"), r#"{"name": "@scope/simple", "version": "0.4.0"}"#).await?;
+    fs.write_file_string(
+        &root.join("package-lock.json"),
+        r#"{"name": "@scope/simple", "version": "0.4.0"}"#,
+    )
+    .await?;
 
     // Create repo.config.toml with custom configuration
     let repo_config = r#"# Configuration for @scope/simple project
@@ -693,7 +738,8 @@ async fn setup_monorepo(temp_dir: &TempDir) -> Result<PathBuf> {
         &root.join("package.json"),
         &serde_json::to_string_pretty(&root_package_json)
             .map_err(|e| Error::operation(format!("Failed to serialize root package.json: {e}")))?,
-    ).await?;
+    )
+    .await?;
 
     // Create pnpm-workspace.yaml
     let pnpm_workspace = r"packages:
@@ -745,12 +791,17 @@ strict-peer-dependencies=true
         &lib_dir.join("package.json"),
         &serde_json::to_string_pretty(&lib_package_json)
             .map_err(|e| Error::operation(format!("Failed to serialize lib package.json: {e}")))?,
-    ).await?;
+    )
+    .await?;
 
-    fs.write_file_string(&lib_dir.join("src/index.ts"), r"// Library functionality using signals
+    fs.write_file_string(
+        &lib_dir.join("src/index.ts"),
+        r"// Library functionality using signals
 export * from './signals';
 export * from './utils';
-").await?;
+",
+    )
+    .await?;
 
     // Create @scope/ui package
     let ui_dir = packages_dir.join("ui");
@@ -779,12 +830,17 @@ export * from './utils';
         &ui_dir.join("package.json"),
         &serde_json::to_string_pretty(&ui_package_json)
             .map_err(|e| Error::operation(format!("Failed to serialize ui package.json: {e}")))?,
-    ).await?;
+    )
+    .await?;
 
-    fs.write_file_string(&ui_dir.join("src/index.ts"), r"// UI components using zag-js
+    fs.write_file_string(
+        &ui_dir.join("src/index.ts"),
+        r"// UI components using zag-js
 export * from './components';
 export * from './hooks';
-").await?;
+",
+    )
+    .await?;
 
     // Create @scope/app package
     let app_dir = apps_dir.join("app");
@@ -814,17 +870,24 @@ export * from './hooks';
         &app_dir.join("package.json"),
         &serde_json::to_string_pretty(&app_package_json)
             .map_err(|e| Error::operation(format!("Failed to serialize app package.json: {e}")))?,
-    ).await?;
+    )
+    .await?;
 
-    fs.write_file_string(&app_dir.join("src/index.ts"), r"// Main application using lib and ui packages
+    fs.write_file_string(
+        &app_dir.join("src/index.ts"),
+        r"// Main application using lib and ui packages
 import { someFunction } from '@scope/lib';
 import { SomeComponent } from '@scope/ui';
 
 console.log('Application started');
-").await?;
+",
+    )
+    .await?;
 
     // Create pnpm-lock.yaml (will be removed/recreated in error recovery test)
-    fs.write_file_string(&root.join("pnpm-lock.yaml"), r"lockfileVersion: 5.4
+    fs.write_file_string(
+        &root.join("pnpm-lock.yaml"),
+        r"lockfileVersion: 5.4
 
 specifiers:
   '@scope/app': workspace:*
@@ -834,7 +897,9 @@ specifiers:
 
 devDependencies:
   typescript: 4.9.5
-").await?;
+",
+    )
+    .await?;
 
     // Create repo.config.toml with monorepo-specific configuration
     let repo_config = r#"# Configuration for @scope/monorepo project
@@ -921,13 +986,13 @@ async fn test_simple_repository_analysis() -> Result<()> {
     // Setup
     let temp_dir = tempfile::tempdir()
         .map_err(|e| Error::operation(format!("Failed to create temp dir: {e}")))?;
-    
+
     let repo_path = setup_simple_repo(&temp_dir).await?;
-    
+
     // Create analyzer with project-specific configuration from repo.config.toml
     println!("🔧 Loading project-specific configuration from repo.config.toml...");
-    let analyzer = SimpleRepoAnalyzer::new_with_project_config(&repo_path).await
-        .unwrap_or_else(|_| {
+    let analyzer =
+        SimpleRepoAnalyzer::new_with_project_config(&repo_path).await.unwrap_or_else(|_| {
             println!("⚠️ Failed to load project config, falling back to defaults");
             SimpleRepoAnalyzer::new()
         });
@@ -958,7 +1023,7 @@ async fn test_simple_repository_analysis() -> Result<()> {
     // Test script execution
     println!("\n🏃 Testing Script Execution:");
     let script_results = analyzer.run_scripts(&repo_info, &["build", "lint", "dev"]).await?;
-    
+
     for (script, success) in &script_results {
         println!("  {} - {}", script, if *success { "✅" } else { "❌" });
     }
@@ -979,7 +1044,7 @@ async fn test_monorepo_analysis() -> Result<()> {
     // Setup
     let temp_dir = tempfile::tempdir()
         .map_err(|e| Error::operation(format!("Failed to create temp dir: {e}")))?;
-    
+
     let monorepo_path = setup_monorepo(&temp_dir).await?;
     let analyzer = MonorepoAnalyzer::new();
 
@@ -991,7 +1056,7 @@ async fn test_monorepo_analysis() -> Result<()> {
     println!("  Name: {}", monorepo_info.name);
     println!("  Package Manager: {}", monorepo_info.package_manager.kind().command());
     println!("  Workspace Packages: {}", monorepo_info.workspace_packages.len());
-    
+
     for package in &monorepo_info.workspace_packages {
         println!("    - {} v{} ({})", package.name, package.version, package.path.display());
         println!("      Scripts: {:?}", package.scripts);
@@ -1014,36 +1079,43 @@ async fn test_monorepo_analysis() -> Result<()> {
     // Assertions
     assert_eq!(monorepo_info.name, "@scope/monorepo");
     assert_eq!(monorepo_info.workspace_packages.len(), 3);
-    
-    let package_names: Vec<&String> = monorepo_info.workspace_packages.iter().map(|p| &p.name).collect();
+
+    let package_names: Vec<&String> =
+        monorepo_info.workspace_packages.iter().map(|p| &p.name).collect();
     assert!(package_names.contains(&&"@scope/lib".to_string()));
     assert!(package_names.contains(&&"@scope/ui".to_string()));
     assert!(package_names.contains(&&"@scope/app".to_string()));
 
     // Verify dependencies
-    let app_package = monorepo_info.workspace_packages.iter()
+    let app_package = monorepo_info
+        .workspace_packages
+        .iter()
         .find(|p| p.name == "@scope/app")
         .ok_or_else(|| Error::operation("@scope/app package should exist"))?;
-    
+
     assert!(app_package.workspace_dependencies.contains(&"@scope/lib".to_string()));
     assert!(app_package.workspace_dependencies.contains(&"@scope/ui".to_string()));
 
-    let lib_package = monorepo_info.workspace_packages.iter()
+    let lib_package = monorepo_info
+        .workspace_packages
+        .iter()
         .find(|p| p.name == "@scope/lib")
         .ok_or_else(|| Error::operation("@scope/lib package should exist"))?;
-    
+
     assert!(lib_package.dependencies.contains(&"signals".to_string()));
 
-    let ui_package = monorepo_info.workspace_packages.iter()
+    let ui_package = monorepo_info
+        .workspace_packages
+        .iter()
         .find(|p| p.name == "@scope/ui")
         .ok_or_else(|| Error::operation("@scope/ui package should exist"))?;
-    
+
     assert!(ui_package.dependencies.contains(&"zag-js".to_string()));
 
     // Test workspace script execution
     println!("\n🏃 Testing Workspace Script Execution:");
     let build_results = analyzer.run_workspace_scripts(&monorepo_info, "build").await?;
-    
+
     for (package, success) in &build_results {
         println!("  {} build - {}", package, if *success { "✅" } else { "❌" });
     }
@@ -1064,7 +1136,7 @@ async fn test_error_recovery_missing_lock_file() -> Result<()> {
     // Setup
     let temp_dir = tempfile::tempdir()
         .map_err(|e| Error::operation(format!("Failed to create temp dir: {e}")))?;
-    
+
     let monorepo_path = setup_monorepo(&temp_dir).await?;
     let analyzer = MonorepoAnalyzer::new();
 
@@ -1090,10 +1162,10 @@ async fn test_project_type_detection() -> Result<()> {
     let monorepo_path = setup_monorepo(&monorepo_temp).await?;
 
     let project_detector = ProjectDetector::new();
-    
+
     // Create monorepo detector with project-specific configuration for better detection
-    let monorepo_detector = MonorepoDetector::new_with_project_config(&monorepo_path).await
-        .unwrap_or_else(|_| {
+    let monorepo_detector =
+        MonorepoDetector::new_with_project_config(&monorepo_path).await.unwrap_or_else(|_| {
             println!("⚠️ Using default monorepo detector config");
             MonorepoDetector::new()
         });
@@ -1103,10 +1175,10 @@ async fn test_project_type_detection() -> Result<()> {
     let simple_project = project_detector.detect(&simple_path, None).await?;
     let simple_info = simple_project.as_project_info();
     println!("  Simple project type: {}", simple_info.kind().name());
-    
+
     let is_simple_monorepo = monorepo_detector.is_monorepo_root(&simple_path).await?;
     println!("  Is simple repo a monorepo: {is_simple_monorepo:?}");
-    
+
     assert!(is_simple_monorepo.is_none()); // Should not be detected as monorepo
 
     // Test monorepo detection
@@ -1114,10 +1186,10 @@ async fn test_project_type_detection() -> Result<()> {
     let monorepo_project = project_detector.detect(&monorepo_path, None).await?;
     let monorepo_project_info = monorepo_project.as_project_info();
     println!("  Monorepo project type: {}", monorepo_project_info.kind().name());
-    
+
     let monorepo_kind = monorepo_detector.is_monorepo_root(&monorepo_path).await?;
     println!("  Monorepo type: {monorepo_kind:?}");
-    
+
     assert!(monorepo_kind.is_some()); // Should be detected as monorepo
     if let Some(kind) = monorepo_kind {
         println!("  Detected monorepo kind: {}", kind.name());
@@ -1136,7 +1208,7 @@ async fn test_comprehensive_real_world_scenario() -> Result<()> {
 
     // Step 1: Set up both project types
     println!("\n📁 Step 1: Setting up test projects...");
-    
+
     let simple_temp = tempfile::tempdir()
         .map_err(|e| Error::operation(format!("Failed to create temp dir: {e}")))?;
     let monorepo_temp = tempfile::tempdir()
@@ -1147,17 +1219,17 @@ async fn test_comprehensive_real_world_scenario() -> Result<()> {
 
     // Step 2: Project discovery and analysis
     println!("\n🔍 Step 2: Discovering and analyzing projects...");
-    
+
     // Create analyzers with project-specific configurations
     println!("🔧 Loading project-specific configurations...");
-    let simple_analyzer = SimpleRepoAnalyzer::new_with_project_config(&simple_path).await
-        .unwrap_or_else(|_| {
+    let simple_analyzer =
+        SimpleRepoAnalyzer::new_with_project_config(&simple_path).await.unwrap_or_else(|_| {
             println!("⚠️ Simple repo config load failed, using defaults");
             SimpleRepoAnalyzer::new()
         });
-    
-    let monorepo_analyzer = MonorepoAnalyzer::new_with_project_config(&monorepo_path).await
-        .unwrap_or_else(|_| {
+
+    let monorepo_analyzer =
+        MonorepoAnalyzer::new_with_project_config(&monorepo_path).await.unwrap_or_else(|_| {
             println!("⚠️ Monorepo config load failed, using defaults");
             MonorepoAnalyzer::new()
         });
@@ -1166,14 +1238,18 @@ async fn test_comprehensive_real_world_scenario() -> Result<()> {
     let monorepo_info = monorepo_analyzer.analyze_monorepo(&monorepo_path).await?;
 
     println!("  Simple project: {} v{}", simple_info.name, simple_info.version);
-    println!("  Monorepo: {} with {} packages", monorepo_info.name, monorepo_info.workspace_packages.len());
+    println!(
+        "  Monorepo: {} with {} packages",
+        monorepo_info.name,
+        monorepo_info.workspace_packages.len()
+    );
 
     // Step 3: Validation and health checks
     println!("\n✅ Step 3: Running validation and health checks...");
-    
+
     // Check that all expected files exist
     let fs = FileSystemManager::new();
-    
+
     // Simple repo checks
     assert!(fs.exists(&simple_path.join("package.json")).await);
     assert!(fs.exists(&simple_path.join("tsconfig.json")).await);
@@ -1189,23 +1265,25 @@ async fn test_comprehensive_real_world_scenario() -> Result<()> {
 
     // Step 4: Dependency analysis
     println!("\n🔗 Step 4: Analyzing dependencies...");
-    
+
     // Simple repo dependencies
     println!("  Simple repo dependencies: {:?}", simple_info.dependencies);
     assert!(simple_info.dependencies.contains(&"node-fetch".to_string()));
 
     // Monorepo workspace dependencies
-    let app_package = monorepo_info.workspace_packages.iter()
+    let app_package = monorepo_info
+        .workspace_packages
+        .iter()
         .find(|p| p.name == "@scope/app")
         .ok_or_else(|| Error::operation("App package should exist"))?;
-    
+
     println!("  App workspace dependencies: {:?}", app_package.workspace_dependencies);
     assert!(app_package.workspace_dependencies.contains(&"@scope/lib".to_string()));
     assert!(app_package.workspace_dependencies.contains(&"@scope/ui".to_string()));
 
     // Step 5: Script execution simulation
     println!("\n🏃 Step 5: Executing development scripts...");
-    
+
     // Run scripts in simple repo
     let simple_results = simple_analyzer.run_scripts(&simple_info, &["build", "lint"]).await?;
     let successful_simple = simple_results.iter().filter(|(_, success)| *success).count();
@@ -1214,7 +1292,11 @@ async fn test_comprehensive_real_world_scenario() -> Result<()> {
     // Run scripts in monorepo
     let monorepo_results = monorepo_analyzer.run_workspace_scripts(&monorepo_info, "build").await?;
     let successful_monorepo = monorepo_results.iter().filter(|(_, success)| *success).count();
-    println!("  Monorepo: {}/{} package builds succeeded", successful_monorepo, monorepo_results.len());
+    println!(
+        "  Monorepo: {}/{} package builds succeeded",
+        successful_monorepo,
+        monorepo_results.len()
+    );
 
     // Step 6: Error recovery demonstration
     println!("\n🔧 Step 6: Demonstrating error recovery...");
@@ -1222,14 +1304,14 @@ async fn test_comprehensive_real_world_scenario() -> Result<()> {
 
     // Step 7: Final verification
     println!("\n🎯 Step 7: Final verification...");
-    
+
     // Verify we can still detect and analyze after recovery
     let recovered_info = monorepo_analyzer.analyze_monorepo(&monorepo_path).await?;
     assert_eq!(recovered_info.workspace_packages.len(), monorepo_info.workspace_packages.len());
     println!("  Post-recovery analysis: ✅");
 
     println!("\n🎉 Comprehensive real-world scenario test completed successfully!");
-    
+
     // Summary
     println!("\n=== FINAL SUMMARY ===");
     println!("Simple Repository:");
@@ -1237,7 +1319,7 @@ async fn test_comprehensive_real_world_scenario() -> Result<()> {
     println!("  Version: {}", simple_info.version);
     println!("  Package Manager: {}", simple_info.package_manager.kind().command());
     println!("  TypeScript: {}", simple_info.has_typescript);
-    
+
     println!("\nMonorepo:");
     println!("  Name: {}", monorepo_info.name);
     println!("  Package Manager: {}", monorepo_info.package_manager.kind().command());

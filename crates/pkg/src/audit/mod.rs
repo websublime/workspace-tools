@@ -71,8 +71,8 @@ pub use manager::AuditManager;
 
 // Health score calculation
 pub use health_score::{
-    calculate_diminishing_factor, calculate_health_score, calculate_health_score_detailed,
-    HealthScoreBreakdown, HealthScoreWeights,
+    HealthScoreBreakdown, HealthScoreWeights, calculate_diminishing_factor, calculate_health_score,
+    calculate_health_score_detailed,
 };
 
 // Issue types
@@ -80,12 +80,12 @@ pub use issue::{AuditIssue, IssueCategory, IssueSeverity};
 
 // Section types and functions
 pub use sections::{
-    audit_breaking_changes, audit_dependencies, audit_upgrades, audit_version_consistency,
-    categorize_dependencies, generate_categorization_issues, BreakingChange, BreakingChangeSource,
-    BreakingChangesAuditSection, CategorizationStats, DependencyAuditSection,
-    DependencyCategorization, DeprecatedPackage, ExternalPackage, InternalPackage, LocalLink,
-    LocalLinkType, PackageBreakingChanges, UpgradeAuditSection, VersionConflict,
-    VersionConsistencyAuditSection, VersionInconsistency, VersionUsage, WorkspaceLink,
+    BreakingChange, BreakingChangeSource, BreakingChangesAuditSection, CategorizationStats,
+    DependencyAuditSection, DependencyCategorization, DeprecatedPackage, ExternalPackage,
+    InternalPackage, LocalLink, LocalLinkType, PackageBreakingChanges, UpgradeAuditSection,
+    VersionConflict, VersionConsistencyAuditSection, VersionInconsistency, VersionUsage,
+    WorkspaceLink, audit_breaking_changes, audit_dependencies, audit_upgrades,
+    audit_version_consistency, categorize_dependencies, generate_categorization_issues,
 };
 
 // Report types
@@ -93,5 +93,5 @@ pub use report::{AuditReport, AuditSections, AuditSummary};
 
 // Formatter types and functions
 pub use formatter::{
-    format_json, format_json_compact, format_markdown, AuditReportExt, FormatOptions, Verbosity,
+    AuditReportExt, FormatOptions, Verbosity, format_json, format_json_compact, format_markdown,
 };

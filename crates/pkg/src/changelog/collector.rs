@@ -261,19 +261,20 @@ impl<'a> ChangelogCollector<'a> {
 
         // Try parsing as conventional commit
         if self.config.conventional.enabled
-            && let Ok(conventional) = ConventionalCommit::parse(&commit.message) {
-                return ChangelogEntry {
-                    description: conventional.description().to_string(),
-                    commit_hash: commit.hash.clone(),
-                    short_hash,
-                    commit_type: Some(conventional.commit_type().to_string()),
-                    scope: conventional.scope().map(String::from),
-                    breaking: conventional.is_breaking(),
-                    author: commit.author_name.clone(),
-                    references: conventional.extract_references().unwrap_or_default(),
-                    date,
-                };
-            }
+            && let Ok(conventional) = ConventionalCommit::parse(&commit.message)
+        {
+            return ChangelogEntry {
+                description: conventional.description().to_string(),
+                commit_hash: commit.hash.clone(),
+                short_hash,
+                commit_type: Some(conventional.commit_type().to_string()),
+                scope: conventional.scope().map(String::from),
+                breaking: conventional.is_breaking(),
+                author: commit.author_name.clone(),
+                references: conventional.extract_references().unwrap_or_default(),
+                date,
+            };
+        }
 
         // Fallback to plain message
         let description = self.extract_first_line(&commit.message);
@@ -314,9 +315,10 @@ impl<'a> ChangelogCollector<'a> {
 
         // Try parsing as Unix timestamp
         if let Ok(timestamp) = date_str.parse::<i64>()
-            && let Some(dt) = Utc.timestamp_opt(timestamp, 0).single() {
-                return dt;
-            }
+            && let Some(dt) = Utc.timestamp_opt(timestamp, 0).single()
+        {
+            return dt;
+        }
 
         // Fallback to current time if parsing fails
         Utc::now()

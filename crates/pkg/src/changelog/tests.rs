@@ -15,8 +15,8 @@
 #![allow(clippy::bool_assert_comparison)]
 #![allow(clippy::unnecessary_to_owned)]
 
-use crate::changelog::conventional::{ConventionalCommit, SectionType};
 use crate::changelog::ChangelogGenerator;
+use crate::changelog::conventional::{ConventionalCommit, SectionType};
 use crate::config::{ChangelogConfig, ChangelogFormat, MonorepoMode, PackageToolsConfig};
 use proptest::prelude::*;
 use sublime_git_tools::Repo;
@@ -3026,8 +3026,7 @@ All notable changes to this project will be documented in this file.
 
         #[test]
         fn test_version_list() {
-            let content =
-                "# Changelog\n\n## [2.0.0] - 2024-02-01\n\n## [1.0.0] - 2024-01-15\n\n## [0.9.0] - 2024-01-01";
+            let content = "# Changelog\n\n## [2.0.0] - 2024-02-01\n\n## [1.0.0] - 2024-01-15\n\n## [0.9.0] - 2024-01-01";
 
             let parser = ChangelogParser::new();
             let result = parser.parse(content).expect("Failed to parse");
@@ -3049,8 +3048,7 @@ All notable changes to this project will be documented in this file.
 
         #[test]
         fn test_parse_to_map() {
-            let content =
-                "# Changelog\n\n## [1.0.0] - 2024-01-15\n- Feature\n\n## [0.9.0] - 2024-01-01\n- Fix";
+            let content = "# Changelog\n\n## [1.0.0] - 2024-01-15\n- Feature\n\n## [0.9.0] - 2024-01-01\n- Fix";
 
             let parser = ChangelogParser::new();
             let map = parser.parse_to_map(content).expect("Failed to parse");
@@ -3100,7 +3098,7 @@ All notable changes to this project will be documented in this file.
 
     mod merge_message_tests {
         use super::*;
-        use crate::changelog::merge_message::{generate_merge_commit_message, MergeMessageContext};
+        use crate::changelog::merge_message::{MergeMessageContext, generate_merge_commit_message};
         use crate::changelog::{Changelog, ChangelogEntry, ChangelogSection};
         use crate::config::GitConfig;
         use chrono::Utc;

@@ -293,9 +293,9 @@ async fn test_extract_dependencies_mixed_types() {
     let result = extract_dependencies(&package_json, &options);
 
     assert_eq!(result.len(), 3);
-    assert!(result
-        .iter()
-        .any(|d| d.name == "express" && d.dependency_type == DependencyType::Regular));
+    assert!(
+        result.iter().any(|d| d.name == "express" && d.dependency_type == DependencyType::Regular)
+    );
     assert!(result.iter().any(|d| d.name == "jest" && d.dependency_type == DependencyType::Dev));
     assert!(result.iter().any(|d| d.name == "react" && d.dependency_type == DependencyType::Peer));
 }

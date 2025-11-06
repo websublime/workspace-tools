@@ -37,7 +37,7 @@ use super::{Error, Result};
 pub trait ErrorContext<T> {
     /// Adds static context to an error.
     fn context<C: Display>(self, context: C) -> Result<T>;
-    
+
     /// Adds dynamic context to an error using a closure.
     fn with_context<F: FnOnce() -> String>(self, f: F) -> Result<T>;
 }
@@ -52,7 +52,7 @@ where
             Error::operation(format!("{context}: {base_error}"))
         })
     }
-    
+
     fn with_context<F: FnOnce() -> String>(self, f: F) -> Result<T> {
         self.map_err(|e| {
             let base_error = e.into();

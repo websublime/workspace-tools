@@ -96,8 +96,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use sublime_standard_tools::monorepo::WorkspacePackage;
 
-use crate::types::traits::Named;
 use crate::types::Version;
+use crate::types::traits::Named;
 
 /// Information about a package in the workspace.
 ///

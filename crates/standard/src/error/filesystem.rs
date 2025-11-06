@@ -93,7 +93,6 @@ pub enum FileSystemError {
     Operation(String),
 }
 
-
 impl FileSystemError {
     /// Creates a new path validation error.
     pub fn validation(path: impl Into<PathBuf>, reason: impl Into<String>) -> Self {

@@ -195,7 +195,6 @@ impl Project {
         }
     }
 
-
     /// Checks if this is a monorepo project.
     ///
     /// # Returns

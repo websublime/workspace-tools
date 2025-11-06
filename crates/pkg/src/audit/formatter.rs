@@ -306,10 +306,11 @@ fn format_breaking_changes_section_markdown(
             let _ = writeln!(output, "### {}", pkg.package_name);
             let _ = writeln!(output);
             if let Some(current) = &pkg.current_version
-                && let Some(next) = &pkg.next_version {
-                    let _ = writeln!(output, "**Version**: {} → {}", current, next);
-                    let _ = writeln!(output);
-                }
+                && let Some(next) = &pkg.next_version
+            {
+                let _ = writeln!(output, "**Version**: {} → {}", current, next);
+                let _ = writeln!(output);
+            }
 
             for change in &pkg.breaking_changes {
                 let source_label = match change.source {

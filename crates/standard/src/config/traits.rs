@@ -5,10 +5,10 @@
 //! generic ConfigManager to provide configuration capabilities.
 
 use async_trait::async_trait;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
-use crate::error::ConfigResult;
 use super::value::ConfigValue;
+use crate::error::ConfigResult;
 
 /// Trait for types that can be configured.
 ///

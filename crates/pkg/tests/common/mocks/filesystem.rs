@@ -292,11 +292,7 @@ impl MockFileSystem {
             .iter()
             .filter_map(
                 |(path, entry)| {
-                    if matches!(entry, FileEntry::File(_)) {
-                        Some(path.clone())
-                    } else {
-                        None
-                    }
+                    if matches!(entry, FileEntry::File(_)) { Some(path.clone()) } else { None }
                 },
             )
             .collect()
@@ -480,7 +476,7 @@ impl AsyncFileSystem for MockFileSystem {
         match files.get(path) {
             Some(FileEntry::Directory) => {}
             Some(FileEntry::File(_)) => {
-                return Err(FileSystemError::NotADirectory { path: path.to_path_buf() }.into())
+                return Err(FileSystemError::NotADirectory { path: path.to_path_buf() }.into());
             }
             None => return Err(FileSystemError::NotFound { path: path.to_path_buf() }.into()),
         }
@@ -508,7 +504,7 @@ impl AsyncFileSystem for MockFileSystem {
         match files.get(path) {
             Some(FileEntry::Directory) => {}
             Some(FileEntry::File(_)) => {
-                return Err(FileSystemError::NotADirectory { path: path.to_path_buf() }.into())
+                return Err(FileSystemError::NotADirectory { path: path.to_path_buf() }.into());
             }
             None => return Err(FileSystemError::NotFound { path: path.to_path_buf() }.into()),
         }

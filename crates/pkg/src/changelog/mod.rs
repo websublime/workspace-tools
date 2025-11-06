@@ -96,7 +96,7 @@ pub use formatter::{
     ConventionalCommitsFormatter, CustomTemplateFormatter, KeepAChangelogFormatter,
 };
 pub use generator::ChangelogGenerator;
-pub use merge_message::{generate_merge_commit_message, MergeMessageContext};
+pub use merge_message::{MergeMessageContext, generate_merge_commit_message};
 pub use parser::{ChangelogParser, ParsedChangelog, ParsedVersion};
 pub use types::{
     Changelog, ChangelogEntry, ChangelogMetadata, ChangelogSection, GeneratedChangelog,

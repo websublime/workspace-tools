@@ -188,9 +188,9 @@ pub use changeset::{ArchivedChangeset, Changeset, ReleaseInfo, UpdateSummary};
 // Dependency types (Story 4.4)
 pub mod dependency;
 pub use dependency::{
+    CircularDependency, DependencyUpdate, LocalLinkType, UpdateReason, VersionProtocol,
     extract_protocol_path, is_local_protocol, is_workspace_protocol, parse_protocol,
-    should_skip_protocol, CircularDependency, DependencyUpdate, LocalLinkType, UpdateReason,
-    VersionProtocol,
+    should_skip_protocol,
 };
 
 // Re-export PackageUpdate from version module to avoid duplication

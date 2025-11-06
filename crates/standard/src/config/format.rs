@@ -5,8 +5,8 @@
 
 use std::path::Path;
 
-use crate::error::{ConfigError, ConfigResult};
 use super::value::ConfigValue;
+use crate::error::{ConfigError, ConfigResult};
 
 /// Supported configuration file formats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

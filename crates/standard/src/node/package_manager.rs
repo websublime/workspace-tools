@@ -247,10 +247,7 @@ impl<'de> serde::Deserialize<'de> for PackageManagerKind {
             "pnpm" => Ok(PackageManagerKind::Pnpm),
             "bun" => Ok(PackageManagerKind::Bun),
             "jsr" => Ok(PackageManagerKind::Jsr),
-            _ => Err(serde::de::Error::unknown_variant(
-                &s,
-                &["npm", "yarn", "pnpm", "bun", "jsr"],
-            )),
+            _ => Err(serde::de::Error::unknown_variant(&s, &["npm", "yarn", "pnpm", "bun", "jsr"])),
         }
     }
 }
@@ -380,34 +377,38 @@ impl PackageManager {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn detect_with_config(path: impl AsRef<Path>, config: &crate::config::PackageManagerConfig) -> Result<Self> {
+    pub fn detect_with_config(
+        path: impl AsRef<Path>,
+        config: &crate::config::PackageManagerConfig,
+    ) -> Result<Self> {
         let path = path.as_ref();
 
         // Check for environment variable preference if configured
         if config.detect_from_env
-            && let Ok(env_manager) = std::env::var(&config.env_var_name) {
-                let kind = match env_manager.to_lowercase().as_str() {
-                    "npm" => Some(PackageManagerKind::Npm),
-                    "yarn" => Some(PackageManagerKind::Yarn),
-                    "pnpm" => Some(PackageManagerKind::Pnpm),
-                    "bun" => Some(PackageManagerKind::Bun),
-                    "jsr" => Some(PackageManagerKind::Jsr),
-                    _ => None,
+            && let Ok(env_manager) = std::env::var(&config.env_var_name)
+        {
+            let kind = match env_manager.to_lowercase().as_str() {
+                "npm" => Some(PackageManagerKind::Npm),
+                "yarn" => Some(PackageManagerKind::Yarn),
+                "pnpm" => Some(PackageManagerKind::Pnpm),
+                "bun" => Some(PackageManagerKind::Bun),
+                "jsr" => Some(PackageManagerKind::Jsr),
+                _ => None,
+            };
+
+            if let Some(kind) = kind {
+                // Verify the preferred manager actually has a lock file
+                let lock_file = if let Some(custom_lock) = config.custom_lock_files.get(&kind) {
+                    custom_lock.as_str()
+                } else {
+                    kind.lock_file()
                 };
 
-                if let Some(kind) = kind {
-                    // Verify the preferred manager actually has a lock file
-                    let lock_file = if let Some(custom_lock) = config.custom_lock_files.get(&kind) {
-                        custom_lock.as_str()
-                    } else {
-                        kind.lock_file()
-                    };
-
-                    if path.join(lock_file).exists() {
-                        return Ok(Self::new(kind, path));
-                    }
+                if path.join(lock_file).exists() {
+                    return Ok(Self::new(kind, path));
                 }
             }
+        }
 
         // Check lock files in configured order
         for &kind in &config.detection_order {
@@ -429,11 +430,12 @@ impl PackageManager {
 
         // Try fallback if configured
         if let Some(fallback_kind) = config.fallback {
-            let fallback_lock = if let Some(custom_lock) = config.custom_lock_files.get(&fallback_kind) {
-                custom_lock.as_str()
-            } else {
-                fallback_kind.lock_file()
-            };
+            let fallback_lock =
+                if let Some(custom_lock) = config.custom_lock_files.get(&fallback_kind) {
+                    custom_lock.as_str()
+                } else {
+                    fallback_kind.lock_file()
+                };
 
             if path.join(fallback_lock).exists() {
                 return Ok(Self::new(fallback_kind, path));

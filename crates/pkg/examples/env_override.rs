@@ -16,7 +16,7 @@
 //! ```
 
 use std::env;
-use sublime_pkg_tools::config::{load_config, PackageToolsConfig, VersioningStrategy};
+use sublime_pkg_tools::config::{PackageToolsConfig, VersioningStrategy, load_config};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

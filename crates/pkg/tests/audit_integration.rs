@@ -868,7 +868,7 @@ async fn test_audit_report_markdown_formatting() {
     let consistency_section =
         manager.audit_version_consistency().await.expect("Should have consistency section");
 
-    use sublime_pkg_tools::audit::{calculate_health_score, AuditReport, AuditSections};
+    use sublime_pkg_tools::audit::{AuditReport, AuditSections, calculate_health_score};
 
     let sections = AuditSections::new(
         upgrades_section,
@@ -916,7 +916,7 @@ async fn test_audit_report_json_formatting() {
     let consistency_section =
         manager.audit_version_consistency().await.expect("Should have consistency section");
 
-    use sublime_pkg_tools::audit::{calculate_health_score, AuditReport, AuditSections};
+    use sublime_pkg_tools::audit::{AuditReport, AuditSections, calculate_health_score};
 
     let sections = AuditSections::new(
         upgrades_section,
@@ -962,7 +962,7 @@ async fn test_audit_report_verbosity_levels() {
     let consistency_section =
         manager.audit_version_consistency().await.expect("Should have consistency section");
 
-    use sublime_pkg_tools::audit::{calculate_health_score, AuditReport, AuditSections};
+    use sublime_pkg_tools::audit::{AuditReport, AuditSections, calculate_health_score};
 
     let sections = AuditSections::new(
         upgrades_section,

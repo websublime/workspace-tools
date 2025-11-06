@@ -12,8 +12,8 @@
 //! A unified descriptor enables consistent handling of different project
 //! types while maintaining type safety and clean API boundaries.
 
-use crate::project::types::ProjectInfo;
 use crate::project::Project;
+use crate::project::types::ProjectInfo;
 
 /// Represents different types of Node.js projects with their specific data.
 ///

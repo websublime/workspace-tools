@@ -194,19 +194,19 @@ mod application;
 
 // Re-export registry public types
 pub use registry::{
-    npmrc::NpmrcConfig, PackageMetadata, RegistryClient, RepositoryInfo, UpgradeType,
+    PackageMetadata, RegistryClient, RepositoryInfo, UpgradeType, npmrc::NpmrcConfig,
 };
 
 // Re-export detection public types and functions
 pub use detection::{
-    detect_upgrades, DependencyUpgrade, DetectionOptions, PackageUpgrades, UpgradePreview,
-    UpgradeSummary, VersionInfo,
+    DependencyUpgrade, DetectionOptions, PackageUpgrades, UpgradePreview, UpgradeSummary,
+    VersionInfo, detect_upgrades,
 };
 
 // Re-export application public types and functions
 pub use application::{
-    apply_upgrades, apply_with_changeset, AppliedUpgrade, ApplySummary, UpgradeResult,
-    UpgradeSelection,
+    AppliedUpgrade, ApplySummary, UpgradeResult, UpgradeSelection, apply_upgrades,
+    apply_with_changeset,
 };
 
 // Backup module for backup and rollback (Story 9.5 - IMPLEMENTED)

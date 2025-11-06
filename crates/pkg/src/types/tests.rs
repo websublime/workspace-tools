@@ -824,9 +824,10 @@ mod package_info_tests {
         assert!(deps
             .iter()
             .any(|(name, _, dep_type)| name == "lodash" && *dep_type == DependencyType::Regular));
-        assert!(deps
-            .iter()
-            .any(|(name, _, dep_type)| name == "jest" && *dep_type == DependencyType::Dev));
+        assert!(
+            deps.iter()
+                .any(|(name, _, dep_type)| name == "jest" && *dep_type == DependencyType::Dev)
+        );
     }
 
     #[test]
@@ -1700,12 +1701,12 @@ mod release_info_tests {
 
 mod dependency_tests {
     use super::*;
-    use crate::types::dependency::{
-        extract_protocol_path, is_local_protocol, is_workspace_protocol, parse_protocol,
-        should_skip_protocol, CircularDependency, DependencyUpdate, LocalLinkType, UpdateReason,
-        VersionProtocol,
-    };
     use crate::types::DependencyType;
+    use crate::types::dependency::{
+        CircularDependency, DependencyUpdate, LocalLinkType, UpdateReason, VersionProtocol,
+        extract_protocol_path, is_local_protocol, is_workspace_protocol, parse_protocol,
+        should_skip_protocol,
+    };
     use crate::version::PackageUpdate;
 
     // =========================================================================
