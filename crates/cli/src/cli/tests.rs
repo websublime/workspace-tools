@@ -441,8 +441,14 @@ fn test_bump_command_execute() {
 
 #[test]
 fn test_bump_command_with_git_options() {
-    let cli =
-        Cli::parse_from(["workspace", "bump", "--execute", "--git-tag", "--git-push", "--git-commit"]);
+    let cli = Cli::parse_from([
+        "workspace",
+        "bump",
+        "--execute",
+        "--git-tag",
+        "--git-push",
+        "--git-commit",
+    ]);
 
     if let Commands::Bump(args) = cli.command {
         assert!(args.execute);
@@ -497,8 +503,14 @@ fn test_bump_command_with_packages() {
 
 #[test]
 fn test_bump_command_with_flags() {
-    let cli =
-        Cli::parse_from(["workspace", "bump", "--execute", "--no-changelog", "--no-archive", "--force"]);
+    let cli = Cli::parse_from([
+        "workspace",
+        "bump",
+        "--execute",
+        "--no-changelog",
+        "--no-archive",
+        "--force",
+    ]);
 
     if let Commands::Bump(args) = cli.command {
         assert!(args.no_changelog);
@@ -589,7 +601,8 @@ fn test_upgrade_backups_list_command() {
 
 #[test]
 fn test_upgrade_backups_restore_command() {
-    let cli = Cli::parse_from(["workspace", "upgrade", "backups", "restore", "backup_123", "--force"]);
+    let cli =
+        Cli::parse_from(["workspace", "upgrade", "backups", "restore", "backup_123", "--force"]);
 
     if let Commands::Upgrade(UpgradeCommands::Backups(UpgradeBackupCommands::Restore(args))) =
         cli.command
@@ -603,7 +616,8 @@ fn test_upgrade_backups_restore_command() {
 
 #[test]
 fn test_upgrade_backups_clean_command() {
-    let cli = Cli::parse_from(["workspace", "upgrade", "backups", "clean", "--keep", "10", "--force"]);
+    let cli =
+        Cli::parse_from(["workspace", "upgrade", "backups", "clean", "--keep", "10", "--force"]);
 
     if let Commands::Upgrade(UpgradeCommands::Backups(UpgradeBackupCommands::Clean(args))) =
         cli.command

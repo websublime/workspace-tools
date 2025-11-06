@@ -563,11 +563,17 @@ fn output_results(output: &Output, changeset: &Changeset, message: Option<&Strin
             print_bullet("Make your changes and commit them", Color::Cyan);
             print_bullet("The changeset will be included in the next version bump", Color::Cyan);
             print_bullet(
-                &format!("Use {} to modify the changeset", TextStyle::dim("workspace changeset update")),
+                &format!(
+                    "Use {} to modify the changeset",
+                    TextStyle::dim("workspace changeset update")
+                ),
                 Color::Cyan,
             );
             print_bullet(
-                &format!("Use {} to preview version changes", TextStyle::dim("workspace bump --dry-run")),
+                &format!(
+                    "Use {} to preview version changes",
+                    TextStyle::dim("workspace bump --dry-run")
+                ),
                 Color::Cyan,
             );
 

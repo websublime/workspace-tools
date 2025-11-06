@@ -203,7 +203,10 @@ mod init_tests {
         assert!(gitignore_path.exists(), ".gitignore not created");
         let gitignore_content =
             fs::read_to_string(gitignore_path).expect("Failed to read .gitignore");
-        assert!(gitignore_content.contains(".workspace-backups/"), ".workspace-backups not in .gitignore");
+        assert!(
+            gitignore_content.contains(".workspace-backups/"),
+            ".workspace-backups not in .gitignore"
+        );
 
         // Verify example changeset was created
         let example_path = changesets_dir.join("README-example.yaml");

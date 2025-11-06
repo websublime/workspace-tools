@@ -637,7 +637,9 @@ fn output_backup_list_human(output: &Output, backups: &[BackupInfo]) -> Result<(
 
     if backups.is_empty() {
         output.info("No backups found")?;
-        output.plain("Run upgrades with `workspace upgrade apply` to create backups automatically.")?;
+        output.plain(
+            "Run upgrades with `workspace upgrade apply` to create backups automatically.",
+        )?;
         return Ok(());
     }
 
@@ -662,7 +664,9 @@ fn output_backup_list_human(output: &Output, backups: &[BackupInfo]) -> Result<(
     // Summary
     output.plain(&format!("Total backups: {}", backups.len()))?;
     output.plain(
-        &style("  Use `workspace upgrade backups restore <ID>` to restore a backup").dim().to_string(),
+        &style("  Use `workspace upgrade backups restore <ID>` to restore a backup")
+            .dim()
+            .to_string(),
     )?;
 
     Ok(())
