@@ -35,11 +35,25 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Setup Rust
-      uses: Boshen/setup-rust@main
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
       with:
         components: ${{ inputs.components }}
-        tools: ${{ inputs.tools }}
-        restore-cache: ${{ inputs.restore-cache }}
-        save-cache: ${{ inputs.save-cache }}
-        cache-key: ${{ inputs.cache-key }}
+
+    - name: Setup Rust cache
+      if: inputs.restore-cache == 'true'
+      uses: Swatinem/rust-cache@v2
+      with:
+        prefix-key: ${{ inputs.cache-key }}
+        save-if: ${{ inputs.save-cache }}
+
+    - name: Install cargo tools
+      if: inputs.tools != ''
+      shell: bash
+      run: |
+        IFS=',' read -ra TOOLS <<< "${{ inputs.tools }}"
+        for tool in "${TOOLS[@]}"; do
+          tool=$(echo "$tool" | xargs)  # trim whitespace
+          echo "Installing $tool..."
+          cargo install "$tool" --locked || echo "⚠️  Failed to install $tool"
+        done
