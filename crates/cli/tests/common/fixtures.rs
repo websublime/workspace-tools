@@ -528,6 +528,9 @@ impl WorkspaceFixture {
                 package_json["dependencies"] = json!(deps);
             }
 
+            // Create package directory if it doesn't exist
+            std::fs::create_dir_all(&package.path).expect("Failed to create package directory");
+
             let package_json_path = package.path.join("package.json");
             std::fs::write(
                 &package_json_path,
