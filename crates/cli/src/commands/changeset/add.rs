@@ -404,12 +404,10 @@ async fn load_workspace_packages(
 ///
 /// # Examples
 ///
-/// ```rust,no_run
-/// # use sublime_cli_tools::commands::changeset::add::detect_affected_packages;
-/// # use sublime_git_tools::Repo;
-/// # use sublime_standard_tools::filesystem::FileSystemManager;
-/// # use std::path::Path;
-/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// ```rust,ignore
+/// // This is an internal helper function used within the changeset add command
+/// // It's called internally during the execute_add flow when packages are not specified
+///
 /// let workspace_root = Path::new(".");
 /// let repo = Repo::open(".")?;
 /// let fs = FileSystemManager::new();
@@ -423,10 +421,8 @@ async fn load_workspace_packages(
 /// ).await;
 ///
 /// println!("Affected packages: {:?}", affected);
-/// # Ok(())
-/// # }
 /// ```
-async fn detect_affected_packages(
+pub(crate) async fn detect_affected_packages(
     workspace_root: &Path,
     repo: &Repo,
     fs: &FileSystemManager,
