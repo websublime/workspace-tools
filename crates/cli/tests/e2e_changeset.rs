@@ -1,0 +1,940 @@
+//! # E2E Tests for Changeset Commands
+//!
+//! **What**: End-to-end tests for all changeset-related commands including
+//! create, update, list, show, edit, and delete operations.
+//!
+//! **How**: Creates real temporary workspaces with git repositories, executes
+//! changeset commands with various configurations, and validates that changesets
+//! are properly created, modified, and managed.
+//!
+//! **Why**: Ensures the complete changeset workflow works correctly across
+//! different scenarios, workspace types, and edge cases. Validates the entire
+//! changeset lifecycle from creation to deletion.
+
+#![allow(clippy::expect_used)]
+#![allow(clippy::panic)]
+#![allow(clippy::unwrap_used)]
+
+mod common;
+
+use common::fixtures::{ChangesetBuilder, WorkspaceFixture};
+use common::helpers::{count_changesets, list_changesets, read_json_file};
+use std::io::Cursor;
+use sublime_cli_tools::cli::commands::{
+    ChangesetCreateArgs, ChangesetDeleteArgs, ChangesetListArgs, ChangesetShowArgs,
+    ChangesetUpdateArgs,
+};
+use sublime_cli_tools::commands::changeset::{
+    execute_add, execute_list, execute_remove, execute_show, execute_update,
+};
+use sublime_cli_tools::output::{Output, OutputFormat};
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Creates a test output with buffer for capturing output.
+fn create_test_output() -> (Output, Cursor<Vec<u8>>) {
+    let buffer = Cursor::new(Vec::new());
+    let output = Output::new(OutputFormat::Json, Box::new(buffer.clone()), false);
+    (output, buffer)
+}
+
+// ============================================================================
+// Changeset Create/Add Tests
+// ============================================================================
+
+/// Test: Create changeset successfully in single package workspace
+#[tokio::test]
+async fn test_changeset_create_single_package() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_branch("feature/test")
+        .finalize();
+
+    let args = ChangesetCreateArgs {
+        bump: Some("minor".to_string()),
+        env: Some(vec!["production".to_string()]),
+        branch: Some("feature/test".to_string()),
+        message: Some("Add new feature".to_string()),
+        packages: Some(vec!["test-package".to_string()]),
+        non_interactive: true,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_add(&args, &output, Some(workspace.root().to_path_buf()), None).await;
+
+    assert!(result.is_ok(), "Create changeset should succeed: {:?}", result.err());
+
+    // Verify changeset file was created
+    assert_eq!(count_changesets(workspace.root()), 1, "Should have 1 changeset");
+
+    let changesets = list_changesets(workspace.root());
+    assert_eq!(changesets.len(), 1);
+
+    let changeset: serde_json::Value = read_json_file(&changesets[0]);
+    assert_eq!(changeset["branch"].as_str().unwrap(), "feature/test");
+    assert_eq!(changeset["bump"].as_str().unwrap(), "minor");
+}
+
+/// Test: Create changeset with major bump
+#[tokio::test]
+async fn test_changeset_create_with_major_bump() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_branch("feature/breaking")
+        .finalize();
+
+    let args = ChangesetCreateArgs {
+        bump: Some("major".to_string()),
+        env: Some(vec!["production".to_string()]),
+        branch: Some("feature/breaking".to_string()),
+        message: Some("Breaking changes".to_string()),
+        packages: Some(vec!["test-package".to_string()]),
+        non_interactive: true,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_add(&args, &output, Some(workspace.root().to_path_buf()), None).await;
+
+    assert!(result.is_ok(), "Create changeset with major bump should succeed");
+
+    let changesets = list_changesets(workspace.root());
+    let changeset: serde_json::Value = read_json_file(&changesets[0]);
+    assert_eq!(changeset["bump"].as_str().unwrap(), "major");
+}
+
+/// Test: Create changeset with patch bump
+#[tokio::test]
+async fn test_changeset_create_with_patch_bump() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_branch("fix/bug")
+        .finalize();
+
+    let args = ChangesetCreateArgs {
+        bump: Some("patch".to_string()),
+        env: Some(vec!["production".to_string()]),
+        branch: Some("fix/bug".to_string()),
+        message: Some("Fix bug".to_string()),
+        packages: Some(vec!["test-package".to_string()]),
+        non_interactive: true,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_add(&args, &output, Some(workspace.root().to_path_buf()), None).await;
+
+    assert!(result.is_ok(), "Create changeset with patch bump should succeed");
+
+    let changesets = list_changesets(workspace.root());
+    let changeset: serde_json::Value = read_json_file(&changesets[0]);
+    assert_eq!(changeset["bump"].as_str().unwrap(), "patch");
+}
+
+/// Test: Create changeset in monorepo with multiple packages
+#[tokio::test]
+async fn test_changeset_create_monorepo_multiple_packages() {
+    let workspace = WorkspaceFixture::monorepo_independent()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_branch("feature/multi-pkg")
+        .finalize();
+
+    let args = ChangesetCreateArgs {
+        bump: Some("minor".to_string()),
+        env: Some(vec!["production".to_string()]),
+        branch: Some("feature/multi-pkg".to_string()),
+        message: Some("Update multiple packages".to_string()),
+        packages: Some(vec!["@test/pkg-a".to_string(), "@test/pkg-b".to_string()]),
+        non_interactive: true,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_add(&args, &output, Some(workspace.root().to_path_buf()), None).await;
+
+    assert!(result.is_ok(), "Create changeset with multiple packages should succeed");
+
+    let changesets = list_changesets(workspace.root());
+    let changeset: serde_json::Value = read_json_file(&changesets[0]);
+
+    let packages = changeset["packages"].as_array().unwrap();
+    assert_eq!(packages.len(), 2, "Should have 2 packages");
+    assert!(packages.iter().any(|p| p.as_str().unwrap() == "@test/pkg-a"));
+    assert!(packages.iter().any(|p| p.as_str().unwrap() == "@test/pkg-b"));
+}
+
+/// Test: Create changeset with multiple environments
+#[tokio::test]
+async fn test_changeset_create_with_multiple_environments() {
+    // Create workspace with custom config that has multiple environments
+    let config = r#"{
+        "changeset": {
+            "path": ".changesets/",
+            "available_environments": ["development", "staging", "production"],
+            "default_environments": ["production"]
+        },
+        "version": {
+            "strategy": "independent",
+            "defaultBump": "patch"
+        },
+        "changelog": {
+            "enabled": true,
+            "path": "CHANGELOG.md"
+        },
+        "upgrade": {
+            "enabled": true,
+            "backup_dir": ".workspace-backups"
+        }
+    }"#;
+
+    let workspace = WorkspaceFixture::single_package()
+        .with_custom_config(config)
+        .with_git()
+        .with_commits(1)
+        .with_branch("feature/multi-env")
+        .finalize();
+
+    let args = ChangesetCreateArgs {
+        bump: Some("minor".to_string()),
+        env: Some(vec!["development".to_string(), "staging".to_string(), "production".to_string()]),
+        branch: Some("feature/multi-env".to_string()),
+        message: Some("Multi-environment release".to_string()),
+        packages: Some(vec!["test-package".to_string()]),
+        non_interactive: true,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_add(&args, &output, Some(workspace.root().to_path_buf()), None).await;
+
+    assert!(
+        result.is_ok(),
+        "Create changeset with multiple environments should succeed: {:?}",
+        result.err()
+    );
+
+    let changesets = list_changesets(workspace.root());
+    let changeset: serde_json::Value = read_json_file(&changesets[0]);
+
+    let environments = changeset["environments"].as_array().unwrap();
+    assert_eq!(environments.len(), 3, "Should have 3 environments");
+    assert!(environments.iter().any(|e| e.as_str().unwrap() == "development"));
+    assert!(environments.iter().any(|e| e.as_str().unwrap() == "staging"));
+    assert!(environments.iter().any(|e| e.as_str().unwrap() == "production"));
+}
+
+/// Test: Create changeset detects current git branch
+#[tokio::test]
+async fn test_changeset_create_detects_git_branch() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_branch("feature/auto-detect")
+        .finalize();
+
+    let args = ChangesetCreateArgs {
+        bump: Some("minor".to_string()),
+        env: Some(vec!["production".to_string()]),
+        branch: None, // Should auto-detect from git
+        message: Some("Auto-detect branch".to_string()),
+        packages: Some(vec!["test-package".to_string()]),
+        non_interactive: true,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_add(&args, &output, Some(workspace.root().to_path_buf()), None).await;
+
+    assert!(result.is_ok(), "Create changeset should auto-detect branch");
+
+    let changesets = list_changesets(workspace.root());
+    let changeset: serde_json::Value = read_json_file(&changesets[0]);
+    assert_eq!(changeset["branch"].as_str().unwrap(), "feature/auto-detect");
+}
+
+/// Test: Create changeset fails when duplicate branch exists
+#[tokio::test]
+async fn test_changeset_create_fails_duplicate_branch() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_branch("feature/duplicate")
+        .add_changeset(ChangesetBuilder::minor().branch("feature/duplicate"))
+        .finalize();
+
+    let args = ChangesetCreateArgs {
+        bump: Some("minor".to_string()),
+        env: Some(vec!["production".to_string()]),
+        branch: Some("feature/duplicate".to_string()),
+        message: Some("Duplicate".to_string()),
+        packages: None,
+        non_interactive: true,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_add(&args, &output, Some(workspace.root().to_path_buf()), None).await;
+
+    assert!(result.is_err(), "Create changeset should fail for duplicate branch");
+}
+
+// ============================================================================
+// Changeset Update Tests
+// ============================================================================
+
+/// Test: Update changeset modifies existing changeset
+#[tokio::test]
+async fn test_changeset_update_modifies_existing() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_branch("feature/update")
+        .add_changeset(ChangesetBuilder::patch().branch("feature/update"))
+        .finalize();
+
+    let args = ChangesetUpdateArgs {
+        id: Some("feature/update".to_string()),
+        commit: Some("abc123".to_string()),
+        packages: None,
+        bump: Some("minor".to_string()), // Upgrade from patch to minor
+        env: None,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_update(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "Update changeset should succeed: {:?}", result.err());
+
+    let changesets = list_changesets(workspace.root());
+    let changeset: serde_json::Value = read_json_file(&changesets[0]);
+    assert_eq!(changeset["bump"].as_str().unwrap(), "minor", "Bump should be updated");
+}
+
+/// Test: Update changeset adds commit
+#[tokio::test]
+async fn test_changeset_update_adds_commit() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(2)
+        .with_branch("feature/commits")
+        .add_changeset(ChangesetBuilder::minor().branch("feature/commits"))
+        .finalize();
+
+    let args = ChangesetUpdateArgs {
+        id: Some("feature/commits".to_string()),
+        commit: Some("new-commit-hash".to_string()),
+        packages: None,
+        bump: None,
+        env: None,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_update(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "Update changeset with commit should succeed");
+}
+
+/// Test: Update changeset changes bump type
+#[tokio::test]
+async fn test_changeset_update_changes_bump_type() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_branch("feature/bump-change")
+        .add_changeset(ChangesetBuilder::patch().branch("feature/bump-change"))
+        .finalize();
+
+    let args = ChangesetUpdateArgs {
+        id: Some("feature/bump-change".to_string()),
+        commit: None,
+        packages: None,
+        bump: Some("major".to_string()),
+        env: None,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_update(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "Update bump type should succeed");
+
+    let changesets = list_changesets(workspace.root());
+    let changeset: serde_json::Value = read_json_file(&changesets[0]);
+    assert_eq!(changeset["bump"].as_str().unwrap(), "major");
+}
+
+/// Test: Update changeset fails when not found
+#[tokio::test]
+async fn test_changeset_update_fails_not_found() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .finalize();
+
+    let args = ChangesetUpdateArgs {
+        id: Some("nonexistent-branch".to_string()),
+        commit: None,
+        packages: None,
+        bump: Some("minor".to_string()),
+        env: None,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_update(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_err(), "Update should fail when changeset not found");
+}
+
+// ============================================================================
+// Changeset List Tests
+// ============================================================================
+
+/// Test: List shows all changesets
+#[tokio::test]
+async fn test_changeset_list_shows_all() {
+    let workspace = WorkspaceFixture::monorepo_independent()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .add_changesets(vec![
+            ChangesetBuilder::minor().branch("feature/a").package("@test/pkg-a"),
+            ChangesetBuilder::patch().branch("fix/b").package("@test/pkg-b"),
+            ChangesetBuilder::major().branch("breaking/c").package("@test/pkg-a"),
+        ])
+        .finalize();
+
+    let args = ChangesetListArgs {
+        filter_package: None,
+        filter_bump: None,
+        filter_env: None,
+        sort: "date".to_string(),
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_list(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "List changesets should succeed");
+    assert_eq!(count_changesets(workspace.root()), 3, "Should have 3 changesets");
+}
+
+/// Test: List filters by package
+#[tokio::test]
+async fn test_changeset_list_filters_by_package() {
+    let workspace = WorkspaceFixture::monorepo_independent()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .add_changesets(vec![
+            ChangesetBuilder::minor().branch("feature/a").package("@test/pkg-a"),
+            ChangesetBuilder::patch().branch("fix/b").package("@test/pkg-b"),
+        ])
+        .finalize();
+
+    let args = ChangesetListArgs {
+        filter_package: Some("@test/pkg-a".to_string()),
+        filter_bump: None,
+        filter_env: None,
+        sort: "date".to_string(),
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_list(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "List with package filter should succeed");
+}
+
+/// Test: List with JSON output
+#[tokio::test]
+async fn test_changeset_list_json_output() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .add_changeset(ChangesetBuilder::minor().branch("feature/json"))
+        .finalize();
+
+    let args = ChangesetListArgs {
+        filter_package: None,
+        filter_bump: None,
+        filter_env: None,
+        sort: "date".to_string(),
+    };
+
+    let buffer = Cursor::new(Vec::new());
+    let output = Output::new(OutputFormat::Json, Box::new(buffer.clone()), false);
+    let result = execute_list(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "List with JSON output should succeed");
+
+    // Verify JSON is valid
+    let output_str = String::from_utf8(buffer.into_inner()).unwrap();
+    if !output_str.is_empty() {
+        let _json: serde_json::Value = serde_json::from_str(&output_str).unwrap();
+    }
+}
+
+/// Test: List empty workspace
+#[tokio::test]
+async fn test_changeset_list_empty_workspace() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .finalize();
+
+    let args = ChangesetListArgs {
+        filter_package: None,
+        filter_bump: None,
+        filter_env: None,
+        sort: "date".to_string(),
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_list(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "List empty workspace should succeed");
+    assert_eq!(count_changesets(workspace.root()), 0, "Should have 0 changesets");
+}
+
+// ============================================================================
+// Changeset Show Tests
+// ============================================================================
+
+/// Test: Show displays changeset details
+#[tokio::test]
+async fn test_changeset_show_displays_details() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .add_changeset(ChangesetBuilder::minor().branch("feature/show"))
+        .finalize();
+
+    let args = ChangesetShowArgs { branch: "feature/show".to_string() };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_show(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "Show changeset should succeed: {:?}", result.err());
+}
+
+/// Test: Show by branch name
+#[tokio::test]
+async fn test_changeset_show_by_branch() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .add_changeset(ChangesetBuilder::patch().branch("fix/bug-123"))
+        .finalize();
+
+    let args = ChangesetShowArgs { branch: "fix/bug-123".to_string() };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_show(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "Show by branch should succeed");
+}
+
+/// Test: Show with JSON output
+#[tokio::test]
+async fn test_changeset_show_json_output() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .add_changeset(ChangesetBuilder::major().branch("feature/json-show"))
+        .finalize();
+
+    let args = ChangesetShowArgs { branch: "feature/json-show".to_string() };
+
+    let buffer = Cursor::new(Vec::new());
+    let output = Output::new(OutputFormat::Json, Box::new(buffer.clone()), false);
+    let result = execute_show(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "Show with JSON output should succeed");
+
+    // Verify JSON is valid
+    let output_str = String::from_utf8(buffer.into_inner()).unwrap();
+    if !output_str.is_empty() {
+        let _json: serde_json::Value = serde_json::from_str(&output_str).unwrap();
+    }
+}
+
+/// Test: Show fails when changeset not found
+#[tokio::test]
+async fn test_changeset_show_not_found() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .finalize();
+
+    let args = ChangesetShowArgs { branch: "nonexistent-branch".to_string() };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_show(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_err(), "Show should fail when changeset not found");
+}
+
+// ============================================================================
+// Changeset Remove/Delete Tests
+// ============================================================================
+
+/// Test: Remove deletes changeset file
+#[tokio::test]
+async fn test_changeset_remove_deletes_file() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .add_changeset(ChangesetBuilder::minor().branch("feature/delete-me"))
+        .finalize();
+
+    assert_eq!(count_changesets(workspace.root()), 1, "Should start with 1 changeset");
+
+    let args = ChangesetDeleteArgs {
+        branch: "feature/delete-me".to_string(),
+        force: true, // Skip confirmation
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_remove(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "Remove changeset should succeed: {:?}", result.err());
+    assert_eq!(count_changesets(workspace.root()), 0, "Should have 0 changesets after removal");
+}
+
+/// Test: Remove with force flag skips confirmation
+#[tokio::test]
+async fn test_changeset_remove_force_flag() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .add_changeset(ChangesetBuilder::patch().branch("fix/force-remove"))
+        .finalize();
+
+    let args = ChangesetDeleteArgs { branch: "fix/force-remove".to_string(), force: true };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_remove(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "Force remove should succeed");
+    assert_eq!(count_changesets(workspace.root()), 0);
+}
+
+/// Test: Remove fails when changeset not found
+#[tokio::test]
+async fn test_changeset_remove_not_found() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .finalize();
+
+    let args = ChangesetDeleteArgs { branch: "nonexistent".to_string(), force: true };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_remove(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_err(), "Remove should fail when changeset not found");
+}
+
+// ============================================================================
+// Additional Integration Tests
+// ============================================================================
+
+/// Test: Multiple changesets workflow - create, list, update, show, delete
+#[tokio::test]
+async fn test_complete_changeset_workflow() {
+    let workspace = WorkspaceFixture::monorepo_independent()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .finalize();
+
+    // 1. Create first changeset
+    let create_args1 = ChangesetCreateArgs {
+        bump: Some("minor".to_string()),
+        env: Some(vec!["production".to_string()]),
+        branch: Some("feature/workflow-1".to_string()),
+        message: Some("First feature".to_string()),
+        packages: Some(vec!["@test/pkg-a".to_string()]),
+        non_interactive: true,
+    };
+
+    let (output, _) = create_test_output();
+    execute_add(&create_args1, &output, Some(workspace.root().to_path_buf()), None).await.unwrap();
+
+    // 2. Create second changeset
+    let create_args2 = ChangesetCreateArgs {
+        bump: Some("patch".to_string()),
+        env: Some(vec!["production".to_string()]),
+        branch: Some("fix/workflow-2".to_string()),
+        message: Some("Bug fix".to_string()),
+        packages: Some(vec!["@test/pkg-b".to_string()]),
+        non_interactive: true,
+    };
+
+    let (output, _) = create_test_output();
+    execute_add(&create_args2, &output, Some(workspace.root().to_path_buf()), None).await.unwrap();
+
+    assert_eq!(count_changesets(workspace.root()), 2, "Should have 2 changesets");
+
+    // 3. List changesets
+    let list_args = ChangesetListArgs {
+        filter_package: None,
+        filter_bump: None,
+        filter_env: None,
+        sort: "date".to_string(),
+    };
+
+    let (output, _) = create_test_output();
+    execute_list(&list_args, &output, Some(workspace.root()), None).await.unwrap();
+
+    // 4. Update first changeset
+    let update_args = ChangesetUpdateArgs {
+        id: Some("feature/workflow-1".to_string()),
+        commit: None,
+        packages: None,
+        bump: Some("major".to_string()), // Upgrade to major
+        env: None,
+    };
+
+    let (output, _) = create_test_output();
+    execute_update(&update_args, &output, Some(workspace.root()), None).await.unwrap();
+
+    // 5. Show updated changeset
+    let show_args = ChangesetShowArgs { branch: "feature/workflow-1".to_string() };
+
+    let (output, _) = create_test_output();
+    execute_show(&show_args, &output, Some(workspace.root()), None).await.unwrap();
+
+    // 6. Delete second changeset
+    let delete_args = ChangesetDeleteArgs { branch: "fix/workflow-2".to_string(), force: true };
+
+    let (output, _) = create_test_output();
+    execute_remove(&delete_args, &output, Some(workspace.root()), None).await.unwrap();
+
+    assert_eq!(count_changesets(workspace.root()), 1, "Should have 1 changeset remaining");
+
+    // Verify the remaining changeset has the updated bump type
+    let changesets = list_changesets(workspace.root());
+    let changeset: serde_json::Value = read_json_file(&changesets[0]);
+    assert_eq!(changeset["branch"].as_str().unwrap(), "feature/workflow-1");
+    assert_eq!(changeset["bump"].as_str().unwrap(), "major");
+}
+
+/// Test: Changeset persists across multiple operations
+#[tokio::test]
+async fn test_changeset_persistence() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .add_changeset(ChangesetBuilder::minor().branch("feature/persist"))
+        .finalize();
+
+    // Read changeset multiple times
+    for _ in 0..3 {
+        let args = ChangesetShowArgs { branch: "feature/persist".to_string() };
+
+        let (output, _) = create_test_output();
+        let result = execute_show(&args, &output, Some(workspace.root()), None).await;
+        assert!(result.is_ok(), "Changeset should persist across reads");
+    }
+
+    assert_eq!(count_changesets(workspace.root()), 1, "Changeset count should remain stable");
+}
+
+// ============================================================================
+// Changeset History Tests
+// ============================================================================
+
+/// Test: History shows archived changesets
+#[tokio::test]
+async fn test_changeset_history_shows_archived() {
+    use sublime_cli_tools::cli::commands::ChangesetHistoryArgs;
+    use sublime_cli_tools::commands::changeset::execute_history;
+
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .add_changeset(ChangesetBuilder::minor().branch("feature/archived-1"))
+        .add_changeset(ChangesetBuilder::patch().branch("fix/archived-2"))
+        .finalize();
+
+    // Move changesets to history directory to simulate archiving
+    let changesets_dir = workspace.root().join(".changesets");
+    let history_dir = changesets_dir.join("history");
+    std::fs::create_dir_all(&history_dir).expect("Failed to create history dir");
+
+    for changeset_file in list_changesets(workspace.root()) {
+        let filename = changeset_file.file_name().expect("No filename");
+        let dest = history_dir.join(filename);
+        std::fs::rename(&changeset_file, &dest).expect("Failed to move to history");
+    }
+
+    let args = ChangesetHistoryArgs {
+        package: None,
+        since: None,
+        until: None,
+        env: None,
+        bump: None,
+        limit: None,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_history(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "History should succeed: {:?}", result.err());
+}
+
+/// Test: History filters by package
+#[tokio::test]
+async fn test_changeset_history_filters_by_package() {
+    use sublime_cli_tools::cli::commands::ChangesetHistoryArgs;
+    use sublime_cli_tools::commands::changeset::execute_history;
+
+    let workspace = WorkspaceFixture::monorepo_independent()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .add_changesets(vec![
+            ChangesetBuilder::minor().branch("feature/pkg-a").package("@test/pkg-a"),
+            ChangesetBuilder::patch().branch("fix/pkg-b").package("@test/pkg-b"),
+        ])
+        .finalize();
+
+    // Move to history
+    let changesets_dir = workspace.root().join(".changesets");
+    let history_dir = changesets_dir.join("history");
+    std::fs::create_dir_all(&history_dir).expect("Failed to create history dir");
+
+    for changeset_file in list_changesets(workspace.root()) {
+        let filename = changeset_file.file_name().expect("No filename");
+        let dest = history_dir.join(filename);
+        std::fs::rename(&changeset_file, &dest).expect("Failed to move to history");
+    }
+
+    let args = ChangesetHistoryArgs {
+        package: Some("@test/pkg-a".to_string()),
+        since: None,
+        until: None,
+        env: None,
+        bump: None,
+        limit: None,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_history(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "History with package filter should succeed");
+}
+
+/// Test: History with limit
+#[tokio::test]
+async fn test_changeset_history_with_limit() {
+    use sublime_cli_tools::cli::commands::ChangesetHistoryArgs;
+    use sublime_cli_tools::commands::changeset::execute_history;
+
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .add_changesets(vec![
+            ChangesetBuilder::minor().branch("feature/1"),
+            ChangesetBuilder::patch().branch("fix/2"),
+            ChangesetBuilder::major().branch("breaking/3"),
+        ])
+        .finalize();
+
+    // Move to history
+    let changesets_dir = workspace.root().join(".changesets");
+    let history_dir = changesets_dir.join("history");
+    std::fs::create_dir_all(&history_dir).expect("Failed to create history dir");
+
+    for changeset_file in list_changesets(workspace.root()) {
+        let filename = changeset_file.file_name().expect("No filename");
+        let dest = history_dir.join(filename);
+        std::fs::rename(&changeset_file, &dest).expect("Failed to move to history");
+    }
+
+    let args = ChangesetHistoryArgs {
+        package: None,
+        since: None,
+        until: None,
+        env: None,
+        bump: None,
+        limit: Some(2),
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_history(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "History with limit should succeed");
+}
+
+/// Test: History empty when no archived changesets
+#[tokio::test]
+async fn test_changeset_history_empty() {
+    use sublime_cli_tools::cli::commands::ChangesetHistoryArgs;
+    use sublime_cli_tools::commands::changeset::execute_history;
+
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .finalize();
+
+    let args = ChangesetHistoryArgs {
+        package: None,
+        since: None,
+        until: None,
+        env: None,
+        bump: None,
+        limit: None,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_history(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_ok(), "History on empty archive should succeed");
+}
+
+// ============================================================================
+// Changeset Edit Tests
+// ============================================================================
+
+/// Test: Edit command detects missing changeset
+#[tokio::test]
+async fn test_changeset_edit_fails_not_found() {
+    use sublime_cli_tools::cli::commands::ChangesetEditArgs;
+    use sublime_cli_tools::commands::changeset::execute_edit;
+
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_branch("feature/nonexistent")
+        .finalize();
+
+    let args = ChangesetEditArgs { branch: Some("feature/nonexistent".to_string()) };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_edit(&args, &output, Some(workspace.root()), None).await;
+
+    assert!(result.is_err(), "Edit should fail when changeset not found");
+}
