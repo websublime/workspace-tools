@@ -1802,8 +1802,7 @@ mod tests {
             .ok()
             .map(|dt| dt.with_timezone(&Utc));
 
-        if let (Some(created), Some(updated), Some(applied)) =
-            (created_at, updated_at, applied_at)
+        if let (Some(created), Some(updated), Some(applied)) = (created_at, updated_at, applied_at)
         {
             let changeset = Changeset {
                 branch: "test".to_string(),
@@ -1983,5 +1982,118 @@ mod tests {
         // 2. Execute history command with various filters
         // 3. Verify performance is acceptable (< 2 seconds)
         // 4. Verify memory usage is reasonable
+    }
+
+    // ========================================================================
+    // Tests for detect_affected_packages (Story 4.1 - Package Detection)
+    // ========================================================================
+
+    #[tokio::test]
+    #[ignore = "requires git repository setup"]
+    async fn test_detect_affected_packages_with_changes() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create temp directory with git repo
+        // 2. Create monorepo with multiple packages
+        // 3. Make commits changing specific packages
+        // 4. Call detect_affected_packages
+        // 5. Verify correct packages are detected
+        // 6. Verify packages without changes are not included
+    }
+
+    #[tokio::test]
+    #[ignore = "requires git repository setup"]
+    async fn test_detect_affected_packages_no_commits() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create temp directory with fresh git repo (no commits)
+        // 2. Call detect_affected_packages
+        // 3. Verify empty vector is returned
+        // 4. Verify no errors occur
+    }
+
+    #[tokio::test]
+    #[ignore = "requires git repository setup"]
+    async fn test_detect_affected_packages_single_package() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create temp directory with git repo
+        // 2. Create single-package project
+        // 3. Make commits
+        // 4. Call detect_affected_packages
+        // 5. Verify single package is detected
+    }
+
+    #[tokio::test]
+    #[ignore = "requires git repository setup"]
+    async fn test_detect_affected_packages_filters_invalid() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create temp directory with git repo
+        // 2. Make commits that would detect "non-existent-package"
+        // 3. Call detect_affected_packages with valid all_packages list
+        // 4. Verify non-existent packages are filtered out
+        // 5. Verify only valid packages are returned
+    }
+
+    #[tokio::test]
+    #[ignore = "requires git repository setup"]
+    async fn test_detect_affected_packages_multiple_commits() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create temp directory with git repo and monorepo
+        // 2. Make multiple commits affecting different packages
+        // 3. Call detect_affected_packages
+        // 4. Verify all affected packages are detected
+        // 5. Verify duplicates are removed
+    }
+
+    #[tokio::test]
+    #[ignore = "requires git repository setup"]
+    async fn test_detect_affected_packages_workspace_protocol() {
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create monorepo with workspace: protocol dependencies
+        // 2. Make commits affecting packages
+        // 3. Verify detection works correctly with workspace dependencies
+    }
+
+    #[tokio::test]
+    #[ignore = "requires git repository setup"]
+    async fn test_execute_add_with_auto_detection() {
+        // This test verifies the full integration of package detection
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create monorepo with packages A, B, C
+        // 2. Make changes only to package A
+        // 3. Run: wnt changeset add --bump minor (no --packages flag)
+        // 4. Verify changeset created with only package A
+        // 5. Verify packages B and C are not included
+    }
+
+    #[tokio::test]
+    #[ignore = "requires git repository setup"]
+    async fn test_execute_add_auto_detection_non_interactive() {
+        // This test verifies auto-detection in non-interactive mode
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create monorepo with packages
+        // 2. Make changes to specific packages
+        // 3. Run: wnt changeset add --bump minor --non-interactive
+        // 4. Verify changeset created with detected packages
+        // 5. Verify no user prompts occurred
+    }
+
+    #[tokio::test]
+    #[ignore = "requires git repository setup"]
+    async fn test_execute_add_auto_detection_empty_fallback() {
+        // This test verifies behavior when no packages detected
+        // TODO: will be implemented when test infrastructure is available
+        // This test would:
+        // 1. Create monorepo with packages
+        // 2. Create git repo with no commits
+        // 3. Run: wnt changeset add --bump minor --non-interactive
+        // 4. Verify appropriate error message
+        // 5. Verify suggests using --packages flag
     }
 }

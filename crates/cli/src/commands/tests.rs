@@ -766,10 +766,7 @@ mod init_tests {
         );
 
         // Verify it has other expected sections
-        assert!(
-            config_content.contains("[changeset]"),
-            "Config should have changeset section"
-        );
+        assert!(config_content.contains("[changeset]"), "Config should have changeset section");
     }
 
     /// Integration test: Full workflow with empty monorepo.
