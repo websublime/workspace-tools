@@ -482,21 +482,12 @@ impl WorkspaceFixture {
         let is_monorepo = self.packages.len() > 1;
 
         if is_monorepo {
-            // Root package.json for monorepo
-            let workspace_patterns: Vec<String> = self
-                .packages
-                .iter()
-                .map(|p| {
-                    let rel_path = p.path.strip_prefix(&self.root).expect("Invalid path");
-                    rel_path.to_string_lossy().to_string()
-                })
-                .collect();
-
+            // Root package.json for monorepo with workspace pattern
             let root_package = json!({
                 "name": "monorepo-root",
                 "version": "1.0.0",
                 "private": true,
-                "workspaces": workspace_patterns
+                "workspaces": ["packages/*"]
             });
 
             std::fs::write(
@@ -504,14 +495,52 @@ impl WorkspaceFixture {
                 serde_json::to_string_pretty(&root_package).expect("Failed to serialize"),
             )
             .expect("Failed to write root package.json");
-        }
 
-        // Create package.json for each package
-        for package in &self.packages {
-            // Ensure parent directory exists
-            if let Some(parent) = package.path.parent() {
-                std::fs::create_dir_all(parent).expect("Failed to create package dir");
+            // Create package-lock.json for monorepo
+            let package_lock = json!({
+                "name": "monorepo-root",
+                "version": "1.0.0",
+                "lockfileVersion": 3,
+                "requires": true,
+                "packages": {}
+            });
+
+            std::fs::write(
+                self.root.join("package-lock.json"),
+                serde_json::to_string_pretty(&package_lock).expect("Failed to serialize"),
+            )
+            .expect("Failed to write package-lock.json");
+
+            // Create package.json for each package in monorepo
+            for package in &self.packages {
+                // Ensure package directory exists
+                std::fs::create_dir_all(&package.path).expect("Failed to create package dir");
+
+                let mut package_json = json!({
+                    "name": package.name,
+                    "version": package.version,
+                });
+
+                // Add dependencies if any
+                if !package.dependencies.is_empty() {
+                    let deps: serde_json::Map<String, serde_json::Value> = package
+                        .dependencies
+                        .iter()
+                        .map(|(name, version)| (name.clone(), json!(version)))
+                        .collect();
+                    package_json["dependencies"] = json!(deps);
+                }
+
+                let package_json_path = package.path.join("package.json");
+                std::fs::write(
+                    &package_json_path,
+                    serde_json::to_string_pretty(&package_json).expect("Failed to serialize"),
+                )
+                .expect("Failed to write package.json");
             }
+        } else {
+            // Single package - create package.json at root
+            let package = &self.packages[0];
 
             let mut package_json = json!({
                 "name": package.name,
@@ -528,10 +557,7 @@ impl WorkspaceFixture {
                 package_json["dependencies"] = json!(deps);
             }
 
-            // Create package directory if it doesn't exist
-            std::fs::create_dir_all(&package.path).expect("Failed to create package directory");
-
-            let package_json_path = package.path.join("package.json");
+            let package_json_path = self.root.join("package.json");
             std::fs::write(
                 &package_json_path,
                 serde_json::to_string_pretty(&package_json).expect("Failed to serialize"),
