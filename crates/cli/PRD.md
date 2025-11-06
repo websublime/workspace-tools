@@ -27,7 +27,7 @@
 
 ## 1. Executive Summary
 
-The Workspace Node Tools CLI (`wnt`) is a command-line interface for managing Node.js projects (single packages and monorepos) with a focus on version management, changesets, dependency upgrades, and project health auditing. It provides a unified interface to the `sublime_package_tools` crate and integrates seamlessly with Git workflows, CI/CD pipelines, and developer workflows.
+The Workspace Node Tools CLI (`workspace`) is a command-line interface for managing Node.js projects (single packages and monorepos) with a focus on version management, changesets, dependency upgrades, and project health auditing. It provides a unified interface to the `sublime_package_tools` crate and integrates seamlessly with Git workflows, CI/CD pipelines, and developer workflows.
 
 ### Key Features
 - **Configuration Management**: Initialize and manage project configuration
@@ -115,10 +115,10 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 ## 5. User Scenarios
 
 ### Scenario A: Project Initialization
-**Context:** Developer starts a new project or adds wnt to existing project
+**Context:** Developer starts a new project or adds workspace to existing project
 
 **Flow:**
-1. Developer runs `wnt init` in project root
+1. Developer runs `workspace init` in project root
 2. CLI detects project type (single/monorepo) and package manager
 3. Interactive prompts collect configuration:
    - Changeset directory (default: `.changesets/`)
@@ -143,7 +143,7 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 
 **Flow:**
 1. Developer creates new branch: `git checkout -b feature/new-component`
-2. Developer runs: `wnt changeset create` (manually or via git hook)
+2. Developer runs: `workspace changeset create` (manually or via git hook)
 3. CLI detects current branch and prompts:
    - "Which environments should this target?" (multi-select from config)
    - "What bump type will this be?" (patch/minor/major)
@@ -151,7 +151,7 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 5. Developer continues working on feature
 
 **Alternative Flow:** 
-- Developer manually runs `wnt changeset create --bump minor --env production,staging`
+- Developer manually runs `workspace changeset create --bump minor --env production,staging`
 - Git hook skipped, changeset created immediately
 
 **Expected Outcome:**
@@ -165,7 +165,7 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 
 **Flow:**
 1. Developer runs: `git commit -m "feat: add new component"`
-2. Developer runs: `wnt changeset update` (manually or via git hook)
+2. Developer runs: `workspace changeset update` (manually or via git hook)
 3. CLI:
    - Loads changeset for current branch
    - Detects which packages were modified in commit
@@ -184,7 +184,7 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 **Context:** Developer wants comprehensive project health analysis
 
 **Flow:**
-1. Developer runs: `wnt audit`
+1. Developer runs: `workspace audit`
 2. CLI prompts:
    - "Report format?" (markdown/json/json-compact)
    - "Audit sections?" (all/upgrades/dependencies/version-consistency/breaking-changes)
@@ -198,7 +198,7 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 5. Displays summary and saves full report
 
 **Alternative Flow:**
-- `wnt audit --format markdown --output audit-report.md --sections upgrades,dependencies`
+- `workspace audit --format markdown --output audit-report.md --sections upgrades,dependencies`
 - Non-interactive mode for automation
 
 **Expected Outcome:**
@@ -212,7 +212,7 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 **Context:** Developer wants to update dependencies safely
 
 **Flow:**
-1. Developer runs: `wnt upgrade check`
+1. Developer runs: `workspace upgrade check`
 2. CLI:
    - Scans all package.json files
    - Queries npm registry for latest versions
@@ -227,9 +227,9 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 5. Developer reviews changes and tests
 
 **Alternative Flow:**
-- `wnt upgrade apply --dry-run` - Preview only
-- `wnt upgrade apply --patch-only --auto-changeset` - Safe automated upgrades
-- `wnt upgrade apply --packages @types/node,eslint` - Specific packages only
+- `workspace upgrade apply --dry-run` - Preview only
+- `workspace upgrade apply --patch-only --auto-changeset` - Safe automated upgrades
+- `workspace upgrade apply --packages @types/node,eslint` - Specific packages only
 
 **Expected Outcome:**
 - Dependencies safely upgraded with backup
@@ -243,7 +243,7 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 
 **Flow:**
 1. GitHub Action triggers on merge to main
-2. Action runs: `wnt bump --execute --git-tag --git-push`
+2. Action runs: `workspace bump --execute --git-tag --git-push`
 3. CLI:
    - Loads all active changesets
    - Resolves version bumps for affected packages
@@ -268,7 +268,7 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 **Context:** Pipeline needs package change information for decision making
 
 **Flow:**
-1. GitHub Action runs as first step: `wnt bump --dry-run --format json`
+1. GitHub Action runs as first step: `workspace bump --dry-run --format json`
 2. CLI:
    - Analyzes changesets without making changes
    - Determines which packages will be bumped
@@ -292,7 +292,7 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 **Context:** Developer needs to view or modify changesets
 
 **Flow:**
-1. Developer runs: `wnt changeset list`
+1. Developer runs: `workspace changeset list`
 2. CLI displays all pending changesets with:
    - Branch name
    - Bump type
@@ -300,10 +300,10 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
    - Number of commits
    - Target environments
 3. Developer can:
-   - View details: `wnt changeset show feature/my-branch`
-   - Update: `wnt changeset update --bump major`
-   - Delete: `wnt changeset delete feature/old-branch`
-   - Query history: `wnt changeset history --package @myorg/core`
+   - View details: `workspace changeset show feature/my-branch`
+   - Update: `workspace changeset update --bump major`
+   - Delete: `workspace changeset delete feature/old-branch`
+   - Query history: `workspace changeset history --package @myorg/core`
 
 **Expected Outcome:**
 - Full visibility into changeset state
@@ -318,7 +318,7 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 
 #### F-001: Project Initialization
 **Priority:** P0 (Must Have)  
-**Description:** Initialize new or existing project with wnt configuration
+**Description:** Initialize new or existing project with workspace configuration
 
 **Requirements:**
 - Detect project type (single package/monorepo)
@@ -916,26 +916,26 @@ The changeset's `packages` field (Vec<String>) determines which packages are aff
 
 1. **silent**: No logs at all
    ```bash
-   wnt --log-level silent bump --execute
+   workspace --log-level silent bump --execute
    # No progress output, only final result
    ```
 
 2. **error**: Only critical errors
    ```bash
-   wnt --log-level error bump --execute
+   workspace --log-level error bump --execute
    # ERROR: Failed to update package.json: Permission denied
    ```
 
 3. **warn**: Errors + warnings
    ```bash
-   wnt --log-level warn upgrade check
+   workspace --log-level warn upgrade check
    # WARN: Package 'eslint' has major version update available
    # WARN: Breaking changes detected
    ```
 
 4. **info** (default): General progress
    ```bash
-   wnt --log-level info bump --execute
+   workspace --log-level info bump --execute
    # INFO: Loading configuration...
    # INFO: Loading changesets...
    # INFO: Found 2 active changesets
@@ -947,7 +947,7 @@ The changeset's `packages` field (Vec<String>) determines which packages are aff
 
 5. **debug**: Detailed operations
    ```bash
-   wnt --log-level debug bump --execute
+   workspace --log-level debug bump --execute
    # DEBUG: Reading config from repo.config.yaml
    # DEBUG: Strategy: independent
    # DEBUG: Loading changeset: feature/new-api
@@ -959,7 +959,7 @@ The changeset's `packages` field (Vec<String>) determines which packages are aff
 
 6. **trace**: Very verbose debugging
    ```bash
-   wnt --log-level trace upgrade check
+   workspace --log-level trace upgrade check
    # TRACE: Entering upgrade check command
    # TRACE: Loading workspace packages from packages/*/package.json
    # TRACE: Found package: @org/core at packages/core
@@ -973,14 +973,14 @@ The changeset's `packages` field (Vec<String>) determines which packages are aff
 
 ```bash
 # Init with info logging (default)
-wnt init
+workspace init
 # INFO: Detecting project type...
 # INFO: Found package.json at root
 # INFO: Detected: single package project
 # INFO: Creating configuration...
 
 # Changeset update with debug
-wnt --log-level debug changeset update
+workspace --log-level debug changeset update
 # DEBUG: Detecting current branch: feature/new-api
 # DEBUG: Loading changeset: .changesets/feature-new-api.json
 # DEBUG: Analyzing git diff since last commit
@@ -990,7 +990,7 @@ wnt --log-level debug changeset update
 # DEBUG: Saving changeset
 
 # Audit with trace
-wnt --log-level trace audit
+workspace --log-level trace audit
 # TRACE: Loading configuration
 # TRACE: Initializing audit manager
 # TRACE: Running upgrade audit...
@@ -1021,23 +1021,23 @@ wnt --log-level trace audit
 - Include all relevant data
 - Valid JSON always (no mixed output)
 - All commands must support JSON output:
-  - `wnt init`
-  - `wnt config show`
-  - `wnt config validate`
-  - `wnt changeset create`
-  - `wnt changeset update`
-  - `wnt changeset list`
-  - `wnt changeset show`
-  - `wnt changeset delete`
-  - `wnt changeset history`
-  - `wnt changeset check`
-  - `wnt bump` (all modes: dry-run, execute, snapshot)
-  - `wnt upgrade check`
-  - `wnt upgrade apply`
-  - `wnt upgrade backups list`
-  - `wnt audit` (all sections)
-  - `wnt changes`
-  - `wnt version`
+  - `workspace init`
+  - `workspace config show`
+  - `workspace config validate`
+  - `workspace changeset create`
+  - `workspace changeset update`
+  - `workspace changeset list`
+  - `workspace changeset show`
+  - `workspace changeset delete`
+  - `workspace changeset history`
+  - `workspace changeset check`
+  - `workspace bump` (all modes: dry-run, execute, snapshot)
+  - `workspace upgrade check`
+  - `workspace upgrade apply`
+  - `workspace upgrade backups list`
+  - `workspace audit` (all sections)
+  - `workspace changes`
+  - `workspace version`
 
 **Acceptance Criteria:**
 - ✓ All commands listed above support JSON output
@@ -1137,7 +1137,7 @@ wnt --log-level trace audit
 ### 7.1 Command Structure
 
 ```
-wnt [GLOBAL_OPTIONS] <COMMAND> [COMMAND_OPTIONS] [ARGS]
+workspace [GLOBAL_OPTIONS] <COMMAND> [COMMAND_OPTIONS] [ARGS]
 ```
 
 ### 7.2 Global Options
@@ -1175,14 +1175,14 @@ Changes working directory before executing command.
 **Examples:**
 ```bash
 # Run from different directory
-wnt --root /path/to/project bump --dry-run
+workspace --root /path/to/project bump --dry-run
 
 # Multiple projects
-wnt --root ~/projects/app1 audit
-wnt --root ~/projects/app2 audit
+workspace --root ~/projects/app1 audit
+workspace --root ~/projects/app2 audit
 
 # Relative paths work too
-wnt --root ../other-project changeset list
+workspace --root ../other-project changeset list
 ```
 
 ---
@@ -1208,16 +1208,16 @@ Controls verbosity of operation logs written to **stderr**.
 **Examples:**
 ```bash
 # JSON output with NO logs (clean JSON only)
-wnt --format json --log-level silent bump --dry-run > result.json
+workspace --format json --log-level silent bump --dry-run > result.json
 
 # JSON output WITH debug logs (logs to stderr, JSON to stdout)
-wnt --format json --log-level debug bump --dry-run > result.json 2> logs.txt
+workspace --format json --log-level debug bump --dry-run > result.json 2> logs.txt
 
 # Text output with NO logs (clean output only)
-wnt --log-level silent changeset list
+workspace --log-level silent changeset list
 
 # Debug logging with text output
-wnt --log-level debug upgrade check
+workspace --log-level debug upgrade check
 ```
 
 ---
@@ -1240,16 +1240,16 @@ Controls output format written to **stdout**.
 **Examples:**
 ```bash
 # JSON with info logging (logs to stderr, JSON to stdout)
-wnt --format json bump --dry-run
+workspace --format json bump --dry-run
 
 # JSON with silent logging (ONLY JSON, no logs at all)
-wnt --format json --log-level silent bump --dry-run
+workspace --format json --log-level silent bump --dry-run
 
 # Text with debug logging
-wnt --format text --log-level debug changeset list
+workspace --format text --log-level debug changeset list
 
 # Separate streams to different files
-wnt --format json --log-level debug bump --execute > output.json 2> debug.log
+workspace --format json --log-level debug bump --execute > output.json 2> debug.log
 ```
 
 ---
@@ -1267,16 +1267,16 @@ Disables ANSI color codes in both stderr and stdout.
 **Examples:**
 ```bash
 # No colors in output and logs
-wnt --no-color changeset list
+workspace --no-color changeset list
 
 # Useful for CI/CD
-wnt --no-color --log-level info audit
+workspace --no-color --log-level info audit
 
 # Environment variable
-NO_COLOR=1 wnt bump --dry-run
+NO_COLOR=1 workspace bump --dry-run
 
 # File redirection (colors would appear as escape codes)
-wnt --no-color audit > report.txt
+workspace --no-color audit > report.txt
 ```
 
 ---
@@ -1293,14 +1293,14 @@ Override default config file location.
 **Examples:**
 ```bash
 # Use specific config
-wnt --config ./test-config.yaml init
+workspace --config ./test-config.yaml init
 
 # Test different strategies
-wnt --config ./independent-config.yaml bump --dry-run
-wnt --config ./unified-config.yaml bump --dry-run
+workspace --config ./independent-config.yaml bump --dry-run
+workspace --config ./unified-config.yaml bump --dry-run
 
 # Absolute path
-wnt --config /etc/myproject/config.json audit
+workspace --config /etc/myproject/config.json audit
 ```
 
 ---
@@ -1311,29 +1311,29 @@ wnt --config /etc/myproject/config.json audit
 
 ```bash
 # 1. JSON output, NO logs (clean JSON only)
-wnt --format json --log-level silent bump --dry-run
+workspace --format json --log-level silent bump --dry-run
 # stdout: {"success": true, ...}
 # stderr: (nothing)
 
 # 2. JSON output, DEBUG logs (logs separate from JSON)
-wnt --format json --log-level debug bump --dry-run
+workspace --format json --log-level debug bump --dry-run
 # stdout: {"success": true, ...}
 # stderr: DEBUG: Loading config...
 #         DEBUG: Found 2 changesets...
 
 # 3. Text output, NO logs (clean text only)
-wnt --format text --log-level silent audit
+workspace --format text --log-level silent audit
 # stdout: Audit Results...
 # stderr: (nothing)
 
 # 4. Text output, INFO logs (default behavior)
-wnt --format text --log-level info bump --execute
+workspace --format text --log-level info bump --execute
 # stdout: Version Bump Preview...
 # stderr: INFO: Loading configuration...
 #         INFO: Found 2 changesets...
 
 # 5. All options combined
-wnt --root ~/project \
+workspace --root ~/project \
     --config ./custom.yaml \
     --format json \
     --log-level debug \
@@ -1341,13 +1341,13 @@ wnt --root ~/project \
     bump --dry-run > output.json 2> debug.log
 
 # 6. Silent JSON for automation (most common CI/CD use case)
-wnt --format json --log-level silent bump --execute
+workspace --format json --log-level silent bump --execute
 
 # 7. Debug everything for troubleshooting
-wnt --log-level trace --format text upgrade check
+workspace --log-level trace --format text upgrade check
 
 # 8. Different directory, no colors, with logs
-wnt --root /other/project --no-color --log-level info audit
+workspace --root /other/project --no-color --log-level info audit
 ```
 
 ---
@@ -1363,32 +1363,32 @@ wnt --root /other/project --no-color --log-level info audit
 
 ```bash
 # Capture output and logs separately
-wnt --format json bump --execute > result.json 2> process.log
+workspace --format json bump --execute > result.json 2> process.log
 
 # Discard logs, keep only output
-wnt --format json bump --execute 2>/dev/null > result.json
+workspace --format json bump --execute 2>/dev/null > result.json
 
 # Discard output, keep only logs (unusual but possible)
-wnt --log-level debug bump --execute >/dev/null 2> debug.log
+workspace --log-level debug bump --execute >/dev/null 2> debug.log
 
 # Everything to same file (not recommended)
-wnt --format json bump --execute &> combined.log
+workspace --format json bump --execute &> combined.log
 
 # Silent mode - no logs, only output (best for scripting)
-wnt --log-level silent --format json bump --execute
+workspace --log-level silent --format json bump --execute
 ```
 
 ### 7.3 Commands
 
 ---
 
-#### `wnt init`
+#### `workspace init`
 
 Initialize project configuration.
 
 **Usage:**
 ```bash
-wnt init [OPTIONS]
+workspace init [OPTIONS]
 ```
 
 **Options:**
@@ -1408,16 +1408,16 @@ wnt init [OPTIONS]
 **Examples:**
 ```bash
 # Interactive mode
-wnt init
+workspace init
 
 # Non-interactive with all options
-wnt init --non-interactive --strategy unified --format yaml --environments "dev,staging,prod" --default-env "prod"
+workspace init --non-interactive --strategy unified --format yaml --environments "dev,staging,prod" --default-env "prod"
 
 # Minimal non-interactive
-wnt init --non-interactive --format json
+workspace init --non-interactive --format json
 
 # JSON output for automation
-wnt init --non-interactive --format json > init-result.json
+workspace init --non-interactive --format json > init-result.json
 ```
 
 **Output (text format):**
@@ -1447,20 +1447,20 @@ wnt init --non-interactive --format json > init-result.json
 
 ---
 
-#### `wnt config`
+#### `workspace config`
 
 Manage configuration.
 
 **Subcommands:**
-- `wnt config show` - Display current configuration
-- `wnt config validate` - Validate configuration file
-- `wnt config get <KEY>` - Get specific config value
-- `wnt config set <KEY> <VALUE>` - Set config value (future)
+- `workspace config show` - Display current configuration
+- `workspace config validate` - Validate configuration file
+- `workspace config get <KEY>` - Get specific config value
+- `workspace config set <KEY> <VALUE>` - Set config value (future)
 
 **Usage:**
 ```bash
-wnt config show [OPTIONS]
-wnt config validate [OPTIONS]
+workspace config show [OPTIONS]
+workspace config validate [OPTIONS]
 ```
 
 **Options:**
@@ -1473,16 +1473,16 @@ wnt config validate [OPTIONS]
 **Examples:**
 ```bash
 # Show configuration
-wnt config show
+workspace config show
 
 # Show as JSON
-wnt config show --format json
+workspace config show --format json
 
 # Validate configuration
-wnt config validate
+workspace config validate
 
 # Validate with JSON output
-wnt config validate --format json
+workspace config validate --format json
 ```
 
 **Output (config show, text format):**
@@ -1544,28 +1544,28 @@ All checks passed:
 
 ---
 
-#### `wnt changeset`
+#### `workspace changeset`
 
 Manage changesets.
 
 **Subcommands:**
-- `wnt changeset create` - Create new changeset
-- `wnt changeset update` - Update current changeset
-- `wnt changeset list` - List all changesets
-- `wnt changeset show <BRANCH>` - Show changeset details
-- `wnt changeset delete <BRANCH>` - Delete changeset
-- `wnt changeset history` - Query archived changesets
-- `wnt changeset check` - Check if changeset exists (for hooks)
+- `workspace changeset create` - Create new changeset
+- `workspace changeset update` - Update current changeset
+- `workspace changeset list` - List all changesets
+- `workspace changeset show <BRANCH>` - Show changeset details
+- `workspace changeset delete <BRANCH>` - Delete changeset
+- `workspace changeset history` - Query archived changesets
+- `workspace changeset check` - Check if changeset exists (for hooks)
 
 **Usage:**
 ```bash
-wnt changeset create [OPTIONS]
-wnt changeset update [ID] [OPTIONS]
-wnt changeset list [OPTIONS]
-wnt changeset show <BRANCH> [OPTIONS]
-wnt changeset delete <BRANCH> [OPTIONS]
-wnt changeset history [OPTIONS]
-wnt changeset check [OPTIONS]
+workspace changeset create [OPTIONS]
+workspace changeset update [ID] [OPTIONS]
+workspace changeset list [OPTIONS]
+workspace changeset show <BRANCH> [OPTIONS]
+workspace changeset delete <BRANCH> [OPTIONS]
+workspace changeset history [OPTIONS]
+workspace changeset check [OPTIONS]
 ```
 
 **Options (create):**
@@ -1612,52 +1612,52 @@ wnt changeset check [OPTIONS]
 **Examples:**
 ```bash
 # Create changeset interactively
-wnt changeset create
+workspace changeset create
 
 # Create with all options
-wnt changeset create --bump minor --env "staging,prod" --message "Add new feature"
+workspace changeset create --bump minor --env "staging,prod" --message "Add new feature"
 
 # Create with JSON output
-wnt changeset create --bump minor --format json
+workspace changeset create --bump minor --format json
 
 # Update current branch's changeset (auto-detects branch)
-wnt changeset update
+workspace changeset update
 
 # Update specific changeset by ID or branch name
-wnt changeset update feature/my-feature
+workspace changeset update feature/my-feature
 
 # List all changesets
-wnt changeset list
+workspace changeset list
 
 # List with filtering
-wnt changeset list --filter-bump major --sort date
+workspace changeset list --filter-bump major --sort date
 
 # List as JSON
-wnt changeset list --format json
+workspace changeset list --format json
 
 # Show specific changeset
-wnt changeset show feature/new-component
+workspace changeset show feature/new-component
 
 # Show as JSON
-wnt changeset show feature/new-component --format json
+workspace changeset show feature/new-component --format json
 
 # Delete changeset with confirmation
-wnt changeset delete old-feature
+workspace changeset delete old-feature
 
 # Force delete without confirmation
-wnt changeset delete old-feature --force
+workspace changeset delete old-feature --force
 
 # Query history
-wnt changeset history --package @myorg/core --since 2024-01-01
+workspace changeset history --package @myorg/core --since 2024-01-01
 
 # Query history as JSON
-wnt changeset history --format json
+workspace changeset history --format json
 
 # Check if changeset exists (for Git hooks)
-wnt changeset check
+workspace changeset check
 
 # Check with JSON output
-wnt changeset check --format json
+workspace changeset check --format json
 ```
 
 **Output (list, text format):**
@@ -1741,7 +1741,7 @@ Total: 2 changesets
 
 ---
 
-#### `wnt bump`
+#### `workspace bump`
 
 Bump package versions based on changesets.
 
@@ -1752,7 +1752,7 @@ Bump package versions based on changesets.
 
 **Usage:**
 ```bash
-wnt bump [OPTIONS]
+workspace bump [OPTIONS]
 ```
 
 **Options:**
@@ -1774,31 +1774,31 @@ wnt bump [OPTIONS]
 **Examples:**
 ```bash
 # Preview version changes
-wnt bump --dry-run
+workspace bump --dry-run
 
 # Preview with JSON output (for CI/CD)
-wnt bump --dry-run --format json
+workspace bump --dry-run --format json
 
 # Execute version bump (only update files)
-wnt bump --execute
+workspace bump --execute
 
 # Execute with git operations
-wnt bump --execute --git-tag --git-push
+workspace bump --execute --git-tag --git-push
 
 # Execute with git commit and tags
-wnt bump --execute --git-commit --git-tag
+workspace bump --execute --git-commit --git-tag
 
 # Generate snapshot versions for feature branch
-wnt bump --snapshot --execute
+workspace bump --snapshot --execute
 
 # Create pre-release versions
-wnt bump --prerelease beta --execute
+workspace bump --prerelease beta --execute
 
 # Bump specific packages only
-wnt bump --packages "@myorg/core,@myorg/utils" --execute --dry-run
+workspace bump --packages "@myorg/core,@myorg/utils" --execute --dry-run
 
 # Full CI/CD workflow
-wnt bump --execute --git-commit --git-tag --git-push --force
+workspace bump --execute --git-commit --git-tag --git-push --force
 ```
 
 **Output (dry-run, Independent Strategy):**
@@ -1906,22 +1906,22 @@ Run with --execute to apply changes.
 
 ---
 
-#### `wnt upgrade`
+#### `workspace upgrade`
 
 Manage dependency upgrades.
 
 **Subcommands:**
-- `wnt upgrade check` - Detect available upgrades
-- `wnt upgrade apply` - Apply upgrades
-- `wnt upgrade backups` - Manage backups
+- `workspace upgrade check` - Detect available upgrades
+- `workspace upgrade apply` - Apply upgrades
+- `workspace upgrade backups` - Manage backups
 
 **Usage:**
 ```bash
-wnt upgrade check [OPTIONS]
-wnt upgrade apply [OPTIONS]
-wnt upgrade backups list [OPTIONS]
-wnt upgrade backups restore <ID> [OPTIONS]
-wnt upgrade backups clean [OPTIONS]
+workspace upgrade check [OPTIONS]
+workspace upgrade apply [OPTIONS]
+workspace upgrade backups list [OPTIONS]
+workspace upgrade backups restore <ID> [OPTIONS]
+workspace upgrade backups clean [OPTIONS]
 ```
 
 **Options (check):**
@@ -1952,37 +1952,37 @@ wnt upgrade backups clean [OPTIONS]
 **Examples:**
 ```bash
 # Check for all upgrades
-wnt upgrade check
+workspace upgrade check
 
 # Check with JSON output
-wnt upgrade check --format json
+workspace upgrade check --format json
 
 # Check patch upgrades only
-wnt upgrade check --no-major --no-minor
+workspace upgrade check --no-major --no-minor
 
 # Check specific packages
-wnt upgrade check --packages "typescript,eslint"
+workspace upgrade check --packages "typescript,eslint"
 
 # Apply all patch upgrades with auto-changeset
-wnt upgrade apply --patch-only --auto-changeset
+workspace upgrade apply --patch-only --auto-changeset
 
 # Apply specific upgrades
-wnt upgrade apply --packages "@types/node,typescript"
+workspace upgrade apply --packages "@types/node,typescript"
 
 # Dry-run to see what would be upgraded
-wnt upgrade apply --dry-run
+workspace upgrade apply --dry-run
 
 # Apply with JSON output
-wnt upgrade apply --format json
+workspace upgrade apply --format json
 
 # List backups
-wnt upgrade backups list
+workspace upgrade backups list
 
 # Restore backup
-wnt upgrade backups restore backup_20240115_103045
+workspace upgrade backups restore backup_20240115_103045
 
 # Clean old backups (keep last 5)
-wnt upgrade backups clean --keep 5
+workspace upgrade backups clean --keep 5
 ```
 
 **Output (check):**
@@ -2071,13 +2071,13 @@ Summary:
 
 ---
 
-#### `wnt audit`
+#### `workspace audit`
 
 Run project health audit.
 
 **Usage:**
 ```bash
-wnt audit [OPTIONS]
+workspace audit [OPTIONS]
 ```
 
 **Options:**
@@ -2093,25 +2093,25 @@ wnt audit [OPTIONS]
 **Examples:**
 ```bash
 # Full audit
-wnt audit
+workspace audit
 
 # Specific sections
-wnt audit --sections upgrades,dependencies
+workspace audit --sections upgrades,dependencies
 
 # Generate markdown report
-wnt audit --format markdown --output audit-report.md
+workspace audit --format markdown --output audit-report.md
 
 # JSON for CI/CD
-wnt audit --format json
+workspace audit --format json
 
 # JSON compact for CI/CD
-wnt audit --format json-compact
+workspace audit --format json-compact
 
 # Only critical and warning severity issues
-wnt audit --min-severity warning
+workspace audit --min-severity warning
 
 # Detailed output
-wnt audit --verbosity detailed
+workspace audit --verbosity detailed
 ```
 
 **Output (text format):**
@@ -2172,18 +2172,18 @@ Recommendations
 1. Address circular dependency between core and utils
 2. Replace deprecated packages (request, mkdirp)
 3. Consider upgrading major versions for security
-4. Run 'wnt upgrade check' for detailed upgrade info
+4. Run 'workspace upgrade check' for detailed upgrade info
 ```
 
 ---
 
-#### `wnt changes`
+#### `workspace changes`
 
 Analyze changes in repository.
 
 **Usage:**
 ```bash
-wnt changes [OPTIONS]
+workspace changes [OPTIONS]
 ```
 
 **Options:**
@@ -2201,22 +2201,22 @@ wnt changes [OPTIONS]
 **Examples:**
 ```bash
 # Analyze working directory changes
-wnt changes
+workspace changes
 
 # Changes since last tag
-wnt changes --since $(git describe --tags --abbrev=0)
+workspace changes --since $(git describe --tags --abbrev=0)
 
 # Changes between commits
-wnt changes --since abc123 --until def456
+workspace changes --since abc123 --until def456
 
 # Changes in current branch vs main
-wnt changes --branch main
+workspace changes --branch main
 
 # Only staged changes
-wnt changes --staged
+workspace changes --staged
 
 # JSON output for CI/CD
-wnt changes --format json
+workspace changes --format json
 ```
 
 **Output (text format):**
@@ -2290,15 +2290,15 @@ Summary:
 
 ---
 
-#### `wnt version`
+#### `workspace version`
 
 Display version information.
 
 **Usage:**
 ```bash
-wnt version [OPTIONS]
-wnt --version
-wnt -V
+workspace version [OPTIONS]
+workspace --version
+workspace -V
 ```
 
 **Options:**
@@ -2309,24 +2309,24 @@ wnt -V
 **Examples:**
 ```bash
 # Simple version
-wnt version
-wnt --version
+workspace version
+workspace --version
 
 # Detailed version info
-wnt version --verbose
+workspace version --verbose
 
 # JSON output
-wnt version --format json
+workspace version --format json
 ```
 
 **Output (text format):**
 ```
-wnt 0.1.0
+workspace 0.1.0
 ```
 
 **Output (--verbose, text format):**
 ```
-wnt 0.1.0
+workspace 0.1.0
 
   Rust version: 1.75.0
   sublime-package-tools: 0.1.0
@@ -2360,10 +2360,10 @@ Build:
 
 **Output:**
 ```
-wnt 0.1.0
+workspace 0.1.0
 
 # Verbose:
-wnt 0.1.0
+workspace 0.1.0
   sublime_package_tools: 0.1.0
   sublime_standard_tools: 0.1.0
   sublime_git_tools: 0.1.0
@@ -2374,26 +2374,26 @@ Rustc: 1.75.0
 
 ---
 
-#### `wnt help`
+#### `workspace help`
 
 Show help information.
 
 **Usage:**
 ```bash
-wnt help [COMMAND]
-wnt <COMMAND> --help
-wnt --help
+workspace help [COMMAND]
+workspace <COMMAND> --help
+workspace --help
 ```
 
 **Examples:**
 ```bash
 # General help
-wnt help
-wnt --help
+workspace help
+workspace --help
 
 # Command-specific help
-wnt help changeset
-wnt changeset create --help
+workspace help changeset
+workspace changeset create --help
 ```
 
 ---
@@ -2726,11 +2726,11 @@ Affected Packages:
 ### 9.5 Help Text Format
 
 ```
-wnt-changeset-create
+workspace-changeset-create
 Create a new changeset for the current branch
 
 USAGE:
-    wnt changeset create [OPTIONS]
+    workspace changeset create [OPTIONS]
 
 OPTIONS:
     --bump <TYPE>
@@ -2754,13 +2754,13 @@ OPTIONS:
 
 EXAMPLES:
     # Interactive mode (prompts for all options)
-    wnt changeset create
+    workspace changeset create
     
     # Non-interactive with options
-    wnt changeset create --bump minor --env production,staging
+    workspace changeset create --bump minor --env production,staging
     
     # With message
-    wnt changeset create --bump patch --message "Fix critical bug"
+    workspace changeset create --bump patch --message "Fix critical bug"
 ```
 
 ---
@@ -2790,21 +2790,21 @@ The script will:
 
 #### Method 2: Homebrew (macOS/Linux)
 ```bash
-brew install org/tap/wnt
+brew install org/tap/workspace
 ```
 
 #### Method 3: Cargo
 ```bash
-cargo install wnt
+cargo install workspace
 ```
 
 #### Method 4: Pre-built Binaries
 Download from GitHub Releases for your platform:
-- `wnt-macos-x86_64.tar.gz`
-- `wnt-macos-aarch64.tar.gz`
-- `wnt-linux-x86_64.tar.gz`
-- `wnt-linux-aarch64.tar.gz`
-- `wnt-windows-x86_64.zip`
+- `workspace-macos-x86_64.tar.gz`
+- `workspace-macos-aarch64.tar.gz`
+- `workspace-linux-x86_64.tar.gz`
+- `workspace-linux-aarch64.tar.gz`
+- `workspace-windows-x86_64.zip`
 
 #### Method 5: Package Managers
 - **Arch Linux:** AUR package
@@ -2828,16 +2828,16 @@ Download from GitHub Releases for your platform:
 **Usage:**
 ```bash
 # Install latest version
-curl -fsSL https://install.wnt.dev | sh
+curl -fsSL https://install.workspace.dev | sh
 
 # Install specific version
-curl -fsSL https://install.wnt.dev | sh -s -- --version v0.1.0
+curl -fsSL https://install.workspace.dev | sh -s -- --version v0.1.0
 
 # Custom install location
-curl -fsSL https://install.wnt.dev | sh -s -- --install-dir ~/.local/bin
+curl -fsSL https://install.workspace.dev | sh -s -- --install-dir ~/.local/bin
 
 # Verbose output
-curl -fsSL https://install.wnt.dev | sh -s -- --verbose
+curl -fsSL https://install.workspace.dev | sh -s -- --verbose
 ```
 
 ### 10.3 Build Configuration
@@ -2904,14 +2904,14 @@ if [ -f .git/MERGE_HEAD ] || [ -d .git/rebase-merge ] || [ -d .git/rebase-apply 
     exit 0
 fi
 
-# Check if wnt is available
-if ! command -v wnt &> /dev/null; then
-    echo "wnt not found, skipping changeset update"
+# Check if workspace is available
+if ! command -v workspace &> /dev/null; then
+    echo "workspace not found, skipping changeset update"
     exit 0
 fi
 
 # Update changeset (will skip if no changeset exists)
-wnt changeset update --log-level error 2>/dev/null || true
+workspace changeset update --log-level error 2>/dev/null || true
 
 exit 0
 ```
@@ -2923,8 +2923,8 @@ exit 0
 #!/bin/sh
 # Validate changesets before pushing
 
-# Check if wnt is available
-if ! command -v wnt &> /dev/null; then
+# Check if workspace is available
+if ! command -v workspace &> /dev/null; then
     exit 0
 fi
 
@@ -2937,9 +2937,9 @@ if [ "$current_branch" = "main" ] || [ "$current_branch" = "master" ]; then
 fi
 
 # Check if changeset exists
-if ! wnt changeset check --log-level error 2>/dev/null; then
+if ! workspace changeset check --log-level error 2>/dev/null; then
     echo "⚠️  No changeset found for branch: $current_branch"
-    echo "Run: wnt changeset create"
+    echo "Run: workspace changeset create"
     read -p "Push anyway? (y/N) " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -2967,13 +2967,13 @@ jobs:
         with:
           fetch-depth: 0
           
-      - name: Install wnt
+      - name: Install workspace
         run: |
-          curl -fsSL https://install.wnt.dev | sh
+          curl -fsSL https://install.workspace.dev | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           
       - name: Bump versions and create tags
-        run: wnt bump --execute --git-commit --git-tag --git-push --format json > bump-result.json
+        run: workspace bump --execute --git-commit --git-tag --git-push --format json > bump-result.json
         
       - name: Publish packages
         run: npm publish --workspaces
@@ -2989,8 +2989,8 @@ Users can create these hooks manually or use tools like `husky` to manage them:
 {
   "husky": {
     "hooks": {
-      "post-commit": "wnt changeset update --log-level error || true",
-      "pre-push": "wnt changeset check || true"
+      "post-commit": "workspace changeset update --log-level error || true",
+      "pre-push": "workspace changeset check || true"
     }
   }
 }
@@ -3001,13 +3001,13 @@ Users can create these hooks manually or use tools like `husky` to manage them:
 **Future Enhancement:**
 ```bash
 # Check for updates
-wnt update check
+workspace update check
 
 # Install latest version
-wnt update install
+workspace update install
 
 # Update to specific version
-wnt update install --version 0.2.0
+workspace update install --version 0.2.0
 ```
 
 ### 10.7 Performance Requirements for Git Hooks
@@ -3015,9 +3015,9 @@ wnt update install --version 0.2.0
 Since the CLI may be called from git hooks, performance is critical:
 
 **Performance Targets:**
-- `wnt changeset check`: < 100ms
-- `wnt changeset update`: < 300ms
-- `wnt changeset create`: < 500ms (with prompts disabled)
+- `workspace changeset check`: < 100ms
+- `workspace changeset update`: < 300ms
+- `workspace changeset create`: < 500ms (with prompts disabled)
 
 **Optimization Strategies:**
 - Lazy loading of configuration
@@ -3054,13 +3054,13 @@ Since the CLI may be called from git hooks, performance is critical:
 
 - **Startup Time:**
   - Target: < 100ms cold start
-  - Measure: `time wnt --version`
+  - Measure: `time workspace --version`
 
 - **Command Execution:**
-  - `wnt changeset create`: < 500ms
-  - `wnt changeset update`: < 200ms
-  - `wnt bump --dry-run`: < 2s for 50 packages
-  - `wnt audit`: < 5s for 50 packages
+  - `workspace changeset create`: < 500ms
+  - `workspace changeset update`: < 200ms
+  - `workspace bump --dry-run`: < 2s for 50 packages
+  - `workspace audit`: < 5s for 50 packages
 
 ### 11.3 Quality Metrics
 

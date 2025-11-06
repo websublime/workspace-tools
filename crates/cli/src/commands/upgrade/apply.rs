@@ -1,6 +1,6 @@
 //! Upgrade apply command implementation.
 //!
-//! This module implements the `wnt upgrade apply` command for applying selected
+//! This module implements the `workspace upgrade apply` command for applying selected
 //! dependency upgrades to workspace packages.
 //!
 //! # What
@@ -39,19 +39,19 @@
 //!
 //! ```bash
 //! # Preview what would be upgraded
-//! wnt upgrade apply --dry-run
+//! workspace upgrade apply --dry-run
 //!
 //! # Apply only patch upgrades
-//! wnt upgrade apply --patch-only
+//! workspace upgrade apply --patch-only
 //!
 //! # Apply with automatic changeset
-//! wnt upgrade apply --auto-changeset --changeset-bump minor
+//! workspace upgrade apply --auto-changeset --changeset-bump minor
 //!
 //! # Apply specific packages
-//! wnt upgrade apply --packages "typescript,eslint"
+//! workspace upgrade apply --packages "typescript,eslint"
 //!
 //! # Apply with JSON output
-//! wnt upgrade apply --format json
+//! workspace upgrade apply --format json
 //! ```
 
 use crate::cli::commands::UpgradeApplyArgs;
@@ -683,7 +683,7 @@ fn output_human(
         output.blank_line()?;
         output.plain(&format!("Backup created: {backup_id}"))?;
         output.plain(
-            &style("  Use `wnt upgrade backups restore <ID>` to rollback").dim().to_string(),
+            &style("  Use `workspace upgrade backups restore <ID>` to rollback").dim().to_string(),
         )?;
     }
 

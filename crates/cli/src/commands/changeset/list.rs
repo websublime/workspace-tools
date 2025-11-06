@@ -272,13 +272,13 @@ async fn load_config(
             }
             Err(e) => {
                 return Err(CliError::Configuration(format!(
-                    "Workspace not initialized. Run 'wnt init' first.\nDetails: {e}"
+                    "Workspace not initialized. Run 'workspace init' first.\nDetails: {e}"
                 )));
             }
         }
     } else {
         return Err(CliError::Configuration(
-            "Workspace not initialized. Run 'wnt init' first.".to_string(),
+            "Workspace not initialized. Run 'workspace init' first.".to_string(),
         ));
     };
 

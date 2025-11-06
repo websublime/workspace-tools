@@ -31,7 +31,7 @@
 //! use clap::Parser;
 //! use sublime_cli_tools::cli::{Cli, Commands};
 //!
-//! let cli = Cli::parse_from(["wnt", "version"]);
+//! let cli = Cli::parse_from(["workspace", "version"]);
 //! match cli.command {
 //!     Commands::Version(_) => println!("Version command"),
 //!     _ => {}
@@ -51,7 +51,7 @@ use std::path::PathBuf;
 /// use clap::Parser;
 /// use sublime_cli_tools::cli::{Cli, Commands};
 ///
-/// let cli = Cli::parse_from(["wnt", "init"]);
+/// let cli = Cli::parse_from(["workspace", "init"]);
 /// matches!(cli.command, Commands::Init(_));
 /// ```
 #[derive(Debug, Subcommand)]
@@ -116,7 +116,7 @@ pub enum Commands {
 /// use clap::Parser;
 /// use sublime_cli_tools::cli::Cli;
 ///
-/// let cli = Cli::parse_from(["wnt", "init", "--non-interactive"]);
+/// let cli = Cli::parse_from(["workspace", "init", "--non-interactive"]);
 /// ```
 #[derive(Debug, Args)]
 pub struct InitArgs {
@@ -184,7 +184,7 @@ pub struct InitArgs {
 /// use clap::Parser;
 /// use sublime_cli_tools::cli::Cli;
 ///
-/// let cli = Cli::parse_from(["wnt", "config", "show"]);
+/// let cli = Cli::parse_from(["workspace", "config", "show"]);
 /// ```
 #[derive(Debug, Subcommand)]
 pub enum ConfigCommands {
@@ -224,7 +224,7 @@ pub struct ConfigValidateArgs {
 /// use clap::Parser;
 /// use sublime_cli_tools::cli::Cli;
 ///
-/// let cli = Cli::parse_from(["wnt", "changeset", "create", "--bump", "minor"]);
+/// let cli = Cli::parse_from(["workspace", "changeset", "create", "--bump", "minor"]);
 /// ```
 #[derive(Debug, Subcommand)]
 pub enum ChangesetCommands {
@@ -455,7 +455,7 @@ pub struct ChangesetCheckArgs {
 /// use clap::Parser;
 /// use sublime_cli_tools::cli::Cli;
 ///
-/// let cli = Cli::parse_from(["wnt", "bump", "--dry-run"]);
+/// let cli = Cli::parse_from(["workspace", "bump", "--dry-run"]);
 /// ```
 #[derive(Debug, Args)]
 #[allow(clippy::struct_excessive_bools)]
@@ -554,7 +554,7 @@ pub struct BumpArgs {
 /// use clap::Parser;
 /// use sublime_cli_tools::cli::Cli;
 ///
-/// let cli = Cli::parse_from(["wnt", "upgrade", "check"]);
+/// let cli = Cli::parse_from(["workspace", "upgrade", "check"]);
 /// ```
 #[derive(Debug, Subcommand)]
 pub enum UpgradeCommands {
@@ -753,7 +753,7 @@ pub struct UpgradeBackupCleanArgs {
 /// use clap::Parser;
 /// use sublime_cli_tools::cli::Cli;
 ///
-/// let cli = Cli::parse_from(["wnt", "audit"]);
+/// let cli = Cli::parse_from(["workspace", "audit"]);
 /// ```
 #[derive(Debug, Args)]
 pub struct AuditArgs {
@@ -818,7 +818,7 @@ pub struct AuditArgs {
 /// use clap::Parser;
 /// use sublime_cli_tools::cli::Cli;
 ///
-/// let cli = Cli::parse_from(["wnt", "changes", "--since", "HEAD~1"]);
+/// let cli = Cli::parse_from(["workspace", "changes", "--since", "HEAD~1"]);
 /// ```
 #[derive(Debug, Args)]
 pub struct ChangesArgs {
@@ -873,7 +873,7 @@ pub struct ChangesArgs {
 /// use clap::Parser;
 /// use sublime_cli_tools::cli::Cli;
 ///
-/// let cli = Cli::parse_from(["wnt", "version", "--verbose"]);
+/// let cli = Cli::parse_from(["workspace", "version", "--verbose"]);
 /// ```
 #[derive(Debug, Args)]
 pub struct VersionArgs {

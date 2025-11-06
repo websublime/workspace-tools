@@ -46,7 +46,7 @@ use crate::cli::commands::{
 
 #[test]
 fn test_default_global_options() {
-    let cli = Cli::parse_from(["wnt", "version"]);
+    let cli = Cli::parse_from(["workspace", "version"]);
 
     assert_eq!(cli.log_level(), LogLevel::Info);
     assert_eq!(cli.output_format(), OutputFormat::Human);
@@ -57,49 +57,49 @@ fn test_default_global_options() {
 
 #[test]
 fn test_log_level_parsing() {
-    let cli = Cli::parse_from(["wnt", "--log-level", "debug", "version"]);
+    let cli = Cli::parse_from(["workspace", "--log-level", "debug", "version"]);
     assert_eq!(cli.log_level(), LogLevel::Debug);
 
-    let cli = Cli::parse_from(["wnt", "-l", "trace", "version"]);
+    let cli = Cli::parse_from(["workspace", "-l", "trace", "version"]);
     assert_eq!(cli.log_level(), LogLevel::Trace);
 
-    let cli = Cli::parse_from(["wnt", "--log-level", "silent", "version"]);
+    let cli = Cli::parse_from(["workspace", "--log-level", "silent", "version"]);
     assert_eq!(cli.log_level(), LogLevel::Silent);
 }
 
 #[test]
 fn test_output_format_parsing() {
-    let cli = Cli::parse_from(["wnt", "--format", "json", "version"]);
+    let cli = Cli::parse_from(["workspace", "--format", "json", "version"]);
     assert_eq!(cli.output_format(), OutputFormat::Json);
 
-    let cli = Cli::parse_from(["wnt", "-f", "json-compact", "version"]);
+    let cli = Cli::parse_from(["workspace", "-f", "json-compact", "version"]);
     assert_eq!(cli.output_format(), OutputFormat::JsonCompact);
 
-    let cli = Cli::parse_from(["wnt", "--format", "quiet", "version"]);
+    let cli = Cli::parse_from(["workspace", "--format", "quiet", "version"]);
     assert_eq!(cli.output_format(), OutputFormat::Quiet);
 }
 
 #[test]
 fn test_no_color_flag() {
-    let cli = Cli::parse_from(["wnt", "--no-color", "version"]);
+    let cli = Cli::parse_from(["workspace", "--no-color", "version"]);
     assert!(cli.is_color_disabled());
 }
 
 #[test]
 fn test_root_directory() {
-    let cli = Cli::parse_from(["wnt", "--root", "/tmp", "version"]);
+    let cli = Cli::parse_from(["workspace", "--root", "/tmp", "version"]);
     assert_eq!(cli.root(), Some(&PathBuf::from("/tmp")));
 
-    let cli = Cli::parse_from(["wnt", "-r", "../other", "version"]);
+    let cli = Cli::parse_from(["workspace", "-r", "../other", "version"]);
     assert_eq!(cli.root(), Some(&PathBuf::from("../other")));
 }
 
 #[test]
 fn test_config_path() {
-    let cli = Cli::parse_from(["wnt", "--config", "custom.toml", "version"]);
+    let cli = Cli::parse_from(["workspace", "--config", "custom.toml", "version"]);
     assert_eq!(cli.config_path(), Some(&PathBuf::from("custom.toml")));
 
-    let cli = Cli::parse_from(["wnt", "-c", "/etc/config.yaml", "version"]);
+    let cli = Cli::parse_from(["workspace", "-c", "/etc/config.yaml", "version"]);
     assert_eq!(cli.config_path(), Some(&PathBuf::from("/etc/config.yaml")));
 }
 
@@ -107,7 +107,7 @@ fn test_config_path() {
 fn test_global_options_with_all_commands() {
     // Test that global options work with any command
     let cli = Cli::parse_from([
-        "wnt",
+        "workspace",
         "--root",
         "/tmp",
         "--log-level",
@@ -133,14 +133,14 @@ fn test_global_options_with_all_commands() {
 
 #[test]
 fn test_init_command_basic() {
-    let cli = Cli::parse_from(["wnt", "init"]);
+    let cli = Cli::parse_from(["workspace", "init"]);
     matches!(cli.command, Commands::Init(_));
 }
 
 #[test]
 fn test_init_command_with_options() {
     let cli = Cli::parse_from([
-        "wnt",
+        "workspace",
         "init",
         "--strategy",
         "independent",
@@ -181,7 +181,7 @@ fn test_init_command_with_options() {
 
 #[test]
 fn test_config_show_command() {
-    let cli = Cli::parse_from(["wnt", "config", "show"]);
+    let cli = Cli::parse_from(["workspace", "config", "show"]);
 
     if let Commands::Config(ConfigCommands::Show(_)) = cli.command {
         // Success
@@ -192,7 +192,7 @@ fn test_config_show_command() {
 
 #[test]
 fn test_config_validate_command() {
-    let cli = Cli::parse_from(["wnt", "config", "validate"]);
+    let cli = Cli::parse_from(["workspace", "config", "validate"]);
 
     if let Commands::Config(ConfigCommands::Validate(_)) = cli.command {
         // Success
@@ -207,7 +207,7 @@ fn test_config_validate_command() {
 
 #[test]
 fn test_changeset_create_command() {
-    let cli = Cli::parse_from(["wnt", "changeset", "create"]);
+    let cli = Cli::parse_from(["workspace", "changeset", "create"]);
 
     if let Commands::Changeset(ChangesetCommands::Create(_)) = cli.command {
         // Success
@@ -219,7 +219,7 @@ fn test_changeset_create_command() {
 #[test]
 fn test_changeset_create_with_options() {
     let cli = Cli::parse_from([
-        "wnt",
+        "workspace",
         "changeset",
         "create",
         "--bump",
@@ -250,7 +250,7 @@ fn test_changeset_create_with_options() {
 #[test]
 fn test_changeset_list_command() {
     let cli = Cli::parse_from([
-        "wnt",
+        "workspace",
         "changeset",
         "list",
         "--filter-package",
@@ -275,7 +275,7 @@ fn test_changeset_list_command() {
 
 #[test]
 fn test_changeset_show_command() {
-    let cli = Cli::parse_from(["wnt", "changeset", "show", "feature/branch"]);
+    let cli = Cli::parse_from(["workspace", "changeset", "show", "feature/branch"]);
 
     if let Commands::Changeset(ChangesetCommands::Show(args)) = cli.command {
         assert_eq!(args.branch, "feature/branch");
@@ -286,7 +286,7 @@ fn test_changeset_show_command() {
 
 #[test]
 fn test_changeset_update_command() {
-    let cli = Cli::parse_from(["wnt", "changeset", "update"]);
+    let cli = Cli::parse_from(["workspace", "changeset", "update"]);
 
     if let Commands::Changeset(ChangesetCommands::Update(_)) = cli.command {
         // Success
@@ -297,7 +297,7 @@ fn test_changeset_update_command() {
 
 #[test]
 fn test_changeset_edit_command() {
-    let cli = Cli::parse_from(["wnt", "changeset", "edit", "feature/branch"]);
+    let cli = Cli::parse_from(["workspace", "changeset", "edit", "feature/branch"]);
 
     if let Commands::Changeset(ChangesetCommands::Edit(args)) = cli.command {
         assert_eq!(args.branch, Some("feature/branch".to_string()));
@@ -308,7 +308,7 @@ fn test_changeset_edit_command() {
 
 #[test]
 fn test_changeset_edit_command_no_branch() {
-    let cli = Cli::parse_from(["wnt", "changeset", "edit"]);
+    let cli = Cli::parse_from(["workspace", "changeset", "edit"]);
 
     if let Commands::Changeset(ChangesetCommands::Edit(args)) = cli.command {
         assert_eq!(args.branch, None);
@@ -319,7 +319,7 @@ fn test_changeset_edit_command_no_branch() {
 
 #[test]
 fn test_changeset_update_with_id() {
-    let cli = Cli::parse_from(["wnt", "changeset", "update", "feature/branch"]);
+    let cli = Cli::parse_from(["workspace", "changeset", "update", "feature/branch"]);
 
     if let Commands::Changeset(ChangesetCommands::Update(args)) = cli.command {
         assert_eq!(args.id, Some("feature/branch".to_string()));
@@ -331,7 +331,7 @@ fn test_changeset_update_with_id() {
 #[test]
 fn test_changeset_update_with_options() {
     let cli = Cli::parse_from([
-        "wnt",
+        "workspace",
         "changeset",
         "update",
         "feature/branch",
@@ -358,7 +358,7 @@ fn test_changeset_update_with_options() {
 
 #[test]
 fn test_changeset_delete_command() {
-    let cli = Cli::parse_from(["wnt", "changeset", "delete", "old-branch", "--force"]);
+    let cli = Cli::parse_from(["workspace", "changeset", "delete", "old-branch", "--force"]);
 
     if let Commands::Changeset(ChangesetCommands::Delete(args)) = cli.command {
         assert_eq!(args.branch, "old-branch");
@@ -371,7 +371,7 @@ fn test_changeset_delete_command() {
 #[test]
 fn test_changeset_history_command() {
     let cli = Cli::parse_from([
-        "wnt",
+        "workspace",
         "changeset",
         "history",
         "--package",
@@ -402,7 +402,7 @@ fn test_changeset_history_command() {
 
 #[test]
 fn test_changeset_check_command() {
-    let cli = Cli::parse_from(["wnt", "changeset", "check", "--branch", "main"]);
+    let cli = Cli::parse_from(["workspace", "changeset", "check", "--branch", "main"]);
 
     if let Commands::Changeset(ChangesetCommands::Check(args)) = cli.command {
         assert_eq!(args.branch, Some("main".to_string()));
@@ -417,7 +417,7 @@ fn test_changeset_check_command() {
 
 #[test]
 fn test_bump_command_dry_run() {
-    let cli = Cli::parse_from(["wnt", "bump", "--dry-run"]);
+    let cli = Cli::parse_from(["workspace", "bump", "--dry-run"]);
 
     if let Commands::Bump(args) = cli.command {
         assert!(args.dry_run);
@@ -429,7 +429,7 @@ fn test_bump_command_dry_run() {
 
 #[test]
 fn test_bump_command_execute() {
-    let cli = Cli::parse_from(["wnt", "bump", "--execute"]);
+    let cli = Cli::parse_from(["workspace", "bump", "--execute"]);
 
     if let Commands::Bump(args) = cli.command {
         assert!(!args.dry_run);
@@ -442,7 +442,7 @@ fn test_bump_command_execute() {
 #[test]
 fn test_bump_command_with_git_options() {
     let cli =
-        Cli::parse_from(["wnt", "bump", "--execute", "--git-tag", "--git-push", "--git-commit"]);
+        Cli::parse_from(["workspace", "bump", "--execute", "--git-tag", "--git-push", "--git-commit"]);
 
     if let Commands::Bump(args) = cli.command {
         assert!(args.execute);
@@ -457,7 +457,7 @@ fn test_bump_command_with_git_options() {
 #[test]
 fn test_bump_command_snapshot() {
     let cli = Cli::parse_from([
-        "wnt",
+        "workspace",
         "bump",
         "--snapshot",
         "--snapshot-format",
@@ -475,7 +475,7 @@ fn test_bump_command_snapshot() {
 
 #[test]
 fn test_bump_command_prerelease() {
-    let cli = Cli::parse_from(["wnt", "bump", "--prerelease", "beta", "--execute"]);
+    let cli = Cli::parse_from(["workspace", "bump", "--prerelease", "beta", "--execute"]);
 
     if let Commands::Bump(args) = cli.command {
         assert_eq!(args.prerelease, Some("beta".to_string()));
@@ -486,7 +486,7 @@ fn test_bump_command_prerelease() {
 
 #[test]
 fn test_bump_command_with_packages() {
-    let cli = Cli::parse_from(["wnt", "bump", "--packages", "pkg1,pkg2", "--dry-run"]);
+    let cli = Cli::parse_from(["workspace", "bump", "--packages", "pkg1,pkg2", "--dry-run"]);
 
     if let Commands::Bump(args) = cli.command {
         assert_eq!(args.packages, Some(vec!["pkg1".to_string(), "pkg2".to_string()]));
@@ -498,7 +498,7 @@ fn test_bump_command_with_packages() {
 #[test]
 fn test_bump_command_with_flags() {
     let cli =
-        Cli::parse_from(["wnt", "bump", "--execute", "--no-changelog", "--no-archive", "--force"]);
+        Cli::parse_from(["workspace", "bump", "--execute", "--no-changelog", "--no-archive", "--force"]);
 
     if let Commands::Bump(args) = cli.command {
         assert!(args.no_changelog);
@@ -515,7 +515,7 @@ fn test_bump_command_with_flags() {
 
 #[test]
 fn test_upgrade_check_command() {
-    let cli = Cli::parse_from(["wnt", "upgrade", "check"]);
+    let cli = Cli::parse_from(["workspace", "upgrade", "check"]);
 
     if let Commands::Upgrade(UpgradeCommands::Check(_)) = cli.command {
         // Success
@@ -527,7 +527,7 @@ fn test_upgrade_check_command() {
 #[test]
 fn test_upgrade_check_with_options() {
     let cli = Cli::parse_from([
-        "wnt",
+        "workspace",
         "upgrade",
         "check",
         "--no-major",
@@ -553,7 +553,7 @@ fn test_upgrade_check_with_options() {
 #[test]
 fn test_upgrade_apply_command() {
     let cli = Cli::parse_from([
-        "wnt",
+        "workspace",
         "upgrade",
         "apply",
         "--patch-only",
@@ -577,7 +577,7 @@ fn test_upgrade_apply_command() {
 
 #[test]
 fn test_upgrade_backups_list_command() {
-    let cli = Cli::parse_from(["wnt", "upgrade", "backups", "list"]);
+    let cli = Cli::parse_from(["workspace", "upgrade", "backups", "list"]);
 
     if let Commands::Upgrade(UpgradeCommands::Backups(UpgradeBackupCommands::List(_))) = cli.command
     {
@@ -589,7 +589,7 @@ fn test_upgrade_backups_list_command() {
 
 #[test]
 fn test_upgrade_backups_restore_command() {
-    let cli = Cli::parse_from(["wnt", "upgrade", "backups", "restore", "backup_123", "--force"]);
+    let cli = Cli::parse_from(["workspace", "upgrade", "backups", "restore", "backup_123", "--force"]);
 
     if let Commands::Upgrade(UpgradeCommands::Backups(UpgradeBackupCommands::Restore(args))) =
         cli.command
@@ -603,7 +603,7 @@ fn test_upgrade_backups_restore_command() {
 
 #[test]
 fn test_upgrade_backups_clean_command() {
-    let cli = Cli::parse_from(["wnt", "upgrade", "backups", "clean", "--keep", "10", "--force"]);
+    let cli = Cli::parse_from(["workspace", "upgrade", "backups", "clean", "--keep", "10", "--force"]);
 
     if let Commands::Upgrade(UpgradeCommands::Backups(UpgradeBackupCommands::Clean(args))) =
         cli.command
@@ -621,7 +621,7 @@ fn test_upgrade_backups_clean_command() {
 
 #[test]
 fn test_audit_command_basic() {
-    let cli = Cli::parse_from(["wnt", "audit"]);
+    let cli = Cli::parse_from(["workspace", "audit"]);
 
     if let Commands::Audit(args) = cli.command {
         assert_eq!(args.sections, vec!["all"]);
@@ -636,7 +636,7 @@ fn test_audit_command_basic() {
 #[test]
 fn test_audit_command_with_options() {
     let cli = Cli::parse_from([
-        "wnt",
+        "workspace",
         "audit",
         "--sections",
         "upgrades,dependencies",
@@ -666,7 +666,7 @@ fn test_audit_command_with_options() {
 
 #[test]
 fn test_changes_command_basic() {
-    let cli = Cli::parse_from(["wnt", "changes"]);
+    let cli = Cli::parse_from(["workspace", "changes"]);
 
     if let Commands::Changes(args) = cli.command {
         assert_eq!(args.since, None);
@@ -682,7 +682,7 @@ fn test_changes_command_basic() {
 #[test]
 fn test_changes_command_with_options() {
     let cli = Cli::parse_from([
-        "wnt",
+        "workspace",
         "changes",
         "--since",
         "HEAD~5",
@@ -706,7 +706,7 @@ fn test_changes_command_with_options() {
 
 #[test]
 fn test_changes_command_staged() {
-    let cli = Cli::parse_from(["wnt", "changes", "--staged"]);
+    let cli = Cli::parse_from(["workspace", "changes", "--staged"]);
 
     if let Commands::Changes(args) = cli.command {
         assert!(args.staged);
@@ -718,7 +718,7 @@ fn test_changes_command_staged() {
 
 #[test]
 fn test_changes_command_unstaged() {
-    let cli = Cli::parse_from(["wnt", "changes", "--unstaged"]);
+    let cli = Cli::parse_from(["workspace", "changes", "--unstaged"]);
 
     if let Commands::Changes(args) = cli.command {
         assert!(!args.staged);
@@ -734,7 +734,7 @@ fn test_changes_command_unstaged() {
 
 #[test]
 fn test_version_command_basic() {
-    let cli = Cli::parse_from(["wnt", "version"]);
+    let cli = Cli::parse_from(["workspace", "version"]);
 
     if let Commands::Version(args) = cli.command {
         assert!(!args.verbose);
@@ -745,7 +745,7 @@ fn test_version_command_basic() {
 
 #[test]
 fn test_version_command_verbose() {
-    let cli = Cli::parse_from(["wnt", "version", "--verbose"]);
+    let cli = Cli::parse_from(["workspace", "version", "--verbose"]);
 
     if let Commands::Version(args) = cli.command {
         assert!(args.verbose);
@@ -798,11 +798,11 @@ fn test_generate_completions_bash() {
     let mut cmd = Cli::command();
     let mut buf = Vec::new();
 
-    generate_completions(Shell::Bash, &mut cmd, "wnt", &mut buf);
+    generate_completions(Shell::Bash, &mut cmd, "workspace", &mut buf);
 
     let output = String::from_utf8(buf).expect("Invalid UTF-8");
     assert!(!output.is_empty());
-    assert!(output.contains("wnt"));
+    assert!(output.contains("workspace"));
 }
 
 // ============================================================================

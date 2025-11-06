@@ -560,7 +560,7 @@ pub(crate) async fn load_config(
         }
     } else {
         return Err(CliError::configuration(
-            "Workspace not initialized. Run 'wnt init' first.".to_string(),
+            "Workspace not initialized. Run 'workspace init' first.".to_string(),
         ));
     };
 

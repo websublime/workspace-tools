@@ -106,31 +106,31 @@ jobs:
       - name: Strip binary (Linux/macOS)
         if: matrix.os != 'windows-latest'
         run: |
-          strip target/${{ matrix.target }}/release/wnt || true
-          ls -lh target/${{ matrix.target }}/release/wnt
+          strip target/${{ matrix.target }}/release/workspace || true
+          ls -lh target/${{ matrix.target }}/release/workspace
 
       - name: Get binary info (Windows)
         if: matrix.os == 'windows-latest'
         shell: bash
         run: |
-          ls -lh target/${{ matrix.target }}/release/wnt.exe
+          ls -lh target/${{ matrix.target }}/release/workspace.exe
 
       - name: Create archive
         shell: bash
         run: |
           VERSION=${{ needs.get-release.outputs.version }}
           TAG=${{ needs.get-release.outputs.tag }}
-          ARCHIVE_NAME="wnt-${TAG}-${{ matrix.target }}"
+          ARCHIVE_NAME="workspace-${TAG}-${{ matrix.target }}"
 
           cd target/${{ matrix.target }}/release
 
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            7z a "${ARCHIVE_NAME}.zip" wnt.exe
+            7z a "${ARCHIVE_NAME}.zip" workspace.exe
             mv "${ARCHIVE_NAME}.zip" ../../..
             cd ../../..
             echo "ARCHIVE_NAME=${ARCHIVE_NAME}.zip" >> $GITHUB_ENV
           else
-            tar czf "${ARCHIVE_NAME}.tar.gz" wnt
+            tar czf "${ARCHIVE_NAME}.tar.gz" workspace
             mv "${ARCHIVE_NAME}.tar.gz" ../../..
             cd ../../..
             echo "ARCHIVE_NAME=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_ENV

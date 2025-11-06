@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 #
-# Official installation script for wnt (Workspace Node Tools)
+# Official installation script for Workspace Tools
 #
 # This script detects the operating system and architecture, downloads the
 # appropriate binary from GitHub releases, verifies its integrity, and
@@ -22,9 +22,9 @@
 #   --help                     Show this help message
 #
 # Environment Variables:
-#   WNT_VERSION                Version to install (overridden by --version)
-#   WNT_INSTALL_DIR            Installation directory (overridden by --install-dir)
-#   WNT_GITHUB_TOKEN           GitHub token for private repositories
+#   WORKSPACE_VERSION                Version to install (overridden by --version)
+#   WORKSPACE_INSTALL_DIR            Installation directory (overridden by --install-dir)
+#   WORKSPACE_GITHUB_TOKEN           GitHub token for private repositories
 #   NO_COLOR                   Disable colored output
 #
 # Exit Codes:
@@ -39,7 +39,7 @@
 set -e
 
 # Constants
-readonly BINARY_NAME="wnt"
+readonly BINARY_NAME="workspace"
 readonly GITHUB_REPO="workspace-node-tools"
 readonly GITHUB_ORG="websublime"
 readonly RELEASE_URL="https://github.com/${GITHUB_ORG}/${GITHUB_REPO}/releases"
@@ -322,8 +322,8 @@ download_file() {
             curl_opts="-fL"
         fi
 
-        if [ -n "${WNT_GITHUB_TOKEN}" ]; then
-            curl ${curl_opts} -H "Authorization: token ${WNT_GITHUB_TOKEN}" -o "${dest}" "${url}" || \
+        if [ -n "${WORKSPACE_GITHUB_TOKEN}" ]; then
+            curl ${curl_opts} -H "Authorization: token ${WORKSPACE_GITHUB_TOKEN}" -o "${dest}" "${url}" || \
                 die "${EXIT_DOWNLOAD}" "Failed to download from ${url}"
         else
             curl ${curl_opts} -o "${dest}" "${url}" || \
@@ -335,8 +335,8 @@ download_file() {
             wget_opts="-v"
         fi
 
-        if [ -n "${WNT_GITHUB_TOKEN}" ]; then
-            wget ${wget_opts} --header="Authorization: token ${WNT_GITHUB_TOKEN}" -O "${dest}" "${url}" || \
+        if [ -n "${WORKSPACE_GITHUB_TOKEN}" ]; then
+            wget ${wget_opts} --header="Authorization: token ${WORKSPACE_GITHUB_TOKEN}" -O "${dest}" "${url}" || \
                 die "${EXIT_DOWNLOAD}" "Failed to download from ${url}"
         else
             wget ${wget_opts} -O "${dest}" "${url}" || \
@@ -465,8 +465,8 @@ determine_install_dir() {
     fi
 
     # Environment variable
-    if [ -n "${WNT_INSTALL_DIR}" ]; then
-        echo "${WNT_INSTALL_DIR}"
+    if [ -n "${WORKSPACE_INSTALL_DIR}" ]; then
+        echo "${WORKSPACE_INSTALL_DIR}"
         return
     fi
 
@@ -645,7 +645,7 @@ show_post_install() {
 #######################################
 show_help() {
     cat << EOF
-Workspace Node Tools (wnt) Installation Script
+Workspace Node Tools (workspace) Installation Script
 
 USAGE:
     curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh [OPTIONS]
@@ -659,9 +659,9 @@ OPTIONS:
     --help                     Show this help message
 
 ENVIRONMENT VARIABLES:
-    WNT_VERSION                Version to install (overridden by --version)
-    WNT_INSTALL_DIR            Installation directory (overridden by --install-dir)
-    WNT_GITHUB_TOKEN           GitHub token for private repositories
+    WORKSPACE_VERSION                Version to install (overridden by --version)
+    WORKSPACE_INSTALL_DIR            Installation directory (overridden by --install-dir)
+    WORKSPACE_GITHUB_TOKEN           GitHub token for private repositories
     NO_COLOR                   Disable colored output
 
 EXAMPLES:
@@ -748,7 +748,7 @@ main() {
     init_colors
 
     log ""
-    log "${BOLD}=== Workspace Node Tools (wnt) Installation ===${NC}"
+    log "${BOLD}=== Workspace Node Tools (workspace) Installation ===${NC}"
     log ""
 
     # Detect platform
@@ -768,8 +768,8 @@ main() {
 
     # Determine version
     if [ -z "${VERSION}" ]; then
-        if [ -n "${WNT_VERSION}" ]; then
-            VERSION="${WNT_VERSION}"
+        if [ -n "${WORKSPACE_VERSION}" ]; then
+            VERSION="${WORKSPACE_VERSION}"
         else
             VERSION=$(get_latest_version)
         fi

@@ -4,7 +4,7 @@
 //! The completions are generated from the Clap CLI definition and placed in the OUT_DIR.
 //!
 //! # What
-//! Generates shell completion scripts for the `wnt` CLI tool.
+//! Generates shell completion scripts for the `workspace` CLI tool.
 //!
 //! # How
 //! Uses clap_complete to generate completion files from the CLI definition at build time.

@@ -1,4 +1,4 @@
-# wnt Git Hooks
+# workspace Git Hooks
 
 Automated changeset management through git hooks for seamless developer workflow.
 
@@ -15,7 +15,7 @@ Automated changeset management through git hooks for seamless developer workflow
 
 ## Overview
 
-The wnt git hooks automate changeset management throughout your development workflow:
+The workspace git hooks automate changeset management throughout your development workflow:
 
 - **pre-commit**: Validates changeset exists, prompts to create if missing
 - **post-checkout**: Creates changesets when you start new feature branches
@@ -79,7 +79,7 @@ git push origin feature/new-thing
 3. Checks if changeset exists for the branch
 4. If missing (interactive mode):
    - Prompts: "Create changeset now? [Y/n]"
-   - If yes (default): Runs `wnt changeset create` interactively
+   - If yes (default): Runs `workspace changeset create` interactively
    - If no: Asks if user wants to continue without changeset
 5. If missing (non-interactive mode): Warns but allows commit
 6. Allows commit to proceed
@@ -114,7 +114,7 @@ git push origin feature/new-thing
 
 **Skip once:**
 ```bash
-WNT_SKIP_HOOKS=1 git commit -m "message"
+WORKSPACE_SKIP_HOOKS=1 git commit -m "message"
 ```
 
 ### post-commit
@@ -140,7 +140,7 @@ WNT_SKIP_HOOKS=1 git commit -m "message"
 
 **Skip once:**
 ```bash
-WNT_SKIP_HOOKS=1 git commit -m "message"
+WORKSPACE_SKIP_HOOKS=1 git commit -m "message"
 ```
 
 ### post-checkout
@@ -165,7 +165,7 @@ WNT_SKIP_HOOKS=1 git commit -m "message"
 
 **Skip once:**
 ```bash
-WNT_SKIP_HOOKS=1 git checkout -b feature/branch
+WORKSPACE_SKIP_HOOKS=1 git checkout -b feature/branch
 ```
 
 ### pre-push
@@ -213,19 +213,19 @@ WNT_SKIP_HOOKS=1 git checkout -b feature/branch
 ✗ No changeset found for branch feature/my-branch
 
 How to fix:
-  1. Create changeset:     wnt changeset create
-  2. Verify it was created: wnt changeset show feature/my-branch
+  1. Create changeset:     workspace changeset create
+  2. Verify it was created: workspace changeset show feature/my-branch
   3. Push again:           git push
 
 To skip this check once:
-  WNT_SKIP_HOOKS=1 git push
+  WORKSPACE_SKIP_HOOKS=1 git push
 ```
 
 **Why bulk update on push?**: Adding commits in bulk before push (instead of per-commit) avoids issues with git commit amending and keeps the workflow simple. You can make multiple commits freely, and they're all tracked when you push. The automatic commit ensures the changeset is always included in the push.
 
 **Skip once:**
 ```bash
-WNT_SKIP_HOOKS=1 git push
+WORKSPACE_SKIP_HOOKS=1 git push
 ```
 
 ### prepare-commit-msg
@@ -242,15 +242,15 @@ WNT_SKIP_HOOKS=1 git push
 **Example addition to commit:**
 ```
 # ──────────────────────────────────────────────────────────────
-# Changeset Info (added by wnt)
+# Changeset Info (added by workspace)
 # Branch: feature/my-branch
-# Run 'wnt changeset show feature/my-branch' to see details
+# Run 'workspace changeset show feature/my-branch' to see details
 # ──────────────────────────────────────────────────────────────
 ```
 
 **Skip once:**
 ```bash
-WNT_SKIP_HOOKS=1 git commit -m "message"
+WORKSPACE_SKIP_HOOKS=1 git commit -m "message"
 ```
 
 ## Installation
@@ -295,7 +295,7 @@ WNT_SKIP_HOOKS=1 git commit -m "message"
 
 ### Project Configuration
 
-Add to `.wnt.toml`:
+Add to `.workspace.toml`:
 
 ```toml
 [git_hooks]
@@ -319,20 +319,20 @@ enhance_commit_messages = true
 
 ```bash
 # Disable all hooks temporarily
-export WNT_SKIP_HOOKS=1
+export WORKSPACE_SKIP_HOOKS=1
 
 # Disable for single command
-WNT_SKIP_HOOKS=1 git commit -m "message"
+WORKSPACE_SKIP_HOOKS=1 git commit -m "message"
 ```
 
 ### Per-Repository Settings
 
 ```bash
 # Disable hooks for this repo only
-git config hooks.wnt.enabled false
+git config hooks.workspace.enabled false
 
 # Enable strict validation
-git config hooks.wnt.strict true
+git config hooks.workspace.strict true
 ```
 
 ## Usage Examples
@@ -405,12 +405,12 @@ Validation errors:
   - Changeset out of sync with commits
 
 How to fix:
-  1. Update: wnt changeset update
+  1. Update: workspace changeset update
   2. Commit: git commit -m 'chore: update changeset'
   3. Push:   git push
 
 # Fix it:
-wnt changeset update
+workspace changeset update
 git add .changesets/
 git commit -m "chore: update changeset"
 git push
@@ -432,9 +432,9 @@ ls -la .git/hooks/pre-push
 ./scripts/install-hooks.sh --force
 ```
 
-### wnt Command Not Found
+### workspace Command Not Found
 
-**Install wnt:**
+**Install workspace:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
 ```
@@ -442,19 +442,19 @@ curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/mai
 **Or use full path:**
 ```bash
 # Edit hook file and use absolute path
-/usr/local/bin/wnt changeset update
+/usr/local/bin/workspace changeset update
 ```
 
 ### Hook Fails on Commit
 
 **Check what's wrong:**
 ```bash
-wnt changeset validate
+workspace changeset validate
 ```
 
 **Skip hook temporarily:**
 ```bash
-WNT_SKIP_HOOKS=1 git commit -m "message"
+WORKSPACE_SKIP_HOOKS=1 git commit -m "message"
 ```
 
 **Disable permanently:**
@@ -482,12 +482,12 @@ rm .git/hooks/prepare-commit-msg
 **Use --quiet flag:**
 ```bash
 # Edit hook files, add --quiet:
-wnt changeset update --quiet
+workspace changeset update --quiet
 ```
 
 **Disable for large repos:**
 ```toml
-# .wnt.toml
+# .workspace.toml
 [git_hooks]
 auto_update_on_commit = false  # Use manual updates instead
 ```
@@ -503,8 +503,8 @@ If you're using Husky:
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
-# Run wnt changeset update
-wnt changeset update --auto --quiet
+# Run workspace changeset update
+workspace changeset update --auto --quiet
 git add .changesets/*.json 2>/dev/null || true
 ```
 
@@ -517,12 +517,12 @@ If you're using Lefthook:
 pre-commit:
   commands:
     changeset-update:
-      run: wnt changeset update --auto --quiet && git add .changesets/*.json
+      run: workspace changeset update --auto --quiet && git add .changesets/*.json
 
 pre-push:
   commands:
     changeset-validate:
-      run: wnt changeset validate
+      run: workspace changeset validate
 ```
 
 ### Git Aliases
@@ -534,10 +534,10 @@ Useful aliases:
 git config --global alias.commit-skip 'commit --no-verify'
 
 # Force update changeset
-git config --global alias.cs-update '!wnt changeset update'
+git config --global alias.cs-update '!workspace changeset update'
 
 # Validate changeset
-git config --global alias.cs-validate '!wnt changeset validate'
+git config --global alias.cs-validate '!workspace changeset validate'
 
 # Usage:
 git commit-skip -m "wip"
@@ -562,11 +562,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install wnt
+      - name: Install workspace
         run: curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
       
       - name: Validate changeset
-        run: wnt changeset validate --strict
+        run: workspace changeset validate --strict
 ```
 
 ## Best Practices
@@ -574,7 +574,7 @@ jobs:
 ### ✅ Do
 
 - Install hooks for all team members
-- Commit the `.wnt.toml` configuration
+- Commit the `.workspace.toml` configuration
 - Use `--quiet` flags for faster hooks
 - Document hook behavior in project README
 - Test hooks before deploying to team
@@ -591,7 +591,7 @@ jobs:
 
 ### Q: Can I customize the hooks?
 
-**A:** Yes! The hook scripts are in `scripts/git-hooks/`. Copy and modify them, or configure behavior via `.wnt.toml`.
+**A:** Yes! The hook scripts are in `scripts/git-hooks/`. Copy and modify them, or configure behavior via `.workspace.toml`.
 
 ### Q: Do hooks work on Windows?
 
@@ -601,12 +601,12 @@ jobs:
 
 **A:** Yes:
 ```bash
-WNT_SKIP_HOOKS=1 git commit
+WORKSPACE_SKIP_HOOKS=1 git commit
 ```
 
-### Q: What if wnt is not installed?
+### Q: What if workspace is not installed?
 
-**A:** Hooks gracefully skip if wnt is not found. They won't break your workflow.
+**A:** Hooks gracefully skip if workspace is not found. They won't break your workflow.
 
 ### Q: Can I use hooks with Husky?
 

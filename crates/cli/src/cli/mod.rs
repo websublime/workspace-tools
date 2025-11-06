@@ -58,7 +58,7 @@ pub use dispatch::dispatch_command;
 
 use crate::output::OutputFormat;
 
-/// Workspace Node Tools - Changeset-based version management.
+/// Workspace Tools - Changeset-based version management.
 ///
 /// This CLI provides comprehensive tools for managing Node.js workspaces using
 /// a changeset-based workflow. It supports both single-package and monorepo
@@ -88,24 +88,24 @@ use crate::output::OutputFormat;
 ///
 /// ```bash
 /// # Initialize a new project
-/// wnt init
+/// workspace init
 ///
 /// # Add a changeset
-/// wnt changeset add
+/// workspace changeset add
 ///
 /// # Preview version bump
-/// wnt bump --dry-run
+/// workspace bump --dry-run
 ///
 /// # JSON output with no logs (clean JSON for automation)
-/// wnt --format json --log-level silent bump --dry-run
+/// workspace --format json --log-level silent bump --dry-run
 ///
 /// # Debug logging with text output
-/// wnt --log-level debug changeset list
+/// workspace --log-level debug changeset list
 /// ```
 #[derive(Debug, Parser)]
-#[command(name = "wnt")]
+#[command(name = "workspace")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
-#[command(about = "Workspace Node Tools - Changeset-based version management")]
+#[command(about = "Workspace Tools - Changeset-based version management")]
 #[command(long_about = None)]
 #[command(author = "Sublime Labs")]
 #[command(help_template = "\
@@ -189,7 +189,7 @@ impl Cli {
     /// use clap::Parser;
     /// use sublime_cli_tools::cli::{Cli, LogLevel};
     ///
-    /// let cli = Cli::parse_from(["wnt", "--log-level", "debug", "version"]);
+    /// let cli = Cli::parse_from(["workspace", "--log-level", "debug", "version"]);
     /// assert_eq!(cli.log_level(), LogLevel::Debug);
     /// ```
     #[must_use]
@@ -206,7 +206,7 @@ impl Cli {
     /// use sublime_cli_tools::cli::Cli;
     /// use sublime_cli_tools::output::OutputFormat;
     ///
-    /// let cli = Cli::parse_from(["wnt", "--format", "json", "version"]);
+    /// let cli = Cli::parse_from(["workspace", "--format", "json", "version"]);
     /// assert_eq!(cli.output_format(), OutputFormat::Json);
     /// ```
     #[must_use]
@@ -224,7 +224,7 @@ impl Cli {
     /// use clap::Parser;
     /// use sublime_cli_tools::cli::Cli;
     ///
-    /// let cli = Cli::parse_from(["wnt", "--no-color", "version"]);
+    /// let cli = Cli::parse_from(["workspace", "--no-color", "version"]);
     /// assert!(cli.is_color_disabled());
     /// ```
     #[must_use]
@@ -241,7 +241,7 @@ impl Cli {
     /// use sublime_cli_tools::cli::Cli;
     /// use std::path::PathBuf;
     ///
-    /// let cli = Cli::parse_from(["wnt", "--root", "/tmp", "version"]);
+    /// let cli = Cli::parse_from(["workspace", "--root", "/tmp", "version"]);
     /// assert_eq!(cli.root(), Some(&PathBuf::from("/tmp")));
     /// ```
     #[must_use]
@@ -258,7 +258,7 @@ impl Cli {
     /// use sublime_cli_tools::cli::Cli;
     /// use std::path::PathBuf;
     ///
-    /// let cli = Cli::parse_from(["wnt", "--config", "custom.toml", "version"]);
+    /// let cli = Cli::parse_from(["workspace", "--config", "custom.toml", "version"]);
     /// assert_eq!(cli.config_path(), Some(&PathBuf::from("custom.toml")));
     /// ```
     #[must_use]

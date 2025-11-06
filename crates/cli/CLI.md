@@ -30,9 +30,9 @@ O developer inicia o desenvolvimento de uma nova feature e cria uma nova branch,
 Feito isto cria o ficheiro de changeset na directoria definida no ficheiro de configuração. Mais uma vez pkg fornece api.
 
 ### C
-O developer vai trabalhando na feature branch a dada altura comita as alterações. O hook de git deve chamar o cli para competar o seguinte: o cli executa `wnt changeset update` (sem ID) que automaticamente detecta a branch actual e procura por um ficheiro de changeset que corresponda ao nome da branch. Se encontrar, lê o ficheiro de changeset, verifica se o conteúdo está correcto, adiciona commit id á lista bem como o package que sofreu alteração. Se não encontrar nenhum changeset correspondente à branch, regista um erro a indicar que não foi encontrado nenhum changeset para a branch actual. Isto é tudo automático sem necessidade de prompt do user usando as funcionalidades de changeset do crate pkg.
+O developer vai trabalhando na feature branch a dada altura comita as alterações. O hook de git deve chamar o cli para competar o seguinte: o cli executa `workspace changeset update` (sem ID) que automaticamente detecta a branch actual e procura por um ficheiro de changeset que corresponda ao nome da branch. Se encontrar, lê o ficheiro de changeset, verifica se o conteúdo está correcto, adiciona commit id á lista bem como o package que sofreu alteração. Se não encontrar nenhum changeset correspondente à branch, regista um erro a indicar que não foi encontrado nenhum changeset para a branch actual. Isto é tudo automático sem necessidade de prompt do user usando as funcionalidades de changeset do crate pkg.
 
-Nota: O comando também suporta um ID ou nome de branch explícito como parâmetro opcional: `wnt changeset update feature/my-branch`
+Nota: O comando também suporta um ID ou nome de branch explícito como parâmetro opcional: `workspace changeset update feature/my-branch`
 
 ### D
 O developer quer obter uma auditoria completa do projecto. Corre o comando audit e deve receber um prompt na qual lhe diz:
@@ -61,12 +61,12 @@ Ou seja de um modo high level o cli deve fornecer um interface para executar as 
 
 Alguns comandos de exemplo:
 
-- wnt init (este pro exemplo pode ser o exemplo A e se tiver todos os parametros das perguntas necessárias o user não precisa de levar com os prompts)
+- workspace init (este pro exemplo pode ser o exemplo A e se tiver todos os parametros das perguntas necessárias o user não precisa de levar com os prompts)
 
-- wnt changeset (mesma coisa se tiver os parametros não precisa de fazer prompt)
-- wnt audit
-- wnt upgrade (pode ter parametro dry-run)
-- wnt bump (vários parametros opcionais bem como apenas só output de dry-run sem alterações, podemos querer uma snapshot version ou pre-release etc)
+- workspace changeset (mesma coisa se tiver os parametros não precisa de fazer prompt)
+- workspace audit
+- workspace upgrade (pode ter parametro dry-run)
+- workspace bump (vários parametros opcionais bem como apenas só output de dry-run sem alterações, podemos querer uma snapshot version ou pre-release etc)
 
 Aqui temos algumas das features que o cli deve providenciar. A ideia é que o cli seja um interface para o crate pkg e que este possa ser extendido com funcionalidades dos outros crates (standard e git) caso seja necessário. 
 

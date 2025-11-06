@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 #
-# Uninstall script for wnt (Workspace Node Tools)
+# Uninstall script for Workspace Tools
 #
-# This script removes the wnt binary, shell completions, and optionally
+# This script removes the workspace binary, shell completions, and optionally
 # configuration files from the system.
 #
 # Usage:
@@ -18,7 +18,7 @@
 #   --help                     Show this help message
 #
 # Environment Variables:
-#   WNT_INSTALL_DIR            Installation directory (overridden by --install-dir)
+#   WORKSPACE_INSTALL_DIR            Installation directory (overridden by --install-dir)
 #   NO_COLOR                   Disable colored output
 #
 # Exit Codes:
@@ -30,7 +30,7 @@
 set -e
 
 # Constants
-readonly BINARY_NAME="wnt"
+readonly BINARY_NAME="workspace"
 readonly DEFAULT_INSTALL_DIRS="/usr/local/bin $HOME/.local/bin"
 
 # Exit codes
@@ -170,7 +170,7 @@ confirm() {
 }
 
 #######################################
-# Find wnt binary in system
+# Find workspace binary in system
 # Returns:
 #   Path to binary if found, empty otherwise
 #######################################
@@ -186,8 +186,8 @@ find_binary() {
     fi
 
     # Environment variable
-    if [ -n "${WNT_INSTALL_DIR}" ]; then
-        local binary="${WNT_INSTALL_DIR}/${BINARY_NAME}"
+    if [ -n "${WORKSPACE_INSTALL_DIR}" ]; then
+        local binary="${WORKSPACE_INSTALL_DIR}/${BINARY_NAME}"
         if [ -f "${binary}" ]; then
             echo "${binary}"
             return 0
@@ -291,25 +291,25 @@ find_config_files() {
     # Project-level config (current directory and parents)
     local dir="${PWD}"
     while [ "${dir}" != "/" ]; do
-        if [ -f "${dir}/.wnt.toml" ]; then
-            files="${files} ${dir}/.wnt.toml"
+        if [ -f "${dir}/.workspace.toml" ]; then
+            files="${files} ${dir}/.workspace.toml"
         fi
         if [ -f "${dir}/.wntrc" ]; then
             files="${files} ${dir}/.wntrc"
         fi
-        if [ -f "${dir}/wnt.config.json" ]; then
-            files="${files} ${dir}/wnt.config.json"
+        if [ -f "${dir}/workspace.config.json" ]; then
+            files="${files} ${dir}/workspace.config.json"
         fi
         dir=$(dirname "${dir}")
     done
 
     # User-level config
-    if [ -f "${HOME}/.config/wnt/config.toml" ]; then
-        files="${files} ${HOME}/.config/wnt/config.toml"
+    if [ -f "${HOME}/.config/workspace/config.toml" ]; then
+        files="${files} ${HOME}/.config/workspace/config.toml"
     fi
 
-    if [ -f "${HOME}/.wnt.toml" ]; then
-        files="${files} ${HOME}/.wnt.toml"
+    if [ -f "${HOME}/.workspace.toml" ]; then
+        files="${files} ${HOME}/.workspace.toml"
     fi
 
     echo "${files}"
@@ -354,10 +354,10 @@ remove_config() {
     done
 
     # Remove empty directories
-    if [ -d "${HOME}/.config/wnt" ]; then
-        if [ -z "$(ls -A "${HOME}/.config/wnt")" ]; then
-            verbose "Removing empty directory: ${HOME}/.config/wnt"
-            rmdir "${HOME}/.config/wnt" 2>/dev/null || true
+    if [ -d "${HOME}/.config/workspace" ]; then
+        if [ -z "$(ls -A "${HOME}/.config/workspace")" ]; then
+            verbose "Removing empty directory: ${HOME}/.config/workspace"
+            rmdir "${HOME}/.config/workspace" 2>/dev/null || true
         fi
     fi
 
@@ -390,7 +390,7 @@ show_completion() {
 #######################################
 show_help() {
     cat << EOF
-Workspace Node Tools (wnt) Uninstall Script
+Workspace Node Tools (workspace) Uninstall Script
 
 USAGE:
     uninstall.sh [OPTIONS]
@@ -404,7 +404,7 @@ OPTIONS:
     --help                     Show this help message
 
 ENVIRONMENT VARIABLES:
-    WNT_INSTALL_DIR            Installation directory (overridden by --install-dir)
+    WORKSPACE_INSTALL_DIR            Installation directory (overridden by --install-dir)
     NO_COLOR                   Disable colored output
 
 EXAMPLES:
@@ -485,7 +485,7 @@ main() {
     init_colors
 
     log ""
-    log "${BOLD}=== Workspace Node Tools (wnt) Uninstall ===${NC}"
+    log "${BOLD}=== Workspace Node Tools (workspace) Uninstall ===${NC}"
     log ""
 
     # Find binary

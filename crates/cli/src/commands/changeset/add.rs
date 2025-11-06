@@ -199,7 +199,7 @@ pub async fn execute_add(
 
     if exists {
         return Err(CliError::validation(format!(
-            "Changeset already exists for branch '{branch}'. Use 'wnt changeset update' to modify it."
+            "Changeset already exists for branch '{branch}'. Use 'workspace changeset update' to modify it."
         )));
     }
 
@@ -529,8 +529,8 @@ fn output_results(output: &Output, changeset: &Changeset, message: Option<&Strin
             output.info("Next steps:")?;
             output.info("  • Make your changes and commit them")?;
             output.info("  • The changeset will be included in the next version bump")?;
-            output.info("  • Use 'wnt changeset update' to modify the changeset")?;
-            output.info("  • Use 'wnt bump --dry-run' to preview version changes")?;
+            output.info("  • Use 'workspace changeset update' to modify the changeset")?;
+            output.info("  • Use 'workspace bump --dry-run' to preview version changes")?;
         } else {
             // Modern styled output
             StatusSymbol::Success.print_line(&TextStyle::success("Changeset created successfully"));
@@ -563,11 +563,11 @@ fn output_results(output: &Output, changeset: &Changeset, message: Option<&Strin
             print_bullet("Make your changes and commit them", Color::Cyan);
             print_bullet("The changeset will be included in the next version bump", Color::Cyan);
             print_bullet(
-                &format!("Use {} to modify the changeset", TextStyle::dim("wnt changeset update")),
+                &format!("Use {} to modify the changeset", TextStyle::dim("workspace changeset update")),
                 Color::Cyan,
             );
             print_bullet(
-                &format!("Use {} to preview version changes", TextStyle::dim("wnt bump --dry-run")),
+                &format!("Use {} to preview version changes", TextStyle::dim("workspace bump --dry-run")),
                 Color::Cyan,
             );
 

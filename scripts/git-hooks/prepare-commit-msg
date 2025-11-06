@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 #
-# prepare-commit-msg hook for wnt (Workspace Node Tools)
+# prepare-commit-msg hook for workspace (Workspace Tools)
 #
 # This hook enhances commit messages with changeset information.
 # It adds metadata about affected packages and bump type to your commits.
@@ -11,7 +11,7 @@
 # 3. Shows affected packages
 # 4. Shows planned version bump
 #
-# Configuration (.wnt.toml):
+# Configuration (.workspace.toml):
 # [git_hooks]
 # enabled = true
 # enhance_commit_messages = true
@@ -22,13 +22,13 @@
 # Bump: {bump}
 # """
 #
-# To disable: Set WNT_SKIP_HOOKS=1 environment variable
-# Example: WNT_SKIP_HOOKS=1 git commit
+# To disable: Set WORKSPACE_SKIP_HOOKS=1 environment variable
+# Example: WORKSPACE_SKIP_HOOKS=1 git commit
 
 set -e
 
 # Check if hooks are disabled
-if [ -n "${WNT_SKIP_HOOKS}" ]; then
+if [ -n "${WORKSPACE_SKIP_HOOKS}" ]; then
     exit 0
 fi
 
@@ -55,13 +55,13 @@ if [ "${BRANCH}" = "main" ] || [ "${BRANCH}" = "master" ]; then
     exit 0
 fi
 
-# Check if wnt is installed
-if ! command -v wnt >/dev/null 2>&1; then
+# Check if workspace is installed
+if ! command -v workspace >/dev/null 2>&1; then
     exit 0
 fi
 
 # Check if changeset exists
-if ! wnt changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
+if ! workspace changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
     exit 0
 fi
 
@@ -74,9 +74,9 @@ fi
 cat >> "${COMMIT_MSG_FILE}" << EOF
 
 # ──────────────────────────────────────────────────────────────
-# Changeset Info (added by wnt)
+# Changeset Info (added by workspace)
 # Branch: ${BRANCH}
-# Run 'wnt changeset show ${BRANCH}' to see details
+# Run 'workspace changeset show ${BRANCH}' to see details
 # ──────────────────────────────────────────────────────────────
 EOF
 

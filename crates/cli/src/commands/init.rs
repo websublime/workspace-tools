@@ -1,6 +1,6 @@
 //! Init command implementation.
 //!
-//! This module implements the `wnt init` command which initializes a workspace
+//! This module implements the `workspace init` command which initializes a workspace
 //! for changeset-based version management.
 //!
 //! # What
@@ -9,7 +9,7 @@
 //! - Detects workspace structure (single package or monorepo)
 //! - Collects configuration through interactive prompts or CLI flags
 //! - Generates repo.config.[format] file
-//! - Creates necessary directory structure (.changesets, .changesets/history, .wnt-backups)
+//! - Creates necessary directory structure (.changesets, .changesets/history, .workspace-backups)
 //! - Sets up .gitignore entries
 //! - Creates example changeset file with documentation
 //!
@@ -348,7 +348,7 @@ fn collect_config_interactive(
     args: &InitArgs,
     workspace_info: &WorkspaceInfo,
 ) -> Result<InitConfig> {
-    eprintln!("\n🚀 Initialize Workspace Node Tools\n");
+    eprintln!("\n🚀 Initialize Workspace Tools\n");
     eprintln!(
         "Detected: {} with {} package(s)\n",
         workspace_info.kind_description(),
@@ -625,8 +625,8 @@ async fn create_directory_structure(root: &Path, changeset_path: &str) -> Result
         CliError::io(format!("Failed to create .gitkeep file {}: {}", gitkeep_path.display(), e))
     })?;
 
-    // Create .wnt-backups directory
-    let backups_dir = root.join(".wnt-backups");
+    // Create .workspace-backups directory
+    let backups_dir = root.join(".workspace-backups");
     fs.create_dir_all(&backups_dir).await.map_err(|e| {
         CliError::io(format!("Failed to create directory {}: {}", backups_dir.display(), e))
     })?;
@@ -656,8 +656,8 @@ async fn update_gitignore(root: &Path) -> Result<()> {
     };
 
     // Check if we need to add entries
-    let needs_backups = !existing_content.contains(".wnt-backups");
-    let needs_comment = !existing_content.contains("# Workspace Node Tools");
+    let needs_backups = !existing_content.contains(".workspace-backups");
+    let needs_comment = !existing_content.contains("# Workspace Tools");
 
     if !needs_backups && !needs_comment {
         // Nothing to add
@@ -677,13 +677,13 @@ async fn update_gitignore(root: &Path) -> Result<()> {
         if !new_content.is_empty() {
             new_content.push('\n');
         }
-        new_content.push_str("# Workspace Node Tools\n");
+        new_content.push_str("# Workspace Tools\n");
         new_content.push_str("# Note: .changesets/ and repo.config.* should be versioned in git\n");
         new_content.push_str("# Only backups are excluded\n");
     }
 
     if needs_backups {
-        new_content.push_str(".wnt-backups/\n");
+        new_content.push_str(".workspace-backups/\n");
     }
 
     // Write updated .gitignore
@@ -701,16 +701,16 @@ async fn create_example_changeset(root: &Path, changeset_path: &str) -> Result<(
     let example_content = r#"# Example Changeset
 #
 # This is an example changeset file to help you understand the format.
-# When you're ready to create real changesets, use: wnt changeset add
+# When you're ready to create real changesets, use: workspace changeset add
 #
 # Important: Changesets should be committed to git as part of your PR.
 # They tell the CI/CD pipeline what version bumps to perform on merge.
 #
 # Workflow:
-# 1. Create a changeset: wnt changeset add
+# 1. Create a changeset: workspace changeset add
 # 2. Commit it with your changes: git add .changesets/your-changeset.yaml
 # 3. Push your branch: git push
-# 4. When merged to main, CI runs: wnt bump --execute
+# 4. When merged to main, CI runs: workspace bump --execute
 # 5. Versions are bumped, changesets move to history/
 #
 # You can delete this example file when you're ready.

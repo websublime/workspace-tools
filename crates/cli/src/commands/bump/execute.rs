@@ -429,7 +429,7 @@ pub async fn execute_bump_apply(
             versions_map.insert(update.name.clone(), update.next_version.to_string());
         }
 
-        let release_info = ReleaseInfo::new("wnt-cli", commit_sha.as_str(), versions_map);
+        let release_info = ReleaseInfo::new("workspace-cli", commit_sha.as_str(), versions_map);
 
         for changeset in &loaded_changesets {
             debug!("Archiving changeset: {}", changeset.branch);

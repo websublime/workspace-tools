@@ -727,7 +727,7 @@ mod upgrade_config {
             "changeset_bump": "patch",
             "backup": {
                 "enabled": true,
-                "backup_dir": ".wnt-backups",
+                "backup_dir": ".workspace-backups",
                 "keep_after_success": false,
                 "max_backups": 5
             }

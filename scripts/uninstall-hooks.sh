@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 #
-# Uninstall wnt git hooks
+# Uninstall workspace git hooks
 #
 # This is a convenience script that calls install-hooks.sh with --uninstall.
 #

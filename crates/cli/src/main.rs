@@ -1,6 +1,6 @@
-//! Main entry point for the Workspace Node Tools CLI.
+//! Main entry point for the Workspace Tools CLI.
 //!
-//! This binary provides the `wnt` command-line interface for managing Node.js
+//! This binary provides the `workspace` command-line interface for managing Node.js
 //! workspaces and monorepos with changeset-based version management.
 //!
 //! # What
@@ -50,9 +50,9 @@ use sublime_cli_tools::error::Result;
 /// # Examples
 ///
 /// ```bash
-/// wnt --help
-/// wnt init
-/// wnt changeset add
+/// workspace --help
+/// workspace init
+/// workspace changeset add
 /// ```
 fn main() {
     // Create tokio runtime

@@ -1,7 +1,7 @@
 
 # Release Process Documentation
 
-This document describes the **fully automated release process** for Workspace Node Tools CLI (`wnt`) using **Release Please**.
+This document describes the **fully automated release process** for Workspace Tools CLI (`workspace`) using **Release Please**.
 
 ## Overview
 
@@ -238,7 +238,7 @@ Release Please is configured in `.github/workflows/release-please.yml`:
 
 ```yaml
 release-type: rust          # Uses Rust/Cargo conventions
-package-name: wnt            # Package name
+package-name: workspace      # Package name
 include-component-in-tag: false  # Tags are just vX.Y.Z, not package-name@vX.Y.Z
 ```
 

@@ -34,27 +34,27 @@
 //!
 //! // Generate bash completions to stdout
 //! let mut cli = Cli::command();
-//! generate_completions(Shell::Bash, &mut cli, "wnt", &mut std::io::stdout());
+//! generate_completions(Shell::Bash, &mut cli, "workspace", &mut std::io::stdout());
 //! ```
 //!
 //! Shell installation:
 //!
 //! ```bash
 //! # Bash
-//! wnt completions bash > /etc/bash_completion.d/wnt
+//! workspace completions bash > /etc/bash_completion.d/workspace
 //! # or
-//! wnt completions bash > ~/.local/share/bash-completion/completions/wnt
+//! workspace completions bash > ~/.local/share/bash-completion/completions/workspace
 //!
 //! # Zsh
-//! wnt completions zsh > /usr/local/share/zsh/site-functions/_wnt
+//! workspace completions zsh > /usr/local/share/zsh/site-functions/_workspace
 //! # or
-//! wnt completions zsh > ~/.zsh/completion/_wnt
+//! workspace completions zsh > ~/.zsh/completion/_workspace
 //!
 //! # Fish
-//! wnt completions fish > ~/.config/fish/completions/wnt.fish
+//! workspace completions fish > ~/.config/fish/completions/workspace.fish
 //!
 //! # PowerShell
-//! wnt completions powershell > $PROFILE
+//! workspace completions powershell > $PROFILE
 //! ```
 
 use clap::Command;
@@ -71,7 +71,7 @@ use std::io::Write;
 ///
 /// * `shell` - The target shell (bash, zsh, fish, or PowerShell)
 /// * `cmd` - The Clap command to generate completions for
-/// * `bin_name` - The name of the binary (typically "wnt")
+/// * `bin_name` - The name of the binary (typically "workspace")
 /// * `buf` - The writer to output the completion script to
 ///
 /// # Examples
@@ -83,7 +83,7 @@ use std::io::Write;
 /// use std::io::stdout;
 ///
 /// let mut cmd = Cli::command();
-/// generate_completions(Shell::Bash, &mut cmd, "wnt", &mut stdout());
+/// generate_completions(Shell::Bash, &mut cmd, "workspace", &mut stdout());
 /// ```
 ///
 /// Generate to a file:
@@ -96,7 +96,7 @@ use std::io::Write;
 ///
 /// let mut cmd = Cli::command();
 /// let mut file = File::create("completions.bash").unwrap();
-/// generate_completions(Shell::Bash, &mut cmd, "wnt", &mut file);
+/// generate_completions(Shell::Bash, &mut cmd, "workspace", &mut file);
 /// ```
 pub fn generate_completions<W: Write>(
     shell: Shell,
@@ -194,11 +194,11 @@ pub fn installation_instructions(shell: Shell) -> String {
             "# Bash completion installation:
 #
 # Option 1: System-wide (requires sudo)
-#   sudo cp completions.bash /etc/bash_completion.d/wnt
+#   sudo cp completions.bash /etc/bash_completion.d/workspace
 #
 # Option 2: User-level
 #   mkdir -p ~/.local/share/bash-completion/completions
-#   cp completions.bash ~/.local/share/bash-completion/completions/wnt
+#   cp completions.bash ~/.local/share/bash-completion/completions/workspace
 #
 # Option 3: Direct sourcing in ~/.bashrc
 #   echo 'source /path/to/completions.bash' >> ~/.bashrc
@@ -210,11 +210,11 @@ pub fn installation_instructions(shell: Shell) -> String {
             "# Zsh completion installation:
 #
 # Option 1: System-wide (requires sudo)
-#   sudo cp completions.zsh /usr/local/share/zsh/site-functions/_wnt
+#   sudo cp completions.zsh /usr/local/share/zsh/site-functions/_workspace
 #
 # Option 2: User-level
 #   mkdir -p ~/.zsh/completion
-#   cp completions.zsh ~/.zsh/completion/_wnt
+#   cp completions.zsh ~/.zsh/completion/_workspace
 #   # Add to ~/.zshrc if not already present:
 #   echo 'fpath=(~/.zsh/completion $fpath)' >> ~/.zshrc
 #   echo 'autoload -Uz compinit && compinit' >> ~/.zshrc
@@ -227,10 +227,10 @@ pub fn installation_instructions(shell: Shell) -> String {
 #
 # Option 1: User-level (recommended)
 #   mkdir -p ~/.config/fish/completions
-#   cp completions.fish ~/.config/fish/completions/wnt.fish
+#   cp completions.fish ~/.config/fish/completions/workspace.fish
 #
 # Option 2: System-wide (requires sudo)
-#   sudo cp completions.fish /usr/share/fish/vendor_completions.d/wnt.fish
+#   sudo cp completions.fish /usr/share/fish/vendor_completions.d/workspace.fish
 #
 # Completions are loaded automatically by fish."
         }
@@ -251,11 +251,11 @@ pub fn installation_instructions(shell: Shell) -> String {
             "# Elvish completion installation:
 #
 # Add to your Elvish rc file (~/.elvish/rc.elv):
-#   eval (wnt completions elvish)
+#   eval (workspace completions elvish)
 #
 # Or save to a file and source it:
-#   wnt completions elvish > ~/.elvish/completions/wnt.elv
-#   echo 'use ./completions/wnt' >> ~/.elvish/rc.elv"
+#   workspace completions elvish > ~/.elvish/completions/workspace.elv
+#   echo 'use ./completions/workspace' >> ~/.elvish/rc.elv"
         }
         _ => "# Unknown shell - no installation instructions available",
     }

@@ -4,7 +4,7 @@ A comprehensive command-line interface for managing Node.js workspaces and monor
 
 ## Overview
 
-`wnt` (Workspace Node Tools) is a CLI tool that provides:
+`workspace` (Workspace Node Tools) is a CLI tool that provides:
 
 - **Configuration Management**: Initialize and validate workspace configurations
 - **Changeset Workflow**: Add, list, show, update, edit, and remove changesets
@@ -21,7 +21,7 @@ A comprehensive command-line interface for managing Node.js workspaces and monor
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
 ```
 
-This will download the appropriate binary for your platform and install it to `~/.local/bin/wnt`.
+This will download the appropriate binary for your platform and install it to `~/.local/bin/workspace`.
 
 ### From GitHub Releases
 
@@ -29,34 +29,34 @@ Download pre-built binaries from [GitHub Releases](https://github.com/websublime
 
 **Linux (x86_64 GNU)**:
 ```bash
-wget https://github.com/websublime/workspace-node-tools/releases/latest/download/wnt-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
-tar xzf wnt-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
-sudo mv wnt /usr/local/bin/
+wget https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
+tar xzf workspace-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
+sudo mv workspace /usr/local/bin/
 ```
 
 **Linux (x86_64 MUSL - static binary)**:
 ```bash
-wget https://github.com/websublime/workspace-node-tools/releases/latest/download/wnt-v0.1.0-x86_64-unknown-linux-musl.tar.gz
-tar xzf wnt-v0.1.0-x86_64-unknown-linux-musl.tar.gz
-sudo mv wnt /usr/local/bin/
+wget https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-v0.1.0-x86_64-unknown-linux-musl.tar.gz
+tar xzf workspace-v0.1.0-x86_64-unknown-linux-musl.tar.gz
+sudo mv workspace /usr/local/bin/
 ```
 
 **macOS (Intel)**:
 ```bash
-wget https://github.com/websublime/workspace-node-tools/releases/latest/download/wnt-v0.1.0-x86_64-apple-darwin.tar.gz
-tar xzf wnt-v0.1.0-x86_64-apple-darwin.tar.gz
-sudo mv wnt /usr/local/bin/
+wget https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-v0.1.0-x86_64-apple-darwin.tar.gz
+tar xzf workspace-v0.1.0-x86_64-apple-darwin.tar.gz
+sudo mv workspace /usr/local/bin/
 ```
 
 **macOS (Apple Silicon)**:
 ```bash
-wget https://github.com/websublime/workspace-node-tools/releases/latest/download/wnt-v0.1.0-aarch64-apple-darwin.tar.gz
-tar xzf wnt-v0.1.0-aarch64-apple-darwin.tar.gz
-sudo mv wnt /usr/local/bin/
+wget https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-v0.1.0-aarch64-apple-darwin.tar.gz
+tar xzf workspace-v0.1.0-aarch64-apple-darwin.tar.gz
+sudo mv workspace /usr/local/bin/
 ```
 
 **Windows**:
-Download `wnt-v0.1.0-x86_64-pc-windows-msvc.zip` from releases and extract.
+Download `workspace-v0.1.0-x86_64-pc-windows-msvc.zip` from releases and extract.
 
 ### Using Cargo
 
@@ -77,8 +77,8 @@ cargo install --path crates/cli
 After installation, verify it works:
 
 ```bash
-wnt --version
-wnt --help
+workspace --version
+workspace --help
 ```
 
 ## Development Status
