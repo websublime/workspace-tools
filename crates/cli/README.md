@@ -15,16 +15,70 @@ A comprehensive command-line interface for managing Node.js workspaces and monor
 
 ## Installation
 
-### From Source
+### Quick Install (Recommended)
 
 ```bash
-cargo install --path .
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
 ```
+
+This will download the appropriate binary for your platform and install it to `~/.local/bin/wnt`.
+
+### From GitHub Releases
+
+Download pre-built binaries from [GitHub Releases](https://github.com/websublime/workspace-node-tools/releases):
+
+**Linux (x86_64 GNU)**:
+```bash
+wget https://github.com/websublime/workspace-node-tools/releases/latest/download/wnt-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
+tar xzf wnt-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
+sudo mv wnt /usr/local/bin/
+```
+
+**Linux (x86_64 MUSL - static binary)**:
+```bash
+wget https://github.com/websublime/workspace-node-tools/releases/latest/download/wnt-v0.1.0-x86_64-unknown-linux-musl.tar.gz
+tar xzf wnt-v0.1.0-x86_64-unknown-linux-musl.tar.gz
+sudo mv wnt /usr/local/bin/
+```
+
+**macOS (Intel)**:
+```bash
+wget https://github.com/websublime/workspace-node-tools/releases/latest/download/wnt-v0.1.0-x86_64-apple-darwin.tar.gz
+tar xzf wnt-v0.1.0-x86_64-apple-darwin.tar.gz
+sudo mv wnt /usr/local/bin/
+```
+
+**macOS (Apple Silicon)**:
+```bash
+wget https://github.com/websublime/workspace-node-tools/releases/latest/download/wnt-v0.1.0-aarch64-apple-darwin.tar.gz
+tar xzf wnt-v0.1.0-aarch64-apple-darwin.tar.gz
+sudo mv wnt /usr/local/bin/
+```
+
+**Windows**:
+Download `wnt-v0.1.0-x86_64-pc-windows-msvc.zip` from releases and extract.
 
 ### Using Cargo
 
 ```bash
-cargo install sublime_cli
+cargo install sublime_cli_tools
+```
+
+### From Source
+
+```bash
+git clone https://github.com/websublime/workspace-node-tools.git
+cd workspace-node-tools
+cargo install --path crates/cli
+```
+
+### Verify Installation
+
+After installation, verify it works:
+
+```bash
+wnt --version
+wnt --help
 ```
 
 ## Development Status
@@ -44,6 +98,72 @@ cargo install sublime_cli
 - Story 1.2: CI/CD Pipeline
 - Story 1.3: Error Handling System
 - Story 1.4: CLI Framework with Clap
+
+## Release Process
+
+This project uses a **fully automated release process** powered by **Release Please**.
+
+### How It Works
+
+Releases are 100% automatic using conventional commits:
+
+1. **Use conventional commit messages** (`feat:`, `fix:`, etc.)
+   ```bash
+   git commit -m "feat: add new command"
+   git commit -m "fix: resolve bug"
+   ```
+
+2. **Merge to main** via PR
+
+3. **Release Please creates a Release PR** automatically
+   - Updates versions
+   - Updates CHANGELOG
+   - Prepares release notes
+
+4. **Review and merge the Release PR**
+   - Crates published to crates.io
+   - Binaries built for all platforms
+   - GitHub Release created
+
+**Zero manual commands!** 🎉
+
+### For Developers
+
+Use conventional commit format:
+
+```bash
+# Feature (minor bump)
+git commit -m "feat(cli): add interactive mode"
+
+# Bug fix (patch bump)
+git commit -m "fix(pkg): resolve version conflict"
+
+# Breaking change (major bump)
+git commit -m "feat!: redesign API"
+# or
+git commit -m "feat: change API" -m "BREAKING CHANGE: old API removed"
+
+# No version bump
+git commit -m "docs: update README"
+git commit -m "chore: update dependencies"
+```
+
+Merge PR → Release Please handles everything!
+
+### Supported Platforms
+
+Every release includes optimized binaries for:
+- Linux x86_64 (GNU and MUSL - static)
+- macOS x86_64 (Intel) and ARM64 (Apple Silicon)
+- Windows x86_64
+
+All binaries are:
+- Fully optimized (LTO, strip symbols)
+- Automatically tested in CI
+- SHA256 checksums included
+- Available on GitHub Releases and crates.io
+
+For detailed information, see [RELEASE.md](../../RELEASE.md).
 
 ## Building
 
