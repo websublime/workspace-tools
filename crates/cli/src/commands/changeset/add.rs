@@ -68,7 +68,7 @@ use crate::interactive::prompts::{
 use crate::output::styling::{Section, StatusSymbol, TextStyle, print_item};
 use crate::output::{JsonResponse, Output};
 use serde::Serialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use sublime_git_tools::Repo;
 use sublime_pkg_tools::changeset::ChangesetManager;
 use sublime_pkg_tools::config::PackageToolsConfig;
@@ -343,7 +343,7 @@ pub async fn execute_add(
 ///
 /// Returns a list of all available package names in the workspace.
 async fn load_workspace_packages(
-    workspace_root: &PathBuf,
+    workspace_root: &Path,
     config: &PackageToolsConfig,
 ) -> Vec<String> {
     use sublime_pkg_tools::version::VersionResolver;
@@ -351,7 +351,7 @@ async fn load_workspace_packages(
     debug!("Loading workspace packages");
 
     // Create a VersionResolver to discover packages
-    let resolver = match VersionResolver::new(workspace_root.clone(), config.clone()).await {
+    let resolver = match VersionResolver::new(workspace_root.to_path_buf(), config.clone()).await {
         Ok(r) => r,
         Err(e) => {
             warn!("Failed to create version resolver: {}", e);
@@ -380,7 +380,7 @@ async fn load_workspace_packages(
 /// Uses the PackageDetector to analyze git changes and determine which
 /// packages are affected.
 fn detect_affected_packages(
-    _workspace_root: &PathBuf,
+    _workspace_root: &Path,
     _repo: &Repo,
     _fs: &FileSystemManager,
     _all_packages: &[String],
