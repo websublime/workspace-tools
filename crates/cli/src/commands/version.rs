@@ -1,6 +1,6 @@
 //! Version command implementation.
 //!
-//! This module implements the `wnt version` command that displays version information
+//! This module implements the `workspace version` command that displays version information
 //! about the CLI and its dependencies.
 //!
 //! # What
@@ -262,7 +262,7 @@ fn display_human_version(info: &VersionInfo, verbose: bool) {
 
     if verbose {
         // Verbose mode: traditional compact display with detailed info
-        println!("{} {}", style("wnt").bold().cyan(), style(&info.version).bold());
+        println!("{} {}", style("workspace").bold().cyan(), style(&info.version).bold());
         println!();
         println!("{}", style("Build Information:").bold().underlined());
         println!("  {} {}", style("Rust:").bold(), info.rust_version);

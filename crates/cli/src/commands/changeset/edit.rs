@@ -168,7 +168,7 @@ pub async fn execute_edit(
     // Load changeset before editing (to capture original state and verify it exists)
     let original_changeset = manager.load(&branch).await.map_err(|e| {
         CliError::validation(format!(
-            "Changeset not found for branch '{branch}'. Use 'wnt changeset create' to create one. Error: {e}"
+            "Changeset not found for branch '{branch}'. Use 'workspace changeset create' to create one. Error: {e}"
         ))
     })?;
     debug!("Original changeset loaded");

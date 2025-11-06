@@ -1,6 +1,6 @@
 # Testing Guide for Workspace Node Tools CLI
 
-This guide covers how to build, install, and test the `wnt` CLI tool.
+This guide covers how to build, install, and test the `workspace` CLI tool.
 
 ## Table of Contents
 
@@ -19,7 +19,7 @@ This guide covers how to build, install, and test the `wnt` CLI tool.
 ./scripts/install-local.sh
 
 # 2. Verify installation
-wnt version
+workspace version
 
 # 3. Test in a demo repository
 ./scripts/test-in-demo.sh
@@ -35,7 +35,7 @@ Fast build for development and testing:
 cargo build --package sublime_cli_tools
 ```
 
-Binary location: `target/debug/wnt`
+Binary location: `target/debug/workspace`
 
 ### Release Build
 
@@ -45,7 +45,7 @@ Optimized build for production use:
 cargo build --package sublime_cli_tools --release
 ```
 
-Binary location: `target/release/wnt` (~7MB)
+Binary location: `target/release/workspace` (~7MB)
 
 ### Build Features
 
@@ -77,8 +77,8 @@ sudo ./scripts/install-local.sh /usr/local/bin
 cargo build --package sublime_cli_tools --release
 
 # Copy to desired location
-cp target/release/wnt ~/.local/bin/wnt
-chmod +x ~/.local/bin/wnt
+cp target/release/workspace ~/.local/bin/workspace
+chmod +x ~/.local/bin/workspace
 
 # Add to PATH if needed
 export PATH="$HOME/.local/bin:$PATH"
@@ -109,7 +109,7 @@ This script:
 1. ✅ Builds the CLI binary
 2. ✅ Creates a temporary monorepo
 3. ✅ Initializes git repository
-4. ✅ Sets up workspace with `wnt init`
+4. ✅ Sets up workspace with `workspace init`
 5. ✅ Creates a feature branch
 6. ✅ Creates sample changesets
 7. ✅ Demonstrates all commands
@@ -122,16 +122,16 @@ While the demo script is running, open a new terminal:
 
 ```bash
 # Navigate to demo directory (path shown in script output)
-cd /tmp/wnt-demo-XXXXXX
+cd /tmp/workspace-demo-XXXXXX
 
 # Test commands
-wnt changeset list
-wnt changeset show feature/test-edit
-wnt changeset edit
+workspace changeset list
+workspace changeset show feature/test-edit
+workspace changeset edit
 
 # Test with different options
-wnt changeset edit --format json
-EDITOR=vim wnt changeset edit
+workspace changeset edit --format json
+EDITOR=vim workspace changeset edit
 ```
 
 ## Testing the Edit Command
@@ -152,8 +152,8 @@ export VISUAL=code     # optional, higher priority than EDITOR
 ./scripts/test-in-demo.sh
 
 # In another terminal
-cd /tmp/wnt-demo-XXXXXX
-wnt changeset edit
+cd /tmp/workspace-demo-XXXXXX
+workspace changeset edit
 
 # Your editor opens the changeset file
 # Make changes and save
@@ -165,13 +165,13 @@ wnt changeset edit
 ```bash
 # Create multiple changesets
 git checkout -b feature/feature-a
-wnt changeset create --bump minor --non-interactive
+workspace changeset create --bump minor --non-interactive
 
 git checkout -b feature/feature-b
-wnt changeset create --bump patch --non-interactive
+workspace changeset create --bump patch --non-interactive
 
 # Edit specific changeset
-wnt changeset edit feature/feature-a
+workspace changeset edit feature/feature-a
 ```
 
 ### Test Scenario 3: Validation Testing
@@ -179,7 +179,7 @@ wnt changeset edit feature/feature-a
 Test that validation catches errors:
 
 ```bash
-wnt changeset edit
+workspace changeset edit
 
 # In editor, try invalid changes:
 # 1. Change branch name → Should reject
@@ -192,18 +192,18 @@ wnt changeset edit
 ### Test Scenario 4: JSON Output
 
 ```bash
-wnt changeset edit --format json
-wnt changeset edit feature/branch --format json-compact
+workspace changeset edit --format json
+workspace changeset edit feature/branch --format json-compact
 ```
 
 ### Test Scenario 5: Different Editors
 
 ```bash
 # Test with different editors
-EDITOR=nano wnt changeset edit
-EDITOR=vim wnt changeset edit
-EDITOR=code wnt changeset edit
-VISUAL=emacs wnt changeset edit
+EDITOR=nano workspace changeset edit
+EDITOR=vim workspace changeset edit
+EDITOR=code workspace changeset edit
+VISUAL=emacs workspace changeset edit
 ```
 
 ## Manual Testing
@@ -212,8 +212,8 @@ VISUAL=emacs wnt changeset edit
 
 ```bash
 # Create test directory
-mkdir -p ~/test-repos/wnt-test
-cd ~/test-repos/wnt-test
+mkdir -p ~/test-repos/workspace-test
+cd ~/test-repos/workspace-test
 
 # Initialize git
 git init
@@ -250,52 +250,52 @@ EOF
 git add .
 git commit -m "initial commit"
 
-# Initialize wnt
-wnt init
+# Initialize workspace
+workspace init
 
 # Create feature branch and changeset
 git checkout -b feature/test-edit
-wnt changeset create --bump minor
+workspace changeset create --bump minor
 
 # Test edit
-wnt changeset edit
+workspace changeset edit
 ```
 
 ### Full Workflow Test
 
 ```bash
 # 1. Initialize
-wnt init --strategy independent
+workspace init --strategy independent
 
 # 2. Create feature branch
 git checkout -b feature/add-logging
 
 # 3. Create changeset
-wnt changeset create \
+workspace changeset create \
   --bump minor \
   --env dev,staging,prod \
   --packages @test/core \
   --message "Add logging support"
 
 # 4. List changesets
-wnt changeset list
+workspace changeset list
 
 # 5. Show details
-wnt changeset show feature/add-logging
+workspace changeset show feature/add-logging
 
 # 6. Edit changeset
-wnt changeset edit
+workspace changeset edit
 
 # 7. Update changeset (add more packages)
-wnt changeset update \
+workspace changeset update \
   --packages @test/utils \
   --bump major
 
 # 8. List again to verify
-wnt changeset list
+workspace changeset list
 
 # 9. Edit again
-wnt changeset edit
+workspace changeset edit
 ```
 
 ## Development Workflow
@@ -336,20 +336,20 @@ cargo test --package sublime_cli_tools test_detect_editor
 
 ```bash
 # Run with debug logging
-RUST_LOG=debug wnt changeset edit
+RUST_LOG=debug workspace changeset edit
 
 # Run with trace logging
-RUST_LOG=trace wnt changeset edit
+RUST_LOG=trace workspace changeset edit
 
 # Log to file
-RUST_LOG=debug wnt changeset edit 2> debug.log
+RUST_LOG=debug workspace changeset edit 2> debug.log
 ```
 
 ## Troubleshooting
 
 ### Editor Not Opening
 
-**Problem:** Editor doesn't launch when running `wnt changeset edit`
+**Problem:** Editor doesn't launch when running `workspace changeset edit`
 
 **Solutions:**
 ```bash
@@ -360,7 +360,7 @@ export EDITOR=nano
 export VISUAL=vim
 
 # Or specify inline
-EDITOR=code wnt changeset edit
+EDITOR=code workspace changeset edit
 
 # Check available editors
 which nano vim vi code
@@ -381,12 +381,12 @@ which nano vim vi code
 
 ### Binary Not Found
 
-**Problem:** `wnt: command not found`
+**Problem:** `workspace: command not found`
 
 **Solutions:**
 ```bash
 # Check if installed
-which wnt
+which workspace
 
 # Check PATH
 echo $PATH
@@ -441,24 +441,24 @@ time cargo build --package sublime_cli_tools
 
 ```bash
 # Check release binary size
-ls -lh target/release/wnt
+ls -lh target/release/workspace
 
 # Check debug binary size
-ls -lh target/debug/wnt
+ls -lh target/debug/workspace
 
 # Strip additional symbols (already done in release)
-strip target/release/wnt
+strip target/release/workspace
 ```
 
 ### Runtime Performance
 
 ```bash
 # Time command execution
-time wnt changeset list
-time wnt changeset edit
+time workspace changeset list
+time workspace changeset edit
 
 # Profile with perf (Linux)
-perf record wnt changeset edit
+perf record workspace changeset edit
 perf report
 ```
 
@@ -471,12 +471,12 @@ perf report
 cd ~/path/to/real-project
 
 # Install CLI
-~/.local/bin/wnt --version
+~/.local/bin/workspace --version
 
 # Test workflow
-~/.local/bin/wnt init
-~/.local/bin/wnt changeset create
-~/.local/bin/wnt changeset edit
+~/.local/bin/workspace init
+~/.local/bin/workspace changeset create
+~/.local/bin/workspace changeset edit
 ```
 
 ### CI/CD Testing
@@ -491,13 +491,13 @@ The CLI can be tested in CI/CD pipelines:
 - name: Install CLI
   run: |
     mkdir -p ~/.local/bin
-    cp target/release/wnt ~/.local/bin/
+    cp target/release/workspace ~/.local/bin/
     echo "$HOME/.local/bin" >> $GITHUB_PATH
 
 - name: Test CLI
   run: |
-    wnt version
-    wnt --help
+    workspace version
+    workspace --help
 ```
 
 ## Next Steps

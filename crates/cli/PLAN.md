@@ -29,7 +29,7 @@
 
 ### Project Overview
 
-`wnt` (Workspace Node Tools) is a comprehensive CLI tool for managing Node.js monorepos with changeset-based versioning. The implementation is divided into **5 major phases** across **10 core modules**, following strict quality standards (100% test coverage, 100% clippy compliance, 100% documentation).
+`workspace` (Workspace Node Tools) is a comprehensive CLI tool for managing Node.js monorepos with changeset-based versioning. The implementation is divided into **5 major phases** across **10 core modules**, following strict quality standards (100% test coverage, 100% clippy compliance, 100% documentation).
 
 ### Key Success Criteria
 
@@ -176,7 +176,7 @@ graph TD
 ### External Dependencies
 
 ```
-wnt (CLI)
+workspace (CLI)
     ↓
 ├─ sublime-package-tools (core logic)
 ├─ sublime-standard-tools (filesystem, config)
@@ -569,18 +569,18 @@ pub async fn execute_bump(
 
 ```rust
 // Example 1: JSON output with NO logs
-// CLI: wnt --format json --log-level silent bump --dry-run
+// CLI: workspace --format json --log-level silent bump --dry-run
 // stdout: {"success": true, ...}
 // stderr: (nothing)
 
 // Example 2: JSON output WITH debug logs
-// CLI: wnt --format json --log-level debug bump --dry-run
+// CLI: workspace --format json --log-level debug bump --dry-run
 // stdout: {"success": true, ...}
 // stderr: DEBUG: Loading config...
 //         DEBUG: Found 2 changesets...
 
 // Example 3: Text output with NO logs
-// CLI: wnt --format text --log-level silent bump --dry-run
+// CLI: workspace --format text --log-level silent bump --dry-run
 // stdout: Version Bump Preview...
 // stderr: (nothing)
 
@@ -744,7 +744,7 @@ src/cli/
 **CLI Structure:**
 ```rust
 #[derive(Parser)]
-#[command(name = "wnt")]
+#[command(name = "workspace")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Workspace Node Tools - Changeset-based version management")]
 pub struct Cli {
@@ -901,10 +901,10 @@ async fn main() -> Result<()> {
 #### 1.7 Configuration Commands (`init`, `config`)
 
 **Tasks:**
-- [ ] Implement `wnt init` command
+- [ ] Implement `workspace init` command
 - [ ] Create interactive prompts for initialization
-- [ ] Implement `wnt config show` command
-- [ ] Implement `wnt config validate` command
+- [ ] Implement `workspace config show` command
+- [ ] Implement `workspace config validate` command
 - [ ] Add configuration templates
 - [ ] Create validation feedback
 
@@ -943,7 +943,7 @@ pub async fn execute_config(args: ConfigArgs, output: &Output) -> Result<()> {
     // 1. Check if already initialized
     // 2. Prompt for configuration options
     // 3. Detect workspace structure
-    // 4. Create .changesets directory and .wnt-backups directory
+    // 4. Create .changesets directory and .workspace-backups directory
     // 5. Generate repo.config.toml
     // 6. Initialize git integration
     // 7. Create example changeset
@@ -984,7 +984,7 @@ Implement comprehensive changeset commands for the core workflow.
 #### 2.1 Changeset Add Command
 
 **Tasks:**
-- [ ] Implement `wnt changeset add` command
+- [ ] Implement `workspace changeset add` command
 - [ ] Create interactive prompt flow
 - [ ] Support multiple packages selection
 - [ ] Implement version bump selection
@@ -1032,7 +1032,7 @@ pub async fn execute_changeset_add(
 #### 2.2 Changeset List Command
 
 **Tasks:**
-- [ ] Implement `wnt changeset list` command
+- [ ] Implement `workspace changeset list` command
 - [ ] Support filtering by branch
 - [ ] Support filtering by package
 - [ ] Support sorting options
@@ -1063,7 +1063,7 @@ pub async fn execute_changeset_list(
 #### 2.3 Changeset Show Command
 
 **Tasks:**
-- [ ] Implement `wnt changeset show` command
+- [ ] Implement `workspace changeset show` command
 - [ ] Display full changeset details
 - [ ] Show related commits
 - [ ] Display affected packages
@@ -1077,7 +1077,7 @@ pub async fn execute_changeset_list(
 #### 2.4 Changeset Update Command
 
 **Tasks:**
-- [ ] Implement `wnt changeset update [id]` command with optional ID parameter
+- [ ] Implement `workspace changeset update [id]` command with optional ID parameter
 - [ ] Detect current branch when ID not provided
 - [ ] Search for changeset matching branch name
 - [ ] Log clear error when no changeset found for branch
@@ -1097,7 +1097,7 @@ pub async fn execute_changeset_list(
 #### 2.5 Changeset Edit Command
 
 **Tasks:**
-- [ ] Implement `wnt changeset edit` command
+- [ ] Implement `workspace changeset edit` command
 - [ ] Open changeset in $EDITOR
 - [ ] Validate after edit
 - [ ] Handle concurrent modifications
@@ -1110,7 +1110,7 @@ pub async fn execute_changeset_list(
 #### 2.6 Changeset Remove Command
 
 **Tasks:**
-- [ ] Implement `wnt changeset remove` command
+- [ ] Implement `workspace changeset remove` command
 - [ ] Add confirmation prompts
 - [ ] Support multiple removals
 - [ ] Create archive before removal
@@ -1123,7 +1123,7 @@ pub async fn execute_changeset_list(
 #### 2.7 Changeset History Command
 
 **Tasks:**
-- [ ] Implement `wnt changeset history` command
+- [ ] Implement `workspace changeset history` command
 - [ ] Show changeset timeline
 - [ ] Display modifications
 - [ ] Show related releases
@@ -1230,7 +1230,7 @@ Tests MUST cover:
 #### 3.1 Bump Command
 
 **Tasks:**
-- [ ] Implement `wnt bump` command
+- [ ] Implement `workspace bump` command
 - [ ] Add preview mode (--dry-run)
 - [ ] Implement execution mode (--execute)
 - [ ] Add git integration (--git-commit, --git-tag, --git-push)
@@ -1519,7 +1519,7 @@ async fn test_bump_preview_shows_unchanged_packages() {
 #### 3.2 Changes Command
 
 **Tasks:**
-- [ ] Implement `wnt changes` command
+- [ ] Implement `workspace changes` command
 - [ ] Support working directory analysis
 - [ ] Support commit range analysis
 - [ ] Detect affected packages
@@ -1554,9 +1554,9 @@ pub async fn execute_changes(
 #### 3.3 Upgrade Commands
 
 **Tasks:**
-- [ ] Implement `wnt upgrade check` command
-- [ ] Implement `wnt upgrade apply` command
-- [ ] Implement `wnt upgrade rollback` command
+- [ ] Implement `workspace upgrade check` command
+- [ ] Implement `workspace upgrade apply` command
+- [ ] Implement `workspace upgrade rollback` command
 - [ ] Add filtering by dependency type
 - [ ] Support ignore patterns
 - [ ] Create upgrade reports
@@ -1623,7 +1623,7 @@ Implement audit system, health checks, and advanced interactive features.
 #### 4.1 Audit Command
 
 **Tasks:**
-- [ ] Implement `wnt audit` command
+- [ ] Implement `workspace audit` command
 - [ ] Add comprehensive audit checks
 - [ ] Add upgrade audit
 - [ ] Add dependency audit
@@ -1743,8 +1743,8 @@ scripts/
 **Implementation:**
 ```bash
 #!/bin/sh
-# Install script for wnt
-# Usage: curl -fsSL https://wnt.dev/install.sh | sh
+# Install script for workspace
+# Usage: curl -fsSL https://workspace.dev/install.sh | sh
 
 set -e
 
@@ -1835,7 +1835,7 @@ docs/
 #### 5.5 Self-Update Mechanism
 
 **Tasks:**
-- [ ] Implement `wnt upgrade-self` command
+- [ ] Implement `workspace upgrade-self` command
 - [ ] Check for new versions
 - [ ] Download and verify new binary
 - [ ] Replace current binary
@@ -2101,7 +2101,7 @@ impl CliError {
     pub fn user_message(&self) -> String {
         match self {
             CliError::Configuration(msg) => {
-                format!("Configuration error: {}\n\nTry running 'wnt config validate' for more details.", msg)
+                format!("Configuration error: {}\n\nTry running 'workspace config validate' for more details.", msg)
             }
             CliError::Validation(msg) => {
                 format!("Validation failed: {}\n\nPlease check your input and try again.", msg)
@@ -2149,8 +2149,8 @@ impl AsRef<str> for CliError {
 /// # Examples
 ///
 /// ```no_run
-/// use wnt::commands::changeset::add::execute;
-/// use wnt::output::Output;
+/// use workspace::commands::changeset::add::execute;
+/// use workspace::output::Output;
 ///
 /// # async fn example() -> anyhow::Result<()> {
 /// let args = ChangesetAddArgs {
@@ -2257,7 +2257,7 @@ async fn test_full_release_workflow() {
     // 1. Setup test repository
     let repo = setup_test_repo().await;
     
-    // 2. Initialize wnt
+    // 2. Initialize workspace
     run_command(&["init"]).await.unwrap();
     
     // 3. Create changeset
@@ -2383,8 +2383,8 @@ Required documentation:
 - ✅ Basic tests passing
 
 **Acceptance Criteria:**
-- Can run `wnt init` successfully
-- Can run `wnt config show`
+- Can run `workspace init` successfully
+- Can run `workspace config show`
 - Error messages are helpful
 - Output works in all modes
 
@@ -2784,20 +2784,20 @@ jobs:
       
       - name: Strip binary (Linux/macOS)
         if: matrix.os != 'windows-latest'
-        run: strip target/${{ matrix.target }}/release/wnt
+        run: strip target/${{ matrix.target }}/release/workspace
       
       - name: Create archive
         shell: bash
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
-          ARCHIVE="wnt-$VERSION-${{ matrix.target }}"
+          ARCHIVE="workspace-$VERSION-${{ matrix.target }}"
           
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp target/${{ matrix.target }}/release/wnt.exe .
-            7z a "$ARCHIVE.zip" wnt.exe
+            cp target/${{ matrix.target }}/release/workspace.exe .
+            7z a "$ARCHIVE.zip" workspace.exe
           else
-            cp target/${{ matrix.target }}/release/wnt .
-            tar czf "$ARCHIVE.tar.gz" wnt
+            cp target/${{ matrix.target }}/release/workspace .
+            tar czf "$ARCHIVE.tar.gz" workspace
           fi
       
       - name: Generate checksum
@@ -2930,16 +2930,16 @@ pub mod exit_codes {
 
 ```bash
 # Initialization
-wnt init                         # Initialize workspace
-wnt init --force                 # Force re-initialization
+workspace init                         # Initialize workspace
+workspace init --force                 # Force re-initialization
 
 # Configuration
-wnt config show                  # Display configuration
-wnt config validate              # Validate configuration
+workspace config show                  # Display configuration
+workspace config validate              # Validate configuration
 
 # Changesets
-wnt changeset add                # Add changeset (interactive)
-wnt changeset add -p pkg1 -b minor  # Add changeset (non-interactive)
-wnt changeset list               # List all changesets
-wnt changeset list --branch main # List changesets for branch
-wnt changeset show
+workspace changeset add                # Add changeset (interactive)
+workspace changeset add -p pkg1 -b minor  # Add changeset (non-interactive)
+workspace changeset list               # List all changesets
+workspace changeset list --branch main # List changesets for branch
+workspace changeset show

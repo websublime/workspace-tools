@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 #
-# post-commit hook for wnt (Workspace Node Tools)
+# post-commit hook for workspace (Workspace Tools)
 #
 # This hook automatically adds the commit SHA to the changeset after a commit
 # is created, then amends the commit to include the updated changeset file.
@@ -13,18 +13,18 @@
 # 5. Stages the updated changeset file
 # 6. Amends the commit to include the changeset update
 #
-# Configuration (.wnt.toml):
+# Configuration (.workspace.toml):
 # [git_hooks]
 # enabled = true
 # auto_update_on_commit = true
 #
-# To disable: Set WNT_SKIP_HOOKS=1 environment variable
-# Example: WNT_SKIP_HOOKS=1 git commit -m "message"
+# To disable: Set WORKSPACE_SKIP_HOOKS=1 environment variable
+# Example: WORKSPACE_SKIP_HOOKS=1 git commit -m "message"
 
 set -e
 
 # Check if hooks are disabled
-if [ -n "${WNT_SKIP_HOOKS}" ]; then
+if [ -n "${WORKSPACE_SKIP_HOOKS}" ]; then
     exit 0
 fi
 
@@ -56,15 +56,15 @@ if [ "${BRANCH}" = "main" ] || [ "${BRANCH}" = "master" ]; then
     exit 0
 fi
 
-# Check if wnt is installed
-if ! command -v wnt >/dev/null 2>&1; then
-    printf "${YELLOW}⚠${NC} wnt not found. Changeset not updated.\n" >&2
+# Check if workspace is installed
+if ! command -v workspace >/dev/null 2>&1; then
+    printf "${YELLOW}⚠${NC} workspace not found. Changeset not updated.\n" >&2
     printf "${BLUE}ℹ${NC} Install: curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh\n" >&2
     exit 0
 fi
 
 # Check if changeset exists for this branch
-if ! wnt changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
+if ! workspace changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
     # No changeset exists, skip
     exit 0
 fi
@@ -75,7 +75,7 @@ COMMIT_SHA=$(git rev-parse HEAD)
 printf "${BLUE}📝 Adding commit to changeset...${NC}\n" >&2
 
 # Add the commit SHA to the changeset
-UPDATE_OUTPUT=$(wnt changeset update "${BRANCH}" --commit "${COMMIT_SHA}" --format quiet 2>&1)
+UPDATE_OUTPUT=$(workspace changeset update "${BRANCH}" --commit "${COMMIT_SHA}" --format quiet 2>&1)
 UPDATE_EXIT_CODE=$?
 
 if [ ${UPDATE_EXIT_CODE} -eq 0 ]; then
@@ -95,7 +95,7 @@ elif echo "${UPDATE_OUTPUT}" | grep -q "No updates were applied\|already contain
 else
     # Other error - show warning but don't block
     printf "${YELLOW}⚠${NC} Failed to update changeset (non-fatal)\n" >&2
-    printf "${BLUE}ℹ${NC} Run 'wnt changeset update ${BRANCH} --commit ${COMMIT_SHA}' manually if needed\n" >&2
+    printf "${BLUE}ℹ${NC} Run 'workspace changeset update ${BRANCH} --commit ${COMMIT_SHA}' manually if needed\n" >&2
 fi
 
 exit 0

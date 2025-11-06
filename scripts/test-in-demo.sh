@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Test wnt CLI in a demo repository
+# Test workspace CLI in a demo repository
 #
 # This script:
 # 1. Builds the CLI binary
 # 2. Creates a temporary demo repository
-# 3. Initializes it with wnt
+# 3. Initializes it with workspace
 # 4. Creates sample changesets
 # 5. Tests the edit command
 #
@@ -24,9 +24,9 @@ NC='\033[0m' # No Color
 
 # Project root
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BINARY="$PROJECT_ROOT/target/release/wnt"
+BINARY="$PROJECT_ROOT/target/release/workspace"
 
-echo -e "${BLUE}=== wnt CLI Demo Test ===${NC}\n"
+echo -e "${BLUE}=== workspace CLI Demo Test ===${NC}\n"
 
 # Build the binary if it doesn't exist
 if [ ! -f "$BINARY" ]; then
@@ -37,7 +37,7 @@ if [ ! -f "$BINARY" ]; then
 fi
 
 # Create temporary demo directory
-DEMO_DIR=$(mktemp -d -t wnt-demo-XXXXXX)
+DEMO_DIR=$(mktemp -d -t workspace-demo-XXXXXX)
 echo -e "${CYAN}Demo repository: $DEMO_DIR${NC}\n"
 
 # Cleanup function
@@ -98,8 +98,8 @@ git add .
 git commit -q -m "initial commit"
 echo -e "${GREEN}✓ Monorepo structure created${NC}\n"
 
-# Initialize wnt
-echo -e "${BLUE}3. Initializing wnt workspace...${NC}"
+# Initialize workspace
+echo -e "${BLUE}3. Initializing workspace workspace...${NC}"
 $BINARY init \
     --changeset-path .changesets \
     --environments dev,staging,prod \
@@ -108,9 +108,9 @@ $BINARY init \
     --non-interactive
 
 if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✓ wnt initialized${NC}\n"
+    echo -e "${GREEN}✓ workspace initialized${NC}\n"
 else
-    echo -e "${RED}✗ wnt initialization failed${NC}\n"
+    echo -e "${RED}✗ workspace initialization failed${NC}\n"
     exit 1
 fi
 

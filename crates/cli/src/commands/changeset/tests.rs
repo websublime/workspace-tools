@@ -969,7 +969,7 @@ mod tests {
         // This test would:
         // 1. Create temp directory without config
         // 2. Execute show command
-        // 3. Verify error message suggests running 'wnt init'
+        // 3. Verify error message suggests running 'workspace init'
         // 4. Verify appropriate exit code is returned
     }
 
@@ -1970,7 +1970,7 @@ mod tests {
         // This test would:
         // 1. Create temp directory without config
         // 2. Execute history command
-        // 3. Verify error message suggests running 'wnt init'
+        // 3. Verify error message suggests running 'workspace init'
     }
 
     #[test]
@@ -2066,7 +2066,7 @@ mod tests {
         // This test would:
         // 1. Create monorepo with packages A, B, C
         // 2. Make changes only to package A
-        // 3. Run: wnt changeset add --bump minor (no --packages flag)
+        // 3. Run: workspace changeset add --bump minor (no --packages flag)
         // 4. Verify changeset created with only package A
         // 5. Verify packages B and C are not included
     }
@@ -2079,7 +2079,7 @@ mod tests {
         // This test would:
         // 1. Create monorepo with packages
         // 2. Make changes to specific packages
-        // 3. Run: wnt changeset add --bump minor --non-interactive
+        // 3. Run: workspace changeset add --bump minor --non-interactive
         // 4. Verify changeset created with detected packages
         // 5. Verify no user prompts occurred
     }
@@ -2092,7 +2092,7 @@ mod tests {
         // This test would:
         // 1. Create monorepo with packages
         // 2. Create git repo with no commits
-        // 3. Run: wnt changeset add --bump minor --non-interactive
+        // 3. Run: workspace changeset add --bump minor --non-interactive
         // 4. Verify appropriate error message
         // 5. Verify suggests using --packages flag
     }

@@ -1,6 +1,6 @@
 //! Upgrade check command implementation.
 //!
-//! This module implements the `wnt upgrade check` command for detecting available
+//! This module implements the `workspace upgrade check` command for detecting available
 //! dependency upgrades in workspace packages.
 //!
 //! # What
@@ -35,16 +35,16 @@
 //!
 //! ```bash
 //! # Check all upgrades
-//! wnt upgrade check
+//! workspace upgrade check
 //!
 //! # Check only patch upgrades
-//! wnt upgrade check --no-major --no-minor
+//! workspace upgrade check --no-major --no-minor
 //!
 //! # Check with JSON output
-//! wnt upgrade check --format json
+//! workspace upgrade check --format json
 //!
 //! # Check specific packages
-//! wnt upgrade check --packages "typescript,eslint"
+//! workspace upgrade check --packages "typescript,eslint"
 //! ```
 
 use crate::cli::commands::UpgradeCheckArgs;

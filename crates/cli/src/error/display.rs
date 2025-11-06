@@ -185,14 +185,15 @@ impl<'a> ErrorDisplay<'a> {
     fn get_suggestion(&self) -> Option<String> {
         match self.error {
             CliError::Configuration(msg) if msg.contains("not found") => {
-                Some("Run 'wnt init' to create a new configuration file.".to_string())
+                Some("Run 'workspace init' to create a new configuration file.".to_string())
             }
             CliError::Configuration(msg)
                 if msg.to_lowercase().contains("invalid")
                     || msg.to_lowercase().contains("parsing") =>
             {
                 Some(
-                    "Run 'wnt config validate' to check your configuration for errors.".to_string(),
+                    "Run 'workspace config validate' to check your configuration for errors."
+                        .to_string(),
                 )
             }
             CliError::Git(msg)
@@ -223,7 +224,7 @@ impl<'a> ErrorDisplay<'a> {
     fn get_next_steps(&self) -> Option<Vec<String>> {
         match self.error {
             CliError::Configuration(msg) if msg.contains("not found") => Some(vec![
-                "Run 'wnt init' to create a configuration file".to_string(),
+                "Run 'workspace init' to create a configuration file".to_string(),
                 "Or specify a config path with --config".to_string(),
             ]),
             CliError::Configuration(msg)
@@ -232,7 +233,7 @@ impl<'a> ErrorDisplay<'a> {
             {
                 Some(vec![
                     "Check the configuration file syntax".to_string(),
-                    "Run 'wnt config validate' for details".to_string(),
+                    "Run 'workspace config validate' for details".to_string(),
                     "See the documentation for valid configuration options".to_string(),
                 ])
             }
@@ -306,7 +307,7 @@ mod tests {
 
         assert!(suggestion.is_some());
         if let Some(msg) = suggestion {
-            assert!(msg.contains("wnt init"));
+            assert!(msg.contains("workspace init"));
         }
     }
 
@@ -318,7 +319,7 @@ mod tests {
 
         assert!(suggestion.is_some());
         if let Some(msg) = suggestion {
-            assert!(msg.contains("wnt config validate"));
+            assert!(msg.contains("workspace config validate"));
         }
     }
 
@@ -400,7 +401,7 @@ mod tests {
         assert!(steps.is_some());
         if let Some(steps_vec) = steps {
             assert!(!steps_vec.is_empty());
-            assert!(steps_vec[0].contains("wnt init"));
+            assert!(steps_vec[0].contains("workspace init"));
         }
     }
 

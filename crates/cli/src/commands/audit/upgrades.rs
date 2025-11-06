@@ -399,20 +399,20 @@ fn display_upgrade_recommendations(
     // Deprecated packages - highest priority
     if !upgrades.deprecated_packages.is_empty() {
         recommendations.push("🚨 Replace deprecated packages immediately");
-        recommendations.push("   Run: wnt upgrade check --show-deprecated");
+        recommendations.push("   Run: workspace upgrade check --show-deprecated");
     }
 
     // Major upgrades - review needed
     if upgrades.major_upgrades > 0 {
         recommendations.push("📋 Review major upgrades for breaking changes");
-        recommendations.push("   Run: wnt upgrade check --filter major");
+        recommendations.push("   Run: workspace upgrade check --filter major");
         recommendations.push("   Review changelogs before applying");
     }
 
     // Minor/Patch upgrades - safe to apply
     if upgrades.minor_upgrades > 0 || upgrades.patch_upgrades > 0 {
         recommendations.push("✅ Minor and patch upgrades are generally safe");
-        recommendations.push("   Run: wnt upgrade apply --filter minor,patch");
+        recommendations.push("   Run: workspace upgrade apply --filter minor,patch");
     }
 
     // Display recommendations if any

@@ -34,19 +34,19 @@
 //!
 //! ```bash
 //! # List all available backups
-//! wnt upgrade backups list
+//! workspace upgrade backups list
 //!
 //! # Restore a specific backup
-//! wnt upgrade backups restore backup_20240115_103045
+//! workspace upgrade backups restore backup_20240115_103045
 //!
 //! # Restore with force (skip confirmation)
-//! wnt upgrade backups restore backup_20240115_103045 --force
+//! workspace upgrade backups restore backup_20240115_103045 --force
 //!
 //! # Clean old backups, keeping last 10
-//! wnt upgrade backups clean --keep 10
+//! workspace upgrade backups clean --keep 10
 //!
 //! # JSON output for programmatic use
-//! wnt upgrade backups list --format json
+//! workspace upgrade backups list --format json
 //! ```
 
 use crate::cli::commands::{
@@ -637,7 +637,9 @@ fn output_backup_list_human(output: &Output, backups: &[BackupInfo]) -> Result<(
 
     if backups.is_empty() {
         output.info("No backups found")?;
-        output.plain("Run upgrades with `wnt upgrade apply` to create backups automatically.")?;
+        output.plain(
+            "Run upgrades with `workspace upgrade apply` to create backups automatically.",
+        )?;
         return Ok(());
     }
 
@@ -662,7 +664,9 @@ fn output_backup_list_human(output: &Output, backups: &[BackupInfo]) -> Result<(
     // Summary
     output.plain(&format!("Total backups: {}", backups.len()))?;
     output.plain(
-        &style("  Use `wnt upgrade backups restore <ID>` to restore a backup").dim().to_string(),
+        &style("  Use `workspace upgrade backups restore <ID>` to restore a backup")
+            .dim()
+            .to_string(),
     )?;
 
     Ok(())

@@ -194,16 +194,19 @@ mod init_tests {
         let gitkeep = history_dir.join(".gitkeep");
         assert!(gitkeep.exists(), ".gitkeep not created in history");
 
-        // Verify .wnt-backups directory was created
-        let backups_dir = temp_dir.path().join(".wnt-backups");
-        assert!(backups_dir.exists(), ".wnt-backups directory not created");
+        // Verify .workspace-backups directory was created
+        let backups_dir = temp_dir.path().join(".workspace-backups");
+        assert!(backups_dir.exists(), ".workspace-backups directory not created");
 
         // Verify .gitignore was updated
         let gitignore_path = temp_dir.path().join(".gitignore");
         assert!(gitignore_path.exists(), ".gitignore not created");
         let gitignore_content =
             fs::read_to_string(gitignore_path).expect("Failed to read .gitignore");
-        assert!(gitignore_content.contains(".wnt-backups/"), ".wnt-backups not in .gitignore");
+        assert!(
+            gitignore_content.contains(".workspace-backups/"),
+            ".workspace-backups not in .gitignore"
+        );
 
         // Verify example changeset was created
         let example_path = changesets_dir.join("README-example.yaml");
@@ -467,7 +470,7 @@ mod init_tests {
             .expect("Failed to read .gitignore");
         assert!(gitignore_content.contains("node_modules/"), "Existing content lost");
         assert!(gitignore_content.contains("dist/"), "Existing content lost");
-        assert!(gitignore_content.contains(".wnt-backups/"), "New content not added");
+        assert!(gitignore_content.contains(".workspace-backups/"), "New content not added");
     }
 
     #[tokio::test]
@@ -585,7 +588,7 @@ mod init_tests {
         let gitignore_path = temp_dir.path().join(".gitignore");
         let gitignore_content =
             fs::read_to_string(&gitignore_path).expect("Failed to read .gitignore");
-        let backup_count = gitignore_content.matches(".wnt-backups/").count();
+        let backup_count = gitignore_content.matches(".workspace-backups/").count();
 
         // Initialize again with force
         let args_force = InitArgs { force: true, ..args };
@@ -595,7 +598,7 @@ mod init_tests {
 
         let gitignore_content_after = fs::read_to_string(&gitignore_path)
             .expect("Failed to read .gitignore after second init");
-        let backup_count_after = gitignore_content_after.matches(".wnt-backups/").count();
+        let backup_count_after = gitignore_content_after.matches(".workspace-backups/").count();
 
         // Should still only have one entry
         assert_eq!(backup_count, backup_count_after, "Gitignore entries were duplicated");
@@ -795,7 +798,7 @@ mod init_tests {
         // Step 2: Verify all directories created
         assert!(temp_dir.path().join(".changesets").exists());
         assert!(temp_dir.path().join(".changesets/history").exists());
-        assert!(temp_dir.path().join(".wnt-backups").exists());
+        assert!(temp_dir.path().join(".workspace-backups").exists());
 
         // Step 3: Verify config is complete
         let config_path = temp_dir.path().join("repo.config.toml");
@@ -812,8 +815,8 @@ mod init_tests {
         let gitignore = temp_dir.path().join(".gitignore");
         assert!(gitignore.exists());
         let gitignore_content = fs::read_to_string(&gitignore).expect("Failed to read .gitignore");
-        assert!(gitignore_content.contains(".wnt-backups/"));
-        assert!(gitignore_content.contains("Workspace Node Tools"));
+        assert!(gitignore_content.contains(".workspace-backups/"));
+        assert!(gitignore_content.contains("Workspace Tools"));
     }
 }
 
@@ -1611,7 +1614,7 @@ retry_delay_ms = 1000
 
 [upgrade.backup]
 enabled = true
-backup_dir = ".wnt-backups"
+backup_dir = ".workspace-backups"
 keep_after_success = false
 max_backups = 10
 
@@ -1691,7 +1694,7 @@ retry_delay_ms = 1000
 
 [upgrade.backup]
 enabled = true
-backup_dir = ".wnt-backups"
+backup_dir = ".workspace-backups"
 keep_after_success = false
 max_backups = 10
 
@@ -1774,7 +1777,7 @@ retry_delay_ms = 1000
 
 [upgrade.backup]
 enabled = true
-backup_dir = ".wnt-backups"
+backup_dir = ".workspace-backups"
 keep_after_success = false
 max_backups = 10
 
@@ -1854,7 +1857,7 @@ retry_delay_ms = 1000
 
 [upgrade.backup]
 enabled = true
-backup_dir = ".wnt-backups"
+backup_dir = ".workspace-backups"
 keep_after_success = false
 max_backups = 10
 
@@ -1934,7 +1937,7 @@ retry_delay_ms = 1000
 
 [upgrade.backup]
 enabled = true
-backup_dir = ".wnt-backups"
+backup_dir = ".workspace-backups"
 keep_after_success = false
 max_backups = 10
 
@@ -2062,7 +2065,7 @@ retry_delay_ms = 1000
 
 [upgrade.backup]
 enabled = true
-backup_dir = ".wnt-backups"
+backup_dir = ".workspace-backups"
 keep_after_success = false
 max_backups = 10
 

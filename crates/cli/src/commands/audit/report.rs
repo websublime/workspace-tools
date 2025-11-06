@@ -306,11 +306,11 @@ pub(crate) fn display_recommendations(
         if !upgrades.deprecated_packages.is_empty() {
             recommendations
                 .push("📦 Replace deprecated packages to avoid future compatibility issues");
-            recommendations.push("   Run: wnt upgrade check --show-deprecated");
+            recommendations.push("   Run: workspace upgrade check --show-deprecated");
         }
         if upgrades.major_upgrades > 0 {
             recommendations.push("🔄 Review major version upgrades for breaking changes");
-            recommendations.push("   Run: wnt upgrade check --filter major");
+            recommendations.push("   Run: workspace upgrade check --filter major");
         }
     }
 
@@ -334,7 +334,7 @@ pub(crate) fn display_recommendations(
         && !version_consistency.inconsistencies.is_empty()
     {
         recommendations.push("📊 Align internal dependency versions across packages");
-        recommendations.push("   Run: wnt upgrade apply --internal-only");
+        recommendations.push("   Run: workspace upgrade apply --internal-only");
     }
 
     // Breaking changes recommendations
@@ -342,7 +342,7 @@ pub(crate) fn display_recommendations(
         && breaking_changes.total_breaking_changes > 0
     {
         recommendations.push("⚠️  Review breaking changes before release");
-        recommendations.push("   Run: wnt audit breaking-changes --verbosity detailed");
+        recommendations.push("   Run: workspace audit breaking-changes --verbosity detailed");
         recommendations.push("   Ensure major version bump for packages with breaking changes");
     }
 

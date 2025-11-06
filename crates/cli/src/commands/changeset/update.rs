@@ -236,7 +236,7 @@ pub async fn execute_update(
     // Load the existing changeset
     let mut changeset = manager.load(&branch).await.map_err(|e| {
         CliError::Execution(format!(
-            "No changeset found for branch '{branch}'. Create one with 'wnt changeset create' first.\nDetails: {e}"
+            "No changeset found for branch '{branch}'. Create one with 'workspace changeset create' first.\nDetails: {e}"
         ))
     })?;
 
@@ -392,13 +392,13 @@ async fn load_config(
             }
             Err(e) => {
                 return Err(CliError::Configuration(format!(
-                    "Workspace not initialized. Run 'wnt init' first.\nDetails: {e}"
+                    "Workspace not initialized. Run 'workspace init' first.\nDetails: {e}"
                 )));
             }
         }
     } else {
         return Err(CliError::Configuration(
-            "Workspace not initialized. Run 'wnt init' first.".to_string(),
+            "Workspace not initialized. Run 'workspace init' first.".to_string(),
         ));
     };
 

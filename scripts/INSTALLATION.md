@@ -1,6 +1,6 @@
 # Installation Guide
 
-Complete guide for installing `wnt` (Workspace Node Tools) CLI on all supported platforms.
+Complete guide for installing `workspace` (Workspace Node Tools) CLI on all supported platforms.
 
 ## Table of Contents
 
@@ -31,7 +31,7 @@ That's it! The script will:
 ### Verify Installation
 
 ```bash
-wnt --version
+workspace --version
 ```
 
 ## Installation Methods
@@ -62,16 +62,16 @@ curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/mai
 
 ```bash
 # Add tap (once)
-brew tap websublime/wnt
+brew tap websublime/workspace
 
 # Install
-brew install wnt
+brew install workspace
 
 # Update
-brew upgrade wnt
+brew upgrade workspace
 
 # Uninstall
-brew uninstall wnt
+brew uninstall workspace
 ```
 
 ### Method 3: Cargo (From Source)
@@ -81,13 +81,13 @@ brew uninstall wnt
 
 ```bash
 # Install from crates.io
-cargo install wnt-cli
+cargo install workspace-cli
 
 # Install from git
-cargo install --git https://github.com/websublime/workspace-node-tools wnt-cli
+cargo install --git https://github.com/websublime/workspace-node-tools workspace-cli
 
 # Install specific version
-cargo install wnt-cli --version 0.1.0
+cargo install workspace-cli --version 0.1.0
 ```
 
 ### Method 4: Pre-built Binaries
@@ -100,16 +100,16 @@ cargo install wnt-cli --version 0.1.0
 # Visit: https://github.com/websublime/workspace-node-tools/releases
 
 # 2. Extract archive
-tar -xzf wnt-v0.1.0-x86_64-apple-darwin.tar.gz
+tar -xzf workspace-v0.1.0-x86_64-apple-darwin.tar.gz
 
 # 3. Move to installation directory
-sudo mv wnt /usr/local/bin/
+sudo mv workspace /usr/local/bin/
 
 # 4. Make executable
-sudo chmod +x /usr/local/bin/wnt
+sudo chmod +x /usr/local/bin/workspace
 
 # 5. Verify
-wnt --version
+workspace --version
 ```
 
 ### Method 5: Package Managers
@@ -120,17 +120,17 @@ wnt --version
 # Note: Package repository coming soon
 # Add repository
 # curl -fsSL https://packages.example.com/gpg.key | sudo apt-key add -
-# echo "deb https://packages.example.com/apt stable main" | sudo tee /etc/apt/sources.list.d/wnt.list
+# echo "deb https://packages.example.com/apt stable main" | sudo tee /etc/apt/sources.list.d/workspace.list
 
 # Install
 sudo apt update
-sudo apt install wnt
+sudo apt install workspace
 
 # Update
-sudo apt upgrade wnt
+sudo apt upgrade workspace
 
 # Uninstall
-sudo apt remove wnt
+sudo apt remove workspace
 ```
 
 #### YUM/DNF (RHEL/Fedora/CentOS)
@@ -138,8 +138,8 @@ sudo apt remove wnt
 ```bash
 # Note: Package repository coming soon
 # Add repository
-# sudo tee /etc/yum.repos.d/wnt.repo <<EOF
-# [wnt]
+# sudo tee /etc/yum.repos.d/workspace.repo <<EOF
+# [workspace]
 # name=Workspace Node Tools
 # baseurl=https://packages.example.com/rpm
 # enabled=1
@@ -148,29 +148,29 @@ sudo apt remove wnt
 # EOF
 
 # Install (RHEL/CentOS)
-sudo yum install wnt
+sudo yum install workspace
 
 # Install (Fedora)
-sudo dnf install wnt
+sudo dnf install workspace
 
 # Update
-sudo yum update wnt  # or sudo dnf upgrade wnt
+sudo yum update workspace  # or sudo dnf upgrade workspace
 
 # Uninstall
-sudo yum remove wnt  # or sudo dnf remove wnt
+sudo yum remove workspace  # or sudo dnf remove workspace
 ```
 
 #### Snap (Universal Linux)
 
 ```bash
 # Install
-sudo snap install wnt
+sudo snap install workspace
 
 # Update
-sudo snap refresh wnt
+sudo snap refresh workspace
 
 # Uninstall
-sudo snap remove wnt
+sudo snap remove workspace
 ```
 
 ## Platform-Specific Instructions
@@ -184,7 +184,7 @@ sudo snap remove wnt
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
 
 # Or via Homebrew
-brew install wnt
+brew install workspace
 ```
 
 #### Apple Silicon Macs (M1/M2/M3 - aarch64)
@@ -194,17 +194,17 @@ brew install wnt
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
 
 # Or via Homebrew (uses native ARM binary)
-brew install wnt
+brew install workspace
 ```
 
 #### Rosetta 2 Compatibility
 
 ```bash
-# wnt runs natively on Apple Silicon
+# workspace runs natively on Apple Silicon
 # No Rosetta required
 
 # Verify architecture
-file $(which wnt)
+file $(which workspace)
 # Output: Mach-O 64-bit executable arm64
 ```
 
@@ -217,12 +217,12 @@ file $(which wnt)
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
 
 # Method 2: APT package
-sudo apt install wnt
+sudo apt install workspace
 
 # Method 3: Download binary
-wget https://github.com/websublime/workspace-node-tools/releases/latest/download/wnt-x86_64-unknown-linux-gnu.tar.gz
-tar -xzf wnt-x86_64-unknown-linux-gnu.tar.gz
-sudo mv wnt /usr/local/bin/
+wget https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf workspace-x86_64-unknown-linux-gnu.tar.gz
+sudo mv workspace /usr/local/bin/
 ```
 
 #### RHEL/CentOS/Fedora
@@ -232,12 +232,12 @@ sudo mv wnt /usr/local/bin/
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
 
 # Method 2: YUM/DNF package
-sudo yum install wnt
+sudo yum install workspace
 
 # Method 3: Download binary
-curl -LO https://github.com/websublime/workspace-node-tools/releases/latest/download/wnt-x86_64-unknown-linux-gnu.tar.gz
-tar -xzf wnt-x86_64-unknown-linux-gnu.tar.gz
-sudo mv wnt /usr/local/bin/
+curl -LO https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf workspace-x86_64-unknown-linux-gnu.tar.gz
+sudo mv workspace /usr/local/bin/
 ```
 
 #### Arch Linux
@@ -247,12 +247,12 @@ sudo mv wnt /usr/local/bin/
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
 
 # Method 2: AUR (coming soon)
-yay -S wnt-bin
+yay -S workspace-bin
 
 # Method 3: Manual
-curl -LO https://github.com/websublime/workspace-node-tools/releases/latest/download/wnt-x86_64-unknown-linux-gnu.tar.gz
-tar -xzf wnt-x86_64-unknown-linux-gnu.tar.gz
-sudo mv wnt /usr/local/bin/
+curl -LO https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf workspace-x86_64-unknown-linux-gnu.tar.gz
+sudo mv workspace /usr/local/bin/
 ```
 
 #### ARM Linux (Raspberry Pi, etc.)
@@ -260,11 +260,11 @@ sudo mv wnt /usr/local/bin/
 ```bash
 # ARMv7 (32-bit)
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
-# Automatically downloads: wnt-armv7-unknown-linux-gnueabihf
+# Automatically downloads: workspace-armv7-unknown-linux-gnueabihf
 
 # ARMv8/aarch64 (64-bit)
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
-# Automatically downloads: wnt-aarch64-unknown-linux-gnu
+# Automatically downloads: workspace-aarch64-unknown-linux-gnu
 ```
 
 ### Windows
@@ -276,7 +276,7 @@ curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/mai
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
 
 # Verify
-wnt --version
+workspace --version
 ```
 
 #### WSL (Windows Subsystem for Linux)
@@ -286,7 +286,7 @@ wnt --version
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
 
 # Verify
-wnt --version
+workspace --version
 ```
 
 #### PowerShell (Native Windows)
@@ -299,25 +299,25 @@ Invoke-WebRequest -Uri https://raw.githubusercontent.com/websublime/workspace-no
 .\install.ps1
 
 # Or download binary manually
-Invoke-WebRequest -Uri https://github.com/websublime/workspace-node-tools/releases/latest/download/wnt-x86_64-pc-windows-msvc.zip -OutFile wnt.zip
-Expand-Archive wnt.zip
-Move-Item wnt\wnt.exe C:\Program Files\wnt\
+Invoke-WebRequest -Uri https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-x86_64-pc-windows-msvc.zip -OutFile workspace.zip
+Expand-Archive workspace.zip
+Move-Item workspace\workspace.exe C:\Program Files\workspace\
 ```
 
 #### Scoop
 
 ```powershell
 # Add bucket
-scoop bucket add wnt https://github.com/websublime/scoop-wnt
+scoop bucket add workspace https://github.com/websublime/scoop-workspace
 
 # Install
-scoop install wnt
+scoop install workspace
 
 # Update
-scoop update wnt
+scoop update workspace
 
 # Uninstall
-scoop uninstall wnt
+scoop uninstall workspace
 ```
 
 ## Verification
@@ -326,26 +326,26 @@ scoop uninstall wnt
 
 ```bash
 # Check version
-wnt --version
+workspace --version
 
 # Check help
-wnt --help
+workspace --help
 
 # Verify installation path
-which wnt
+which workspace
 
 # Check file type
-file $(which wnt)
+file $(which workspace)
 ```
 
 ### Detailed Verification
 
 ```bash
 # Run version command (shows dependencies)
-wnt version
+workspace version
 
 # Expected output:
-# wnt 0.1.0
+# workspace 0.1.0
 # rust: 1.75.0
 # sublime-package-tools: 0.1.0
 # sublime-standard-tools: 0.1.0
@@ -356,18 +356,18 @@ wnt version
 
 ```bash
 # Create test directory
-mkdir -p /tmp/wnt-test
-cd /tmp/wnt-test
+mkdir -p /tmp/workspace-test
+cd /tmp/workspace-test
 
 # Initialize a test workspace
-wnt init --strategy independent
+workspace init --strategy independent
 
 # Verify config was created
-ls -la .wnt.toml
+ls -la .workspace.toml
 
 # Clean up
 cd ..
-rm -rf /tmp/wnt-test
+rm -rf /tmp/workspace-test
 ```
 
 ## Shell Completions
@@ -378,11 +378,11 @@ Completions are automatically installed by the install script.
 
 ```bash
 # Location
-~/.local/share/bash-completion/completions/wnt
+~/.local/share/bash-completion/completions/workspace
 
 # If completions don't work, add to ~/.bashrc:
-if [ -f ~/.local/share/bash-completion/completions/wnt ]; then
-    source ~/.local/share/bash-completion/completions/wnt
+if [ -f ~/.local/share/bash-completion/completions/workspace ]; then
+    source ~/.local/share/bash-completion/completions/workspace
 fi
 
 # Then reload:
@@ -411,7 +411,7 @@ compinit
 
 ```bash
 # Location
-~/.config/fish/completions/wnt.fish
+~/.config/fish/completions/workspace.fish
 
 # Completions are automatically loaded
 # To reload:
@@ -422,9 +422,9 @@ fish_update_completions
 
 ```bash
 # Generate completions manually
-wnt completions bash > ~/.local/share/bash-completion/completions/wnt
-wnt completions zsh > ~/.local/share/zsh/site-functions/_wnt
-wnt completions fish > ~/.config/fish/completions/wnt.fish
+workspace completions bash > ~/.local/share/bash-completion/completions/workspace
+workspace completions zsh > ~/.local/share/zsh/site-functions/_wnt
+workspace completions fish > ~/.config/fish/completions/workspace.fish
 ```
 
 ## Updating
@@ -443,35 +443,35 @@ curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/mai
 
 ```bash
 # Homebrew
-brew upgrade wnt
+brew upgrade workspace
 
 # APT
-sudo apt update && sudo apt upgrade wnt
+sudo apt update && sudo apt upgrade workspace
 
 # YUM/DNF
-sudo yum update wnt  # or sudo dnf upgrade wnt
+sudo yum update workspace  # or sudo dnf upgrade workspace
 
 # Cargo
-cargo install wnt-cli --force
+cargo install workspace-cli --force
 
 # Snap
-sudo snap refresh wnt
+sudo snap refresh workspace
 
 # Scoop
-scoop update wnt
+scoop update workspace
 ```
 
 ### Update via Self-Update (Coming Soon)
 
 ```bash
 # Check for updates
-wnt update check
+workspace update check
 
 # Update to latest
-wnt update apply
+workspace update apply
 
 # Update to specific version
-wnt update apply --version v0.2.0
+workspace update apply --version v0.2.0
 ```
 
 ## Uninstallation
@@ -493,41 +493,41 @@ curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/mai
 
 ```bash
 # Homebrew
-brew uninstall wnt
+brew uninstall workspace
 
 # APT
-sudo apt remove wnt
-sudo apt purge wnt  # Also removes config
+sudo apt remove workspace
+sudo apt purge workspace  # Also removes config
 
 # YUM/DNF
-sudo yum remove wnt  # or sudo dnf remove wnt
+sudo yum remove workspace  # or sudo dnf remove workspace
 
 # Cargo
-cargo uninstall wnt-cli
+cargo uninstall workspace-cli
 
 # Snap
-sudo snap remove wnt
+sudo snap remove workspace
 
 # Scoop
-scoop uninstall wnt
+scoop uninstall workspace
 ```
 
 ### Manual Uninstallation
 
 ```bash
 # 1. Remove binary
-sudo rm /usr/local/bin/wnt
+sudo rm /usr/local/bin/workspace
 # or
-rm ~/.local/bin/wnt
+rm ~/.local/bin/workspace
 
 # 2. Remove completions
-rm ~/.local/share/bash-completion/completions/wnt
+rm ~/.local/share/bash-completion/completions/workspace
 rm ~/.local/share/zsh/site-functions/_wnt
-rm ~/.config/fish/completions/wnt.fish
+rm ~/.config/fish/completions/workspace.fish
 
 # 3. Remove config (optional)
-rm -rf ~/.config/wnt
-rm ~/.wnt.toml
+rm -rf ~/.config/workspace
+rm ~/.workspace.toml
 ```
 
 ## Troubleshooting
@@ -542,7 +542,7 @@ uname -s  # Should be: Darwin, Linux, or MINGW*/MSYS*/CYGWIN*
 uname -m  # Should be: x86_64, aarch64, arm64, or armv7l
 
 # If unsupported, build from source:
-cargo install --git https://github.com/websublime/workspace-node-tools wnt-cli
+cargo install --git https://github.com/websublime/workspace-node-tools workspace-cli
 ```
 
 #### "Download failed"
@@ -570,13 +570,13 @@ curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/mai
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
 
 # Download manually and verify
-wget https://github.com/websublime/workspace-node-tools/releases/download/v0.1.0/wnt-x86_64-apple-darwin.tar.gz
+wget https://github.com/websublime/workspace-node-tools/releases/download/v0.1.0/workspace-x86_64-apple-darwin.tar.gz
 wget https://github.com/websublime/workspace-node-tools/releases/download/v0.1.0/checksums.txt
 
 # Verify manually
-grep "wnt-x86_64-apple-darwin.tar.gz" checksums.txt
-sha256sum wnt-x86_64-apple-darwin.tar.gz  # Linux
-shasum -a 256 wnt-x86_64-apple-darwin.tar.gz  # macOS
+grep "workspace-x86_64-apple-darwin.tar.gz" checksums.txt
+sha256sum workspace-x86_64-apple-darwin.tar.gz  # Linux
+shasum -a 256 workspace-x86_64-apple-darwin.tar.gz  # macOS
 ```
 
 #### "Permission denied"
@@ -596,8 +596,8 @@ sudo chown -R $USER /usr/local/bin
 
 ```bash
 # Check if binary exists
-ls -l ~/.local/bin/wnt
-ls -l /usr/local/bin/wnt
+ls -l ~/.local/bin/workspace
+ls -l /usr/local/bin/workspace
 
 # Check PATH
 echo $PATH
@@ -610,19 +610,19 @@ export PATH="/usr/local/bin:$PATH"
 source ~/.bashrc  # or source ~/.zshrc
 
 # Or use full path
-~/.local/bin/wnt --version
+~/.local/bin/workspace --version
 ```
 
 ### Command Not Found
 
 ```bash
 # Verify installation
-which wnt
+which workspace
 
 # If not found, check common locations
-ls -l /usr/local/bin/wnt
-ls -l ~/.local/bin/wnt
-ls -l ~/bin/wnt
+ls -l /usr/local/bin/workspace
+ls -l ~/.local/bin/workspace
+ls -l ~/bin/workspace
 
 # Add to PATH
 export PATH="$HOME/.local/bin:$PATH"
@@ -636,7 +636,7 @@ source ~/.bashrc
 
 ```bash
 # Bash
-source ~/.local/share/bash-completion/completions/wnt
+source ~/.local/share/bash-completion/completions/workspace
 
 # Zsh
 rm -f ~/.zcompdump*
@@ -646,9 +646,9 @@ autoload -Uz compinit && compinit
 fish_update_completions
 
 # Regenerate completions
-wnt completions bash > ~/.local/share/bash-completion/completions/wnt
-wnt completions zsh > ~/.local/share/zsh/site-functions/_wnt
-wnt completions fish > ~/.config/fish/completions/wnt.fish
+workspace completions bash > ~/.local/share/bash-completion/completions/workspace
+workspace completions zsh > ~/.local/share/zsh/site-functions/_wnt
+workspace completions fish > ~/.config/fish/completions/workspace.fish
 ```
 
 ### Old Version After Update
@@ -661,10 +661,10 @@ hash -r
 exec $SHELL
 
 # Verify version
-wnt --version
+workspace --version
 
 # Check if multiple installations exist
-which -a wnt
+which -a workspace
 ```
 
 ## Advanced Installation Options
@@ -690,19 +690,19 @@ curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/mai
 
 ```bash
 # 1. Download on machine with internet
-wget https://github.com/websublime/workspace-node-tools/releases/download/v0.1.0/wnt-x86_64-unknown-linux-gnu.tar.gz
+wget https://github.com/websublime/workspace-node-tools/releases/download/v0.1.0/workspace-x86_64-unknown-linux-gnu.tar.gz
 wget https://github.com/websublime/workspace-node-tools/releases/download/v0.1.0/checksums.txt
 
 # 2. Transfer files to offline machine
 
 # 3. Verify checksum
-grep "wnt-x86_64-unknown-linux-gnu.tar.gz" checksums.txt
-sha256sum wnt-x86_64-unknown-linux-gnu.tar.gz
+grep "workspace-x86_64-unknown-linux-gnu.tar.gz" checksums.txt
+sha256sum workspace-x86_64-unknown-linux-gnu.tar.gz
 
 # 4. Extract and install
-tar -xzf wnt-x86_64-unknown-linux-gnu.tar.gz
-sudo mv wnt /usr/local/bin/
-sudo chmod +x /usr/local/bin/wnt
+tar -xzf workspace-x86_64-unknown-linux-gnu.tar.gz
+sudo mv workspace /usr/local/bin/
+sudo chmod +x /usr/local/bin/workspace
 ```
 
 ### Corporate/Proxy Environment
@@ -723,7 +723,7 @@ curl -x http://proxy.company.com:8080 -fsSL https://raw.githubusercontent.com/we
 
 ```bash
 # Set GitHub token
-export WNT_GITHUB_TOKEN="ghp_your_token_here"
+export WORKSPACE_GITHUB_TOKEN="ghp_your_token_here"
 
 # Install
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
@@ -736,26 +736,26 @@ After installation:
 1. **Initialize a workspace**
    ```bash
    cd /path/to/your/project
-   wnt init
+   workspace init
    ```
 
 2. **Read the documentation**
    ```bash
-   wnt --help
-   wnt init --help
-   wnt changeset --help
+   workspace --help
+   workspace init --help
+   workspace changeset --help
    ```
 
 3. **Create your first changeset**
    ```bash
-   wnt changeset add
+   workspace changeset add
    ```
 
 4. **Explore commands**
    ```bash
-   wnt config show
-   wnt changes
-   wnt audit
+   workspace config show
+   workspace changes
+   workspace audit
    ```
 
 ## Support
@@ -763,7 +763,7 @@ After installation:
 - **Documentation**: https://github.com/websublime/workspace-node-tools/docs
 - **GitHub Issues**: https://github.com/websublime/workspace-node-tools/issues
 - **Discussions**: https://github.com/websublime/workspace-node-tools/discussions
-- **Discord**: https://discord.gg/wnt (coming soon)
+- **Discord**: https://discord.gg/workspace (coming soon)
 
 ## License
 

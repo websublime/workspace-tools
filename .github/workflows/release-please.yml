@@ -30,7 +30,7 @@ jobs:
           release-type: rust
 
           # Package name (used in release title)
-          package-name: wnt
+          package-name: workspace
 
           # Include all packages in the workspace
           include-component-in-tag: false

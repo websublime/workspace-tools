@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Development installation script for wnt (Workspace Node Tools)
+# Development installation script for workspace (Workspace Tools)
 #
 # This script builds the CLI in release mode and installs it locally for testing.
 # It's designed for development workflow, not production installations.
@@ -28,9 +28,9 @@ INSTALL_DIR="${1:-$DEFAULT_INSTALL_DIR}"
 
 # Project root (parent of scripts directory)
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BINARY_SOURCE="$PROJECT_ROOT/target/release/wnt"
+BINARY_SOURCE="$PROJECT_ROOT/target/release/workspace"
 
-echo -e "${BLUE}=== wnt CLI Development Installation ===${NC}\n"
+echo -e "${BLUE}=== workspace CLI Development Installation ===${NC}\n"
 
 # Check if binary exists, if not build it
 if [ ! -f "$BINARY_SOURCE" ]; then
@@ -53,9 +53,9 @@ if [ ! -d "$INSTALL_DIR" ]; then
 fi
 
 # Copy binary
-echo -e "${BLUE}Installing wnt to: $INSTALL_DIR${NC}"
-cp "$BINARY_SOURCE" "$INSTALL_DIR/wnt"
-chmod +x "$INSTALL_DIR/wnt"
+echo -e "${BLUE}Installing workspace to: $INSTALL_DIR${NC}"
+cp "$BINARY_SOURCE" "$INSTALL_DIR/workspace"
+chmod +x "$INSTALL_DIR/workspace"
 
 # Check if installation directory is in PATH
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
@@ -67,13 +67,13 @@ fi
 # Display version
 echo -e "\n${GREEN}✓ Installation complete!${NC}"
 echo -e "\nInstalled version:"
-"$INSTALL_DIR/wnt" version
+"$INSTALL_DIR/workspace" version
 
 echo -e "\n${BLUE}Usage:${NC}"
-echo -e "  wnt --help              # Show help"
-echo -e "  wnt init                # Initialize a workspace"
-echo -e "  wnt changeset create    # Create a changeset"
-echo -e "  wnt changeset edit      # Edit a changeset"
-echo -e "  wnt changeset list      # List changesets"
+echo -e "  workspace --help              # Show help"
+echo -e "  workspace init                # Initialize a workspace"
+echo -e "  workspace changeset create    # Create a changeset"
+echo -e "  workspace changeset edit      # Edit a changeset"
+echo -e "  workspace changeset list      # List changesets"
 
 echo -e "\n${GREEN}Happy testing!${NC}"

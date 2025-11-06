@@ -1,6 +1,6 @@
 //! Config command implementation.
 //!
-//! This module implements the `wnt config` subcommands for managing and viewing
+//! This module implements the `workspace config` subcommands for managing and viewing
 //! configuration settings.
 //!
 //! # What
@@ -255,7 +255,7 @@ pub async fn execute_validate(
     // Check if config file exists
     let config_file_path = found_config.ok_or_else(|| {
         CliError::configuration(
-            "No configuration file found. Run 'wnt init' to create one.\n\
+            "No configuration file found. Run 'workspace init' to create one.\n\
             Expected one of: repo.config.toml, repo.config.json, repo.config.yaml, repo.config.yml",
         )
     })?;

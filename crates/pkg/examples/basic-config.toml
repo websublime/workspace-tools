@@ -89,8 +89,8 @@ read_npmrc = true
 # Whether to create backups before applying upgrades
 enabled = true
 
-# Directory where backups are stored (default: ".wnt-backups")
-backup_dir = ".wnt-backups"
+# Directory where backups are stored (default: ".workspace-backups")
+backup_dir = ".workspace-backups"
 
 # Whether to keep backups after successful upgrades
 keep_after_success = false

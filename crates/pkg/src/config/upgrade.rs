@@ -123,7 +123,7 @@ pub struct RegistryConfig {
 ///
 /// let config = BackupConfig::default();
 /// assert!(config.enabled);
-/// assert_eq!(config.backup_dir, ".wnt-backups");
+/// assert_eq!(config.backup_dir, ".workspace-backups");
 /// assert_eq!(config.max_backups, 5);
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -137,7 +137,7 @@ pub struct BackupConfig {
 
     /// Directory where backups are stored.
     ///
-    /// # Default: `".wnt-backups"`
+    /// # Default: `".workspace-backups"`
     pub backup_dir: String,
 
     /// Whether to keep backups after successful operations.
@@ -184,7 +184,7 @@ impl Default for BackupConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            backup_dir: ".wnt-backups".to_string(),
+            backup_dir: ".workspace-backups".to_string(),
             keep_after_success: false,
             max_backups: 5,
         }

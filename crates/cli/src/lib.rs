@@ -1,11 +1,11 @@
-//! # Workspace Node Tools CLI
+//! # Workspace Tools CLI
 //!
 //! A comprehensive command-line interface for managing Node.js workspaces and monorepos
 //! with changeset-based version management.
 //!
 //! ## What
 //!
-//! This crate provides the `wnt` CLI tool that offers:
+//! This crate provides the `workspace` CLI tool that offers:
 //! - Configuration management (`init`, `config`)
 //! - Changeset workflow (`changeset add`, `list`, `show`, etc.)
 //! - Version bumping (`bump`)

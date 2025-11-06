@@ -1,6 +1,6 @@
 # Scripts Directory
 
-Utility scripts for building, installing, testing, and managing the `wnt` CLI.
+Utility scripts for building, installing, testing, and managing the `workspace` CLI.
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ Utility scripts for building, installing, testing, and managing the `wnt` CLI.
 
 ### 🚀 `install.sh` - Production Installation
 
-Official installation script for `wnt` CLI. Downloads pre-built binaries from GitHub releases, verifies checksums, and installs system-wide or locally.
+Official installation script for `workspace` CLI. Downloads pre-built binaries from GitHub releases, verifies checksums, and installs system-wide or locally.
 
 **Usage:**
 ```bash
@@ -50,9 +50,9 @@ curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/mai
 - `--help` - Show help message
 
 **Environment Variables:**
-- `WNT_VERSION` - Version to install (overridden by `--version`)
-- `WNT_INSTALL_DIR` - Installation directory (overridden by `--install-dir`)
-- `WNT_GITHUB_TOKEN` - GitHub token for private repositories
+- `WORKSPACE_VERSION` - Version to install (overridden by `--version`)
+- `WORKSPACE_INSTALL_DIR` - Installation directory (overridden by `--install-dir`)
+- `WORKSPACE_GITHUB_TOKEN` - GitHub token for private repositories
 - `NO_COLOR` - Disable colored output
 
 **What it does:**
@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/mai
 
 ### 📦 `install-dev.sh` - Development Installation
 
-Install the `wnt` CLI binary locally for development and testing. Builds from source and installs to specified location.
+Install the `workspace` CLI binary locally for development and testing. Builds from source and installs to specified location.
 
 **Usage:**
 ```bash
@@ -111,7 +111,7 @@ sudo ./scripts/install-dev.sh /usr/local/bin
 
 ### 🗑️ `uninstall.sh` - Uninstallation
 
-Removes `wnt` CLI binary, shell completions, and optionally configuration files.
+Removes `workspace` CLI binary, shell completions, and optionally configuration files.
 
 **Usage:**
 ```bash
@@ -140,11 +140,11 @@ Removes `wnt` CLI binary, shell completions, and optionally configuration files.
 - `--help` - Show help message
 
 **Environment Variables:**
-- `WNT_INSTALL_DIR` - Installation directory (overridden by `--install-dir`)
+- `WORKSPACE_INSTALL_DIR` - Installation directory (overridden by `--install-dir`)
 - `NO_COLOR` - Disable colored output
 
 **What it does:**
-1. Searches for `wnt` binary in common locations
+1. Searches for `workspace` binary in common locations
 2. Displays found installation
 3. Asks for confirmation (unless `--yes` is used)
 4. Removes binary (with sudo if needed)
@@ -153,8 +153,8 @@ Removes `wnt` CLI binary, shell completions, and optionally configuration files.
 7. Shows completion message
 
 **Configuration Files Searched:**
-- Project-level: `.wnt.toml`, `.wntrc`, `wnt.config.json` (in current directory and parents)
-- User-level: `~/.config/wnt/config.toml`, `~/.wnt.toml`
+- Project-level: `.workspace.toml`, `.wntrc`, `workspace.config.json` (in current directory and parents)
+- User-level: `~/.config/workspace/config.toml`, `~/.workspace.toml`
 
 **Exit Codes:**
 - `0` - Success
@@ -177,7 +177,7 @@ Create a temporary demo repository and test the CLI interactively.
 1. Builds the release binary
 2. Creates a temporary monorepo structure
 3. Initializes git repository
-4. Runs `wnt init` to setup workspace
+4. Runs `workspace init` to setup workspace
 5. Creates a feature branch
 6. Creates a sample changeset
 7. Lists and shows changesets
@@ -200,11 +200,11 @@ Create a temporary demo repository and test the CLI interactively.
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
 
 # Verify installation
-wnt version
+workspace version
 
 # Initialize your workspace
 cd /path/to/your/project
-wnt init
+workspace init
 ```
 
 ### For Developers (Development)
@@ -218,7 +218,7 @@ cd workspace-node-tools
 ./scripts/install-dev.sh
 
 # 3. Verify installation
-wnt version
+workspace version
 
 # 4. Test in demo repository
 ./scripts/test-in-demo.sh
@@ -231,8 +231,8 @@ wnt version
 ./scripts/test-in-demo.sh
 
 # In another terminal (while demo is running)
-cd /tmp/wnt-demo-XXXXXX  # Use the path shown in output
-wnt changeset edit
+cd /tmp/workspace-demo-XXXXXX  # Use the path shown in output
+workspace changeset edit
 ```
 
 ## Development Workflow
@@ -254,7 +254,7 @@ cargo build --package sublime_cli_tools --release
 
 # 5. Or test in real project
 cd ~/my-real-project
-wnt changeset edit
+workspace changeset edit
 ```
 
 ### Rapid Iteration
@@ -264,7 +264,7 @@ wnt changeset edit
 cargo watch -x 'build --package sublime_cli_tools --release' -s './scripts/install-dev.sh'
 
 # In another terminal, test your changes
-wnt --help
+workspace --help
 ```
 
 ### Manual Build and Copy
@@ -276,17 +276,17 @@ If you prefer to build and copy manually:
 cargo build --package sublime_cli_tools --release
 
 # Binary location
-ls -lh target/release/wnt
+ls -lh target/release/workspace
 
 # Copy to your desired location
-cp target/release/wnt ~/bin/wnt
+cp target/release/workspace ~/bin/workspace
 # or
-cp target/release/wnt ~/.local/bin/wnt
+cp target/release/workspace ~/.local/bin/workspace
 # or
-sudo cp target/release/wnt /usr/local/bin/wnt
+sudo cp target/release/workspace /usr/local/bin/workspace
 
 # Make executable
-chmod +x ~/bin/wnt
+chmod +x ~/bin/workspace
 ```
 
 ## Testing the Edit Command
@@ -298,9 +298,9 @@ chmod +x ~/bin/wnt
 ./scripts/test-in-demo.sh
 
 # In another terminal (follow instructions from script output)
-cd /tmp/wnt-demo-XXXXXX
+cd /tmp/workspace-demo-XXXXXX
 export EDITOR=vim  # or your preferred editor
-wnt changeset edit
+workspace changeset edit
 
 # The changeset file will open in your editor
 # Make changes, save, and exit
@@ -317,17 +317,17 @@ wnt changeset edit
 cd /path/to/test-repo
 
 # Initialize workspace
-wnt init
+workspace init
 
 # Create a changeset
 git checkout -b feature/test
-wnt changeset create --bump minor --env dev
+workspace changeset create --bump minor --env dev
 
 # Edit the changeset
-wnt changeset edit
+workspace changeset edit
 
 # Or specify branch
-wnt changeset edit feature/test
+workspace changeset edit feature/test
 ```
 
 ## Environment Variables
@@ -335,13 +335,13 @@ wnt changeset edit feature/test
 The scripts respect these environment variables:
 
 ### Installation Scripts
-- `WNT_VERSION` - Version to install (install.sh)
-- `WNT_INSTALL_DIR` - Installation directory (install.sh, uninstall.sh)
-- `WNT_GITHUB_TOKEN` - GitHub token for private repositories (install.sh)
+- `WORKSPACE_VERSION` - Version to install (install.sh)
+- `WORKSPACE_INSTALL_DIR` - Installation directory (install.sh, uninstall.sh)
+- `WORKSPACE_GITHUB_TOKEN` - GitHub token for private repositories (install.sh)
 - `NO_COLOR` - Disable colored output (all scripts)
 
 ### CLI Usage
-- `EDITOR` - Your preferred text editor (used by `wnt changeset edit`)
+- `EDITOR` - Your preferred text editor (used by `workspace changeset edit`)
 - `VISUAL` - Alternative editor specification (higher priority than EDITOR)
 
 ## Binary Information
@@ -389,7 +389,7 @@ curl -I https://github.com
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --verbose
 
 # For private repositories, provide GitHub token
-export WNT_GITHUB_TOKEN="your_token_here"
+export WORKSPACE_GITHUB_TOKEN="your_token_here"
 curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
 ```
 
@@ -411,7 +411,7 @@ Run the install script, it will build automatically:
 ./scripts/install-dev.sh
 ```
 
-#### "Command not found: wnt"
+#### "Command not found: workspace"
 
 Add the installation directory to your PATH:
 ```bash
@@ -422,11 +422,11 @@ export PATH="$HOME/.local/bin:$PATH"
 source ~/.bashrc  # or source ~/.zshrc
 ```
 
-Or verify where wnt is installed:
+Or verify where workspace is installed:
 ```bash
-which wnt
-ls -l ~/.local/bin/wnt
-ls -l /usr/local/bin/wnt
+which workspace
+ls -l ~/.local/bin/workspace
+ls -l /usr/local/bin/workspace
 ```
 
 #### Editor doesn't open
@@ -434,7 +434,7 @@ ls -l /usr/local/bin/wnt
 Set your EDITOR environment variable:
 ```bash
 export EDITOR=nano  # or vim, code, emacs, etc.
-wnt changeset edit
+workspace changeset edit
 ```
 
 #### Demo script fails
@@ -460,9 +460,9 @@ rustc --version
 
 The binary may already be uninstalled or installed in a custom location:
 ```bash
-# Search for wnt in common locations
-which wnt
-find ~ -name wnt -type f 2>/dev/null
+# Search for workspace in common locations
+which workspace
+find ~ -name workspace -type f 2>/dev/null
 
 # Uninstall from custom directory
 ./scripts/uninstall.sh --install-dir /path/to/custom/dir
@@ -482,7 +482,7 @@ Shell completions are automatically installed by `install.sh` to:
 ### Bash
 ```bash
 # Location
-~/.local/share/bash-completion/completions/wnt
+~/.local/share/bash-completion/completions/workspace
 
 # Reload completions
 source ~/.bashrc
@@ -502,7 +502,7 @@ rm -f ~/.zcompdump; compinit
 ### Fish
 ```bash
 # Location
-~/.config/fish/completions/wnt.fish
+~/.config/fish/completions/workspace.fish
 
 # Completions are automatically loaded
 ```
@@ -512,13 +512,13 @@ rm -f ~/.zcompdump; compinit
 If you need to regenerate completions:
 ```bash
 # Bash
-wnt completions bash > ~/.local/share/bash-completion/completions/wnt
+workspace completions bash > ~/.local/share/bash-completion/completions/workspace
 
 # Zsh
-wnt completions zsh > ~/.local/share/zsh/site-functions/_wnt
+workspace completions zsh > ~/.local/share/zsh/site-functions/_wnt
 
 # Fish
-wnt completions fish > ~/.config/fish/completions/wnt.fish
+workspace completions fish > ~/.config/fish/completions/workspace.fish
 ```
 
 ## Notes
@@ -550,7 +550,7 @@ wnt completions fish > ~/.config/fish/completions/wnt.fish
 ### Cleanup
 - Temporary files are automatically cleaned up on script exit
 - The demo script cleans up on exit (Ctrl+C)
-- Uninstall script only removes wnt-related files, never user data (unless `--remove-config`)
+- Uninstall script only removes workspace-related files, never user data (unless `--remove-config`)
 
 ## Contributing
 

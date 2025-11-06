@@ -77,7 +77,7 @@ read_npmrc = true
 # Always create backups in monorepos
 enabled = true
 
-# Custom backup location (default: ".wnt-backups")
+# Custom backup location (default: ".workspace-backups")
 # Using custom path for this example
 backup_dir = ".pkg-tools/backups"
 

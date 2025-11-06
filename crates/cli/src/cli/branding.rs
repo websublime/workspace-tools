@@ -1,7 +1,7 @@
 //! Branding and visual styling for the CLI.
 //!
 //! This module provides ASCII art, custom styling, and visual branding
-//! elements for the Workspace Node Tools CLI.
+//! elements for the Workspace Tools CLI.
 //!
 //! # What
 //!
@@ -47,7 +47,7 @@ use clap::builder::styling::{AnsiColor, Color, Style, Styles};
 /// ASCII art logo for Workspace Tools.
 ///
 /// This is displayed at the top of help messages and when explicitly
-/// requested. The art spells out "WORKSPACE TOOLS" in a distinctive
+/// requested. The art spells out "WORKSPACE" in a distinctive
 /// ASCII font style.
 ///
 /// # Examples
@@ -58,9 +58,9 @@ use clap::builder::styling::{AnsiColor, Color, Style, Styles};
 /// println!("{}", ASCII_LOGO);
 /// ```
 pub const ASCII_LOGO: &str = r"
-░█░█░█▀█░█▀▄░█░█░█▀▀░█▀█░█▀█░█▀▀░█▀▀░░░▀█▀░█▀█░█▀█░█░░░█▀▀░░
-░█▄█░█░█░█▀▄░█▀▄░▀▀█░█▀▀░█▀█░█░░░█▀▀░░░░█░░█░█░█░█░█░░░▀▀█░░
-░▀░▀░▀▀▀░▀░▀░▀░▀░▀▀▀░▀░░░▀░▀░▀▀▀░▀▀▀░░░░▀░░▀▀▀░▀▀▀░▀▀▀░▀▀▀░░
+░█░█░█▀█░█▀▄░█░█░█▀▀░█▀█░█▀█░█▀▀░█▀▀
+░█▄█░█░█░█▀▄░█▀▄░▀▀█░█▀▀░█▀█░█░█░█▀▀
+░▀░▀░▀▀▀░▀░▀░▀░▀░▀▀▀░▀░░░▀░▀░▀▀▀░▀▀▀
 ";
 
 /// Separator line using box-drawing characters.
@@ -78,10 +78,10 @@ pub const ASCII_LOGO: &str = r"
 pub const SEPARATOR: &str = "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯";
 
 /// Short name abbreviation for the CLI.
-pub const SHORT_NAME: &str = "WNT";
+pub const SHORT_NAME: &str = "workspace";
 
 /// Full name of the tool.
-pub const FULL_NAME: &str = "Workspace Node Tools";
+pub const FULL_NAME: &str = "Workspace Tools";
 
 /// Custom clap styling for modern, minimal appearance.
 pub const CLAP_STYLING: Styles = Styles::styled()

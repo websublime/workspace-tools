@@ -463,7 +463,7 @@ fn display_breaking_changes_recommendations(
         recommendations.push("");
         recommendations.push("🔢 Plan version bump strategy");
         recommendations.push("   - Breaking changes require a major version bump (x.0.0)");
-        recommendations.push("   - Run: wnt bump --preview to see version impact");
+        recommendations.push("   - Run: workspace bump --preview to see version impact");
         recommendations.push("   - Consider coordinating release across affected packages");
 
         recommendations.push("");
@@ -475,7 +475,7 @@ fn display_breaking_changes_recommendations(
         recommendations.push("✅ No breaking changes detected");
         recommendations.push("   - Safe to release without major version bump");
         recommendations.push("   - Consider minor or patch version based on changes");
-        recommendations.push("   - Run: wnt bump --preview to see recommended versions");
+        recommendations.push("   - Run: workspace bump --preview to see recommended versions");
     }
 
     // Display recommendations if any

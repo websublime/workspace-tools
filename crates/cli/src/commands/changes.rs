@@ -1,6 +1,6 @@
 //! Changes analysis command implementation.
 //!
-//! This module implements the `wnt changes` command which analyzes changes in
+//! This module implements the `workspace changes` command which analyzes changes in
 //! the workspace to detect affected packages and their change statistics.
 //!
 //! # What

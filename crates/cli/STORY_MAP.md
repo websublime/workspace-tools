@@ -376,7 +376,7 @@ Implement the main CLI structure using clap, including all command definitions, 
 - [ ] Help text is comprehensive and clear
 - [ ] Command parsing validated with tests
 - [ ] Shell completions generate correctly
-- [ ] Subcommand help works (e.g., wnt changeset --help)
+- [ ] Subcommand help works (e.g., workspace changeset --help)
 - [ ] Version flag shows correct version
 - [ ] Invalid arguments show helpful errors
 - [ ] 100% test coverage on parsing
@@ -408,11 +408,11 @@ Implement the main CLI structure using clap, including all command definitions, 
 **Priority**: Critical
 
 **As a** user  
-**I want** to initialize my workspace for wnt  
+**I want** to initialize my workspace for workspace  
 **So that** I can start using changeset-based versioning
 
 **Description**:
-Implement the `wnt init` command that creates configuration, detects workspace structure, and sets up the changesets directory structure.
+Implement the `workspace init` command that creates configuration, detects workspace structure, and sets up the changesets directory structure.
 
 **Tasks**:
 1. Create `src/commands/init.rs`
@@ -444,7 +444,7 @@ Implement the `wnt init` command that creates configuration, detects workspace s
 5. Implement changesets directory creation
    - Create .changesets directory (default, configurable)
    - Create .changesets/history subdirectory for archived changesets
-   - Create .wnt-backups directory for upgrade backups
+   - Create .workspace-backups directory for upgrade backups
    - Create .gitkeep files in history directory
    - Set proper permissions
    - **Effort**: Low
@@ -452,7 +452,7 @@ Implement the `wnt init` command that creates configuration, detects workspace s
 6. Implement git integration setup
    - Check git repository exists
    - Optionally setup git hooks
-   - Add .wnt-backups/ to .gitignore (backups are local only)
+   - Add .workspace-backups/ to .gitignore (backups are local only)
    - Ensure .changesets/ is NOT in .gitignore (must be versioned)
    - Add helpful comment explaining what should be versioned
    - **Effort**: Medium
@@ -477,7 +477,7 @@ Implement the `wnt init` command that creates configuration, detects workspace s
 - [ ] Interactive prompts have sensible defaults
 - [ ] .changesets/ directory created with correct structure
 - [ ] .changesets/history/ subdirectory created
-- [ ] .wnt-backups/ directory created
+- [ ] .workspace-backups/ directory created
 - [ ] .gitignore updated correctly (backups ignored, changesets versioned)
 - [ ] Git integration optional and working
 - [ ] Example changeset is helpful and explains git workflow
@@ -498,7 +498,7 @@ Implement the `wnt init` command that creates configuration, detects workspace s
 - ✅ **MUST version in git**: `.changesets/*.yaml` (active changesets)
 - ✅ **MUST version in git**: `.changesets/history/` (archived changesets for audit)
 - ✅ **MUST version in git**: `repo.config.toml` (project configuration)
-- ❌ **MUST NOT version**: `.wnt-backups/` (local upgrade backups only)
+- ❌ **MUST NOT version**: `.workspace-backups/` (local upgrade backups only)
 
 **Why changesets must be versioned**:
 1. **Collaboration**: Team members need to see pending version bumps
@@ -509,13 +509,13 @@ Implement the `wnt init` command that creates configuration, detects workspace s
 **Workflow**:
 ```bash
 # Developer creates changeset
-wnt changeset add
+workspace changeset add
 git add .changesets/feat-new-login.yaml
 git commit -m "feat: add login feature"
 git push
 
 # CI/CD on merge to main
-wnt bump --execute --git-tag --git-push
+workspace bump --execute --git-tag --git-push
 # This consumes changesets, moves to history, creates release
 ```
 
@@ -536,7 +536,7 @@ wnt bump --execute --git-tag --git-push
 **So that** I can verify settings and troubleshoot issues
 
 **Description**:
-Implement `wnt config show` to display current configuration in human-readable or JSON format.
+Implement `workspace config show` to display current configuration in human-readable or JSON format.
 
 **Tasks**:
 1. Create `src/commands/config.rs`
@@ -599,7 +599,7 @@ Implement `wnt config show` to display current configuration in human-readable o
 **So that** I can catch issues before running commands
 
 **Description**:
-Implement `wnt config validate` to check configuration for errors and provide actionable feedback.
+Implement `workspace config validate` to check configuration for errors and provide actionable feedback.
 
 **Tasks**:
 1. Extend `src/commands/config.rs`
@@ -918,7 +918,7 @@ Setup tracing-based logging with configurable levels and output formatting.
 **So that** I can track version bumps easily
 
 **Description**:
-Implement `wnt changeset add` with interactive prompts for package selection, bump type, and summary.
+Implement `workspace changeset add` with interactive prompts for package selection, bump type, and summary.
 
 **Tasks**:
 1. Create `src/commands/changeset/mod.rs`
@@ -1007,7 +1007,7 @@ Implement `wnt changeset add` with interactive prompts for package selection, bu
 **So that** I can use it in scripts and CI/CD
 
 **Description**:
-Extend `wnt changeset add` to support non-interactive mode with command-line arguments.
+Extend `workspace changeset add` to support non-interactive mode with command-line arguments.
 
 **Tasks**:
 1. Extend ChangesetAddArgs
@@ -1067,7 +1067,7 @@ Extend `wnt changeset add` to support non-interactive mode with command-line arg
 **So that** I can see pending version bumps
 
 **Description**:
-Implement `wnt changeset list` to display all changesets in table or JSON format.
+Implement `workspace changeset list` to display all changesets in table or JSON format.
 
 **Tasks**:
 1. Create `src/commands/changeset/list.rs`
@@ -1145,7 +1145,7 @@ Implement `wnt changeset list` to display all changesets in table or JSON format
 **So that** I can understand specific version bumps
 
 **Description**:
-Implement `wnt changeset show <id>` to display full details of a changeset.
+Implement `workspace changeset show <id>` to display full details of a changeset.
 
 **Tasks**:
 1. Create `src/commands/changeset/show.rs`
@@ -1200,7 +1200,7 @@ Implement `wnt changeset show <id>` to display full details of a changeset.
 **So that** I can refine version bump information
 
 **Description**:
-Implement `wnt changeset update [id]` to modify changeset properties. The ID parameter is optional - when not provided, the command detects the current branch and searches for a matching changeset. If no changeset is found for the branch, it logs an appropriate error message.
+Implement `workspace changeset update [id]` to modify changeset properties. The ID parameter is optional - when not provided, the command detects the current branch and searches for a matching changeset. If no changeset is found for the branch, it logs an appropriate error message.
 
 **Tasks**:
 1. Create `src/commands/changeset/update.rs`
@@ -1274,7 +1274,7 @@ Implement `wnt changeset update [id]` to modify changeset properties. The ID par
 **So that** I have full control over changeset content
 
 **Description**:
-Implement `wnt changeset edit <id>` to open changeset in $EDITOR.
+Implement `workspace changeset edit <id>` to open changeset in $EDITOR.
 
 **Tasks**:
 1. Create `src/commands/changeset/edit.rs`
@@ -1330,7 +1330,7 @@ Implement `wnt changeset edit <id>` to open changeset in $EDITOR.
 **So that** I can remove mistakes or outdated entries
 
 **Description**:
-Implement `wnt changeset remove <id>` with confirmation and archiving.
+Implement `workspace changeset remove <id>` with confirmation and archiving.
 
 **Tasks**:
 1. Create `src/commands/changeset/remove.rs`
@@ -1386,7 +1386,7 @@ Implement `wnt changeset remove <id>` with confirmation and archiving.
 **So that** I can track changes over time
 
 **Description**:
-Implement `wnt changeset history` to show timeline of changeset operations.
+Implement `workspace changeset history` to show timeline of changeset operations.
 
 **Tasks**:
 1. Create `src/commands/changeset/history.rs`
@@ -1447,7 +1447,7 @@ Implement `wnt changeset history` to show timeline of changeset operations.
 **So that** I can verify changes before applying them
 
 **Description**:
-Implement `wnt bump` in preview mode (default) to show what versions would be bumped. Must correctly handle different versioning strategies:
+Implement `workspace bump` in preview mode (default) to show what versions would be bumped. Must correctly handle different versioning strategies:
 - **Independent**: Only show packages in changesets receiving bumps
 - **Unified**: Show all workspace packages receiving the same version
 
@@ -1540,7 +1540,7 @@ Implement `wnt bump` in preview mode (default) to show what versions would be bu
 **So that** I can release new versions
 
 **Description**:
-Implement `wnt bump --execute` to actually apply version bumps, update files, and create git operations. Must respect versioning strategy when determining which packages to update.
+Implement `workspace bump --execute` to actually apply version bumps, update files, and create git operations. Must respect versioning strategy when determining which packages to update.
 
 **Tasks**:
 1. Implement strategy-aware package selection
@@ -1701,7 +1701,7 @@ Implement snapshot version generation for testing purposes. Must respect version
 **So that** I can understand what needs version bumps
 
 **Description**:
-Implement `wnt changes` to analyze working directory or commit range changes.
+Implement `workspace changes` to analyze working directory or commit range changes.
 
 **Tasks**:
 1. Create `src/commands/changes.rs`
@@ -1780,7 +1780,7 @@ Implement `wnt changes` to analyze working directory or commit range changes.
 **So that** I can keep dependencies up to date
 
 **Description**:
-Implement `wnt upgrade check` to detect available dependency upgrades.
+Implement `workspace upgrade check` to detect available dependency upgrades.
 
 **Tasks**:
 1. Create `src/commands/upgrade/mod.rs`
@@ -1852,7 +1852,7 @@ Implement `wnt upgrade check` to detect available dependency upgrades.
 **So that** I can update my dependencies safely
 
 **Description**:
-Implement `wnt upgrade apply` to apply selected upgrades with backup.
+Implement `workspace upgrade apply` to apply selected upgrades with backup.
 
 **Tasks**:
 1. Create `src/commands/upgrade/apply.rs`
@@ -1870,7 +1870,7 @@ Implement `wnt upgrade apply` to apply selected upgrades with backup.
 
 3. Implement backup creation
    - Backup all package.json files before changes
-   - Store in .wnt-backups/ directory
+   - Store in .workspace-backups/ directory
    - Include timestamp
    - **Effort**: Medium
 
@@ -1922,7 +1922,7 @@ Implement `wnt upgrade apply` to apply selected upgrades with backup.
 **So that** I can recover from upgrade issues
 
 **Description**:
-Implement `wnt upgrade rollback` to restore from backup.
+Implement `workspace upgrade rollback` to restore from backup.
 
 **Tasks**:
 1. Create `src/commands/upgrade/rollback.rs`
@@ -1984,7 +1984,7 @@ Implement `wnt upgrade rollback` to restore from backup.
 **So that** I can identify and fix issues
 
 **Description**:
-Implement `wnt audit` to run comprehensive health checks.
+Implement `workspace audit` to run comprehensive health checks.
 
 **Tasks**:
 1. Create `src/commands/audit/mod.rs`
@@ -2515,7 +2515,7 @@ Setup GitHub Actions workflow for automated releases with multi-platform binarie
 
 **As a** macOS user  
 **I want** to install via Homebrew  
-**So that** I can manage wnt like other tools
+**So that** I can manage workspace like other tools
 
 **Description**:
 Create and maintain Homebrew formula for easy installation on macOS.
@@ -2529,7 +2529,7 @@ Create and maintain Homebrew formula for easy installation on macOS.
    - **Effort**: Medium
 
 2. Setup tap repository
-   - Create homebrew-wnt repository
+   - Create homebrew-workspace repository
    - Setup auto-updates on release
    - **Effort**: Low
 
@@ -2563,11 +2563,11 @@ Create and maintain Homebrew formula for easy installation on macOS.
 **Priority**: Low
 
 **As a** user  
-**I want** to update wnt itself  
+**I want** to update workspace itself  
 **So that** I can get new features easily
 
 **Description**:
-Implement `wnt upgrade-self` to update the CLI binary.
+Implement `workspace upgrade-self` to update the CLI binary.
 
 **Tasks**:
 1. Create `src/commands/upgrade_self.rs`
@@ -2629,7 +2629,7 @@ Implement `wnt upgrade-self` to update the CLI binary.
 
 **As a** user  
 **I want** comprehensive documentation  
-**So that** I can learn to use wnt effectively
+**So that** I can learn to use workspace effectively
 
 **Description**:
 Create a complete user guide covering all features and workflows.
@@ -2737,7 +2737,7 @@ Create comprehensive command reference documentation.
 
 **As a** user  
 **I want** example projects  
-**So that** I can see wnt in action
+**So that** I can see workspace in action
 
 **Description**:
 Create example projects demonstrating various use cases.
@@ -2792,7 +2792,7 @@ Create example projects demonstrating various use cases.
 
 **As a** user migrating from another tool  
 **I want** a migration guide  
-**So that** I can switch to wnt easily
+**So that** I can switch to workspace easily
 
 **Description**:
 Create guides for migrating from other tools (Changesets, Lerna, etc.).
@@ -2839,7 +2839,7 @@ Create guides for migrating from other tools (Changesets, Lerna, etc.).
 
 **As a** potential user  
 **I want** a clear README  
-**So that** I can quickly understand what wnt does
+**So that** I can quickly understand what workspace does
 
 **Description**:
 Create an comprehensive README with quick start and links to detailed docs.
