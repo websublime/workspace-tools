@@ -249,18 +249,12 @@ pub(crate) fn detect_default_editor() -> Result<String> {
 pub(crate) fn is_command_available(command: &str) -> bool {
     #[cfg(unix)]
     {
-        Command::new("which")
-            .arg(command)
-            .output()
-            .is_ok_and(|output| output.status.success())
+        Command::new("which").arg(command).output().is_ok_and(|output| output.status.success())
     }
 
     #[cfg(windows)]
     {
-        Command::new("where")
-            .arg(command)
-            .output()
-            .is_ok_and(|output| output.status.success())
+        Command::new("where").arg(command).output().is_ok_and(|output| output.status.success())
     }
 
     #[cfg(not(any(unix, windows)))]

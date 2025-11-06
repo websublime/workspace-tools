@@ -230,7 +230,9 @@ pub enum VersionError {
     ///
     /// This error occurs when a dependency version spec cannot be parsed
     /// or is in an invalid format.
-    #[error("Invalid version spec '{spec}' for dependency '{dependency}' in package '{package}': {reason}")]
+    #[error(
+        "Invalid version spec '{spec}' for dependency '{dependency}' in package '{package}': {reason}"
+    )]
     InvalidVersionSpec {
         /// Name of the package containing the dependency.
         package: String,

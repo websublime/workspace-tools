@@ -9,11 +9,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use sublime_pkg_tools::audit::{
-    format_markdown, AuditIssue, AuditReport, AuditReportExt, AuditSections,
-    BreakingChangesAuditSection, CategorizationStats, DependencyAuditSection,
-    DependencyCategorization, DeprecatedPackage, FormatOptions, IssueCategory, IssueSeverity,
-    UpgradeAuditSection, Verbosity, VersionConsistencyAuditSection, VersionInconsistency,
-    VersionUsage,
+    AuditIssue, AuditReport, AuditReportExt, AuditSections, BreakingChangesAuditSection,
+    CategorizationStats, DependencyAuditSection, DependencyCategorization, DeprecatedPackage,
+    FormatOptions, IssueCategory, IssueSeverity, UpgradeAuditSection, Verbosity,
+    VersionConsistencyAuditSection, VersionInconsistency, VersionUsage, format_markdown,
 };
 
 fn main() {

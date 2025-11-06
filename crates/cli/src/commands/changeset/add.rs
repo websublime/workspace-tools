@@ -68,7 +68,7 @@ use crate::interactive::prompts::{
 use crate::output::styling::{Section, StatusSymbol, TextStyle, print_item};
 use crate::output::{JsonResponse, Output};
 use serde::Serialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use sublime_git_tools::Repo;
 use sublime_pkg_tools::changeset::ChangesetManager;
 use sublime_pkg_tools::config::PackageToolsConfig;
@@ -209,7 +209,7 @@ pub async fn execute_add(
     // Detect affected packages from git if not provided
     let detected_packages = if args.packages.is_none() && !all_packages.is_empty() {
         debug!("Detecting affected packages from git changes");
-        detect_affected_packages(&workspace_root, &repo, &fs, &all_packages)
+        detect_affected_packages(&workspace_root, &repo, &fs, &all_packages).await
     } else {
         vec![]
     };
@@ -343,7 +343,7 @@ pub async fn execute_add(
 ///
 /// Returns a list of all available package names in the workspace.
 async fn load_workspace_packages(
-    workspace_root: &PathBuf,
+    workspace_root: &Path,
     config: &PackageToolsConfig,
 ) -> Vec<String> {
     use sublime_pkg_tools::version::VersionResolver;
@@ -351,7 +351,7 @@ async fn load_workspace_packages(
     debug!("Loading workspace packages");
 
     // Create a VersionResolver to discover packages
-    let resolver = match VersionResolver::new(workspace_root.clone(), config.clone()).await {
+    let resolver = match VersionResolver::new(workspace_root.to_path_buf(), config.clone()).await {
         Ok(r) => r,
         Err(e) => {
             warn!("Failed to create version resolver: {}", e);
@@ -377,24 +377,116 @@ async fn load_workspace_packages(
 
 /// Detects affected packages from git changes.
 ///
-/// Uses the PackageDetector to analyze git changes and determine which
-/// packages are affected.
-fn detect_affected_packages(
-    _workspace_root: &PathBuf,
-    _repo: &Repo,
-    _fs: &FileSystemManager,
-    _all_packages: &[String],
+/// Uses the `PackageDetector` to analyze git changes and determine which
+/// packages are affected by recent commits.
+///
+/// # How it works
+///
+/// 1. Creates a `PackageDetector` instance with the workspace context
+/// 2. Gets recent commits since the last tag or base branch
+/// 3. Uses the detector to map changed files to affected packages
+/// 4. Returns the list of unique package names
+///
+/// # Parameters
+///
+/// * `workspace_root` - Root directory of the workspace
+/// * `repo` - Git repository instance
+/// * `fs` - Filesystem manager for file operations
+/// * `all_packages` - List of all available packages (for validation)
+///
+/// # Returns
+///
+/// A vector of package names that were affected by git changes.
+/// Returns empty vector if:
+/// - No commits found
+/// - Detection fails (logs warning)
+/// - No packages affected
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// // This is an internal helper function used within the changeset add command
+/// // It's called internally during the execute_add flow when packages are not specified
+///
+/// let workspace_root = Path::new(".");
+/// let repo = Repo::open(".")?;
+/// let fs = FileSystemManager::new();
+/// let all_packages = vec!["pkg-a".to_string(), "pkg-b".to_string()];
+///
+/// let affected = detect_affected_packages(
+///     workspace_root,
+///     &repo,
+///     &fs,
+///     &all_packages
+/// ).await;
+///
+/// println!("Affected packages: {:?}", affected);
+/// ```
+pub(crate) async fn detect_affected_packages(
+    workspace_root: &Path,
+    repo: &Repo,
+    fs: &FileSystemManager,
+    all_packages: &[String],
 ) -> Vec<String> {
-    // TODO: will be implemented with proper PackageDetector integration
-    // For now, return empty list as we don't have package detection yet
-    debug!("Detecting affected packages from git (placeholder - will be implemented in story 5.x)");
+    use sublime_pkg_tools::changeset::PackageDetector;
 
-    // In a real implementation, this would:
-    // 1. Get changed files from git
-    // 2. Use PackageDetector to map files to packages
-    // 3. Return list of affected package names
+    debug!("Detecting affected packages from git changes");
 
-    vec![]
+    // Create PackageDetector
+    let detector = PackageDetector::new(workspace_root, repo, fs.clone());
+
+    // Get recent commits (since last tag or all recent commits)
+    // We use None to get recent commits without a specific reference
+    let commits = match detector.get_commits_since(None) {
+        Ok(commits) => {
+            debug!("Found {} commits for analysis", commits.len());
+            commits
+        }
+        Err(e) => {
+            warn!("Failed to get commits for package detection: {}", e);
+            return vec![];
+        }
+    };
+
+    if commits.is_empty() {
+        debug!("No commits found for package detection");
+        return vec![];
+    }
+
+    // Extract commit IDs
+    let commit_ids: Vec<String> = commits.iter().map(|c| c.hash.clone()).collect();
+
+    // Detect affected packages from commits
+    let affected_packages = match detector.detect_affected_packages(&commit_ids).await {
+        Ok(packages) => {
+            debug!("Detected {} affected package(s): {:?}", packages.len(), packages);
+            packages
+        }
+        Err(e) => {
+            warn!("Failed to detect affected packages: {}", e);
+            return vec![];
+        }
+    };
+
+    // Filter to only include packages that exist in the workspace
+    let valid_packages: Vec<String> = affected_packages
+        .into_iter()
+        .filter(|pkg| {
+            let exists = all_packages.contains(pkg);
+            if !exists {
+                debug!("Filtered out non-existent package: {}", pkg);
+            }
+            exists
+        })
+        .collect();
+
+    if valid_packages.is_empty() {
+        debug!("No valid packages detected from git changes");
+    } else {
+        info!("Detected {} affected package(s) from git changes", valid_packages.len());
+    }
+
+    valid_packages
 }
 
 /// Outputs the command results based on the output format.

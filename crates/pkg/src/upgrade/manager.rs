@@ -17,7 +17,7 @@ use crate::config::{PackageToolsConfig, UpgradeConfig};
 use crate::error::{UpgradeError, UpgradeResult};
 use crate::upgrade::application::{apply_upgrades, apply_with_changeset};
 use crate::upgrade::backup::BackupManager;
-use crate::upgrade::detection::{detect_upgrades, DetectionOptions, UpgradePreview};
+use crate::upgrade::detection::{DetectionOptions, UpgradePreview, detect_upgrades};
 use crate::upgrade::registry::RegistryClient;
 use crate::upgrade::{UpgradeResult as UpgradeResultType, UpgradeSelection};
 use std::path::PathBuf;
@@ -287,10 +287,12 @@ impl UpgradeManager {
                 }
 
                 // Clean up backup if configured
-                if self.config.backup.enabled && !self.config.backup.keep_after_success
-                    && let Some(id) = backup_id {
-                        let _ = self.backup_manager.delete_backup(&id).await;
-                    }
+                if self.config.backup.enabled
+                    && !self.config.backup.keep_after_success
+                    && let Some(id) = backup_id
+                {
+                    let _ = self.backup_manager.delete_backup(&id).await;
+                }
 
                 // Clean up old backups
                 if self.config.backup.enabled {

@@ -41,7 +41,7 @@
 //! # }
 //! ```
 
-use crate::changelog::version_detection::{find_previous_version, parse_version_tag, VersionTag};
+use crate::changelog::version_detection::{VersionTag, find_previous_version, parse_version_tag};
 use crate::changelog::{Changelog, ChangelogCollector, ChangelogMetadata};
 use crate::config::ChangelogConfig;
 use crate::error::{ChangelogError, ChangelogResult};

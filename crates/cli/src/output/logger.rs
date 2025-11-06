@@ -234,8 +234,8 @@ pub fn operation_span(operation: &str) -> tracing::Span {
 ///
 /// # Examples
 ///
-/// ```rust
-/// // Instead of: use tracing::{info, debug, warn, error, trace};
-/// // Just use the macros directly after this module is in scope
+/// ```text
+/// Instead of: use tracing::{info, debug, warn, error, trace};
+/// Just use the macros directly after this module is in scope
 /// ```
 pub use tracing::{debug, error, info, trace, warn};

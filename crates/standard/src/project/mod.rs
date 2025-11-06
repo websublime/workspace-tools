@@ -31,7 +31,5 @@ mod tests;
 pub use detector::{ProjectDetector, ProjectDetectorTrait, ProjectDetectorWithFs};
 pub use manager::ProjectManager;
 pub use project::{Dependencies, Project};
-pub use types::{
-    ProjectDescriptor, ProjectInfo, ProjectKind, ProjectValidationStatus,
-};
+pub use types::{ProjectDescriptor, ProjectInfo, ProjectKind, ProjectValidationStatus};
 pub use validator::ProjectValidator;

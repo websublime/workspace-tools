@@ -16,8 +16,8 @@
 //! and ready for development. Consistent validation across project types
 //! helps identify issues early and provides actionable feedback.
 
-use super::types::{ProjectDescriptor, ProjectInfo, ProjectValidationStatus};
 use super::Project;
+use super::types::{ProjectDescriptor, ProjectInfo, ProjectValidationStatus};
 use crate::error::Result;
 use crate::filesystem::{AsyncFileSystem, FileSystemManager};
 use package_json::PackageJson;

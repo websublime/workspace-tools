@@ -13,7 +13,7 @@
 //! essential for interactive command execution and monitoring.
 
 use std::{
-    sync::{atomic::AtomicBool, Arc},
+    sync::{Arc, atomic::AtomicBool},
     time::Duration,
 };
 use tokio::sync::mpsc;

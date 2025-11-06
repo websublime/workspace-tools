@@ -683,10 +683,11 @@ fn default_buffer_size() -> usize {
     // Check environment variable for custom buffer size
     if let Ok(env_buffer) = std::env::var("SUBLIME_BUFFER_SIZE")
         && let Ok(buffer_size) = env_buffer.trim().parse::<usize>()
-            && (256..=65536).contains(&buffer_size) {
-                // Reasonable bounds: 256B to 64KB
-                return buffer_size;
-            }
+        && (256..=65536).contains(&buffer_size)
+    {
+        // Reasonable bounds: 256B to 64KB
+        return buffer_size;
+    }
 
     // Fallback to hardcoded default buffer size
     1024
@@ -700,10 +701,11 @@ fn default_max_concurrent() -> usize {
     // Check environment variable for custom max concurrent commands
     if let Ok(env_concurrent) = std::env::var("SUBLIME_MAX_CONCURRENT")
         && let Ok(max_concurrent) = env_concurrent.trim().parse::<usize>()
-            && (1..=100).contains(&max_concurrent) {
-                // Reasonable bounds
-                return max_concurrent;
-            }
+        && (1..=100).contains(&max_concurrent)
+    {
+        // Reasonable bounds
+        return max_concurrent;
+    }
 
     // Fallback to hardcoded default
     4
@@ -736,10 +738,11 @@ fn default_async_buffer_size() -> usize {
     // Check environment variable for custom async buffer size
     if let Ok(env_buffer) = std::env::var("SUBLIME_ASYNC_BUFFER_SIZE")
         && let Ok(buffer_size) = env_buffer.trim().parse::<usize>()
-            && (1024..=1_048_576).contains(&buffer_size) {
-                // Reasonable bounds: 1KB to 1MB
-                return buffer_size;
-            }
+        && (1024..=1_048_576).contains(&buffer_size)
+    {
+        // Reasonable bounds: 1KB to 1MB
+        return buffer_size;
+    }
 
     // Fallback to hardcoded default async buffer size
     8192
@@ -749,10 +752,11 @@ fn default_max_concurrent_io() -> usize {
     // Check environment variable for custom max concurrent I/O operations
     if let Ok(env_io) = std::env::var("SUBLIME_MAX_CONCURRENT_IO")
         && let Ok(max_io) = env_io.trim().parse::<usize>()
-            && (1..=1000).contains(&max_io) {
-                // Reasonable bounds
-                return max_io;
-            }
+        && (1..=1000).contains(&max_io)
+    {
+        // Reasonable bounds
+        return max_io;
+    }
 
     // Fallback to hardcoded default max concurrent I/O
     10
@@ -762,10 +766,12 @@ fn default_io_timeout() -> Duration {
     // Check environment variable for custom I/O timeout
     if let Ok(env_timeout) = std::env::var("SUBLIME_IO_TIMEOUT")
         && let Ok(seconds) = env_timeout.trim().parse::<u64>()
-            && seconds > 0 && seconds <= 300 {
-                // Max 5 minutes
-                return Duration::from_secs(seconds);
-            }
+        && seconds > 0
+        && seconds <= 300
+    {
+        // Max 5 minutes
+        return Duration::from_secs(seconds);
+    }
 
     // Fallback to hardcoded default I/O timeout
     Duration::from_secs(5)
@@ -809,10 +815,11 @@ fn default_collection_window_ms() -> u64 {
     // Check environment variable for custom collection window
     if let Ok(env_window) = std::env::var("SUBLIME_COLLECTION_WINDOW_MS")
         && let Ok(window_ms) = env_window.trim().parse::<u64>()
-            && (1..=1000).contains(&window_ms) {
-                // Reasonable bounds: 1ms to 1s
-                return window_ms;
-            }
+        && (1..=1000).contains(&window_ms)
+    {
+        // Reasonable bounds: 1ms to 1s
+        return window_ms;
+    }
 
     // Fallback to hardcoded default
     5
@@ -822,10 +829,11 @@ fn default_collection_sleep_us() -> u64 {
     // Check environment variable for custom collection sleep
     if let Ok(env_sleep) = std::env::var("SUBLIME_COLLECTION_SLEEP_US")
         && let Ok(sleep_us) = env_sleep.trim().parse::<u64>()
-            && (10..=10_000).contains(&sleep_us) {
-                // Reasonable bounds: 10μs to 10ms
-                return sleep_us;
-            }
+        && (10..=10_000).contains(&sleep_us)
+    {
+        // Reasonable bounds: 10μs to 10ms
+        return sleep_us;
+    }
 
     // Fallback to hardcoded default
     100
@@ -835,10 +843,11 @@ fn default_idle_sleep_ms() -> u64 {
     // Check environment variable for custom idle sleep
     if let Ok(env_idle) = std::env::var("SUBLIME_IDLE_SLEEP_MS")
         && let Ok(idle_ms) = env_idle.trim().parse::<u64>()
-            && (1..=1000).contains(&idle_ms) {
-                // Reasonable bounds: 1ms to 1s
-                return idle_ms;
-            }
+        && (1..=1000).contains(&idle_ms)
+    {
+        // Reasonable bounds: 1ms to 1s
+        return idle_ms;
+    }
 
     // Fallback to hardcoded default
     10

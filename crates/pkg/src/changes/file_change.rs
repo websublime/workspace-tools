@@ -370,9 +370,8 @@ impl FileChange {
     /// ```
     #[must_use]
     pub fn is_package_json(&self) -> bool {
-        self.package_relative_path
-            .file_name()
-            .and_then(|name| name.to_str()) == Some("package.json")
+        self.package_relative_path.file_name().and_then(|name| name.to_str())
+            == Some("package.json")
     }
 
     /// Calculates the net line change (added - deleted).

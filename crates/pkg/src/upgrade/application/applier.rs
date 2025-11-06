@@ -14,9 +14,9 @@
 
 use crate::error::UpgradeError;
 use crate::types::DependencyType;
+use crate::upgrade::UpgradeSelection;
 use crate::upgrade::detection::{DependencyUpgrade, PackageUpgrades};
 use crate::upgrade::registry::UpgradeType;
-use crate::upgrade::UpgradeSelection;
 use chrono::Utc;
 use package_json::PackageJson;
 use std::collections::HashSet;
@@ -266,13 +266,13 @@ fn apply_single_upgrade(pkg_json: &mut PackageJson, upgrade: &DependencyUpgrade)
     };
 
     if let Some(deps_map) = deps
-        && let Some(version) = deps_map.get_mut(&upgrade.name) {
-            // Preserve the version prefix (^, ~, etc.) if present
-            let new_spec =
-                preserve_version_prefix(&upgrade.current_version, &upgrade.latest_version);
-            *version = new_spec;
-            return true;
-        }
+        && let Some(version) = deps_map.get_mut(&upgrade.name)
+    {
+        // Preserve the version prefix (^, ~, etc.) if present
+        let new_spec = preserve_version_prefix(&upgrade.current_version, &upgrade.latest_version);
+        *version = new_spec;
+        return true;
+    }
 
     false
 }

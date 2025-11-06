@@ -24,8 +24,8 @@ use std::{
 };
 use tokio::{
     sync::{
-        mpsc::{Receiver, Sender},
         Semaphore,
+        mpsc::{Receiver, Sender},
     },
     task::JoinHandle,
 };

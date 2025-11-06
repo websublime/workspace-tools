@@ -25,8 +25,8 @@ mod tests {
         VersionConsistencyAuditSection, VersionInconsistency, VersionUsage,
     };
     use crate::audit::{
-        format_json, format_json_compact, format_markdown, AuditManager, AuditReport,
-        AuditReportExt, AuditSections, FormatOptions, Verbosity,
+        AuditManager, AuditReport, AuditReportExt, AuditSections, FormatOptions, Verbosity,
+        format_json, format_json_compact, format_markdown,
     };
     use crate::config::PackageToolsConfig;
     use std::collections::HashMap;
@@ -3011,7 +3011,7 @@ mod tests {
 
     #[test]
     fn test_health_score_perfect_score() {
-        use crate::audit::{calculate_health_score, AuditIssue, HealthScoreWeights};
+        use crate::audit::{AuditIssue, HealthScoreWeights, calculate_health_score};
 
         let issues: Vec<AuditIssue> = vec![];
         let weights = HealthScoreWeights::default();
@@ -3023,8 +3023,8 @@ mod tests {
     #[test]
     fn test_health_score_single_critical_security_issue() {
         use crate::audit::{
-            calculate_health_score_detailed, AuditIssue, HealthScoreWeights, IssueCategory,
-            IssueSeverity,
+            AuditIssue, HealthScoreWeights, IssueCategory, IssueSeverity,
+            calculate_health_score_detailed,
         };
 
         let issues = vec![AuditIssue::new(
@@ -3047,8 +3047,8 @@ mod tests {
     #[test]
     fn test_health_score_multiple_warnings_same_category() {
         use crate::audit::{
-            calculate_health_score_detailed, AuditIssue, HealthScoreWeights, IssueCategory,
-            IssueSeverity,
+            AuditIssue, HealthScoreWeights, IssueCategory, IssueSeverity,
+            calculate_health_score_detailed,
         };
 
         let issues = vec![
@@ -3087,8 +3087,8 @@ mod tests {
     #[test]
     fn test_health_score_mixed_severities_and_categories() {
         use crate::audit::{
-            calculate_health_score_detailed, AuditIssue, HealthScoreWeights, IssueCategory,
-            IssueSeverity,
+            AuditIssue, HealthScoreWeights, IssueCategory, IssueSeverity,
+            calculate_health_score_detailed,
         };
 
         let issues = vec![
@@ -3128,7 +3128,7 @@ mod tests {
     #[test]
     fn test_health_score_floor_at_zero() {
         use crate::audit::{
-            calculate_health_score, AuditIssue, HealthScoreWeights, IssueCategory, IssueSeverity,
+            AuditIssue, HealthScoreWeights, IssueCategory, IssueSeverity, calculate_health_score,
         };
 
         // Create enough critical security issues to exceed 100 points
@@ -3161,8 +3161,8 @@ mod tests {
     #[test]
     fn test_health_score_breakdown_summary() {
         use crate::audit::{
-            calculate_health_score_detailed, AuditIssue, HealthScoreWeights, IssueCategory,
-            IssueSeverity,
+            AuditIssue, HealthScoreWeights, IssueCategory, IssueSeverity,
+            calculate_health_score_detailed,
         };
 
         let issues = vec![
@@ -3194,7 +3194,7 @@ mod tests {
 
     #[test]
     fn test_health_score_empty_breakdown() {
-        use crate::audit::{calculate_health_score_detailed, AuditIssue, HealthScoreWeights};
+        use crate::audit::{AuditIssue, HealthScoreWeights, calculate_health_score_detailed};
 
         let issues: Vec<AuditIssue> = vec![];
         let weights = HealthScoreWeights::default();
@@ -3212,7 +3212,7 @@ mod tests {
     #[test]
     fn test_health_score_custom_weights() {
         use crate::audit::{
-            calculate_health_score, AuditIssue, HealthScoreWeights, IssueCategory, IssueSeverity,
+            AuditIssue, HealthScoreWeights, IssueCategory, IssueSeverity, calculate_health_score,
         };
 
         let issues = vec![AuditIssue::new(
@@ -3247,8 +3247,8 @@ mod tests {
     #[test]
     fn test_health_score_all_categories() {
         use crate::audit::{
-            calculate_health_score_detailed, AuditIssue, HealthScoreWeights, IssueCategory,
-            IssueSeverity,
+            AuditIssue, HealthScoreWeights, IssueCategory, IssueSeverity,
+            calculate_health_score_detailed,
         };
 
         let issues = vec![
@@ -3324,8 +3324,8 @@ mod tests {
     #[test]
     fn test_health_score_breakdown_serialization() {
         use crate::audit::{
-            calculate_health_score_detailed, AuditIssue, HealthScoreWeights, IssueCategory,
-            IssueSeverity,
+            AuditIssue, HealthScoreWeights, IssueCategory, IssueSeverity,
+            calculate_health_score_detailed,
         };
 
         let issues = vec![AuditIssue::new(

@@ -123,9 +123,7 @@ impl FileSystemManager {
     /// ```
     #[must_use]
     pub fn with_standard_config(fs_config: &crate::config::FilesystemConfig) -> Self {
-        Self { 
-            config: AsyncFileSystemConfig::from(fs_config)
-        }
+        Self { config: AsyncFileSystemConfig::from(fs_config) }
     }
 
     /// Creates a new `FileSystemManager` instance with async I/O configuration.
@@ -152,9 +150,7 @@ impl FileSystemManager {
     /// ```
     #[must_use]
     pub fn with_async_io_config(async_io_config: &crate::config::standard::AsyncIoConfig) -> Self {
-        Self { 
-            config: AsyncFileSystemConfig::from(async_io_config)
-        }
+        Self { config: AsyncFileSystemConfig::from(async_io_config) }
     }
 
     /// Creates a new `FileSystemManager` that automatically loads configuration from project files.
@@ -191,10 +187,8 @@ impl FileSystemManager {
     pub async fn new_with_project_config(project_root: &Path) -> Result<Self> {
         let temp_fs = Self::new(); // Temporary instance for loading config
         let config = Self::load_project_config(&temp_fs, project_root, None).await?;
-        
-        Ok(Self {
-            config: AsyncFileSystemConfig::from(&config.filesystem),
-        })
+
+        Ok(Self { config: AsyncFileSystemConfig::from(&config.filesystem) })
     }
 
     /// Loads configuration from project files in the specified directory.
@@ -228,7 +222,7 @@ impl FileSystemManager {
         // Check for repo.config.* files in order of preference
         let config_files = [
             project_root.join("repo.config.toml"),
-            project_root.join("repo.config.yml"), 
+            project_root.join("repo.config.yml"),
             project_root.join("repo.config.yaml"),
             project_root.join("repo.config.json"),
         ];
@@ -240,19 +234,20 @@ impl FileSystemManager {
             }
         }
 
-        let manager = builder.build(fs.clone()).map_err(|e| {
-            Error::operation(format!("Failed to create config manager: {e}"))
-        })?;
+        let manager = builder
+            .build(fs.clone())
+            .map_err(|e| Error::operation(format!("Failed to create config manager: {e}")))?;
 
-        let mut config = manager.load().await.map_err(|e| {
-            Error::operation(format!("Failed to load configuration: {e}"))
-        })?;
+        let mut config = manager
+            .load()
+            .await
+            .map_err(|e| Error::operation(format!("Failed to load configuration: {e}")))?;
 
         // Merge with base config if provided
         if let Some(base) = base_config {
-            config.merge_with(base).map_err(|e| {
-                Error::operation(format!("Failed to merge configurations: {e}"))
-            })?;
+            config
+                .merge_with(base)
+                .map_err(|e| Error::operation(format!("Failed to merge configurations: {e}")))?;
         }
 
         Ok(config)
@@ -354,9 +349,10 @@ impl AsyncFileSystem for FileSystemManager {
         let operation = async {
             // Create parent directories if they don't exist
             if let Some(parent) = path.parent()
-                && !self.exists(parent).await {
-                    self.create_dir_all(parent).await?;
-                }
+                && !self.exists(parent).await
+            {
+                self.create_dir_all(parent).await?;
+            }
 
             fs::write(path, contents)
                 .await
@@ -383,9 +379,10 @@ impl AsyncFileSystem for FileSystemManager {
         let operation = async {
             // Create parent directories if they don't exist
             if let Some(parent) = path.parent()
-                && !self.exists(parent).await {
-                    self.create_dir_all(parent).await?;
-                }
+                && !self.exists(parent).await
+            {
+                self.create_dir_all(parent).await?;
+            }
 
             fs::write(path, contents)
                 .await
@@ -438,7 +435,11 @@ impl AsyncFileSystem for FileSystemManager {
         match fs::try_exists(path).await {
             Ok(exists) => exists,
             Err(e) => {
-                log::warn!("Failed to check existence of path {}: {}. Treating as non-existent.", path.display(), e);
+                log::warn!(
+                    "Failed to check existence of path {}: {}. Treating as non-existent.",
+                    path.display(),
+                    e
+                );
                 false
             }
         }

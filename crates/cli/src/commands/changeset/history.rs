@@ -217,10 +217,9 @@ async fn query_changesets(
     // Start with the most specific filter first
     if let Some(package) = &args.package {
         debug!("Querying by package: {}", package);
-        changesets = history
-            .query_by_package(package)
-            .await
-            .map_err(|e| CliError::Execution(format!("Failed to query changesets by package: {e}")))?;
+        changesets = history.query_by_package(package).await.map_err(|e| {
+            CliError::Execution(format!("Failed to query changesets by package: {e}"))
+        })?;
         used_package_primary = true;
     } else if args.since.is_some() || args.until.is_some() {
         // Query by date range
@@ -229,7 +228,9 @@ async fn query_changesets(
         } else {
             // Use earliest possible date
             DateTime::parse_from_rfc3339("1970-01-01T00:00:00Z")
-                .map_err(|e| CliError::Validation(format!("Failed to parse default since date: {e}")))?
+                .map_err(|e| {
+                    CliError::Validation(format!("Failed to parse default since date: {e}"))
+                })?
                 .with_timezone(&Utc)
         };
 
@@ -248,22 +249,16 @@ async fn query_changesets(
         used_date_primary = true;
     } else if let Some(env) = &args.env {
         debug!("Querying by environment: {}", env);
-        changesets = history
-            .query_by_environment(env)
-            .await
-            .map_err(|e| {
-                CliError::Execution(format!("Failed to query changesets by environment: {e}"))
-            })?;
+        changesets = history.query_by_environment(env).await.map_err(|e| {
+            CliError::Execution(format!("Failed to query changesets by environment: {e}"))
+        })?;
         used_env_primary = true;
     } else if let Some(bump_str) = &args.bump {
         let bump = parse_bump_type(bump_str)?;
         debug!("Querying by bump type: {:?}", bump);
-        changesets = history
-            .query_by_bump(bump)
-            .await
-            .map_err(|e| {
-                CliError::Execution(format!("Failed to query changesets by bump type: {e}"))
-            })?;
+        changesets = history.query_by_bump(bump).await.map_err(|e| {
+            CliError::Execution(format!("Failed to query changesets by bump type: {e}"))
+        })?;
         used_bump_primary = true;
     } else {
         // No specific filter, get all changesets
@@ -328,9 +323,7 @@ fn parse_date(date_str: &str) -> Result<DateTime<Utc>> {
     if let Ok(date) = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
         return Ok(date
             .and_hms_opt(0, 0, 0)
-            .ok_or_else(|| {
-                CliError::Validation(format!("Invalid date components in: {date_str}"))
-            })?
+            .ok_or_else(|| CliError::Validation(format!("Invalid date components in: {date_str}")))?
             .and_utc());
     }
 
@@ -350,11 +343,8 @@ fn output_json(output: &Output, changesets: Vec<ArchivedChangeset>) -> Result<()
         changesets.into_iter().map(std::convert::Into::into).collect();
 
     let total = items.len();
-    let response = JsonResponse::success(ChangesetHistoryResponse {
-        success: true,
-        changesets: items,
-        total,
-    });
+    let response =
+        JsonResponse::success(ChangesetHistoryResponse { success: true, changesets: items, total });
 
     output
         .json(&response)
@@ -425,9 +415,7 @@ fn output_table(output: &Output, changesets: &[ArchivedChangeset]) -> Result<()>
         .table(&mut table)
         .map_err(|e| CliError::Execution(format!("Failed to render table: {e}")))?;
 
-    output
-        .blank_line()
-        .map_err(|e| CliError::Execution(format!("Failed to write output: {e}")))?;
+    output.blank_line().map_err(|e| CliError::Execution(format!("Failed to write output: {e}")))?;
 
     // Display summary
     let section = Section::new("Summary");

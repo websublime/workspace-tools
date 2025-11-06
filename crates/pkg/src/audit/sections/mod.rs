@@ -37,16 +37,15 @@ pub(crate) mod version_consistency;
 
 // Public exports
 pub use breaking_changes::{
-    audit_breaking_changes, BreakingChange, BreakingChangeSource, BreakingChangesAuditSection,
-    PackageBreakingChanges,
+    BreakingChange, BreakingChangeSource, BreakingChangesAuditSection, PackageBreakingChanges,
+    audit_breaking_changes,
 };
 pub use categorization::{
-    categorize_dependencies, generate_categorization_issues, CategorizationStats,
-    DependencyCategorization, ExternalPackage, InternalPackage, LocalLink, LocalLinkType,
-    WorkspaceLink,
+    CategorizationStats, DependencyCategorization, ExternalPackage, InternalPackage, LocalLink,
+    LocalLinkType, WorkspaceLink, categorize_dependencies, generate_categorization_issues,
 };
-pub use dependencies::{audit_dependencies, DependencyAuditSection, VersionConflict, VersionUsage};
-pub use upgrades::{audit_upgrades, DeprecatedPackage, UpgradeAuditSection};
+pub use dependencies::{DependencyAuditSection, VersionConflict, VersionUsage, audit_dependencies};
+pub use upgrades::{DeprecatedPackage, UpgradeAuditSection, audit_upgrades};
 pub use version_consistency::{
-    audit_version_consistency, VersionConsistencyAuditSection, VersionInconsistency,
+    VersionConsistencyAuditSection, VersionInconsistency, audit_version_consistency,
 };

@@ -430,11 +430,7 @@ impl ConventionalCommit {
 
         let body = if footer_start > 0 {
             let body_text = lines[..footer_start].join("\n").trim().to_string();
-            if body_text.is_empty() {
-                None
-            } else {
-                Some(body_text)
-            }
+            if body_text.is_empty() { None } else { Some(body_text) }
         } else {
             None
         };
@@ -523,12 +519,13 @@ impl ConventionalCommit {
 
             // This is a continuation line or non-footer content
             if let Some(ref mut footer) = current
-                && !trimmed.is_empty() {
-                    if !footer.value.is_empty() {
-                        footer.value.push(' ');
-                    }
-                    footer.value.push_str(trimmed);
+                && !trimmed.is_empty()
+            {
+                if !footer.value.is_empty() {
+                    footer.value.push(' ');
                 }
+                footer.value.push_str(trimmed);
+            }
         }
 
         // Don't forget the last footer

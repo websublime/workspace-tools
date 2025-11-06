@@ -183,11 +183,7 @@ impl DependencyCategorization {
     #[must_use]
     pub fn internal_percentage(&self) -> f64 {
         let total = self.stats.internal_packages + self.stats.external_packages;
-        if total == 0 {
-            0.0
-        } else {
-            (self.stats.internal_packages as f64 / total as f64) * 100.0
-        }
+        if total == 0 { 0.0 } else { (self.stats.internal_packages as f64 / total as f64) * 100.0 }
     }
 
     /// Returns the percentage of external packages relative to total unique dependencies.
@@ -203,11 +199,7 @@ impl DependencyCategorization {
     #[must_use]
     pub fn external_percentage(&self) -> f64 {
         let total = self.stats.internal_packages + self.stats.external_packages;
-        if total == 0 {
-            0.0
-        } else {
-            (self.stats.external_packages as f64 / total as f64) * 100.0
-        }
+        if total == 0 { 0.0 } else { (self.stats.external_packages as f64 / total as f64) * 100.0 }
     }
 }
 

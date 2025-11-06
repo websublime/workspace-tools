@@ -9,7 +9,7 @@
 //! ```
 
 use sublime_pkg_tools::config::{
-    load_config, load_config_from_file, ConfigLoader, PackageToolsConfig,
+    ConfigLoader, PackageToolsConfig, load_config, load_config_from_file,
 };
 use sublime_standard_tools::config::Configurable;
 

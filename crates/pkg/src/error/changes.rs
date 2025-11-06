@@ -307,7 +307,9 @@ pub enum ChangesError {
     /// This error occurs when calculating the next version for a package
     /// based on a version bump fails, typically due to version overflow
     /// or invalid version format.
-    #[error("Failed to calculate next version for package '{package}': cannot bump {current_version} with {bump_type} - {reason}")]
+    #[error(
+        "Failed to calculate next version for package '{package}': cannot bump {current_version} with {bump_type} - {reason}"
+    )]
     VersionCalculationFailed {
         /// Name of the package.
         package: String,

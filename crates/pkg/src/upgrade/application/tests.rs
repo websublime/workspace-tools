@@ -15,7 +15,7 @@
 
 use crate::types::DependencyType;
 use crate::upgrade::application::applier::preserve_version_prefix;
-use crate::upgrade::application::{apply_upgrades, UpgradeSelection};
+use crate::upgrade::application::{UpgradeSelection, apply_upgrades};
 use crate::upgrade::detection::{DependencyUpgrade, PackageUpgrades, VersionInfo};
 use crate::upgrade::registry::UpgradeType;
 use chrono::Utc;

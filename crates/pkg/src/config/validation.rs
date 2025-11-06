@@ -286,20 +286,21 @@ fn validate_changelog_config(config: &PackageToolsConfig) -> ConfigResult<()> {
 
         // Validate repository URL if commit links are enabled
         if changelog.include_commit_links
-            && let Some(ref url) = changelog.repository_url {
-                if url.is_empty() {
-                    return Err(ConfigError::validation(
-                        "changelog.repository_url: URL cannot be empty when include_commit_links is true.",
-                    ));
-                }
-
-                if !url.starts_with("http://") && !url.starts_with("https://") {
-                    return Err(ConfigError::validation(
-                        "changelog.repository_url: URL must start with http:// or https://",
-                    ));
-                }
+            && let Some(ref url) = changelog.repository_url
+        {
+            if url.is_empty() {
+                return Err(ConfigError::validation(
+                    "changelog.repository_url: URL cannot be empty when include_commit_links is true.",
+                ));
             }
-            // Note: repository_url being None is allowed - it will be detected at runtime when actually generating changelogs
+
+            if !url.starts_with("http://") && !url.starts_with("https://") {
+                return Err(ConfigError::validation(
+                    "changelog.repository_url: URL must start with http:// or https://",
+                ));
+            }
+        }
+        // Note: repository_url being None is allowed - it will be detected at runtime when actually generating changelogs
 
         // Validate tag formats
         if changelog.version_tag_format.is_empty() {

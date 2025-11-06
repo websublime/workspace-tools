@@ -409,11 +409,12 @@ impl HealthScoreBreakdown {
             lines.push("Issues by Severity:".to_string());
             for severity in ["critical", "warning", "info"] {
                 if let Some(count) = self.issues_by_severity.get(severity)
-                    && *count > 0 {
-                        let deduction =
-                            self.deductions_by_severity.get(severity).copied().unwrap_or(0.0);
-                        lines.push(format!("  {}: {} (-{:.1} points)", severity, count, deduction));
-                    }
+                    && *count > 0
+                {
+                    let deduction =
+                        self.deductions_by_severity.get(severity).copied().unwrap_or(0.0);
+                    lines.push(format!("  {}: {} (-{:.1} points)", severity, count, deduction));
+                }
             }
             lines.push(String::new());
         }

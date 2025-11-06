@@ -638,11 +638,7 @@ impl<F: AsyncFileSystem> BackupManager<F> {
 
     /// Resolves a path to an absolute path.
     fn resolve_path(&self, path: &Path) -> PathBuf {
-        if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            self.workspace_root.join(path)
-        }
+        if path.is_absolute() { path.to_path_buf() } else { self.workspace_root.join(path) }
     }
 
     /// Loads the metadata collection from disk.

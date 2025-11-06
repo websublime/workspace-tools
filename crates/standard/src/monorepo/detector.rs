@@ -16,7 +16,7 @@
 //! approach eliminates confusion and provides consistent API across all operations.
 
 use super::{MonorepoDescriptor, MonorepoKind, WorkspacePackage};
-use crate::config::{traits::Configurable, ConfigManager, StandardConfig};
+use crate::config::{ConfigManager, StandardConfig, traits::Configurable};
 use crate::error::{Error, Result};
 use crate::filesystem::{AsyncFileSystem, FileSystemManager};
 use crate::project::ProjectValidationStatus;
@@ -300,7 +300,7 @@ pub trait MonorepoDetectorWithFs<F: AsyncFileSystem>: MonorepoDetectorTrait {
     ///
     /// Each result in the vector may contain an error if detection fails for that root.
     async fn detect_packages_multiple(&self, roots: &[&Path])
-        -> Vec<Result<Vec<WorkspacePackage>>>;
+    -> Vec<Result<Vec<WorkspacePackage>>>;
 
     /// Asynchronously performs parallel package discovery with concurrency control.
     ///
@@ -595,14 +595,16 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
         if self.fs.exists(&yarn_lock_path).await {
             let package_json_path = path.join("package.json");
             if self.fs.exists(&package_json_path).await
-                && let Ok(content) = self.fs.read_file_string(&package_json_path).await {
-                    // Try raw JSON parsing to check for workspaces field
-                    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&content)
-                        && let Some(workspaces) = json_value.get("workspaces")
-                            && !workspaces.is_null() {
-                                return Ok(Some(MonorepoKind::YarnWorkspaces));
-                            }
+                && let Ok(content) = self.fs.read_file_string(&package_json_path).await
+            {
+                // Try raw JSON parsing to check for workspaces field
+                if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&content)
+                    && let Some(workspaces) = json_value.get("workspaces")
+                    && !workspaces.is_null()
+                {
+                    return Ok(Some(MonorepoKind::YarnWorkspaces));
                 }
+            }
         }
 
         // Check for pnpm-lock.yaml with workspaces
@@ -611,21 +613,28 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
             let package_json_path = path.join("package.json");
             if self.fs.exists(&package_json_path).await {
                 match self.fs.read_file_string(&package_json_path).await {
-                    Ok(content) => {
-                        match serde_json::from_str::<serde_json::Value>(&content) {
-                            Ok(json_value) => {
-                                if let Some(workspaces) = json_value.get("workspaces")
-                                    && !workspaces.is_null() {
-                                        return Ok(Some(MonorepoKind::PnpmWorkspaces));
-                                    }
-                            }
-                            Err(e) => {
-                                log::warn!("Failed to parse package.json for pnpm workspace detection at {}: {}", package_json_path.display(), e);
+                    Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+                        Ok(json_value) => {
+                            if let Some(workspaces) = json_value.get("workspaces")
+                                && !workspaces.is_null()
+                            {
+                                return Ok(Some(MonorepoKind::PnpmWorkspaces));
                             }
                         }
-                    }
+                        Err(e) => {
+                            log::warn!(
+                                "Failed to parse package.json for pnpm workspace detection at {}: {}",
+                                package_json_path.display(),
+                                e
+                            );
+                        }
+                    },
                     Err(e) => {
-                        log::debug!("Could not read package.json for pnpm workspace detection at {}: {}", package_json_path.display(), e);
+                        log::debug!(
+                            "Could not read package.json for pnpm workspace detection at {}: {}",
+                            package_json_path.display(),
+                            e
+                        );
                     }
                 }
             }
@@ -655,21 +664,28 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
         let npm_lock_path = path.join("package-lock.json");
         if self.fs.exists(&package_json_path).await && self.fs.exists(&npm_lock_path).await {
             match self.fs.read_file_string(&package_json_path).await {
-                Ok(content) => {
-                    match serde_json::from_str::<serde_json::Value>(&content) {
-                        Ok(json_value) => {
-                            if let Some(workspaces) = json_value.get("workspaces")
-                                && !workspaces.is_null() {
-                                    return Ok(Some(MonorepoKind::NpmWorkSpace));
-                                }
-                        }
-                        Err(e) => {
-                            log::warn!("Failed to parse package.json for npm workspace detection at {}: {}", package_json_path.display(), e);
+                Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+                    Ok(json_value) => {
+                        if let Some(workspaces) = json_value.get("workspaces")
+                            && !workspaces.is_null()
+                        {
+                            return Ok(Some(MonorepoKind::NpmWorkSpace));
                         }
                     }
-                }
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to parse package.json for npm workspace detection at {}: {}",
+                            package_json_path.display(),
+                            e
+                        );
+                    }
+                },
                 Err(e) => {
-                    log::debug!("Could not read package.json for npm workspace detection at {}: {}", package_json_path.display(), e);
+                    log::debug!(
+                        "Could not read package.json for npm workspace detection at {}: {}",
+                        package_json_path.display(),
+                        e
+                    );
                 }
             }
         }
@@ -796,15 +812,17 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
                     }
 
                     if let Ok(metadata) = self.fs.metadata(&dir_path).await
-                        && metadata.is_dir() {
-                            let package_json_path = dir_path.join("package.json");
-                            if self.fs.exists(&package_json_path).await
-                                && let Ok(package) =
-                                    self.load_workspace_package(&package_json_path, &discovered_scopes).await
-                                {
-                                    packages.push(package);
-                                }
+                        && metadata.is_dir()
+                    {
+                        let package_json_path = dir_path.join("package.json");
+                        if self.fs.exists(&package_json_path).await
+                            && let Ok(package) = self
+                                .load_workspace_package(&package_json_path, &discovered_scopes)
+                                .await
+                        {
+                            packages.push(package);
                         }
+                    }
                 }
             }
         }
@@ -813,11 +831,7 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
     }
 
     async fn has_multiple_packages(&self, path: &Path) -> bool {
-        if let Ok(packages) = self.detect_packages(path).await {
-            packages.len() > 1
-        } else {
-            false
-        }
+        if let Ok(packages) = self.detect_packages(path).await { packages.len() > 1 } else { false }
     }
 }
 
@@ -871,7 +885,7 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
     /// A vector of discovered internal workspace scopes (e.g., `["@scope/", "@internal/"]`)
     async fn discover_internal_scopes(&self, root: &Path) -> Result<Vec<String>> {
         let mut discovered_scopes = std::collections::HashSet::new();
-        
+
         // Get workspace patterns to scan for packages
         let package_json_path = root.join("package.json");
         if !self.fs.exists(&package_json_path).await {
@@ -912,20 +926,25 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
                     }
 
                     if let Ok(metadata) = self.fs.metadata(&dir_path).await
-                        && metadata.is_dir() {
-                            let package_json_path = dir_path.join("package.json");
-                            if self.fs.exists(&package_json_path).await
-                                && let Ok(pkg_content) = self.fs.read_file_string(&package_json_path).await
-                                    && let Ok(pkg_json) = serde_json::from_str::<serde_json::Value>(&pkg_content)
-                                        && let Some(name) = pkg_json.get("name").and_then(|v| v.as_str()) {
-                                            // Extract scope from package name (e.g., "@scope/lib" -> "@scope/")
-                                            if name.starts_with('@')
-                                                && let Some(slash_pos) = name.find('/') {
-                                                    let scope = format!("{}/", &name[..slash_pos]);
-                                                    discovered_scopes.insert(scope);
-                                                }
-                                        }
+                        && metadata.is_dir()
+                    {
+                        let package_json_path = dir_path.join("package.json");
+                        if self.fs.exists(&package_json_path).await
+                            && let Ok(pkg_content) =
+                                self.fs.read_file_string(&package_json_path).await
+                            && let Ok(pkg_json) =
+                                serde_json::from_str::<serde_json::Value>(&pkg_content)
+                            && let Some(name) = pkg_json.get("name").and_then(|v| v.as_str())
+                        {
+                            // Extract scope from package name (e.g., "@scope/lib" -> "@scope/")
+                            if name.starts_with('@')
+                                && let Some(slash_pos) = name.find('/')
+                            {
+                                let scope = format!("{}/", &name[..slash_pos]);
+                                discovered_scopes.insert(scope);
+                            }
                         }
+                    }
                 }
             }
         }
@@ -933,7 +952,7 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
         // Convert to sorted Vec for consistent results
         let mut scopes: Vec<String> = discovered_scopes.into_iter().collect();
         scopes.sort();
-        
+
         Ok(scopes)
     }
 
@@ -962,9 +981,10 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
             // Component-based matching for directory-level exclusions
             for component in path.components() {
                 if let Some(component_str) = component.as_os_str().to_str()
-                    && Self::matches_exclusion_pattern(component_str, exclude_pattern) {
-                        return true;
-                    }
+                    && Self::matches_exclusion_pattern(component_str, exclude_pattern)
+                {
+                    return true;
+                }
             }
         }
 
@@ -1009,7 +1029,9 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
 
         // Directory prefix matching (e.g., "cache" matches "cache/file")
         if let Some(remaining) = path_component.strip_prefix(exclude_pattern) {
-            return remaining.is_empty() || remaining.starts_with('/') || remaining.starts_with('\\');
+            return remaining.is_empty()
+                || remaining.starts_with('/')
+                || remaining.starts_with('\\');
         }
 
         false
@@ -1066,8 +1088,10 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
         if let Some(star_pos) = pattern.find('*') {
             let prefix = &pattern[..star_pos];
             let suffix = &pattern[star_pos + 1..];
-            
-            return text.starts_with(prefix) && text.ends_with(suffix) && text.len() >= prefix.len() + suffix.len();
+
+            return text.starts_with(prefix)
+                && text.ends_with(suffix)
+                && text.len() >= prefix.len() + suffix.len();
         }
 
         false
@@ -1075,7 +1099,7 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
 
     /// Determines if a dependency name represents a workspace dependency.
     ///
-    /// This method uses both configuration and discovered internal scopes to determine 
+    /// This method uses both configuration and discovered internal scopes to determine
     /// if a dependency is an internal workspace dependency. No hardcoded patterns are used.
     ///
     /// # Arguments
@@ -1093,7 +1117,7 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
                 return true;
             }
         }
-        
+
         // Check against discovered internal scopes
         for scope in discovered_scopes {
             if dep_name.starts_with(scope) {
@@ -1119,7 +1143,7 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
                     return true;
                 }
             }
-            
+
             // Advanced glob pattern matching for complex patterns
             // e.g., "packages/*/lib" -> matches dependencies from lib packages
             if pattern.contains('*') && pattern != "*" {
@@ -1153,28 +1177,41 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
     /// // Pattern "packages/*" matches dependency "@myorg/lib" if there's a package at packages/lib
     /// // Pattern "libs/*/core" matches dependency "@core/utils" if there's a package at libs/utils/core
     /// ```
-    fn matches_workspace_pattern(&self, dep_name: &str, workspace_pattern: &str, discovered_scopes: &[String]) -> bool {
+    fn matches_workspace_pattern(
+        &self,
+        dep_name: &str,
+        workspace_pattern: &str,
+        discovered_scopes: &[String],
+    ) -> bool {
         // Enterprise-grade workspace pattern matching with full glob support and directory analysis
         // Handles complex monorepo structures, nested dependencies, and sophisticated naming patterns
-        
+
         // Parse and analyze workspace pattern components
         let pattern_parts: Vec<&str> = workspace_pattern.split('/').collect();
-        
+
         // Handle multi-level patterns like "packages/*/*", "apps/*/lib", "modules/core/*"
         if workspace_pattern.contains("*/") {
-            return Self::analyze_complex_workspace_pattern(dep_name, &pattern_parts, discovered_scopes);
+            return Self::analyze_complex_workspace_pattern(
+                dep_name,
+                &pattern_parts,
+                discovered_scopes,
+            );
         }
-        
+
         // Handle single-level patterns with comprehensive scope analysis
         if !workspace_pattern.contains('/') && workspace_pattern != "*" {
-            return Self::analyze_simple_workspace_pattern(dep_name, workspace_pattern, discovered_scopes);
+            return Self::analyze_simple_workspace_pattern(
+                dep_name,
+                workspace_pattern,
+                discovered_scopes,
+            );
         }
-        
+
         // Handle wildcard-only patterns with sophisticated heuristics
         if workspace_pattern == "*" {
             return self.analyze_wildcard_workspace_pattern(dep_name, discovered_scopes);
         }
-        
+
         false
     }
 
@@ -1191,21 +1228,30 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
     /// # Returns
     ///
     /// `true` if the dependency matches the complex pattern, `false` otherwise.
-    fn analyze_complex_workspace_pattern(dep_name: &str, pattern_parts: &[&str], discovered_scopes: &[String]) -> bool {
+    fn analyze_complex_workspace_pattern(
+        dep_name: &str,
+        pattern_parts: &[&str],
+        discovered_scopes: &[String],
+    ) -> bool {
         // Advanced pattern analysis for enterprise monorepo structures
         for (index, part) in pattern_parts.iter().enumerate() {
             if *part == "*" {
                 // Wildcard analysis: examine surrounding context to infer scope patterns
                 let has_before = index > 0;
                 let has_after = index < pattern_parts.len() - 1;
-                
+
                 if has_before && has_after {
                     // Pattern like "packages/*/lib" - analyze contextual dependencies
                     let before_part = pattern_parts[index - 1];
                     let after_part = pattern_parts[index + 1];
-                    
+
                     // Check for dependency names that match contextual patterns
-                    if Self::matches_contextual_pattern(dep_name, before_part, after_part, discovered_scopes) {
+                    if Self::matches_contextual_pattern(
+                        dep_name,
+                        before_part,
+                        after_part,
+                        discovered_scopes,
+                    ) {
                         return true;
                     }
                 } else if has_before {
@@ -1217,7 +1263,11 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
                 } else if has_after {
                     // Pattern like "*/lib" - reverse scope analysis
                     let scope_suffix = pattern_parts[index + 1];
-                    if Self::matches_reverse_scope_pattern(dep_name, scope_suffix, discovered_scopes) {
+                    if Self::matches_reverse_scope_pattern(
+                        dep_name,
+                        scope_suffix,
+                        discovered_scopes,
+                    ) {
                         return true;
                     }
                 }
@@ -1227,68 +1277,84 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
                 if dep_name.starts_with(&scope_pattern) {
                     return true;
                 }
-                
+
                 // Check for embedded pattern matching in scoped dependencies
                 if dep_name.starts_with('@') && dep_name.contains(part) {
                     return true;
                 }
             }
         }
-        
+
         false
     }
 
     /// Analyzes contextual dependency patterns using ONLY direct scope matching.
-    fn matches_contextual_pattern(dep_name: &str, before_part: &str, after_part: &str, discovered_scopes: &[String]) -> bool {
+    fn matches_contextual_pattern(
+        dep_name: &str,
+        before_part: &str,
+        after_part: &str,
+        discovered_scopes: &[String],
+    ) -> bool {
         // Check discovered scopes first - highest priority
         for scope in discovered_scopes {
             if dep_name.starts_with(scope) {
                 return true;
             }
         }
-        
+
         // ONLY direct contextual matching - NO assumptions about naming patterns
         if dep_name.starts_with('@') {
             let scope_with_suffix = format!("@{before_part}/");
             let after_scope = format!("@{after_part}/");
-            
-            return dep_name.starts_with(&scope_with_suffix) || 
-                   dep_name.starts_with(&after_scope);
+
+            return dep_name.starts_with(&scope_with_suffix) || dep_name.starts_with(&after_scope);
         }
         false
     }
 
     /// Analyzes scope-based patterns for workspace dependencies using ONLY direct matching.
-    fn matches_scope_based_pattern(dep_name: &str, scope_base: &str, discovered_scopes: &[String]) -> bool {
+    fn matches_scope_based_pattern(
+        dep_name: &str,
+        scope_base: &str,
+        discovered_scopes: &[String],
+    ) -> bool {
         // Check discovered scopes first - highest priority
         for scope in discovered_scopes {
             if dep_name.starts_with(scope) {
                 return true;
             }
         }
-        
+
         if dep_name.starts_with('@') {
             // ONLY direct scope matching - NO assumptions or abbreviations
             let direct_scope = format!("@{scope_base}/");
             if dep_name.starts_with(&direct_scope) {
                 return true;
             }
-            
+
             // Use configuration-based inference only
-            return Self::infer_scope_from_workspace_pattern(dep_name, scope_base, discovered_scopes);
+            return Self::infer_scope_from_workspace_pattern(
+                dep_name,
+                scope_base,
+                discovered_scopes,
+            );
         }
         false
     }
 
     /// Analyzes reverse scope patterns using ONLY direct scope matching.
-    fn matches_reverse_scope_pattern(dep_name: &str, scope_suffix: &str, discovered_scopes: &[String]) -> bool {
+    fn matches_reverse_scope_pattern(
+        dep_name: &str,
+        scope_suffix: &str,
+        discovered_scopes: &[String],
+    ) -> bool {
         // Check discovered scopes first - highest priority
         for scope in discovered_scopes {
             if dep_name.starts_with(scope) {
                 return true;
             }
         }
-        
+
         if dep_name.starts_with('@') {
             // ONLY direct reverse pattern matching - NO assumptions
             let suffix_scope = format!("@{scope_suffix}/");
@@ -1300,33 +1366,41 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
     }
 
     /// Infers scope patterns from workspace directory structures using configuration only.
-    fn infer_scope_from_workspace_pattern(dep_name: &str, workspace_dir: &str, discovered_scopes: &[String]) -> bool {
+    fn infer_scope_from_workspace_pattern(
+        dep_name: &str,
+        workspace_dir: &str,
+        discovered_scopes: &[String],
+    ) -> bool {
         // Check discovered scopes first - highest priority
         for scope in discovered_scopes {
             if dep_name.starts_with(scope) {
                 return true;
             }
         }
-        
+
         // NO HARDCODING - use ONLY configuration and dynamic detection
         // Check if workspace directory name appears as a scope in the dependency
         if dep_name.starts_with('@') {
             let workspace_scope = format!("@{workspace_dir}/");
             return dep_name.starts_with(&workspace_scope);
         }
-        
+
         false
     }
 
     /// Analyzes simple single-level workspace patterns with comprehensive scope matching.
-    fn analyze_simple_workspace_pattern(dep_name: &str, workspace_pattern: &str, discovered_scopes: &[String]) -> bool {
+    fn analyze_simple_workspace_pattern(
+        dep_name: &str,
+        workspace_pattern: &str,
+        discovered_scopes: &[String],
+    ) -> bool {
         if dep_name.starts_with('@') {
             // Direct scope matching
             let scope_pattern = format!("@{workspace_pattern}/");
             if dep_name.starts_with(&scope_pattern) {
                 return true;
             }
-            
+
             // Pattern-based scope inference using enterprise heuristics
             // Check discovered scopes first - highest priority
             for scope in discovered_scopes {
@@ -1334,36 +1408,47 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
                     return true;
                 }
             }
-            
+
             // Pattern-based scope inference using enterprise heuristics
-            return Self::infer_scope_from_workspace_pattern(dep_name, workspace_pattern, discovered_scopes);
+            return Self::infer_scope_from_workspace_pattern(
+                dep_name,
+                workspace_pattern,
+                discovered_scopes,
+            );
         }
         false
     }
 
     /// Analyzes wildcard workspace patterns using ONLY configuration and discovered scopes.
-    fn analyze_wildcard_workspace_pattern(&self, dep_name: &str, discovered_scopes: &[String]) -> bool {
+    fn analyze_wildcard_workspace_pattern(
+        &self,
+        dep_name: &str,
+        discovered_scopes: &[String],
+    ) -> bool {
         // Enterprise-grade wildcard pattern analysis using ONLY discovered scopes and configuration
-        
+
         // Check against discovered internal scopes from workspace packages
         for scope in discovered_scopes {
             if dep_name.starts_with(scope) {
                 return true;
             }
         }
-        
+
         // Check against configured custom workspace fields/patterns
         for field in &self.config.custom_workspace_fields {
             if dep_name.starts_with(field) {
                 return true;
             }
         }
-        
+
         // Check for local file references (these are always workspace dependencies)
-        if dep_name.starts_with("file:") || dep_name.starts_with("./") || dep_name.starts_with("../") {
+        if dep_name.starts_with("file:")
+            || dep_name.starts_with("./")
+            || dep_name.starts_with("../")
+        {
             return true;
         }
-        
+
         // Check for workspace-relative references (without hardcoding specific patterns)
         // Only use patterns that exist in configuration or were discovered dynamically
         for pattern in &self.config.workspace_patterns {
@@ -1375,7 +1460,7 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
                 }
             }
         }
-        
+
         false
     }
 
@@ -1391,9 +1476,9 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
     /// * `Ok(WorkspacePackage)` - The loaded workspace package
     /// * `Err(Error)` - If the package cannot be loaded
     async fn load_workspace_package(
-        &self, 
-        package_json_path: &Path, 
-        discovered_scopes: &[String]
+        &self,
+        package_json_path: &Path,
+        discovered_scopes: &[String],
     ) -> Result<WorkspacePackage> {
         let content = self.fs.read_file_string(package_json_path).await?;
 
@@ -1409,7 +1494,11 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
         let absolute_path = match location.canonicalize() {
             Ok(canonical) => canonical,
             Err(e) => {
-                log::debug!("Failed to canonicalize path {}: {}. Using original path.", location.display(), e);
+                log::debug!(
+                    "Failed to canonicalize path {}: {}. Using original path.",
+                    location.display(),
+                    e
+                );
                 location.clone()
             }
         };
@@ -1425,23 +1514,25 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
 
         // Check regular dependencies - use custom workspace fields or detect by name patterns
         if let Some(deps) = json_value.get("dependencies")
-            && let Some(deps_obj) = deps.as_object() {
-                for (dep_name, _) in deps_obj {
-                    if self.is_workspace_dependency(dep_name, discovered_scopes) {
-                        workspace_dependencies.push(dep_name.clone());
-                    }
+            && let Some(deps_obj) = deps.as_object()
+        {
+            for (dep_name, _) in deps_obj {
+                if self.is_workspace_dependency(dep_name, discovered_scopes) {
+                    workspace_dependencies.push(dep_name.clone());
                 }
             }
+        }
 
         // Check dev dependencies - use custom workspace fields or detect by name patterns
         if let Some(dev_deps) = json_value.get("devDependencies")
-            && let Some(dev_deps_obj) = dev_deps.as_object() {
-                for (dep_name, _) in dev_deps_obj {
-                    if self.is_workspace_dependency(dep_name, discovered_scopes) {
-                        workspace_dev_dependencies.push(dep_name.clone());
-                    }
+            && let Some(dev_deps_obj) = dev_deps.as_object()
+        {
+            for (dep_name, _) in dev_deps_obj {
+                if self.is_workspace_dependency(dep_name, discovered_scopes) {
+                    workspace_dev_dependencies.push(dep_name.clone());
                 }
             }
+        }
 
         Ok(WorkspacePackage {
             name,

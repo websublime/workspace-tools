@@ -72,7 +72,7 @@ use tracing::{debug, info, warn};
 
 // Import shared functionality
 use super::common::{detect_current_branch, get_changeset_file_path, load_config};
-use super::types::{format_bump_type, ChangesetInfo};
+use super::types::{ChangesetInfo, format_bump_type};
 
 /// Response data for changeset edit command (JSON output).
 ///
@@ -222,7 +222,6 @@ pub async fn execute_edit(
     }
 }
 
-
 /// Validates an edited changeset by reloading it.
 ///
 /// # Arguments
@@ -341,4 +340,3 @@ fn output_formatted(output: &Output, branch: &str, changeset: &Changeset) -> Res
 
     Ok(())
 }
-

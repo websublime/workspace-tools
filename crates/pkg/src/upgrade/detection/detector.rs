@@ -565,59 +565,63 @@ pub(crate) fn extract_dependencies(
 
     // Regular dependencies
     if options.include_dependencies
-        && let Some(deps) = &package_json.dependencies {
-            for (name, version) in deps {
-                if !is_internal_dependency(version) && options.matches_dependency_filter(name) {
-                    dependencies.push(DependencyToCheck {
-                        name: name.clone(),
-                        version_spec: version.clone(),
-                        dependency_type: DependencyType::Regular,
-                    });
-                }
+        && let Some(deps) = &package_json.dependencies
+    {
+        for (name, version) in deps {
+            if !is_internal_dependency(version) && options.matches_dependency_filter(name) {
+                dependencies.push(DependencyToCheck {
+                    name: name.clone(),
+                    version_spec: version.clone(),
+                    dependency_type: DependencyType::Regular,
+                });
             }
         }
+    }
 
     // Dev dependencies
     if options.include_dev_dependencies
-        && let Some(deps) = &package_json.dev_dependencies {
-            for (name, version) in deps {
-                if !is_internal_dependency(version) && options.matches_dependency_filter(name) {
-                    dependencies.push(DependencyToCheck {
-                        name: name.clone(),
-                        version_spec: version.clone(),
-                        dependency_type: DependencyType::Dev,
-                    });
-                }
+        && let Some(deps) = &package_json.dev_dependencies
+    {
+        for (name, version) in deps {
+            if !is_internal_dependency(version) && options.matches_dependency_filter(name) {
+                dependencies.push(DependencyToCheck {
+                    name: name.clone(),
+                    version_spec: version.clone(),
+                    dependency_type: DependencyType::Dev,
+                });
             }
         }
+    }
 
     // Peer dependencies
     if options.include_peer_dependencies
-        && let Some(deps) = &package_json.peer_dependencies {
-            for (name, version) in deps {
-                if !is_internal_dependency(version) && options.matches_dependency_filter(name) {
-                    dependencies.push(DependencyToCheck {
-                        name: name.clone(),
-                        version_spec: version.clone(),
-                        dependency_type: DependencyType::Peer,
-                    });
-                }
+        && let Some(deps) = &package_json.peer_dependencies
+    {
+        for (name, version) in deps {
+            if !is_internal_dependency(version) && options.matches_dependency_filter(name) {
+                dependencies.push(DependencyToCheck {
+                    name: name.clone(),
+                    version_spec: version.clone(),
+                    dependency_type: DependencyType::Peer,
+                });
             }
         }
+    }
 
     // Optional dependencies
     if options.include_optional_dependencies
-        && let Some(deps) = &package_json.optional_dependencies {
-            for (name, version) in deps {
-                if !is_internal_dependency(version) && options.matches_dependency_filter(name) {
-                    dependencies.push(DependencyToCheck {
-                        name: name.clone(),
-                        version_spec: version.clone(),
-                        dependency_type: DependencyType::Optional,
-                    });
-                }
+        && let Some(deps) = &package_json.optional_dependencies
+    {
+        for (name, version) in deps {
+            if !is_internal_dependency(version) && options.matches_dependency_filter(name) {
+                dependencies.push(DependencyToCheck {
+                    name: name.clone(),
+                    version_spec: version.clone(),
+                    dependency_type: DependencyType::Optional,
+                });
             }
         }
+    }
 
     dependencies
 }
@@ -787,9 +791,10 @@ pub(crate) fn find_latest_prerelease(versions: &[String]) -> Option<String> {
 
     for version_str in versions {
         if let Ok(version) = Version::parse(version_str)
-            && !version.pre.is_empty() {
-                prerelease_versions.push(version);
-            }
+            && !version.pre.is_empty()
+        {
+            prerelease_versions.push(version);
+        }
     }
 
     if prerelease_versions.is_empty() {

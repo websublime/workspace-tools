@@ -14,9 +14,9 @@ use crate::config::RegistryConfig;
 use crate::error::UpgradeError;
 use crate::upgrade::registry::npmrc::NpmrcConfig;
 use crate::upgrade::registry::types::{PackageMetadata, RepositoryInfo, UpgradeType};
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
+use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use semver::Version;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -408,9 +408,10 @@ impl RegistryClient {
     pub(crate) fn resolve_registry_url(&self, package_name: &str) -> String {
         // Try .npmrc first if available
         if let Some(npmrc) = &self.npmrc
-            && let Some(registry) = npmrc.resolve_registry(package_name) {
-                return registry.to_string();
-            }
+            && let Some(registry) = npmrc.resolve_registry(package_name)
+        {
+            return registry.to_string();
+        }
 
         // Check if package is scoped (starts with @)
         if let Some(scope) = package_name.strip_prefix('@') {
@@ -444,9 +445,10 @@ impl RegistryClient {
     pub(crate) fn resolve_auth_token(&self, registry_url: &str) -> Option<String> {
         // Try .npmrc first if available
         if let Some(npmrc) = &self.npmrc
-            && let Some(token) = npmrc.get_auth_token(registry_url) {
-                return Some(token.to_string());
-            }
+            && let Some(token) = npmrc.get_auth_token(registry_url)
+        {
+            return Some(token.to_string());
+        }
 
         // Try exact match first
         if let Some(token) = self.config.auth_tokens.get(registry_url) {

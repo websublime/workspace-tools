@@ -1352,7 +1352,7 @@ mod circular_dependency_property_tests {
         use crate::types::{
             Changeset, DependencyType, UpdateReason, Version, VersionBump, VersioningStrategy,
         };
-        use crate::version::resolution::{resolve_versions, PackageUpdate, VersionResolution};
+        use crate::version::resolution::{PackageUpdate, VersionResolution, resolve_versions};
         use std::collections::HashMap;
 
         /// Test resolving versions with independent strategy and minor bump

@@ -19,6 +19,6 @@ mod tests;
 
 // Re-export public API
 pub use detector::{
-    detect_upgrades, DependencyUpgrade, DetectionOptions, PackageUpgrades, UpgradePreview,
-    UpgradeSummary, VersionInfo,
+    DependencyUpgrade, DetectionOptions, PackageUpgrades, UpgradePreview, UpgradeSummary,
+    VersionInfo, detect_upgrades,
 };

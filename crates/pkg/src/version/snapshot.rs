@@ -395,11 +395,7 @@ impl SnapshotGenerator {
     /// assert_eq!(short, "abc123d");
     /// ```
     fn short_hash(commit: &str) -> &str {
-        if commit.len() > 7 {
-            &commit[..7]
-        } else {
-            commit
-        }
+        if commit.len() > 7 { &commit[..7] } else { commit }
     }
 
     /// Validates that a generated snapshot version is semver-compatible.

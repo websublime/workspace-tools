@@ -96,11 +96,8 @@ pub(crate) async fn load_config(
     let mut found_config = None;
     if let Some(config) = config_path {
         // Use the explicitly provided config file
-        let config_file = if config.is_absolute() {
-            config.to_path_buf()
-        } else {
-            workspace_root.join(config)
-        };
+        let config_file =
+            if config.is_absolute() { config.to_path_buf() } else { workspace_root.join(config) };
 
         if fs.exists(&config_file).await {
             found_config = Some(config_file);
@@ -185,9 +182,9 @@ pub(crate) async fn load_config(
 pub(crate) fn detect_current_branch(workspace_root: &Path) -> Result<String> {
     debug!("Detecting current Git branch at: {}", workspace_root.display());
 
-    let workspace_str = workspace_root.to_str().ok_or_else(|| {
-        CliError::io("Workspace path contains invalid UTF-8 characters")
-    })?;
+    let workspace_str = workspace_root
+        .to_str()
+        .ok_or_else(|| CliError::io("Workspace path contains invalid UTF-8 characters"))?;
 
     let repo = Repo::open(workspace_str).map_err(|e| {
         CliError::git(format!(
