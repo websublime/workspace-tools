@@ -11,7 +11,7 @@
 //!
 //! # Available Formatters
 //!
-//! - **Keep a Changelog**: Standard format following https://keepachangelog.com
+//! - **Keep a Changelog**: Standard format following <https://keepachangelog.com>
 //! - **Conventional Commits**: Automatic grouping by commit type
 //! - **Custom Template**: User-defined templates with variable substitution
 //!

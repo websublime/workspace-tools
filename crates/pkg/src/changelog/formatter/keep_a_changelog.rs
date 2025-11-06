@@ -2,7 +2,7 @@
 //!
 //! **What**: Implements the Keep a Changelog format specification for changelog generation.
 //! This formatter converts internal changelog data structures into the standard format
-//! defined at https://keepachangelog.com.
+//! defined at <https://keepachangelog.com>.
 //!
 //! **How**: Maps internal section types to Keep a Changelog sections (Added, Changed,
 //! Deprecated, Removed, Fixed, Security) and formats entries according to the specification.

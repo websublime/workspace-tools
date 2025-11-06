@@ -1802,7 +1802,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```no_run // Example needs a repo setup
+    /// ```no_run
+    /// # // Example needs a repo setup
     /// use git::repo::Repo;
     ///
     /// # fn example() -> Result<(), git::repo::RepoError> {
