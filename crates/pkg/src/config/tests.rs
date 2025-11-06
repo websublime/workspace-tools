@@ -727,7 +727,7 @@ mod upgrade_config {
             "changeset_bump": "patch",
             "backup": {
                 "enabled": true,
-                "backup_dir": ".pkg-backups",
+                "backup_dir": ".wnt-backups",
                 "keep_after_success": false,
                 "max_backups": 5
             }

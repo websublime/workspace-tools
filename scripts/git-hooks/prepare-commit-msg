@@ -1,0 +1,83 @@
+#!/usr/bin/env sh
+#
+# prepare-commit-msg hook for wnt (Workspace Node Tools)
+#
+# This hook enhances commit messages with changeset information.
+# It adds metadata about affected packages and bump type to your commits.
+#
+# What it does:
+# 1. Reads the changeset for current branch
+# 2. Appends changeset info to commit message
+# 3. Shows affected packages
+# 4. Shows planned version bump
+#
+# Configuration (.wnt.toml):
+# [git_hooks]
+# enabled = true
+# enhance_commit_messages = true
+# commit_template = """
+#
+# Changeset: {branch}
+# Packages: {packages}
+# Bump: {bump}
+# """
+#
+# To disable: Set WNT_SKIP_HOOKS=1 environment variable
+# Example: WNT_SKIP_HOOKS=1 git commit
+
+set -e
+
+# Check if hooks are disabled
+if [ -n "${WNT_SKIP_HOOKS}" ]; then
+    exit 0
+fi
+
+# Hook arguments
+COMMIT_MSG_FILE=$1
+COMMIT_SOURCE=$2
+SHA1=$3
+
+# Only enhance user-written messages (not merge/squash/etc)
+if [ -n "${COMMIT_SOURCE}" ]; then
+    exit 0
+fi
+
+# Get current branch
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+# Skip if not in a git repository
+if [ $? -ne 0 ]; then
+    exit 0
+fi
+
+# Skip for main/master branches
+if [ "${BRANCH}" = "main" ] || [ "${BRANCH}" = "master" ]; then
+    exit 0
+fi
+
+# Check if wnt is installed
+if ! command -v wnt >/dev/null 2>&1; then
+    exit 0
+fi
+
+# Check if changeset exists
+if ! wnt changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
+    exit 0
+fi
+
+# Check if message already has changeset info
+if grep -q "Changeset:" "${COMMIT_MSG_FILE}"; then
+    exit 0
+fi
+
+# Append changeset info to commit message
+cat >> "${COMMIT_MSG_FILE}" << EOF
+
+# ──────────────────────────────────────────────────────────────
+# Changeset Info (added by wnt)
+# Branch: ${BRANCH}
+# Run 'wnt changeset show ${BRANCH}' to see details
+# ──────────────────────────────────────────────────────────────
+EOF
+
+exit 0

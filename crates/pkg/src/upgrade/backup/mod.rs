@@ -12,11 +12,11 @@
 //!
 //! # Backup Structure
 //!
-//! Backups are stored in a configurable directory (default: `.pkg-backups/`) with the
+//! Backups are stored in a configurable directory (default: `.wnt-backups/`) with the
 //! following structure:
 //!
 //! ```text
-//! .pkg-backups/
+//! .wnt-backups/
 //! ├── 2024-01-15T10-30-45-upgrade/
 //! │   ├── package.json
 //! │   └── packages/

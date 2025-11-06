@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 #
-# Build cli release
+# Development installation script for wnt (Workspace Node Tools)
 #
-# cargo build --package sublime_cli_tools --release 2>&1 | tail -20
-#
-# Install wnt CLI locally for testing
+# This script builds the CLI in release mode and installs it locally for testing.
+# It's designed for development workflow, not production installations.
 #
 # Usage:
-#   ./scripts/install-local.sh [DESTINATION]
+#   ./scripts/install-dev.sh [DESTINATION]
 #
 # Examples:
-#   ./scripts/install-local.sh                    # Install to ~/.local/bin
-#   ./scripts/install-local.sh /usr/local/bin    # Install to system-wide location
-#   ./scripts/install-local.sh ~/bin             # Install to custom location
+#   ./scripts/install-dev.sh                    # Install to ~/.local/bin
+#   ./scripts/install-dev.sh /usr/local/bin    # Install to system-wide location
+#   ./scripts/install-dev.sh ~/bin             # Install to custom location
 
 set -e
 
@@ -31,7 +30,7 @@ INSTALL_DIR="${1:-$DEFAULT_INSTALL_DIR}"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BINARY_SOURCE="$PROJECT_ROOT/target/release/wnt"
 
-echo -e "${BLUE}=== wnt CLI Local Installation ===${NC}\n"
+echo -e "${BLUE}=== wnt CLI Development Installation ===${NC}\n"
 
 # Check if binary exists, if not build it
 if [ ! -f "$BINARY_SOURCE" ]; then

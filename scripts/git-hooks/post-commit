@@ -1,0 +1,101 @@
+#!/usr/bin/env sh
+#
+# post-commit hook for wnt (Workspace Node Tools)
+#
+# This hook automatically adds the commit SHA to the changeset after a commit
+# is created, then amends the commit to include the updated changeset file.
+#
+# What it does:
+# 1. Detects current branch
+# 2. Skips main/master branches
+# 3. Gets the SHA of the just-created commit
+# 4. Adds the SHA to the changeset's changes array
+# 5. Stages the updated changeset file
+# 6. Amends the commit to include the changeset update
+#
+# Configuration (.wnt.toml):
+# [git_hooks]
+# enabled = true
+# auto_update_on_commit = true
+#
+# To disable: Set WNT_SKIP_HOOKS=1 environment variable
+# Example: WNT_SKIP_HOOKS=1 git commit -m "message"
+
+set -e
+
+# Check if hooks are disabled
+if [ -n "${WNT_SKIP_HOOKS}" ]; then
+    exit 0
+fi
+
+# Colors (only if terminal supports it)
+if [ -t 1 ]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m'
+else
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    NC=''
+fi
+
+# Get current branch
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+# Skip if not in a git repository
+if [ $? -ne 0 ]; then
+    exit 0
+fi
+
+# Skip for main/master branches
+if [ "${BRANCH}" = "main" ] || [ "${BRANCH}" = "master" ]; then
+    exit 0
+fi
+
+# Check if wnt is installed
+if ! command -v wnt >/dev/null 2>&1; then
+    printf "${YELLOW}⚠${NC} wnt not found. Changeset not updated.\n" >&2
+    printf "${BLUE}ℹ${NC} Install: curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh\n" >&2
+    exit 0
+fi
+
+# Check if changeset exists for this branch
+if ! wnt changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
+    # No changeset exists, skip
+    exit 0
+fi
+
+# Get the SHA of the commit we just created
+COMMIT_SHA=$(git rev-parse HEAD)
+
+printf "${BLUE}📝 Adding commit to changeset...${NC}\n" >&2
+
+# Add the commit SHA to the changeset
+UPDATE_OUTPUT=$(wnt changeset update "${BRANCH}" --commit "${COMMIT_SHA}" --format quiet 2>&1)
+UPDATE_EXIT_CODE=$?
+
+if [ ${UPDATE_EXIT_CODE} -eq 0 ]; then
+    # Stage the updated changeset file
+    git add .changesets/*.json 2>/dev/null || true
+
+    # Amend the commit to include the changeset update
+    # Use --no-verify to avoid triggering hooks again (prevent infinite loop)
+    if git commit --amend --no-edit --no-verify >/dev/null 2>&1; then
+        printf "${GREEN}✓${NC} Changeset updated and included in commit\n" >&2
+    else
+        printf "${YELLOW}⚠${NC} Changeset updated but amend failed (non-fatal)\n" >&2
+    fi
+elif echo "${UPDATE_OUTPUT}" | grep -q "No updates were applied\|already contains"; then
+    # Commit SHA already in changeset - this is fine
+    printf "${GREEN}✓${NC} Commit already tracked in changeset\n" >&2
+else
+    # Other error - show warning but don't block
+    printf "${YELLOW}⚠${NC} Failed to update changeset (non-fatal)\n" >&2
+    printf "${BLUE}ℹ${NC} Run 'wnt changeset update ${BRANCH} --commit ${COMMIT_SHA}' manually if needed\n" >&2
+fi
+
+exit 0

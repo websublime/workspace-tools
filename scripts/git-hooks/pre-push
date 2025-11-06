@@ -1,0 +1,135 @@
+#!/usr/bin/env sh
+#
+# pre-push hook for wnt (Workspace Node Tools)
+#
+# This hook updates the changeset with all branch commits before pushing.
+# It creates a commit with the updated changeset automatically.
+#
+# What it does:
+# 1. Detects current branch
+# 2. Skips main/master branches
+# 3. Checks if changeset exists (blocks push if missing)
+# 4. Adds all branch commits to changeset's changes array (bulk update)
+# 5. Creates a commit with the updated changeset file
+# 6. Allows push to continue (includes the changeset commit)
+#
+# Configuration (.wnt.toml):
+# [git_hooks]
+# enabled = true
+# validate_on_push = true
+#
+# To disable: Set WNT_SKIP_HOOKS=1 environment variable
+# Example: WNT_SKIP_HOOKS=1 git push
+
+set -e
+
+# Check if hooks are disabled
+if [ -n "${WNT_SKIP_HOOKS}" ]; then
+    exit 0
+fi
+
+# Colors (only if terminal supports it)
+if [ -t 1 ]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    CYAN='\033[0;36m'
+    BOLD='\033[1m'
+    NC='\033[0m'
+else
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    CYAN=''
+    BOLD=''
+    NC=''
+fi
+
+# Get current branch
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+# Skip if not in a git repository
+if [ $? -ne 0 ]; then
+    exit 0
+fi
+
+# Skip for main/master branches
+if [ "${BRANCH}" = "main" ] || [ "${BRANCH}" = "master" ]; then
+    exit 0
+fi
+
+# Check if wnt is installed
+if ! command -v wnt >/dev/null 2>&1; then
+    printf "${YELLOW}⚠${NC} wnt not found. Skipping changeset validation.\n" >&2
+    printf "${BLUE}ℹ${NC} Install: curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh\n" >&2
+    exit 0
+fi
+
+# Display validation message
+printf "\n${BLUE}🔍 Checking changeset...${NC}\n" >&2
+
+# Check if changeset exists
+if ! wnt changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
+    # Changeset missing - block push
+    printf "\n${RED}✗${NC} ${BOLD}No changeset found for branch ${CYAN}${BRANCH}${NC}\n\n" >&2
+
+    printf "${BOLD}How to fix:${NC}\n" >&2
+    printf "  ${GREEN}1.${NC} Create changeset:     ${CYAN}wnt changeset create${NC}\n" >&2
+    printf "  ${GREEN}2.${NC} Verify it was created: ${CYAN}wnt changeset show ${BRANCH}${NC}\n" >&2
+    printf "  ${GREEN}3.${NC} Push again:           ${CYAN}git push${NC}\n" >&2
+
+    printf "\n${BOLD}To skip this check once:${NC}\n" >&2
+    printf "  ${CYAN}WNT_SKIP_HOOKS=1 git push${NC}\n\n" >&2
+
+    exit 1
+fi
+
+printf "${GREEN}✓${NC} Changeset exists for branch ${CYAN}${BRANCH}${NC}\n" >&2
+
+# Get all commits from this branch that aren't in main
+printf "${BLUE}📝 Adding branch commits to changeset...${NC}\n" >&2
+
+# Determine main branch name
+MAIN_BRANCH="main"
+if ! git rev-parse --verify main >/dev/null 2>&1; then
+    MAIN_BRANCH="master"
+fi
+
+# Get commits that are in current branch but not in main
+COMMITS=$(git rev-list ${MAIN_BRANCH}..HEAD 2>/dev/null || echo "")
+
+if [ -z "${COMMITS}" ]; then
+    printf "${BLUE}ℹ${NC} No commits to add\n" >&2
+else
+    # Count commits
+    COMMIT_COUNT=$(echo "${COMMITS}" | wc -l | tr -d ' ')
+    printf "${BLUE}ℹ${NC} Found ${COMMIT_COUNT} commit(s)\n" >&2
+
+    # Add each commit to changeset (suppress "already contains" errors)
+    echo "${COMMITS}" | while read -r commit_sha; do
+        wnt changeset update "${BRANCH}" --commit "${commit_sha}" --format quiet >/dev/null 2>&1 || true
+    done
+
+    printf "${GREEN}✓${NC} Commits added to changeset\n" >&2
+fi
+
+# Check if changeset was modified
+if ! git diff --quiet .changesets/*.json 2>/dev/null; then
+    # Changeset was updated - commit it
+    printf "${BLUE}📦 Committing updated changeset...${NC}\n" >&2
+
+    git add .changesets/*.json 2>/dev/null || true
+
+    if git commit -m "chore: update changeset for ${BRANCH}" --no-verify >/dev/null 2>&1; then
+        printf "${GREEN}✓${NC} Changeset committed\n" >&2
+    else
+        printf "${YELLOW}⚠${NC} Failed to commit changeset (non-fatal)\n" >&2
+    fi
+else
+    printf "${BLUE}ℹ${NC} Changeset already up-to-date\n" >&2
+fi
+
+printf "${GREEN}✓${NC} Ready to push\n\n" >&2
+exit 0
