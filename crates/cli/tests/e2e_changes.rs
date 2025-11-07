@@ -40,10 +40,16 @@ fn create_test_output(format: OutputFormat) -> Output {
 
 /// Creates a test file change in the workspace.
 ///
-/// Creates or modifies a README.md file to trigger Git changes without
-/// breaking JSON parsing.
+/// Creates or modifies a file to trigger Git changes without breaking JSON parsing.
+/// Creates parent directories if they don't exist.
 fn create_file_change(root: &std::path::Path, filename: &str, content: &str) {
     let file_path = root.join(filename);
+
+    // Create parent directories if they don't exist
+    if let Some(parent) = file_path.parent() {
+        std::fs::create_dir_all(parent).expect("Failed to create parent directories");
+    }
+
     std::fs::write(file_path, content).expect("Failed to write test file");
 }
 
