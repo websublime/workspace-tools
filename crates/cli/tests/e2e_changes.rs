@@ -294,6 +294,9 @@ async fn test_changes_branch_comparison() {
     let repo = sublime_git_tools::Repo::open(workspace.root().to_str().unwrap())
         .expect("Failed to open repo");
 
+    // Get the current (base) branch name before creating feature branch
+    let base_branch = repo.get_current_branch().expect("Failed to get current branch");
+
     // Create a feature branch
     repo.create_branch("feature/test").expect("Failed to create branch");
     repo.checkout("feature/test").expect("Failed to checkout branch");
@@ -307,7 +310,7 @@ async fn test_changes_branch_comparison() {
     let args = ChangesArgs {
         since: None,
         until: None,
-        branch: Some("main".to_string()),
+        branch: Some(base_branch),
         staged: false,
         unstaged: false,
         packages: None,
