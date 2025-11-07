@@ -1618,8 +1618,7 @@ async fn test_changeset_update_adds_environment() {
 
     assert!(
         environments.contains(&"production".to_string()),
-        "Should contain production environment, got: {:?}",
-        environments
+        "Should contain production environment, got: {environments:?}",
     );
 }
 
@@ -1712,8 +1711,7 @@ async fn test_changeset_update_multiple_operations() {
 
     assert!(
         commits_field.iter().any(|c| c.as_str() == Some(commit_hash)),
-        "Should contain commit hash {}",
-        commit_hash
+        "Should contain commit hash {commit_hash}",
     );
 
     assert!(
