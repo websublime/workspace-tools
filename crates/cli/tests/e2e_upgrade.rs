@@ -1322,16 +1322,36 @@ async fn test_upgrade_apply_custom_changeset_bump() {
 async fn test_upgrade_backups_clean_with_custom_keep() {
     let workspace = WorkspaceFixture::single_package().with_default_config().finalize();
 
-    // Create multiple backups
+    // Create multiple backups with metadata
     let backup_dir = workspace.root().join(".workspace-backups");
     std::fs::create_dir_all(&backup_dir).expect("Should create backup directory");
 
     // Create 5 backup files with timestamps
+    let mut backup_ids = Vec::new();
     for i in 1..=5 {
-        let backup_file = backup_dir.join(format!("backup-202501{i:02}T120000.tar.gz"));
+        let backup_id = format!("backup-202501{i:02}T120000.tar.gz");
+        let backup_file = backup_dir.join(&backup_id);
         std::fs::write(&backup_file, format!("backup content {i}"))
             .expect("Should create backup file");
+        backup_ids.push(backup_id);
     }
+
+    // Create metadata.json with all backups
+    let metadata = serde_json::json!({
+        "backups": backup_ids.iter().map(|id| serde_json::json!({
+            "id": id,
+            "timestamp": "2025-01-01T12:00:00Z",
+            "operation": "upgrade",
+            "packages_affected": 1,
+            "success": false
+        })).collect::<Vec<_>>()
+    });
+    let metadata_path = backup_dir.join("metadata.json");
+    std::fs::write(
+        &metadata_path,
+        serde_json::to_string_pretty(&metadata).expect("Should serialize metadata"),
+    )
+    .expect("Should write metadata");
 
     let args = UpgradeBackupCleanArgs { keep: 2, force: true };
 
@@ -1369,15 +1389,35 @@ async fn test_upgrade_backups_clean_with_custom_keep() {
 async fn test_upgrade_backups_clean_force() {
     let workspace = WorkspaceFixture::single_package().with_default_config().finalize();
 
-    // Create backup directory and files
+    // Create backup directory and files with metadata
     let backup_dir = workspace.root().join(".workspace-backups");
     std::fs::create_dir_all(&backup_dir).expect("Should create backup directory");
 
     // Create 3 old backup files
+    let mut backup_ids = Vec::new();
     for i in 1..=3 {
-        let backup_file = backup_dir.join(format!("backup-202501{i:02}T120000.tar.gz"));
+        let backup_id = format!("backup-202501{i:02}T120000.tar.gz");
+        let backup_file = backup_dir.join(&backup_id);
         std::fs::write(&backup_file, format!("old backup {i}")).expect("Should create backup file");
+        backup_ids.push(backup_id);
     }
+
+    // Create metadata.json with all backups
+    let metadata = serde_json::json!({
+        "backups": backup_ids.iter().map(|id| serde_json::json!({
+            "id": id,
+            "timestamp": "2025-01-01T12:00:00Z",
+            "operation": "upgrade",
+            "packages_affected": 1,
+            "success": false
+        })).collect::<Vec<_>>()
+    });
+    let metadata_path = backup_dir.join("metadata.json");
+    std::fs::write(
+        &metadata_path,
+        serde_json::to_string_pretty(&metadata).expect("Should serialize metadata"),
+    )
+    .expect("Should write metadata");
 
     let args = UpgradeBackupCleanArgs {
         keep: 1,
