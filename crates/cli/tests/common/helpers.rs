@@ -795,9 +795,9 @@ exit 1
 
     #[cfg(windows)]
     {
-        let script_content = r#"@echo off
+        let script_content = r"@echo off
 exit /b 1
-"#;
+";
 
         std::fs::write(&script_path, script_content)
             .expect("Failed to write failing mock editor script");
