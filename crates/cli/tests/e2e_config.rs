@@ -702,3 +702,287 @@ async fn test_config_validate_invalid_snapshot_format() {
     // ASSERT: Validation should fail
     assert!(result.is_err(), "Config validate should fail with invalid snapshot format");
 }
+
+// ============================================================================
+// Config Format Support Tests - Gap Coverage
+// ============================================================================
+
+/// Test: Config show with TOML format configuration
+///
+/// Verifies that the `config show` command correctly reads and displays
+/// configuration stored in TOML format.
+#[tokio::test]
+async fn test_config_show_toml_format() {
+    // ARRANGE: Create workspace with TOML config
+    let workspace = WorkspaceFixture::single_package().with_git().with_commits(1).finalize();
+
+    // Create TOML config file
+    let toml_config = r#"
+[changeset]
+path = ".changesets/"
+history_path = ".changesets/history/"
+available_environments = ["production", "staging"]
+default_environments = ["production"]
+
+[version]
+strategy = "independent"
+default_bump = "patch"
+snapshot_format = "{version}-{branch}.{short_commit}"
+
+[dependency]
+propagation_bump = "patch"
+propagate_dependencies = true
+propagate_dev_dependencies = false
+propagate_peer_dependencies = false
+max_depth = 10
+fail_on_circular = true
+
+[upgrade]
+auto_changeset = false
+changeset_bump = "patch"
+
+[upgrade.registry]
+default_registry = "https://registry.npmjs.org"
+timeout_secs = 30
+retry_attempts = 3
+
+[upgrade.registry.scoped_registries]
+
+[upgrade.backup]
+enabled = true
+backup_dir = ".workspace-backups"
+keep_after_success = false
+max_backups = 5
+
+[changelog]
+enabled = true
+format = "keep-a-changelog"
+include_commit_links = true
+repository_url = ""
+
+[audit]
+enabled = true
+min_severity = "info"
+"#;
+
+    let config_path = workspace.root().join("repo.config.toml");
+    std::fs::write(&config_path, toml_config).expect("Failed to write TOML config");
+
+    let args = ConfigShowArgs {};
+
+    // ACT: Execute config show command
+    let result = execute_show(&args, workspace.root(), None, OutputFormat::Human).await;
+
+    // ASSERT: Command should succeed with TOML format
+    assert!(result.is_ok(), "Config show should succeed with TOML format: {:?}", result.err());
+}
+
+/// Test: Config show with YAML format configuration
+///
+/// Verifies that the `config show` command correctly reads and displays
+/// configuration stored in YAML format.
+#[tokio::test]
+async fn test_config_show_yaml_format() {
+    // ARRANGE: Create workspace with YAML config
+    let workspace = WorkspaceFixture::single_package().with_git().with_commits(1).finalize();
+
+    // Create YAML config file
+    let yaml_config = r#"
+changeset:
+  path: .changesets/
+  history_path: .changesets/history/
+  available_environments:
+    - production
+    - staging
+  default_environments:
+    - production
+
+version:
+  strategy: independent
+  default_bump: patch
+  snapshot_format: "{version}-{branch}.{short_commit}"
+
+dependency:
+  propagation_bump: patch
+  propagate_dependencies: true
+  propagate_dev_dependencies: false
+  propagate_peer_dependencies: false
+  max_depth: 10
+  fail_on_circular: true
+
+upgrade:
+  auto_changeset: false
+  changeset_bump: patch
+  registry:
+    default_registry: https://registry.npmjs.org
+    scoped_registries: {}
+    timeout_secs: 30
+    retry_attempts: 3
+  backup:
+    enabled: true
+    backup_dir: .workspace-backups
+    keep_after_success: false
+    max_backups: 5
+
+changelog:
+  enabled: true
+  format: keep-a-changelog
+  include_commit_links: true
+  repository_url: null
+
+audit:
+  enabled: true
+  min_severity: info
+"#;
+
+    let config_path = workspace.root().join("repo.config.yaml");
+    std::fs::write(&config_path, yaml_config).expect("Failed to write YAML config");
+
+    let args = ConfigShowArgs {};
+
+    // ACT: Execute config show command
+    let result = execute_show(&args, workspace.root(), None, OutputFormat::Human).await;
+
+    // ASSERT: Command should succeed with YAML format
+    assert!(result.is_ok(), "Config show should succeed with YAML format: {:?}", result.err());
+}
+
+/// Test: Config validate with TOML format configuration
+///
+/// Verifies that the `config validate` command correctly validates
+/// configuration stored in TOML format.
+#[tokio::test]
+async fn test_config_validate_toml_format() {
+    // ARRANGE: Create workspace with TOML config
+    let workspace = WorkspaceFixture::single_package().with_git().with_commits(1).finalize();
+
+    // Create valid TOML config file
+    let toml_config = r#"
+[changeset]
+path = ".changesets/"
+history_path = ".changesets/history/"
+available_environments = ["production", "staging"]
+default_environments = ["production"]
+
+[version]
+strategy = "independent"
+default_bump = "patch"
+snapshot_format = "{version}-{branch}.{short_commit}"
+
+[dependency]
+propagation_bump = "patch"
+propagate_dependencies = true
+propagate_dev_dependencies = false
+propagate_peer_dependencies = false
+max_depth = 10
+fail_on_circular = true
+
+[upgrade]
+auto_changeset = false
+changeset_bump = "patch"
+
+[upgrade.registry]
+default_registry = "https://registry.npmjs.org"
+timeout_secs = 30
+retry_attempts = 3
+
+[upgrade.registry.scoped_registries]
+
+[upgrade.backup]
+enabled = true
+backup_dir = ".workspace-backups"
+keep_after_success = false
+max_backups = 5
+
+[changelog]
+enabled = true
+format = "keep-a-changelog"
+include_commit_links = true
+repository_url = ""
+
+[audit]
+enabled = true
+min_severity = "info"
+"#;
+
+    let config_path = workspace.root().join("repo.config.toml");
+    std::fs::write(&config_path, toml_config).expect("Failed to write TOML config");
+
+    let args = ConfigValidateArgs {};
+
+    // ACT: Execute config validate command
+    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+
+    // ASSERT: Validation should succeed with TOML format
+    assert!(result.is_ok(), "Config validate should succeed with TOML format: {:?}", result.err());
+}
+
+/// Test: Config validate with YAML format configuration
+///
+/// Verifies that the `config validate` command correctly validates
+/// configuration stored in YAML format.
+#[tokio::test]
+async fn test_config_validate_yaml_format() {
+    // ARRANGE: Create workspace with YAML config
+    let workspace = WorkspaceFixture::single_package().with_git().with_commits(1).finalize();
+
+    // Create valid YAML config file
+    let yaml_config = r#"
+changeset:
+  path: .changesets/
+  history_path: .changesets/history/
+  available_environments:
+    - production
+    - staging
+  default_environments:
+    - production
+
+version:
+  strategy: independent
+  default_bump: patch
+  snapshot_format: "{version}-{branch}.{short_commit}"
+
+dependency:
+  propagation_bump: patch
+  propagate_dependencies: true
+  propagate_dev_dependencies: false
+  propagate_peer_dependencies: false
+  max_depth: 10
+  fail_on_circular: true
+
+upgrade:
+  auto_changeset: false
+  changeset_bump: patch
+  registry:
+    default_registry: https://registry.npmjs.org
+    scoped_registries: {}
+    timeout_secs: 30
+    retry_attempts: 3
+  backup:
+    enabled: true
+    backup_dir: .workspace-backups
+    keep_after_success: false
+    max_backups: 5
+
+changelog:
+  enabled: true
+  format: keep-a-changelog
+  include_commit_links: true
+  repository_url: null
+
+audit:
+  enabled: true
+  min_severity: info
+"#;
+
+    let config_path = workspace.root().join("repo.config.yaml");
+    std::fs::write(&config_path, yaml_config).expect("Failed to write YAML config");
+
+    let args = ConfigValidateArgs {};
+
+    // ACT: Execute config validate command
+    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+
+    // ASSERT: Validation should succeed with YAML format
+    assert!(result.is_ok(), "Config validate should succeed with YAML format: {:?}", result.err());
+}

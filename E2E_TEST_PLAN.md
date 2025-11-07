@@ -559,3 +559,649 @@ Target: < 10s for full suite
 - [Test Pyramid](https://martinfowler.com/articles/practical-test-pyramid.html)
 - [Testing Best Practices](https://doc.rust-lang.org/book/ch11-00-testing.html)
 - [Integration Testing in Rust](https://doc.rust-lang.org/book/ch11-03-test-organization.html)
+
+---
+
+## 🚨 COMPREHENSIVE GAP ANALYSIS - MISSING TESTS
+
+**Date**: 2025-11-07  
+**Analysis**: Deep review identified **74 missing test scenarios**  
+**Current Coverage**: 71% (147/207 features tested)  
+**Target Coverage**: 100% (221 tests total)
+
+See [E2E_COVERAGE_GAP_ANALYSIS.md](./E2E_COVERAGE_GAP_ANALYSIS.md) for detailed analysis.
+
+---
+
+### Phase 2.1A: Init Command - Missing Tests (7 tests)
+
+**Priority**: 🟡 HIGH  
+**Current**: 12 tests, **Missing**: 7 tests
+
+```rust
+// Environment configuration
+test_init_with_default_environments()
+  // Test: --environments dev,staging,prod --default-env prod
+  // Verify: Only prod is marked as default
+
+test_init_invalid_strategy_fails()
+  // Test: --strategy invalidstrategy
+  // Verify: Fails with clear error message
+
+test_init_invalid_format_fails()
+  // Test: --config-format xml
+  // Verify: Fails with supported formats list
+
+test_init_invalid_registry_url_fails()
+  // Test: --registry not-a-url
+  // Verify: Fails with URL validation error
+
+// Git integration
+test_init_creates_gitignore_entries()
+  // Test: Run init, check .gitignore contains .changesets
+  // Verify: .gitignore updated or created
+
+test_init_with_git_not_initialized()
+  // Test: Init in directory without git
+  // Verify: Works correctly, no git operations
+
+// Interactive mode
+test_init_interactive_prompts()
+  // Test: Run without --non-interactive
+  // Verify: Prompts for strategy, environments, etc.
+```
+
+---
+
+### Phase 2.2A: Config Command - Missing Tests (2 tests)
+
+**Priority**: 🟢 MEDIUM  
+**Current**: 18 tests, **Missing**: 2 tests
+
+```rust
+// Format support
+test_config_show_toml_format()
+test_config_show_yaml_format()
+  // Test: Create config in TOML/YAML, run config show
+  // Verify: Shows correct values
+
+test_config_validate_toml_format()
+test_config_validate_yaml_format()
+  // Test: Create config in TOML/YAML, run config validate
+  // Verify: Validates correctly
+```
+
+**⚠️ NOTE**: Plan mentions `config get` and `config set` but these commands **DO NOT EXIST** in CLI. Remove from plan or add to CLI as feature request.
+
+---
+
+### Phase 2.3A: Changeset Command - Missing Tests (13 tests)
+
+**Priority**: 🔴 CRITICAL (edit/check), 🟡 HIGH (filters)  
+**Current**: 25 tests, **Missing**: 13 tests
+
+```rust
+// === Create command ===
+test_changeset_create_with_custom_message()
+  // Test: --message "feat: add new feature"
+  // Verify: Message stored in changeset
+
+test_changeset_create_with_custom_branch()
+  // Test: --branch custom-branch
+  // Verify: Uses custom branch instead of git detection
+
+test_changeset_create_auto_detect_packages_vs_manual()
+  // Test: Compare auto-detect vs --packages flag
+  // Verify: Both work, manual overrides auto-detect
+
+test_changeset_create_interactive_prompts()
+  // Test: Run without --non-interactive
+  // Verify: Prompts for bump, environments, message
+
+// === Update command ===
+test_changeset_update_adds_environment()
+  // Test: --env staging,prod
+  // Verify: Adds environments to existing changeset
+
+test_changeset_update_adds_packages()
+  // Test: --packages package-a,package-b
+  // Verify: Adds packages to existing changeset
+
+test_changeset_update_multiple_operations()
+  // Test: --commit abc123 --packages pkg-a --bump major
+  // Verify: All updates applied
+
+// === List command ===
+test_changeset_list_filter_by_bump_type()
+  // Test: --filter-bump major
+  // Verify: Only shows major changesets
+
+test_changeset_list_filter_by_environment()
+  // Test: --filter-env prod
+  // Verify: Only shows changesets with prod env
+
+test_changeset_list_sort_by_bump()
+test_changeset_list_sort_by_branch()
+test_changeset_list_sort_by_date()
+  // Test: --sort <field>
+  // Verify: Sorted correctly
+
+// === 🔴 CRITICAL: Edit command - COMPLETELY UNTESTED ===
+test_changeset_edit_opens_editor()
+  // Test: Mock $EDITOR, verify opens changeset file
+  // Verify: Editor opened with correct file
+
+test_changeset_edit_validates_changes_after_edit()
+  // Test: Edit changeset, make invalid change
+  // Verify: Validation catches errors
+
+test_changeset_edit_current_branch()
+test_changeset_edit_specific_branch()
+  // Test: Edit with/without branch argument
+  // Verify: Edits correct changeset
+
+// === History command ===
+test_changeset_history_filter_by_package()
+  // Test: --package package-a
+  // Verify: Only shows history for package-a
+
+test_changeset_history_date_range()
+  // Test: --since 2024-01-01 --until 2024-12-31
+  // Verify: Shows changesets in date range
+
+test_changeset_history_filter_by_environment()
+  // Test: --env prod
+  // Verify: Shows only prod changesets
+
+test_changeset_history_filter_by_bump()
+  // Test: --bump major
+  // Verify: Shows only major bumps
+
+test_changeset_history_with_limit()
+  // Test: --limit 10
+  // Verify: Shows max 10 results
+
+// === 🔴 CRITICAL: Check command - COMPLETELY UNTESTED ===
+test_changeset_check_exists_for_current_branch()
+  // Test: Create changeset, run check
+  // Verify: Exit code 0
+
+test_changeset_check_exists_for_specific_branch()
+  // Test: --branch feature-branch
+  // Verify: Exit code 0 if exists
+
+test_changeset_check_not_exists()
+  // Test: Run check with no changeset
+  // Verify: Exit code non-zero
+
+test_changeset_check_exit_code_for_git_hooks()
+  // Test: Simulate git hook usage
+  // Verify: Correct exit codes for automation
+```
+
+---
+
+### Phase 2.4A: Bump Command - Missing Tests (6 tests)
+
+**Priority**: 🔴 CRITICAL (snapshot/prerelease)  
+**Current**: 25 tests, **Missing**: 6 tests
+
+```rust
+// === 🔴 CRITICAL: Snapshot versions - COMPLETELY UNTESTED ===
+test_bump_snapshot_generates_snapshot_version()
+  // Test: --execute --snapshot
+  // Verify: Version becomes 1.2.3-<branch>.<commit>
+
+test_bump_snapshot_with_custom_format()
+  // Test: --snapshot-format "{version}-{branch}.{short_commit}"
+  // Verify: Custom format applied
+
+test_bump_snapshot_format_variables()
+  // Test: All variables: {version}, {branch}, {commit}, {short_commit}
+  // Verify: All substituted correctly
+
+// === 🔴 CRITICAL: Pre-release - COMPLETELY UNTESTED ===
+test_bump_prerelease_alpha()
+test_bump_prerelease_beta()
+test_bump_prerelease_rc()
+  // Test: --prerelease <tag>
+  // Verify: Version becomes 1.2.3-alpha.1, etc.
+
+// === Git operations ===
+test_bump_git_tag_and_push_to_remote()
+  // Test: --git-tag --git-push
+  // Verify: Tags created and pushed
+
+// === Advanced flags ===
+test_bump_no_archive_keeps_changesets()
+  // Test: --execute --no-archive
+  // Verify: Changesets NOT archived
+
+test_bump_force_skips_confirmations()
+  // Test: --execute --force
+  // Verify: No prompts, auto-confirms
+```
+
+---
+
+### Phase 2.5A: Upgrade Command - Missing Tests (10 tests)
+
+**Priority**: 🟡 HIGH  
+**Current**: 16 tests, **Missing**: 10 tests
+
+```rust
+// === Check command ===
+test_upgrade_check_no_major()
+test_upgrade_check_no_minor()
+test_upgrade_check_no_patch()
+  // Test: --no-major, --no-minor, --no-patch
+  // Verify: Excludes specified bump types
+
+test_upgrade_check_with_peer_dependencies()
+  // Test: --peer
+  // Verify: Includes peer dependencies
+
+test_upgrade_check_without_dev_dependencies()
+  // Test: --dev=false or without --dev
+  // Verify: Excludes dev dependencies
+
+test_upgrade_check_specific_packages()
+  // Test: --packages package-a,package-b
+  // Verify: Only checks specified packages
+
+test_upgrade_check_custom_registry()
+  // Test: --registry https://custom-registry.com
+  // Verify: Uses custom registry
+
+// === Apply command ===
+test_upgrade_apply_minor_and_patch_only()
+  // Test: --minor-and-patch
+  // Verify: Only applies non-breaking upgrades
+
+test_upgrade_apply_no_backup()
+  // Test: --no-backup
+  // Verify: No backup created
+
+test_upgrade_apply_force()
+  // Test: --force
+  // Verify: No confirmation prompts
+
+test_upgrade_apply_custom_changeset_bump()
+  // Test: --auto-changeset --changeset-bump major
+  // Verify: Changeset created with major bump
+
+// === Backups commands ===
+test_upgrade_backups_clean_with_custom_keep()
+  // Test: --keep 10
+  // Verify: Keeps 10 most recent backups
+
+test_upgrade_backups_clean_force()
+  // Test: --force
+  // Verify: No confirmation prompt
+
+test_upgrade_backups_restore_force()
+  // Test: --force
+  // Verify: No confirmation prompt
+```
+
+---
+
+### Phase 2.6A: Audit Command - Missing Tests (2 tests)
+
+**Priority**: 🟢 MEDIUM  
+**Current**: 25 tests, **Missing**: 2 tests
+
+```rust
+test_audit_breaking_changes_section()
+  // Test: --sections breaking-changes
+  // Verify: Shows only breaking changes analysis
+
+test_audit_output_to_file_explicit()
+  // Test: --output audit-report.txt
+  // Verify: Report written to file (distinct from --export)
+```
+
+---
+
+### Phase 2.7A: Changes Command - Missing Tests (2 tests)
+
+**Priority**: 🔴 CRITICAL  
+**Current**: 14 tests, **Missing**: 2 tests
+
+```rust
+test_changes_filter_by_packages()
+  // Test: --packages package-a,package-b
+  // Verify: Only shows changes for specified packages
+
+test_changes_filter_by_packages_with_dependencies()
+  // Test: Change pkg-a, pkg-b depends on pkg-a
+  // Test: --packages package-b
+  // Verify: Shows pkg-b even though change in pkg-a
+```
+
+---
+
+### Phase 3A: Workflow Tests - CRITICAL MISSING (20 tests)
+
+**Priority**: 🔴 CRITICAL  
+**Current**: 0 tests, **Missing**: 20 tests  
+**Status**: ⚪ **NOT IMPLEMENTED**
+
+```rust
+// === Release workflows ===
+#[tokio::test]
+async fn test_complete_release_workflow_single_package() {
+    // 1. init workspace
+    // 2. changeset create --bump minor
+    // 3. bump --dry-run (preview)
+    // 4. bump --execute
+    // 5. Verify: version bumped, changelog updated, changeset archived
+}
+
+#[tokio::test]
+async fn test_complete_release_workflow_monorepo() {
+    // Same as above but with 3+ packages
+    // Verify: All changesets processed correctly
+}
+
+#[tokio::test]
+async fn test_hotfix_workflow() {
+    // 1. Checkout from release tag
+    // 2. Create patch changeset
+    // 3. Bump and release
+    // 4. Verify: Patch version applied
+}
+
+#[tokio::test]
+async fn test_environment_specific_release() {
+    // 1. Create changesets with environment filters
+    // 2. Bump respects environment constraints
+    // 3. Verify: Only correct packages bumped per environment
+}
+
+// === Upgrade workflows ===
+#[tokio::test]
+async fn test_upgrade_with_auto_changeset_complete_flow() {
+    // 1. upgrade check
+    // 2. upgrade apply --auto-changeset
+    // 3. bump preview
+    // 4. bump execute
+    // 5. Verify: Complete upgrade → release cycle
+}
+
+#[tokio::test]
+async fn test_rollback_failed_upgrade_complete_flow() {
+    // 1. upgrade apply
+    // 2. Simulate failure
+    // 3. upgrade backups restore
+    // 4. Verify: Restored to previous state
+}
+
+// === Cascading and dependencies ===
+#[tokio::test]
+async fn test_cascading_bumps_in_monorepo_complete() {
+    // Package B depends on A
+    // 1. Change A, create changeset
+    // 2. Bump
+    // 3. Verify: B also bumped due to dependency
+}
+
+#[tokio::test]
+async fn test_dependency_impact_across_packages() {
+    // A ← B ← C (dependency chain)
+    // 1. Change A
+    // 2. Verify: changes command shows B and C affected
+}
+
+// === CI/CD simulation ===
+#[tokio::test]
+async fn test_ci_cd_pull_request_workflow() {
+    // Simulate PR workflow:
+    // 1. Create feature branch
+    // 2. changeset create
+    // 3. changeset check (for Git hook)
+    // 4. Verify: Changeset validation passes
+}
+
+#[tokio::test]
+async fn test_ci_cd_merge_and_release_workflow() {
+    // Simulate merge to main:
+    // 1. Merge feature branch
+    // 2. changeset update (add merge commit)
+    // 3. bump execute --git-tag --git-commit
+    // 4. Verify: Release artifacts created
+}
+
+#[tokio::test]
+async fn test_ci_cd_with_changeset_validation() {
+    // CI pipeline validation:
+    // 1. Run changeset check
+    // 2. If fails, block merge
+    // 3. Verify: Exit codes correct for CI
+}
+
+// === Multi-changeset workflows ===
+#[tokio::test]
+async fn test_multiple_changesets_single_release() {
+    // Real-world: Multiple features merged
+    // 1. Create 3 changesets (different branches)
+    // 2. Merge all to main
+    // 3. Single bump execute
+    // 4. Verify: All changes in one release
+}
+
+#[tokio::test]
+async fn test_multiple_teams_multiple_changesets() {
+    // Multiple teams working simultaneously:
+    // 1. Team A: major change
+    // 2. Team B: minor change
+    // 3. Team C: patch change
+    // 4. Merge all, bump once
+    // 5. Verify: Highest bump wins (major)
+}
+
+// === Audit integration ===
+#[tokio::test]
+async fn test_audit_before_release_workflow() {
+    // Best practice workflow:
+    // 1. audit --sections all
+    // 2. Fix critical issues
+    // 3. bump execute
+    // 4. Verify: Clean audit before release
+}
+
+#[tokio::test]
+async fn test_audit_blocks_release_on_critical_issues() {
+    // Automated gate:
+    // 1. Create breaking change
+    // 2. audit --min-severity critical
+    // 3. Verify: Critical issues found
+    // 4. Attempt bump should warn/fail
+}
+
+// === Error recovery ===
+#[tokio::test]
+async fn test_partial_failure_rollback_workflow() {
+    // Test transaction-like behavior:
+    // 1. Start bump execute
+    // 2. Fail during changelog generation
+    // 3. Verify: All changes rolled back
+}
+
+#[tokio::test]
+async fn test_network_failure_recovery_workflow() {
+    // Test resilience:
+    // 1. upgrade check (mock network failure)
+    // 2. Retry
+    // 3. Verify: Recovers gracefully
+}
+
+#[tokio::test]
+async fn test_conflicting_changes_resolution_workflow() {
+    // Conflict handling:
+    // 1. Two changesets modify same package
+    // 2. Different bump types
+    // 3. Verify: Conflict detected and resolved
+}
+
+// === Snapshot and pre-release ===
+#[tokio::test]
+async fn test_snapshot_deployment_workflow() {
+    // Feature branch deployment:
+    // 1. changeset create
+    // 2. bump --snapshot
+    // 3. Deploy to staging
+    // 4. Verify: Snapshot version created
+}
+
+#[tokio::test]
+async fn test_prerelease_to_stable_promotion_workflow() {
+    // Alpha → Beta → RC → Stable:
+    // 1. bump --prerelease alpha
+    // 2. bump --prerelease beta
+    // 3. bump --prerelease rc
+    // 4. bump --execute (stable)
+    // 5. Verify: Version progression correct
+}
+
+// === Backup and restore ===
+#[tokio::test]
+async fn test_upgrade_backup_restore_complete_workflow() {
+    // Full backup lifecycle:
+    // 1. upgrade apply (creates backup)
+    // 2. Make more changes
+    // 3. upgrade backups list
+    // 4. upgrade backups restore
+    // 5. Verify: Restored correctly
+}
+```
+
+---
+
+### Phase 4A: Cross-Cutting Concerns (14 tests)
+
+**Priority**: ⚪ LOW  
+**Status**: Future enhancement
+
+```rust
+// === Global flags ===
+test_all_commands_with_custom_root()
+test_all_commands_with_log_level_debug()
+test_all_commands_with_no_color()
+test_all_commands_with_custom_config_path()
+
+// === Exit codes ===
+test_exit_codes_consistency()
+  // 0 = success, 1 = error, 2 = usage error
+
+// === Error messages ===
+test_error_messages_clarity()
+  // All errors have actionable messages
+
+// === Performance ===
+test_large_monorepo_performance()
+  // 100+ packages, should complete < 5s
+
+test_many_changesets_performance()
+  // 50+ changesets, should handle efficiently
+
+test_deep_dependency_trees_performance()
+  // 10+ levels deep, should resolve correctly
+
+// === Concurrency ===
+test_concurrent_changeset_creation()
+  // Multiple users creating changesets
+
+test_concurrent_bump_operations()
+  // Race condition handling
+```
+
+---
+
+## 📊 Updated Coverage Summary
+
+### By Priority
+
+| Priority | Tests Missing | Time Estimate |
+|----------|---------------|---------------|
+| 🔴 **CRITICAL** | 34 | 1 week |
+| 🟡 **HIGH** | 24 | 3-4 days |
+| 🟢 **MEDIUM** | 10 | 2-3 days |
+| ⚪ **LOW** | 14 | 1-2 weeks |
+| **TOTAL** | **82** | **3-4 weeks** |
+
+### By Command
+
+| Command | Implemented | Missing | Total | Coverage |
+|---------|-------------|---------|-------|----------|
+| Init | 12 | 7 | 19 | 63% |
+| Config | 18 | 2 | 20 | 90% |
+| Changeset | 25 | 13 | 38 | 66% |
+| Bump | 25 | 6 | 31 | 81% |
+| Upgrade | 16 | 10 | 26 | 62% |
+| Audit | 25 | 2 | 27 | 93% |
+| Changes | 14 | 2 | 16 | 88% |
+| Version | 12 | 1 | 13 | 92% |
+| **Workflows** | **0** | **20** | **20** | **0%** |
+| **Cross-Cutting** | **0** | **14** | **14** | **0%** |
+| **TOTAL** | **147** | **77** | **224** | **66%** |
+
+---
+
+## 🎯 Updated Timeline
+
+| Phase | Duration | Priority | Status |
+|-------|----------|----------|--------|
+| Phase 1: Foundation | 1-2 days | ✅ DONE | 🟢 Complete |
+| Phase 2: Commands (Original) | 3-5 days | ✅ DONE | 🟢 Complete |
+| **Phase 2A: Command Gaps** | **3-4 days** | **🔴 CRITICAL** | **⚪ Pending** |
+| **Phase 3A: Workflow Tests** | **1 week** | **🔴 CRITICAL** | **⚪ Pending** |
+| Phase 4: Documentation | 1 day | 🟢 MEDIUM | ⚪ Pending |
+| **Phase 4A: Cross-Cutting** | **1-2 weeks** | **⚪ LOW** | **⚪ Pending** |
+| **TOTAL REMAINING** | **2.5-4 weeks** | | |
+
+---
+
+## 🚀 Recommended Execution Order
+
+### Sprint 1: Critical Workflows (1 week)
+1. **Phase 3A: Workflow Tests** (20 tests) - **HIGHEST PRIORITY**
+   - Complete release workflows
+   - CI/CD simulation
+   - Multi-changeset scenarios
+   
+### Sprint 2: Critical Commands (1 week)
+2. **Phase 2A: Critical Command Gaps** (34 tests)
+   - `changeset edit` (4 tests)
+   - `changeset check` (4 tests)
+   - `bump --snapshot/--prerelease` (6 tests)
+   - `changes --packages` (2 tests)
+   - Other high-priority flags
+
+### Sprint 3: Polish (1 week)
+3. **Phase 2A: Medium Priority Gaps** (10 tests)
+4. **Phase 4: Documentation** (1 day)
+
+### Sprint 4: Future Enhancements (Optional)
+5. **Phase 4A: Cross-Cutting Concerns** (14 tests)
+   - Performance tests
+   - Concurrency tests
+   - Global flags consistency
+
+---
+
+## ✅ Action Items
+
+- [x] Complete Phase 1 (Foundation)
+- [x] Complete Phase 2 (Command Tests - Original Set)
+- [x] Comprehensive gap analysis completed
+- [ ] **NEXT**: Implement Phase 3A Workflow Tests (20 tests)
+- [ ] **THEN**: Implement Phase 2A Critical Gaps (34 tests)
+- [ ] Update documentation
+- [ ] Add CI performance monitoring
+- [ ] Establish coverage metrics tracking
+
+---
+
+**Last Updated**: 2025-11-07  
+**Next Review**: After Phase 3A completion

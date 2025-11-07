@@ -1203,3 +1203,259 @@ async fn test_bump_snapshot_doesnt_consume_changesets() {
     // Verify changeset still exists after snapshot (not consumed)
     workspace.assert_changeset_count(1);
 }
+
+// ============================================================================
+// Prerelease Tests - CRITICAL GAP COVERAGE
+// ============================================================================
+
+/// Test: Bump with alpha prerelease tag
+///
+/// This test validates that the `--prerelease alpha` flag correctly generates
+/// alpha prerelease versions (e.g., 1.1.0-alpha.1).
+#[tokio::test]
+async fn test_bump_prerelease_alpha() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_git()
+        .with_commits(1)
+        .add_changeset(ChangesetBuilder::minor().branch("feature/alpha-release"))
+        .with_default_config()
+        .finalize();
+
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: Some("alpha".to_string()),
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: true,
+        no_archive: false,
+        force: true,
+        show_diff: false,
+    };
+
+    let (output, _buffer) = create_json_output();
+
+    let result = execute_bump_apply(&args, &output, workspace.root(), None).await;
+    assert!(result.is_ok(), "Prerelease alpha should succeed: {:?}", result.err());
+
+    // Verify version has alpha prerelease tag
+    let version = get_package_version(workspace.root()).await.unwrap();
+    assert!(version.contains("-alpha"), "Version should contain '-alpha' tag, got: {version}");
+
+    // Should be in format: 1.1.0-alpha.1 or similar
+    assert!(
+        version.starts_with("1.1.0-alpha") || version.starts_with("1.1.0-alpha."),
+        "Version should start with '1.1.0-alpha', got: {version}"
+    );
+}
+
+/// Test: Bump with beta prerelease tag
+///
+/// This test validates that the `--prerelease beta` flag correctly generates
+/// beta prerelease versions (e.g., 1.1.0-beta.1).
+#[tokio::test]
+async fn test_bump_prerelease_beta() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_git()
+        .with_commits(1)
+        .add_changeset(ChangesetBuilder::minor().branch("feature/beta-release"))
+        .with_default_config()
+        .finalize();
+
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: Some("beta".to_string()),
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: true,
+        no_archive: false,
+        force: true,
+        show_diff: false,
+    };
+
+    let (output, _buffer) = create_json_output();
+
+    let result = execute_bump_apply(&args, &output, workspace.root(), None).await;
+    assert!(result.is_ok(), "Prerelease beta should succeed: {:?}", result.err());
+
+    // Verify version has beta prerelease tag
+    let version = get_package_version(workspace.root()).await.unwrap();
+    assert!(version.contains("-beta"), "Version should contain '-beta' tag, got: {version}");
+
+    // Should be in format: 1.1.0-beta.1 or similar
+    assert!(
+        version.starts_with("1.1.0-beta") || version.starts_with("1.1.0-beta."),
+        "Version should start with '1.1.0-beta', got: {version}"
+    );
+}
+
+/// Test: Bump with rc (release candidate) prerelease tag
+///
+/// This test validates that the `--prerelease rc` flag correctly generates
+/// release candidate versions (e.g., 1.1.0-rc.1).
+#[tokio::test]
+async fn test_bump_prerelease_rc() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_git()
+        .with_commits(1)
+        .add_changeset(ChangesetBuilder::minor().branch("feature/rc-release"))
+        .with_default_config()
+        .finalize();
+
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: Some("rc".to_string()),
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: true,
+        no_archive: false,
+        force: true,
+        show_diff: false,
+    };
+
+    let (output, _buffer) = create_json_output();
+
+    let result = execute_bump_apply(&args, &output, workspace.root(), None).await;
+    assert!(result.is_ok(), "Prerelease rc should succeed: {:?}", result.err());
+
+    // Verify version has rc prerelease tag
+    let version = get_package_version(workspace.root()).await.unwrap();
+    assert!(version.contains("-rc"), "Version should contain '-rc' tag, got: {version}");
+
+    // Should be in format: 1.1.0-rc.1 or similar
+    assert!(
+        version.starts_with("1.1.0-rc") || version.starts_with("1.1.0-rc."),
+        "Version should start with '1.1.0-rc', got: {version}"
+    );
+}
+
+// ============================================================================
+// Additional Bump Advanced Flags Tests - Gap Coverage
+// ============================================================================
+
+/// Test: Bump with no-archive flag keeps changesets unarchived
+///
+/// This test validates that the `--no-archive` flag prevents changesets from
+/// being archived after a successful bump, which is useful for multi-stage
+/// releases or when the same changesets need to be used multiple times.
+#[allow(clippy::unnecessary_map_or)]
+#[tokio::test]
+async fn test_bump_no_archive_keeps_changesets() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_git()
+        .with_commits(1)
+        .add_changeset(ChangesetBuilder::patch().branch("feature/no-archive-test"))
+        .with_default_config()
+        .finalize();
+
+    // Count changesets before bump
+    workspace.assert_changeset_count(1);
+
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: None,
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: true,
+        no_archive: true, // Don't archive changesets
+        force: true,
+        show_diff: false,
+    };
+
+    let (output, _buffer) = create_json_output();
+
+    let result = execute_bump_apply(&args, &output, workspace.root(), None).await;
+    assert!(result.is_ok(), "Bump with no-archive should succeed: {:?}", result.err());
+
+    // Verify version was bumped
+    let version = get_package_version(workspace.root()).await.unwrap();
+    assert_eq!(version, "1.0.1", "Version should be bumped to 1.0.1");
+
+    // Verify changeset still exists (not archived)
+    workspace.assert_changeset_count(1);
+
+    // Verify history directory does NOT contain archived changesets
+    let history_dir = workspace.root().join(".changesets/history");
+    if history_dir.exists() {
+        let history_count = std::fs::read_dir(&history_dir)
+            .expect("Should read history directory")
+            .filter_map(Result::ok)
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
+            .count();
+        assert_eq!(history_count, 0, "History directory should be empty with --no-archive");
+    }
+}
+
+/// Test: Bump with force flag skips confirmations
+///
+/// This test validates that the `--force` flag skips all interactive
+/// confirmations, which is critical for CI/CD automation pipelines where
+/// no user interaction is available.
+#[tokio::test]
+async fn test_bump_force_skips_confirmations() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_git()
+        .with_commits(1)
+        .add_changeset(ChangesetBuilder::major().branch("feature/force-test"))
+        .with_default_config()
+        .finalize();
+
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: None,
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: true,
+        no_archive: false,
+        force: true, // Skip confirmations
+        show_diff: false,
+    };
+
+    let (output, _buffer) = create_json_output();
+
+    // Execute bump with force flag (should not block on confirmations)
+    let result = execute_bump_apply(&args, &output, workspace.root(), None).await;
+    assert!(result.is_ok(), "Bump with force should succeed without prompts: {:?}", result.err());
+
+    // Verify version was bumped
+    let version = get_package_version(workspace.root()).await.unwrap();
+    assert_eq!(version, "2.0.0", "Version should be bumped to 2.0.0 (major)");
+
+    // Verify changesets were archived (normal bump behavior)
+    workspace.assert_changeset_count(0);
+
+    // Verify history contains archived changeset
+    let history_dir = workspace.root().join(".changesets/history");
+    assert!(history_dir.exists(), "History directory should exist");
+
+    let history_count = std::fs::read_dir(&history_dir)
+        .expect("Should read history directory")
+        .filter_map(Result::ok)
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
+        .count();
+    assert_eq!(history_count, 1, "History should contain 1 archived changeset");
+}

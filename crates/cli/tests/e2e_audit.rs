@@ -919,3 +919,72 @@ async fn test_audit_clean_workspace_health() {
 
     assert!(result.is_ok(), "Audit should succeed: {:?}", result.err());
 }
+
+// ============================================================================
+// Additional Audit Tests - Gap Coverage
+// ============================================================================
+
+/// Test: Audit breaking changes section
+///
+/// This test validates that the 'breaking-changes' section can be audited
+/// independently to check for breaking changes in dependencies.
+#[tokio::test]
+async fn test_audit_breaking_changes_section() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .finalize();
+
+    let args = AuditArgs {
+        sections: vec!["breaking-changes".to_string()],
+        output: None,
+        min_severity: "info".to_string(),
+        verbosity: "normal".to_string(),
+        no_health_score: false,
+        export: None,
+        export_file: None,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_audit(&args, &output, workspace.root(), None).await;
+
+    assert!(result.is_ok(), "Audit breaking-changes section should succeed: {:?}", result.err());
+}
+
+/// Test: Audit output to file
+///
+/// This test validates that the `--output` flag correctly writes audit
+/// results to a specified file path.
+#[tokio::test]
+async fn test_audit_output_to_file() {
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .finalize();
+
+    let output_file = workspace.root().join("audit-results.txt");
+
+    let args = AuditArgs {
+        sections: vec!["dependencies".to_string()],
+        output: Some(output_file.clone()),
+        min_severity: "info".to_string(),
+        verbosity: "normal".to_string(),
+        no_health_score: false,
+        export: None,
+        export_file: None,
+    };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_audit(&args, &output, workspace.root(), None).await;
+
+    assert!(result.is_ok(), "Audit with output file should succeed: {:?}", result.err());
+
+    // Verify output file was created
+    assert!(output_file.exists(), "Output file should be created at specified path");
+
+    // Verify file has content
+    let content = read_file(&output_file);
+    assert!(!content.is_empty(), "Output file should contain audit results");
+}
