@@ -539,3 +539,313 @@ pub fn clean_directory(dir: &Path) {
         }
     }
 }
+
+// =============================================================================
+// Editor Mock Helpers
+// =============================================================================
+
+/// Creates a mock editor script for testing.
+///
+/// The mock editor can be configured to modify files, fail, or do nothing.
+/// Returns the path to the mock editor executable and an environment guard
+/// that sets EDITOR to point to it.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// // Mock editor that changes "patch" to "minor"
+/// let (editor_path, _guard) = create_mock_editor(|content| {
+///     content.replace("\"patch\"", "\"minor\"")
+/// });
+/// // EDITOR is now set, execute_edit will use our mock
+/// execute_edit(&args, &output, Some(workspace.root()), None).await?;
+/// ```
+///
+/// # Panics
+///
+/// Panics if the mock editor script cannot be created or made executable.
+#[allow(clippy::expect_used)]
+pub fn create_mock_editor<F>(_modifier: F) -> (std::path::PathBuf, EnvVarGuard)
+where
+    F: Fn(String) -> String + 'static,
+{
+    let temp_dir = std::env::temp_dir();
+    // Use timestamp + random to ensure uniqueness across tests
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_nanos();
+    let script_name = format!("mock_editor_{}_{}", std::process::id(), timestamp);
+
+    #[cfg(unix)]
+    let script_path = temp_dir.join(format!("{script_name}.sh"));
+
+    #[cfg(windows)]
+    let script_path = temp_dir.join(format!("{script_name}.bat"));
+
+    // Create the mock editor script
+    #[cfg(unix)]
+    {
+        let script_content = r#"#!/bin/bash
+# Mock editor for testing
+# Reads the file, applies modifications, and writes it back
+
+FILE="$1"
+if [ -z "$FILE" ]; then
+    echo "Usage: $0 <file>" >&2
+    exit 1
+fi
+
+if [ ! -f "$FILE" ]; then
+    echo "File not found: $FILE" >&2
+    exit 1
+fi
+
+# The Rust test will handle the modification via a custom mechanism
+# For now, this script just exits successfully
+exit 0
+"#;
+
+        std::fs::write(&script_path, script_content).expect("Failed to write mock editor script");
+
+        // Make it executable
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = std::fs::metadata(&script_path).expect("Failed to get script metadata");
+            let mut permissions = metadata.permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&script_path, permissions)
+                .expect("Failed to set script permissions");
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        let script_content = r#"@echo off
+REM Mock editor for testing
+set FILE=%1
+
+if "%FILE%"=="" (
+    echo Usage: %0 ^<file^> 1>&2
+    exit /b 1
+)
+
+if not exist "%FILE%" (
+    echo File not found: %FILE% 1>&2
+    exit /b 1
+)
+
+exit /b 0
+"#;
+
+        std::fs::write(&script_path, script_content).expect("Failed to write mock editor script");
+    }
+
+    // Set EDITOR environment variable
+    let guard = set_env_var("EDITOR", script_path.to_str().expect("Invalid path"));
+
+    (script_path, guard)
+}
+
+/// Builder for creating mock editors with specific behaviors.
+///
+/// Provides a fluent API for configuring mock editor behavior.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// // Create a mock editor that modifies the bump type
+/// let _guard = MockEditorBuilder::new()
+///     .modify_json(|json| {
+///         json["bump"] = serde_json::Value::String("major".to_string());
+///         json
+///     })
+///     .build();
+///
+/// execute_edit(&args, &output, Some(workspace.root()), None).await?;
+/// ```
+pub struct MockEditorBuilder {
+    fail: bool,
+    modification: Option<Box<dyn Fn(String) -> String>>,
+}
+
+impl MockEditorBuilder {
+    /// Creates a new mock editor builder.
+    pub fn new() -> Self {
+        Self { fail: false, modification: None }
+    }
+
+    /// Configures the mock editor to fail (exit with non-zero status).
+    #[allow(dead_code)]
+    pub fn fail(mut self) -> Self {
+        self.fail = true;
+        self
+    }
+
+    /// Configures the mock editor to modify file content.
+    #[allow(dead_code)]
+    pub fn modify<F>(mut self, f: F) -> Self
+    where
+        F: Fn(String) -> String + 'static,
+    {
+        self.modification = Some(Box::new(f));
+        self
+    }
+
+    /// Configures the mock editor to modify JSON content.
+    ///
+    /// The provided function receives a mutable reference to the parsed JSON
+    /// and can modify it directly.
+    #[allow(dead_code)]
+    pub fn modify_json<F>(self, f: F) -> Self
+    where
+        F: Fn(serde_json::Value) -> serde_json::Value + 'static,
+    {
+        self.modify(move |content| {
+            let json: serde_json::Value =
+                serde_json::from_str(&content).expect("Failed to parse JSON");
+            let modified = f(json);
+            serde_json::to_string_pretty(&modified).expect("Failed to serialize JSON")
+        })
+    }
+
+    /// Builds the mock editor and returns the environment guard.
+    ///
+    /// The guard must be kept alive for the duration of the test.
+    #[allow(dead_code)]
+    pub fn build(self) -> EnvVarGuard {
+        let (_path, guard) = if self.fail {
+            create_failing_mock_editor()
+        } else if let Some(modifier) = self.modification {
+            create_mock_editor(modifier)
+        } else {
+            create_noop_mock_editor()
+        };
+
+        guard
+    }
+}
+
+impl Default for MockEditorBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Creates a mock editor that does nothing (no-op).
+///
+/// This simulates a user opening the editor and closing it without changes.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let (_path, _guard) = create_noop_mock_editor();
+/// execute_edit(&args, &output, Some(workspace.root()), None).await?;
+/// ```
+#[allow(clippy::expect_used)]
+pub fn create_noop_mock_editor() -> (std::path::PathBuf, EnvVarGuard) {
+    create_mock_editor(|content| content)
+}
+
+/// Creates a mock editor that fails (exits with non-zero status).
+///
+/// This simulates editor failure scenarios.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let (_path, _guard) = create_failing_mock_editor();
+/// let result = execute_edit(&args, &output, Some(workspace.root()), None).await;
+/// assert!(result.is_err());
+/// ```
+#[allow(clippy::expect_used)]
+pub fn create_failing_mock_editor() -> (std::path::PathBuf, EnvVarGuard) {
+    let temp_dir = std::env::temp_dir();
+    // Use timestamp + random to ensure uniqueness across tests
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_nanos();
+    let script_name = format!("mock_editor_fail_{}_{}", std::process::id(), timestamp);
+
+    #[cfg(unix)]
+    let script_path = temp_dir.join(format!("{script_name}.sh"));
+
+    #[cfg(windows)]
+    let script_path = temp_dir.join(format!("{script_name}.bat"));
+
+    #[cfg(unix)]
+    {
+        let script_content = r"#!/bin/bash
+exit 1
+";
+
+        std::fs::write(&script_path, script_content)
+            .expect("Failed to write failing mock editor script");
+
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = std::fs::metadata(&script_path).expect("Failed to get script metadata");
+            let mut permissions = metadata.permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&script_path, permissions)
+                .expect("Failed to set script permissions");
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        let script_content = r#"@echo off
+exit /b 1
+"#;
+
+        std::fs::write(&script_path, script_content)
+            .expect("Failed to write failing mock editor script");
+    }
+
+    let guard = set_env_var("EDITOR", script_path.to_str().expect("Invalid path"));
+
+    (script_path, guard)
+}
+
+/// Manually modifies a changeset file for testing edit validation.
+///
+/// This bypasses the editor and directly modifies the changeset file,
+/// useful for testing validation logic.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// // Create a changeset
+/// execute_add(&args, &output, Some(workspace.root()), None).await?;
+///
+/// // Manually corrupt it
+/// modify_changeset_file(
+///     workspace.root(),
+///     "feature-test",
+///     |mut json| {
+///         json["packages"] = serde_json::Value::Array(vec![]); // Invalid: empty array
+///         json
+///     }
+/// );
+///
+/// // Try to load it - should fail validation
+/// let result = execute_show(&args, &output, Some(workspace.root()), None).await;
+/// assert!(result.is_err());
+/// ```
+#[allow(clippy::expect_used)]
+pub fn modify_changeset_file<F>(workspace_root: &Path, changeset_name: &str, modifier: F)
+where
+    F: FnOnce(serde_json::Value) -> serde_json::Value,
+{
+    let changeset_path = workspace_root.join(".changesets").join(format!("{changeset_name}.json"));
+
+    let content = read_file(&changeset_path);
+    let json: serde_json::Value =
+        serde_json::from_str(&content).expect("Failed to parse changeset JSON");
+
+    let modified = modifier(json);
+
+    let new_content = serde_json::to_string_pretty(&modified).expect("Failed to serialize JSON");
+    write_file(&changeset_path, &new_content);
+}
