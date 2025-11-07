@@ -350,16 +350,13 @@ pub async fn execute_bump_apply(
     if !args.no_changelog && config.changelog.enabled {
         info!("Generating changelogs");
 
-        if git_repo.is_some() {
-            // Need to open a new Repo instance since Repo doesn't implement Clone
-            let repo_for_changelog = Repo::open(workspace_root.to_str().ok_or_else(|| {
-                CliError::execution("Workspace path contains invalid UTF-8".to_string())
-            })?)
-            .map_err(|e| {
-                error!("Failed to open Git repository for changelog: {}", e);
-                CliError::execution(format!("Failed to open Git repository for changelog: {e}"))
-            })?;
+        // Try to open git repository for changelog generation
+        // Changelog needs git history, independent of whether git operations are requested
+        let repo_result = Repo::open(workspace_root.to_str().ok_or_else(|| {
+            CliError::execution("Workspace path contains invalid UTF-8".to_string())
+        })?);
 
+        if let Ok(repo_for_changelog) = repo_result {
             let changelog_gen = ChangelogGenerator::new(
                 workspace_root.to_path_buf(),
                 repo_for_changelog,
@@ -395,12 +392,24 @@ pub async fn execute_bump_apply(
                     changeset.branch
                 );
 
-                // Add CHANGELOG.md files to modified files list
+                // Write CHANGELOG.md files to disk and add to modified files list
                 for changelog in changelogs {
-                    if let Some(pkg_name) = &changelog.package_name {
-                        let changelog_path = workspace_root.join(pkg_name).join("CHANGELOG.md");
-                        modified_files.push(changelog_path);
-                    }
+                    // Write the changelog to filesystem
+                    changelog.write(&fs).await.map_err(|e| {
+                        error!(
+                            "Failed to write changelog for package {:?}: {}",
+                            changelog.package_name, e
+                        );
+                        CliError::execution(format!(
+                            "Failed to write changelog for package {:?}: {}",
+                            changelog.package_name, e
+                        ))
+                    })?;
+
+                    info!("Written changelog to: {}", changelog.changelog_path.display());
+
+                    // Add to modified files for git commit
+                    modified_files.push(changelog.changelog_path.clone());
                 }
             }
         } else {

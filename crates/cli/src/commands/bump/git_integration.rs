@@ -106,18 +106,65 @@ pub fn commit_version_changes(
     debug!("Commit message: {}", commit_message);
     debug!("Modified files: {}", modified_files.len());
 
+    // Get repository root for converting absolute paths to relative
+    let repo_root = repo.get_repo_path();
+
+    // Canonicalize repository root to handle symlinks (e.g., /var -> /private/var on macOS)
+    let canonical_repo_root = repo_root.canonicalize().map_err(|e| {
+        warn!("Failed to canonicalize repo root, using as-is: {}", e);
+        CliError::execution(format!("Failed to canonicalize repository root: {e}"))
+    })?;
+
     // Stage all modified files
     for file in modified_files {
         let file_path = file.as_ref();
         debug!("Staging file: {}", file_path.display());
 
-        repo.add(file_path.to_str().ok_or_else(|| {
-            CliError::execution(format!(
-                "File path contains invalid UTF-8: {}",
-                file_path.display()
-            ))
-        })?)
-        .map_err(|e| {
+        // Convert absolute path to relative path from repository root
+        let relative_path_str = if file_path.is_absolute() {
+            // Canonicalize file path to handle symlinks
+            let canonical_file_path = file_path.canonicalize().map_err(|e| {
+                CliError::execution(format!(
+                    "Failed to canonicalize file path {}: {}",
+                    file_path.display(),
+                    e
+                ))
+            })?;
+
+            let relative_path =
+                canonical_file_path.strip_prefix(&canonical_repo_root).map_err(|e| {
+                    CliError::execution(format!(
+                        "File path {} is not within repository root {}: {}",
+                        canonical_file_path.display(),
+                        canonical_repo_root.display(),
+                        e
+                    ))
+                })?;
+
+            relative_path
+                .to_str()
+                .ok_or_else(|| {
+                    CliError::execution(format!(
+                        "File path contains invalid UTF-8: {}",
+                        relative_path.display()
+                    ))
+                })?
+                .to_string()
+        } else {
+            file_path
+                .to_str()
+                .ok_or_else(|| {
+                    CliError::execution(format!(
+                        "File path contains invalid UTF-8: {}",
+                        file_path.display()
+                    ))
+                })?
+                .to_string()
+        };
+
+        debug!("Staging relative path: {}", relative_path_str);
+
+        repo.add(&relative_path_str).map_err(|e| {
             CliError::execution(format!("Failed to stage file {}: {e}", file_path.display()))
         })?;
     }

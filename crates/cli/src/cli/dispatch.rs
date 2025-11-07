@@ -175,9 +175,14 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
                     )
                     .await?;
                 }
-                ChangesetCommands::Check(_args) => {
-                    // TODO: will be implemented on story 4.3
-                    todo!("Changeset check command will be implemented in story 4.3")
+                ChangesetCommands::Check(args) => {
+                    changeset::execute_check(
+                        args,
+                        &output,
+                        Some(root),
+                        config_path.as_ref().map(|p| p.as_path()),
+                    )
+                    .await?;
                 }
             }
         }
