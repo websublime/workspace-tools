@@ -757,8 +757,7 @@ max_backups = 5
 [changelog]
 enabled = true
 format = "keep-a-changelog"
-include_commit_links = true
-repository_url = ""
+include_commit_links = false
 
 [audit]
 enabled = true
@@ -897,8 +896,7 @@ max_backups = 5
 [changelog]
 enabled = true
 format = "keep-a-changelog"
-include_commit_links = true
-repository_url = ""
+include_commit_links = false
 
 [audit]
 enabled = true
