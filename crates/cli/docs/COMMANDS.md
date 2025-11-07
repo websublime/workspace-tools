@@ -861,7 +861,32 @@ workspace bump [OPTIONS]
 
 ### Description
 
-Calculates and applies version bumps according to active changesets and the configured versioning strategy. Supports both preview (dry-run) and execution modes.
+Calculates and applies version bumps according to active changesets and the configured versioning strategy.
+
+### Bump Modes
+
+The `bump` command operates in one of three modes:
+
+1. **Preview Mode** (default)
+   - Activated when: No action flags provided, or `--dry-run` flag
+   - Shows what would change without modifying any files
+   - Safe to run anytime - no side effects
+   - This is the **DEFAULT** behavior for safety
+
+2. **Execute Mode**
+   - Activated when: `--execute` flag
+   - Applies version bumps and updates files
+   - Requires explicit flag to prevent accidents
+   - Can be combined with git flags for full release workflow
+
+3. **Snapshot Mode**
+   - Activated when: `--snapshot` flag
+   - Generates snapshot versions for feature branches
+   - Format: `{version}-{branch}.{shortcommit}`
+   - Can be combined with `--execute` to apply snapshots
+
+**Safety Design**: Preview mode is the default to prevent accidental version bumps.
+You must explicitly use `--execute` to modify files.
 
 **Behavior by Strategy:**
 - **Single Repository**: Bumps the single package version
@@ -889,13 +914,17 @@ Calculates and applies version bumps according to active changesets and the conf
 ### Examples
 
 ```bash
-# Preview version changes (safe, no modifications)
-workspace bump --dry-run
+# Preview version changes (DEFAULT - safest, no modifications)
+workspace bump                    # Default preview mode (recommended)
+workspace bump --dry-run          # Explicit preview (same as above)
 
-# Preview with JSON output (for CI/CD)
-workspace --format json bump --dry-run
+# Preview with JSON output (for CI/CD info)
+workspace --format json bump      # Default is preview
 
-# Execute version bump
+# Show detailed diffs in preview
+workspace bump --show-diff
+
+# Execute version bump (requires explicit flag)
 workspace bump --execute
 
 # Execute with git operations
@@ -905,7 +934,8 @@ workspace bump --execute --git-tag --git-push
 workspace bump --execute --git-commit --git-tag --git-push
 
 # Generate snapshot versions for feature branch
-workspace bump --snapshot --execute
+workspace bump --snapshot
+workspace bump --snapshot --execute  # Apply snapshots
 
 # Create pre-release versions
 workspace bump --prerelease beta --execute
@@ -913,12 +943,11 @@ workspace bump --prerelease beta --execute
 # Bump specific packages only
 workspace bump --packages "@org/core,@org/utils" --execute
 
-# Show detailed diffs in preview
-workspace bump --dry-run --show-diff
-
 # CI/CD workflow (silent, JSON output)
 workspace --format json --log-level silent bump --execute --force
 ```
+
+💡 **Tip**: `workspace bump` without flags is safe - it only previews changes without modifying any files.
 
 ### Output Example (--dry-run, Independent Strategy)
 
