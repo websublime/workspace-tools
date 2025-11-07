@@ -8,9 +8,9 @@
 //!
 //! **Why**: Eliminates code duplication and ensures consistent test patterns.
 
+#![allow(dead_code)] // Test helpers may not be used in all test files
+#![allow(unused_imports)] // Re-exports may not be used in all contexts
+
 pub mod assertions;
 pub mod fixtures;
 pub mod helpers;
-
-// Re-export commonly used items
-pub use helpers::*;

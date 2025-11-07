@@ -214,8 +214,8 @@ impl WorkspaceFixture {
     /// ```
     #[allow(clippy::expect_used)]
     pub fn with_default_config(self) -> Self {
-        let is_monorepo = self.packages.len() > 1;
-        let strategy = if is_monorepo { "independent" } else { "independent" };
+        // Always use independent strategy for default config
+        let strategy = "independent";
 
         let config = json!({
             "changeset": {
