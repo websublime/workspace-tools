@@ -384,27 +384,28 @@ All flags from the gap analysis are implemented:
 
 ### Recommendations
 
-**Phase 1 - Critical CLI Bugs (HIGH Priority)**
-1. Fix TOML validation issue in config commands
-2. Fix upgrade backup clean functionality (--keep, --force flags)
+**Phase 1 - Complete Missing Feature (PRIORITY)**
+1. Implement `changeset check` command (story 4.3)
+2. Add 4 E2E tests for `changeset check`
 
-**Phase 2 - Test Infrastructure (MEDIUM Priority)**
-3. Fix changeset test unwrap() bugs (3 tests)
-4. Fix changes filter test directory creation (2 tests)
-5. Improve audit test fixtures for git history
+**Phase 2 - Critical CLI Bugs (HIGH Priority)**
+3. Fix TOML validation issue in config commands
+4. Fix upgrade backup clean functionality (--keep, --force flags)
 
-**Phase 3 - Verification (MEDIUM Priority)**
-6. Verify prerelease functionality works end-to-end
-7. Manual testing of all fixed features
+**Phase 3 - Test Infrastructure (MEDIUM Priority)**
+5. Fix changeset test unwrap() bugs (3 tests)
+6. Fix changes filter test directory creation (2 tests)
+7. Improve audit test fixtures for git history
 
-**Phase 4 - Missing Features (LOW Priority)**
-8. Implement `changeset check` command (story 4.3)
-9. Add 4 tests for `changeset check`
+**Phase 4 - Verification (MEDIUM Priority)**
+8. Verify prerelease functionality works end-to-end
+9. Manual testing of all fixed features
 
 **Expected Impact**:
-- After Phase 1+2: ~217/219 tests passing (99.1%)
-- After Phase 3: Confidence in all implemented features
-- After Phase 4: 100% feature completion
+- After Phase 1: 100% feature completion, 4 new tests
+- After Phase 2: All critical bugs fixed, ~217/219 tests passing (99.1%)
+- After Phase 3: All test infrastructure fixed, ~219/223 tests passing (98.2%)
+- After Phase 4: Complete confidence in all features
 
 ---
 

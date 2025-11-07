@@ -1984,3 +1984,190 @@ async fn test_changeset_history_respects_limit() {
 
     // Verify: Should return maximum of 5 results
 }
+
+// ============================================================================
+// Changeset Check Tests
+// ============================================================================
+
+/// Test: Check if changeset exists for current branch
+///
+/// Validates that `changeset check` correctly detects an existing changeset
+/// for the current branch (auto-detected from Git).
+#[tokio::test]
+async fn test_changeset_check_exists_for_current_branch() {
+    use sublime_cli_tools::cli::commands::ChangesetCheckArgs;
+    use sublime_cli_tools::commands::changeset::execute_check;
+
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_branch("feature/new-api")
+        .finalize();
+
+    // Create a changeset for the current branch
+    let create_args = ChangesetCreateArgs {
+        bump: Some("minor".to_string()),
+        env: Some(vec!["production".to_string()]),
+        branch: Some("feature/new-api".to_string()),
+        message: Some("Add new API".to_string()),
+        packages: Some(vec!["test-package".to_string()]),
+        non_interactive: true,
+    };
+
+    let (output, _) = create_test_output();
+    let create_result =
+        execute_add(&create_args, &output, Some(workspace.root().to_path_buf()), None).await;
+    assert!(
+        create_result.is_ok(),
+        "Should create changeset successfully: {:?}",
+        create_result.err()
+    );
+
+    // Check if changeset exists (without specifying branch - should auto-detect)
+    let check_args = ChangesetCheckArgs { branch: None };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_check(&check_args, &output, Some(workspace.root()), None).await;
+
+    // Should succeed because changeset exists
+    assert!(result.is_ok(), "Check should succeed when changeset exists for current branch");
+}
+
+/// Test: Check if changeset exists for specific branch
+///
+/// Validates that `changeset check --branch <name>` correctly detects
+/// changesets for explicitly specified branches.
+#[tokio::test]
+async fn test_changeset_check_exists_for_specific_branch() {
+    use sublime_cli_tools::cli::commands::ChangesetCheckArgs;
+    use sublime_cli_tools::commands::changeset::execute_check;
+
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_branch("feature/specific-branch")
+        .finalize();
+
+    // Create a changeset for specific branch
+    let create_args = ChangesetCreateArgs {
+        bump: Some("patch".to_string()),
+        env: Some(vec!["production".to_string()]),
+        branch: Some("feature/specific-branch".to_string()),
+        message: Some("Bug fix".to_string()),
+        packages: Some(vec!["test-package".to_string()]),
+        non_interactive: true,
+    };
+
+    let (output, _) = create_test_output();
+    let create_result =
+        execute_add(&create_args, &output, Some(workspace.root().to_path_buf()), None).await;
+    assert!(
+        create_result.is_ok(),
+        "Should create changeset successfully: {:?}",
+        create_result.err()
+    );
+
+    // Check if changeset exists for the specific branch
+    let check_args = ChangesetCheckArgs { branch: Some("feature/specific-branch".to_string()) };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_check(&check_args, &output, Some(workspace.root()), None).await;
+
+    // Should succeed because changeset exists for the specified branch
+    assert!(result.is_ok(), "Check should succeed when changeset exists for specified branch");
+}
+
+/// Test: Check returns error when changeset does not exist
+///
+/// Validates that `changeset check` returns appropriate error when no
+/// changeset exists for the current or specified branch.
+#[tokio::test]
+async fn test_changeset_check_not_exists() {
+    use sublime_cli_tools::cli::commands::ChangesetCheckArgs;
+    use sublime_cli_tools::commands::changeset::execute_check;
+
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_branch("feature/no-changeset")
+        .finalize();
+
+    // Don't create any changeset
+
+    // Check if changeset exists (should fail)
+    let check_args = ChangesetCheckArgs { branch: None };
+
+    let (output, _buffer) = create_test_output();
+    let result = execute_check(&check_args, &output, Some(workspace.root()), None).await;
+
+    // Should fail because no changeset exists
+    assert!(result.is_err(), "Check should fail when changeset does not exist");
+
+    // Verify error message
+    let error_message = format!("{:?}", result.err().unwrap());
+    assert!(
+        error_message.contains("No changeset found"),
+        "Error should indicate no changeset found"
+    );
+}
+
+/// Test: Check exit codes for Git hooks integration
+///
+/// Validates that `changeset check` returns correct exit codes:
+/// - Exit 0 (Ok) when changeset exists
+/// - Exit 1 (Err) when changeset doesn't exist
+///
+/// This is critical for Git hook integration where exit codes determine hook success/failure.
+#[tokio::test]
+async fn test_changeset_check_exit_code_for_git_hooks() {
+    use sublime_cli_tools::cli::commands::ChangesetCheckArgs;
+    use sublime_cli_tools::commands::changeset::execute_check;
+
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_branch("feature/hook-test")
+        .finalize();
+
+    // Test 1: No changeset - should return Err (exit code 1)
+    let check_args = ChangesetCheckArgs { branch: Some("feature/hook-test".to_string()) };
+
+    let (output, _) = create_test_output();
+    let result_without_changeset =
+        execute_check(&check_args, &output, Some(workspace.root()), None).await;
+
+    assert!(
+        result_without_changeset.is_err(),
+        "Should return Err (exit 1) when no changeset exists"
+    );
+
+    // Test 2: Create changeset - should return Ok (exit code 0)
+    let create_args = ChangesetCreateArgs {
+        bump: Some("minor".to_string()),
+        env: Some(vec!["production".to_string()]),
+        branch: Some("feature/hook-test".to_string()),
+        message: Some("Feature for hook test".to_string()),
+        packages: Some(vec!["test-package".to_string()]),
+        non_interactive: true,
+    };
+
+    let (output, _) = create_test_output();
+    let create_result =
+        execute_add(&create_args, &output, Some(workspace.root().to_path_buf()), None).await;
+    assert!(
+        create_result.is_ok(),
+        "Should create changeset successfully: {:?}",
+        create_result.err()
+    );
+
+    // Test 3: Check again - should return Ok (exit code 0)
+    let (output, _) = create_test_output();
+    let result_with_changeset =
+        execute_check(&check_args, &output, Some(workspace.root()), None).await;
+
+    assert!(result_with_changeset.is_ok(), "Should return Ok (exit 0) when changeset exists");
+}
