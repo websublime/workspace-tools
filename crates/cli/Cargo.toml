@@ -1,12 +1,11 @@
 [package]
 name = "sublime_cli_tools"
-version = "0.0.1"
 description = "CLI application for workspace node tools"
 documentation = "https://docs.rs/sublime_cli"
 readme = "README.md"
 keywords = ["cli", "nodejs", "workspace", "tools"]
 categories = ["development-tools", "command-line-utilities"]
-
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -60,9 +59,9 @@ clap_complete = "4.5"
 sysexits = "0.10"
 
 # Internal crates
-sublime_pkg_tools = { version = "0.0.1", path = "../pkg" }
-sublime_standard_tools = { version = "0.0.1", path = "../standard" }
-sublime_git_tools = { version = "0.0.1", path = "../git" }
+sublime_standard_tools.workspace = true
+sublime_git_tools.workspace = true
+sublime_pkg_tools.workspace = true
 
 [dev-dependencies]
 tempfile = "3.8.1"

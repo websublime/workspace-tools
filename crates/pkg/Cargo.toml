@@ -13,8 +13,8 @@ categories = ["development-tools", "command-line-utilities"]
 
 [dependencies]
 # Internal dependencies
-sublime_git_tools.workspace = true
 sublime_standard_tools.workspace = true
+sublime_git_tools.workspace = true
 
 # Async runtime
 tokio = { workspace = true, features = ["full"] }

@@ -1,9 +1,8 @@
 [package]
 name = "sublime_git_tools"
-version = "0.0.1"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -12,6 +11,7 @@ documentation = "https://docs.rs/sublime_git_tools"
 readme = "README.md"
 keywords = ["git", "repository", "version-control", "libgit2", "development"]
 categories = ["development-tools", "version-control"]
+
 
 [package.metadata.docs.rs]
 all-features = true
@@ -42,5 +42,5 @@ dirs = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.19.1"
-sublime_standard_tools = { workspace = true }
+sublime_standard_tools.workspace = true
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
