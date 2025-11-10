@@ -26,6 +26,8 @@ publish_allow_dirty = false
 # disable running `cargo-semver-checks`
 semver_check = false
 
+changelog_path = "./CHANGELOG.md"
+
 # Publish order based on dependencies
 # 1. standard (no internal deps)
 # 2. git (depends on standard)
