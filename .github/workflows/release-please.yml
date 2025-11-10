@@ -1,166 +1,26 @@
 name: Release Please
 
-# Automatic release workflow using Google's Release Please
-# Analyzes conventional commits and creates release PRs
-# When merged, triggers cargo publish and binary builds
-
 on:
   push:
     branches:
       - main
 
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
-  release-please:
-    name: Release Please
-    runs-on: ubuntu-latest
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-      version: ${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}.${{ steps.release.outputs.patch }}
-    steps:
-      - name: Run Release Please
-        id: release
-        uses: google-github-actions/release-please-action@v4
-        with:
-          # Release type for Rust projects
-          release-type: rust
-
-          # Package name (used in release title)
-          package-name: workspace
-
-          # Include all packages in the workspace
-          include-component-in-tag: false
-
-          # Changelog sections
-          changelog-types: |
-            [
-              {"type":"feat","section":"Features","hidden":false},
-              {"type":"fix","section":"Bug Fixes","hidden":false},
-              {"type":"perf","section":"Performance Improvements","hidden":false},
-              {"type":"docs","section":"Documentation","hidden":false},
-              {"type":"chore","section":"Miscellaneous","hidden":false},
-              {"type":"refactor","section":"Code Refactoring","hidden":false},
-              {"type":"test","section":"Tests","hidden":false},
-              {"type":"build","section":"Build System","hidden":false},
-              {"type":"ci","section":"Continuous Integration","hidden":false}
-            ]
-
-          # Bootstrap options for first release
-          bootstrap-sha: ${{ github.sha }}
-
-      - name: Show release outputs
-        if: steps.release.outputs.release_created
-        run: |
-          echo "## 🎉 Release Created!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version**: ${{ steps.release.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Major**: ${{ steps.release.outputs.major }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Minor**: ${{ steps.release.outputs.minor }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Patch**: ${{ steps.release.outputs.patch }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "- Cargo publish will run automatically" >> $GITHUB_STEP_SUMMARY
-          echo "- Binary builds will be triggered" >> $GITHUB_STEP_SUMMARY
-          echo "- GitHub Release will be created with assets" >> $GITHUB_STEP_SUMMARY
-
-  # Publish to crates.io when a release is created
-  publish-cargo:
-    name: Publishing to Cargo
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+  release-plz:
+    name: Release-plz
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Publish workspace crates in order
-        run: |
-          echo "Publishing crates in dependency order..."
-
-          # Function to publish a crate
-          publish_crate() {
-            local crate_path=$1
-            local crate_name=$(basename "$crate_path")
-
-            echo "Publishing ${crate_name}..."
-            cd "$crate_path"
-
-            # Try to publish, ignore if already published
-            if cargo publish --token "$CARGO_REGISTRY_TOKEN" 2>&1 | tee publish.log; then
-              echo "✓ ${crate_name} published successfully"
-            else
-              if grep -q "already uploaded" publish.log; then
-                echo "⚠ ${crate_name} already published (skipping)"
-              else
-                echo "✗ ${crate_name} failed to publish"
-                cat publish.log
-                exit 1
-              fi
-            fi
-
-            cd - > /dev/null
-          }
-
-          # Publish in dependency order
-          publish_crate "crates/standard"
-          sleep 30  # Wait for crates.io to propagate
-
-          publish_crate "crates/git"
-          sleep 30
-
-          publish_crate "crates/pkg"
-          sleep 30
-
-          publish_crate "crates/cli"
-
-          echo ""
-          echo "✓ All crates published successfully!"
+      - name: Run release-plz
+        uses: MarcoIeni/release-plz-action@v0.5
         env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "## 📦 Cargo Publishing Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Published to crates.io:" >> $GITHUB_STEP_SUMMARY
-          echo "- sublime_standard_tools" >> $GITHUB_STEP_SUMMARY
-          echo "- sublime_git_tools" >> $GITHUB_STEP_SUMMARY
-          echo "- sublime_pkg_tools" >> $GITHUB_STEP_SUMMARY
-          echo "- sublime_cli_tools" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Install with: \`cargo install sublime_cli_tools\`" >> $GITHUB_STEP_SUMMARY
-
-  # Trigger binary builds (build-binaries.yml will handle this)
-  trigger-binary-builds:
-    name: Trigger Binary Builds
-    needs: [release-please, publish-cargo]
-    if: needs.release-please.outputs.release_created == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Wait for tag propagation
-        run: |
-          echo "Waiting for tag to propagate..."
-          sleep 10
-
-      - name: Notify binary build
-        run: |
-          echo "## 🔨 Binary Builds Triggered" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Tag **${{ needs.release-please.outputs.tag_name }}** will trigger:" >> $GITHUB_STEP_SUMMARY
-          echo "- Linux x86_64 (GNU)" >> $GITHUB_STEP_SUMMARY
-          echo "- Linux x86_64 (MUSL)" >> $GITHUB_STEP_SUMMARY
-          echo "- macOS x86_64 (Intel)" >> $GITHUB_STEP_SUMMARY
-          echo "- macOS ARM64 (Apple Silicon)" >> $GITHUB_STEP_SUMMARY
-          echo "- Windows x86_64" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Check the 'Build and Release Binaries' workflow for progress." >> $GITHUB_STEP_SUMMARY

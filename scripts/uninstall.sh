@@ -7,7 +7,7 @@
 #
 # Usage:
 #   ./uninstall.sh [OPTIONS]
-#   curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/uninstall.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/uninstall.sh | sh
 #
 # Options:
 #   --remove-config            Remove configuration files
@@ -381,7 +381,7 @@ show_completion() {
         log ""
     fi
 
-    log "To reinstall, visit: ${CYAN}https://github.com/websublime/workspace-node-tools${NC}"
+    log "To reinstall, visit: ${CYAN}https://github.com/websublime/workspace-tools${NC}"
     log ""
 }
 
@@ -426,7 +426,7 @@ EXIT CODES:
     2   Invalid usage
     3   Binary not found
 
-For more information, visit: https://github.com/websublime/workspace-node-tools
+For more information, visit: https://github.com/websublime/workspace-tools
 EOF
 }
 

@@ -2074,8 +2074,8 @@ echo $?  # 64
 
 - **User Guide**: See [GUIDE.md](./GUIDE.md) for comprehensive tutorials and concepts
 - **API Documentation**: See Rust docs for internal API reference
-- **GitHub**: <https://github.com/websublime/workspace-node-tools>
-- **Issues**: <https://github.com/websublime/workspace-node-tools/issues>
+- **GitHub**: <https://github.com/websublime/workspace-tools>
+- **Issues**: <https://github.com/websublime/workspace-tools/issues>
 
 ---
 

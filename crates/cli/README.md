@@ -1,6 +1,6 @@
 # Workspace Node Tools CLI
 
-[![Pull Request](https://github.com/websublime/workspace-node-tools/workflows/Pull%20Request/badge.svg)](https://github.com/websublime/workspace-node-tools/actions)
+[![Pull Request](https://github.com/websublime/workspace-tools/workflows/Pull%20Request/badge.svg)](https://github.com/websublime/workspace-tools/actions)
 [![Crates.io](https://img.shields.io/crates/v/sublime_cli_tools.svg)](https://crates.io/crates/sublime_cli_tools)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -33,29 +33,29 @@ cargo install sublime_cli_tools
 
 **From GitHub Releases** (pre-built binaries):
 
-Download pre-built binaries from [GitHub Releases](https://github.com/websublime/workspace-node-tools/releases):
+Download pre-built binaries from [GitHub Releases](https://github.com/websublime/workspace-tools/releases):
 
 **macOS (Apple Silicon)**:
 ```bash
-curl -L https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-v0.1.0-aarch64-apple-darwin.tar.gz | tar xz
+curl -L https://github.com/websublime/workspace-tools/releases/latest/download/workspace-v0.1.0-aarch64-apple-darwin.tar.gz | tar xz
 sudo mv workspace /usr/local/bin/
 ```
 
 **macOS (Intel)**:
 ```bash
-curl -L https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-v0.1.0-x86_64-apple-darwin.tar.gz | tar xz
+curl -L https://github.com/websublime/workspace-tools/releases/latest/download/workspace-v0.1.0-x86_64-apple-darwin.tar.gz | tar xz
 sudo mv workspace /usr/local/bin/
 ```
 
 **Linux (x86_64 GNU)**:
 ```bash
-curl -L https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-v0.1.0-x86_64-unknown-linux-gnu.tar.gz | tar xz
+curl -L https://github.com/websublime/workspace-tools/releases/latest/download/workspace-v0.1.0-x86_64-unknown-linux-gnu.tar.gz | tar xz
 sudo mv workspace /usr/local/bin/
 ```
 
 **Linux (x86_64 MUSL - static binary)**:
 ```bash
-curl -L https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-v0.1.0-x86_64-unknown-linux-musl.tar.gz | tar xz
+curl -L https://github.com/websublime/workspace-tools/releases/latest/download/workspace-v0.1.0-x86_64-unknown-linux-musl.tar.gz | tar xz
 sudo mv workspace /usr/local/bin/
 ```
 
@@ -65,8 +65,8 @@ Download `workspace-v0.1.0-x86_64-pc-windows-msvc.zip` from releases and extract
 ### From Source
 
 ```bash
-git clone https://github.com/websublime/workspace-node-tools.git
-cd workspace-node-tools
+git clone https://github.com/websublime/workspace-tools.git
+cd workspace-tools
 cargo install --path crates/cli
 ```
 
@@ -454,7 +454,7 @@ This project is licensed under the MIT License - see the [../../LICENSE-MIT](../
 **[Documentation](./docs/GUIDE.md)** •
 **[Commands](./docs/COMMANDS.md)** •
 **[Contributing](../../CONTRIBUTING.md)** •
-**[Issues](https://github.com/websublime/workspace-node-tools/issues)**
+**[Issues](https://github.com/websublime/workspace-tools/issues)**
 
 Part of [Workspace Node Tools](../../README.md)
 

@@ -86,14 +86,14 @@ All notable changes to this project will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
-- Update workspace-node-tools to fix the issue
+- Update workspace-tools to fix the issue
 - Merge pull request #13 from websublime/fix/dependency-release
 
 ## [0.7.8] - 2024-07-24
 
 ### ⚙️ Miscellaneous Tasks
 
-- Update workspace-node-tools crate
+- Update workspace-tools crate
 - Merge pull request #12 from websublime/feature/json-parse
 
 ## [0.7.7] - 2024-07-24
@@ -104,7 +104,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
-- Update workspace-node-tools crate
+- Update workspace-tools crate
 - Update readme api
 - Merge pull request #11 from websublime/feature/pretty-json-pnpm
 
@@ -262,7 +262,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🚀 Features
 
-- Initial integration with workspace-node-tools crate
+- Initial integration with workspace-tools crate
 
 ### ⚙️ Miscellaneous Tasks
 

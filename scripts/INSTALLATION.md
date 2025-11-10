@@ -18,7 +18,7 @@ Complete guide for installing `workspace` (Workspace Node Tools) CLI on all supp
 ### Recommended Installation (All Platforms)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 ```
 
 That's it! The script will:
@@ -43,16 +43,16 @@ workspace --version
 
 ```bash
 # Install latest version
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 
 # Install specific version
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --version v0.1.0
 
 # Custom installation directory
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --install-dir ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --install-dir ~/.local/bin
 
 # Preview before installing
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | less
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | less
 ```
 
 ### Method 2: Homebrew (macOS/Linux)
@@ -84,7 +84,7 @@ brew uninstall workspace
 cargo install workspace-cli
 
 # Install from git
-cargo install --git https://github.com/websublime/workspace-node-tools workspace-cli
+cargo install --git https://github.com/websublime/workspace-tools workspace-cli
 
 # Install specific version
 cargo install workspace-cli --version 0.1.0
@@ -97,7 +97,7 @@ cargo install workspace-cli --version 0.1.0
 
 ```bash
 # 1. Download binary for your platform
-# Visit: https://github.com/websublime/workspace-node-tools/releases
+# Visit: https://github.com/websublime/workspace-tools/releases
 
 # 2. Extract archive
 tar -xzf workspace-v0.1.0-x86_64-apple-darwin.tar.gz
@@ -181,7 +181,7 @@ sudo snap remove workspace
 
 ```bash
 # Automatic installation
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 
 # Or via Homebrew
 brew install workspace
@@ -191,7 +191,7 @@ brew install workspace
 
 ```bash
 # Automatic installation (detects ARM architecture)
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 
 # Or via Homebrew (uses native ARM binary)
 brew install workspace
@@ -214,13 +214,13 @@ file $(which workspace)
 
 ```bash
 # Method 1: Install script (recommended)
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 
 # Method 2: APT package
 sudo apt install workspace
 
 # Method 3: Download binary
-wget https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-x86_64-unknown-linux-gnu.tar.gz
+wget https://github.com/websublime/workspace-tools/releases/latest/download/workspace-x86_64-unknown-linux-gnu.tar.gz
 tar -xzf workspace-x86_64-unknown-linux-gnu.tar.gz
 sudo mv workspace /usr/local/bin/
 ```
@@ -229,13 +229,13 @@ sudo mv workspace /usr/local/bin/
 
 ```bash
 # Method 1: Install script (recommended)
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 
 # Method 2: YUM/DNF package
 sudo yum install workspace
 
 # Method 3: Download binary
-curl -LO https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-x86_64-unknown-linux-gnu.tar.gz
+curl -LO https://github.com/websublime/workspace-tools/releases/latest/download/workspace-x86_64-unknown-linux-gnu.tar.gz
 tar -xzf workspace-x86_64-unknown-linux-gnu.tar.gz
 sudo mv workspace /usr/local/bin/
 ```
@@ -244,13 +244,13 @@ sudo mv workspace /usr/local/bin/
 
 ```bash
 # Method 1: Install script
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 
 # Method 2: AUR (coming soon)
 yay -S workspace-bin
 
 # Method 3: Manual
-curl -LO https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-x86_64-unknown-linux-gnu.tar.gz
+curl -LO https://github.com/websublime/workspace-tools/releases/latest/download/workspace-x86_64-unknown-linux-gnu.tar.gz
 tar -xzf workspace-x86_64-unknown-linux-gnu.tar.gz
 sudo mv workspace /usr/local/bin/
 ```
@@ -259,11 +259,11 @@ sudo mv workspace /usr/local/bin/
 
 ```bash
 # ARMv7 (32-bit)
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 # Automatically downloads: workspace-armv7-unknown-linux-gnueabihf
 
 # ARMv8/aarch64 (64-bit)
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 # Automatically downloads: workspace-aarch64-unknown-linux-gnu
 ```
 
@@ -273,7 +273,7 @@ curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/mai
 
 ```bash
 # Install via Git Bash
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 
 # Verify
 workspace --version
@@ -283,7 +283,7 @@ workspace --version
 
 ```bash
 # Inside WSL terminal
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 
 # Verify
 workspace --version
@@ -293,13 +293,13 @@ workspace --version
 
 ```powershell
 # Download installer
-Invoke-WebRequest -Uri https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.ps1 -OutFile install.ps1
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.ps1 -OutFile install.ps1
 
 # Run installer
 .\install.ps1
 
 # Or download binary manually
-Invoke-WebRequest -Uri https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-x86_64-pc-windows-msvc.zip -OutFile workspace.zip
+Invoke-WebRequest -Uri https://github.com/websublime/workspace-tools/releases/latest/download/workspace-x86_64-pc-windows-msvc.zip -OutFile workspace.zip
 Expand-Archive workspace.zip
 Move-Item workspace\workspace.exe C:\Program Files\workspace\
 ```
@@ -433,10 +433,10 @@ workspace completions fish > ~/.config/fish/completions/workspace.fish
 
 ```bash
 # Install latest version (overwrites existing)
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 
 # Install specific version
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --version v0.2.0
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --version v0.2.0
 ```
 
 ### Update via Package Manager
@@ -480,13 +480,13 @@ workspace update apply --version v0.2.0
 
 ```bash
 # Basic uninstall (keeps config)
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/uninstall.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/uninstall.sh | sh
 
 # Uninstall and remove config
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/uninstall.sh | sh -s -- --remove-config
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/uninstall.sh | sh -s -- --remove-config
 
 # Non-interactive
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/uninstall.sh | sh -s -- --yes --remove-config
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/uninstall.sh | sh -s -- --yes --remove-config
 ```
 
 ### Uninstall via Package Manager
@@ -542,7 +542,7 @@ uname -s  # Should be: Darwin, Linux, or MINGW*/MSYS*/CYGWIN*
 uname -m  # Should be: x86_64, aarch64, arm64, or armv7l
 
 # If unsupported, build from source:
-cargo install --git https://github.com/websublime/workspace-node-tools workspace-cli
+cargo install --git https://github.com/websublime/workspace-tools workspace-cli
 ```
 
 #### "Download failed"
@@ -552,26 +552,26 @@ cargo install --git https://github.com/websublime/workspace-node-tools workspace
 curl -I https://github.com
 
 # Check if URL is accessible
-curl -I https://github.com/websublime/workspace-node-tools/releases
+curl -I https://github.com/websublime/workspace-tools/releases
 
 # Use verbose mode for more details
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --verbose
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --verbose
 
 # For corporate networks, check proxy settings
 export HTTP_PROXY=http://proxy.company.com:8080
 export HTTPS_PROXY=http://proxy.company.com:8080
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 ```
 
 #### "Checksum verification failed"
 
 ```bash
 # Download may be corrupted, try again
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 
 # Download manually and verify
-wget https://github.com/websublime/workspace-node-tools/releases/download/v0.1.0/workspace-x86_64-apple-darwin.tar.gz
-wget https://github.com/websublime/workspace-node-tools/releases/download/v0.1.0/checksums.txt
+wget https://github.com/websublime/workspace-tools/releases/download/v0.1.0/workspace-x86_64-apple-darwin.tar.gz
+wget https://github.com/websublime/workspace-tools/releases/download/v0.1.0/checksums.txt
 
 # Verify manually
 grep "workspace-x86_64-apple-darwin.tar.gz" checksums.txt
@@ -583,10 +583,10 @@ shasum -a 256 workspace-x86_64-apple-darwin.tar.gz  # macOS
 
 ```bash
 # Option 1: Use default user directory
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --install-dir ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --install-dir ~/.local/bin
 
 # Option 2: Use sudo for system-wide installation
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sudo sh
 
 # Option 3: Change permissions of target directory
 sudo chown -R $USER /usr/local/bin
@@ -673,7 +673,7 @@ which -a workspace
 
 ```bash
 # Install to custom directory
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --install-dir ~/my-tools/bin
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --install-dir ~/my-tools/bin
 
 # Add to PATH
 export PATH="$HOME/my-tools/bin:$PATH"
@@ -683,15 +683,15 @@ export PATH="$HOME/my-tools/bin:$PATH"
 
 ```bash
 # Install without completions
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --no-shell-completions
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --no-shell-completions
 ```
 
 ### Offline Installation
 
 ```bash
 # 1. Download on machine with internet
-wget https://github.com/websublime/workspace-node-tools/releases/download/v0.1.0/workspace-x86_64-unknown-linux-gnu.tar.gz
-wget https://github.com/websublime/workspace-node-tools/releases/download/v0.1.0/checksums.txt
+wget https://github.com/websublime/workspace-tools/releases/download/v0.1.0/workspace-x86_64-unknown-linux-gnu.tar.gz
+wget https://github.com/websublime/workspace-tools/releases/download/v0.1.0/checksums.txt
 
 # 2. Transfer files to offline machine
 
@@ -713,10 +713,10 @@ export HTTP_PROXY=http://proxy.company.com:8080
 export HTTPS_PROXY=http://proxy.company.com:8080
 
 # Install
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 
 # Or use proxy with curl
-curl -x http://proxy.company.com:8080 -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -x http://proxy.company.com:8080 -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 ```
 
 ### Private Repository
@@ -726,7 +726,7 @@ curl -x http://proxy.company.com:8080 -fsSL https://raw.githubusercontent.com/we
 export WORKSPACE_GITHUB_TOKEN="ghp_your_token_here"
 
 # Install
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 ```
 
 ## Next Steps
@@ -760,9 +760,9 @@ After installation:
 
 ## Support
 
-- **Documentation**: https://github.com/websublime/workspace-node-tools/docs
-- **GitHub Issues**: https://github.com/websublime/workspace-node-tools/issues
-- **Discussions**: https://github.com/websublime/workspace-node-tools/discussions
+- **Documentation**: https://github.com/websublime/workspace-tools/docs
+- **GitHub Issues**: https://github.com/websublime/workspace-tools/issues
+- **Discussions**: https://github.com/websublime/workspace-tools/discussions
 - **Discord**: https://discord.gg/workspace (coming soon)
 
 ## License

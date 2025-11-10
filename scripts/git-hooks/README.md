@@ -436,7 +436,7 @@ ls -la .git/hooks/pre-push
 
 **Install workspace:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 ```
 
 **Or use full path:**
@@ -563,7 +563,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Install workspace
-        run: curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+        run: curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
       
       - name: Validate changeset
         run: workspace changeset validate --strict
@@ -618,9 +618,9 @@ WORKSPACE_SKIP_HOOKS=1 git commit
 
 ## Support
 
-- **Documentation**: https://github.com/websublime/workspace-node-tools
-- **Issues**: https://github.com/websublime/workspace-node-tools/issues
-- **Discussions**: https://github.com/websublime/workspace-node-tools/discussions
+- **Documentation**: https://github.com/websublime/workspace-tools
+- **Issues**: https://github.com/websublime/workspace-tools/issues
+- **Discussions**: https://github.com/websublime/workspace-tools/discussions
 
 ## License
 
