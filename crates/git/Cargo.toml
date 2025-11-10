@@ -32,7 +32,7 @@ git2 = { version = "0.20", features = [
   "vendored-libgit2",
   "vendored-openssl",
 ] }
-libgit2-sys = { version = "*", features = [
+libgit2-sys = { version = "0.18", features = [
   "ssh",
   "https",
   "vendored",
