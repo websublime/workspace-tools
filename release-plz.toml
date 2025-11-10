@@ -25,3 +25,29 @@ publish_allow_dirty = false
 
 # disable running `cargo-semver-checks`
 semver_check = false
+
+# Publish order based on dependencies
+# 1. standard (no internal deps)
+# 2. git (depends on standard)
+# 3. pkg (depends on git + standard)
+# 4. cli (depends on all)
+
+[[package]]
+name = "sublime_standard_tools"
+changelog_path = "crates/standard/CHANGELOG.md"
+changelog_update = true
+
+[[package]]
+name = "sublime_git_tools"
+changelog_path = "crates/git/CHANGELOG.md"
+changelog_update = true
+
+[[package]]
+name = "sublime_pkg_tools"
+changelog_path = "crates/pkg/CHANGELOG.md"
+changelog_update = true
+
+[[package]]
+name = "sublime_cli_tools"
+changelog_path = "crates/cli/CHANGELOG.md"
+changelog_update = true
