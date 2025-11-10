@@ -10,7 +10,7 @@ description = "A high-level Rust interface to Git operations with robust error h
 documentation = "https://docs.rs/sublime_git_tools"
 readme = "README.md"
 keywords = ["git", "repository", "version-control", "libgit2", "development"]
-categories = ["development-tools", "version-control"]
+categories = ["development-tools"]
 
 
 [package.metadata.docs.rs]
