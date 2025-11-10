@@ -8,7 +8,7 @@ authors = ["WebSublime"]
 edition = "2024"
 rust-version = "1.90.0"
 license = "MIT"
-repository = "https://github.com/websublime/workspace-node-tools"
+repository = "https://github.com/websublime/workspace-tools"
 
 [workspace.dependencies]
 # Internal crates

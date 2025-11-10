@@ -1,6 +1,6 @@
 # `@websublime/workspace-tools`
 
-![https://github.com/websublime/workspace-node-tools/actions](https://github.com/websublime/workspace-node-tools/workflows/CI/badge.svg)
+![https://github.com/websublime/workspace-tools/actions](https://github.com/websublime/workspace-tools/workflows/CI/badge.svg)
 
 > Tools to use on github actions for bumping version, changelogs on a monorepo.
 

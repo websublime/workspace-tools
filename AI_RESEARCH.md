@@ -1,7 +1,7 @@
 # AI Agent Research & Specifications
 
 **Date**: January 2025  
-**Project**: workspace-node-tools  
+**Project**: workspace-tools  
 **Purpose**: Comprehensive research and technical specifications for implementing an AI-powered agent to enhance CLI usability
 
 ---
@@ -5003,7 +5003,7 @@ This research document compiled from:
 - OpenAI GPT-4 API documentation
 - Community best practices for CLI AI integration
 - Rust async patterns and performance optimization
-- Existing workspace-node-tools codebase analysis
+- Existing workspace-tools codebase analysis
 
 **Last Updated**: January 2025  
 **Status**: Research Complete - Ready for Implementation  

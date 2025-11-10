@@ -30,7 +30,7 @@
     "access": "public"
   },
   "repository": {
-    "url": "git+ssh://git@github.com/websublime/workspace-node-tools.git",
+    "url": "git+ssh://git@github.com/websublime/workspace-tools.git",
     "type": "git"
   },
   "browser": "workspace-tools.wasi-browser.js",

@@ -100,7 +100,7 @@ cargo install workspace
 
 ### Method 3: Pre-built Binaries
 
-Download from [GitHub Releases](https://github.com/org/workspace-node-tools/releases):
+Download from [GitHub Releases](https://github.com/org/workspace-tools/releases):
 
 - **macOS (Intel):** `workspace-macos-x86_64.tar.gz`
 - **macOS (Apple Silicon):** `workspace-macos-aarch64.tar.gz`
@@ -2531,9 +2531,9 @@ Create a `WORKFLOW.md` documenting the new process for your team.
 ### Links
 
 - **Documentation:** https://workspace.dev/docs
-- **GitHub:** https://github.com/org/workspace-node-tools
-- **Issues:** https://github.com/org/workspace-node-tools/issues
-- **Changelog:** https://github.com/org/workspace-node-tools/blob/main/CHANGELOG.md
+- **GitHub:** https://github.com/org/workspace-tools
+- **Issues:** https://github.com/org/workspace-tools/issues
+- **Changelog:** https://github.com/org/workspace-tools/blob/main/CHANGELOG.md
 
 ### Community
 

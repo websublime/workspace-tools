@@ -23,22 +23,22 @@ Official installation script for `workspace` CLI. Downloads pre-built binaries f
 **Usage:**
 ```bash
 # Install latest version
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 
 # Install specific version
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --version v0.1.0
 
 # Custom installation directory
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --install-dir ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --install-dir ~/.local/bin
 
 # Skip shell completions
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --no-shell-completions
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --no-shell-completions
 
 # Verbose output
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --verbose
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --verbose
 
 # Show help
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --help
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --help
 ```
 
 **Options:**
@@ -197,7 +197,7 @@ Create a temporary demo repository and test the CLI interactively.
 
 ```bash
 # Install latest version
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 
 # Verify installation
 workspace version
@@ -211,8 +211,8 @@ workspace init
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/websublime/workspace-node-tools.git
-cd workspace-node-tools
+git clone https://github.com/websublime/workspace-tools.git
+cd workspace-tools
 
 # 2. Build and install locally
 ./scripts/install-dev.sh
@@ -386,20 +386,20 @@ uname -m  # Architecture
 curl -I https://github.com
 
 # Use verbose mode to see details
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --verbose
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --verbose
 
 # For private repositories, provide GitHub token
 export WORKSPACE_GITHUB_TOKEN="your_token_here"
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 ```
 
 #### "Checksum verification failed" error
 ```bash
 # Download may be corrupted, try again
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 
 # If problem persists, report issue with verbose output
-curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --verbose
+curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --verbose
 ```
 
 ### Development Issues
@@ -569,5 +569,5 @@ When modifying installation scripts:
 - [PRD](../crates/cli/PRD.md) - Product requirements
 - [PLAN](../crates/cli/PLAN.md) - Implementation plan
 - [STORY_MAP](../crates/cli/STORY_MAP.md) - Development roadmap
-- [Website](https://github.com/websublime/workspace-node-tools) - Official documentation
-- [GitHub](https://github.com/websublime/workspace-node-tools) - Source code and releases
+- [Website](https://github.com/websublime/workspace-tools) - Official documentation
+- [GitHub](https://github.com/websublime/workspace-tools) - Source code and releases

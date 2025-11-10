@@ -486,7 +486,7 @@ For issues with the release process:
 
 1. Check this documentation
 2. Review GitHub Actions logs
-3. Check existing issues: https://github.com/websublime/workspace-node-tools/issues
+3. Check existing issues: https://github.com/websublime/workspace-tools/issues
 4. Create new issue with:
    - Workflow run URL
    - Error messages

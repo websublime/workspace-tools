@@ -1,6 +1,6 @@
 # Workspace Node Tools
 
-[![Pull Request](https://github.com/websublime/workspace-node-tools/workflows/Pull%20Request/badge.svg)](https://github.com/websublime/workspace-node-tools/actions)
+[![Pull Request](https://github.com/websublime/workspace-tools/workflows/Pull%20Request/badge.svg)](https://github.com/websublime/workspace-tools/actions)
 [![Crates.io](https://img.shields.io/crates/v/sublime_cli_tools.svg)](https://crates.io/crates/sublime_cli_tools)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docs](https://img.shields.io/badge/docs-latest-blue.svg)](./crates/cli/docs/GUIDE.md)
@@ -39,15 +39,15 @@ cargo install sublime_cli_tools
 **From GitHub Releases** (pre-built binaries):
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-v0.1.0-aarch64-apple-darwin.tar.gz | tar xz
+curl -L https://github.com/websublime/workspace-tools/releases/latest/download/workspace-v0.1.0-aarch64-apple-darwin.tar.gz | tar xz
 sudo mv workspace /usr/local/bin/
 
 # macOS (Intel)
-curl -L https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-v0.1.0-x86_64-apple-darwin.tar.gz | tar xz
+curl -L https://github.com/websublime/workspace-tools/releases/latest/download/workspace-v0.1.0-x86_64-apple-darwin.tar.gz | tar xz
 sudo mv workspace /usr/local/bin/
 
 # Linux (x86_64)
-curl -L https://github.com/websublime/workspace-node-tools/releases/latest/download/workspace-v0.1.0-x86_64-unknown-linux-gnu.tar.gz | tar xz
+curl -L https://github.com/websublime/workspace-tools/releases/latest/download/workspace-v0.1.0-x86_64-unknown-linux-gnu.tar.gz | tar xz
 sudo mv workspace /usr/local/bin/
 
 # Windows
@@ -56,8 +56,8 @@ sudo mv workspace /usr/local/bin/
 
 **From Source**:
 ```bash
-git clone https://github.com/websublime/workspace-node-tools.git
-cd workspace-node-tools
+git clone https://github.com/websublime/workspace-tools.git
+cd workspace-tools
 cargo install --path crates/cli
 ```
 
@@ -243,7 +243,7 @@ The project provides reusable Rust libraries:
 ### Project Structure
 
 ```
-workspace-node-tools/
+workspace-tools/
 ├── crates/
 │   ├── cli/              # CLI application (workspace binary)
 │   │   ├── docs/         # User documentation
@@ -384,8 +384,8 @@ jobs:
 
 ```bash
 # Clone repository
-git clone https://github.com/websublime/workspace-node-tools.git
-cd workspace-node-tools
+git clone https://github.com/websublime/workspace-tools.git
+cd workspace-tools
 
 # Build all crates
 cargo build
@@ -560,8 +560,8 @@ This project is licensed under the MIT License - see the [LICENSE-MIT](./LICENSE
 
 ## 📞 Support & Community
 
-- **Issues**: [GitHub Issues](https://github.com/websublime/workspace-node-tools/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/websublime/workspace-node-tools/discussions)
+- **Issues**: [GitHub Issues](https://github.com/websublime/workspace-tools/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/websublime/workspace-tools/discussions)
 - **Documentation**: [User Guide](./crates/cli/docs/GUIDE.md) | [Command Reference](./crates/cli/docs/COMMANDS.md)
 
 ---

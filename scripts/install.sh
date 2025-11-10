@@ -7,11 +7,11 @@
 # installs it to the specified location.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --version v0.1.0
-#   curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --install-dir ~/.local/bin
-#   curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --verbose
-#   curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --no-color
+#   curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --version v0.1.0
+#   curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --install-dir ~/.local/bin
+#   curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --verbose
+#   curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --no-color
 #
 # Options:
 #   --version <VERSION>        Install specific version (default: latest)
@@ -40,7 +40,7 @@ set -e
 
 # Constants
 readonly BINARY_NAME="workspace"
-readonly GITHUB_REPO="workspace-node-tools"
+readonly GITHUB_REPO="workspace-tools"
 readonly GITHUB_ORG="websublime"
 readonly RELEASE_URL="https://github.com/${GITHUB_ORG}/${GITHUB_REPO}/releases"
 readonly DEFAULT_INSTALL_DIR="/usr/local/bin"
@@ -636,7 +636,7 @@ show_post_install() {
     log "  ${GREEN}${BINARY_NAME} init${NC}                Initialize a workspace"
     log "  ${GREEN}${BINARY_NAME} changeset add${NC}       Create a changeset"
     log ""
-    log "For more information, visit: ${CYAN}https://github.com/websublime/workspace-node-tools${NC}"
+    log "For more information, visit: ${CYAN}https://github.com/websublime/workspace-tools${NC}"
     log ""
 }
 
@@ -648,7 +648,7 @@ show_help() {
 Workspace Node Tools (workspace) Installation Script
 
 USAGE:
-    curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh [OPTIONS]
+    curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh [OPTIONS]
 
 OPTIONS:
     --version <VERSION>        Install specific version (default: latest)
@@ -666,16 +666,16 @@ ENVIRONMENT VARIABLES:
 
 EXAMPLES:
     # Install latest version
-    curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh
+    curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh
 
     # Install specific version
-    curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --version v0.1.0
+    curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --version v0.1.0
 
     # Custom installation directory
-    curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --install-dir ~/.local/bin
+    curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --install-dir ~/.local/bin
 
     # Verbose output
-    curl -fsSL https://raw.githubusercontent.com/websublime/workspace-node-tools/main/scripts/install.sh | sh -s -- --verbose
+    curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh -s -- --verbose
 
 EXIT CODES:
     0   Success
@@ -686,7 +686,7 @@ EXIT CODES:
     5   Checksum verification failed
     6   Installation failed
 
-For more information, visit: https://github.com/websublime/workspace-node-tools
+For more information, visit: https://github.com/websublime/workspace-tools
 EOF
 }
 

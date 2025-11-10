@@ -2,8 +2,8 @@
 
 [![Crates.io](https://img.shields.io/crates/v/sublime_standard_tools.svg)](https://crates.io/crates/sublime_standard_tools)
 [![Documentation](https://docs.rs/sublime_standard_tools/badge.svg)](https://docs.rs/sublime_standard_tools)
-[![License](https://img.shields.io/crates/l/sublime_standard_tools.svg)](https://github.com/websublime/workspace-node-tools/blob/main/LICENSE)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/websublime/workspace-node-tools/ci.yml?branch=main)](https://github.com/websublime/workspace-node-tools/actions)
+[![License](https://img.shields.io/crates/l/sublime_standard_tools.svg)](https://github.com/websublime/workspace-tools/blob/main/LICENSE)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/websublime/workspace-tools/ci.yml?branch=main)](https://github.com/websublime/workspace-tools/actions)
 
 A comprehensive Rust toolkit for working with Node.js projects, package managers, and development workflows. This crate provides a unified, type-safe interface for interacting with Node.js ecosystems from Rust applications.
 
@@ -1540,8 +1540,8 @@ Contributions are welcome! Please read our Contributing Guidelines and Code of C
 ### Development Setup
 
 ```bash
-git clone https://github.com/websublime/workspace-node-tools.git
-cd workspace-node-tools/crates/standard
+git clone https://github.com/websublime/workspace-tools.git
+cd workspace-tools/crates/standard
 cargo test --all-features
 ```
 
@@ -1557,7 +1557,7 @@ cargo test monorepo::tests --features full
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the [LICENSE](https://github.com/websublime/workspace-node-tools/blob/main/LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](https://github.com/websublime/workspace-tools/blob/main/LICENSE) file for details.
 
 ## 🔗 Related Projects
 
@@ -1573,6 +1573,6 @@ This project is licensed under the MIT License - see the [LICENSE](https://githu
 
 [Documentation](https://docs.rs/sublime_standard_tools) •
 [Crates.io](https://crates.io/crates/sublime_standard_tools) •
-[Repository](https://github.com/websublime/workspace-node-tools)
+[Repository](https://github.com/websublime/workspace-tools)
 
 </div>

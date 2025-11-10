@@ -1,7 +1,7 @@
 {
   "name": "@websublime/workspace-tools",
   "version": "1.0.2",
-  "description": "Bindings for node from crate workspace-node-tools",
+  "description": "Bindings for node from crate workspace-tools",
   "main": "./dist/cjs/index.cjs",
   "types": "./dist/types/index.d.cts",
   "exports": {
@@ -14,7 +14,7 @@
   },
   "browser": "browser.js",
   "repository": {
-    "url": "git+ssh://git@github.com/websublime/workspace-node-tools.git",
+    "url": "git+ssh://git@github.com/websublime/workspace-tools.git",
     "type": "git"
   },
   "license": "MIT",

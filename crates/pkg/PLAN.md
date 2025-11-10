@@ -1561,7 +1561,7 @@ edition = "2021"
 authors = ["Your Team"]
 license = "MIT OR Apache-2.0"
 description = "Changeset-based package version management for Node.js projects"
-repository = "https://github.com/yourorg/workspace-node-tools"
+repository = "https://github.com/yourorg/workspace-tools"
 keywords = ["nodejs", "package", "version", "monorepo", "changeset"]
 categories = ["development-tools"]
 
