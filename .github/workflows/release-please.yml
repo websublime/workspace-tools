@@ -10,6 +10,7 @@ jobs:
   release-plz-release:
     name: Release crates
     runs-on: ubuntu-latest
+    if: ${{ github.repository_owner == 'websublime' }}
     permissions:
       contents: write
     steps:
