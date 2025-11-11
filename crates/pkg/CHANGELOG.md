@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.4 - 2025-11-11
+
+### Bug Fixes
+
+#### WOR-TSK-140
+
+- Add support for _auth authentication in .npmrc files ([#17](https://github.com/websublime/workspace-tools/pull/17))
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.3 - 2025-11-11
 
 <!-- Made with ❤️ by WebSublime -->
