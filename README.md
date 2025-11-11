@@ -220,6 +220,47 @@ workspace --format json --log-level silent audit --sections upgrades
 workspace bump --execute --git-tag --git-push --force
 ```
 
+### Git Hooks Integration
+
+Automate changeset management throughout your development workflow with Git hooks:
+
+```bash
+# Install hooks (one-time setup)
+./scripts/install-hooks.sh
+
+# Hooks are now active!
+```
+
+**Available Hooks:**
+- **pre-commit**: Validates changeset exists, prompts to create if missing
+- **post-commit**: Automatically adds commit SHA to changeset
+- **post-checkout**: Creates changeset when starting new feature branches
+- **pre-push**: Adds all branch commits to changeset before pushing
+
+**Workflow with Hooks:**
+```bash
+# Create feature branch
+git checkout -b feature/new-thing
+# → Hook prompts to create changeset
+
+# Make commits (as many as you want)
+git commit -m "feat: add feature"
+# → Hook validates changeset exists
+
+# Push (commits are added here)
+git push origin feature/new-thing
+# → Hook adds all branch commits to changeset
+# → Hook creates commit "chore: update changeset"
+# → Push includes all commits + changeset update
+```
+
+**Skip Hooks Temporarily:**
+```bash
+WORKSPACE_SKIP_HOOKS=1 git commit -m "wip"
+```
+
+For complete documentation, see [Git Hooks Documentation](./scripts/git-hooks/README.md).
+
 ---
 
 ## 📚 Documentation
