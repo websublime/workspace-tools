@@ -3,7 +3,7 @@ members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
-version = "0.0.2"
+version = "0.0.3"
 authors = ["WebSublime"]
 edition = "2024"
 rust-version = "1.90.0"
@@ -12,10 +12,10 @@ repository = "https://github.com/websublime/workspace-tools"
 
 [workspace.dependencies]
 # Internal crates
-sublime_standard_tools = { version = "0.0.2", path = "crates/standard" }
-sublime_git_tools = { version = "0.0.2", path = "crates/git" }
-sublime_pkg_tools = { version = "0.0.2", path = "crates/pkg" }
-sublime_cli_tools = { version = "0.0.2", path = "crates/cli" }
+sublime_standard_tools = { version = "0.0.3", path = "crates/standard" }
+sublime_git_tools = { version = "0.0.3", path = "crates/git" }
+sublime_pkg_tools = { version = "0.0.3", path = "crates/pkg" }
+sublime_cli_tools = { version = "0.0.3", path = "crates/cli" }
 
 # Core dependencies
 async-trait = "0.1.74"
