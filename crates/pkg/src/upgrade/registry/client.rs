@@ -14,14 +14,29 @@ use crate::config::RegistryConfig;
 use crate::error::UpgradeError;
 use crate::upgrade::registry::npmrc::NpmrcConfig;
 use crate::upgrade::registry::types::{PackageMetadata, RepositoryInfo, UpgradeType};
-use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
+use reqwest::header::AUTHORIZATION;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use semver::Version;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
+
+/// Custom deserializer for HashMap<String, String> that skips null values.
+///
+/// Some registries (like Artifactory) return null values in time fields
+/// (e.g., "unpublished": null), which would fail deserialization to HashMap<String, String>.
+/// This deserializer filters out null values during deserialization.
+fn deserialize_string_map_skip_nulls<'de, D>(
+    deserializer: D,
+) -> Result<HashMap<String, String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt_map: HashMap<String, Option<String>> = HashMap::deserialize(deserializer)?;
+    Ok(opt_map.into_iter().filter_map(|(k, v)| v.map(|v| (k, v))).collect())
+}
 
 /// Client for querying NPM package registries.
 ///
@@ -62,13 +77,20 @@ pub struct RegistryClient {
 ///
 /// The NPM registry API returns a complex JSON structure. This struct
 /// represents the top-level response for package metadata queries.
-#[derive(Debug, Deserialize)]
+///
+/// Uses `deny_unknown_fields = false` (default) to allow extra fields from
+/// different registry implementations (Artifactory, Verdaccio, etc).
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
 struct RegistryResponse {
     name: String,
+    #[serde(default)]
     versions: HashMap<String, VersionInfo>,
-    #[serde(rename = "dist-tags")]
+    #[serde(rename = "dist-tags", default)]
     dist_tags: HashMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_string_map_skip_nulls")]
     time: HashMap<String, String>,
+    #[serde(default)]
     repository: Option<RepositoryInfo>,
 }
 
@@ -116,12 +138,10 @@ impl RegistryClient {
     /// ```
     pub async fn new(_workspace_root: &Path, config: RegistryConfig) -> Result<Self, UpgradeError> {
         // Build base reqwest client with timeout
-        let mut headers = HeaderMap::new();
-        headers.insert("Accept", HeaderValue::from_static("application/vnd.npm.install-v1+json"));
-
+        // Note: Not setting Accept header here as different registries support different formats.
+        // We'll set it per-request with fallback handling for compatibility.
         let reqwest_client = reqwest::Client::builder()
             .timeout(Duration::from_secs(config.timeout_secs))
-            .default_headers(headers)
             .build()
             .map_err(|e| UpgradeError::NetworkError {
                 reason: format!("Failed to build HTTP client: {}", e),
@@ -212,8 +232,17 @@ impl RegistryClient {
         // Build request with authentication if available
         let mut request = self.http_client.get(&package_url);
 
-        if let Some(token) = self.resolve_auth_token(&registry_url) {
-            let auth_header = format!("Bearer {}", token);
+        // Add Accept header - use standard application/json for compatibility
+        // with both npm registry and enterprise proxies like Artifactory
+        request = request.header("Accept", "application/json");
+
+        if let Some(cred) = self.resolve_auth_token(&registry_url) {
+            use crate::upgrade::registry::npmrc::AuthType;
+
+            let auth_header = match cred.auth_type {
+                AuthType::Bearer => format!("Bearer {}", cred.value),
+                AuthType::Basic => format!("Basic {}", cred.value),
+            };
             request = request.header(AUTHORIZATION, auth_header);
         }
 
@@ -430,9 +459,9 @@ impl RegistryClient {
         self.config.default_registry.clone()
     }
 
-    /// Resolves the authentication token for a registry URL.
+    /// Resolves the authentication credential for a registry URL.
     ///
-    /// Checks the auth_tokens configuration for a matching token.
+    /// Checks the auth_tokens configuration for a matching credential.
     /// If .npmrc is loaded, it takes precedence over config settings.
     ///
     /// # Arguments
@@ -441,24 +470,29 @@ impl RegistryClient {
     ///
     /// # Returns
     ///
-    /// The authentication token if one is configured, None otherwise.
-    pub(crate) fn resolve_auth_token(&self, registry_url: &str) -> Option<String> {
+    /// The authentication credential (with type and value) if one is configured, None otherwise.
+    pub(crate) fn resolve_auth_token(
+        &self,
+        registry_url: &str,
+    ) -> Option<crate::upgrade::registry::npmrc::AuthCredential> {
+        use crate::upgrade::registry::npmrc::{AuthCredential, AuthType};
+
         // Try .npmrc first if available
         if let Some(npmrc) = &self.npmrc
-            && let Some(token) = npmrc.get_auth_token(registry_url)
+            && let Some(cred) = npmrc.get_auth_token(registry_url)
         {
-            return Some(token.to_string());
+            return Some(cred.clone());
         }
 
-        // Try exact match first
+        // Try exact match first (config tokens are assumed to be Bearer tokens)
         if let Some(token) = self.config.auth_tokens.get(registry_url) {
-            return Some(token.clone());
+            return Some(AuthCredential { auth_type: AuthType::Bearer, value: token.clone() });
         }
 
         // Try without trailing slash
         let url_without_slash = registry_url.trim_end_matches('/');
         if let Some(token) = self.config.auth_tokens.get(url_without_slash) {
-            return Some(token.clone());
+            return Some(AuthCredential { auth_type: AuthType::Bearer, value: token.clone() });
         }
 
         None

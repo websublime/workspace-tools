@@ -60,6 +60,62 @@ use std::collections::HashMap;
 use std::path::Path;
 use sublime_standard_tools::filesystem::AsyncFileSystem;
 
+/// Type of authentication credential.
+///
+/// NPM supports two types of authentication:
+/// - `Basic`: Base64 encoded username:password from `_auth` field
+/// - `Bearer`: Token-based authentication from `_authToken` field
+///
+/// # Example
+///
+/// ```rust,ignore
+/// // _auth uses Basic authentication
+/// let basic_auth = AuthType::Basic;
+///
+/// // _authToken uses Bearer authentication
+/// let bearer_auth = AuthType::Bearer;
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AuthType {
+    /// Basic authentication with Base64 encoded credentials.
+    ///
+    /// Used for `_auth` field in .npmrc.
+    /// Format: Base64(username:password)
+    Basic,
+
+    /// Bearer token authentication.
+    ///
+    /// Used for `_authToken` field in .npmrc.
+    /// Format: Token string (npm_xxxx, etc.)
+    Bearer,
+}
+
+/// Authentication credential with its type.
+///
+/// Stores both the credential value and its type (Basic or Bearer).
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let basic_cred = AuthCredential {
+///     auth_type: AuthType::Basic,
+///     value: "base64encodedcredentials".to_string(),
+/// };
+///
+/// let bearer_cred = AuthCredential {
+///     auth_type: AuthType::Bearer,
+///     value: "npm_AbCdEf123456".to_string(),
+/// };
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthCredential {
+    /// Type of authentication (Basic or Bearer).
+    pub auth_type: AuthType,
+
+    /// The credential value (token or Base64 encoded credentials).
+    pub value: String,
+}
+
 /// Parsed .npmrc configuration.
 ///
 /// Contains registry URLs, scoped registry mappings, authentication tokens,
@@ -85,11 +141,13 @@ pub struct NpmrcConfig {
     /// Extracted from `@scope:registry=<url>` lines.
     pub scoped_registries: HashMap<String, String>,
 
-    /// Authentication tokens for registries.
+    /// Authentication credentials for registries.
     ///
-    /// Maps registry URLs (or URL patterns) to auth tokens.
-    /// Extracted from `//<registry>/:_authToken=<token>` lines.
-    pub auth_tokens: HashMap<String, String>,
+    /// Maps registry URLs (or URL patterns) to authentication credentials.
+    /// Credentials include both the type (Basic or Bearer) and the value.
+    /// Extracted from `//<registry>/:_authToken=<token>` (Bearer) and
+    /// `//<registry>/:_auth=<base64>` (Basic) lines.
+    pub auth_tokens: HashMap<String, AuthCredential>,
 
     /// Other configuration properties.
     ///
@@ -214,9 +272,9 @@ impl NpmrcConfig {
         self.registry.as_deref()
     }
 
-    /// Gets authentication token for a registry URL.
+    /// Gets authentication credential for a registry URL.
     ///
-    /// Checks the auth_tokens map for a matching token. Tries exact match first,
+    /// Checks the auth_tokens map for a matching credential. Tries exact match first,
     /// then normalized URL without protocol/trailing slashes.
     ///
     /// # Arguments
@@ -225,36 +283,38 @@ impl NpmrcConfig {
     ///
     /// # Returns
     ///
-    /// Authentication token if one is configured, None otherwise.
+    /// Authentication credential (with type and value) if one is configured, None otherwise.
     ///
     /// # Example
     ///
-    /// ```rust
-    /// use sublime_pkg_tools::upgrade::NpmrcConfig;
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::upgrade::{NpmrcConfig, AuthCredential, AuthType};
     /// use std::collections::HashMap;
     ///
     /// let mut config = NpmrcConfig::default();
     /// config.auth_tokens.insert(
     ///     "npm.myorg.com".to_string(),
-    ///     "npm_AbCdEf123456".to_string()
+    ///     AuthCredential {
+    ///         auth_type: AuthType::Bearer,
+    ///         value: "npm_AbCdEf123456".to_string(),
+    ///     }
     /// );
     ///
     /// // Exact match
-    /// assert_eq!(
-    ///     config.get_auth_token("npm.myorg.com"),
-    ///     Some("npm_AbCdEf123456")
-    /// );
+    /// if let Some(cred) = config.get_auth_token("npm.myorg.com") {
+    ///     assert_eq!(cred.auth_type, AuthType::Bearer);
+    ///     assert_eq!(cred.value, "npm_AbCdEf123456");
+    /// }
     ///
     /// // Match with protocol
-    /// assert_eq!(
-    ///     config.get_auth_token("https://npm.myorg.com"),
-    ///     Some("npm_AbCdEf123456")
-    /// );
+    /// if let Some(cred) = config.get_auth_token("https://npm.myorg.com") {
+    ///     assert_eq!(cred.auth_type, AuthType::Bearer);
+    /// }
     /// ```
-    pub fn get_auth_token(&self, registry_url: &str) -> Option<&str> {
+    pub fn get_auth_token(&self, registry_url: &str) -> Option<&AuthCredential> {
         // Try exact match first
-        if let Some(token) = self.auth_tokens.get(registry_url) {
-            return Some(token.as_str());
+        if let Some(cred) = self.auth_tokens.get(registry_url) {
+            return Some(cred);
         }
 
         // Normalize URL for matching: remove protocol and trailing slashes
@@ -264,12 +324,12 @@ impl NpmrcConfig {
             .trim_end_matches('/');
 
         // Try normalized match
-        if let Some(token) = self.auth_tokens.get(normalized) {
-            return Some(token.as_str());
+        if let Some(cred) = self.auth_tokens.get(normalized) {
+            return Some(cred);
         }
 
         // Try checking if any stored key matches the normalized URL
-        for (key, token) in &self.auth_tokens {
+        for (key, cred) in &self.auth_tokens {
             let normalized_key = key
                 .trim_start_matches("https://")
                 .trim_start_matches("http://")
@@ -277,7 +337,7 @@ impl NpmrcConfig {
                 .trim_end_matches('/');
 
             if normalized_key == normalized {
-                return Some(token.as_str());
+                return Some(cred);
             }
         }
 
@@ -439,22 +499,34 @@ impl NpmrcConfig {
             // Extract registry URL from key (between // and /:_authToken or /:_auth)
             if let Some(auth_pos) = key.find("/:_authToken") {
                 let registry = &key[2..auth_pos];
-                config.auth_tokens.insert(registry.to_string(), value.to_string());
+                config.auth_tokens.insert(
+                    registry.to_string(),
+                    AuthCredential { auth_type: AuthType::Bearer, value: value.to_string() },
+                );
                 return Ok(());
             } else if let Some(auth_pos) = key.find(":_authToken") {
                 // Handle case without leading slash: //registry.com:_authToken
                 let registry = &key[2..auth_pos];
-                config.auth_tokens.insert(registry.to_string(), value.to_string());
+                config.auth_tokens.insert(
+                    registry.to_string(),
+                    AuthCredential { auth_type: AuthType::Bearer, value: value.to_string() },
+                );
                 return Ok(());
             } else if let Some(auth_pos) = key.find("/:_auth") {
-                // Handle _auth format: //registry.com/:_auth
+                // Handle _auth format: //registry.com/:_auth (Base64 encoded credentials)
                 let registry = &key[2..auth_pos];
-                config.auth_tokens.insert(registry.to_string(), value.to_string());
+                config.auth_tokens.insert(
+                    registry.to_string(),
+                    AuthCredential { auth_type: AuthType::Basic, value: value.to_string() },
+                );
                 return Ok(());
             } else if let Some(auth_pos) = key.find(":_auth") {
-                // Handle case without leading slash: //registry.com:_auth
+                // Handle case without leading slash: //registry.com:_auth (Base64 encoded credentials)
                 let registry = &key[2..auth_pos];
-                config.auth_tokens.insert(registry.to_string(), value.to_string());
+                config.auth_tokens.insert(
+                    registry.to_string(),
+                    AuthCredential { auth_type: AuthType::Basic, value: value.to_string() },
+                );
                 return Ok(());
             }
         }
@@ -462,13 +534,19 @@ impl NpmrcConfig {
         // Check for other auth formats (_authToken or _auth at the end)
         if key.ends_with(":_authToken") {
             let registry = key.trim_end_matches(":_authToken").trim_end_matches('/');
-            config.auth_tokens.insert(registry.to_string(), value.to_string());
+            config.auth_tokens.insert(
+                registry.to_string(),
+                AuthCredential { auth_type: AuthType::Bearer, value: value.to_string() },
+            );
             return Ok(());
         }
 
         if key.ends_with(":_auth") {
             let registry = key.trim_end_matches(":_auth").trim_end_matches('/');
-            config.auth_tokens.insert(registry.to_string(), value.to_string());
+            config.auth_tokens.insert(
+                registry.to_string(),
+                AuthCredential { auth_type: AuthType::Basic, value: value.to_string() },
+            );
             return Ok(());
         }
 
