@@ -12,8 +12,7 @@
 # 5. Adds all existing commits from the branch to the changeset (if any are missing)
 # 6. Allows commit to proceed
 #
-# Note: The new commit SHA will be validated by the post-commit hook.
-# It will be added to the changeset on the next pre-commit or pre-push.
+# Note: The new commit SHA will be added to the changeset on the next pre-commit or pre-push.
 #
 # Configuration (.workspace.toml):
 # [git_hooks]
