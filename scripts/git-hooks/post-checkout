@@ -70,7 +70,7 @@ fi
 # Check if workspace is installed
 if ! command -v workspace >/dev/null 2>&1; then
     printf "${YELLOW}⚠${NC} workspace not found. Changeset not created.\n" >&2
-    printf "${BLUE}ℹ${NC} Install: curl -fsSL https://raw.githubusercontent.com/websublime/workspace-tools/main/scripts/install.sh | sh\n" >&2
+    printf "${BLUE}ℹ${NC} Install: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/websublime/workspace-tools/releases/latest/download/sublime_cli_tools-installer.sh | sh\n" >&2
     printf "${CYAN}💡${NC} You can create changeset manually: workspace changeset create\n" >&2
     exit 0
 fi

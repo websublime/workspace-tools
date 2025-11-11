@@ -1,4 +1,4 @@
-# Testing Guide for Workspace Node Tools CLI
+# Testing Guide for Workspace Tools CLI
 
 This guide covers how to build, install, and test the `workspace` CLI tool.
 
@@ -518,7 +518,7 @@ After testing:
 - [Story Map](crates/cli/STORY_MAP.md)
 - [Implementation Plan](crates/cli/PLAN.md)
 - [Product Requirements](crates/cli/PRD.md)
-- [Scripts Documentation](scripts/README.md)
+- [Main README](../README.md)
 
 ## Support
 

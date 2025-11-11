@@ -6,6 +6,8 @@
 **Status:** Draft for Iteration  
 **Target Audience:** Node.js/TypeScript developers working with single packages or monorepos
 
+> **📝 Note:** This is a historical design document. The installation methods described in Section 10 have been superseded by **cargo-dist** automated installers. See the main [README.md](../../README.md) for current installation instructions.
+
 ---
 
 ## Table of Contents

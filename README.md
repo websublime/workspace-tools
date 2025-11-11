@@ -1,19 +1,19 @@
-# Workspace Node Tools
+# Workspace Tools
 
 [![Pull Request](https://github.com/websublime/workspace-tools/workflows/Pull%20Request/badge.svg)](https://github.com/websublime/workspace-tools/actions)
 [![Crates.io](https://img.shields.io/crates/v/sublime_cli_tools.svg)](https://crates.io/crates/sublime_cli_tools)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Docs](https://img.shields.io/badge/docs-latest-blue.svg)](./crates/cli/docs/GUIDE.md)
+[![Docs](https://img.shields.io/badge/docs-latest-blue.svg)](./crates/cli/README.md)
 
-**Modern, changeset-based version management for Node.js projects**
+**Modern, changeset-based version management for JavaScript/TypeScript projects**
 
-Workspace Node Tools provides a comprehensive CLI (`workspace`) and Rust libraries for managing Node.js single-package repositories and monorepos with changeset-based versioning, automated dependency management, and project health auditing.
+Workspace Tools provides a comprehensive CLI (`workspace`) and Rust libraries for managing JavaScript/TypeScript single-package repositories and monorepos with changeset-based versioning, automated dependency management, and project health auditing.
 
 ---
 
 ## 🎯 Why Workspace Tools?
 
-Modern Node.js development requires sophisticated tooling for version management, especially in monorepos. Workspace Tools solves this with:
+Modern JavaScript/TypeScript development requires sophisticated tooling for version management, especially in monorepos. Workspace Tools solves this with:
 
 - **🔄 Changeset-Based Workflow** - Track changes across feature branches with automated package detection
 - **📦 Smart Version Management** - Support for both independent and unified versioning strategies
@@ -31,27 +31,41 @@ Modern Node.js development requires sophisticated tooling for version management
 
 Choose your preferred installation method:
 
-**Using Cargo** (recommended for Rust developers):
+**Automated Installer** (recommended - works on all platforms):
+```bash
+# Unix/Linux/macOS
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/websublime/workspace-tools/releases/latest/download/sublime_cli_tools-installer.sh | sh
+
+# Windows PowerShell
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/websublime/workspace-tools/releases/latest/download/sublime_cli_tools-installer.ps1 | iex"
+```
+
+**Using Cargo** (alternative for Rust developers):
 ```bash
 cargo install sublime_cli_tools
 ```
 
-**From GitHub Releases** (pre-built binaries):
+**Manual Download** (pre-built binaries):
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/websublime/workspace-tools/releases/latest/download/workspace-v0.1.0-aarch64-apple-darwin.tar.gz | tar xz
+curl -L https://github.com/websublime/workspace-tools/releases/latest/download/sublime_cli_tools-aarch64-apple-darwin.tar.xz | tar xJ
 sudo mv workspace /usr/local/bin/
 
 # macOS (Intel)
-curl -L https://github.com/websublime/workspace-tools/releases/latest/download/workspace-v0.1.0-x86_64-apple-darwin.tar.gz | tar xz
+curl -L https://github.com/websublime/workspace-tools/releases/latest/download/sublime_cli_tools-x86_64-apple-darwin.tar.xz | tar xJ
 sudo mv workspace /usr/local/bin/
 
-# Linux (x86_64)
-curl -L https://github.com/websublime/workspace-tools/releases/latest/download/workspace-v0.1.0-x86_64-unknown-linux-gnu.tar.gz | tar xz
+# Linux (x86_64 - GNU)
+curl -L https://github.com/websublime/workspace-tools/releases/latest/download/sublime_cli_tools-x86_64-unknown-linux-gnu.tar.xz | tar xJ
+sudo mv workspace /usr/local/bin/
+
+# Linux (x86_64 - MUSL - static)
+curl -L https://github.com/websublime/workspace-tools/releases/latest/download/sublime_cli_tools-x86_64-unknown-linux-musl.tar.xz | tar xJ
 sudo mv workspace /usr/local/bin/
 
 # Windows
-# Download workspace-v0.1.0-x86_64-pc-windows-msvc.zip from releases
+# Download from: https://github.com/websublime/workspace-tools/releases/latest
+# Extract sublime_cli_tools-x86_64-pc-windows-msvc.zip and add to PATH
 ```
 
 **From Source**:
@@ -206,14 +220,54 @@ workspace --format json --log-level silent audit --sections upgrades
 workspace bump --execute --git-tag --git-push --force
 ```
 
+### Git Hooks Integration
+
+Automate changeset management throughout your development workflow with Git hooks:
+
+```bash
+# Install hooks (one-time setup)
+./scripts/install-hooks.sh
+
+# Hooks are now active!
+```
+
+**Available Hooks:**
+- **pre-commit**: Validates changeset exists, prompts to create if missing
+- **post-commit**: Automatically adds commit SHA to changeset
+- **post-checkout**: Creates changeset when starting new feature branches
+- **pre-push**: Adds all branch commits to changeset before pushing
+
+**Workflow with Hooks:**
+```bash
+# Create feature branch
+git checkout -b feature/new-thing
+# → Hook prompts to create changeset
+
+# Make commits (as many as you want)
+git commit -m "feat: add feature"
+# → Hook validates changeset exists
+
+# Push (commits are added here)
+git push origin feature/new-thing
+# → Hook adds all branch commits to changeset
+# → Hook creates commit "chore: update changeset"
+# → Push includes all commits + changeset update
+```
+
+**Skip Hooks Temporarily:**
+```bash
+WORKSPACE_SKIP_HOOKS=1 git commit -m "wip"
+```
+
+For complete documentation, see [Git Hooks Documentation](./scripts/git-hooks/README.md).
+
 ---
 
 ## 📚 Documentation
 
-### User Guides
+### Documentation
 
-- **[User Guide](./crates/cli/docs/GUIDE.md)** - Comprehensive guide covering installation, configuration, and workflows
-- **[Command Reference](./crates/cli/docs/COMMANDS.md)** - Complete command documentation with examples
+- **[CLI Documentation](./crates/cli/README.md)** - Complete CLI documentation including installation, configuration, commands, and workflows
 
 ### Core Concepts
 
@@ -377,7 +431,7 @@ jobs:
 ### Prerequisites
 
 - Rust 1.90.0 or higher
-- Node.js 18+ (for testing with Node.js projects)
+- Node.js 18+ (for testing with JavaScript/TypeScript projects)
 - Git
 
 ### Building
@@ -525,7 +579,7 @@ workspace config show
 workspace config validate
 ```
 
-For complete configuration documentation, see the [User Guide](./crates/cli/docs/GUIDE.md).
+For complete configuration documentation, see the [CLI Documentation](./crates/cli/README.md).
 
 ---
 
@@ -562,14 +616,13 @@ This project is licensed under the MIT License - see the [LICENSE-MIT](./LICENSE
 
 - **Issues**: [GitHub Issues](https://github.com/websublime/workspace-tools/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/websublime/workspace-tools/discussions)
-- **Documentation**: [User Guide](./crates/cli/docs/GUIDE.md) | [Command Reference](./crates/cli/docs/COMMANDS.md)
+- **Documentation**: [CLI Documentation](./crates/cli/README.md)
 
 ---
 
 <div align="center">
 
-**[Getting Started](./crates/cli/docs/GUIDE.md)** •
-**[Commands](./crates/cli/docs/COMMANDS.md)** •
+**[Documentation](./crates/cli/README.md)** •
 **[Examples](#-example-workflows)** •
 **[Contributing](./CONTRIBUTING.md)**
 
