@@ -976,6 +976,48 @@ npm.internal.com/:_authToken=token3
     }
 
     #[tokio::test]
+    async fn test_parse_auth_base64() {
+        let mut fs = MockFileSystem::new();
+        fs.add_file(
+            "/workspace/.npmrc",
+            "//npm.myorg.com/:_auth=TUlHUkFNTzpjbVZtZEd0dU9qQXhPakF3TURBd01EQXdNREE2U1ZOVVpIcHFNR1V3UkRCbk5uWlJUMDR4YUV4aVZIVlpWbkl3\n",
+        );
+
+        let config = NpmrcConfig::from_workspace(Path::new("/workspace"), &fs)
+            .await
+            .expect("Should parse _auth token");
+
+        assert_eq!(
+            config.auth_tokens.get("npm.myorg.com"),
+            Some(&"TUlHUkFNTzpjbVZtZEd0dU9qQXhPakF3TURBd01EQXdNREE2U1ZOVVpIcHFNR1V3UkRCbk5uWlJUMDR4YUV4aVZIVlpWbkl3".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_parse_auth_and_authtoken_mixed() {
+        let mut fs = MockFileSystem::new();
+        fs.add_file(
+            "/workspace/.npmrc",
+            r#"
+//npm.myorg.com/:_auth=base64token
+//registry.npmjs.org/:_authToken=bearer_token
+//internal.corp.com/:_auth=another_base64
+"#,
+        );
+
+        let config = NpmrcConfig::from_workspace(Path::new("/workspace"), &fs)
+            .await
+            .expect("Should parse mixed _auth and _authToken formats");
+
+        assert_eq!(config.auth_tokens.get("npm.myorg.com"), Some(&"base64token".to_string()));
+        assert_eq!(config.auth_tokens.get("registry.npmjs.org"), Some(&"bearer_token".to_string()));
+        assert_eq!(
+            config.auth_tokens.get("internal.corp.com"),
+            Some(&"another_base64".to_string())
+        );
+    }
+
+    #[tokio::test]
     async fn test_parse_comments() {
         let mut fs = MockFileSystem::new();
         fs.add_file(

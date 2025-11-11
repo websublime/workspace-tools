@@ -33,6 +33,9 @@
 //!
 //! # Authentication token with environment variable
 //! //npm.myorg.com/:_authToken=${NPM_TOKEN}
+//!
+//! # Authentication (Base64 encoded username:password)
+//! //npm.myorg.com/:_auth=base64encodedcredentials
 //! ```
 //!
 //! # Example
@@ -431,9 +434,9 @@ impl NpmrcConfig {
             }
         }
 
-        // Check for auth token: //<registry>/:_authToken
-        if key.starts_with("//") && key.contains(":_authToken") {
-            // Extract registry URL from key (between // and /:_authToken)
+        // Check for auth token: //<registry>/:_authToken or //<registry>/:_auth
+        if key.starts_with("//") && (key.contains(":_authToken") || key.contains(":_auth")) {
+            // Extract registry URL from key (between // and /:_authToken or /:_auth)
             if let Some(auth_pos) = key.find("/:_authToken") {
                 let registry = &key[2..auth_pos];
                 config.auth_tokens.insert(registry.to_string(), value.to_string());
@@ -443,12 +446,28 @@ impl NpmrcConfig {
                 let registry = &key[2..auth_pos];
                 config.auth_tokens.insert(registry.to_string(), value.to_string());
                 return Ok(());
+            } else if let Some(auth_pos) = key.find("/:_auth") {
+                // Handle _auth format: //registry.com/:_auth
+                let registry = &key[2..auth_pos];
+                config.auth_tokens.insert(registry.to_string(), value.to_string());
+                return Ok(());
+            } else if let Some(auth_pos) = key.find(":_auth") {
+                // Handle case without leading slash: //registry.com:_auth
+                let registry = &key[2..auth_pos];
+                config.auth_tokens.insert(registry.to_string(), value.to_string());
+                return Ok(());
             }
         }
 
-        // Check for other auth formats
+        // Check for other auth formats (_authToken or _auth at the end)
         if key.ends_with(":_authToken") {
             let registry = key.trim_end_matches(":_authToken").trim_end_matches('/');
+            config.auth_tokens.insert(registry.to_string(), value.to_string());
+            return Ok(());
+        }
+
+        if key.ends_with(":_auth") {
+            let registry = key.trim_end_matches(":_auth").trim_end_matches('/');
             config.auth_tokens.insert(registry.to_string(), value.to_string());
             return Ok(());
         }
