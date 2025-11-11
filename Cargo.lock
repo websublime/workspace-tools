@@ -2110,7 +2110,7 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "sublime_cli_tools"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2140,7 +2140,7 @@ dependencies = [
 
 [[package]]
 name = "sublime_git_tools"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "chrono",
  "dirs 6.0.0",
@@ -2155,7 +2155,7 @@ dependencies = [
 
 [[package]]
 name = "sublime_pkg_tools"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "async-trait",
  "base64 0.21.7",
@@ -2187,7 +2187,7 @@ dependencies = [
 
 [[package]]
 name = "sublime_standard_tools"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "async-trait",
  "chrono",
