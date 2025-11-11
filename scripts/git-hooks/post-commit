@@ -2,21 +2,22 @@
 #
 # post-commit hook for workspace (Workspace Tools)
 #
-# This hook automatically adds the commit SHA to the changeset after a commit
-# is created, then amends the commit to include the updated changeset file.
+# This hook validates that all commits in the branch are tracked in the changeset.
+# It runs AFTER a commit is created and warns if any commits are missing from the changeset.
 #
 # What it does:
 # 1. Detects current branch
 # 2. Skips main/master branches
-# 3. Gets the SHA of the just-created commit
-# 4. Adds the SHA to the changeset's changes array
-# 5. Stages the updated changeset file
-# 6. Amends the commit to include the changeset update
+# 3. Gets all commits in the branch (including the one just created)
+# 4. Gets commits tracked in the changeset
+# 5. Compares and warns if any commits are missing
+#
+# Note: Missing commits will be automatically added on the next pre-commit or pre-push.
+# This hook serves as a validation/warning mechanism only.
 #
 # Configuration (.workspace.toml):
 # [git_hooks]
 # enabled = true
-# auto_update_on_commit = true
 #
 # To disable: Set WORKSPACE_SKIP_HOOKS=1 environment variable
 # Example: WORKSPACE_SKIP_HOOKS=1 git commit -m "message"
@@ -58,44 +59,76 @@ fi
 
 # Check if workspace is installed
 if ! command -v workspace >/dev/null 2>&1; then
-    printf "${YELLOW}⚠${NC} workspace not found. Changeset not updated.\n" >&2
-    printf "${BLUE}ℹ${NC} Install: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/websublime/workspace-tools/releases/latest/download/sublime_cli_tools-installer.sh | sh\n" >&2
     exit 0
 fi
 
 # Check if changeset exists for this branch
 if ! workspace changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
-    # No changeset exists, skip
+    # No changeset exists, skip validation
     exit 0
 fi
 
-# Get the SHA of the commit we just created
-COMMIT_SHA=$(git rev-parse HEAD)
+# Get all commits in the current branch (excluding main/master)
+MAIN_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+BRANCH_COMMITS=$(git log --pretty=format:"%H" "${MAIN_BRANCH}..${BRANCH}" 2>/dev/null || echo "")
 
-printf "${BLUE}📝 Adding commit to changeset...${NC}\n" >&2
+if [ -z "${BRANCH_COMMITS}" ]; then
+    # No commits in this branch yet
+    exit 0
+fi
 
-# Add the commit SHA to the changeset
-UPDATE_OUTPUT=$(workspace changeset update "${BRANCH}" --commit "${COMMIT_SHA}" --format quiet 2>&1)
-UPDATE_EXIT_CODE=$?
+# Get commits from the changeset
+# Note: Branch names with slashes (feature/foo) are converted to hyphens (feature-foo) in filenames
+CHANGESET_BRANCH=$(echo "${BRANCH}" | sed 's/\//-/g')
+CHANGESET_FILE=".changesets/${CHANGESET_BRANCH}.json"
+if [ ! -f "${CHANGESET_FILE}" ]; then
+    # Changeset file not found, skip validation
+    exit 0
+fi
 
-if [ ${UPDATE_EXIT_CODE} -eq 0 ]; then
-    # Stage the updated changeset file
-    git add .changesets/*.json 2>/dev/null || true
+# Extract commits from changeset JSON (using sed to handle multi-line arrays)
+CHANGESET_COMMITS=$(sed -n '/"changes":/,/\]/p' "${CHANGESET_FILE}" | \
+    grep -o '"[a-f0-9]\{7,40\}"' | \
+    sed 's/"//g' || echo "")
 
-    # Amend the commit to include the changeset update
-    # Use --no-verify to avoid triggering hooks again (prevent infinite loop)
-    if git commit --amend --no-edit --no-verify >/dev/null 2>&1; then
-        printf "${GREEN}✓${NC} Changeset updated and included in commit\n" >&2
-    else
-        printf "${YELLOW}⚠${NC} Changeset updated but amend failed (non-fatal)\n" >&2
+# Find missing commits
+MISSING_COMMITS=""
+for commit_sha in ${BRANCH_COMMITS}; do
+    # Get short SHA (7 chars) for comparison
+    SHORT_SHA=$(echo "${commit_sha}" | cut -c1-7)
+
+    # Check if this commit is in the changeset (match by short SHA prefix)
+    # This handles both short (7 char) and full (40 char) SHAs in changeset
+    FOUND=0
+    for changeset_sha in ${CHANGESET_COMMITS}; do
+        if echo "${changeset_sha}" | grep -q "^${SHORT_SHA}"; then
+            FOUND=1
+            break
+        fi
+    done
+
+    if [ ${FOUND} -eq 0 ]; then
+        if [ -z "${MISSING_COMMITS}" ]; then
+            MISSING_COMMITS="${commit_sha}"
+        else
+            MISSING_COMMITS="${MISSING_COMMITS} ${commit_sha}"
+        fi
     fi
-elif echo "${UPDATE_OUTPUT}" | grep -q "No updates were applied\|already contains"; then
-    # Commit SHA already in changeset - this is fine
-    printf "${GREEN}✓${NC} Commit already tracked in changeset\n" >&2
+done
+
+# Report results
+if [ -z "${MISSING_COMMITS}" ]; then
+    printf "${GREEN}✓${NC} All commits are tracked in changeset\n" >&2
 else
-    # Other error - show warning but don't block
-    printf "${YELLOW}⚠${NC} Failed to update changeset (non-fatal)\n" >&2
-    printf "${BLUE}ℹ${NC} Run 'workspace changeset update ${BRANCH} --commit ${COMMIT_SHA}' manually if needed\n" >&2
+    printf "${YELLOW}⚠${NC} Warning: The following commits are NOT in the changeset:\n" >&2
+    for missing_sha in ${MISSING_COMMITS}; do
+        # Get short SHA and commit message
+        SHORT_SHA=$(echo "${missing_sha}" | cut -c1-7)
+        COMMIT_MSG=$(git log -1 --pretty=format:"%s" "${missing_sha}" 2>/dev/null || echo "unknown")
+        printf "  ${RED}✗${NC} ${SHORT_SHA} - ${COMMIT_MSG}\n" >&2
+    done
+    printf "\n${BLUE}ℹ${NC} These commits will be added automatically on the next commit or push\n" >&2
+    printf "${BLUE}ℹ${NC} Or run manually: ${GREEN}workspace changeset update ${BRANCH} --commit <sha>${NC}\n" >&2
 fi
 
 exit 0
