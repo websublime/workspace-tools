@@ -5,6 +5,8 @@
 **Last Updated**: 2024-01-15  
 **Status**: 📋 Ready for Development
 
+> **📝 Note:** This is a historical planning document. Epic 9 (Distribution) mentions custom installation scripts that have been replaced by **cargo-dist** automated installers. See the main [README.md](../../README.md) for current installation instructions.
+
 ---
 
 ## Table of Contents

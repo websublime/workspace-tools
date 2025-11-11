@@ -5,6 +5,8 @@
 **Based on**: PRD.md v1.0  
 **Last Updated**: 2024-01-15
 
+> **📝 Note:** This is a historical planning document. The installation scripts mentioned (install.sh, install-dev.sh, uninstall.sh) have been replaced by **cargo-dist** automated installers. See the main [README.md](../../README.md) for current installation instructions.
+
 ---
 
 ## Table of Contents
