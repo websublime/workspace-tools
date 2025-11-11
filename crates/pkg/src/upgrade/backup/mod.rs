@@ -275,15 +275,39 @@ impl<F: AsyncFileSystem> BackupManager<F> {
             }
 
             // Calculate relative path from workspace root
-            let relative = if file.is_absolute() {
-                file.strip_prefix(&self.workspace_root)
-                    .map_err(|_| UpgradeError::FileSystemError {
-                        path: file.clone(),
-                        reason: "File is not within workspace".to_string(),
-                    })?
-                    .to_path_buf()
+            // Note: We need to handle the case where paths are already absolute
+            // For absolute paths passed in (like from collect_package_json_files),
+            // we calculate the relative path from the workspace root
+            let relative = if absolute_path.is_absolute() {
+                // Try to strip the workspace root prefix
+                // If the path is already absolute and within workspace, this will work
+                // If strip_prefix fails, it means the path is absolute but outside workspace
+                match absolute_path.strip_prefix(&self.workspace_root) {
+                    Ok(rel) => rel.to_path_buf(),
+                    Err(_) => {
+                        // Path might use different canonicalization (e.g., /tmp vs /private/tmp)
+                        // Try canonicalizing both paths and then strip
+                        let canonical_workspace = self
+                            .workspace_root
+                            .canonicalize()
+                            .unwrap_or_else(|_| self.workspace_root.clone());
+                        let canonical_file =
+                            absolute_path.canonicalize().unwrap_or_else(|_| absolute_path.clone());
+
+                        canonical_file
+                            .strip_prefix(&canonical_workspace)
+                            .map_err(|_| UpgradeError::FileSystemError {
+                                path: absolute_path.clone(),
+                                reason: format!(
+                                    "File is not within workspace. File: {:?}, Workspace: {:?}",
+                                    canonical_file, canonical_workspace
+                                ),
+                            })?
+                            .to_path_buf()
+                    }
+                }
             } else {
-                file.clone()
+                absolute_path.clone()
             };
 
             // Create target path in backup directory
