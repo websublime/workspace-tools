@@ -279,10 +279,25 @@ impl<F: AsyncFileSystem> BackupManager<F> {
             // For absolute paths passed in (like from collect_package_json_files),
             // we calculate the relative path from the workspace root
             let relative = if absolute_path.is_absolute() {
+                // Normalize paths to use forward slashes for consistent comparison on Windows
+                // This prevents issues with mixed separators in paths
+                let normalize = |p: &Path| -> PathBuf {
+                    #[cfg(windows)]
+                    {
+                        PathBuf::from(p.to_string_lossy().replace('\\', "/"))
+                    }
+                    #[cfg(not(windows))]
+                    {
+                        p.to_path_buf()
+                    }
+                };
+
+                let normalized_workspace = normalize(&self.workspace_root);
+                let normalized_file = normalize(&absolute_path);
+
                 // Try to strip the workspace root prefix
                 // If the path is already absolute and within workspace, this will work
-                // If strip_prefix fails, it means the path is absolute but outside workspace
-                match absolute_path.strip_prefix(&self.workspace_root) {
+                match normalized_file.strip_prefix(&normalized_workspace) {
                     Ok(rel) => rel.to_path_buf(),
                     Err(_) => {
                         // Path might use different canonicalization (e.g., /tmp vs /private/tmp)
@@ -294,13 +309,16 @@ impl<F: AsyncFileSystem> BackupManager<F> {
                         let canonical_file =
                             absolute_path.canonicalize().unwrap_or_else(|_| absolute_path.clone());
 
-                        canonical_file
-                            .strip_prefix(&canonical_workspace)
+                        let normalized_canonical_workspace = normalize(&canonical_workspace);
+                        let normalized_canonical_file = normalize(&canonical_file);
+
+                        normalized_canonical_file
+                            .strip_prefix(&normalized_canonical_workspace)
                             .map_err(|_| UpgradeError::FileSystemError {
                                 path: absolute_path.clone(),
                                 reason: format!(
                                     "File is not within workspace. File: {:?}, Workspace: {:?}",
-                                    canonical_file, canonical_workspace
+                                    normalized_canonical_file, normalized_canonical_workspace
                                 ),
                             })?
                             .to_path_buf()
