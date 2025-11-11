@@ -331,6 +331,11 @@ impl<F: AsyncFileSystem> BackupManager<F> {
             // Create target path in backup directory
             let target = backup_path.join(&relative);
 
+            // Normalize target path on Windows for MockFileSystem consistency
+            // This ensures all paths use forward slashes when interacting with the filesystem
+            #[cfg(windows)]
+            let target = PathBuf::from(target.to_string_lossy().replace('\\', "/"));
+
             // Ensure parent directory exists
             if let Some(parent) = target.parent() {
                 self.fs.create_dir_all(parent).await.map_err(|e| UpgradeError::BackupFailed {
