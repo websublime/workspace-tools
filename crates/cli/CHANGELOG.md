@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.6 - 2025-11-12
+
+### Features
+
+#### WOR-TSK-138
+
+- Add {short_commit} variable support in snapshot format ([#21](https://github.com/websublime/workspace-tools/pull/21))
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.5 - 2025-11-12
 
 <!-- Made with ❤️ by WebSublime -->
