@@ -703,3 +703,146 @@ async fn test_changes_filter_by_packages_with_dependencies() {
     // (pkg-a) was changed. This is important for CI/CD to know which packages
     // need to be tested/built even if they weren't directly modified.
 }
+
+// ============================================================================
+// Robust Content Validation Tests (Bug Regression Prevention)
+// ============================================================================
+
+/// Test: Changes command populates line statistics in JSON output
+///
+/// This test validates Bug 6 fix - ensures that workspace changes analysis
+/// actually populates the lines_added and lines_deleted fields for modified files.
+///
+/// **Why**: Previous test only verified the command succeeded, not that it
+/// returned complete data. This test validates:
+/// - JSON output contains file changes
+/// - Each file change has linesAdded field
+/// - Each file change has linesDeleted field
+/// - Values are numbers and make sense (e.g., non-negative)
+///
+/// **Regression Prevention**: Without this test, the bug could return where
+/// fields exist but are null/empty without test failure.
+#[tokio::test]
+async fn test_changes_working_directory_line_statistics_validation() {
+    use common::helpers::create_shared_json_output;
+
+    // ARRANGE: Create workspace with Git
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .finalize();
+
+    // Create a file with known content
+    let test_file = workspace.root().join("test-stats.md");
+    std::fs::write(&test_file, "# Original\n\nOriginal content.\n")
+        .expect("Failed to write original file");
+
+    // Commit the file to establish baseline
+    let repo = sublime_git_tools::Repo::open(workspace.root().to_str().unwrap())
+        .expect("Failed to open repo");
+    repo.add("test-stats.md").expect("Failed to stage file");
+    repo.commit("feat: add test file").expect("Failed to commit");
+
+    // Now modify the file with known changes:
+    // - Remove 1 line (delete "Original content.")
+    // - Add 3 new lines
+    std::fs::write(
+        &test_file,
+        "# Modified\n\nThis is new line 1.\nThis is new line 2.\nThis is new line 3.\n",
+    )
+    .expect("Failed to modify file");
+
+    let args = ChangesArgs {
+        since: None,
+        until: None,
+        branch: None,
+        staged: false,
+        unstaged: false,
+        packages: None,
+    };
+
+    let (output, buffer) = create_shared_json_output();
+
+    // ACT: Execute changes command
+    let result = execute_changes(&args, &output, workspace.root(), None).await;
+    assert!(result.is_ok(), "Changes command should succeed: {:?}", result.err());
+
+    // ASSERT: Validate JSON output has line statistics
+    let output_bytes = buffer.lock().unwrap().clone();
+    assert!(!output_bytes.is_empty(), "JSON output should not be empty");
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&output_bytes).expect("Output should be valid JSON");
+
+    // Validate response structure
+    assert!(json.get("success").is_some(), "JSON should have 'success' field");
+    assert_eq!(json["success"], true, "'success' should be true");
+
+    assert!(json.get("data").is_some(), "JSON should have 'data' field");
+    let data = &json["data"];
+
+    assert!(data.get("affectedPackages").is_some(), "data should have 'affectedPackages' field");
+    assert!(data["affectedPackages"].is_array(), "'affectedPackages' should be an array");
+
+    let packages = data["affectedPackages"].as_array().expect("affectedPackages should be array");
+    assert!(!packages.is_empty(), "Should have at least one package");
+
+    // Find the package with changes
+    let mut found_file_with_stats = false;
+    for package in packages {
+        if let Some(changes) = package.get("changes")
+            && let Some(changes_array) = changes.as_array() {
+                for file in changes_array {
+                    // Check if this is our test file
+                    if let Some(path) = file.get("path")
+                        && path.as_str().unwrap_or("").contains("test-stats.md") {
+                            // CRITICAL: Validate line statistics are populated
+                            assert!(
+                                file.get("linesAdded").is_some(),
+                                "File should have 'linesAdded' field"
+                            );
+                            assert!(
+                                file.get("linesDeleted").is_some(),
+                                "File should have 'linesDeleted' field"
+                            );
+
+                            // Validate they are numbers (not null)
+                            let lines_added = file["linesAdded"].as_u64();
+                            let lines_deleted = file["linesDeleted"].as_u64();
+
+                            assert!(
+                                lines_added.is_some(),
+                                "'linesAdded' should be a number, got: {:?}",
+                                file["linesAdded"]
+                            );
+                            assert!(
+                                lines_deleted.is_some(),
+                                "'linesDeleted' should be a number, got: {:?}",
+                                file["linesDeleted"]
+                            );
+
+                            // Validate values make sense (we added and deleted lines)
+                            let added = lines_added.unwrap();
+                            let deleted = lines_deleted.unwrap();
+
+                            assert!(
+                                added > 0,
+                                "Should have added lines (we added 3 new lines), got: {added}"
+                            );
+                            assert!(
+                                deleted > 0,
+                                "Should have deleted lines (we removed content), got: {deleted}"
+                            );
+
+                            found_file_with_stats = true;
+                        }
+                }
+            }
+    }
+
+    assert!(
+        found_file_with_stats,
+        "Should have found the test file with populated line statistics"
+    );
+}
