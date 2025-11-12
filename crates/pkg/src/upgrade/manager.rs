@@ -110,8 +110,8 @@ impl UpgradeManager {
         let registry_client = RegistryClient::new(&workspace_root, config.registry.clone()).await?;
 
         // Initialize backup manager
-        let backup_dir = workspace_root.join(&config.backup.backup_dir);
-        let backup_manager = BackupManager::new(backup_dir, config.backup.clone(), fs.clone());
+        let backup_manager =
+            BackupManager::new(workspace_root.clone(), config.backup.clone(), fs.clone());
 
         Ok(Self {
             workspace_root,

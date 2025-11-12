@@ -251,7 +251,7 @@ impl<F: AsyncFileSystem> BackupManager<F> {
 
         // Generate backup ID
         let backup_id = self.generate_backup_id(operation);
-        let backup_path = self.backup_path(&backup_id);
+        let backup_path = self.normalize_fs_path(&self.backup_path(&backup_id));
 
         // Create backup directory
         self.fs.create_dir_all(&backup_path).await.map_err(|e| UpgradeError::BackupFailed {
@@ -262,7 +262,7 @@ impl<F: AsyncFileSystem> BackupManager<F> {
         // Copy each file to backup directory, preserving directory structure
         let mut backed_up_files = Vec::new();
         for file in files {
-            let absolute_path = self.resolve_path(file);
+            let absolute_path = self.normalize_fs_path(&self.resolve_path(file));
 
             // Check if file exists before backing up
             let exists = self.fs.exists(&absolute_path).await;
@@ -275,19 +275,61 @@ impl<F: AsyncFileSystem> BackupManager<F> {
             }
 
             // Calculate relative path from workspace root
-            let relative = if file.is_absolute() {
-                file.strip_prefix(&self.workspace_root)
-                    .map_err(|_| UpgradeError::FileSystemError {
-                        path: file.clone(),
-                        reason: "File is not within workspace".to_string(),
-                    })?
-                    .to_path_buf()
+            // Note: We need to handle the case where paths are already absolute
+            // For absolute paths passed in (like from collect_package_json_files),
+            // we calculate the relative path from the workspace root
+            let relative = if absolute_path.is_absolute() {
+                // Normalize paths to use forward slashes for consistent comparison on Windows
+                // This prevents issues with mixed separators in paths
+                let normalize = |p: &Path| -> PathBuf {
+                    #[cfg(windows)]
+                    {
+                        PathBuf::from(p.to_string_lossy().replace('\\', "/"))
+                    }
+                    #[cfg(not(windows))]
+                    {
+                        p.to_path_buf()
+                    }
+                };
+
+                let normalized_workspace = normalize(&self.workspace_root);
+                let normalized_file = normalize(&absolute_path);
+
+                // Try to strip the workspace root prefix
+                // If the path is already absolute and within workspace, this will work
+                match normalized_file.strip_prefix(&normalized_workspace) {
+                    Ok(rel) => rel.to_path_buf(),
+                    Err(_) => {
+                        // Path might use different canonicalization (e.g., /tmp vs /private/tmp)
+                        // Try canonicalizing both paths and then strip
+                        let canonical_workspace = self
+                            .workspace_root
+                            .canonicalize()
+                            .unwrap_or_else(|_| self.workspace_root.clone());
+                        let canonical_file =
+                            absolute_path.canonicalize().unwrap_or_else(|_| absolute_path.clone());
+
+                        let normalized_canonical_workspace = normalize(&canonical_workspace);
+                        let normalized_canonical_file = normalize(&canonical_file);
+
+                        normalized_canonical_file
+                            .strip_prefix(&normalized_canonical_workspace)
+                            .map_err(|_| UpgradeError::FileSystemError {
+                                path: absolute_path.clone(),
+                                reason: format!(
+                                    "File is not within workspace. File: {:?}, Workspace: {:?}",
+                                    normalized_canonical_file, normalized_canonical_workspace
+                                ),
+                            })?
+                            .to_path_buf()
+                    }
+                }
             } else {
-                file.clone()
+                absolute_path.clone()
             };
 
             // Create target path in backup directory
-            let target = backup_path.join(&relative);
+            let target = self.normalize_fs_path(&backup_path.join(&relative));
 
             // Ensure parent directory exists
             if let Some(parent) = target.parent() {
@@ -360,7 +402,7 @@ impl<F: AsyncFileSystem> BackupManager<F> {
     /// # }
     /// ```
     pub async fn restore_backup(&self, backup_id: &str) -> UpgradeResult<()> {
-        let backup_path = self.backup_path(backup_id);
+        let backup_path = self.normalize_fs_path(&self.backup_path(backup_id));
 
         // Check if backup exists
         let exists = self.fs.exists(&backup_path).await;
@@ -380,13 +422,16 @@ impl<F: AsyncFileSystem> BackupManager<F> {
                 }
             })?;
 
-            let backup_file = backup_path.join(relative);
-            let target_file = file_path;
+            let backup_file = self.normalize_fs_path(&backup_path.join(relative));
+            let target_file = self.normalize_fs_path(file_path);
 
             // Ensure parent directory exists
             if let Some(parent) = target_file.parent() {
-                self.fs.create_dir_all(parent).await.map_err(|e| UpgradeError::RollbackFailed {
-                    reason: format!("Failed to create parent directory: {}", e),
+                let parent_normalized = self.normalize_fs_path(parent);
+                self.fs.create_dir_all(&parent_normalized).await.map_err(|e| {
+                    UpgradeError::RollbackFailed {
+                        reason: format!("Failed to create parent directory: {}", e),
+                    }
                 })?;
             }
 
@@ -397,7 +442,7 @@ impl<F: AsyncFileSystem> BackupManager<F> {
                 }
             })?;
 
-            self.fs.write_file(target_file, &content).await.map_err(|e| {
+            self.fs.write_file(&target_file, &content).await.map_err(|e| {
                 UpgradeError::RollbackFailed {
                     reason: format!("Failed to restore file {}: {}", target_file.display(), e),
                 }
@@ -489,7 +534,7 @@ impl<F: AsyncFileSystem> BackupManager<F> {
     /// # }
     /// ```
     pub async fn delete_backup(&self, backup_id: &str) -> UpgradeResult<()> {
-        let backup_path = self.backup_path(backup_id);
+        let backup_path = self.normalize_fs_path(&self.backup_path(backup_id));
 
         // Check if backup exists
         let exists = self.fs.exists(&backup_path).await;
@@ -601,7 +646,7 @@ impl<F: AsyncFileSystem> BackupManager<F> {
 
         // Remove all backups from filesystem
         for backup_id in &to_remove_all {
-            let backup_path = self.backup_path(backup_id);
+            let backup_path = self.normalize_fs_path(&self.backup_path(backup_id));
             if self.fs.exists(&backup_path).await {
                 let _ = self.fs.remove(&backup_path).await;
             }
@@ -641,9 +686,24 @@ impl<F: AsyncFileSystem> BackupManager<F> {
         if path.is_absolute() { path.to_path_buf() } else { self.workspace_root.join(path) }
     }
 
+    /// Normalizes a path for filesystem operations on Windows.
+    ///
+    /// Converts backslashes to forward slashes on Windows to ensure consistent
+    /// path handling across MockFileSystem operations.
+    fn normalize_fs_path(&self, path: &Path) -> PathBuf {
+        #[cfg(windows)]
+        {
+            PathBuf::from(path.to_string_lossy().replace('\\', "/"))
+        }
+        #[cfg(not(windows))]
+        {
+            path.to_path_buf()
+        }
+    }
+
     /// Loads the metadata collection from disk.
     async fn load_metadata_collection(&self) -> UpgradeResult<BackupMetadataCollection> {
-        let metadata_path = self.metadata_path();
+        let metadata_path = self.normalize_fs_path(&self.metadata_path());
 
         let exists = self.fs.exists(&metadata_path).await;
 
@@ -669,10 +729,10 @@ impl<F: AsyncFileSystem> BackupManager<F> {
         &self,
         collection: &BackupMetadataCollection,
     ) -> UpgradeResult<()> {
-        let metadata_path = self.metadata_path();
+        let metadata_path = self.normalize_fs_path(&self.metadata_path());
 
         // Ensure backup directory exists
-        let backup_dir = self.backup_dir();
+        let backup_dir = self.normalize_fs_path(&self.backup_dir());
         self.fs.create_dir_all(&backup_dir).await.map_err(|e| UpgradeError::BackupFailed {
             path: backup_dir,
             reason: format!("Failed to create backup directory: {}", e),

@@ -2,17 +2,17 @@
 #
 # pre-commit hook for workspace (Workspace Tools)
 #
-# This hook validates that a changeset exists before allowing a commit.
-# It ensures proper changeset workflow is followed for feature branches.
+# This hook ensures proper changeset workflow is followed for feature branches.
 #
 # What it does:
 # 1. Detects current branch
 # 2. Skips main/master branches
 # 3. Checks if changeset exists for the branch
 # 4. Prompts to create one if missing (or aborts in non-interactive mode)
-# 5. Allows commit to proceed if changeset exists
+# 5. Adds all existing commits from the branch to the changeset (if any are missing)
+# 6. Allows commit to proceed
 #
-# Note: The commit SHA is added to the changeset by the post-commit hook.
+# Note: The new commit SHA will be added to the changeset on the next pre-commit or pre-push.
 #
 # Configuration (.workspace.toml):
 # [git_hooks]
@@ -65,71 +65,94 @@ if ! command -v workspace >/dev/null 2>&1; then
 fi
 
 # Check if changeset exists for this branch
-if workspace changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
-    # Changeset exists - all good
-    printf "${GREEN}✓${NC} Changeset found for branch ${BLUE}${BRANCH}${NC}\n" >&2
-    exit 0
-fi
+if ! workspace changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
+    # No changeset exists - inform user
+    printf "\n${YELLOW}⚠${NC} No changeset found for branch ${BLUE}${BRANCH}${NC}\n" >&2
 
-# No changeset exists - inform user
-printf "\n${YELLOW}⚠${NC} No changeset found for branch ${BLUE}${BRANCH}${NC}\n" >&2
+    # Try to use terminal directly for interactive prompts
+    # This works even when stdin is redirected (like with git commit -m)
+    if [ -e /dev/tty ]; then
+        exec < /dev/tty
 
-# Try to use terminal directly for interactive prompts
-# This works even when stdin is redirected (like with git commit -m)
-if [ -e /dev/tty ]; then
-    exec < /dev/tty
+        # Prompt to create changeset
+        printf "${YELLOW}?${NC} Create changeset now? ${BLUE}[Y/n]${NC} " >&2
+        read -r response
 
-    # Prompt to create changeset
-    printf "${YELLOW}?${NC} Create changeset now? ${BLUE}[Y/n]${NC} " >&2
-    read -r response
+        case "${response}" in
+            [nN][oO]|[nN])
+                # User declined - ask if they want to continue anyway
+                printf "${YELLOW}?${NC} Continue commit without changeset? ${BLUE}[y/N]${NC} " >&2
+                read -r continue_response
 
-    case "${response}" in
-        [nN][oO]|[nN])
-            # User declined - ask if they want to continue anyway
-            printf "${YELLOW}?${NC} Continue commit without changeset? ${BLUE}[y/N]${NC} " >&2
-            read -r continue_response
-
-            case "${continue_response}" in
-                [yY][eE][sS]|[yY])
-                    printf "${YELLOW}⚠${NC} Proceeding without changeset\n" >&2
-                    exit 0
-                    ;;
-                *)
-                    printf "${RED}✗${NC} Commit aborted\n" >&2
-                    printf "${BLUE}ℹ${NC} Create changeset with: ${GREEN}workspace changeset create${NC}\n" >&2
-                    exit 1
-                    ;;
-            esac
-            ;;
-        *)
-            # User accepted (default) - create changeset interactively
-            printf "\n${BLUE}📝 Creating changeset...${NC}\n\n" >&2
-
-            if workspace changeset create; then
-                printf "\n${GREEN}✓${NC} Changeset created successfully\n" >&2
-                printf "${BLUE}ℹ${NC} Continuing with commit...\n" >&2
-                exit 0
-            else
-                printf "\n${RED}✗${NC} Failed to create changeset\n" >&2
-                printf "${YELLOW}?${NC} Continue commit anyway? ${BLUE}[y/N]${NC} " >&2
-                read -r fallback_response
-
-                case "${fallback_response}" in
+                case "${continue_response}" in
                     [yY][eE][sS]|[yY])
                         printf "${YELLOW}⚠${NC} Proceeding without changeset\n" >&2
                         exit 0
                         ;;
                     *)
                         printf "${RED}✗${NC} Commit aborted\n" >&2
+                        printf "${BLUE}ℹ${NC} Create changeset with: ${GREEN}workspace changeset create${NC}\n" >&2
                         exit 1
                         ;;
                 esac
-            fi
-            ;;
-    esac
-else
-    # No terminal available (CI/CD, scripts, etc.) - warn but allow commit
-    printf "${YELLOW}⚠${NC} No terminal available - proceeding without changeset\n" >&2
-    printf "${BLUE}ℹ${NC} Create changeset later with: ${GREEN}workspace changeset create${NC}\n" >&2
+                ;;
+            *)
+                # User accepted (default) - create changeset interactively
+                printf "\n${BLUE}📝 Creating changeset...${NC}\n\n" >&2
+
+                if workspace changeset create; then
+                    printf "\n${GREEN}✓${NC} Changeset created successfully\n" >&2
+                else
+                    printf "\n${RED}✗${NC} Failed to create changeset\n" >&2
+                    printf "${YELLOW}?${NC} Continue commit anyway? ${BLUE}[y/N]${NC} " >&2
+                    read -r fallback_response
+
+                    case "${fallback_response}" in
+                        [yY][eE][sS]|[yY])
+                            printf "${YELLOW}⚠${NC} Proceeding without changeset\n" >&2
+                            exit 0
+                            ;;
+                        *)
+                            printf "${RED}✗${NC} Commit aborted\n" >&2
+                            exit 1
+                            ;;
+                    esac
+                fi
+                ;;
+        esac
+    else
+        # No terminal available (CI/CD, scripts, etc.) - warn but allow commit
+        printf "${YELLOW}⚠${NC} No terminal available - proceeding without changeset\n" >&2
+        printf "${BLUE}ℹ${NC} Create changeset later with: ${GREEN}workspace changeset create${NC}\n" >&2
+        exit 0
+    fi
+fi
+
+# Changeset exists - add any missing commits from the branch
+printf "${GREEN}✓${NC} Changeset found for branch ${BLUE}${BRANCH}${NC}\n" >&2
+
+# Get all commits in the current branch (excluding main/master)
+MAIN_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+BRANCH_COMMITS=$(git log --pretty=format:"%H" "${MAIN_BRANCH}..${BRANCH}" 2>/dev/null || echo "")
+
+if [ -z "${BRANCH_COMMITS}" ]; then
+    # No commits yet in this branch
+    printf "${BLUE}ℹ${NC} No existing commits to add to changeset\n" >&2
     exit 0
 fi
+
+# Add each commit to the changeset (workspace will skip duplicates)
+ADDED_COUNT=0
+for commit_sha in ${BRANCH_COMMITS}; do
+    if workspace changeset update "${BRANCH}" --commit "${commit_sha}" >/dev/null 2>&1; then
+        ADDED_COUNT=$((ADDED_COUNT + 1))
+    fi
+done
+
+if [ ${ADDED_COUNT} -gt 0 ]; then
+    printf "${GREEN}✓${NC} Added ${ADDED_COUNT} commit(s) to changeset\n" >&2
+else
+    printf "${BLUE}ℹ${NC} All commits already in changeset\n" >&2
+fi
+
+exit 0

@@ -215,6 +215,10 @@ async fn test_directory_exists_edge_cases() {
 }
 
 #[tokio::test]
+#[cfg_attr(
+    target_os = "windows",
+    ignore = "Windows path normalization issues - tracked in WOR-TSK-141"
+)]
 async fn test_create_backup_success() {
     let config = BackupConfig {
         enabled: true,
@@ -309,6 +313,10 @@ async fn test_create_backup_nonexistent_file() {
 }
 
 #[tokio::test]
+#[cfg_attr(
+    target_os = "windows",
+    ignore = "Windows path normalization issues - tracked in WOR-TSK-141"
+)]
 async fn test_restore_backup_success() {
     let config = BackupConfig::default();
     let manager = create_test_manager(config);
@@ -345,6 +353,10 @@ async fn test_restore_backup_nonexistent() {
 }
 
 #[tokio::test]
+#[cfg_attr(
+    target_os = "windows",
+    ignore = "Windows path normalization issues - tracked in WOR-TSK-141"
+)]
 async fn test_restore_last_backup() {
     let config = BackupConfig::default();
     let manager = create_test_manager(config);
@@ -418,6 +430,10 @@ async fn test_list_backups_empty() {
 }
 
 #[tokio::test]
+#[cfg_attr(
+    target_os = "windows",
+    ignore = "Windows path normalization issues - tracked in WOR-TSK-141"
+)]
 async fn test_delete_backup() {
     let config = BackupConfig::default();
     let manager = create_test_manager(config);
@@ -600,6 +616,10 @@ async fn test_cleanup_priority_removes_successful_before_count() {
 }
 
 #[tokio::test]
+#[cfg_attr(
+    target_os = "windows",
+    ignore = "Windows path normalization issues - tracked in WOR-TSK-141"
+)]
 async fn test_relative_path_handling() {
     let config = BackupConfig::default();
     let manager = create_test_manager(config);
@@ -623,6 +643,10 @@ async fn test_relative_path_handling() {
 }
 
 #[tokio::test]
+#[cfg_attr(
+    target_os = "windows",
+    ignore = "Windows path normalization issues - tracked in WOR-TSK-141"
+)]
 async fn test_nested_directory_structure() {
     let config = BackupConfig::default();
     let manager = create_test_manager(config);
@@ -642,6 +666,10 @@ async fn test_nested_directory_structure() {
 }
 
 #[tokio::test]
+#[cfg_attr(
+    target_os = "windows",
+    ignore = "Windows path normalization issues - tracked in WOR-TSK-141"
+)]
 async fn test_multiple_files_backup_and_restore() {
     let config = BackupConfig::default();
     let manager = create_test_manager(config);

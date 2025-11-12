@@ -17,6 +17,7 @@
 mod integration_tests {
     use crate::config::RegistryConfig;
     use crate::error::UpgradeError;
+    use crate::upgrade::registry::npmrc::AuthType;
     use crate::upgrade::{RegistryClient, UpgradeType};
     use mockito::Server;
     use std::path::PathBuf;
@@ -696,8 +697,11 @@ mod integration_tests {
             .await
             .expect("Failed to create client");
 
-        let token = client.resolve_auth_token("https://npm.myorg.com");
-        assert_eq!(token, Some("test-token".to_string()));
+        let cred = client.resolve_auth_token("https://npm.myorg.com");
+        assert!(cred.is_some());
+        let cred = cred.unwrap();
+        assert_eq!(cred.auth_type, AuthType::Bearer);
+        assert_eq!(cred.value, "test-token");
     }
 
     #[tokio::test]
@@ -709,8 +713,11 @@ mod integration_tests {
             .await
             .expect("Failed to create client");
 
-        let token = client.resolve_auth_token("https://npm.myorg.com/");
-        assert_eq!(token, Some("test-token".to_string()));
+        let cred = client.resolve_auth_token("https://npm.myorg.com/");
+        assert!(cred.is_some());
+        let cred = cred.unwrap();
+        assert_eq!(cred.auth_type, AuthType::Bearer);
+        assert_eq!(cred.value, "test-token");
     }
 
     #[tokio::test]
@@ -720,8 +727,8 @@ mod integration_tests {
             .await
             .expect("Failed to create client");
 
-        let token = client.resolve_auth_token("https://unknown.com");
-        assert_eq!(token, None);
+        let cred = client.resolve_auth_token("https://unknown.com");
+        assert_eq!(cred, None);
     }
 }
 
@@ -733,7 +740,7 @@ mod integration_tests {
 #[allow(clippy::expect_used)]
 #[allow(clippy::field_reassign_with_default)]
 mod npmrc_tests {
-    use crate::upgrade::registry::npmrc::NpmrcConfig;
+    use crate::upgrade::registry::npmrc::{AuthCredential, AuthType, NpmrcConfig};
     use std::collections::HashMap;
     use std::path::{Path, PathBuf};
     use sublime_standard_tools::filesystem::AsyncFileSystem;
@@ -951,7 +958,9 @@ mod npmrc_tests {
             .await
             .expect("Should parse auth token");
 
-        assert_eq!(config.auth_tokens.get("npm.myorg.com"), Some(&"npm_AbCdEf123456".to_string()));
+        let cred = config.auth_tokens.get("npm.myorg.com").expect("Should have auth token");
+        assert_eq!(cred.auth_type, AuthType::Bearer);
+        assert_eq!(cred.value, "npm_AbCdEf123456");
     }
 
     #[tokio::test]
@@ -970,9 +979,17 @@ npm.internal.com/:_authToken=token3
             .await
             .expect("Should parse various auth token formats");
 
-        assert_eq!(config.auth_tokens.get("npm.myorg.com"), Some(&"token1".to_string()));
-        assert_eq!(config.auth_tokens.get("registry.npmjs.org"), Some(&"token2".to_string()));
-        assert_eq!(config.auth_tokens.get("npm.internal.com"), Some(&"token3".to_string()));
+        let cred1 = config.auth_tokens.get("npm.myorg.com").expect("Should have token1");
+        assert_eq!(cred1.auth_type, AuthType::Bearer);
+        assert_eq!(cred1.value, "token1");
+
+        let cred2 = config.auth_tokens.get("registry.npmjs.org").expect("Should have token2");
+        assert_eq!(cred2.auth_type, AuthType::Bearer);
+        assert_eq!(cred2.value, "token2");
+
+        let cred3 = config.auth_tokens.get("npm.internal.com").expect("Should have token3");
+        assert_eq!(cred3.auth_type, AuthType::Bearer);
+        assert_eq!(cred3.value, "token3");
     }
 
     #[tokio::test]
@@ -987,9 +1004,11 @@ npm.internal.com/:_authToken=token3
             .await
             .expect("Should parse _auth token");
 
+        let cred = config.auth_tokens.get("npm.myorg.com").expect("Should have _auth token");
+        assert_eq!(cred.auth_type, AuthType::Basic);
         assert_eq!(
-            config.auth_tokens.get("npm.myorg.com"),
-            Some(&"TUlHUkFNTzpjbVZtZEd0dU9qQXhPakF3TURBd01EQXdNREE2U1ZOVVpIcHFNR1V3UkRCbk5uWlJUMDR4YUV4aVZIVlpWbkl3".to_string())
+            cred.value,
+            "TUlHUkFNTzpjbVZtZEd0dU9qQXhPakF3TURBd01EQXdNREE2U1ZOVVpIcHFNR1V3UkRCbk5uWlJUMDR4YUV4aVZIVlpWbkl3"
         );
     }
 
@@ -1009,12 +1028,17 @@ npm.internal.com/:_authToken=token3
             .await
             .expect("Should parse mixed _auth and _authToken formats");
 
-        assert_eq!(config.auth_tokens.get("npm.myorg.com"), Some(&"base64token".to_string()));
-        assert_eq!(config.auth_tokens.get("registry.npmjs.org"), Some(&"bearer_token".to_string()));
-        assert_eq!(
-            config.auth_tokens.get("internal.corp.com"),
-            Some(&"another_base64".to_string())
-        );
+        let cred1 = config.auth_tokens.get("npm.myorg.com").expect("Should have _auth");
+        assert_eq!(cred1.auth_type, AuthType::Basic);
+        assert_eq!(cred1.value, "base64token");
+
+        let cred2 = config.auth_tokens.get("registry.npmjs.org").expect("Should have _authToken");
+        assert_eq!(cred2.auth_type, AuthType::Bearer);
+        assert_eq!(cred2.value, "bearer_token");
+
+        let cred3 = config.auth_tokens.get("internal.corp.com").expect("Should have _auth");
+        assert_eq!(cred3.auth_type, AuthType::Basic);
+        assert_eq!(cred3.value, "another_base64");
     }
 
     #[tokio::test]
@@ -1114,7 +1138,9 @@ package-lock=false
             .await
             .expect("Should parse with env var substitution");
 
-        assert_eq!(config.auth_tokens.get("npm.myorg.com"), Some(&"secret_token_123".to_string()));
+        let cred = config.auth_tokens.get("npm.myorg.com").expect("Should have substituted token");
+        assert_eq!(cred.auth_type, AuthType::Bearer);
+        assert_eq!(cred.value, "secret_token_123");
 
         unsafe {
             std::env::remove_var("TEST_NPM_TOKEN");
@@ -1131,10 +1157,9 @@ package-lock=false
             .expect("Should parse even if env var not set");
 
         // Should keep the placeholder if env var not set
-        assert_eq!(
-            config.auth_tokens.get("npm.myorg.com"),
-            Some(&"${NONEXISTENT_VAR}".to_string())
-        );
+        let cred = config.auth_tokens.get("npm.myorg.com").expect("Should have placeholder");
+        assert_eq!(cred.auth_type, AuthType::Bearer);
+        assert_eq!(cred.value, "${NONEXISTENT_VAR}");
     }
 
     #[tokio::test]
@@ -1176,39 +1201,62 @@ package-lock=false
     #[tokio::test]
     async fn test_get_auth_token_exact_match() {
         let mut config = NpmrcConfig::default();
-        config.auth_tokens.insert("npm.myorg.com".to_string(), "token123".to_string());
+        config.auth_tokens.insert(
+            "npm.myorg.com".to_string(),
+            AuthCredential { auth_type: AuthType::Bearer, value: "token123".to_string() },
+        );
 
-        assert_eq!(config.get_auth_token("npm.myorg.com"), Some("token123"));
+        let cred = config.get_auth_token("npm.myorg.com").expect("Should find token");
+        assert_eq!(cred.auth_type, AuthType::Bearer);
+        assert_eq!(cred.value, "token123");
     }
 
     #[tokio::test]
     async fn test_get_auth_token_with_protocol() {
         let mut config = NpmrcConfig::default();
-        config.auth_tokens.insert("npm.myorg.com".to_string(), "token123".to_string());
+        config.auth_tokens.insert(
+            "npm.myorg.com".to_string(),
+            AuthCredential { auth_type: AuthType::Bearer, value: "token123".to_string() },
+        );
 
-        assert_eq!(config.get_auth_token("https://npm.myorg.com"), Some("token123"));
+        let cred = config.get_auth_token("https://npm.myorg.com").expect("Should find token");
+        assert_eq!(cred.auth_type, AuthType::Bearer);
+        assert_eq!(cred.value, "token123");
     }
 
     #[tokio::test]
     async fn test_get_auth_token_with_trailing_slash() {
         let mut config = NpmrcConfig::default();
-        config.auth_tokens.insert("npm.myorg.com".to_string(), "token123".to_string());
+        config.auth_tokens.insert(
+            "npm.myorg.com".to_string(),
+            AuthCredential { auth_type: AuthType::Bearer, value: "token123".to_string() },
+        );
 
-        assert_eq!(config.get_auth_token("https://npm.myorg.com/"), Some("token123"));
+        let cred = config.get_auth_token("https://npm.myorg.com/").expect("Should find token");
+        assert_eq!(cred.auth_type, AuthType::Bearer);
+        assert_eq!(cred.value, "token123");
     }
 
     #[tokio::test]
     async fn test_get_auth_token_stored_with_protocol() {
         let mut config = NpmrcConfig::default();
-        config.auth_tokens.insert("//npm.myorg.com".to_string(), "token123".to_string());
+        config.auth_tokens.insert(
+            "//npm.myorg.com".to_string(),
+            AuthCredential { auth_type: AuthType::Bearer, value: "token123".to_string() },
+        );
 
-        assert_eq!(config.get_auth_token("https://npm.myorg.com"), Some("token123"));
+        let cred = config.get_auth_token("https://npm.myorg.com").expect("Should find token");
+        assert_eq!(cred.auth_type, AuthType::Bearer);
+        assert_eq!(cred.value, "token123");
     }
 
     #[tokio::test]
     async fn test_get_auth_token_not_found() {
         let mut config = NpmrcConfig::default();
-        config.auth_tokens.insert("npm.myorg.com".to_string(), "token123".to_string());
+        config.auth_tokens.insert(
+            "npm.myorg.com".to_string(),
+            AuthCredential { auth_type: AuthType::Bearer, value: "token123".to_string() },
+        );
 
         assert_eq!(config.get_auth_token("npm.other.com"), None);
     }
@@ -1224,7 +1272,10 @@ package-lock=false
         override_config
             .scoped_registries
             .insert("internal".to_string(), "https://npm.internal.com".to_string());
-        override_config.auth_tokens.insert("npm.internal.com".to_string(), "token123".to_string());
+        override_config.auth_tokens.insert(
+            "npm.internal.com".to_string(),
+            AuthCredential { auth_type: AuthType::Bearer, value: "token123".to_string() },
+        );
 
         base.merge_with(override_config);
 
@@ -1240,7 +1291,9 @@ package-lock=false
         );
 
         // Auth tokens should be added
-        assert_eq!(base.auth_tokens.get("npm.internal.com"), Some(&"token123".to_string()));
+        let cred = base.auth_tokens.get("npm.internal.com").expect("Should have merged token");
+        assert_eq!(cred.auth_type, AuthType::Bearer);
+        assert_eq!(cred.value, "token123");
     }
 
     #[tokio::test]
@@ -1286,14 +1339,15 @@ legacy-peer-deps=false
 
         // Verify auth tokens
         assert_eq!(config.auth_tokens.len(), 2);
-        assert_eq!(
-            config.auth_tokens.get("npm.myorg.com"),
-            Some(&"npm_secret_token_123".to_string())
-        );
-        assert_eq!(
-            config.auth_tokens.get("registry.internal.corp"),
-            Some(&"internal_token_456".to_string())
-        );
+
+        let cred1 = config.auth_tokens.get("npm.myorg.com").expect("Should have myorg token");
+        assert_eq!(cred1.auth_type, AuthType::Bearer);
+        assert_eq!(cred1.value, "npm_secret_token_123");
+
+        let cred2 =
+            config.auth_tokens.get("registry.internal.corp").expect("Should have internal token");
+        assert_eq!(cred2.auth_type, AuthType::Bearer);
+        assert_eq!(cred2.value, "internal_token_456");
 
         // Verify other properties
         assert_eq!(config.other.get("save-exact"), Some(&"true".to_string()));
@@ -1302,7 +1356,11 @@ legacy-peer-deps=false
         // Test resolution
         assert_eq!(config.resolve_registry("@myorg/package"), Some("https://npm.myorg.com"));
         assert_eq!(config.resolve_registry("lodash"), Some("https://registry.npmjs.org"));
-        assert_eq!(config.get_auth_token("https://npm.myorg.com"), Some("npm_secret_token_123"));
+
+        let cred =
+            config.get_auth_token("https://npm.myorg.com").expect("Should resolve auth token");
+        assert_eq!(cred.auth_type, AuthType::Bearer);
+        assert_eq!(cred.value, "npm_secret_token_123");
     }
 
     #[tokio::test]

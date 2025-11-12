@@ -438,9 +438,9 @@ pub async fn detect_upgrades(
     let mut patch_upgrades = 0;
     let mut deprecated_dependencies = 0;
 
-    for package_path in package_files {
+    for package_json_path in package_files {
         // Read and parse package.json
-        let package_json = read_package_json(&package_path, fs).await?;
+        let package_json = read_package_json(&package_json_path, fs).await?;
 
         // Get package name
         let package_name = if package_json.name.is_empty() {
@@ -476,6 +476,15 @@ pub async fn detect_upgrades(
 
         // Add to results if there are upgrades or we're including all packages
         if !upgrades.is_empty() {
+            // Extract the directory containing package.json (not the file itself)
+            let package_path = package_json_path
+                .parent()
+                .ok_or_else(|| UpgradeError::FileSystemError {
+                    path: package_json_path.clone(),
+                    reason: "Cannot determine parent directory of package.json".to_string(),
+                })?
+                .to_path_buf();
+
             all_packages.push(PackageUpgrades {
                 package_name,
                 package_path,
