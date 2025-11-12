@@ -597,6 +597,12 @@ struct FileChangeJson {
     change_type: String,
     /// File path
     path: String,
+    /// Number of lines added (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lines_added: Option<usize>,
+    /// Number of lines deleted (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lines_deleted: Option<usize>,
 }
 
 impl FileChangeJson {
@@ -616,6 +622,8 @@ impl FileChangeJson {
         Self {
             change_type: change_type.to_string(),
             path: file.path.to_str().unwrap_or("<invalid-utf8>").to_string(),
+            lines_added: file.lines_added,
+            lines_deleted: file.lines_deleted,
         }
     }
 }
