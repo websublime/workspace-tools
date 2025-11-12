@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.5 - 2025-11-12
+
+### Bug Fixes
+
+#### WOR-TSK-141
+
+- Refactor git hooks philosophy - pre-commit adds, post-commit validates ([#19](https://github.com/websublime/workspace-tools/pull/19))
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.4 - 2025-11-11
 
 ### Bug Fixes
