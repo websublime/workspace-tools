@@ -60,6 +60,42 @@ pub fn create_json_output() -> (Output, Cursor<Vec<u8>>) {
     create_test_output(OutputFormat::Json)
 }
 
+/// Shared writer for capturing output in tests with proper buffer sharing.
+pub struct SharedWriter {
+    buffer: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+}
+
+impl std::io::Write for SharedWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.buffer.lock().unwrap().write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.buffer.lock().unwrap().flush()
+    }
+}
+
+/// Creates an output with shared buffer for tests that need to capture and validate output.
+///
+/// This is needed when the standard Cursor approach doesn't work due to cloning limitations.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let (output, buffer) = create_shared_json_output();
+/// command_execute(&output).await?;
+/// let output_bytes = buffer.lock().unwrap().clone();
+/// let json: serde_json::Value = serde_json::from_slice(&output_bytes).unwrap();
+/// ```
+pub fn create_shared_json_output() -> (Output, std::sync::Arc<std::sync::Mutex<Vec<u8>>>) {
+    use std::sync::{Arc, Mutex};
+
+    let buffer = Arc::new(Mutex::new(Vec::new()));
+    let writer = SharedWriter { buffer: Arc::clone(&buffer) };
+    let output = Output::new(OutputFormat::Json, Box::new(writer), false);
+    (output, buffer)
+}
+
 // =============================================================================
 // File System Helpers
 // =============================================================================
