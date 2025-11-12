@@ -251,7 +251,7 @@ impl<F: AsyncFileSystem> BackupManager<F> {
 
         // Generate backup ID
         let backup_id = self.generate_backup_id(operation);
-        let backup_path = self.backup_path(&backup_id);
+        let backup_path = self.normalize_fs_path(&self.backup_path(&backup_id));
 
         // Create backup directory
         self.fs.create_dir_all(&backup_path).await.map_err(|e| UpgradeError::BackupFailed {
@@ -262,7 +262,7 @@ impl<F: AsyncFileSystem> BackupManager<F> {
         // Copy each file to backup directory, preserving directory structure
         let mut backed_up_files = Vec::new();
         for file in files {
-            let absolute_path = self.resolve_path(file);
+            let absolute_path = self.normalize_fs_path(&self.resolve_path(file));
 
             // Check if file exists before backing up
             let exists = self.fs.exists(&absolute_path).await;
@@ -329,12 +329,7 @@ impl<F: AsyncFileSystem> BackupManager<F> {
             };
 
             // Create target path in backup directory
-            let target = backup_path.join(&relative);
-
-            // Normalize target path on Windows for MockFileSystem consistency
-            // This ensures all paths use forward slashes when interacting with the filesystem
-            #[cfg(windows)]
-            let target = PathBuf::from(target.to_string_lossy().replace('\\', "/"));
+            let target = self.normalize_fs_path(&backup_path.join(&relative));
 
             // Ensure parent directory exists
             if let Some(parent) = target.parent() {
@@ -407,7 +402,7 @@ impl<F: AsyncFileSystem> BackupManager<F> {
     /// # }
     /// ```
     pub async fn restore_backup(&self, backup_id: &str) -> UpgradeResult<()> {
-        let backup_path = self.backup_path(backup_id);
+        let backup_path = self.normalize_fs_path(&self.backup_path(backup_id));
 
         // Check if backup exists
         let exists = self.fs.exists(&backup_path).await;
@@ -427,13 +422,16 @@ impl<F: AsyncFileSystem> BackupManager<F> {
                 }
             })?;
 
-            let backup_file = backup_path.join(relative);
-            let target_file = file_path;
+            let backup_file = self.normalize_fs_path(&backup_path.join(relative));
+            let target_file = self.normalize_fs_path(file_path);
 
             // Ensure parent directory exists
             if let Some(parent) = target_file.parent() {
-                self.fs.create_dir_all(parent).await.map_err(|e| UpgradeError::RollbackFailed {
-                    reason: format!("Failed to create parent directory: {}", e),
+                let parent_normalized = self.normalize_fs_path(parent);
+                self.fs.create_dir_all(&parent_normalized).await.map_err(|e| {
+                    UpgradeError::RollbackFailed {
+                        reason: format!("Failed to create parent directory: {}", e),
+                    }
                 })?;
             }
 
@@ -444,7 +442,7 @@ impl<F: AsyncFileSystem> BackupManager<F> {
                 }
             })?;
 
-            self.fs.write_file(target_file, &content).await.map_err(|e| {
+            self.fs.write_file(&target_file, &content).await.map_err(|e| {
                 UpgradeError::RollbackFailed {
                     reason: format!("Failed to restore file {}: {}", target_file.display(), e),
                 }
@@ -536,7 +534,7 @@ impl<F: AsyncFileSystem> BackupManager<F> {
     /// # }
     /// ```
     pub async fn delete_backup(&self, backup_id: &str) -> UpgradeResult<()> {
-        let backup_path = self.backup_path(backup_id);
+        let backup_path = self.normalize_fs_path(&self.backup_path(backup_id));
 
         // Check if backup exists
         let exists = self.fs.exists(&backup_path).await;
@@ -648,7 +646,7 @@ impl<F: AsyncFileSystem> BackupManager<F> {
 
         // Remove all backups from filesystem
         for backup_id in &to_remove_all {
-            let backup_path = self.backup_path(backup_id);
+            let backup_path = self.normalize_fs_path(&self.backup_path(backup_id));
             if self.fs.exists(&backup_path).await {
                 let _ = self.fs.remove(&backup_path).await;
             }
@@ -688,9 +686,24 @@ impl<F: AsyncFileSystem> BackupManager<F> {
         if path.is_absolute() { path.to_path_buf() } else { self.workspace_root.join(path) }
     }
 
+    /// Normalizes a path for filesystem operations on Windows.
+    ///
+    /// Converts backslashes to forward slashes on Windows to ensure consistent
+    /// path handling across MockFileSystem operations.
+    fn normalize_fs_path(&self, path: &Path) -> PathBuf {
+        #[cfg(windows)]
+        {
+            PathBuf::from(path.to_string_lossy().replace('\\', "/"))
+        }
+        #[cfg(not(windows))]
+        {
+            path.to_path_buf()
+        }
+    }
+
     /// Loads the metadata collection from disk.
     async fn load_metadata_collection(&self) -> UpgradeResult<BackupMetadataCollection> {
-        let metadata_path = self.metadata_path();
+        let metadata_path = self.normalize_fs_path(&self.metadata_path());
 
         let exists = self.fs.exists(&metadata_path).await;
 
@@ -716,10 +729,10 @@ impl<F: AsyncFileSystem> BackupManager<F> {
         &self,
         collection: &BackupMetadataCollection,
     ) -> UpgradeResult<()> {
-        let metadata_path = self.metadata_path();
+        let metadata_path = self.normalize_fs_path(&self.metadata_path());
 
         // Ensure backup directory exists
-        let backup_dir = self.backup_dir();
+        let backup_dir = self.normalize_fs_path(&self.backup_dir());
         self.fs.create_dir_all(&backup_dir).await.map_err(|e| UpgradeError::BackupFailed {
             path: backup_dir,
             reason: format!("Failed to create backup directory: {}", e),
