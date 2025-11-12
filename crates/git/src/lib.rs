@@ -119,7 +119,9 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub use types::{GitChangedFile, GitFileStatus, Repo, RepoCommit, RepoError, RepoTags};
+pub use types::{
+    GitChangedFile, GitDiffStats, GitFileStatus, Repo, RepoCommit, RepoError, RepoTags,
+};
 
 /// Result type alias for git operations.
 ///

@@ -92,6 +92,31 @@ pub struct GitChangedFile {
     pub workdir: bool,
 }
 
+/// Represents diff statistics for a file
+///
+/// Contains line-level change statistics for a file in the working directory
+/// compared to HEAD or the index.
+///
+/// # Examples
+///
+/// ```
+/// use git::repo::GitDiffStats;
+///
+/// let stats = GitDiffStats {
+///     lines_added: 15,
+///     lines_deleted: 3,
+/// };
+///
+/// println!("File has +{} -{} lines changed", stats.lines_added, stats.lines_deleted);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GitDiffStats {
+    /// Number of lines added
+    pub lines_added: usize,
+    /// Number of lines deleted
+    pub lines_deleted: usize,
+}
+
 /// Represents a commit in the Git repository
 ///
 /// # Examples
