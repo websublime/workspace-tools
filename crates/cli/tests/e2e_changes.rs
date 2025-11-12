@@ -792,53 +792,55 @@ async fn test_changes_working_directory_line_statistics_validation() {
     let mut found_file_with_stats = false;
     for package in packages {
         if let Some(changes) = package.get("changes")
-            && let Some(changes_array) = changes.as_array() {
-                for file in changes_array {
-                    // Check if this is our test file
-                    if let Some(path) = file.get("path")
-                        && path.as_str().unwrap_or("").contains("test-stats.md") {
-                            // CRITICAL: Validate line statistics are populated
-                            assert!(
-                                file.get("linesAdded").is_some(),
-                                "File should have 'linesAdded' field"
-                            );
-                            assert!(
-                                file.get("linesDeleted").is_some(),
-                                "File should have 'linesDeleted' field"
-                            );
+            && let Some(changes_array) = changes.as_array()
+        {
+            for file in changes_array {
+                // Check if this is our test file
+                if let Some(path) = file.get("path")
+                    && path.as_str().unwrap_or("").contains("test-stats.md")
+                {
+                    // CRITICAL: Validate line statistics are populated
+                    assert!(
+                        file.get("linesAdded").is_some(),
+                        "File should have 'linesAdded' field"
+                    );
+                    assert!(
+                        file.get("linesDeleted").is_some(),
+                        "File should have 'linesDeleted' field"
+                    );
 
-                            // Validate they are numbers (not null)
-                            let lines_added = file["linesAdded"].as_u64();
-                            let lines_deleted = file["linesDeleted"].as_u64();
+                    // Validate they are numbers (not null)
+                    let lines_added = file["linesAdded"].as_u64();
+                    let lines_deleted = file["linesDeleted"].as_u64();
 
-                            assert!(
-                                lines_added.is_some(),
-                                "'linesAdded' should be a number, got: {:?}",
-                                file["linesAdded"]
-                            );
-                            assert!(
-                                lines_deleted.is_some(),
-                                "'linesDeleted' should be a number, got: {:?}",
-                                file["linesDeleted"]
-                            );
+                    assert!(
+                        lines_added.is_some(),
+                        "'linesAdded' should be a number, got: {:?}",
+                        file["linesAdded"]
+                    );
+                    assert!(
+                        lines_deleted.is_some(),
+                        "'linesDeleted' should be a number, got: {:?}",
+                        file["linesDeleted"]
+                    );
 
-                            // Validate values make sense (we added and deleted lines)
-                            let added = lines_added.unwrap();
-                            let deleted = lines_deleted.unwrap();
+                    // Validate values make sense (we added and deleted lines)
+                    let added = lines_added.unwrap();
+                    let deleted = lines_deleted.unwrap();
 
-                            assert!(
-                                added > 0,
-                                "Should have added lines (we added 3 new lines), got: {added}"
-                            );
-                            assert!(
-                                deleted > 0,
-                                "Should have deleted lines (we removed content), got: {deleted}"
-                            );
+                    assert!(
+                        added > 0,
+                        "Should have added lines (we added 3 new lines), got: {added}"
+                    );
+                    assert!(
+                        deleted > 0,
+                        "Should have deleted lines (we removed content), got: {deleted}"
+                    );
 
-                            found_file_with_stats = true;
-                        }
+                    found_file_with_stats = true;
                 }
             }
+        }
     }
 
     assert!(
