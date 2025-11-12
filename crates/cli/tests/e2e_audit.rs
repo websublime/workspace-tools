@@ -1005,3 +1005,119 @@ async fn test_audit_output_to_file() {
     let content = read_file(&output_file);
     assert!(!content.is_empty(), "Output file should contain audit results");
 }
+
+// ============================================================================
+// Robust Content Validation Tests (Bug Regression Prevention)
+// ============================================================================
+
+/// Test: JSON audit output has correct structure and all required fields
+///
+/// This test validates Bug 4 fix - ensures JSON output contains the complete
+/// expected structure with all required fields, not just valid JSON.
+///
+/// **Why**: Previous test only verified JSON was parseable, not that it had
+/// the correct audit report structure. This test validates:
+/// - Response wrapper (success, data)
+/// - Summary fields (totalIssues, criticalCount, etc.)
+/// - Sections array with proper structure
+/// - Health score when enabled
+#[tokio::test]
+async fn test_audit_json_output_structure_validation() {
+    use common::helpers::create_shared_json_output;
+
+    // ARRANGE: Create workspace with some issues to detect
+    let workspace = WorkspaceFixture::monorepo_independent()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .finalize();
+
+    // Create version inconsistencies to ensure we have issues in the report
+    create_version_inconsistencies(&workspace);
+
+    let args = AuditArgs {
+        sections: vec!["dependencies".to_string()],
+        output: None,
+        min_severity: "info".to_string(),
+        verbosity: "normal".to_string(),
+        no_health_score: false,
+        export: None,
+        export_file: None,
+    };
+
+    let (output, buffer) = create_shared_json_output();
+
+    // ACT: Execute audit command
+    let result = execute_audit(&args, &output, workspace.root(), None).await;
+    assert!(result.is_ok(), "Audit should succeed: {:?}", result.err());
+
+    // ASSERT: Validate JSON structure
+    let output_bytes = buffer.lock().unwrap().clone();
+    assert!(!output_bytes.is_empty(), "JSON output should not be empty");
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&output_bytes).expect("Output should be valid JSON");
+
+    // Validate response wrapper
+    assert!(json.get("success").is_some(), "JSON should have 'success' field");
+    assert!(json["success"].is_boolean(), "'success' should be a boolean");
+
+    assert!(json.get("data").is_some(), "JSON should have 'data' field");
+    let data = &json["data"];
+
+    // Validate summary exists and has correct structure
+    assert!(data.get("summary").is_some(), "data should have 'summary' field");
+    let summary = &data["summary"];
+
+    assert!(summary.get("totalIssues").is_some(), "summary should have 'totalIssues'");
+    assert!(summary["totalIssues"].is_number(), "'totalIssues' should be a number");
+
+    assert!(summary.get("critical").is_some(), "summary should have 'critical'");
+    assert!(summary["critical"].is_number(), "'critical' should be a number");
+
+    assert!(summary.get("warnings").is_some(), "summary should have 'warnings'");
+    assert!(summary["warnings"].is_number(), "'warnings' should be a number");
+
+    assert!(summary.get("info").is_some(), "summary should have 'info'");
+    assert!(summary["info"].is_number(), "'info' should be a number");
+
+    // Validate sections array exists and has correct structure
+    assert!(data.get("sections").is_some(), "data should have 'sections' field");
+    assert!(data["sections"].is_array(), "'sections' should be an array");
+
+    // If there are sections, validate their structure
+    if let Some(sections_array) = data["sections"].as_array()
+        && !sections_array.is_empty()
+    {
+        let first_section = &sections_array[0];
+        assert!(first_section.get("name").is_some(), "section should have 'name' field");
+        assert!(first_section["name"].is_string(), "'name' should be a string");
+
+        assert!(first_section.get("issues").is_some(), "section should have 'issues' field");
+        assert!(first_section["issues"].is_array(), "'issues' should be an array");
+
+        // If there are issues, validate their structure
+        if let Some(issues_array) = first_section["issues"].as_array()
+            && !issues_array.is_empty()
+        {
+            let first_issue = &issues_array[0];
+            assert!(first_issue.get("severity").is_some(), "issue should have 'severity'");
+            assert!(first_issue["severity"].is_string(), "'severity' should be a string");
+
+            assert!(first_issue.get("category").is_some(), "issue should have 'category'");
+            assert!(first_issue["category"].is_string(), "'category' should be a string");
+
+            assert!(first_issue.get("title").is_some(), "issue should have 'title'");
+            assert!(first_issue["title"].is_string(), "'title' should be a string");
+
+            assert!(first_issue.get("description").is_some(), "issue should have 'description'");
+            assert!(first_issue["description"].is_string(), "'description' should be a string");
+        }
+    }
+
+    // Validate health score when not disabled
+    assert!(data.get("healthScore").is_some(), "data should have 'healthScore' field");
+    if !data["healthScore"].is_null() {
+        assert!(data["healthScore"].is_number(), "'healthScore' should be a number");
+    }
+}
