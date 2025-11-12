@@ -1623,6 +1623,67 @@ impl Repo {
         Ok(staged_files)
     }
 
+    /// Get diff statistics for a specific file in the working directory
+    ///
+    /// Calculates the number of lines added and deleted for a file compared to HEAD.
+    /// This works for both modified files and new files (untracked files return all lines as added).
+    ///
+    /// # Arguments
+    ///
+    /// * `file_path` - Path to the file relative to repository root
+    ///
+    /// # Returns
+    ///
+    /// * `Result<GitDiffStats, RepoError>` - Statistics with lines added and deleted
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The file path is invalid
+    /// - Git diff operation fails
+    /// - The file cannot be read
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use git::repo::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// let stats = repo.get_file_diff_stats("src/main.rs")
+    ///     .expect("Failed to get diff stats");
+    ///
+    /// println!("Lines added: {}, deleted: {}", stats.lines_added, stats.lines_deleted);
+    /// ```
+    pub fn get_file_diff_stats(
+        &self,
+        file_path: &str,
+    ) -> Result<crate::types::GitDiffStats, RepoError> {
+        use git2::DiffOptions;
+
+        // Get the HEAD tree to compare against
+        let head = self.repo.head().map_err(RepoError::HeadError)?;
+        let head_tree = head.peel_to_tree().map_err(RepoError::PeelError)?;
+
+        // Create diff options to target specific file
+        let mut diff_opts = DiffOptions::new();
+        diff_opts.pathspec(file_path);
+        diff_opts.context_lines(0); // We only need line counts, not context
+
+        // Create diff between HEAD tree and working directory
+        let diff = self
+            .repo
+            .diff_tree_to_workdir_with_index(Some(&head_tree), Some(&mut diff_opts))
+            .map_err(RepoError::DiffError)?;
+
+        // Collect statistics
+        let stats = diff.stats().map_err(RepoError::DiffError)?;
+
+        Ok(crate::types::GitDiffStats {
+            lines_added: stats.insertions(),
+            lines_deleted: stats.deletions(),
+        })
+    }
+
     /// Finds the branch that contains a specific commit
     ///
     /// # Arguments

@@ -30,9 +30,10 @@
 use crate::commands::audit::comprehensive::AuditResults;
 use crate::commands::audit::types::MinSeverity;
 use crate::error::Result;
-use crate::output::Output;
+use crate::output::{JsonResponse, Output};
+use serde::Serialize;
 use std::path::Path;
-use sublime_pkg_tools::audit::{IssueSeverity, Verbosity};
+use sublime_pkg_tools::audit::{AuditIssue, IssueSeverity, Verbosity};
 
 /// Formats and displays an audit report.
 ///
@@ -86,6 +87,11 @@ pub async fn format_audit_report(
     output: &Output,
     output_file: Option<&Path>,
 ) -> Result<()> {
+    // Check if JSON output is requested
+    if output.format().is_json() {
+        return output_json_report(results, health_score, min_severity, output);
+    }
+
     // Filter issues by severity
     let filtered_issues = filter_issues_by_severity(results, min_severity);
 
@@ -494,4 +500,317 @@ pub(crate) fn write_report_to_file(
     export_data(&data, format, file_path)?;
 
     Ok(())
+}
+
+// ============================================================================
+// JSON Output Support
+// ============================================================================
+
+/// JSON response structure for audit report.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AuditReportJson {
+    /// Overall health score (0-100).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    health_score: Option<u8>,
+
+    /// Summary of issues found.
+    summary: AuditSummaryJson,
+
+    /// Audit sections with detailed results.
+    sections: Vec<AuditSectionJson>,
+}
+
+/// Summary information for JSON output.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AuditSummaryJson {
+    /// Total number of issues found.
+    total_issues: usize,
+
+    /// Number of critical issues.
+    critical: usize,
+
+    /// Number of warnings.
+    warnings: usize,
+
+    /// Number of informational issues.
+    info: usize,
+
+    /// Upgrade statistics (if available).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    upgrades: Option<UpgradeStatsJson>,
+
+    /// Dependency statistics (if available).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dependencies: Option<DependencyStatsJson>,
+
+    /// Version consistency statistics (if available).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version_consistency: Option<VersionConsistencyStatsJson>,
+
+    /// Breaking changes statistics (if available).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    breaking_changes: Option<BreakingChangesStatsJson>,
+}
+
+/// Upgrade statistics for JSON output.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpgradeStatsJson {
+    /// Total number of upgrades available.
+    total: usize,
+
+    /// Number of major upgrades.
+    major: usize,
+
+    /// Number of minor upgrades.
+    minor: usize,
+
+    /// Number of patch upgrades.
+    patch: usize,
+
+    /// Number of deprecated packages.
+    deprecated: usize,
+}
+
+/// Dependency statistics for JSON output.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DependencyStatsJson {
+    /// Number of circular dependencies.
+    circular: usize,
+
+    /// Number of version conflicts.
+    conflicts: usize,
+}
+
+/// Version consistency statistics for JSON output.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VersionConsistencyStatsJson {
+    /// Number of inconsistencies.
+    inconsistencies: usize,
+}
+
+/// Breaking changes statistics for JSON output.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BreakingChangesStatsJson {
+    /// Total number of breaking changes.
+    total: usize,
+
+    /// Number of packages with breaking changes.
+    packages: usize,
+}
+
+/// A single audit section in JSON output.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AuditSectionJson {
+    /// Section name.
+    name: String,
+
+    /// Issues found in this section.
+    issues: Vec<AuditIssueJson>,
+}
+
+/// An individual issue in JSON output.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AuditIssueJson {
+    /// Issue severity.
+    severity: String,
+
+    /// Issue category.
+    category: String,
+
+    /// Issue title.
+    title: String,
+
+    /// Issue description.
+    description: String,
+
+    /// Additional context or recommendation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    suggestion: Option<String>,
+}
+
+/// Outputs the audit report in JSON format.
+///
+/// Creates a structured JSON response with audit data and outputs it
+/// using the Output handler.
+///
+/// # Arguments
+///
+/// * `results` - The audit results
+/// * `health_score` - Optional health score
+/// * `min_severity` - Minimum severity filter
+/// * `output` - Output handler
+///
+/// # Returns
+///
+/// Returns `Ok(())` if JSON output succeeds.
+///
+/// # Errors
+///
+/// Returns an error if JSON serialization or output fails.
+fn output_json_report(
+    results: &AuditResults,
+    health_score: Option<u8>,
+    min_severity: MinSeverity,
+    output: &Output,
+) -> Result<()> {
+    // Filter issues by severity
+    let filtered_issues = filter_issues_by_severity(results, min_severity);
+
+    // Build summary
+    let summary = build_json_summary(results, &filtered_issues);
+
+    // Build sections
+    let sections = build_json_sections(results, &filtered_issues);
+
+    // Create report structure
+    let report = AuditReportJson { health_score, summary, sections };
+
+    // Output as JSON response
+    let response = JsonResponse::success(report);
+    output.json(&response)?;
+
+    Ok(())
+}
+
+/// Builds the JSON summary from audit results.
+fn build_json_summary(results: &AuditResults, filtered_issues: &[&AuditIssue]) -> AuditSummaryJson {
+    // Count issues by severity
+    let critical =
+        filtered_issues.iter().filter(|i| matches!(i.severity, IssueSeverity::Critical)).count();
+    let warnings =
+        filtered_issues.iter().filter(|i| matches!(i.severity, IssueSeverity::Warning)).count();
+    let info = filtered_issues.iter().filter(|i| matches!(i.severity, IssueSeverity::Info)).count();
+
+    // Build upgrade stats if available
+    let upgrades = results.upgrades.as_ref().map(|u| UpgradeStatsJson {
+        total: u.total_upgrades,
+        major: u.major_upgrades,
+        minor: u.minor_upgrades,
+        patch: u.patch_upgrades,
+        deprecated: u.deprecated_packages.len(),
+    });
+
+    // Build dependency stats if available
+    let dependencies = results.dependencies.as_ref().map(|d| DependencyStatsJson {
+        circular: d.circular_dependencies.len(),
+        conflicts: d.version_conflicts.len(),
+    });
+
+    // Build version consistency stats if available
+    let version_consistency = results
+        .version_consistency
+        .as_ref()
+        .map(|v| VersionConsistencyStatsJson { inconsistencies: v.inconsistencies.len() });
+
+    // Build breaking changes stats if available
+    let breaking_changes = results.breaking_changes.as_ref().map(|b| BreakingChangesStatsJson {
+        total: b.total_breaking_changes,
+        packages: b.packages_with_breaking.len(),
+    });
+
+    AuditSummaryJson {
+        total_issues: filtered_issues.len(),
+        critical,
+        warnings,
+        info,
+        upgrades,
+        dependencies,
+        version_consistency,
+        breaking_changes,
+    }
+}
+
+/// Builds the JSON sections from audit results.
+fn build_json_sections(
+    results: &AuditResults,
+    filtered_issues: &[&AuditIssue],
+) -> Vec<AuditSectionJson> {
+    let mut sections = Vec::new();
+
+    // Upgrades section
+    if let Some(ref upgrades) = results.upgrades {
+        let section_issues: Vec<AuditIssueJson> = upgrades
+            .issues
+            .iter()
+            .filter(|issue| filtered_issues.iter().any(|fi| std::ptr::eq(*fi, *issue)))
+            .map(convert_issue_to_json)
+            .collect();
+
+        if !section_issues.is_empty() {
+            sections
+                .push(AuditSectionJson { name: "Upgrades".to_string(), issues: section_issues });
+        }
+    }
+
+    // Dependencies section
+    if let Some(ref dependencies) = results.dependencies {
+        let section_issues: Vec<AuditIssueJson> = dependencies
+            .issues
+            .iter()
+            .filter(|issue| filtered_issues.iter().any(|fi| std::ptr::eq(*fi, *issue)))
+            .map(convert_issue_to_json)
+            .collect();
+
+        if !section_issues.is_empty() {
+            sections.push(AuditSectionJson {
+                name: "Dependencies".to_string(),
+                issues: section_issues,
+            });
+        }
+    }
+
+    // Version consistency section
+    if let Some(ref version_consistency) = results.version_consistency {
+        let section_issues: Vec<AuditIssueJson> = version_consistency
+            .issues
+            .iter()
+            .filter(|issue| filtered_issues.iter().any(|fi| std::ptr::eq(*fi, *issue)))
+            .map(convert_issue_to_json)
+            .collect();
+
+        if !section_issues.is_empty() {
+            sections.push(AuditSectionJson {
+                name: "VersionConsistency".to_string(),
+                issues: section_issues,
+            });
+        }
+    }
+
+    // Breaking changes section
+    if let Some(ref breaking_changes) = results.breaking_changes {
+        let section_issues: Vec<AuditIssueJson> = breaking_changes
+            .issues
+            .iter()
+            .filter(|issue| filtered_issues.iter().any(|fi| std::ptr::eq(*fi, *issue)))
+            .map(convert_issue_to_json)
+            .collect();
+
+        if !section_issues.is_empty() {
+            sections.push(AuditSectionJson {
+                name: "BreakingChanges".to_string(),
+                issues: section_issues,
+            });
+        }
+    }
+
+    sections
+}
+
+/// Converts an AuditIssue to JSON format.
+fn convert_issue_to_json(issue: &AuditIssue) -> AuditIssueJson {
+    AuditIssueJson {
+        severity: format!("{:?}", issue.severity),
+        category: format!("{:?}", issue.category),
+        title: issue.title.clone(),
+        description: issue.description.clone(),
+        suggestion: issue.suggestion.clone(),
+    }
 }

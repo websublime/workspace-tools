@@ -18,7 +18,8 @@
 //!
 //! - `{version}`: The base version number (e.g., "1.2.3")
 //! - `{branch}`: The sanitized git branch name (e.g., "feat-oauth")
-//! - `{commit}`: The short git commit hash (e.g., "abc123d")
+//! - `{commit}`: The short git commit hash (e.g., "abc123d") - 7 characters
+//! - `{short_commit}`: Alias for `{commit}` - the short git commit hash (e.g., "abc123d")
 //! - `{timestamp}`: Unix timestamp in seconds (e.g., "1640000000")
 //!
 //! # Format Examples
@@ -205,10 +206,13 @@ impl SnapshotGenerator {
             result = result.replace("{branch}", &sanitized_branch);
         }
 
-        // Replace {commit}
-        if self.variables.contains(&SnapshotVariable::Commit) {
+        // Replace {commit} and {short_commit} (both use short hash)
+        if self.variables.contains(&SnapshotVariable::Commit)
+            || self.variables.contains(&SnapshotVariable::ShortCommit)
+        {
             let short_commit = Self::short_hash(&context.commit);
             result = result.replace("{commit}", short_commit);
+            result = result.replace("{short_commit}", short_commit);
         }
 
         // Replace {timestamp}
@@ -292,13 +296,14 @@ impl SnapshotGenerator {
                 "version" => SnapshotVariable::Version,
                 "branch" => SnapshotVariable::Branch,
                 "commit" => SnapshotVariable::Commit,
+                "short_commit" => SnapshotVariable::ShortCommit,
                 "timestamp" => SnapshotVariable::Timestamp,
                 _ => {
                     return Err(VersionError::SnapshotFailed {
                         package: "unknown".to_string(),
                         reason: format!(
                             "unsupported variable '{{{}}}' in snapshot format. \
-                             Supported variables: {{version}}, {{branch}}, {{commit}}, {{timestamp}}",
+                             Supported variables: {{version}}, {{branch}}, {{commit}}, {{short_commit}}, {{timestamp}}",
                             var_name
                         ),
                     });
@@ -485,7 +490,8 @@ impl SnapshotGenerator {
 ///
 /// - `Version`: The base version number (e.g., "1.2.3")
 /// - `Branch`: The sanitized git branch name (e.g., "feat-oauth")
-/// - `Commit`: The short git commit hash (e.g., "abc123d")
+/// - `Commit`: The short git commit hash (e.g., "abc123d") - 7 characters
+/// - `ShortCommit`: Alias for `Commit` - the short git commit hash (e.g., "abc123d")
 /// - `Timestamp`: Unix timestamp in seconds (e.g., "1640000000")
 ///
 /// # Examples
@@ -502,8 +508,10 @@ pub enum SnapshotVariable {
     Version,
     /// The sanitized git branch name (e.g., "feat-oauth").
     Branch,
-    /// The short git commit hash (e.g., "abc123d").
+    /// The short git commit hash (e.g., "abc123d") - 7 characters.
     Commit,
+    /// Alias for `Commit` - the short git commit hash (e.g., "abc123d") - 7 characters.
+    ShortCommit,
     /// Unix timestamp in seconds (e.g., "1640000000").
     Timestamp,
 }

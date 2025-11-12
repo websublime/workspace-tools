@@ -591,7 +591,23 @@ where
 
                 // Create FileChange
                 let change_type = FileChangeType::from_git_status(&git_file.status);
-                let file_change = FileChange::new(file_path, package_relative_path, change_type);
+                let mut file_change =
+                    FileChange::new(file_path.clone(), package_relative_path, change_type);
+
+                // Calculate lines added/deleted using git diff for working directory changes
+                // Only attempt to get diff stats for files that aren't deleted
+                // If diff stats fail (e.g., binary file, permission issues), leave as None
+                if !matches!(change_type, FileChangeType::Deleted) {
+                    match self.git_repo.get_file_diff_stats(git_file.path.as_str()) {
+                        Ok(diff_stats) => {
+                            file_change.lines_added = Some(diff_stats.lines_added);
+                            file_change.lines_deleted = Some(diff_stats.lines_deleted);
+                        }
+                        Err(_) => {
+                            // Diff stats not available (binary file, permission issues, etc.)
+                        }
+                    }
+                }
 
                 package_file_changes.entry(package_name).or_default().push(file_change);
             }
