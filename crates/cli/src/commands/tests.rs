@@ -3071,4 +3071,144 @@ custom/backups/
             );
         }
     }
+
+    // ========================================================================
+    // Global Parameters Tests (Review Corrections)
+    // ========================================================================
+
+    #[test]
+    fn test_determine_destination_respects_absolute_path() {
+        // Test that determine_destination returns absolute paths as-is
+        let absolute_path = if cfg!(windows) { "C:\\absolute\\path" } else { "/absolute/path" };
+
+        let result = determine_destination(
+            "https://github.com/org/repo.git",
+            Some(&PathBuf::from(absolute_path)),
+        );
+
+        assert!(result.is_ok());
+        let destination = result.unwrap();
+        assert!(destination.is_absolute());
+        assert_eq!(destination, PathBuf::from(absolute_path));
+    }
+
+    #[test]
+    fn test_determine_destination_returns_relative_path() {
+        // Test that determine_destination returns relative paths for repo names
+        let result = determine_destination("https://github.com/org/repo.git", None);
+
+        assert!(result.is_ok());
+        let destination = result.unwrap();
+        assert!(!destination.is_absolute());
+        assert_eq!(destination, PathBuf::from("repo"));
+    }
+
+    #[test]
+    fn test_determine_destination_with_relative_override() {
+        // Test that determine_destination returns relative path when provided
+        let result = determine_destination(
+            "https://github.com/org/repo.git",
+            Some(&PathBuf::from("my-custom-dir")),
+        );
+
+        assert!(result.is_ok());
+        let destination = result.unwrap();
+        assert!(!destination.is_absolute());
+        assert_eq!(destination, PathBuf::from("my-custom-dir"));
+    }
+
+    #[test]
+    fn test_convert_to_init_args_preserves_cli_overrides() {
+        // Test that CLI arguments take precedence in convert_to_init_args
+        let clone_args = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: Some("custom-changesets".to_string()),
+            environments: Some(vec!["dev".to_string(), "prod".to_string()]),
+            default_env: Some(vec!["prod".to_string()]),
+            strategy: Some("unified".to_string()),
+            registry: Some("https://custom-registry.com".to_string()),
+            config_format: Some("yaml".to_string()),
+            non_interactive: true,
+            skip_validation: false,
+            force: false,
+            depth: None,
+        };
+
+        let init_args = convert_to_init_args(&clone_args, None);
+
+        // Verify CLI args are preserved
+        assert_eq!(init_args.changeset_path, PathBuf::from("custom-changesets"));
+        assert_eq!(init_args.environments, Some(vec!["dev".to_string(), "prod".to_string()]));
+        assert_eq!(init_args.default_env, Some(vec!["prod".to_string()]));
+        assert_eq!(init_args.strategy, Some("unified".to_string()));
+        assert_eq!(init_args.registry, "https://custom-registry.com");
+        assert_eq!(init_args.config_format, Some("yaml".to_string()));
+        assert!(init_args.non_interactive);
+        assert!(!init_args.force); // Force should always be false for clone
+    }
+
+    #[test]
+    fn test_convert_to_init_args_force_always_false() {
+        // Test that force is always false regardless of clone args
+        let clone_args = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: None,
+            environments: None,
+            default_env: None,
+            strategy: None,
+            registry: None,
+            config_format: None,
+            non_interactive: false,
+            skip_validation: false,
+            force: true, // Even if clone has force=true
+            depth: None,
+        };
+
+        let init_args = convert_to_init_args(&clone_args, None);
+
+        // Force should always be false for init
+        assert!(!init_args.force);
+    }
+
+    #[test]
+    fn test_convert_to_init_args_non_interactive_preserved() {
+        // Test that non_interactive flag is preserved
+        let clone_args_interactive = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: None,
+            environments: None,
+            default_env: None,
+            strategy: None,
+            registry: None,
+            config_format: None,
+            non_interactive: false,
+            skip_validation: false,
+            force: false,
+            depth: None,
+        };
+
+        let init_args_interactive = convert_to_init_args(&clone_args_interactive, None);
+        assert!(!init_args_interactive.non_interactive);
+
+        let clone_args_non_interactive = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: None,
+            environments: None,
+            default_env: None,
+            strategy: None,
+            registry: None,
+            config_format: None,
+            non_interactive: true,
+            skip_validation: false,
+            force: false,
+            depth: None,
+        };
+
+        let init_args_non_interactive = convert_to_init_args(&clone_args_non_interactive, None);
+        assert!(init_args_non_interactive.non_interactive);
+    }
 }

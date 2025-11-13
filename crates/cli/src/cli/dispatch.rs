@@ -266,8 +266,13 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
         }
 
         Commands::Clone(args) => {
-            crate::commands::clone::execute_clone(args, config_path.map(PathBuf::as_path), format)
-                .await?;
+            crate::commands::clone::execute_clone(
+                args,
+                root,
+                config_path.map(PathBuf::as_path),
+                format,
+            )
+            .await?;
         }
     }
 

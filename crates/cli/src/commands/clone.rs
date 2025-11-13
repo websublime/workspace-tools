@@ -545,11 +545,11 @@ pub(crate) fn validate_destination(destination: &Path, force: bool) -> Result<()
 ///
 /// # Implementation Notes
 ///
-/// Currently uses `Repo::clone()` which doesn't support progress callbacks.
-/// The spinner provides visual feedback that the operation is in progress.
-///
-/// TODO: Story 11.2 - Enhance `sublime_git_tools` to support `RemoteCallbacks`
-/// for real-time progress tracking (receiving objects, resolving deltas).
+/// Uses `Repo::clone_with_progress()` from `sublime_git_tools` which supports
+/// progress callbacks for real-time progress tracking. The progress bar displays:
+/// - Receiving objects with percentage
+/// - Current/total object counts
+/// - Completion status
 pub(crate) fn clone_with_progress(
     url: &str,
     destination: &Path,
@@ -793,42 +793,50 @@ fn map_git_error(error: &sublime_git_tools::RepoError, url: &str) -> CliError {
 ///     // ... other fields
 /// };
 ///
-/// execute_clone(&args, OutputFormat::Human).await?;
+/// execute_clone(&args, Path::new("."), None, OutputFormat::Human).await?;
 /// ```
 pub async fn execute_clone(
     args: &CloneArgs,
-    _config_path: Option<&Path>,
+    root: &Path,
+    config_path: Option<&Path>,
     format: OutputFormat,
 ) -> Result<()> {
     // Step 1: Determine destination directory
     let destination = determine_destination(&args.url, args.destination.as_ref())?;
 
-    // Step 2: Validate destination
-    validate_destination(&destination, args.force)?;
+    // Step 2: Make destination relative to root (respecting --root global option)
+    // Absolute paths are used as-is, relative paths are joined with root
+    let final_destination =
+        if destination.is_absolute() { destination } else { root.join(destination) };
 
-    // Step 3: Remove existing destination if --force is set
-    if args.force && destination.exists() {
+    debug!("Clone destination: {} (root: {})", final_destination.display(), root.display());
+
+    // Step 3: Validate destination
+    validate_destination(&final_destination, args.force)?;
+
+    // Step 4: Remove existing destination if --force is set
+    if args.force && final_destination.exists() {
         let fs = FileSystemManager::new();
-        fs.remove(&destination).await.map_err(|e| {
+        fs.remove(&final_destination).await.map_err(|e| {
             CliError::io(format!(
                 "Failed to remove existing destination {}: {}",
-                destination.display(),
+                final_destination.display(),
                 e
             ))
         })?;
     }
 
-    // Step 4: Clone repository with progress
-    debug!("Cloning repository from {} to {}", args.url, destination.display());
-    let _repo = clone_with_progress(&args.url, &destination, args.depth, format)?;
-    info!("Repository cloned successfully to {}", destination.display());
+    // Step 5: Clone repository with progress
+    debug!("Cloning repository from {} to {}", args.url, final_destination.display());
+    let _repo = clone_with_progress(&args.url, &final_destination, args.depth, format)?;
+    info!("Repository cloned successfully to {}", final_destination.display());
 
-    // Step 5: Detect workspace configuration (Story 11.3)
-    // Note: config_path should be None here since we just cloned - can't have --config pointing to cloned repo yet
+    // Step 6: Detect workspace configuration (Story 11.3)
+    // Pass config_path parameter to allow custom config file usage
     debug!("Detecting workspace configuration in cloned repository");
-    let config_opt = crate::commands::find_and_load_config(&destination, None).await?;
+    let config_opt = crate::commands::find_and_load_config(&final_destination, config_path).await?;
 
-    // Step 6: Handle based on configuration existence (Story 11.4)
+    // Step 7: Handle based on configuration existence (Story 11.4)
     if let Some(_config) = config_opt {
         info!("Workspace configuration detected");
 
@@ -839,7 +847,7 @@ pub async fn execute_clone(
         } else {
             debug!("Validating workspace configuration");
             output_validation_starting(format);
-            let validation = validate_workspace(&destination).await?;
+            let validation = validate_workspace(&final_destination).await?;
 
             if !validation.is_valid {
                 // Validation failed - report errors
@@ -853,7 +861,7 @@ pub async fn execute_clone(
             true
         };
 
-        output_clone_complete(&destination, validated, format)?;
+        output_clone_complete(&final_destination, validated, format)?;
     } else {
         info!("No workspace configuration found, initializing workspace");
 
@@ -866,9 +874,9 @@ pub async fn execute_clone(
 
         // Execute init command
         debug!("Executing init to create workspace configuration");
-        crate::commands::init::execute_init(&init_args, &destination, format).await?;
+        crate::commands::init::execute_init(&init_args, &final_destination, format).await?;
 
-        output_clone_complete_with_init(&destination, format)?;
+        output_clone_complete_with_init(&final_destination, format)?;
     }
 
     Ok(())
