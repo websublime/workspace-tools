@@ -314,6 +314,68 @@ Empower Node.js developers with a robust, modern CLI tool that simplifies versio
 
 ---
 
+### Scenario I: Repository Cloning with Setup
+
+**Context:** Developer needs to clone a repository and start working immediately
+
+**Flow:**
+1. Developer runs: `workspace clone https://github.com/company/api.git ~/dev/api`
+2. CLI displays progress bar during clone operation
+3. CLI detects if workspace configuration exists:
+   - **Path 3a - Config exists**: 
+     - Validates configuration file
+     - Checks directory structure (.changesets/, .changesets/history/, .workspace-backups/)
+     - Verifies .gitignore entries
+     - Reports validation results
+   - **Path 3b - No config**: 
+     - Automatically starts init command
+     - Prompts for configuration (or uses flags if --non-interactive)
+     - Creates configuration file
+     - Creates directory structure
+     - Updates .gitignore
+4. CLI displays success message with next steps
+
+**Alternative Flow 1:** Developer omits destination
+```bash
+workspace clone https://github.com/company/api.git
+# Clones to ./api/ (using repository name)
+```
+
+**Alternative Flow 2:** Developer provides all init flags for non-interactive setup
+```bash
+workspace clone https://github.com/user/lib.git ./my-lib \
+  --non-interactive \
+  --strategy independent \
+  --environments "dev,staging,prod" \
+  --default-env "prod"
+# Clones and initializes without prompts
+```
+
+**Alternative Flow 3:** Destination already exists
+```bash
+workspace clone https://github.com/company/api.git ~/dev/api
+# Error: Destination already exists
+# Use --force to remove and re-clone
+```
+
+**Alternative Flow 4:** Validation fails on existing config
+```bash
+workspace clone https://github.com/team/broken.git ~/dev/broken
+# Clone succeeds
+# Validation detects:
+#   - Missing .changesets/history/ directory
+#   - Invalid strategy value in config
+# Reports errors with suggested fixes
+```
+
+**Expected Outcome:**
+- Repository cloned successfully to destination
+- Workspace configuration verified or created
+- Developer can immediately use workspace commands
+- Clear feedback on what was done and next steps
+
+---
+
 ## 6. Feature Requirements
 
 ### 6.1 Configuration Management
@@ -887,6 +949,55 @@ The changeset's `packages` field (Vec<String>) determines which packages are aff
 - ✓ Retrieves all commit info correctly
 - ✓ Handles merge commits
 - ✓ Works with all git versions
+
+#### F-095: Repository Clone Command
+**Priority:** P1 (Should Have)  
+**Description:** Clone repository and automatically setup workspace
+
+**Requirements:**
+- Clone repository from URL using git (HTTPS and SSH)
+- Support optional destination path (defaults to repository name)
+- Display progress bar during clone operation
+- Detect existing workspace configuration
+- Validate configuration if exists:
+  - Check config file is valid and parseable
+  - Verify .changesets/ directory exists
+  - Verify .changesets/history/ directory exists
+  - Verify .workspace-backups/ directory exists
+  - Check .gitignore has required entries
+- Run init automatically if no configuration:
+  - Support interactive mode (prompts)
+  - Support non-interactive mode (flags)
+  - Create all required directories
+  - Generate configuration file
+  - Update .gitignore
+- Handle clone failures gracefully (network, auth, disk space)
+- Support force flag to overwrite existing destination
+- Support shallow clone with depth parameter
+- Provide clear feedback on validation results
+- Suggest fixes for validation errors
+- Support JSON output for automation
+
+**Acceptance Criteria:**
+- ✓ Successfully clones from HTTPS URLs
+- ✓ Successfully clones from SSH URLs
+- ✓ Destination defaults to repository name if not provided
+- ✓ Progress bar shows clone progress
+- ✓ Detects existing configuration correctly
+- ✓ Validation runs all required checks
+- ✓ Validation errors show specific issues
+- ✓ Validation errors include suggested fixes
+- ✓ Init executes automatically when no config found
+- ✓ Interactive prompts work in init flow
+- ✓ Non-interactive mode works with all flags
+- ✓ Force flag removes existing destination
+- ✓ Depth flag creates shallow clone
+- ✓ Clear error messages for all failure scenarios
+- ✓ JSON output includes all relevant information
+- ✓ Works on Windows, Linux, and macOS
+- ✓ Handles network failures gracefully
+- ✓ Handles authentication errors clearly
+- ✓ Timeout handled by libgit2 (errors propagated)
 
 ---
 
@@ -2288,6 +2399,277 @@ Summary:
     "linesDeleted": 44
   }
 }
+```
+
+---
+
+#### `workspace clone`
+
+Clone a repository and setup workspace automatically.
+
+**Usage:**
+```bash
+workspace clone <URL> [DESTINATION] [OPTIONS]
+```
+
+**Arguments:**
+| Argument | Description | Required |
+|----------|-------------|----------|
+| `<URL>` | Repository URL (HTTPS or SSH) | Yes |
+| `[DESTINATION]` | Local path for cloned repository | No (defaults to repo name) |
+
+**Options:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--changeset-path <PATH>` | Changeset directory | `.changesets` |
+| `--environments <LIST>` | Comma-separated environments | Prompt |
+| `--default-env <LIST>` | Default environments | Prompt |
+| `--strategy <STRATEGY>` | Versioning strategy (independent\|unified) | Prompt |
+| `--registry <URL>` | NPM registry URL | `https://registry.npmjs.org` |
+| `--config-format <FORMAT>` | Config format (json\|toml\|yaml) | Prompt |
+| `--non-interactive` | No prompts, use defaults/flags | false |
+| `--skip-validation` | Skip validation if config exists | false |
+| `--force` | Remove existing destination | false |
+| `--depth <N>` | Create shallow clone with depth N | Full clone |
+
+**Note:** Options related to init (changeset-path, environments, strategy, etc.) are only used if the cloned repository does not have workspace configuration.
+
+**Examples:**
+```bash
+# Clone with default destination (./api/)
+workspace clone https://github.com/company/api.git
+
+# Clone to specific destination
+workspace clone https://github.com/company/api.git ~/dev/api
+
+# Clone private repo (SSH)
+workspace clone git@github.com:company/private-api.git
+
+# Clone with non-interactive setup
+workspace clone https://github.com/user/lib.git ./my-lib \
+  --non-interactive \
+  --strategy independent \
+  --environments "dev,staging,prod"
+
+# Clone and skip validation (faster)
+workspace clone https://github.com/company/api.git --skip-validation
+
+# Force clone (remove existing destination)
+workspace clone https://github.com/company/api.git --force
+
+# Shallow clone (faster, less history)
+workspace clone https://github.com/company/huge-repo.git --depth 1
+
+# Clone with JSON output (for scripts)
+workspace --format json clone https://github.com/company/api.git ./api
+```
+
+**Behavior:**
+
+1. **Clone Phase:**
+   - Validates URL format
+   - Checks destination doesn't exist (unless --force)
+   - Clones repository with progress bar
+   - Handles authentication (SSH keys, credentials)
+   - Reports clone errors (network, auth, disk space)
+
+2. **Detection Phase:**
+   - Searches for configuration file (repo.config.yaml/json/toml)
+   - Checks for workspace directories
+
+3. **Path A - Configuration Exists:**
+   - Validates configuration file can be parsed
+   - Checks all required directories exist
+   - Validates .gitignore has required entries
+   - Reports validation results:
+     - **Success**: Shows "Workspace is ready!"
+     - **Failure**: Lists errors with suggested fixes
+   - Skipped if --skip-validation flag used
+
+4. **Path B - No Configuration:**
+   - Automatically runs init command
+   - Uses interactive prompts or provided flags
+   - Creates configuration and directory structure
+   - Updates .gitignore
+   - Reports init success
+
+**Output (text format, config exists and valid):**
+```
+⠋ Cloning repository from https://github.com/company/api.git...
+Receiving objects: 100% (1523/1523), 2.4 MiB | 1.2 MiB/s, done.
+Resolving deltas: 100% (891/891), done.
+✓ Repository cloned successfully to ~/dev/api
+
+⠋ Detecting workspace configuration...
+✓ Configuration found: repo.config.yaml
+
+⠋ Validating workspace...
+✓ Configuration file is valid
+✓ Strategy: independent
+✓ Changesets directory exists (.changesets/)
+✓ History directory exists (.changesets/history/)
+✓ Backup directory exists (.workspace-backups/)
+✓ Git ignore configured correctly
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Workspace cloned and validated successfully!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Next steps:
+  cd ~/dev/api
+  workspace changeset list
+  workspace bump --dry-run
+```
+
+**Output (text format, no config, init runs):**
+```
+⠋ Cloning repository from https://github.com/user/lib.git...
+Receiving objects: 100% (342/342), 456 KiB | 228 KiB/s, done.
+✓ Repository cloned successfully to ./my-lib
+
+⠋ Detecting workspace configuration...
+ℹ No workspace configuration found
+
+Initializing workspace...
+
+Detected: single package project
+
+? Which environments do you want available? › 
+  ◯ development
+  ◉ staging
+  ◉ production
+  
+[... init prompts continue ...]
+
+✓ Workspace initialized successfully!
+
+Next steps:
+  cd ./my-lib
+  workspace changeset create
+```
+
+**Output (JSON format):**
+```json
+{
+  "success": true,
+  "url": "https://github.com/company/api.git",
+  "destination": "/Users/dev/api",
+  "config_exists": true,
+  "init_executed": false,
+  "validation": {
+    "is_valid": true,
+    "strategy": "independent",
+    "checks": [
+      {
+        "name": "Configuration file",
+        "passed": true,
+        "error": null,
+        "suggestion": null
+      },
+      {
+        "name": "Changesets directory",
+        "passed": true,
+        "error": null,
+        "suggestion": null
+      },
+      {
+        "name": "History directory",
+        "passed": true,
+        "error": null,
+        "suggestion": null
+      },
+      {
+        "name": "Backups directory",
+        "passed": true,
+        "error": null,
+        "suggestion": null
+      },
+      {
+        "name": ".gitignore configuration",
+        "passed": true,
+        "error": null,
+        "suggestion": null
+      }
+    ]
+  }
+}
+```
+
+**Exit Codes:**
+- `0` - Success (cloned and configured or validated)
+- `1` - Clone failed (network, auth, or URL invalid)
+- `2` - Destination exists (use --force to overwrite)
+- `3` - Validation failed (config exists but invalid)
+- `4` - Init failed (no config, init unsuccessful)
+
+**Error Examples:**
+
+**Network failure:**
+```
+Error: Failed to clone repository
+  Could not connect to https://github.com/company/api.git
+  
+  Possible causes:
+  - No internet connection
+  - Repository does not exist
+  - Server is down
+  
+  Suggestions:
+  - Check your internet connection
+  - Verify the repository URL is correct
+  - Try again later
+```
+
+**Authentication failure:**
+```
+Error: Failed to clone repository
+  Authentication required for git@github.com:company/private-api.git
+  
+  Possible causes:
+  - SSH key not configured
+  - SSH key not added to ssh-agent
+  - Wrong permissions on SSH key
+  
+  Suggestions:
+  - Generate SSH key: ssh-keygen -t ed25519 -C "your_email@example.com"
+  - Add to ssh-agent: ssh-add ~/.ssh/id_ed25519
+  - Add public key to GitHub: https://github.com/settings/keys
+```
+
+**Destination exists:**
+```
+Error: Destination already exists
+  Path ~/dev/api already exists
+  
+  Suggestions:
+  - Use a different destination path
+  - Remove existing directory: rm -rf ~/dev/api
+  - Use --force flag to overwrite: workspace clone <url> ~/dev/api --force
+```
+
+**Validation failure:**
+```
+✓ Repository cloned to ~/dev/broken
+✓ Configuration found: repo.config.json
+✗ Validation failed
+
+Errors found:
+  ✗ Missing directory: .changesets/history/
+     Suggestion: mkdir .changesets/history
+  
+  ✗ Invalid strategy in config: "wrongvalue"
+     Expected: "independent" or "unified"
+     Suggestion: Edit repo.config.json and fix strategy value
+  
+  ✗ Missing .gitignore entry: .workspace-backups/
+     Suggestion: Add '.workspace-backups/' to .gitignore
+
+To fix:
+  1. Run: workspace config validate
+     (for detailed validation report)
+  
+  2. Run: workspace init --force
+     (to reinitialize with correct configuration)
 ```
 
 ---

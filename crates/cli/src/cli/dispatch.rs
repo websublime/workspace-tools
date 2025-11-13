@@ -264,6 +264,10 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
         Commands::Version(args) => {
             version::execute_version(args, root, format)?;
         }
+
+        Commands::Clone(args) => {
+            crate::commands::clone::execute_clone(args).await?;
+        }
     }
 
     Ok(())

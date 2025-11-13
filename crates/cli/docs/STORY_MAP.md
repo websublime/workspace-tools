@@ -2988,6 +2988,522 @@ Each story must pass these gates before being considered "Done":
 
 ---
 
+## Epic 11: Repository Clone Feature
+
+**Phase**: 2.5  
+**Total Effort**: High  
+**Dependencies**: Epic 1 (Foundation), Epic 2 (Init)  
+**Goal**: Enable repository cloning with automatic workspace setup
+
+**Stories**: 6 stories total
+- Story 11.1: Core Clone Command Structure
+- Story 11.2: Git Clone with Progress Bar
+- Story 11.3: Configuration Detection and Validation
+- Story 11.4: Init Integration and Output
+- Story 11.5: End-to-End Testing
+- Story 11.6: Documentation
+
+---
+
+### Story 11.1: Core Clone Command Structure
+**Effort**: Low  
+**Priority**: P1 (Should Have)  
+**Aligns with**: PLAN.md Deliverable 2.5.1
+
+**As a** developer  
+**I want** the basic clone command structure and argument parsing  
+**So that** I can build the clone functionality on a solid foundation
+
+**Description**:
+Create the command structure, argument definitions, and basic destination logic for the clone command. This story focuses on the CLI interface and argument handling without implementing the actual clone or configuration logic.
+
+**Tasks**:
+1. Create src/commands/clone.rs module
+   - Add module to commands/mod.rs
+   - Setup basic file structure
+   - **Effort**: Minimal
+
+2. Define CloneArgs struct
+   - URL (required positional)
+   - Destination (optional positional)
+   - All configuration override flags (changeset_path, environments, etc.)
+   - Force flag
+   - Depth flag
+   - Non-interactive flag
+   - Skip-validation flag
+   - Add help documentation for each field
+   - **Effort**: Low
+
+3. Add Clone variant to Commands enum
+   - Add to src/cli/commands.rs
+   - Wire up dispatch in main.rs
+   - **Effort**: Minimal
+
+4. Implement determine_destination()
+   - Extract repository name from URL
+   - Handle HTTPS URLs (https://...)
+   - Handle SSH URLs (git@...)
+   - Default to repo name if destination not provided
+   - Validate destination path
+   - **Effort**: Low
+
+5. Implement destination validation
+   - Check if destination exists
+   - Return error if exists and not --force
+   - Handle --force flag (prepare for removal)
+   - **Effort**: Low
+
+6. Write unit tests
+   - Test URL parsing (HTTPS)
+   - Test URL parsing (SSH)
+   - Test destination defaulting
+   - Test validation logic
+   - Test argument parsing
+   - **Effort**: Low
+
+**Acceptance Criteria**:
+- [ ] CloneArgs struct compiles with all fields
+- [ ] Command appears in `workspace --help`
+- [ ] Command appears in `workspace clone --help`
+- [ ] Help text is comprehensive and clear
+- [ ] determine_destination() extracts repo name correctly from HTTPS URLs
+- [ ] determine_destination() extracts repo name correctly from SSH URLs
+- [ ] Destination defaults to repo name when omitted
+- [ ] Validation detects existing destination
+- [ ] Force flag bypasses existence check
+- [ ] Unit tests pass with 100% coverage
+- [ ] Clippy passes without warnings
+
+**Definition of Done**:
+- [ ] All tasks completed
+- [ ] All tests pass
+- [ ] Code reviewed and approved
+- [ ] Clippy clean
+
+**Dependencies**: Epic 1 (Foundation)
+
+**Blocked By**: None
+
+**Blocks**: Story 11.2
+
+---
+
+### Story 11.2: Git Clone with Progress Bar
+**Effort**: Medium  
+**Priority**: P1 (Should Have)  
+**Aligns with**: PLAN.md Deliverable 2.5.2
+
+**As a** user  
+**I want** to see progress while cloning large repositories  
+**So that** I know the operation is working and not stalled
+
+**Description**:
+Implement the actual Git clone functionality using `sublime_git_tools`, with progress tracking via `RemoteCallbacks` and visual feedback using the existing `crates/cli/src/output/progress` module.
+
+**Tasks**:
+1. Implement clone_with_progress()
+   - Use sublime_git_tools::Repo::clone()
+   - Setup RemoteCallbacks for progress tracking
+   - Use output::progress::ProgressBar from existing module
+   - Update progress bar in transfer_progress callback
+   - Handle clone completion
+   - **Effort**: Medium
+
+2. Implement progress bar display
+   - Use ProgressBar::new_with_format(total_objects, format)
+   - Show receiving objects with percentage via set_position()
+   - Display current/total objects via set_message()
+   - Show resolving deltas phase
+   - Finish with success message using finish_with_message()
+   - Automatic suppression in JSON output mode (handled by progress module)
+   - **Effort**: Low
+
+3. Implement depth flag support
+   - Add depth parameter to clone options
+   - Use Repo::clone_with_options() for shallow clone
+   - Pass depth to libgit2 via FetchOptions
+   - Handle shallow clone specifics
+   - **Effort**: Low
+
+4. Implement force flag execution
+   - Remove existing destination if --force
+   - Use FileSystemManager::remove_dir_all()
+   - Handle removal errors
+   - **Effort**: Minimal
+
+5. Implement error handling
+   - Network errors (connection failed, timeout)
+   - Authentication errors (invalid credentials, SSH key issues)
+   - Disk space errors
+   - Permission errors
+   - Map libgit2 errors to CliError
+   - Provide actionable error messages
+   - **Effort**: Medium
+
+6. Write unit tests
+   - Mock git operations (using test fixtures)
+   - Test progress callback logic
+   - Test depth flag
+   - Test force flag removal
+   - Test error scenarios
+   - **Effort**: Medium
+
+**Acceptance Criteria**:
+- [ ] Clones HTTPS URLs successfully
+- [ ] Clones SSH URLs successfully
+- [ ] Progress bar displays during clone
+- [ ] Progress shows receiving objects percentage
+- [ ] Progress shows resolving deltas
+- [ ] Progress bar finishes with success message
+- [ ] No progress bar in JSON mode
+- [ ] Depth flag creates shallow clone with correct depth
+- [ ] Force flag removes existing destination
+- [ ] Network errors have clear messages
+- [ ] Authentication errors have clear messages
+- [ ] Error messages suggest fixes
+- [ ] Unit tests pass with 100% coverage
+- [ ] Clippy passes without warnings
+- [ ] Performance overhead < 5% vs raw git clone
+
+**Definition of Done**:
+- [ ] All tasks completed
+- [ ] All tests pass
+- [ ] Error handling comprehensive
+- [ ] Code reviewed and approved
+- [ ] Performance validated
+
+**Dependencies**: Story 11.1, sublime_git_tools crate
+
+**Blocked By**: Story 11.1
+
+**Blocks**: Story 11.3
+
+---
+
+### Story 11.3: Configuration Detection and Validation
+**Effort**: Medium  
+**Priority**: P1 (Should Have)  
+**Aligns with**: PLAN.md Deliverable 2.5.3
+
+**As a** user  
+**I want** the clone command to detect and validate workspace configuration  
+**So that** I know if the cloned repository is properly configured
+
+**Description**:
+Implement configuration detection using `sublime_pkg_tools::config::load_config_from_file()` and validation using the `Configurable::validate()` trait, along with additional workspace structure checks.
+
+**Tasks**:
+1. Implement detect_workspace_config()
+   - Use sublime_pkg_tools::config::load_config_from_file()
+   - Try package-tools.toml
+   - Try .sublime/package-tools.toml
+   - Return Option<PackageToolsConfig>
+   - **Effort**: Low
+
+2. Implement validate_workspace()
+   - Load configuration using detect_workspace_config()
+   - Call config.validate() for structure validation
+   - Check .changesets/ directory exists
+   - Check .changesets/history/ directory exists
+   - Check .workspace-backups/ directory exists
+   - Check .gitignore has required entries
+   - **Effort**: Medium
+
+3. Create ValidationResult types
+   - ValidationResult struct with is_valid, strategy, checks
+   - ValidationCheck struct with name, passed, error, suggestion
+   - Implement Display for user-friendly output
+   - **Effort**: Low
+
+4. Generate validation reports
+   - List all checks with status
+   - Show errors for failed checks
+   - Provide actionable suggestions
+   - Format for human output
+   - Format for JSON output
+   - **Effort**: Low
+
+5. Write unit tests
+   - Test detection with config present
+   - Test detection with config absent
+   - Test validation with valid config
+   - Test validation with invalid config
+   - Test validation with missing directories
+   - Test validation with missing .gitignore entries
+   - Test suggestion generation
+   - **Effort**: Medium
+
+**Acceptance Criteria**:
+- [ ] Detects package-tools.toml correctly
+- [ ] Detects .sublime/package-tools.toml correctly
+- [ ] Returns None when no config found
+- [ ] Calls config.validate() on loaded config
+- [ ] Validates all required directories
+- [ ] Validates .gitignore entries
+- [ ] ValidationResult shows all check results
+- [ ] Failed checks have error messages
+- [ ] Failed checks have actionable suggestions
+- [ ] Human output is clear and formatted
+- [ ] JSON output includes all information
+- [ ] Unit tests pass with 100% coverage
+- [ ] Clippy passes without warnings
+- [ ] Validation completes < 50ms
+
+**Definition of Done**:
+- [ ] All tasks completed
+- [ ] All tests pass
+- [ ] Uses existing config infrastructure
+- [ ] Code reviewed and approved
+- [ ] Performance validated
+
+**Dependencies**: Story 11.2, sublime_pkg_tools::config
+
+**Blocked By**: Story 11.2
+
+**Blocks**: Story 11.4
+
+---
+
+### Story 11.4: Init Integration and Output
+**Effort**: Medium  
+**Priority**: P1 (Should Have)  
+**Aligns with**: PLAN.md Deliverable 2.5.4
+
+**As a** user  
+**I want** automatic workspace initialization when cloning unconfigured repositories  
+**So that** I can start working immediately without manual setup
+
+**Description**:
+Integrate the init command to run automatically when no configuration is detected, implement configuration merge logic (CLI > workspace > defaults), and create comprehensive output formatting for all scenarios.
+
+**Tasks**:
+1. Implement convert_to_init_args()
+   - Implement configuration merge logic (CLI > workspace > defaults)
+   - Merge changeset_path
+   - Merge environments
+   - Merge default_env
+   - Merge strategy
+   - Merge registry
+   - Merge config_format
+   - Set force to false (never force during clone)
+   - Pass through non_interactive flag
+   - **Effort**: Low
+
+2. Integrate execute_init()
+   - Call when no config detected
+   - Pass converted InitArgs
+   - Handle init success
+   - Handle init failure
+   - Propagate errors clearly
+   - **Effort**: Low
+
+3. Implement complete execute_clone()
+   - Clone phase (from Story 11.2)
+   - Detection phase (from Story 11.3)
+   - Validation phase (if config exists and not --skip-validation)
+   - Init phase (if no config)
+   - Output phase
+   - **Effort**: Low
+
+4. Implement output formatting
+   - output_init_starting()
+   - output_validation_starting()
+   - output_validation_success()
+   - output_validation_errors()
+   - output_clone_complete()
+   - output_clone_complete_with_init()
+   - JSON output with CloneResponse struct
+   - **Effort**: Medium
+
+5. Write unit tests
+   - Test convert_to_init_args merge logic
+   - Test init called when no config
+   - Test validation called when config exists
+   - Test validation skipped with --skip-validation
+   - Test output formatting (text)
+   - Test output formatting (JSON)
+   - **Effort**: Medium
+
+**Acceptance Criteria**:
+- [ ] Init runs when no config detected
+- [ ] Init respects non-interactive flag
+- [ ] Init uses merged configuration (CLI > workspace > defaults)
+- [ ] Validation runs when config exists
+- [ ] Validation skipped with --skip-validation flag
+- [ ] Text output is clear and helpful
+- [ ] Success message includes next steps
+- [ ] Validation report shows all checks
+- [ ] Error messages suggest fixes
+- [ ] JSON output includes all information (destination, config_detected, validated, initialized)
+- [ ] Unit tests pass with 100% coverage
+- [ ] Clippy passes without warnings
+
+**Definition of Done**:
+- [ ] All tasks completed
+- [ ] All tests pass
+- [ ] Init integration works seamlessly
+- [ ] Code reviewed and approved
+- [ ] Output tested in all modes
+
+**Dependencies**: Story 11.3, Story 2.1 (Init Command)
+
+**Blocked By**: Story 11.3
+
+**Blocks**: Story 11.5
+
+---
+
+### Story 11.5: End-to-End Testing
+**Effort**: High  
+**Priority**: P1 (Should Have)
+
+**As a** developer  
+**I want** comprehensive end-to-end tests for the clone command  
+**So that** I can ensure the entire flow works correctly across platforms
+
+**Description**:
+Create comprehensive E2E tests that verify the complete clone workflow including actual git operations, file system operations, and cross-platform compatibility.
+
+**Tasks**:
+1. Setup E2E test infrastructure
+   - Create tests/e2e_clone.rs
+   - Setup test fixtures with real git repositories
+   - Create helper functions for test repos
+   - Setup cleanup utilities
+   - **Effort**: Medium
+
+2. Write happy path E2E tests
+   - Test clone with HTTPS URL
+   - Test clone with SSH URL (if SSH available)
+   - Test clone with destination specified
+   - Test clone with destination omitted
+   - Test clone with no config (triggers init)
+   - Test clone with valid config (passes validation)
+   - Test clone with invalid config (fails validation)
+   - **Effort**: High
+
+3. Write edge case E2E tests
+   - Test clone with --force (removes existing)
+   - Test clone with --depth (shallow)
+   - Test clone with --skip-validation
+   - Test clone with --non-interactive
+   - Test clone with all config override flags
+   - Test destination exists without --force (should fail)
+   - **Effort**: Medium
+
+4. Write error scenario E2E tests
+   - Test invalid URL (should fail with clear error)
+   - Test network failure (mock network error)
+   - Test permission error (write-protected destination)
+   - Test invalid config in cloned repo
+   - Test missing directories in cloned repo
+   - **Effort**: Medium
+
+5. Write cross-platform tests
+   - Conditional tests for Windows-specific behavior
+   - Conditional tests for Unix-specific behavior
+   - Test path handling on both platforms
+   - **Effort**: Low
+
+6. Write output format tests
+   - Test text output in various scenarios
+   - Test JSON output in various scenarios
+   - Test JSON compact output
+   - Verify output structure and content
+   - **Effort**: Low
+
+**Acceptance Criteria**:
+- [ ] E2E tests use real git operations
+- [ ] Happy path tests all pass
+- [ ] Edge case tests all pass
+- [ ] Error scenario tests all pass
+- [ ] Tests work on Windows
+- [ ] Tests work on Linux
+- [ ] Tests work on macOS
+- [ ] Text output validated in tests
+- [ ] JSON output validated in tests
+- [ ] Test fixtures properly cleaned up
+- [ ] Tests run in < 30 seconds total
+- [ ] Tests can run in parallel
+- [ ] E2E test coverage > 90%
+- [ ] All tests pass on CI
+
+**Definition of Done**:
+- [ ] All tasks completed
+- [ ] All E2E tests pass locally
+- [ ] All E2E tests pass on CI
+- [ ] Cross-platform tests validated
+- [ ] Code reviewed and approved
+- [ ] Test fixtures documented
+
+**Dependencies**: Story 11.4
+
+**Blocked By**: Story 11.4
+
+**Blocks**: None
+
+---
+
+### Story 11.6: Clone Command Documentation
+**Effort**: Low  
+**Priority**: P1 (Should Have)
+
+**As a** user  
+**I want** comprehensive documentation for the clone command  
+**So that** I understand all options and behaviors
+
+**Description**:
+Create complete documentation for the clone command including examples, error scenarios, and best practices.
+
+**Tasks**:
+1. Update CLI.md or README.md
+   - Add clone command reference
+   - Document all arguments and flags
+   - Provide usage examples
+   - Document behavior paths (with/without config)
+   - **Effort**: Low
+
+2. Add error scenario examples
+   - Network failure example
+   - Authentication failure example
+   - Destination exists example
+   - Validation failure example
+   - **Effort**: Minimal
+
+3. Add integration examples
+   - CI/CD script example
+   - Interactive workflow example
+   - Non-interactive workflow example
+   - **Effort**: Minimal
+
+4. Update help text
+   - Ensure --help is comprehensive
+   - Add examples to long help
+   - Verify all flags documented
+   - **Effort**: Minimal
+
+**Acceptance Criteria**:
+- [ ] Command reference added to docs
+- [ ] All flags documented
+- [ ] Examples cover common use cases
+- [ ] Error scenarios documented
+- [ ] Help text is comprehensive
+- [ ] Examples are tested and work
+
+**Definition of Done**:
+- [ ] Documentation complete
+- [ ] Examples verified
+- [ ] Help text reviewed
+- [ ] PR approved
+
+**Dependencies**: Story 11.5
+
+**Blocked By**: Story 11.5
+
+**Blocks**: None
+
+---
+
 ## How to Use This Story Map
 
 ### For Planning

@@ -43,6 +43,7 @@ pub mod audit;
 pub mod bump;
 pub mod changes;
 pub mod changeset;
+pub mod clone;
 pub mod config;
 pub mod init;
 pub mod upgrade;
@@ -52,8 +53,6 @@ pub mod version;
 mod tests;
 
 // TODO: will be implemented in subsequent stories
-// Story 4.2+ will implement remaining changeset commands (update, list, show, delete, history, check)
-// Story 5.2 will implement version bump execution
-// Story 6.2 will implement upgrade apply command
-// Story 6.3 will implement upgrade backups commands
-// Story 7.2+ will implement specific audit sections (upgrades, dependencies, version-consistency, breaking-changes)
+// Story 11.2 will implement Git clone with progress bar
+// Story 11.3 will implement configuration detection and validation
+// Story 11.4 will implement init integration and output

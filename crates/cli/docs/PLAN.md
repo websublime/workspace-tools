@@ -1145,6 +1145,619 @@ pub async fn execute_changeset_list(
 
 ---
 
+## Phase 2.5: Repository Clone Feature (Week 7.5)
+
+### Objective
+Implement repository cloning with automatic workspace setup to improve developer onboarding.
+
+### Deliverables
+
+#### 2.5.1 Core Clone Implementation
+
+**Tasks:**
+- [ ] Create `src/commands/clone.rs` module structure
+- [ ] Define CloneArgs struct with all arguments
+- [ ] Implement execute_clone function skeleton
+- [ ] Add Clone command to Commands enum
+- [ ] Add dispatch handler for clone command
+- [ ] Implement basic error types for clone operations
+
+**Files:**
+```
+src/commands/
+└── clone.rs                     # Clone command implementation
+```
+
+**Command Structure:**
+```rust
+#[derive(Debug, Args)]
+pub struct CloneArgs {
+    /// Repository URL to clone from
+    #[arg(value_name = "URL")]
+    pub url: String,
+
+    /// Destination path (optional, defaults to repo name)
+    #[arg(value_name = "DESTINATION")]
+    pub destination: Option<PathBuf>,
+
+    // Init-related flags (used if no config found)
+    // These override workspace config if specified
+    
+    /// Changeset path (overrides workspace config, defaults to ".changesets")
+    #[arg(long, value_name = "PATH")]
+    pub changeset_path: Option<String>,
+
+    /// Available environments (overrides workspace config)
+    #[arg(long, value_delimiter = ',')]
+    pub environments: Option<Vec<String>>,
+
+    /// Default environments (overrides workspace config)
+    #[arg(long, value_delimiter = ',')]
+    pub default_env: Option<Vec<String>>,
+
+    /// Versioning strategy (overrides workspace config: "independent" or "unified")
+    #[arg(long)]
+    pub strategy: Option<String>,
+
+    /// Registry URL (overrides workspace config, defaults to "https://registry.npmjs.org")
+    #[arg(long, value_name = "URL")]
+    pub registry: Option<String>,
+
+    /// Config format (overrides workspace config: "toml", "yaml", or "json")
+    #[arg(long)]
+    pub config_format: Option<String>,
+
+    /// Skip interactive prompts
+    #[arg(long)]
+    pub non_interactive: bool,
+
+    /// Skip configuration validation
+    #[arg(long)]
+    pub skip_validation: bool,
+
+    /// Overwrite destination if it exists
+    #[arg(long)]
+    pub force: bool,
+
+    /// Create a shallow clone with specified depth
+    #[arg(long)]
+    pub depth: Option<u32>,
+}
+```
+
+**Quality Gates:**
+- ✅ Command structure compiles
+- ✅ Arguments parse correctly
+- ✅ Help text is comprehensive
+- ✅ Clippy passes without warnings
+
+#### 2.5.2 Git Clone Integration with Progress
+
+**Tasks:**
+- [ ] Implement git clone using sublime_git_tools
+- [ ] Add progress callback using RemoteCallbacks
+- [ ] Use existing output::progress::ProgressBar module for visual feedback
+- [ ] Handle destination path logic (default to repo name)
+- [ ] Implement force flag (remove existing destination)
+- [ ] Implement depth flag (shallow clone)
+- [ ] Handle clone errors (network, auth, disk space)
+- [ ] Write unit tests for clone logic
+
+**Implementation:**
+```rust
+use sublime_pkg_tools::config::{load_config_from_file, PackageToolsConfig};
+use sublime_git_tools::Repo;
+use sublime_standard_tools::filesystem::FileSystemManager;
+
+pub async fn execute_clone(
+    args: &CloneArgs,
+    _root: &Path,
+    format: OutputFormat,
+) -> Result<()> {
+    let fs = FileSystemManager::new();
+    
+    // 1. Determine destination (use repo name if not provided)
+    let destination = determine_destination(&args.url, &args.destination)?;
+    
+    // 2. Check destination doesn't exist (unless --force)
+    if fs.exists(&destination).await && !args.force {
+        return Err(CliError::validation(format!(
+            "Destination already exists: {}. Use --force to overwrite.",
+            destination.display()
+        )));
+    }
+    
+    // 3. Remove destination if --force
+    if fs.exists(&destination).await && args.force {
+        fs.remove_dir_all(&destination).await?;
+    }
+    
+    // 4. Clone with progress bar
+    let _repo = clone_with_progress(&args.url, &destination, args.depth, format)?;
+    
+    // 5. Detect and validate/init (continues in deliverable 2.5.3 and 2.5.4)
+    // See deliverable 2.5.4 for complete implementation
+    
+    Ok(())
+}
+
+fn clone_with_progress(
+    url: &str,
+    destination: &Path,
+    depth: Option<u32>,
+    format: OutputFormat,
+) -> Result<Repo> {
+    use crate::output::progress::ProgressBar;
+    
+    // Create progress bar using existing module
+    // Automatically suppressed in JSON mode, non-TTY, or quiet mode
+    let progress = ProgressBar::new_with_format(100, format);
+    
+    // Setup RemoteCallbacks
+    let mut callbacks = RemoteCallbacks::new();
+    callbacks.transfer_progress(|stats| {
+        // Update progress bar with current status
+        let total = stats.total_objects();
+        let received = stats.received_objects();
+        
+        if total > 0 {
+            let percentage = (received * 100) / total;
+            progress.set_position(percentage);
+            progress.set_message(format!(
+                "Receiving objects: {}% ({}/{})",
+                percentage,
+                received,
+                total
+            ));
+        }
+        
+        true
+    });
+    
+    // Perform clone
+    let repo = if let Some(depth) = depth {
+        // Shallow clone
+        Repo::clone_with_options(url, destination, depth, callbacks)?
+    } else {
+        // Full clone
+        Repo::clone(url, destination.to_str().unwrap_or(""))?
+    };
+    
+    // Finish progress bar with success message
+    progress.finish_with_message("✓ Clone complete");
+    
+    Ok(repo)
+}
+```
+
+**Quality Gates:**
+- ✅ Clone works with HTTPS URLs
+- ✅ Clone works with SSH URLs
+- ✅ Progress bar updates correctly
+- ✅ Destination defaults to repo name
+- ✅ Force flag works correctly
+- ✅ Depth flag creates shallow clone
+- ✅ Error handling is comprehensive
+- ✅ Performance < 5% overhead vs raw git clone
+
+#### 2.5.3 Configuration Detection and Validation
+
+**Tasks:**
+- [ ] Implement config file detection (yaml/json/toml)
+- [ ] Implement workspace structure validation
+- [ ] Create ValidationResult and ValidationCheck types
+- [ ] Validate config file can be parsed
+- [ ] Validate .changesets/ directory exists
+- [ ] Validate .changesets/history/ directory exists
+- [ ] Validate .workspace-backups/ directory exists
+- [ ] Validate .gitignore entries
+- [ ] Generate validation report with suggestions
+- [ ] Write comprehensive validation tests
+
+**Implementation:**
+```rust
+use sublime_pkg_tools::config::{load_config_from_file, PackageToolsConfig};
+use sublime_standard_tools::config::Configurable;
+
+/// Detects if workspace configuration exists in the cloned repository.
+///
+/// Uses `sublime_pkg_tools::config::load_config_from_file` to check for configuration.
+async fn detect_workspace_config(root: &Path) -> Result<Option<PackageToolsConfig>> {
+    // Try to load configuration from standard locations
+    // load_config_from_file looks for: package-tools.toml, .sublime/package-tools.toml
+    match load_config_from_file(root.join("package-tools.toml")).await {
+        Ok(config) => Ok(Some(config)),
+        Err(_) => {
+            // Try alternate location
+            match load_config_from_file(root.join(".sublime/package-tools.toml")).await {
+                Ok(config) => Ok(Some(config)),
+                Err(_) => Ok(None),
+            }
+        }
+    }
+}
+
+/// Validates workspace configuration using built-in validation.
+///
+/// Uses the `Configurable::validate()` method from the loaded configuration.
+async fn validate_workspace(root: &Path) -> Result<ValidationResult> {
+    let mut checks = Vec::new();
+    let fs = FileSystemManager::new();
+    
+    // Check 1: Load and validate configuration
+    let config_result = detect_workspace_config(root).await?;
+    
+    let (config_check, config_opt) = match config_result {
+        Some(config) => {
+            // Config loaded, now validate it
+            match config.validate() {
+                Ok(()) => (
+                    ValidationCheck {
+                        name: "Configuration file".to_string(),
+                        passed: true,
+                        error: None,
+                        suggestion: None,
+                    },
+                    Some(config),
+                ),
+                Err(e) => (
+                    ValidationCheck {
+                        name: "Configuration validation".to_string(),
+                        passed: false,
+                        error: Some(format!("Validation failed: {}", e)),
+                        suggestion: Some("Fix configuration errors or run 'workspace init --force'".to_string()),
+                    },
+                    Some(config),
+                ),
+            }
+        }
+        None => (
+            ValidationCheck {
+                name: "Configuration file".to_string(),
+                passed: false,
+                error: Some("Configuration file not found".to_string()),
+                suggestion: Some("Run 'workspace init' to create configuration".to_string()),
+            },
+            None,
+        ),
+    };
+    checks.push(config_check);
+    
+    // Check 2: Changeset directory
+    let changeset_path = config_opt
+        .as_ref()
+        .map(|c| &c.changeset.path)
+        .unwrap_or(&".changesets".to_string());
+    
+    let changeset_dir = root.join(changeset_path);
+    checks.push(ValidationCheck {
+        name: "Changeset directory".to_string(),
+        passed: fs.exists(&changeset_dir).await,
+        error: if !fs.exists(&changeset_dir).await {
+            Some(format!("Directory '{}' does not exist", changeset_path))
+        } else {
+            None
+        },
+        suggestion: Some("Run 'workspace init --force' to create directory".to_string()),
+    });
+    
+    // Check 3: History directory
+    let history_path = config_opt
+        .as_ref()
+        .map(|c| &c.changeset.history_path)
+        .unwrap_or(&".changesets/history".to_string());
+    
+    let history_dir = root.join(history_path);
+    checks.push(ValidationCheck {
+        name: "History directory".to_string(),
+        passed: fs.exists(&history_dir).await,
+        error: if !fs.exists(&history_dir).await {
+            Some(format!("Directory '{}' does not exist", history_path))
+        } else {
+            None
+        },
+        suggestion: Some("Run 'workspace init --force' to create directory".to_string()),
+    });
+    
+    // Check 4: Backup directory
+    let backup_path = config_opt
+        .as_ref()
+        .map(|c| &c.upgrade.backup.path)
+        .unwrap_or(&".workspace-backups".to_string());
+    
+    let backup_dir = root.join(backup_path);
+    checks.push(ValidationCheck {
+        name: "Backup directory".to_string(),
+        passed: fs.exists(&backup_dir).await,
+        error: if !fs.exists(&backup_dir).await {
+            Some(format!("Directory '{}' does not exist", backup_path))
+        } else {
+            None
+        },
+        suggestion: Some("Run 'workspace init --force' to create directory".to_string()),
+    });
+    
+    // Check 5: .gitignore entries
+    let gitignore_path = root.join(".gitignore");
+    let gitignore_check = if fs.exists(&gitignore_path).await {
+        let content = fs.read_to_string(&gitignore_path).await?;
+        let has_changesets = content.contains(changeset_path);
+        let has_backups = content.contains(backup_path);
+        
+        ValidationCheck {
+            name: ".gitignore entries".to_string(),
+            passed: has_changesets && has_backups,
+            error: if !has_changesets || !has_backups {
+                Some("Missing .gitignore entries for workspace directories".to_string())
+            } else {
+                None
+            },
+            suggestion: Some("Run 'workspace init --force' to update .gitignore".to_string()),
+        }
+    } else {
+        ValidationCheck {
+            name: ".gitignore file".to_string(),
+            passed: false,
+            error: Some(".gitignore file does not exist".to_string()),
+            suggestion: Some("Create .gitignore with workspace directories".to_string()),
+        }
+    };
+    checks.push(gitignore_check);
+    
+    let is_valid = checks.iter().all(|c| c.passed);
+    let strategy = config_opt.map(|c| c.version.strategy);
+    
+    Ok(ValidationResult {
+        is_valid,
+        strategy,
+        checks,
+    })
+}
+
+#[derive(Debug)]
+struct ValidationResult {
+    is_valid: bool,
+    strategy: Option<VersioningStrategy>,
+    checks: Vec<ValidationCheck>,
+}
+
+#[derive(Debug)]
+struct ValidationCheck {
+    name: String,
+    passed: bool,
+    error: Option<String>,
+    suggestion: Option<String>,
+}
+```
+
+**Quality Gates:**
+- ✅ Detects all config formats correctly
+- ✅ Validation runs all required checks
+- ✅ Validation reports are clear
+- ✅ Suggestions are actionable
+- ✅ Performance < 50ms for validation
+- ✅ 100% test coverage
+
+#### 2.5.4 Init Integration and Output
+
+**Tasks:**
+- [ ] Implement conversion from CloneArgs to InitArgs
+- [ ] Call execute_init when no config detected
+- [ ] Handle init success/failure
+- [ ] Implement output formatting (text and JSON)
+- [ ] Create CloneResponse struct for JSON output
+- [ ] Implement success messages with next steps
+- [ ] Implement error messages with suggestions
+- [ ] Write integration tests for full clone flow
+
+**Implementation:**
+```rust
+pub async fn execute_clone(
+    args: &CloneArgs,
+    _root: &Path,
+    format: OutputFormat,
+) -> Result<()> {
+    // ... (clone phase from 2.5.2) ...
+    
+    // Detection phase - returns Some(config) if found, None otherwise
+    let config_opt = detect_workspace_config(&destination).await?;
+    
+    if config_opt.is_none() {
+        // No config - run init with merged settings
+        output_init_starting(format)?;
+        
+        // Convert CloneArgs to InitArgs with defaults
+        let init_args = convert_to_init_args(args, None);
+        execute_init(&init_args, &destination, format).await?;
+        
+        output_clone_complete_with_init(&destination, format)?;
+        
+    } else {
+        // Config exists - validate (unless --skip-validation)
+        if !args.skip_validation {
+            output_validation_starting(format)?;
+            
+            let validation = validate_workspace(&destination).await?;
+            
+            if validation.is_valid {
+                output_validation_success(&validation, &destination, format)?;
+            } else {
+                output_validation_errors(&validation, &destination, format)?;
+                return Err(CliError::validation(
+                    "Workspace configuration is invalid"
+                ));
+            }
+        }
+        
+        output_clone_complete(&destination, format)?;
+    }
+    
+    Ok(())
+}
+
+/// Converts CloneArgs to InitArgs with configuration merge logic.
+///
+/// Merge priority: CLI args > workspace config > defaults
+///
+/// This ensures that:
+/// - CLI arguments always take precedence
+/// - Workspace configuration is used if no CLI arg provided
+/// - Sensible defaults are used as fallback
+fn convert_to_init_args(
+    args: &CloneArgs, 
+    workspace_config: Option<&PackageToolsConfig>
+) -> InitArgs {
+    // Merge changeset_path: CLI > workspace > default
+    let changeset_path = args.changeset_path
+        .clone()
+        .or_else(|| {
+            workspace_config.map(|c| c.changeset.path.clone())
+        })
+        .unwrap_or_else(|| ".changesets".to_string());
+    
+    // Merge environments: CLI > workspace > default
+    let environments = args.environments
+        .clone()
+        .or_else(|| {
+            workspace_config.map(|c| c.changeset.available_environments.clone())
+        });
+    
+    // Merge default_env: CLI > workspace > default
+    let default_env = args.default_env
+        .clone()
+        .or_else(|| {
+            workspace_config.map(|c| c.changeset.default_environments.clone())
+        });
+    
+    // Merge strategy: CLI > workspace > default
+    let strategy = args.strategy
+        .clone()
+        .or_else(|| {
+            workspace_config.map(|c| {
+                match c.version.strategy {
+                    VersioningStrategy::Independent => "independent".to_string(),
+                    VersioningStrategy::Unified => "unified".to_string(),
+                }
+            })
+        });
+    
+    // Merge registry: CLI > workspace > default
+    let registry = args.registry
+        .clone()
+        .or_else(|| {
+            workspace_config.map(|c| c.upgrade.registry.default_registry.clone())
+        })
+        .unwrap_or_else(|| "https://registry.npmjs.org".to_string());
+    
+    // Merge config_format: CLI > workspace > None (let init choose)
+    let config_format = args.config_format.clone();
+    
+    InitArgs {
+        changeset_path: PathBuf::from(changeset_path),
+        environments,
+        default_env,
+        strategy,
+        registry,
+        config_format,
+        force: false,  // Never force during clone
+        non_interactive: args.non_interactive,
+    }
+}
+```
+
+**Quality Gates:**
+- ✅ Init integration works seamlessly
+- ✅ Output messages are clear and helpful
+- ✅ JSON output includes all information
+- ✅ Error messages suggest fixes
+- ✅ All output modes tested
+- ✅ Integration tests pass
+
+### Configuration Architecture
+
+The clone command implements a three-tier configuration merge strategy that leverages existing crates:
+
+#### 1. Configuration Sources (Priority Order)
+1. **CLI Arguments** (Highest): Explicit user input via command flags
+2. **Workspace Config**: Loaded from cloned repository using `sublime_pkg_tools::config::load_config_from_file()`
+3. **Defaults** (Lowest): Hardcoded sensible defaults
+
+#### 2. Existing Crate Integration
+
+**Detection:**
+- Uses `sublime_pkg_tools::config::load_config_from_file()` instead of custom detection
+- Returns `Result<PackageToolsConfig>` with all configuration loaded
+- Supports standard locations: `package-tools.toml`, `.sublime/package-tools.toml`
+
+**Validation:**
+- Uses `sublime_standard_tools::config::Configurable::validate()` trait method
+- Validates loaded configuration automatically
+- No need for custom validation logic for config structure
+
+**Configuration Structure:**
+```rust
+PackageToolsConfig {
+    changeset: ChangesetConfig {
+        path: String,                    // e.g., ".changesets"
+        history_path: String,            // e.g., ".changesets/history"
+        available_environments: Vec<String>,
+        default_environments: Vec<String>,
+    },
+    version: VersionConfig {
+        strategy: VersioningStrategy,    // Independent or Unified
+        default_bump: VersionBump,
+        snapshot_format: String,
+    },
+    upgrade: UpgradeConfig {
+        registry: RegistryConfig {
+            default_registry: String,    // e.g., "https://registry.npmjs.org"
+            ...
+        },
+        backup: BackupConfig {
+            path: String,                // e.g., ".workspace-backups"
+            ...
+        },
+        ...
+    },
+    ...
+}
+```
+
+#### 3. Merge Implementation Example
+
+```rust
+// CLI args > workspace config > defaults
+let changeset_path = args.changeset_path
+    .as_deref()                          // CLI argument (Option<String>)
+    .or_else(|| {
+        workspace_config.map(|c| c.changeset.path.as_str())  // Workspace config
+    })
+    .unwrap_or(".changesets");           // Default fallback
+```
+
+This approach:
+- ✅ Reuses existing, well-tested configuration infrastructure
+- ✅ Avoids code duplication
+- ✅ Maintains consistency across all commands
+- ✅ Supports environment variable overrides via `SUBLIME_PKG_*` prefix
+- ✅ Provides clear precedence rules
+
+### Phase 2.5 Exit Criteria
+- ✅ Clone command works end-to-end
+- ✅ Progress bar displays during clone
+- ✅ Config detection uses existing `load_config_from_file()`
+- ✅ Validation uses existing `config.validate()` method
+- ✅ Configuration merge follows CLI > workspace > defaults priority
+- ✅ Init runs automatically when needed
+- ✅ Force and depth flags work
+- ✅ All output modes work correctly
+- ✅ Clippy passes without warnings
+- ✅ 100% test coverage on clone module
+- ✅ Works on Windows, Linux, and macOS
+- ✅ Documentation complete
+
+---
+
 ## Phase 3: Version Management & Upgrades (Weeks 8-11)
 
 ### Objective
