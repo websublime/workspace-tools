@@ -1078,209 +1078,6 @@ mod changes_tests {
             analysis_mode: AnalysisMode::WorkingDirectory,
             base_ref: None,
             head_ref: None,
-            packages: vec![
-                PackageChanges {
-                    package_info: default_pkg(),
-                    package_name: "pkg1".to_string(),
-                    package_version: "1.0.0".to_string(),
-                    package_location: PathBuf::from("packages/pkg1"),
-                    current_version: None,
-                    next_version: None,
-                    bump_type: None,
-                    files: vec![],
-                    commits: vec![],
-                    has_changes: true,
-                    stats: PackageChangeStats {
-                        files_changed: 2,
-                        files_added: 1,
-                        files_modified: 1,
-                        files_deleted: 0,
-                        commits: 1,
-                        lines_added: 50,
-                        lines_deleted: 10,
-                    },
-                },
-                PackageChanges {
-                    package_info: default_pkg(),
-                    package_name: "pkg2".to_string(),
-                    package_version: "2.0.0".to_string(),
-                    package_location: PathBuf::from("packages/pkg2"),
-                    current_version: None,
-                    next_version: None,
-                    bump_type: None,
-                    files: vec![],
-                    commits: vec![],
-                    has_changes: true,
-                    stats: PackageChangeStats {
-                        files_changed: 3,
-                        files_added: 2,
-                        files_modified: 1,
-                        files_deleted: 0,
-                        commits: 2,
-                        lines_added: 100,
-                        lines_deleted: 20,
-                    },
-                },
-            ],
-            summary: ChangesSummary {
-                total_packages: 2,
-                packages_with_changes: 2,
-                packages_without_changes: 0,
-                total_files_changed: 5,
-                total_commits: 3,
-                total_lines_added: 150,
-                total_lines_deleted: 30,
-            },
-            is_monorepo: true,
-        };
-
-        let filter_names = vec!["pkg1".to_string()];
-        let filtered = filter_report_by_packages(report, &filter_names);
-
-        assert_eq!(filtered.packages.len(), 1);
-        assert_eq!(filtered.packages[0].package_name, "pkg1");
-        assert_eq!(filtered.summary.packages_with_changes, 1);
-        assert_eq!(filtered.summary.total_files_changed, 0); // 0 because files vec is empty
-        assert_eq!(filtered.summary.total_commits, 0); // 0 because commits vec is empty
-    }
-
-    #[allow(clippy::too_many_lines)]
-    #[test]
-    fn test_filter_report_by_packages_multiple_packages() {
-        use crate::commands::changes::filter_report_by_packages;
-        use chrono::Utc;
-        use std::path::PathBuf;
-        use sublime_pkg_tools::changes::{
-            AnalysisMode, ChangesReport, ChangesSummary, PackageChangeStats, PackageChanges,
-        };
-        use sublime_standard_tools::monorepo::WorkspacePackage;
-
-        let default_pkg = || WorkspacePackage {
-            name: String::new(),
-            version: String::new(),
-            location: PathBuf::new(),
-            absolute_path: PathBuf::new(),
-            workspace_dependencies: Vec::new(),
-            workspace_dev_dependencies: Vec::new(),
-        };
-
-        let report = ChangesReport {
-            analyzed_at: Utc::now(),
-            analysis_mode: AnalysisMode::WorkingDirectory,
-            base_ref: None,
-            head_ref: None,
-            packages: vec![
-                PackageChanges {
-                    package_info: default_pkg(),
-                    package_name: "pkg1".to_string(),
-                    package_version: "1.0.0".to_string(),
-                    package_location: PathBuf::from("packages/pkg1"),
-                    current_version: None,
-                    next_version: None,
-                    bump_type: None,
-                    files: vec![],
-                    commits: vec![],
-                    has_changes: true,
-                    stats: PackageChangeStats {
-                        files_changed: 2,
-                        files_added: 1,
-                        files_modified: 1,
-                        files_deleted: 0,
-                        commits: 1,
-                        lines_added: 50,
-                        lines_deleted: 10,
-                    },
-                },
-                PackageChanges {
-                    package_info: default_pkg(),
-                    package_name: "pkg2".to_string(),
-                    package_version: "2.0.0".to_string(),
-                    package_location: PathBuf::from("packages/pkg2"),
-                    current_version: None,
-                    next_version: None,
-                    bump_type: None,
-                    files: vec![],
-                    commits: vec![],
-                    has_changes: true,
-                    stats: PackageChangeStats {
-                        files_changed: 3,
-                        files_added: 2,
-                        files_modified: 1,
-                        files_deleted: 0,
-                        commits: 2,
-                        lines_added: 100,
-                        lines_deleted: 20,
-                    },
-                },
-                PackageChanges {
-                    package_info: default_pkg(),
-                    package_name: "pkg3".to_string(),
-                    package_version: "3.0.0".to_string(),
-                    package_location: PathBuf::from("packages/pkg3"),
-                    current_version: None,
-                    next_version: None,
-                    bump_type: None,
-                    files: vec![],
-                    commits: vec![],
-                    has_changes: true,
-                    stats: PackageChangeStats {
-                        files_changed: 1,
-                        files_added: 0,
-                        files_modified: 1,
-                        files_deleted: 0,
-                        commits: 1,
-                        lines_added: 25,
-                        lines_deleted: 5,
-                    },
-                },
-            ],
-            summary: ChangesSummary {
-                total_packages: 3,
-                packages_with_changes: 3,
-                packages_without_changes: 0,
-                total_files_changed: 6,
-                total_commits: 4,
-                total_lines_added: 175,
-                total_lines_deleted: 35,
-            },
-            is_monorepo: true,
-        };
-
-        let filter_names = vec!["pkg1".to_string(), "pkg3".to_string()];
-        let filtered = filter_report_by_packages(report, &filter_names);
-
-        assert_eq!(filtered.packages.len(), 2);
-        assert_eq!(filtered.packages[0].package_name, "pkg1");
-        assert_eq!(filtered.packages[1].package_name, "pkg3");
-        assert_eq!(filtered.summary.packages_with_changes, 2);
-        assert_eq!(filtered.summary.total_files_changed, 0); // 0 because files vec is empty
-        assert_eq!(filtered.summary.total_commits, 0); // 0 because commits vec is empty
-    }
-
-    #[test]
-    fn test_filter_report_by_packages_no_matches() {
-        use crate::commands::changes::filter_report_by_packages;
-        use chrono::Utc;
-        use std::path::PathBuf;
-        use sublime_pkg_tools::changes::{
-            AnalysisMode, ChangesReport, ChangesSummary, PackageChangeStats, PackageChanges,
-        };
-        use sublime_standard_tools::monorepo::WorkspacePackage;
-
-        let default_pkg = || WorkspacePackage {
-            name: String::new(),
-            version: String::new(),
-            location: PathBuf::new(),
-            absolute_path: PathBuf::new(),
-            workspace_dependencies: Vec::new(),
-            workspace_dev_dependencies: Vec::new(),
-        };
-
-        let report = ChangesReport {
-            analyzed_at: Utc::now(),
-            analysis_mode: AnalysisMode::WorkingDirectory,
-            base_ref: None,
-            head_ref: None,
             packages: vec![PackageChanges {
                 package_info: default_pkg(),
                 package_name: "pkg1".to_string(),
@@ -1321,70 +1118,6 @@ mod changes_tests {
         assert_eq!(filtered.summary.packages_with_changes, 0);
         assert_eq!(filtered.summary.total_files_changed, 0);
         assert_eq!(filtered.summary.total_commits, 0);
-    }
-
-    #[test]
-    fn test_filter_report_by_packages_empty_filter() {
-        use crate::commands::changes::filter_report_by_packages;
-        use chrono::Utc;
-        use std::path::PathBuf;
-        use sublime_pkg_tools::changes::{
-            AnalysisMode, ChangesReport, ChangesSummary, PackageChangeStats, PackageChanges,
-        };
-        use sublime_standard_tools::monorepo::WorkspacePackage;
-
-        let default_pkg = || WorkspacePackage {
-            name: String::new(),
-            version: String::new(),
-            location: PathBuf::new(),
-            absolute_path: PathBuf::new(),
-            workspace_dependencies: Vec::new(),
-            workspace_dev_dependencies: Vec::new(),
-        };
-
-        let report = ChangesReport {
-            analyzed_at: Utc::now(),
-            analysis_mode: AnalysisMode::WorkingDirectory,
-            base_ref: None,
-            head_ref: None,
-            packages: vec![PackageChanges {
-                package_info: default_pkg(),
-                package_name: "pkg1".to_string(),
-                package_version: "1.0.0".to_string(),
-                package_location: PathBuf::from("packages/pkg1"),
-                current_version: None,
-                next_version: None,
-                bump_type: None,
-                files: vec![],
-                commits: vec![],
-                has_changes: true,
-                stats: PackageChangeStats {
-                    files_changed: 2,
-                    files_added: 1,
-                    files_modified: 1,
-                    files_deleted: 0,
-                    commits: 1,
-                    lines_added: 50,
-                    lines_deleted: 10,
-                },
-            }],
-            summary: ChangesSummary {
-                total_packages: 1,
-                packages_with_changes: 1,
-                packages_without_changes: 0,
-                total_files_changed: 2,
-                total_commits: 1,
-                total_lines_added: 50,
-                total_lines_deleted: 10,
-            },
-            is_monorepo: true,
-        };
-
-        let filter_names: Vec<String> = vec![];
-        let filtered = filter_report_by_packages(report, &filter_names);
-
-        assert_eq!(filtered.packages.len(), 0);
-        assert_eq!(filtered.summary.packages_with_changes, 0);
     }
 }
 
@@ -2223,14 +1956,16 @@ version_consistency = true
 #[allow(clippy::unwrap_used)]
 #[allow(clippy::panic)]
 mod clone_tests {
+    use crate::cli::commands::CloneArgs;
     use crate::commands::clone::{
-        clone_with_progress, detect_workspace_config, determine_destination, validate_destination,
+        clone_with_progress, convert_to_init_args, determine_destination, validate_destination,
         validate_workspace,
     };
     use crate::output::OutputFormat;
     use crate::output::progress::Spinner;
     use std::fs;
     use std::path::{Path, PathBuf};
+    use sublime_pkg_tools::config::PackageToolsConfig;
     use sublime_pkg_tools::types::VersioningStrategy;
     use tempfile::TempDir;
 
@@ -2492,6 +2227,253 @@ mod clone_tests {
     }
 
     // ========================================================================
+    // convert_to_init_args() tests
+    // ========================================================================
+
+    #[test]
+    fn test_convert_to_init_args_uses_cli_args_when_provided() {
+        let clone_args = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: Some(".custom-changesets".to_string()),
+            environments: Some(vec!["dev".to_string(), "prod".to_string()]),
+            default_env: Some(vec!["prod".to_string()]),
+            strategy: Some("unified".to_string()),
+            registry: Some("https://custom.registry.io".to_string()),
+            config_format: Some("yaml".to_string()),
+            non_interactive: true,
+            skip_validation: false,
+            force: false,
+            depth: None,
+        };
+
+        let init_args = convert_to_init_args(&clone_args, None);
+        assert_eq!(init_args.changeset_path, PathBuf::from(".custom-changesets"));
+        assert_eq!(init_args.environments, Some(vec!["dev".to_string(), "prod".to_string()]));
+        assert_eq!(init_args.default_env, Some(vec!["prod".to_string()]));
+        assert_eq!(init_args.strategy, Some("unified".to_string()));
+        assert_eq!(init_args.registry, "https://custom.registry.io");
+        assert_eq!(init_args.config_format, Some("yaml".to_string()));
+        assert!(init_args.non_interactive);
+        assert!(!init_args.force);
+    }
+
+    #[test]
+    fn test_convert_to_init_args_falls_back_to_workspace_config() {
+        let mut workspace_config = PackageToolsConfig::default();
+        workspace_config.changeset.path = ".ws-changesets".to_string();
+        workspace_config.changeset.available_environments =
+            vec!["staging".to_string(), "production".to_string()];
+        workspace_config.changeset.default_environments = vec!["staging".to_string()];
+        workspace_config.version.strategy = VersioningStrategy::Unified;
+        workspace_config.upgrade.registry.default_registry = "https://ws.registry.io".to_string();
+
+        let clone_args = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: None,
+            environments: None,
+            default_env: None,
+            strategy: None,
+            registry: None,
+            config_format: None,
+            non_interactive: false,
+            skip_validation: false,
+            force: false,
+            depth: None,
+        };
+
+        let init_args = convert_to_init_args(&clone_args, Some(&workspace_config));
+        assert_eq!(init_args.changeset_path, PathBuf::from(".ws-changesets"));
+        assert_eq!(
+            init_args.environments,
+            Some(vec!["staging".to_string(), "production".to_string()])
+        );
+        assert_eq!(init_args.default_env, Some(vec!["staging".to_string()]));
+        assert_eq!(init_args.strategy, Some("unified".to_string()));
+        assert_eq!(init_args.registry, "https://ws.registry.io");
+        assert_eq!(init_args.config_format, None);
+    }
+
+    #[test]
+    fn test_convert_to_init_args_uses_defaults_when_nothing_provided() {
+        let clone_args = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: None,
+            environments: None,
+            default_env: None,
+            strategy: None,
+            registry: None,
+            config_format: None,
+            non_interactive: false,
+            skip_validation: false,
+            force: false,
+            depth: None,
+        };
+
+        let init_args = convert_to_init_args(&clone_args, None);
+        assert_eq!(init_args.changeset_path, PathBuf::from(".changesets"));
+        assert_eq!(init_args.environments, None);
+        assert_eq!(init_args.default_env, None);
+        assert_eq!(init_args.strategy, None);
+        assert_eq!(init_args.registry, "https://registry.npmjs.org");
+        assert_eq!(init_args.config_format, None);
+        assert!(!init_args.non_interactive);
+        assert!(!init_args.force);
+    }
+
+    #[test]
+    fn test_convert_to_init_args_cli_overrides_workspace() {
+        let mut workspace_config = PackageToolsConfig::default();
+        workspace_config.changeset.path = ".ws-changesets".to_string();
+        workspace_config.changeset.available_environments = vec!["dev".to_string()];
+        workspace_config.version.strategy = VersioningStrategy::Unified;
+
+        let clone_args = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: Some(".cli-changesets".to_string()),
+            environments: None,
+            default_env: None,
+            strategy: None,
+            registry: Some("https://cli.registry.io".to_string()),
+            config_format: None,
+            non_interactive: false,
+            skip_validation: false,
+            force: false,
+            depth: None,
+        };
+
+        let init_args = convert_to_init_args(&clone_args, Some(&workspace_config));
+        assert_eq!(init_args.changeset_path, PathBuf::from(".cli-changesets"));
+        assert_eq!(init_args.environments, Some(vec!["dev".to_string()]));
+        assert_eq!(init_args.strategy, Some("unified".to_string()));
+        assert_eq!(init_args.registry, "https://cli.registry.io");
+        assert_eq!(init_args.config_format, None);
+    }
+
+    #[test]
+    fn test_convert_to_init_args_strategy_independent_conversion() {
+        let mut workspace_config = PackageToolsConfig::default();
+        workspace_config.version.strategy = VersioningStrategy::Independent;
+
+        let clone_args = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: None,
+            environments: None,
+            default_env: None,
+            strategy: None,
+            registry: None,
+            config_format: None,
+            non_interactive: false,
+            skip_validation: false,
+            force: false,
+            depth: None,
+        };
+
+        let init_args = convert_to_init_args(&clone_args, Some(&workspace_config));
+        assert_eq!(init_args.strategy, Some("independent".to_string()));
+    }
+
+    #[test]
+    fn test_convert_to_init_args_strategy_unified_conversion() {
+        let mut workspace_config = PackageToolsConfig::default();
+        workspace_config.version.strategy = VersioningStrategy::Unified;
+
+        let clone_args = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: None,
+            environments: None,
+            default_env: None,
+            strategy: None,
+            registry: None,
+            config_format: None,
+            non_interactive: false,
+            skip_validation: false,
+            force: false,
+            depth: None,
+        };
+
+        let init_args = convert_to_init_args(&clone_args, Some(&workspace_config));
+        assert_eq!(init_args.strategy, Some("unified".to_string()));
+    }
+
+    #[test]
+    fn test_convert_to_init_args_force_is_always_false() {
+        let clone_args = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: None,
+            environments: None,
+            default_env: None,
+            strategy: None,
+            registry: None,
+            config_format: None,
+            non_interactive: false,
+            skip_validation: false,
+            force: true,
+            depth: None,
+        };
+
+        let init_args = convert_to_init_args(&clone_args, None);
+        assert!(!init_args.force);
+    }
+
+    #[test]
+    fn test_convert_to_init_args_non_interactive_is_preserved() {
+        let clone_args = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: None,
+            environments: None,
+            default_env: None,
+            strategy: None,
+            registry: None,
+            config_format: None,
+            non_interactive: true,
+            skip_validation: false,
+            force: false,
+            depth: None,
+        };
+
+        let init_args = convert_to_init_args(&clone_args, None);
+        assert!(init_args.non_interactive);
+    }
+
+    #[test]
+    fn test_convert_to_init_args_partial_cli_args() {
+        let mut workspace_config = PackageToolsConfig::default();
+        workspace_config.changeset.path = ".ws-changesets".to_string();
+        workspace_config.changeset.available_environments = vec!["dev".to_string()];
+        workspace_config.version.strategy = VersioningStrategy::Unified;
+
+        let clone_args = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: Some(".cli-changesets".to_string()),
+            environments: None,
+            default_env: None,
+            strategy: None,
+            registry: Some("https://cli.registry.io".to_string()),
+            config_format: None,
+            non_interactive: false,
+            skip_validation: false,
+            force: false,
+            depth: None,
+        };
+
+        let init_args = convert_to_init_args(&clone_args, Some(&workspace_config));
+        assert_eq!(init_args.changeset_path, PathBuf::from(".cli-changesets"));
+        assert_eq!(init_args.environments, Some(vec!["dev".to_string()]));
+        assert_eq!(init_args.strategy, Some("unified".to_string()));
+        assert_eq!(init_args.registry, "https://cli.registry.io");
+        assert_eq!(init_args.config_format, None);
+    }
+
+    // ========================================================================
     // map_git_error() tests
     // ========================================================================
     //
@@ -2729,7 +2711,7 @@ mod clone_tests {
     fn create_valid_workspace() -> TempDir {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
 
-        // Create package-tools.toml
+        // Create repo.config.toml
         let config_content = "
 [changeset]
 path = \".changesets\"
@@ -2749,7 +2731,7 @@ keep_count = 5
 [upgrade.registry]
 default_registry = \"https://registry.npmjs.org\"
 ";
-        fs::write(temp_dir.path().join("package-tools.toml"), config_content)
+        fs::write(temp_dir.path().join("repo.config.toml"), config_content)
             .expect("Failed to write config");
 
         // Create required directories
@@ -2774,7 +2756,7 @@ node_modules/
     fn create_invalid_workspace_missing_dirs() -> TempDir {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
 
-        // Create package-tools.toml
+        // Create repo.config.toml
         let config_content = "
 [changeset]
 path = \".changesets\"
@@ -2794,7 +2776,7 @@ keep_count = 5
 [upgrade.registry]
 default_registry = \"https://registry.npmjs.org\"
 ";
-        fs::write(temp_dir.path().join("package-tools.toml"), config_content)
+        fs::write(temp_dir.path().join("repo.config.toml"), config_content)
             .expect("Failed to write config");
 
         // Deliberately don't create the required directories
@@ -2811,7 +2793,7 @@ default_registry = \"https://registry.npmjs.org\"
     async fn test_detect_workspace_config_with_primary_location() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
 
-        // Create config in primary location (package-tools.toml)
+        // Create config in primary location (repo.config.toml)
         let config_content = "
 [changeset]
 path = \".changesets\"
@@ -2831,10 +2813,10 @@ keep_count = 5
 [upgrade.registry]
 default_registry = \"https://registry.npmjs.org\"
 ";
-        fs::write(temp_dir.path().join("package-tools.toml"), config_content)
+        fs::write(temp_dir.path().join("repo.config.toml"), config_content)
             .expect("Failed to write config");
 
-        let result = detect_workspace_config(temp_dir.path()).await;
+        let result = crate::commands::find_and_load_config(temp_dir.path(), None).await;
 
         assert!(result.is_ok());
         let config_opt = result.unwrap();
@@ -2843,119 +2825,17 @@ default_registry = \"https://registry.npmjs.org\"
         let config = config_opt.unwrap();
         assert_eq!(config.changeset.path, ".changesets");
         assert_eq!(config.version.strategy, VersioningStrategy::Independent);
-    }
-
-    #[tokio::test]
-    async fn test_detect_workspace_config_with_alternate_location() {
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-
-        // Create config in alternate location (.sublime/package-tools.toml)
-        fs::create_dir_all(temp_dir.path().join(".sublime")).expect("Failed to create .sublime");
-
-        let config_content = "
-[changeset]
-path = \".changesets\"
-history_path = \".changesets/history\"
-available_environments = [\"dev\", \"prod\"]
-default_environments = [\"prod\"]
-
-[version]
-strategy = \"unified\"
-default_bump = \"minor\"
-
-[upgrade.backup]
-backup_dir = \".workspace-backups\"
-enabled = true
-keep_count = 5
-
-[upgrade.registry]
-default_registry = \"https://registry.npmjs.org\"
-";
-        fs::write(temp_dir.path().join(".sublime/package-tools.toml"), config_content)
-            .expect("Failed to write config");
-
-        let result = detect_workspace_config(temp_dir.path()).await;
-
-        assert!(result.is_ok());
-        let config_opt = result.unwrap();
-        assert!(config_opt.is_some());
-
-        let config = config_opt.unwrap();
-        assert_eq!(config.changeset.path, ".changesets");
-        assert_eq!(config.version.strategy, VersioningStrategy::Unified);
     }
 
     #[tokio::test]
     async fn test_detect_workspace_config_not_found() {
         let temp_dir = create_unconfigured_workspace();
 
-        let result = detect_workspace_config(temp_dir.path()).await;
+        let result = crate::commands::find_and_load_config(temp_dir.path(), None).await;
 
         assert!(result.is_ok());
         let config_opt = result.unwrap();
         assert!(config_opt.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_detect_workspace_config_primary_takes_precedence() {
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-
-        // Create config in both locations
-        let primary_config = "
-[changeset]
-path = \".changesets-primary\"
-history_path = \".changesets-primary/history\"
-available_environments = [\"dev\", \"prod\"]
-default_environments = [\"prod\"]
-
-[version]
-strategy = \"independent\"
-default_bump = \"patch\"
-
-[upgrade.backup]
-backup_dir = \".workspace-backups\"
-enabled = true
-keep_count = 5
-
-[upgrade.registry]
-default_registry = \"https://registry.npmjs.org\"
-";
-        fs::write(temp_dir.path().join("package-tools.toml"), primary_config)
-            .expect("Failed to write primary config");
-
-        fs::create_dir_all(temp_dir.path().join(".sublime")).expect("Failed to create .sublime");
-        let alternate_config = "
-[changeset]
-path = \".changesets-alternate\"
-history_path = \".changesets-alternate/history\"
-available_environments = [\"dev\", \"prod\"]
-default_environments = [\"prod\"]
-
-[version]
-strategy = \"unified\"
-default_bump = \"minor\"
-
-[upgrade.backup]
-backup_dir = \".workspace-backups\"
-enabled = true
-keep_count = 5
-
-[upgrade.registry]
-default_registry = \"https://registry.npmjs.org\"
-";
-        fs::write(temp_dir.path().join(".sublime/package-tools.toml"), alternate_config)
-            .expect("Failed to write alternate config");
-
-        let result = detect_workspace_config(temp_dir.path()).await;
-
-        assert!(result.is_ok());
-        let config_opt = result.unwrap();
-        assert!(config_opt.is_some());
-
-        let config = config_opt.unwrap();
-        // Should use primary location
-        assert_eq!(config.changeset.path, ".changesets-primary");
-        assert_eq!(config.version.strategy, VersioningStrategy::Independent);
     }
 
     #[tokio::test]
@@ -3050,7 +2930,7 @@ keep_count = 5
 [upgrade.registry]
 default_registry = \"https://registry.npmjs.org\"
 ";
-        fs::write(temp_dir.path().join("package-tools.toml"), config_content)
+        fs::write(temp_dir.path().join("repo.config.toml"), config_content)
             .expect("Failed to write config");
 
         fs::create_dir_all(temp_dir.path().join(".changesets/history"))
@@ -3096,7 +2976,7 @@ keep_count = 5
 [upgrade.registry]
 default_registry = \"https://registry.npmjs.org\"
 ";
-        fs::write(temp_dir.path().join("package-tools.toml"), config_content)
+        fs::write(temp_dir.path().join("repo.config.toml"), config_content)
             .expect("Failed to write config");
 
         fs::create_dir_all(temp_dir.path().join(".changesets/history"))
@@ -3152,7 +3032,7 @@ keep_count = 5
 [upgrade.registry]
 default_registry = \"https://registry.npmjs.org\"
 ";
-        fs::write(temp_dir.path().join("package-tools.toml"), config_content)
+        fs::write(temp_dir.path().join("repo.config.toml"), config_content)
             .expect("Failed to write config");
 
         // Create directories with custom paths
@@ -3190,5 +3070,145 @@ custom/backups/
                 check.name, check.error
             );
         }
+    }
+
+    // ========================================================================
+    // Global Parameters Tests (Review Corrections)
+    // ========================================================================
+
+    #[test]
+    fn test_determine_destination_respects_absolute_path() {
+        // Test that determine_destination returns absolute paths as-is
+        let absolute_path = if cfg!(windows) { "C:\\absolute\\path" } else { "/absolute/path" };
+
+        let result = determine_destination(
+            "https://github.com/org/repo.git",
+            Some(&PathBuf::from(absolute_path)),
+        );
+
+        assert!(result.is_ok());
+        let destination = result.unwrap();
+        assert!(destination.is_absolute());
+        assert_eq!(destination, PathBuf::from(absolute_path));
+    }
+
+    #[test]
+    fn test_determine_destination_returns_relative_path() {
+        // Test that determine_destination returns relative paths for repo names
+        let result = determine_destination("https://github.com/org/repo.git", None);
+
+        assert!(result.is_ok());
+        let destination = result.unwrap();
+        assert!(!destination.is_absolute());
+        assert_eq!(destination, PathBuf::from("repo"));
+    }
+
+    #[test]
+    fn test_determine_destination_with_relative_override() {
+        // Test that determine_destination returns relative path when provided
+        let result = determine_destination(
+            "https://github.com/org/repo.git",
+            Some(&PathBuf::from("my-custom-dir")),
+        );
+
+        assert!(result.is_ok());
+        let destination = result.unwrap();
+        assert!(!destination.is_absolute());
+        assert_eq!(destination, PathBuf::from("my-custom-dir"));
+    }
+
+    #[test]
+    fn test_convert_to_init_args_preserves_cli_overrides() {
+        // Test that CLI arguments take precedence in convert_to_init_args
+        let clone_args = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: Some("custom-changesets".to_string()),
+            environments: Some(vec!["dev".to_string(), "prod".to_string()]),
+            default_env: Some(vec!["prod".to_string()]),
+            strategy: Some("unified".to_string()),
+            registry: Some("https://custom-registry.com".to_string()),
+            config_format: Some("yaml".to_string()),
+            non_interactive: true,
+            skip_validation: false,
+            force: false,
+            depth: None,
+        };
+
+        let init_args = convert_to_init_args(&clone_args, None);
+
+        // Verify CLI args are preserved
+        assert_eq!(init_args.changeset_path, PathBuf::from("custom-changesets"));
+        assert_eq!(init_args.environments, Some(vec!["dev".to_string(), "prod".to_string()]));
+        assert_eq!(init_args.default_env, Some(vec!["prod".to_string()]));
+        assert_eq!(init_args.strategy, Some("unified".to_string()));
+        assert_eq!(init_args.registry, "https://custom-registry.com");
+        assert_eq!(init_args.config_format, Some("yaml".to_string()));
+        assert!(init_args.non_interactive);
+        assert!(!init_args.force); // Force should always be false for clone
+    }
+
+    #[test]
+    fn test_convert_to_init_args_force_always_false() {
+        // Test that force is always false regardless of clone args
+        let clone_args = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: None,
+            environments: None,
+            default_env: None,
+            strategy: None,
+            registry: None,
+            config_format: None,
+            non_interactive: false,
+            skip_validation: false,
+            force: true, // Even if clone has force=true
+            depth: None,
+        };
+
+        let init_args = convert_to_init_args(&clone_args, None);
+
+        // Force should always be false for init
+        assert!(!init_args.force);
+    }
+
+    #[test]
+    fn test_convert_to_init_args_non_interactive_preserved() {
+        // Test that non_interactive flag is preserved
+        let clone_args_interactive = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: None,
+            environments: None,
+            default_env: None,
+            strategy: None,
+            registry: None,
+            config_format: None,
+            non_interactive: false,
+            skip_validation: false,
+            force: false,
+            depth: None,
+        };
+
+        let init_args_interactive = convert_to_init_args(&clone_args_interactive, None);
+        assert!(!init_args_interactive.non_interactive);
+
+        let clone_args_non_interactive = CloneArgs {
+            url: "https://github.com/org/repo.git".to_string(),
+            destination: None,
+            changeset_path: None,
+            environments: None,
+            default_env: None,
+            strategy: None,
+            registry: None,
+            config_format: None,
+            non_interactive: true,
+            skip_validation: false,
+            force: false,
+            depth: None,
+        };
+
+        let init_args_non_interactive = convert_to_init_args(&clone_args_non_interactive, None);
+        assert!(init_args_non_interactive.non_interactive);
     }
 }

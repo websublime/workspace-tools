@@ -56,7 +56,7 @@
 //! workspace clone https://github.com/org/repo.git --depth 1
 //! ```
 
-use crate::cli::commands::CloneArgs;
+use crate::cli::commands::{CloneArgs, InitArgs};
 use crate::error::{CliError, Result};
 use crate::output::OutputFormat;
 use crate::output::progress::ProgressBar;
@@ -65,10 +65,11 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use sublime_git_tools::Repo;
-use sublime_pkg_tools::config::{PackageToolsConfig, load_config_from_file};
+use sublime_pkg_tools::config::PackageToolsConfig;
 use sublime_pkg_tools::types::VersioningStrategy;
 use sublime_standard_tools::config::Configurable;
 use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
+use tracing::{debug, info};
 
 /// Represents the result of a validation operation.
 ///
@@ -175,66 +176,6 @@ impl fmt::Display for ValidationResult {
     }
 }
 
-/// Detects if workspace configuration exists in the cloned repository.
-///
-/// Uses `sublime_pkg_tools::config::load_config_from_file()` to check for
-/// configuration in standard locations:
-/// - package-tools.toml
-/// - .sublime/package-tools.toml
-///
-/// # Arguments
-///
-/// * `root` - The root directory of the cloned repository
-///
-/// # Returns
-///
-/// Returns `Ok(Some(config))` if configuration is found and loaded successfully,
-/// `Ok(None)` if no configuration exists, or an error if loading fails.
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - File system operations fail
-/// - Configuration file exists but is malformed
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// let config = detect_workspace_config(Path::new("./my-repo")).await?;
-/// match config {
-///     Some(cfg) => println!("Found configuration with strategy: {:?}", cfg.version.strategy),
-///     None => println!("No configuration found"),
-/// }
-/// ```
-pub async fn detect_workspace_config(root: &Path) -> Result<Option<PackageToolsConfig>> {
-    let fs = FileSystemManager::new();
-
-    // Try package-tools.toml first
-    let primary_config = root.join("package-tools.toml");
-    if fs.exists(&primary_config).await {
-        match load_config_from_file(&primary_config).await {
-            Ok(config) => return Ok(Some(config)),
-            Err(_) => {
-                // File exists but failed to load - continue to alternate location
-            }
-        }
-    }
-
-    // Try alternate location: .sublime/package-tools.toml
-    let alternate_config = root.join(".sublime/package-tools.toml");
-    if fs.exists(&alternate_config).await {
-        match load_config_from_file(&alternate_config).await {
-            Ok(config) => return Ok(Some(config)),
-            Err(_) => {
-                // File exists but failed to load
-            }
-        }
-    }
-
-    // No configuration found in either location
-    Ok(None)
-}
-
 /// Helper function to validate directory existence.
 ///
 /// Creates a `ValidationCheck` for a directory.
@@ -310,7 +251,7 @@ pub async fn validate_workspace(root: &Path) -> Result<ValidationResult> {
     let fs = FileSystemManager::new();
 
     // Check 1: Load and validate configuration
-    let config_result = detect_workspace_config(root).await?;
+    let config_result = crate::commands::find_and_load_config(root, None).await?;
 
     let (config_check, config_opt) = match config_result {
         Some(config) => {
@@ -604,11 +545,11 @@ pub(crate) fn validate_destination(destination: &Path, force: bool) -> Result<()
 ///
 /// # Implementation Notes
 ///
-/// Currently uses `Repo::clone()` which doesn't support progress callbacks.
-/// The spinner provides visual feedback that the operation is in progress.
-///
-/// TODO: Story 11.2 - Enhance `sublime_git_tools` to support `RemoteCallbacks`
-/// for real-time progress tracking (receiving objects, resolving deltas).
+/// Uses `Repo::clone_with_progress()` from `sublime_git_tools` which supports
+/// progress callbacks for real-time progress tracking. The progress bar displays:
+/// - Receiving objects with percentage
+/// - Current/total object counts
+/// - Completion status
 pub(crate) fn clone_with_progress(
     url: &str,
     destination: &Path,
@@ -852,37 +793,61 @@ fn map_git_error(error: &sublime_git_tools::RepoError, url: &str) -> CliError {
 ///     // ... other fields
 /// };
 ///
-/// execute_clone(&args, OutputFormat::Human).await?;
+/// execute_clone(&args, Path::new("."), None, OutputFormat::Human).await?;
 /// ```
-pub async fn execute_clone(args: &CloneArgs, format: OutputFormat) -> Result<()> {
+pub async fn execute_clone(
+    args: &CloneArgs,
+    root: &Path,
+    config_path: Option<&Path>,
+    format: OutputFormat,
+) -> Result<()> {
     // Step 1: Determine destination directory
     let destination = determine_destination(&args.url, args.destination.as_ref())?;
 
-    // Step 2: Validate destination
-    validate_destination(&destination, args.force)?;
+    // Step 2: Make destination relative to root (respecting --root global option)
+    // Absolute paths are used as-is, relative paths are joined with root
+    let final_destination =
+        if destination.is_absolute() { destination } else { root.join(destination) };
 
-    // Step 3: Remove existing destination if --force is set
-    if args.force && destination.exists() {
+    debug!("Clone destination: {} (root: {})", final_destination.display(), root.display());
+
+    // Step 3: Validate destination
+    validate_destination(&final_destination, args.force)?;
+
+    // Step 4: Remove existing destination if --force is set
+    if args.force && final_destination.exists() {
         let fs = FileSystemManager::new();
-        fs.remove(&destination).await.map_err(|e| {
+        fs.remove(&final_destination).await.map_err(|e| {
             CliError::io(format!(
                 "Failed to remove existing destination {}: {}",
-                destination.display(),
+                final_destination.display(),
                 e
             ))
         })?;
     }
 
-    // Step 4: Clone repository with progress
-    let _repo = clone_with_progress(&args.url, &destination, args.depth, format)?;
+    // Step 5: Clone repository with progress
+    debug!("Cloning repository from {} to {}", args.url, final_destination.display());
+    let _repo = clone_with_progress(&args.url, &final_destination, args.depth, format)?;
+    info!("Repository cloned successfully to {}", final_destination.display());
 
-    // Step 5: Detect and validate workspace configuration (Story 11.3)
-    let config_exists = detect_workspace_config(&destination).await?.is_some();
+    // Step 6: Detect workspace configuration (Story 11.3)
+    // Pass config_path parameter to allow custom config file usage
+    debug!("Detecting workspace configuration in cloned repository");
+    let config_opt = crate::commands::find_and_load_config(&final_destination, config_path).await?;
 
-    if config_exists {
+    // Step 7: Handle based on configuration existence (Story 11.4)
+    if let Some(_config) = config_opt {
+        info!("Workspace configuration detected");
+
         // Configuration exists - validate it (unless --skip-validation)
-        if !args.skip_validation {
-            let validation = validate_workspace(&destination).await?;
+        let validated = if args.skip_validation {
+            debug!("Skipping validation (--skip-validation flag)");
+            false
+        } else {
+            debug!("Validating workspace configuration");
+            output_validation_starting(format);
+            let validation = validate_workspace(&final_destination).await?;
 
             if !validation.is_valid {
                 // Validation failed - report errors
@@ -891,16 +856,318 @@ pub async fn execute_clone(args: &CloneArgs, format: OutputFormat) -> Result<()>
                 )));
             }
 
-            // Validation passed - success message will be shown in Story 11.4
-        }
+            info!("Workspace configuration validated successfully");
+            output_validation_success(&validation, format);
+            true
+        };
+
+        output_clone_complete(&final_destination, validated, format)?;
+    } else {
+        info!("No workspace configuration found, initializing workspace");
+
+        // No configuration - run init automatically
+        output_init_starting(format);
+
+        // Convert CloneArgs to InitArgs with configuration merge
+        // Note: No workspace config exists yet, so we only use CLI args + defaults
+        let init_args = convert_to_init_args(args, None);
+
+        // Execute init command
+        debug!("Executing init to create workspace configuration");
+        crate::commands::init::execute_init(&init_args, &final_destination, format).await?;
+
+        output_clone_complete_with_init(&final_destination, format)?;
     }
 
-    // TODO: Story 11.4 - Implement init integration and output
-    // - If no config detected, run execute_init with merged settings
-    // - Convert CloneArgs to InitArgs with proper priority
-    // - Display success message with next steps
+    Ok(())
+}
 
-    // Note: #[allow(clippy::todo)] cannot be used on macro invocations
-    // This will be implemented as part of Story 11.4
-    todo!("Init integration and output - Story 11.4")
+/// Converts CloneArgs to InitArgs with configuration merge logic.
+///
+/// Implements the merge priority: CLI args > workspace config > defaults.
+///
+/// This ensures that:
+/// - CLI arguments always take precedence when explicitly provided
+/// - Workspace configuration is used when no CLI arg is provided
+/// - Sensible defaults are used as final fallback
+///
+/// # Arguments
+///
+/// * `args` - Clone command arguments
+/// * `workspace_config` - Optional workspace configuration from package.json
+///
+/// # Returns
+///
+/// Returns an `InitArgs` structure with merged configuration values.
+///
+/// # Errors
+///
+/// Returns an error if the merge results in invalid configuration.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// // With CLI args only (no workspace config)
+/// let clone_args = CloneArgs {
+///     strategy: Some("independent".to_string()),
+///     environments: Some(vec!["dev".to_string(), "prod".to_string()]),
+///     ..Default::default()
+/// };
+/// let init_args = convert_to_init_args(&clone_args, None)?;
+/// assert_eq!(init_args.strategy, Some("independent".to_string()));
+///
+/// // With workspace config fallback
+/// let workspace_config = PackageToolsConfig::default();
+/// let init_args = convert_to_init_args(&clone_args, Some(&workspace_config))?;
+/// ```
+pub(crate) fn convert_to_init_args(
+    args: &CloneArgs,
+    workspace_config: Option<&PackageToolsConfig>,
+) -> InitArgs {
+    // Merge changeset_path: CLI > workspace > default
+    let changeset_path = if let Some(ref path) = args.changeset_path {
+        PathBuf::from(path)
+    } else if let Some(config) = workspace_config {
+        PathBuf::from(&config.changeset.path)
+    } else {
+        PathBuf::from(".changesets")
+    };
+
+    // Merge environments: CLI > workspace > default
+    let environments = if args.environments.is_some() {
+        args.environments.clone()
+    } else {
+        workspace_config.map(|config| config.changeset.available_environments.clone())
+    };
+
+    // Merge default_env: CLI > workspace > default
+    let default_env = if args.default_env.is_some() {
+        args.default_env.clone()
+    } else {
+        workspace_config.map(|config| config.changeset.default_environments.clone())
+    };
+
+    // Merge strategy: CLI > workspace > default
+    let strategy = if args.strategy.is_some() {
+        args.strategy.clone()
+    } else {
+        workspace_config.map(|config| match config.version.strategy {
+            sublime_pkg_tools::types::VersioningStrategy::Independent => "independent".to_string(),
+            sublime_pkg_tools::types::VersioningStrategy::Unified => "unified".to_string(),
+        })
+    };
+
+    // Merge registry: CLI > workspace > default
+    let registry = if let Some(ref reg) = args.registry {
+        reg.clone()
+    } else if let Some(config) = workspace_config {
+        config.upgrade.registry.default_registry.clone()
+    } else {
+        "https://registry.npmjs.org".to_string()
+    };
+
+    // Merge config_format: CLI > workspace > default
+    let config_format = if args.config_format.is_some() {
+        args.config_format.clone()
+    } else {
+        None // Will use init's default prompts
+    };
+
+    InitArgs {
+        changeset_path,
+        environments,
+        default_env,
+        strategy,
+        registry,
+        config_format,
+        force: false, // Never force during clone
+        non_interactive: args.non_interactive,
+    }
+}
+
+/// Outputs "Starting initialization..." message.
+///
+/// # Arguments
+///
+/// * `format` - Output format to control message display
+#[allow(clippy::print_stdout)]
+fn output_init_starting(format: OutputFormat) {
+    match format {
+        OutputFormat::Human => {
+            println!("\n🔧 No workspace configuration found. Starting initialization...\n");
+        }
+        OutputFormat::Json | OutputFormat::JsonCompact | OutputFormat::Quiet => {}
+    }
+}
+
+/// Outputs "Starting validation..." message.
+///
+/// # Arguments
+///
+/// * `format` - Output format to control message display
+#[allow(clippy::print_stdout)]
+fn output_validation_starting(format: OutputFormat) {
+    match format {
+        OutputFormat::Human => {
+            println!("\n🔍 Validating workspace configuration...\n");
+        }
+        OutputFormat::Json | OutputFormat::JsonCompact | OutputFormat::Quiet => {}
+    }
+}
+
+/// Outputs validation success message with results.
+///
+/// # Arguments
+///
+/// * `validation` - Validation result details
+/// * `format` - Output format to control message display
+#[allow(clippy::print_stdout)]
+fn output_validation_success(validation: &ValidationResult, format: OutputFormat) {
+    match format {
+        OutputFormat::Human => {
+            println!("✓ Workspace configuration is valid\n");
+
+            if let Some(strategy) = &validation.strategy {
+                let strategy_str = match strategy {
+                    VersioningStrategy::Independent => "independent",
+                    VersioningStrategy::Unified => "unified",
+                };
+                println!("  Strategy: {strategy_str}");
+            }
+
+            println!("\n  All validation checks passed:");
+            for check in &validation.checks {
+                if check.passed {
+                    println!("    ✓ {}", check.name);
+                }
+            }
+            println!();
+        }
+        OutputFormat::Json | OutputFormat::JsonCompact | OutputFormat::Quiet => {}
+    }
+}
+/// Outputs clone completion message (without init).
+///
+/// # Arguments
+///
+/// * `destination` - Destination directory path
+/// * `validated` - Whether workspace configuration was validated
+/// * `format` - Output format to control message display
+///
+/// # Errors
+///
+/// Returns an error if output writing fails.
+#[allow(clippy::print_stdout)]
+fn output_clone_complete(destination: &Path, validated: bool, format: OutputFormat) -> Result<()> {
+    match format {
+        OutputFormat::Human => {
+            println!("\n✓ Clone completed successfully!\n");
+            println!("  Location: {}\n", destination.display());
+            println!("Next steps:");
+            println!("  cd {}", destination.display());
+            println!("  workspace changeset add    # Create a changeset");
+            println!("  workspace bump --dry-run   # Preview version bump\n");
+            Ok(())
+        }
+        OutputFormat::Json | OutputFormat::JsonCompact => {
+            #[derive(serde::Serialize)]
+            #[allow(non_snake_case)]
+            struct CloneResponse {
+                success: bool,
+                destination: String,
+                outcome: CloneOutcome,
+            }
+
+            #[derive(serde::Serialize)]
+            #[allow(non_snake_case)]
+            enum CloneOutcome {
+                ExistingConfigValidated,
+                ExistingConfigUnvalidated,
+            }
+
+            let response = CloneResponse {
+                success: true,
+                destination: destination.display().to_string(),
+                outcome: if validated {
+                    CloneOutcome::ExistingConfigValidated
+                } else {
+                    CloneOutcome::ExistingConfigUnvalidated
+                },
+            };
+
+            let json = if format == OutputFormat::JsonCompact {
+                serde_json::to_string(&response)
+            } else {
+                serde_json::to_string_pretty(&response)
+            }
+            .map_err(|e| CliError::execution(format!("Failed to serialize JSON: {e}")))?;
+
+            println!("{json}");
+            Ok(())
+        }
+        OutputFormat::Quiet => {
+            println!("Clone completed: {}", destination.display());
+            Ok(())
+        }
+    }
+}
+
+/// Outputs clone completion message (with init).
+///
+/// # Arguments
+///
+/// * `destination` - Destination directory path
+/// * `format` - Output format to control message display
+///
+/// # Errors
+///
+/// Returns an error if output writing fails.
+#[allow(clippy::print_stdout)]
+fn output_clone_complete_with_init(destination: &Path, format: OutputFormat) -> Result<()> {
+    match format {
+        OutputFormat::Human => {
+            println!("\n✓ Clone and initialization completed successfully!\n");
+            println!("  Location: {}\n", destination.display());
+            println!("Next steps:");
+            println!("  cd {}", destination.display());
+            println!("  workspace changeset add    # Create your first changeset");
+            println!("  workspace bump --dry-run   # Preview version bump\n");
+            Ok(())
+        }
+        OutputFormat::Json | OutputFormat::JsonCompact => {
+            #[derive(serde::Serialize)]
+            #[allow(non_snake_case)]
+            struct CloneResponse {
+                success: bool,
+                destination: String,
+                outcome: CloneOutcome,
+            }
+
+            #[derive(serde::Serialize)]
+            #[allow(non_snake_case)]
+            enum CloneOutcome {
+                NewWorkspaceInitialized,
+            }
+
+            let response = CloneResponse {
+                success: true,
+                destination: destination.display().to_string(),
+                outcome: CloneOutcome::NewWorkspaceInitialized,
+            };
+
+            let json = if format == OutputFormat::JsonCompact {
+                serde_json::to_string(&response)
+            } else {
+                serde_json::to_string_pretty(&response)
+            }
+            .map_err(|e| CliError::execution(format!("Failed to serialize JSON: {e}")))?;
+
+            println!("{json}");
+            Ok(())
+        }
+        OutputFormat::Quiet => {
+            println!("Clone and init completed: {}", destination.display());
+            Ok(())
+        }
+    }
 }
