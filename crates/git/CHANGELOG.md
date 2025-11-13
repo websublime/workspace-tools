@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.8 - 2025-11-13
+
+### Features
+
+#### WORK-TSK-143
+
+- Implement Story 11.2 - Git Clone with Progress Bar ([#25](https://github.com/websublime/workspace-tools/pull/25))
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.7 - 2025-11-13
 
 <!-- Made with ❤️ by WebSublime -->
