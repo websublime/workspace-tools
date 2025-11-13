@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.9 - 2025-11-13
+
+### Features
+
+#### WOR-TSK-144
+
+- Implement Story 11.3 - Configuration Detection and Validation ([#27](https://github.com/websublime/workspace-tools/pull/27))
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.8 - 2025-11-13
 
 ### Features
