@@ -102,6 +102,12 @@ pub enum Commands {
     ///
     /// Shows the CLI version and optionally detailed build information.
     Version(VersionArgs),
+
+    /// Clone a repository and setup workspace.
+    ///
+    /// Clones a Git repository and automatically initializes or validates
+    /// workspace configuration for immediate development.
+    Clone(CloneArgs),
 }
 
 // ============================================================================
@@ -882,4 +888,95 @@ pub struct VersionArgs {
     /// Includes Rust version, dependencies, and build information.
     #[arg(long)]
     pub verbose: bool,
+}
+
+// ============================================================================
+// Clone Command
+// ============================================================================
+
+/// Arguments for the `clone` command.
+///
+/// # Examples
+///
+/// ```rust
+/// use clap::Parser;
+/// use sublime_cli_tools::cli::Cli;
+///
+/// let cli = Cli::parse_from([
+///     "workspace",
+///     "clone",
+///     "https://github.com/org/repo.git"
+/// ]);
+/// ```
+#[derive(Debug, Args)]
+pub struct CloneArgs {
+    /// Repository URL to clone from.
+    ///
+    /// Supports both HTTPS and SSH URLs:
+    /// - HTTPS: https://github.com/org/repo.git
+    /// - SSH: git@github.com:org/repo.git
+    #[arg(value_name = "URL")]
+    pub url: String,
+
+    /// Destination path (optional, defaults to repository name).
+    ///
+    /// If not provided, uses the repository name extracted from the URL.
+    #[arg(value_name = "DESTINATION")]
+    pub destination: Option<PathBuf>,
+
+    // Init-related flags (used if no config found)
+    // These override workspace config if specified
+    /// Changeset path (overrides workspace config, defaults to ".changesets").
+    #[arg(long, value_name = "PATH")]
+    pub changeset_path: Option<String>,
+
+    /// Available environments (overrides workspace config).
+    ///
+    /// Comma-separated list of environments.
+    /// Example: "dev,staging,prod"
+    #[arg(long, value_delimiter = ',')]
+    pub environments: Option<Vec<String>>,
+
+    /// Default environments (overrides workspace config).
+    ///
+    /// Comma-separated list of default environments.
+    /// Example: "prod"
+    #[arg(long, value_delimiter = ',')]
+    pub default_env: Option<Vec<String>>,
+
+    /// Versioning strategy (overrides workspace config: "independent" or "unified").
+    #[arg(long)]
+    pub strategy: Option<String>,
+
+    /// Registry URL (overrides workspace config, defaults to "https://registry.npmjs.org").
+    #[arg(long, value_name = "URL")]
+    pub registry: Option<String>,
+
+    /// Config format (overrides workspace config: "toml", "yaml", or "json").
+    #[arg(long)]
+    pub config_format: Option<String>,
+
+    /// Skip interactive prompts.
+    ///
+    /// Uses provided flags and defaults without prompting.
+    #[arg(long)]
+    pub non_interactive: bool,
+
+    /// Skip configuration validation.
+    ///
+    /// Skips validation even if configuration exists.
+    #[arg(long)]
+    pub skip_validation: bool,
+
+    /// Overwrite destination if it exists.
+    ///
+    /// Removes the destination directory before cloning.
+    #[arg(long)]
+    pub force: bool,
+
+    /// Create a shallow clone with specified depth.
+    ///
+    /// Performs a shallow clone with the specified number of commits.
+    #[arg(long)]
+    pub depth: Option<u32>,
 }
