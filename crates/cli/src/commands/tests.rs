@@ -2224,12 +2224,14 @@ version_consistency = true
 #[allow(clippy::panic)]
 mod clone_tests {
     use crate::commands::clone::{
-        clone_with_progress, determine_destination, validate_destination,
+        clone_with_progress, detect_workspace_config, determine_destination, validate_destination,
+        validate_workspace,
     };
     use crate::output::OutputFormat;
     use crate::output::progress::Spinner;
     use std::fs;
     use std::path::{Path, PathBuf};
+    use sublime_pkg_tools::types::VersioningStrategy;
     use tempfile::TempDir;
 
     // ========================================================================
@@ -2717,5 +2719,476 @@ mod clone_tests {
         // We can't assert whether it's active or not because it depends on the test environment
         // (whether stdout is a TTY). Just test that it doesn't crash.
         spinner.finish();
+    }
+
+    // ========================================================================
+    // Configuration detection and validation tests (Story 11.3)
+    // ========================================================================
+
+    /// Helper to create a test workspace with valid configuration.
+    fn create_valid_workspace() -> TempDir {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+
+        // Create package-tools.toml
+        let config_content = "
+[changeset]
+path = \".changesets\"
+history_path = \".changesets/history\"
+available_environments = [\"dev\", \"staging\", \"prod\"]
+default_environments = [\"prod\"]
+
+[version]
+strategy = \"independent\"
+default_bump = \"patch\"
+
+[upgrade.backup]
+backup_dir = \".workspace-backups\"
+enabled = true
+keep_count = 5
+
+[upgrade.registry]
+default_registry = \"https://registry.npmjs.org\"
+";
+        fs::write(temp_dir.path().join("package-tools.toml"), config_content)
+            .expect("Failed to write config");
+
+        // Create required directories
+        fs::create_dir_all(temp_dir.path().join(".changesets/history"))
+            .expect("Failed to create .changesets/history");
+        fs::create_dir_all(temp_dir.path().join(".workspace-backups"))
+            .expect("Failed to create .workspace-backups");
+
+        // Create .gitignore with required entries
+        let gitignore_content = "
+node_modules/
+.changesets/
+.workspace-backups/
+";
+        fs::write(temp_dir.path().join(".gitignore"), gitignore_content)
+            .expect("Failed to write .gitignore");
+
+        temp_dir
+    }
+
+    /// Helper to create a workspace with configuration but missing directories.
+    fn create_invalid_workspace_missing_dirs() -> TempDir {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+
+        // Create package-tools.toml
+        let config_content = "
+[changeset]
+path = \".changesets\"
+history_path = \".changesets/history\"
+available_environments = [\"dev\", \"staging\", \"prod\"]
+default_environments = [\"prod\"]
+
+[version]
+strategy = \"independent\"
+default_bump = \"patch\"
+
+[upgrade.backup]
+backup_dir = \".workspace-backups\"
+enabled = true
+keep_count = 5
+
+[upgrade.registry]
+default_registry = \"https://registry.npmjs.org\"
+";
+        fs::write(temp_dir.path().join("package-tools.toml"), config_content)
+            .expect("Failed to write config");
+
+        // Deliberately don't create the required directories
+
+        temp_dir
+    }
+
+    /// Helper to create a workspace without configuration.
+    fn create_unconfigured_workspace() -> TempDir {
+        TempDir::new().expect("Failed to create temp dir")
+    }
+
+    #[tokio::test]
+    async fn test_detect_workspace_config_with_primary_location() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+
+        // Create config in primary location (package-tools.toml)
+        let config_content = "
+[changeset]
+path = \".changesets\"
+history_path = \".changesets/history\"
+available_environments = [\"dev\", \"prod\"]
+default_environments = [\"prod\"]
+
+[version]
+strategy = \"independent\"
+default_bump = \"patch\"
+
+[upgrade.backup]
+backup_dir = \".workspace-backups\"
+enabled = true
+keep_count = 5
+
+[upgrade.registry]
+default_registry = \"https://registry.npmjs.org\"
+";
+        fs::write(temp_dir.path().join("package-tools.toml"), config_content)
+            .expect("Failed to write config");
+
+        let result = detect_workspace_config(temp_dir.path()).await;
+
+        assert!(result.is_ok());
+        let config_opt = result.unwrap();
+        assert!(config_opt.is_some());
+
+        let config = config_opt.unwrap();
+        assert_eq!(config.changeset.path, ".changesets");
+        assert_eq!(config.version.strategy, VersioningStrategy::Independent);
+    }
+
+    #[tokio::test]
+    async fn test_detect_workspace_config_with_alternate_location() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+
+        // Create config in alternate location (.sublime/package-tools.toml)
+        fs::create_dir_all(temp_dir.path().join(".sublime")).expect("Failed to create .sublime");
+
+        let config_content = "
+[changeset]
+path = \".changesets\"
+history_path = \".changesets/history\"
+available_environments = [\"dev\", \"prod\"]
+default_environments = [\"prod\"]
+
+[version]
+strategy = \"unified\"
+default_bump = \"minor\"
+
+[upgrade.backup]
+backup_dir = \".workspace-backups\"
+enabled = true
+keep_count = 5
+
+[upgrade.registry]
+default_registry = \"https://registry.npmjs.org\"
+";
+        fs::write(temp_dir.path().join(".sublime/package-tools.toml"), config_content)
+            .expect("Failed to write config");
+
+        let result = detect_workspace_config(temp_dir.path()).await;
+
+        assert!(result.is_ok());
+        let config_opt = result.unwrap();
+        assert!(config_opt.is_some());
+
+        let config = config_opt.unwrap();
+        assert_eq!(config.changeset.path, ".changesets");
+        assert_eq!(config.version.strategy, VersioningStrategy::Unified);
+    }
+
+    #[tokio::test]
+    async fn test_detect_workspace_config_not_found() {
+        let temp_dir = create_unconfigured_workspace();
+
+        let result = detect_workspace_config(temp_dir.path()).await;
+
+        assert!(result.is_ok());
+        let config_opt = result.unwrap();
+        assert!(config_opt.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_detect_workspace_config_primary_takes_precedence() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+
+        // Create config in both locations
+        let primary_config = "
+[changeset]
+path = \".changesets-primary\"
+history_path = \".changesets-primary/history\"
+available_environments = [\"dev\", \"prod\"]
+default_environments = [\"prod\"]
+
+[version]
+strategy = \"independent\"
+default_bump = \"patch\"
+
+[upgrade.backup]
+backup_dir = \".workspace-backups\"
+enabled = true
+keep_count = 5
+
+[upgrade.registry]
+default_registry = \"https://registry.npmjs.org\"
+";
+        fs::write(temp_dir.path().join("package-tools.toml"), primary_config)
+            .expect("Failed to write primary config");
+
+        fs::create_dir_all(temp_dir.path().join(".sublime")).expect("Failed to create .sublime");
+        let alternate_config = "
+[changeset]
+path = \".changesets-alternate\"
+history_path = \".changesets-alternate/history\"
+available_environments = [\"dev\", \"prod\"]
+default_environments = [\"prod\"]
+
+[version]
+strategy = \"unified\"
+default_bump = \"minor\"
+
+[upgrade.backup]
+backup_dir = \".workspace-backups\"
+enabled = true
+keep_count = 5
+
+[upgrade.registry]
+default_registry = \"https://registry.npmjs.org\"
+";
+        fs::write(temp_dir.path().join(".sublime/package-tools.toml"), alternate_config)
+            .expect("Failed to write alternate config");
+
+        let result = detect_workspace_config(temp_dir.path()).await;
+
+        assert!(result.is_ok());
+        let config_opt = result.unwrap();
+        assert!(config_opt.is_some());
+
+        let config = config_opt.unwrap();
+        // Should use primary location
+        assert_eq!(config.changeset.path, ".changesets-primary");
+        assert_eq!(config.version.strategy, VersioningStrategy::Independent);
+    }
+
+    #[tokio::test]
+    async fn test_validate_workspace_with_valid_configuration() {
+        let temp_dir = create_valid_workspace();
+
+        let result = validate_workspace(temp_dir.path()).await;
+
+        assert!(result.is_ok());
+        let validation = result.unwrap();
+
+        assert!(validation.is_valid, "Validation should pass for valid workspace");
+        assert!(validation.strategy.is_some());
+        assert_eq!(validation.strategy.unwrap(), VersioningStrategy::Independent);
+
+        // All checks should pass
+        for check in &validation.checks {
+            assert!(
+                check.passed,
+                "Check '{}' should pass, but failed with: {:?}",
+                check.name, check.error
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_validate_workspace_without_configuration() {
+        let temp_dir = create_unconfigured_workspace();
+
+        let result = validate_workspace(temp_dir.path()).await;
+
+        assert!(result.is_ok());
+        let validation = result.unwrap();
+
+        assert!(!validation.is_valid, "Validation should fail without configuration");
+        assert!(validation.strategy.is_none());
+
+        // Configuration check should fail
+        let config_check = validation.checks.iter().find(|c| c.name == "Configuration file");
+        assert!(config_check.is_some());
+        assert!(!config_check.unwrap().passed);
+        assert!(config_check.unwrap().error.is_some());
+        assert!(config_check.unwrap().suggestion.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_validate_workspace_missing_directories() {
+        let temp_dir = create_invalid_workspace_missing_dirs();
+
+        let result = validate_workspace(temp_dir.path()).await;
+
+        assert!(result.is_ok());
+        let validation = result.unwrap();
+
+        assert!(!validation.is_valid, "Validation should fail with missing directories");
+
+        // Check that directory checks failed
+        let changeset_check = validation.checks.iter().find(|c| c.name == "Changeset directory");
+        assert!(changeset_check.is_some());
+        assert!(!changeset_check.unwrap().passed);
+
+        let history_check = validation.checks.iter().find(|c| c.name == "History directory");
+        assert!(history_check.is_some());
+        assert!(!history_check.unwrap().passed);
+
+        let backup_check = validation.checks.iter().find(|c| c.name == "Backup directory");
+        assert!(backup_check.is_some());
+        assert!(!backup_check.unwrap().passed);
+    }
+
+    #[tokio::test]
+    async fn test_validate_workspace_missing_gitignore() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+
+        // Create config and directories but no .gitignore
+        let config_content = "
+[changeset]
+path = \".changesets\"
+history_path = \".changesets/history\"
+available_environments = [\"dev\", \"prod\"]
+default_environments = [\"prod\"]
+
+[version]
+strategy = \"independent\"
+default_bump = \"patch\"
+
+[upgrade.backup]
+backup_dir = \".workspace-backups\"
+enabled = true
+keep_count = 5
+
+[upgrade.registry]
+default_registry = \"https://registry.npmjs.org\"
+";
+        fs::write(temp_dir.path().join("package-tools.toml"), config_content)
+            .expect("Failed to write config");
+
+        fs::create_dir_all(temp_dir.path().join(".changesets/history"))
+            .expect("Failed to create .changesets/history");
+        fs::create_dir_all(temp_dir.path().join(".workspace-backups"))
+            .expect("Failed to create .workspace-backups");
+
+        let result = validate_workspace(temp_dir.path()).await;
+
+        assert!(result.is_ok());
+        let validation = result.unwrap();
+
+        assert!(!validation.is_valid, "Validation should fail without .gitignore");
+
+        // .gitignore check should fail
+        let gitignore_check = validation.checks.iter().find(|c| c.name == ".gitignore file");
+        assert!(gitignore_check.is_some());
+        assert!(!gitignore_check.unwrap().passed);
+        assert!(gitignore_check.unwrap().error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_validate_workspace_incomplete_gitignore() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+
+        // Create config and directories
+        let config_content = "
+[changeset]
+path = \".changesets\"
+history_path = \".changesets/history\"
+available_environments = [\"dev\", \"prod\"]
+default_environments = [\"prod\"]
+
+[version]
+strategy = \"independent\"
+default_bump = \"patch\"
+
+[upgrade.backup]
+backup_dir = \".workspace-backups\"
+enabled = true
+keep_count = 5
+
+[upgrade.registry]
+default_registry = \"https://registry.npmjs.org\"
+";
+        fs::write(temp_dir.path().join("package-tools.toml"), config_content)
+            .expect("Failed to write config");
+
+        fs::create_dir_all(temp_dir.path().join(".changesets/history"))
+            .expect("Failed to create .changesets/history");
+        fs::create_dir_all(temp_dir.path().join(".workspace-backups"))
+            .expect("Failed to create .workspace-backups");
+
+        // Create .gitignore with only one required entry
+        let gitignore_content = "
+node_modules/
+.changesets/
+";
+        fs::write(temp_dir.path().join(".gitignore"), gitignore_content)
+            .expect("Failed to write .gitignore");
+
+        let result = validate_workspace(temp_dir.path()).await;
+
+        assert!(result.is_ok());
+        let validation = result.unwrap();
+
+        assert!(!validation.is_valid, "Validation should fail with incomplete .gitignore");
+
+        // .gitignore entries check should fail
+        let gitignore_check = validation.checks.iter().find(|c| c.name == ".gitignore entries");
+        assert!(gitignore_check.is_some());
+        assert!(!gitignore_check.unwrap().passed);
+        assert!(
+            gitignore_check.unwrap().error.as_ref().unwrap().contains("Missing .gitignore entries")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_workspace_custom_paths() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+
+        // Create config with custom paths
+        let config_content = "
+[changeset]
+path = \"custom/changesets\"
+history_path = \"custom/changesets/archive\"
+available_environments = [\"dev\", \"prod\"]
+default_environments = [\"prod\"]
+
+[version]
+strategy = \"unified\"
+default_bump = \"minor\"
+
+[upgrade.backup]
+backup_dir = \"custom/backups\"
+enabled = true
+keep_count = 5
+
+[upgrade.registry]
+default_registry = \"https://registry.npmjs.org\"
+";
+        fs::write(temp_dir.path().join("package-tools.toml"), config_content)
+            .expect("Failed to write config");
+
+        // Create directories with custom paths
+        fs::create_dir_all(temp_dir.path().join("custom/changesets/archive"))
+            .expect("Failed to create custom changeset directory");
+        fs::create_dir_all(temp_dir.path().join("custom/backups"))
+            .expect("Failed to create custom backup directory");
+
+        // Create .gitignore with custom paths
+        let gitignore_content = "
+node_modules/
+custom/changesets/
+custom/backups/
+";
+        fs::write(temp_dir.path().join(".gitignore"), gitignore_content)
+            .expect("Failed to write .gitignore");
+
+        let result = validate_workspace(temp_dir.path()).await;
+
+        assert!(result.is_ok());
+        let validation = result.unwrap();
+
+        assert!(
+            validation.is_valid,
+            "Validation should pass with custom paths: {:#?}",
+            validation.checks
+        );
+        assert_eq!(validation.strategy.unwrap(), VersioningStrategy::Unified);
+
+        // All checks should pass
+        for check in &validation.checks {
+            assert!(
+                check.passed,
+                "Check '{}' should pass, but failed with: {:?}",
+                check.name, check.error
+            );
+        }
     }
 }

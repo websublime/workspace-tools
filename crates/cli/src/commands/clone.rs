@@ -61,10 +61,354 @@ use crate::error::{CliError, Result};
 use crate::output::OutputFormat;
 use crate::output::progress::ProgressBar;
 use regex::Regex;
+use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use sublime_git_tools::Repo;
+use sublime_pkg_tools::config::{PackageToolsConfig, load_config_from_file};
+use sublime_pkg_tools::types::VersioningStrategy;
+use sublime_standard_tools::config::Configurable;
 use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
+
+/// Represents the result of a validation operation.
+///
+/// Contains the overall validation status, the detected strategy (if any),
+/// and a list of individual validation checks.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let result = ValidationResult {
+///     is_valid: false,
+///     strategy: Some(VersioningStrategy::Independent),
+///     checks: vec![
+///         ValidationCheck {
+///             name: "Configuration file".to_string(),
+///             passed: true,
+///             error: None,
+///             suggestion: None,
+///         },
+///         ValidationCheck {
+///             name: "Changeset directory".to_string(),
+///             passed: false,
+///             error: Some("Directory does not exist".to_string()),
+///             suggestion: Some("Run 'workspace init --force'".to_string()),
+///         },
+///     ],
+/// };
+/// ```
+#[derive(Debug, Clone)]
+pub struct ValidationResult {
+    /// Whether all validation checks passed.
+    pub is_valid: bool,
+
+    /// The versioning strategy detected from configuration, if available.
+    pub strategy: Option<VersioningStrategy>,
+
+    /// List of individual validation checks performed.
+    pub checks: Vec<ValidationCheck>,
+}
+
+/// Represents an individual validation check.
+///
+/// Each check has a name, a pass/fail status, and optional error message
+/// and suggestion for fixing the issue.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let check = ValidationCheck {
+///     name: "Configuration file".to_string(),
+///     passed: false,
+///     error: Some("File not found".to_string()),
+///     suggestion: Some("Run 'workspace init' to create configuration".to_string()),
+/// };
+/// ```
+#[derive(Debug, Clone)]
+pub struct ValidationCheck {
+    /// The name of the validation check.
+    pub name: String,
+
+    /// Whether the check passed.
+    pub passed: bool,
+
+    /// Optional error message if the check failed.
+    pub error: Option<String>,
+
+    /// Optional suggestion for fixing the issue.
+    pub suggestion: Option<String>,
+}
+
+impl fmt::Display for ValidationResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Validation Results:")?;
+        writeln!(f)?;
+
+        if let Some(strategy) = &self.strategy {
+            let strategy_str = match strategy {
+                VersioningStrategy::Independent => "independent",
+                VersioningStrategy::Unified => "unified",
+            };
+            writeln!(f, "Strategy: {strategy_str}")?;
+            writeln!(f)?;
+        }
+
+        writeln!(f, "Checks:")?;
+        for check in &self.checks {
+            let status = if check.passed { "✓" } else { "✗" };
+            writeln!(f, "  {status} {}", check.name)?;
+
+            if let Some(error) = &check.error {
+                writeln!(f, "    Error: {error}")?;
+            }
+
+            if let Some(suggestion) = &check.suggestion {
+                writeln!(f, "    Suggestion: {suggestion}")?;
+            }
+        }
+
+        writeln!(f)?;
+        let overall = if self.is_valid { "VALID" } else { "INVALID" };
+        writeln!(f, "Overall Status: {overall}")?;
+
+        Ok(())
+    }
+}
+
+/// Detects if workspace configuration exists in the cloned repository.
+///
+/// Uses `sublime_pkg_tools::config::load_config_from_file()` to check for
+/// configuration in standard locations:
+/// - package-tools.toml
+/// - .sublime/package-tools.toml
+///
+/// # Arguments
+///
+/// * `root` - The root directory of the cloned repository
+///
+/// # Returns
+///
+/// Returns `Ok(Some(config))` if configuration is found and loaded successfully,
+/// `Ok(None)` if no configuration exists, or an error if loading fails.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - File system operations fail
+/// - Configuration file exists but is malformed
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let config = detect_workspace_config(Path::new("./my-repo")).await?;
+/// match config {
+///     Some(cfg) => println!("Found configuration with strategy: {:?}", cfg.version.strategy),
+///     None => println!("No configuration found"),
+/// }
+/// ```
+pub async fn detect_workspace_config(root: &Path) -> Result<Option<PackageToolsConfig>> {
+    let fs = FileSystemManager::new();
+
+    // Try package-tools.toml first
+    let primary_config = root.join("package-tools.toml");
+    if fs.exists(&primary_config).await {
+        match load_config_from_file(&primary_config).await {
+            Ok(config) => return Ok(Some(config)),
+            Err(_) => {
+                // File exists but failed to load - continue to alternate location
+            }
+        }
+    }
+
+    // Try alternate location: .sublime/package-tools.toml
+    let alternate_config = root.join(".sublime/package-tools.toml");
+    if fs.exists(&alternate_config).await {
+        match load_config_from_file(&alternate_config).await {
+            Ok(config) => return Ok(Some(config)),
+            Err(_) => {
+                // File exists but failed to load
+            }
+        }
+    }
+
+    // No configuration found in either location
+    Ok(None)
+}
+
+/// Helper function to validate directory existence.
+///
+/// Creates a `ValidationCheck` for a directory.
+///
+/// # Arguments
+///
+/// * `fs` - The filesystem manager
+/// * `root` - The root directory
+/// * `path` - The relative path to check
+/// * `name` - Display name for the check
+async fn validate_directory(
+    fs: &FileSystemManager,
+    root: &Path,
+    path: &str,
+    name: &str,
+) -> ValidationCheck {
+    let dir = root.join(path);
+    let exists = fs.exists(&dir).await;
+    ValidationCheck {
+        name: name.to_string(),
+        passed: exists,
+        error: if exists { None } else { Some(format!("Directory '{path}' does not exist")) },
+        suggestion: if exists {
+            None
+        } else {
+            Some("Run 'workspace init --force' to create directory".to_string())
+        },
+    }
+}
+
+/// Validates workspace configuration and directory structure.
+///
+/// Performs comprehensive validation including:
+/// 1. Configuration file existence and loading
+/// 2. Configuration structure validation using `Configurable::validate()`
+/// 3. Required directory existence checks (.changesets/, .changesets/history/, .workspace-backups/)
+/// 4. .gitignore entries verification
+///
+/// # Arguments
+///
+/// * `root` - The root directory of the workspace to validate
+///
+/// # Returns
+///
+/// Returns a `ValidationResult` containing:
+/// - Overall validation status (passed/failed)
+/// - Detected versioning strategy
+/// - Individual check results with errors and suggestions
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - File system operations fail
+/// - Cannot read .gitignore file
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let result = validate_workspace(Path::new("./my-repo")).await?;
+/// if result.is_valid {
+///     println!("Workspace is valid!");
+/// } else {
+///     println!("Validation failed:");
+///     for check in &result.checks {
+///         if !check.passed {
+///             println!("  - {}: {}", check.name, check.error.as_ref().unwrap());
+///         }
+///     }
+/// }
+/// ```
+pub async fn validate_workspace(root: &Path) -> Result<ValidationResult> {
+    let mut checks = Vec::new();
+    let fs = FileSystemManager::new();
+
+    // Check 1: Load and validate configuration
+    let config_result = detect_workspace_config(root).await?;
+
+    let (config_check, config_opt) = match config_result {
+        Some(config) => {
+            // Config loaded, now validate it using the Configurable trait
+            match config.validate() {
+                Ok(()) => (
+                    ValidationCheck {
+                        name: "Configuration file".to_string(),
+                        passed: true,
+                        error: None,
+                        suggestion: None,
+                    },
+                    Some(config),
+                ),
+                Err(e) => (
+                    ValidationCheck {
+                        name: "Configuration validation".to_string(),
+                        passed: false,
+                        error: Some(format!("Validation failed: {e}")),
+                        suggestion: Some(
+                            "Fix configuration errors or run 'workspace init --force'".to_string(),
+                        ),
+                    },
+                    Some(config),
+                ),
+            }
+        }
+        None => (
+            ValidationCheck {
+                name: "Configuration file".to_string(),
+                passed: false,
+                error: Some("Configuration file not found".to_string()),
+                suggestion: Some("Run 'workspace init' to create configuration".to_string()),
+            },
+            None,
+        ),
+    };
+    checks.push(config_check);
+
+    // Check 2: Changeset directory
+    let changeset_path = config_opt.as_ref().map_or(".changesets", |c| c.changeset.path.as_str());
+    checks.push(validate_directory(&fs, root, changeset_path, "Changeset directory").await);
+
+    // Check 3: History directory
+    let history_path =
+        config_opt.as_ref().map_or(".changesets/history", |c| c.changeset.history_path.as_str());
+    checks.push(validate_directory(&fs, root, history_path, "History directory").await);
+
+    // Check 4: Backup directory
+    let backup_path =
+        config_opt.as_ref().map_or(".workspace-backups", |c| c.upgrade.backup.backup_dir.as_str());
+    checks.push(validate_directory(&fs, root, backup_path, "Backup directory").await);
+
+    // Check 5: .gitignore entries
+    let gitignore_path = root.join(".gitignore");
+    let gitignore_check = if fs.exists(&gitignore_path).await {
+        let content = fs.read_file_string(&gitignore_path).await.map_err(|e| {
+            CliError::io(format!(
+                "Failed to read .gitignore file at {}: {e}",
+                gitignore_path.display()
+            ))
+        })?;
+
+        let has_changesets = content.contains(changeset_path);
+        let has_backups = content.contains(backup_path);
+
+        ValidationCheck {
+            name: ".gitignore entries".to_string(),
+            passed: has_changesets && has_backups,
+            error: if !has_changesets || !has_backups {
+                Some("Missing .gitignore entries for workspace directories".to_string())
+            } else {
+                None
+            },
+            suggestion: if !has_changesets || !has_backups {
+                Some("Run 'workspace init --force' to update .gitignore".to_string())
+            } else {
+                None
+            },
+        }
+    } else {
+        ValidationCheck {
+            name: ".gitignore file".to_string(),
+            passed: false,
+            error: Some(".gitignore file does not exist".to_string()),
+            suggestion: Some("Create .gitignore with workspace directories".to_string()),
+        }
+    };
+    checks.push(gitignore_check);
+
+    // Determine overall validity
+    let is_valid = checks.iter().all(|c| c.passed);
+
+    // Extract strategy if configuration loaded successfully
+    let strategy = config_opt.map(|c| c.version.strategy);
+
+    Ok(ValidationResult { is_valid, strategy, checks })
+}
 
 /// Determines the destination directory for cloning.
 ///
@@ -532,10 +876,24 @@ pub async fn execute_clone(args: &CloneArgs, format: OutputFormat) -> Result<()>
     // Step 4: Clone repository with progress
     let _repo = clone_with_progress(&args.url, &destination, args.depth, format)?;
 
-    // TODO: Story 11.3 - Implement configuration detection and validation
-    // - Detect if workspace configuration exists
-    // - If exists, validate configuration (unless --skip-validation)
-    // - Report validation results
+    // Step 5: Detect and validate workspace configuration (Story 11.3)
+    let config_exists = detect_workspace_config(&destination).await?.is_some();
+
+    if config_exists {
+        // Configuration exists - validate it (unless --skip-validation)
+        if !args.skip_validation {
+            let validation = validate_workspace(&destination).await?;
+
+            if !validation.is_valid {
+                // Validation failed - report errors
+                return Err(CliError::validation(format!(
+                    "Workspace configuration validation failed:\n\n{validation}"
+                )));
+            }
+
+            // Validation passed - success message will be shown in Story 11.4
+        }
+    }
 
     // TODO: Story 11.4 - Implement init integration and output
     // - If no config detected, run execute_init with merged settings
@@ -543,8 +901,6 @@ pub async fn execute_clone(args: &CloneArgs, format: OutputFormat) -> Result<()>
     // - Display success message with next steps
 
     // Note: #[allow(clippy::todo)] cannot be used on macro invocations
-    // This will be implemented as part of Stories 11.3 and 11.4
-    todo!(
-        "Configuration detection and validation - Story 11.3\nInit integration and output - Story 11.4"
-    )
+    // This will be implemented as part of Story 11.4
+    todo!("Init integration and output - Story 11.4")
 }
