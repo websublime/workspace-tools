@@ -913,7 +913,7 @@ pub struct CloneArgs {
     /// Repository URL to clone from.
     ///
     /// Supports both HTTPS and SSH URLs:
-    /// - HTTPS: https://github.com/org/repo.git
+    /// - HTTPS: <https://github.com/org/repo.git>
     /// - SSH: git@github.com:org/repo.git
     #[arg(value_name = "URL")]
     pub url: String,
@@ -948,7 +948,7 @@ pub struct CloneArgs {
     #[arg(long)]
     pub strategy: Option<String>,
 
-    /// Registry URL (overrides workspace config, defaults to "https://registry.npmjs.org").
+    /// Registry URL (overrides workspace config, defaults to "<https://registry.npmjs.org>").
     #[arg(long, value_name = "URL")]
     pub registry: Option<String>,
 
