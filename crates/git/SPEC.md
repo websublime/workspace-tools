@@ -132,6 +132,145 @@ let repo = Repo::clone("https://github.com/example/repo.git", "./cloned-repo")?;
 - `CanonicalPathFailure`: Failed to canonicalize the provided path
 - `CloneRepoFailure`: Failed to clone the Git repository
 
+#### `Repo::clone_with_options`
+
+Clones a Git repository from a URL to a local path with advanced options including shallow clone support.
+
+```rust
+pub fn clone_with_options(
+    url: &str,
+    path: &str,
+    depth: Option<i32>
+) -> Result<Self, RepoError>
+```
+
+**Parameters:**
+- `url`: The URL of the repository to clone
+- `path`: The local path where the repository should be cloned
+- `depth`: Optional depth for shallow clone (e.g., `Some(1)` for only the latest commit, `None` for full clone)
+
+**Returns:**
+- `Result<Self, RepoError>`: A `Repo` instance or an error
+
+**Examples:**
+```rust
+// Full clone (equivalent to Repo::clone)
+let repo = Repo::clone_with_options(
+    "https://github.com/example/repo.git",
+    "./cloned-repo",
+    None
+)?;
+
+// Shallow clone with depth 1 (only latest commit)
+let repo = Repo::clone_with_options(
+    "https://github.com/example/large-repo.git",
+    "./shallow-clone",
+    Some(1)
+)?;
+
+// Shallow clone with depth 10 (last 10 commits)
+let repo = Repo::clone_with_options(
+    "https://github.com/example/repo.git",
+    "./partial-clone",
+    Some(10)
+)?;
+```
+
+**Performance Benefits:**
+Shallow clones can significantly reduce:
+- Clone time (especially for repositories with extensive history)
+- Disk space usage
+- Network bandwidth consumption
+
+This is particularly useful for:
+- CI/CD pipelines that only need the latest code
+- Deployment scenarios
+- Quick repository inspection
+- Limited disk space environments
+
+**Limitations:**
+- Cannot push from a shallow clone without converting to full clone first
+- Some operations requiring full history may fail
+- Can be converted to full clone later using `git fetch --unshallow`
+
+**Possible errors:**
+- `CanonicalPathFailure`: Failed to canonicalize the provided path
+- `CloneRepoFailure`: Failed to clone the Git repository
+- Network connection failures
+- Authentication failures
+- Insufficient disk space
+
+#### `Repo::clone_with_progress`
+
+Clones a Git repository with real-time progress tracking callbacks.
+
+```rust
+pub fn clone_with_progress<F>(
+    url: &str,
+    path: &str,
+    depth: Option<i32>,
+    progress_cb: F
+) -> Result<Self, RepoError>
+where
+    F: FnMut(usize, usize) + 'static
+```
+
+**Parameters:**
+- `url`: The URL of the repository to clone
+- `path`: The local path where the repository should be cloned
+- `depth`: Optional depth for shallow clone
+- `progress_cb`: Callback function that receives `(current_objects, total_objects)` for progress updates
+
+**Returns:**
+- `Result<Self, RepoError>`: A `Repo` instance or an error
+
+**Examples:**
+```rust
+use sublime_git_tools::Repo;
+
+// Clone with progress updates
+let repo = Repo::clone_with_progress(
+    "https://github.com/example/repo.git",
+    "./cloned-repo",
+    None,
+    |current, total| {
+        println!("Progress: {}/{} objects ({:.1}%)", 
+                 current, total, 
+                 (current as f64 / total as f64) * 100.0);
+    }
+)?;
+
+// Shallow clone with progress
+let repo = Repo::clone_with_progress(
+    "https://github.com/example/large-repo.git",
+    "./shallow",
+    Some(1),
+    |current, total| {
+        if total > 0 {
+            let percent = (current as f64 / total as f64) * 100.0;
+            print!("\rReceiving objects: {:.0}%", percent);
+        }
+    }
+)?;
+```
+
+**Progress Callback Details:**
+The callback is invoked periodically during the clone operation with:
+- `current`: Number of objects received so far
+- `total`: Total number of objects to receive (may be 0 initially)
+
+The callback is called during:
+1. Receiving objects from the remote
+2. Resolving deltas
+3. Indexing objects
+
+**Possible errors:**
+- `CanonicalPathFailure`: Failed to canonicalize the provided path
+- `CloneRepoFailure`: Failed to clone the Git repository
+- Network connection failures
+- Authentication failures
+- Insufficient disk space
+
 ### Repository Information
 
 #### `Repo::get_repo_path`

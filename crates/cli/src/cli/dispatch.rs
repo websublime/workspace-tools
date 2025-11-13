@@ -266,7 +266,7 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
         }
 
         Commands::Clone(args) => {
-            crate::commands::clone::execute_clone(args).await?;
+            crate::commands::clone::execute_clone(args, format).await?;
         }
     }
 
