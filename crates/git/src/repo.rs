@@ -58,7 +58,7 @@ use git2::{
     BranchType, Commit, Cred, CredentialType, Delta, DiffOptions, Direction, Error as Git2Error,
     FetchOptions, FetchPrune, IndexAddOption, MergeOptions, Oid, PushOptions, RemoteCallbacks,
     Repository, RepositoryInitOptions, StatusOptions, TreeWalkMode, TreeWalkResult,
-    build::CheckoutBuilder,
+    build::{CheckoutBuilder, RepoBuilder},
 };
 use std::collections::HashMap;
 use std::fs::canonicalize;
@@ -419,6 +419,158 @@ impl Repo {
     pub fn clone(url: &str, path: &str) -> Result<Self, RepoError> {
         let local_path = canonicalize_path(path)?;
         let repo = Repository::clone(url, path).map_err(RepoError::CloneRepoFailure)?;
+
+        Ok(Self { repo, local_path: PathBuf::from(local_path) })
+    }
+
+    /// Clones a Git repository from a URL to a local path with additional options.
+    ///
+    /// This method provides advanced cloning capabilities including shallow clones
+    /// (limited history depth) and progress callbacks for tracking clone progress.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - The URL of the repository to clone
+    /// * `path` - The local path where the repository should be cloned
+    /// * `depth` - Optional depth for shallow clone (e.g., Some(1) for single commit)
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self, RepoError>` - A new `Repo` instance or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Path canonicalization fails (`CanonicalPathFailure`)
+    /// - Clone operation fails (`CloneRepoFailure`)
+    /// - Network connection fails
+    /// - Authentication fails
+    /// - Insufficient disk space
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_git_tools::Repo;
+    ///
+    /// // Full clone
+    /// let repo = Repo::clone_with_options(
+    ///     "https://github.com/example/repo.git",
+    ///     "./cloned-repo",
+    ///     None
+    /// )?;
+    ///
+    /// // Shallow clone with depth 1 (only latest commit)
+    /// let repo = Repo::clone_with_options(
+    ///     "https://github.com/example/large-repo.git",
+    ///     "./shallow-clone",
+    ///     Some(1)
+    /// )?;
+    ///
+    /// // Shallow clone with depth 10 (last 10 commits)
+    /// let repo = Repo::clone_with_options(
+    ///     "https://github.com/example/repo.git",
+    ///     "./partial-clone",
+    ///     Some(10)
+    /// )?;
+    /// ```
+    ///
+    /// # Performance
+    ///
+    /// Shallow clones can significantly reduce clone time and disk space usage
+    /// for repositories with extensive history. A depth of 1 only fetches the
+    /// most recent commit, which is useful for CI/CD pipelines and deployment
+    /// scenarios where full history is not needed.
+    ///
+    /// # Limitations
+    ///
+    /// Shallow clones have some limitations:
+    /// - Cannot push from a shallow clone
+    /// - Some operations requiring full history may not work
+    /// - Can be "unshallowed" later using `git fetch --unshallow`
+    pub fn clone_with_options(
+        url: &str,
+        path: &str,
+        depth: Option<i32>,
+    ) -> Result<Self, RepoError> {
+        let local_path = canonicalize_path(path)?;
+
+        // Build fetch options with depth if specified
+        let mut fetch_opts = FetchOptions::new();
+        if let Some(depth_value) = depth {
+            fetch_opts.depth(depth_value);
+        }
+
+        // Build repository clone with options
+        let mut builder = RepoBuilder::new();
+        builder.fetch_options(fetch_opts);
+
+        // Perform the clone
+        let repo = builder.clone(url, Path::new(path)).map_err(RepoError::CloneRepoFailure)?;
+
+        Ok(Self { repo, local_path: PathBuf::from(local_path) })
+    }
+
+    /// Clones a Git repository with progress tracking.
+    ///
+    /// This method provides real-time progress updates during the clone operation,
+    /// reporting the number of objects received and indexed.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - The URL of the repository to clone
+    /// * `path` - The local path where the repository should be cloned
+    /// * `depth` - Optional depth for shallow clone
+    /// * `progress_cb` - Callback function receiving (current, total) objects
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self, RepoError>` - A new `Repo` instance or an error
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_git_tools::Repo;
+    ///
+    /// let repo = Repo::clone_with_progress(
+    ///     "https://github.com/example/repo.git",
+    ///     "./cloned-repo",
+    ///     None,
+    ///     |current, total| {
+    ///         println!("Progress: {}/{}", current, total);
+    ///     }
+    /// )?;
+    /// ```
+    pub fn clone_with_progress<F>(
+        url: &str,
+        path: &str,
+        depth: Option<i32>,
+        mut progress_cb: F,
+    ) -> Result<Self, RepoError>
+    where
+        F: FnMut(usize, usize) + 'static,
+    {
+        let local_path = canonicalize_path(path)?;
+
+        // Setup callbacks for progress tracking
+        let mut callbacks = RemoteCallbacks::new();
+        callbacks.transfer_progress(move |stats| {
+            progress_cb(stats.received_objects(), stats.total_objects());
+            true
+        });
+
+        // Build fetch options with callbacks and depth
+        let mut fetch_opts = FetchOptions::new();
+        fetch_opts.remote_callbacks(callbacks);
+        if let Some(depth_value) = depth {
+            fetch_opts.depth(depth_value);
+        }
+
+        // Build repository clone with options
+        let mut builder = RepoBuilder::new();
+        builder.fetch_options(fetch_opts);
+
+        // Perform the clone
+        let repo = builder.clone(url, Path::new(path)).map_err(RepoError::CloneRepoFailure)?;
 
         Ok(Self { repo, local_path: PathBuf::from(local_path) })
     }
