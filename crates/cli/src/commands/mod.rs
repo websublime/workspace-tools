@@ -51,8 +51,3 @@ pub mod version;
 
 #[cfg(test)]
 mod tests;
-
-// TODO: will be implemented in subsequent stories
-// Story 11.2 will implement Git clone with progress bar
-// Story 11.3 will implement configuration detection and validation
-// Story 11.4 will implement init integration and output
