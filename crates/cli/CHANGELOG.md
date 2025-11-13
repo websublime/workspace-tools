@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.10 - 2025-11-13
+
+### Features
+
+#### WOR-TSK-145
+
+- Implement Story 11.4 - Init Integration and Output ([#29](https://github.com/websublime/workspace-tools/pull/29))
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.9 - 2025-11-13
 
 ### Features
