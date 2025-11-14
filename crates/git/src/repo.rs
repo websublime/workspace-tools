@@ -549,8 +549,6 @@ impl Repo {
     where
         F: FnMut(usize, usize) + 'static,
     {
-        let local_path = canonicalize_path(path)?;
-
         // Setup callbacks for progress tracking
         let mut callbacks = RemoteCallbacks::new();
         callbacks.transfer_progress(move |stats| {
@@ -571,6 +569,9 @@ impl Repo {
 
         // Perform the clone
         let repo = builder.clone(url, Path::new(path)).map_err(RepoError::CloneRepoFailure)?;
+
+        // Canonicalize the path AFTER cloning (when the directory exists)
+        let local_path = canonicalize_path(path)?;
 
         Ok(Self { repo, local_path: PathBuf::from(local_path) })
     }
