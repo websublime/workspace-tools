@@ -43,6 +43,7 @@ workspace upgrade <subcommand>        # Manage dependency upgrades
 workspace audit [options]             # Run project health audit
 workspace changes [options]           # Analyze repository changes
 workspace version [options]           # Display version information
+workspace clone <url> [destination]   # Clone repository with workspace setup
 ```
 
 ---
@@ -586,6 +587,264 @@ workspace version
 
 # Show detailed information
 workspace version --verbose
+```
+
+---
+
+### `clone` - Clone Repository with Workspace Setup
+
+Clones a Git repository and automatically initializes or validates workspace configuration for immediate development.
+
+**Usage:**
+```bash
+workspace clone <URL> [DESTINATION] [OPTIONS]
+```
+
+**Arguments:**
+- `<URL>` - Repository URL to clone from (HTTPS or SSH)
+- `[DESTINATION]` - Optional destination path (defaults to repository name)
+
+**Options:**
+
+*Clone Options:*
+- `--force` - Overwrite destination if it exists
+- `--depth <N>` - Create shallow clone with specified depth
+- `--skip-validation` - Skip configuration validation (even if config exists)
+- `--non-interactive` - Skip interactive prompts
+
+*Init Options (used if no config found):*
+- `--changeset-path <PATH>` - Changeset directory path (default: `.changesets`)
+- `--environments <LIST>` - Comma-separated list of environments
+- `--default-env <LIST>` - Comma-separated list of default environments
+- `--strategy <STRATEGY>` - Versioning strategy (`independent` or `unified`)
+- `--registry <URL>` - NPM registry URL (default: `https://registry.npmjs.org`)
+- `--config-format <FORMAT>` - Config file format (`json`, `toml`, or `yaml`)
+
+**Behavior:**
+
+The clone command follows this workflow:
+
+1. **Clone repository** - Downloads the repository with progress indication
+2. **Detect configuration** - Searches for existing workspace configuration
+3. **Path A: Configuration exists** 
+   - Validates configuration file structure
+   - Checks required directories exist (.changesets/, .changesets/history/, .workspace-backups/)
+   - Verifies .gitignore entries
+   - Reports validation results
+4. **Path B: No configuration**
+   - Automatically runs `init` command
+   - Creates workspace configuration
+   - Sets up directory structure
+   - Updates .gitignore
+
+**Examples:**
+
+```bash
+# Clone to default location (repository name)
+workspace clone https://github.com/org/repo.git
+
+# Clone to specific directory
+workspace clone https://github.com/org/repo.git ./my-project
+
+# Clone with SSH
+workspace clone git@github.com:org/repo.git
+
+# Clone and force overwrite existing directory
+workspace clone https://github.com/org/repo.git --force
+
+# Shallow clone (faster, less disk space)
+workspace clone https://github.com/org/repo.git --depth 1
+
+# Clone with init configuration (non-interactive)
+workspace clone https://github.com/org/repo.git \
+  --non-interactive \
+  --strategy independent \
+  --environments "dev,staging,prod" \
+  --default-env "prod"
+
+# Clone and skip validation
+workspace clone https://github.com/org/repo.git --skip-validation
+
+# Clone for CI/CD with JSON output
+workspace --format json clone https://github.com/org/repo.git ./workspace
+```
+
+**Error Scenarios:**
+
+The clone command handles various error scenarios with helpful messages:
+
+```bash
+# Network/DNS failure
+workspace clone https://github.com/org/invalid.git
+# Error: Network error: Could not resolve host for URL
+# Suggestions:
+#   - Check your internet connection
+#   - Verify the repository URL is correct
+
+# Authentication failure (SSH)
+workspace clone git@github.com:private/repo.git
+# Error: Authentication error: Failed to authenticate
+# Suggestions:
+#   - Ensure your SSH key is added to your SSH agent
+#   - Verify your SSH key is registered with GitHub
+#   - Try: ssh -T git@github.com to test connection
+
+# Authentication failure (HTTPS)
+workspace clone https://github.com/private/repo.git
+# Error: Authentication error: Failed to authenticate
+# Suggestions:
+#   - Verify you have access to this repository
+#   - Ensure authentication is configured
+#   - Check if your access token is valid
+
+# Destination exists (without --force)
+workspace clone https://github.com/org/repo.git ./existing-dir
+# Error: Destination already exists: ./existing-dir
+# Use --force to overwrite
+
+# Repository not found
+workspace clone https://github.com/org/nonexistent.git
+# Error: Repository not found
+# Suggestions:
+#   - Verify the repository URL is correct
+#   - Check if the repository exists
+#   - Ensure you have access if repository is private
+
+# Disk space error
+workspace clone https://github.com/large/repository.git
+# Error: Insufficient disk space to clone repository
+# Suggestions:
+#   - Free up disk space
+#   - Choose a different destination with more space
+#   - Consider using --depth 1 for a shallow clone
+
+# Validation failure (existing config)
+workspace clone https://github.com/org/broken-config.git
+# Clone succeeds
+# Validation detects:
+#   ✗ Changeset directory
+#     Error: Directory '.changesets' does not exist
+#     Suggestion: Run 'workspace init --force' to create directory
+#   ✗ .gitignore entries
+#     Error: Missing .gitignore entries for workspace directories
+#     Suggestion: Run 'workspace init --force' to update .gitignore
+```
+
+**Integration Examples:**
+
+*CI/CD Pipeline (GitHub Actions):*
+
+```yaml
+name: Setup Development Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: 'Repository to clone'
+        required: true
+      branch:
+        description: 'Branch to checkout'
+        default: 'main'
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone and setup workspace
+        run: |
+          workspace clone ${{ github.event.inputs.repository }} \
+            --non-interactive \
+            --strategy independent \
+            --config-format yaml
+
+      - name: Checkout specific branch
+        working-directory: ./repo-name
+        run: git checkout ${{ github.event.inputs.branch }}
+
+      - name: Verify setup
+        working-directory: ./repo-name
+        run: workspace config validate
+```
+
+*Developer Onboarding Script:*
+
+```bash
+#!/bin/bash
+# onboard.sh - Quick setup for new developers
+
+REPO_URL="https://github.com/myorg/monorepo.git"
+DEST_DIR="$HOME/projects/monorepo"
+
+echo "Setting up development environment..."
+
+# Clone with workspace setup
+workspace clone "$REPO_URL" "$DEST_DIR" \
+  --non-interactive \
+  --strategy independent \
+  --environments "dev,staging,production" \
+  --default-env "production" \
+  --config-format toml
+
+cd "$DEST_DIR" || exit 1
+
+# Verify setup
+echo "Verifying workspace configuration..."
+workspace config validate
+
+echo "Setup complete! You can now:"
+echo "  cd $DEST_DIR"
+echo "  workspace changeset create"
+echo "  workspace bump --dry-run"
+```
+
+*Automated Testing Environment:*
+
+```bash
+#!/bin/bash
+# test-setup.sh - Create isolated test environment
+
+TEST_DIR=$(mktemp -d)
+REPO="https://github.com/org/repo.git"
+
+# Clone with shallow depth for faster setup
+workspace clone "$REPO" "$TEST_DIR/workspace" \
+  --depth 1 \
+  --non-interactive \
+  --skip-validation \
+  --force
+
+cd "$TEST_DIR/workspace" || exit 1
+
+# Run tests
+npm install
+npm test
+
+# Cleanup
+rm -rf "$TEST_DIR"
+```
+
+*Mirror Repository Setup:*
+
+```bash
+#!/bin/bash
+# mirror.sh - Setup repository mirror
+
+SOURCE="https://github.com/upstream/original.git"
+MIRROR_DIR="/var/repos/mirror"
+
+# Clone original repository
+workspace clone "$SOURCE" "$MIRROR_DIR" \
+  --force \
+  --config-format json
+
+cd "$MIRROR_DIR" || exit 1
+
+# Add mirror remote
+git remote add mirror https://git.mycompany.com/mirror.git
+
+# Validate workspace setup
+workspace config validate && echo "Mirror setup complete"
 ```
 
 ---
