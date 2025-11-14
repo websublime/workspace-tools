@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.11 - 2025-11-14
+
+### Features
+
+#### WOR-TSK-146
+
+- Implement Story 11.5 - E2E tests for clone command ([#31](https://github.com/websublime/workspace-tools/pull/31))
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.10 - 2025-11-13
 
 ### Features
