@@ -673,6 +673,162 @@ impl WorkspaceFixture {
         let changelog_path = self.root.join("CHANGELOG.md");
         assert!(changelog_path.exists(), "Changelog does not exist");
     }
+
+    // =========================================================================
+    // Clone Support Methods
+    // =========================================================================
+
+    /// Creates workspace directories for clone testing.
+    ///
+    /// Creates the standard workspace directories:
+    /// - .changesets/
+    /// - .changesets/history/
+    /// - .workspace-backups/
+    ///
+    /// This is useful for creating valid workspace configurations that can be cloned.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let workspace = WorkspaceFixture::single_package()
+    ///     .with_default_config()
+    ///     .with_git()
+    ///     .with_workspace_directories()
+    ///     .finalize();
+    /// ```
+    #[allow(clippy::expect_used)]
+    pub fn with_workspace_directories(self) -> Self {
+        let changesets_dir = self.root.join(".changesets");
+        let history_dir = self.root.join(".changesets/history");
+        let backups_dir = self.root.join(".workspace-backups");
+
+        std::fs::create_dir_all(&changesets_dir).expect("Failed to create .changesets");
+        std::fs::create_dir_all(&history_dir).expect("Failed to create .changesets/history");
+        std::fs::create_dir_all(&backups_dir).expect("Failed to create .workspace-backups");
+
+        // Git doesn't track empty directories, so add .gitkeep files
+        std::fs::write(changesets_dir.join(".gitkeep"), "")
+            .expect("Failed to write .changesets/.gitkeep");
+        std::fs::write(history_dir.join(".gitkeep"), "")
+            .expect("Failed to write .changesets/history/.gitkeep");
+        std::fs::write(backups_dir.join(".gitkeep"), "")
+            .expect("Failed to write .workspace-backups/.gitkeep");
+
+        self
+    }
+
+    /// Adds .gitignore with workspace directories.
+    ///
+    /// Creates a .gitignore file that ignores:
+    /// - .changesets/
+    /// - .workspace-backups/
+    /// - node_modules/
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let workspace = WorkspaceFixture::single_package()
+    ///     .with_git()
+    ///     .with_gitignore()
+    ///     .finalize();
+    /// ```
+    #[allow(clippy::expect_used)]
+    pub fn with_gitignore(self) -> Self {
+        let gitignore_content = ".changesets/*\n\
+                                !.changesets/.gitkeep\n\
+                                !.changesets/history/\n\
+                                .changesets/history/*\n\
+                                !.changesets/history/.gitkeep\n\
+                                .workspace-backups/*\n\
+                                !.workspace-backups/.gitkeep\n\
+                                node_modules/\n";
+        let gitignore_path = self.root.join(".gitignore");
+        std::fs::write(&gitignore_path, gitignore_content).expect("Failed to write .gitignore");
+        self
+    }
+
+    /// Returns a file:// URL for this workspace.
+    ///
+    /// This URL can be used to clone the workspace repository using git clone.
+    /// The workspace must have git initialized before calling this method.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let workspace = WorkspaceFixture::single_package()
+    ///     .with_git()
+    ///     .finalize();
+    ///
+    /// let clone_url = workspace.as_git_remote_url();
+    /// // Use clone_url for cloning
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if the workspace path cannot be converted to a string.
+    #[allow(clippy::expect_used)]
+    pub fn as_git_remote_url(&self) -> String {
+        format!("file://{}", self.root.display())
+    }
+
+    /// Creates a valid workspace ready for clone testing.
+    ///
+    /// This is a convenience method that combines common operations for creating
+    /// a workspace that can be cloned and validated:
+    /// - Creates workspace directories (.changesets, etc.)
+    /// - Adds .gitignore
+    /// - Commits all files (requires git to be initialized)
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let workspace = WorkspaceFixture::single_package()
+    ///     .with_default_config()
+    ///     .with_git()
+    ///     .with_commits(1)
+    ///     .setup_for_clone()
+    ///     .finalize();
+    ///
+    /// let url = workspace.as_git_remote_url();
+    /// ```
+    #[allow(clippy::expect_used)]
+    pub fn setup_for_clone(self) -> Self {
+        assert!(self.git_initialized, "Git must be initialized before setup_for_clone");
+
+        self.with_workspace_directories().with_gitignore()
+    }
+
+    /// Commits all files in the workspace.
+    ///
+    /// This is useful for creating a clean git state before cloning.
+    /// Git must be initialized before calling this method.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let workspace = WorkspaceFixture::single_package()
+    ///     .with_git()
+    ///     .finalize()
+    ///     .commit_all("Initial commit");
+    /// ```
+    #[allow(clippy::expect_used)]
+    pub fn commit_all(self, message: &str) -> Self {
+        assert!(self.git_initialized, "Git must be initialized before commit_all");
+
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(&self.root)
+            .output()
+            .expect("Failed to git add");
+
+        std::process::Command::new("git")
+            .args(["commit", "-m", message])
+            .current_dir(&self.root)
+            .output()
+            .expect("Failed to git commit");
+
+        self
+    }
 }
 
 // =============================================================================
