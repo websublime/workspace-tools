@@ -768,7 +768,22 @@ impl WorkspaceFixture {
     /// Panics if the workspace path cannot be converted to a string.
     #[allow(clippy::expect_used)]
     pub fn as_git_remote_url(&self) -> String {
-        format!("file://{}", self.root.display())
+        let path_str = self.root.to_string_lossy();
+
+        #[cfg(windows)]
+        {
+            // Windows: file:///C:/path/to/repo (3 slashes + forward slashes)
+            // Git on Windows requires forward slashes in file:// URLs
+            let path_normalized = path_str.replace('\\', "/");
+            format!("file:///{path_normalized}")
+        }
+
+        #[cfg(not(windows))]
+        {
+            // Unix: file:///path/to/repo (3 slashes)
+            // Path already starts with /, so file:// + /path = file:///path
+            format!("file://{path_str}")
+        }
     }
 
     /// Creates a valid workspace ready for clone testing.
