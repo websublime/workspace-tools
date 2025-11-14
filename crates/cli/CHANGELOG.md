@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.12 - 2025-11-14
+
+### Documentation
+
+#### WOR-TSK-147
+
+- Add comprehensive documentation for clone command ([#33](https://github.com/websublime/workspace-tools/pull/33))
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.11 - 2025-11-14
 
 ### Features
