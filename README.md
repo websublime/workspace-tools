@@ -86,6 +86,7 @@ workspace --version
 
 Get started with a complete changeset-based workflow:
 
+**Starting a New Project:**
 ```bash
 # 1. Initialize your project
 cd your-project
@@ -107,11 +108,48 @@ workspace bump --dry-run
 workspace bump --execute --git-tag --git-push
 ```
 
+**Joining an Existing Project:**
+```bash
+# Clone repository with automatic workspace setup
+workspace clone https://github.com/org/project.git
+
+# Start working immediately
+cd project
+workspace changeset create
+```
+
 That's it! You now have a complete audit trail from development to release.
 
 ---
 
 ## ✨ Key Features
+
+### Repository Cloning with Setup
+
+Clone repositories with automatic workspace initialization:
+
+```bash
+# Clone with automatic setup
+workspace clone https://github.com/org/repo.git
+
+# Clone with custom configuration
+workspace clone https://github.com/org/repo.git \
+  --strategy independent \
+  --environments "dev,staging,prod"
+
+# Clone and force overwrite
+workspace clone https://github.com/org/repo.git ./my-project --force
+
+# Shallow clone for faster setup
+workspace clone https://github.com/org/repo.git --depth 1
+```
+
+**Features:**
+- Automatic configuration detection and validation
+- Initializes workspace if no config exists
+- Progress indication during clone
+- Supports HTTPS and SSH
+- Shallow clones for faster onboarding
 
 ### Changeset Management
 
@@ -392,6 +430,27 @@ npm test
 
 # If tests pass, release
 workspace bump --execute --git-tag
+```
+
+### Developer Onboarding
+
+```bash
+# New team member joins - clone with setup
+workspace clone https://github.com/myorg/monorepo.git ~/projects/monorepo
+
+# Workspace automatically initialized and validated
+cd ~/projects/monorepo
+
+# Start working on first task
+git checkout -b feature/my-first-feature
+workspace changeset create --bump minor
+
+# Make changes
+git commit -m "feat: implement feature"
+workspace changeset update
+
+# Preview before merge
+workspace bump --dry-run
 ```
 
 ### CI/CD Pipeline
