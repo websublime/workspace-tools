@@ -1089,6 +1089,13 @@ impl Repo {
 
     /// Gets the name of the currently checked out branch
     ///
+    /// This method handles multiple scenarios:
+    /// - **Normal checkout**: Returns the current branch name directly
+    /// - **Detached HEAD (CI/CD)**: Attempts to resolve branch name from:
+    ///   1. CI environment variables (GitHub Actions, GitLab CI, etc.)
+    ///   2. Local branches pointing to the current commit
+    ///   3. Remote branches pointing to the current commit
+    ///
     /// # Returns
     ///
     /// * `Result<String, RepoError>` - The current branch name, or an error
@@ -1098,7 +1105,7 @@ impl Repo {
     /// This function will return an error if:
     /// - The HEAD reference cannot be accessed
     /// - The HEAD reference is invalid or corrupted
-    /// - The repository is in a detached HEAD state
+    /// - Cannot determine branch name in detached HEAD state
     /// - The branch name contains invalid characters
     ///
     /// # Examples
@@ -1112,11 +1119,146 @@ impl Repo {
     /// ```
     pub fn get_current_branch(&self) -> Result<String, RepoError> {
         let head = self.repo.head().map_err(RepoError::HeadError)?;
-        let branch = head.shorthand().ok_or_else(|| {
-            RepoError::BranchNameError(Git2Error::from_str("Invalid branch reference"))
-        })?;
 
-        Ok(branch.to_string())
+        // Try to get branch name from HEAD reference
+        if let Some(branch_name) = head.shorthand() {
+            // Check if we're in detached HEAD state
+            // In detached HEAD, shorthand() returns "HEAD"
+            if branch_name == "HEAD" {
+                // We're in detached HEAD - try to resolve the actual branch
+                return self.resolve_branch_in_detached_head();
+            }
+
+            // Normal branch checkout
+            return Ok(branch_name.to_string());
+        }
+
+        // If shorthand() returned None, try to resolve from detached HEAD
+        self.resolve_branch_in_detached_head()
+    }
+
+    /// Resolves the branch name when in detached HEAD state.
+    ///
+    /// This is common in CI/CD environments (GitHub Actions, GitLab CI, etc.)
+    /// where repositories are checked out at a specific commit SHA rather than
+    /// a branch reference.
+    ///
+    /// Resolution strategy:
+    /// 1. Check CI environment variables (GITHUB_HEAD_REF, GITHUB_REF_NAME, etc.)
+    /// 2. Find local branches pointing to HEAD commit
+    /// 3. Find remote branches pointing to HEAD commit
+    ///
+    /// # Returns
+    ///
+    /// * `Result<String, RepoError>` - The resolved branch name, or an error
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - HEAD commit cannot be determined
+    /// - No branches point to the current commit
+    /// - No CI environment variables are available
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// // This is called internally by get_current_branch()
+    /// let branch = repo.resolve_branch_in_detached_head()?;
+    /// ```
+    fn resolve_branch_in_detached_head(&self) -> Result<String, RepoError> {
+        // Strategy 1: Check CI environment variables
+        // GitHub Actions
+        if let Ok(branch) = std::env::var("GITHUB_HEAD_REF")
+            && !branch.is_empty()
+        {
+            return Ok(branch);
+        }
+        if let Ok(branch) = std::env::var("GITHUB_REF_NAME")
+            && !branch.is_empty()
+        {
+            return Ok(branch);
+        }
+
+        // GitLab CI
+        if let Ok(branch) = std::env::var("CI_COMMIT_REF_NAME")
+            && !branch.is_empty()
+        {
+            return Ok(branch);
+        }
+
+        // CircleCI
+        if let Ok(branch) = std::env::var("CIRCLE_BRANCH")
+            && !branch.is_empty()
+        {
+            return Ok(branch);
+        }
+
+        // Travis CI
+        if let Ok(branch) = std::env::var("TRAVIS_PULL_REQUEST_BRANCH")
+            && !branch.is_empty()
+        {
+            return Ok(branch);
+        }
+        if let Ok(branch) = std::env::var("TRAVIS_BRANCH")
+            && !branch.is_empty()
+        {
+            return Ok(branch);
+        }
+
+        // Jenkins
+        if let Ok(branch) = std::env::var("CHANGE_BRANCH")
+            && !branch.is_empty()
+        {
+            return Ok(branch);
+        }
+        if let Ok(branch) = std::env::var("BRANCH_NAME")
+            && !branch.is_empty()
+        {
+            return Ok(branch);
+        }
+
+        // Strategy 2: Find branches pointing to HEAD commit
+        let head_commit = self
+            .repo
+            .head()
+            .map_err(RepoError::HeadError)?
+            .peel_to_commit()
+            .map_err(RepoError::CommitError)?;
+
+        let head_oid = head_commit.id();
+
+        // Try local branches first
+        if let Ok(branches) = self.repo.branches(Some(BranchType::Local)) {
+            for (branch, _) in branches.flatten() {
+                if let Ok(reference) = branch.get().resolve()
+                    && reference.target() == Some(head_oid)
+                    && let Ok(Some(name)) = branch.name()
+                {
+                    return Ok(name.to_string());
+                }
+            }
+        }
+
+        // Try remote branches
+        if let Ok(branches) = self.repo.branches(Some(BranchType::Remote)) {
+            for (branch, _) in branches.flatten() {
+                if let Ok(reference) = branch.get().resolve()
+                    && reference.target() == Some(head_oid)
+                    && let Ok(Some(name)) = branch.name()
+                {
+                    // Remove 'origin/' prefix from remote branch names
+                    let clean_name = name.strip_prefix("origin/").unwrap_or(name);
+                    return Ok(clean_name.to_string());
+                }
+            }
+        }
+
+        // Strategy 3: Fallback - use commit SHA as "branch" name
+        // This is a last resort for when we truly cannot determine the branch
+        Err(RepoError::BranchNameError(Git2Error::from_str(
+            "Cannot determine branch name in detached HEAD state. \
+             No CI environment variables found and no branches point to HEAD commit.",
+        )))
     }
 
     /// Creates a new tag at the current HEAD
