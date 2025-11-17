@@ -11,6 +11,7 @@ mod tests {
         fs::{File, canonicalize, create_dir, remove_dir_all},
         io::Write,
         path::PathBuf,
+        sync::Arc,
     };
 
     #[cfg(not(windows))]
@@ -953,20 +954,14 @@ mod tests {
         // This test simulates GitHub Actions environment where the repository
         // is in detached HEAD state but GITHUB_REF_NAME is set
 
-        // Save original env value if it exists
-        let original_value = std::env::var("GITHUB_REF_NAME").ok();
-
-        // Set the environment variable to simulate GitHub Actions
-        // Safety: This is safe in a test environment as we're controlling the execution
-        // and restoring the original value at the end
-        unsafe {
-            std::env::set_var("GITHUB_REF_NAME", "feature/bff");
-        }
-
         let workspace = TestWorkspace::new().unwrap();
         let workspace_path = workspace.path();
 
-        let repo = Repo::create(workspace_path.display().to_string().as_str())?;
+        // Create a mock environment provider with GITHUB_REF_NAME set
+        let mock_env =
+            Arc::new(crate::env::MockEnvProvider::new().with_var("GITHUB_REF_NAME", "feature/bff"));
+
+        let repo = Repo::create_with_env(workspace_path.display().to_string().as_str(), mock_env)?;
         repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
 
         // Create a commit to have a valid HEAD
@@ -994,15 +989,6 @@ mod tests {
         // we should get "feature/bff" from the environment variable
         let detached_branch = repo.get_current_branch()?;
         assert_eq!(detached_branch, String::from("feature/bff"));
-
-        // Cleanup: restore original environment variable
-        // Safety: This is safe in a test environment as we're restoring the state
-        unsafe {
-            match original_value {
-                Some(val) => std::env::set_var("GITHUB_REF_NAME", val),
-                None => std::env::remove_var("GITHUB_REF_NAME"),
-            }
-        }
 
         Ok(())
     }

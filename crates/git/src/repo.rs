@@ -63,6 +63,7 @@ use git2::{
 use std::collections::HashMap;
 use std::fs::canonicalize;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::{GitChangedFile, GitFileStatus, Repo, RepoCommit, RepoError, RepoTags};
 
@@ -333,6 +334,45 @@ impl Repo {
     /// println!("Repository created at: {}", repo.get_repo_path().display());
     /// ```
     pub fn create(path: &str) -> Result<Self, RepoError> {
+        Self::create_with_env(path, Arc::new(crate::env::SystemEnvProvider))
+    }
+
+    /// Creates a new Git repository at the specified path with custom environment provider
+    ///
+    /// This method is primarily useful for testing scenarios where you need to control
+    /// environment variables without modifying the global process state.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path where the repository should be created
+    /// * `env` - Environment variable provider for dependency injection
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self, RepoError>` - A new `Repo` instance or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The path cannot be canonicalized
+    /// - The directory cannot be created
+    /// - Git repository initialization fails
+    /// - The repository cannot be opened after creation
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_git_tools::{Repo, SystemEnvProvider};
+    /// use std::sync::Arc;
+    ///
+    /// let repo = Repo::create_with_env("/tmp/new-repo", Arc::new(SystemEnvProvider))
+    ///     .expect("Failed to create repository");
+    /// println!("Repository created at: {}", repo.get_repo_path().display());
+    /// ```
+    pub fn create_with_env(
+        path: &str,
+        env: Arc<dyn crate::env::EnvProvider>,
+    ) -> Result<Self, RepoError> {
         let location = canonicalize_path(path)?;
         let location_buf = PathBuf::from(location);
 
@@ -344,7 +384,7 @@ impl Repo {
         .map_err(RepoError::CreateRepoFailure)?;
 
         // Just return the repo without making any commits
-        let result = Self { repo, local_path: location_buf };
+        let result = Self { repo, local_path: location_buf, env };
 
         // Now make the initial commit using our new instance
         result.make_initial_commit()?;
@@ -381,10 +421,51 @@ impl Repo {
     /// ```
     #[allow(clippy::arc_with_non_send_sync)]
     pub fn open(path: &str) -> Result<Self, RepoError> {
+        Self::open_with_env(path, Arc::new(crate::env::SystemEnvProvider))
+    }
+
+    /// Opens an existing Git repository at the specified path with custom environment provider
+    ///
+    /// This method is primarily useful for testing scenarios where you need to control
+    /// environment variables without modifying the global process state.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to the existing repository
+    /// * `env` - Environment variable provider for dependency injection
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self, RepoError>` - A `Repo` instance or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The path cannot be canonicalized
+    /// - The path does not contain a valid Git repository
+    /// - The repository cannot be opened due to permission issues
+    /// - The repository is corrupted or invalid
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_git_tools::{Repo, SystemEnvProvider};
+    /// use std::sync::Arc;
+    ///
+    /// let repo = Repo::open_with_env("./my-project", Arc::new(SystemEnvProvider))
+    ///     .expect("Failed to open repository");
+    /// let branch = repo.get_current_branch().expect("Failed to get current branch");
+    /// println!("Current branch: {}", branch);
+    /// ```
+    #[allow(clippy::arc_with_non_send_sync)]
+    pub fn open_with_env(
+        path: &str,
+        env: Arc<dyn crate::env::EnvProvider>,
+    ) -> Result<Self, RepoError> {
         let local_path = canonicalize_path(path)?;
         let repo = Repository::open(path).map_err(RepoError::OpenRepoFailure)?;
 
-        Ok(Self { repo, local_path: PathBuf::from(local_path) })
+        Ok(Self { repo, local_path: PathBuf::from(local_path), env })
     }
 
     /// Clones a Git repository from a URL to a local path
@@ -417,10 +498,55 @@ impl Repo {
     ///     .expect("Failed to clone repository");
     /// ```
     pub fn clone(url: &str, path: &str) -> Result<Self, RepoError> {
+        Self::clone_with_env(url, path, Arc::new(crate::env::SystemEnvProvider))
+    }
+
+    /// Clones a Git repository from a URL to a local path with custom environment provider
+    ///
+    /// This method is primarily useful for testing scenarios where you need to control
+    /// environment variables without modifying the global process state.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - The URL of the repository to clone
+    /// * `path` - The local path where the repository should be cloned
+    /// * `env` - Environment variable provider for dependency injection
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self, RepoError>` - A `Repo` instance or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The path cannot be canonicalized
+    /// - The URL is invalid or unreachable
+    /// - Network connectivity issues prevent cloning
+    /// - Authentication is required but not provided or fails
+    /// - The destination path already exists or cannot be created
+    /// - Insufficient disk space or permissions
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sublime_git_tools::{Repo, SystemEnvProvider};
+    /// use std::sync::Arc;
+    ///
+    /// let repo = Repo::clone_with_env(
+    ///     "https://github.com/example/repo.git",
+    ///     "./cloned-repo",
+    ///     Arc::new(SystemEnvProvider)
+    /// ).expect("Failed to clone repository");
+    /// ```
+    pub fn clone_with_env(
+        url: &str,
+        path: &str,
+        env: Arc<dyn crate::env::EnvProvider>,
+    ) -> Result<Self, RepoError> {
         let local_path = canonicalize_path(path)?;
         let repo = Repository::clone(url, path).map_err(RepoError::CloneRepoFailure)?;
 
-        Ok(Self { repo, local_path: PathBuf::from(local_path) })
+        Ok(Self { repo, local_path: PathBuf::from(local_path), env })
     }
 
     /// Clones a Git repository from a URL to a local path with additional options.
@@ -492,6 +618,54 @@ impl Repo {
         path: &str,
         depth: Option<i32>,
     ) -> Result<Self, RepoError> {
+        Self::clone_with_options_and_env(url, path, depth, Arc::new(crate::env::SystemEnvProvider))
+    }
+
+    /// Clones a Git repository from a URL to a local path with additional options and custom environment provider
+    ///
+    /// This method provides advanced cloning capabilities including shallow clones
+    /// (limited history depth) and custom environment variable providers for testing.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - The URL of the repository to clone
+    /// * `path` - The local path where the repository should be cloned
+    /// * `depth` - Optional depth for shallow clone (e.g., Some(1) for single commit)
+    /// * `env` - Environment variable provider for dependency injection
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self, RepoError>` - A new `Repo` instance or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Path canonicalization fails (`CanonicalPathFailure`)
+    /// - Clone operation fails (`CloneRepoFailure`)
+    /// - Network connection fails
+    /// - Authentication fails
+    /// - Insufficient disk space
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_git_tools::{Repo, SystemEnvProvider};
+    /// use std::sync::Arc;
+    ///
+    /// // Shallow clone with depth 1 (only latest commit)
+    /// let repo = Repo::clone_with_options_and_env(
+    ///     "https://github.com/example/large-repo.git",
+    ///     "./shallow-clone",
+    ///     Some(1),
+    ///     Arc::new(SystemEnvProvider)
+    /// )?;
+    /// ```
+    pub fn clone_with_options_and_env(
+        url: &str,
+        path: &str,
+        depth: Option<i32>,
+        env: Arc<dyn crate::env::EnvProvider>,
+    ) -> Result<Self, RepoError> {
         let local_path = canonicalize_path(path)?;
 
         // Build fetch options with depth if specified
@@ -507,7 +681,7 @@ impl Repo {
         // Perform the clone
         let repo = builder.clone(url, Path::new(path)).map_err(RepoError::CloneRepoFailure)?;
 
-        Ok(Self { repo, local_path: PathBuf::from(local_path) })
+        Ok(Self { repo, local_path: PathBuf::from(local_path), env })
     }
 
     /// Clones a Git repository with progress tracking.
@@ -544,7 +718,60 @@ impl Repo {
         url: &str,
         path: &str,
         depth: Option<i32>,
+        progress_cb: F,
+    ) -> Result<Self, RepoError>
+    where
+        F: FnMut(usize, usize) + 'static,
+    {
+        Self::clone_with_progress_and_env(
+            url,
+            path,
+            depth,
+            progress_cb,
+            Arc::new(crate::env::SystemEnvProvider),
+        )
+    }
+
+    /// Clones a Git repository with progress tracking and custom environment provider.
+    ///
+    /// This method provides real-time progress updates during the clone operation,
+    /// reporting the number of objects received and indexed, while allowing custom
+    /// environment variable providers for testing scenarios.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - The URL of the repository to clone
+    /// * `path` - The local path where the repository should be cloned
+    /// * `depth` - Optional depth for shallow clone
+    /// * `progress_cb` - Callback function receiving (current, total) objects
+    /// * `env` - Environment variable provider for dependency injection
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self, RepoError>` - A new `Repo` instance or an error
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_git_tools::{Repo, SystemEnvProvider};
+    /// use std::sync::Arc;
+    ///
+    /// let repo = Repo::clone_with_progress_and_env(
+    ///     "https://github.com/example/repo.git",
+    ///     "./cloned-repo",
+    ///     None,
+    ///     |current, total| {
+    ///         println!("Progress: {}/{}", current, total);
+    ///     },
+    ///     Arc::new(SystemEnvProvider)
+    /// )?;
+    /// ```
+    pub fn clone_with_progress_and_env<F>(
+        url: &str,
+        path: &str,
+        depth: Option<i32>,
         mut progress_cb: F,
+        env: Arc<dyn crate::env::EnvProvider>,
     ) -> Result<Self, RepoError>
     where
         F: FnMut(usize, usize) + 'static,
@@ -573,7 +800,7 @@ impl Repo {
         // Canonicalize the path AFTER cloning (when the directory exists)
         let local_path = canonicalize_path(path)?;
 
-        Ok(Self { repo, local_path: PathBuf::from(local_path) })
+        Ok(Self { repo, local_path: PathBuf::from(local_path), env })
     }
 
     /// Gets the local path of the repository
@@ -1168,50 +1395,50 @@ impl Repo {
     fn resolve_branch_in_detached_head(&self) -> Result<String, RepoError> {
         // Strategy 1: Check CI environment variables
         // GitHub Actions
-        if let Ok(branch) = std::env::var("GITHUB_HEAD_REF")
+        if let Ok(branch) = self.env.var("GITHUB_HEAD_REF")
             && !branch.is_empty()
         {
             return Ok(branch);
         }
-        if let Ok(branch) = std::env::var("GITHUB_REF_NAME")
+        if let Ok(branch) = self.env.var("GITHUB_REF_NAME")
             && !branch.is_empty()
         {
             return Ok(branch);
         }
 
         // GitLab CI
-        if let Ok(branch) = std::env::var("CI_COMMIT_REF_NAME")
+        if let Ok(branch) = self.env.var("CI_COMMIT_REF_NAME")
             && !branch.is_empty()
         {
             return Ok(branch);
         }
 
         // CircleCI
-        if let Ok(branch) = std::env::var("CIRCLE_BRANCH")
+        if let Ok(branch) = self.env.var("CIRCLE_BRANCH")
             && !branch.is_empty()
         {
             return Ok(branch);
         }
 
         // Travis CI
-        if let Ok(branch) = std::env::var("TRAVIS_PULL_REQUEST_BRANCH")
+        if let Ok(branch) = self.env.var("TRAVIS_PULL_REQUEST_BRANCH")
             && !branch.is_empty()
         {
             return Ok(branch);
         }
-        if let Ok(branch) = std::env::var("TRAVIS_BRANCH")
+        if let Ok(branch) = self.env.var("TRAVIS_BRANCH")
             && !branch.is_empty()
         {
             return Ok(branch);
         }
 
         // Jenkins
-        if let Ok(branch) = std::env::var("CHANGE_BRANCH")
+        if let Ok(branch) = self.env.var("CHANGE_BRANCH")
             && !branch.is_empty()
         {
             return Ok(branch);
         }
-        if let Ok(branch) = std::env::var("BRANCH_NAME")
+        if let Ok(branch) = self.env.var("BRANCH_NAME")
             && !branch.is_empty()
         {
             return Ok(branch);
@@ -3599,8 +3826,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(&temp_dir); // Clean up if exists
         std::fs::create_dir_all(&temp_dir).unwrap();
 
-        let repo =
-            Repo { repo: git2::Repository::init_bare(&temp_dir).unwrap(), local_path: temp_dir };
+        let repo = Repo {
+            repo: git2::Repository::init_bare(&temp_dir).unwrap(),
+            local_path: temp_dir,
+            env: Arc::new(crate::env::SystemEnvProvider),
+        };
 
         // Test standard semantic versions
         assert_eq!(repo.parse_semantic_version("1.2.3"), Some((1, 2, 3, None)));
@@ -3633,8 +3863,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(&temp_dir); // Clean up if exists
         std::fs::create_dir_all(&temp_dir).unwrap();
 
-        let repo =
-            Repo { repo: git2::Repository::init_bare(&temp_dir).unwrap(), local_path: temp_dir };
+        let repo = Repo {
+            repo: git2::Repository::init_bare(&temp_dir).unwrap(),
+            local_path: temp_dir,
+            env: Arc::new(crate::env::SystemEnvProvider),
+        };
 
         // Test semantic version comparison
         assert_eq!(repo.compare_version_tags("v1.2.3", "v2.0.0"), Ordering::Less);
