@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.12 - 2025-11-17
+
+### Bug Fixes
+
+#### WOR-TSK-148
+
+- Resolve branch name detection in detached HEAD state for CI/CD environments ([#35](https://github.com/websublime/workspace-tools/pull/35))
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.11 - 2025-11-14
 
 ### Features
