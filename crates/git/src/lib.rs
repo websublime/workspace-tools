@@ -113,11 +113,16 @@
 #![deny(clippy::unimplemented)]
 #![deny(clippy::panic)]
 
+mod env;
 mod repo;
 mod types;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+pub use env::MockEnvProvider;
+pub use env::{EnvProvider, SystemEnvProvider};
 
 pub use types::{
     GitChangedFile, GitDiffStats, GitFileStatus, Repo, RepoCommit, RepoError, RepoTags,

@@ -11,6 +11,7 @@ mod tests {
         fs::{File, canonicalize, create_dir, remove_dir_all},
         io::Write,
         path::PathBuf,
+        sync::Arc,
     };
 
     #[cfg(not(windows))]
@@ -944,6 +945,50 @@ mod tests {
         // Fetch with pruning
         let result = repo.fetch("origin", None, true)?;
         assert!(result, "Fetch with pruning should succeed");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_current_branch_with_github_env() -> Result<(), RepoError> {
+        // This test simulates GitHub Actions environment where the repository
+        // is in detached HEAD state but GITHUB_REF_NAME is set
+
+        let workspace = TestWorkspace::new().unwrap();
+        let workspace_path = workspace.path();
+
+        // Create a mock environment provider with GITHUB_REF_NAME set
+        let mock_env =
+            Arc::new(crate::env::MockEnvProvider::new().with_var("GITHUB_REF_NAME", "feature/bff"));
+
+        let repo = Repo::create_with_env(workspace_path.display().to_string().as_str(), mock_env)?;
+        repo.config("Sublime Git Bot", "git-boot@websublime.com")?;
+
+        // Create a commit to have a valid HEAD
+        let readme_path = workspace_path.join("README.md");
+        let mut file = File::create(&readme_path).unwrap();
+        file.write_all(b"# Test").unwrap();
+        drop(file);
+
+        repo.add(readme_path.display().to_string().as_str())?;
+        repo.commit("Initial commit")?;
+
+        // In normal checkout, we should get "main"
+        let current_branch = repo.get_current_branch()?;
+        assert_eq!(current_branch, String::from("main"));
+
+        // Now simulate detached HEAD by getting the current commit
+        let commit_sha = repo.get_current_sha()?;
+
+        // Checkout to the commit SHA directly (creates detached HEAD)
+        repo.repo
+            .set_head_detached(git2::Oid::from_str(&commit_sha).map_err(RepoError::HeadError)?)
+            .map_err(RepoError::HeadError)?;
+
+        // In detached HEAD state with GITHUB_REF_NAME set,
+        // we should get "feature/bff" from the environment variable
+        let detached_branch = repo.get_current_branch()?;
+        assert_eq!(detached_branch, String::from("feature/bff"));
 
         Ok(())
     }
