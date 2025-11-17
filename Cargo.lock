@@ -178,9 +178,9 @@ checksum = "46c5e41b57b8bba42a04676d81cb89e9ee8e859a1a66f80a5a72e1cb76b34d43"
 
 [[package]]
 name = "bytes"
-version = "1.10.1"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
+checksum = "b35204fbdc0b3f4446b89fc1ac2cf84a8a68971995d0bf2e925ec7cd960f9cb3"
 
 [[package]]
 name = "cc"
@@ -2110,7 +2110,7 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "sublime_cli_tools"
-version = "0.0.12"
+version = "0.0.13"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2141,7 +2141,7 @@ dependencies = [
 
 [[package]]
 name = "sublime_git_tools"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "chrono",
  "dirs 6.0.0",
@@ -2156,7 +2156,7 @@ dependencies = [
 
 [[package]]
 name = "sublime_pkg_tools"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "async-trait",
  "base64 0.21.7",
@@ -2643,9 +2643,9 @@ checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
 name = "unit-prefix"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "323402cff2dd658f39ca17c789b502021b3f18707c91cdf22e3838e1b4023817"
+checksum = "81e544489bf3d8ef66c953931f56617f423cd4b5494be343d9b9d3dda037b9a3"
 
 [[package]]
 name = "unsafe-libyaml"
