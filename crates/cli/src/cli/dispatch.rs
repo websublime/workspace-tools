@@ -100,7 +100,10 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
 
     match &cli.command {
         Commands::Init(args) => {
-            init::execute_init(args, root, format).await?;
+            // Create Output for Pattern B signature
+            let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
+            init::execute_init(args, &output, root, config_path.as_ref().map(|p| p.as_path()))
+                .await?;
         }
 
         Commands::Config(config_cmd) => match config_cmd {

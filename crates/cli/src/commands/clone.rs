@@ -874,7 +874,13 @@ pub async fn execute_clone(
 
         // Execute init command
         debug!("Executing init to create workspace configuration");
-        crate::commands::init::execute_init(&init_args, &final_destination, format).await?;
+
+        // TODO: will be implemented in Story 4.2 - Clone command will be refactored to use Output struct
+        // For now, create Output instance to match execute_init's Pattern B signature
+        #[allow(clippy::todo)]
+        let init_output = crate::output::Output::new(format, std::io::stdout(), false);
+        crate::commands::init::execute_init(&init_args, &init_output, &final_destination, None)
+            .await?;
 
         output_clone_complete_with_init(&final_destination, format)?;
     }

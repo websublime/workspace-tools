@@ -20,7 +20,7 @@ use common::fixtures::WorkspaceFixture;
 use std::path::PathBuf;
 use sublime_cli_tools::cli::commands::InitArgs;
 use sublime_cli_tools::commands::init::execute_init;
-use sublime_cli_tools::output::OutputFormat;
+use sublime_cli_tools::output::{Output, OutputFormat};
 
 // ============================================================================
 // Basic Init Tests
@@ -44,7 +44,13 @@ async fn test_init_single_package_creates_config() {
     };
 
     // Execute init
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "Init should succeed: {:?}", result.err());
 
     // Verify config file was created
@@ -81,7 +87,13 @@ async fn test_init_monorepo_creates_config() {
     };
 
     // Execute init
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "Init should succeed: {:?}", result.err());
 
     // Verify config exists
@@ -109,7 +121,13 @@ async fn test_init_unified_strategy() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "Init should succeed for unified strategy");
 
     workspace.assert_config_exists();
@@ -135,7 +153,13 @@ async fn test_init_multiple_environments() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "Init should succeed with multiple environments");
 
     workspace.assert_config_exists();
@@ -161,7 +185,13 @@ async fn test_init_json_format() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_ok());
 
     let config_path = workspace.root().join("repo.config.json");
@@ -184,7 +214,13 @@ async fn test_init_toml_format() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_ok());
 
     let config_path = workspace.root().join("repo.config.toml");
@@ -207,7 +243,13 @@ async fn test_init_yaml_format() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_ok());
 
     let config_path = workspace.root().join("repo.config.yaml");
@@ -235,7 +277,13 @@ async fn test_init_fails_when_config_exists() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_err(), "Init should fail when config already exists");
 }
 
@@ -256,7 +304,13 @@ async fn test_init_force_overwrites_config() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "Init with force should succeed: {:?}", result.err());
 
     workspace.assert_config_exists();
@@ -284,7 +338,9 @@ async fn test_init_fails_without_package_json() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, root, OutputFormat::Json).await;
+    let result =
+        execute_init(&args, &Output::new(OutputFormat::Json, std::io::sink(), true), root, None)
+            .await;
     assert!(result.is_err(), "Init should fail without package.json");
 }
 
@@ -304,7 +360,13 @@ async fn test_init_custom_changeset_path() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "Init with custom path should succeed");
 
     // Verify custom path was created
@@ -328,7 +390,13 @@ async fn test_init_custom_registry() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "Init with custom registry should succeed");
 
     workspace.assert_config_exists();
@@ -358,7 +426,13 @@ async fn test_init_with_default_environments() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "Init with default environments should succeed: {:?}", result.err());
 
     workspace.assert_config_exists();
@@ -392,7 +466,13 @@ async fn test_init_invalid_strategy_fails() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_err(), "Init should fail with invalid strategy");
 
     let error_msg = result.unwrap_err().to_string().to_lowercase();
@@ -418,7 +498,13 @@ async fn test_init_invalid_format_fails() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_err(), "Init should fail with invalid config format");
 
     let error_msg = result.unwrap_err().to_string().to_lowercase();
@@ -444,7 +530,13 @@ async fn test_init_invalid_registry_url_fails() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_err(), "Init should fail with invalid registry URL");
 
     let error_msg = result.unwrap_err().to_string().to_lowercase();
@@ -474,7 +566,13 @@ async fn test_init_creates_gitignore_entries() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "Init should succeed with git repository");
 
     // Verify .gitignore exists and contains workspace entries
@@ -509,7 +607,13 @@ async fn test_init_with_git_not_initialized() {
         non_interactive: true,
     };
 
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "Init should succeed even without git repository");
 
     workspace.assert_config_exists();
@@ -539,7 +643,13 @@ async fn test_init_interactive_prompts() {
     // Note: In non-interactive CI environments, this should still work
     // with provided defaults. Interactive prompts would only appear
     // if parameters are missing AND stdin is a TTY.
-    let result = execute_init(&args, workspace.root(), OutputFormat::Json).await;
+    let result = execute_init(
+        &args,
+        &Output::new(OutputFormat::Json, std::io::sink(), true),
+        workspace.root(),
+        None,
+    )
+    .await;
     assert!(
         result.is_ok(),
         "Init in interactive mode should succeed with all args provided: {:?}",
