@@ -3,27 +3,20 @@
 # Install workspace git hooks
 #
 # This script installs the workspace git hooks into your repository's .git/hooks directory.
-# The hooks will automatically manage changesets during your git workflow.
+# The hook will automatically sync changesets before pushing.
 #
 # Usage:
 #   ./scripts/install-hooks.sh [OPTIONS]
 #
 # Options:
-#   --all                     Install all hooks (default)
-#   --pre-commit              Install only pre-commit hook
-#   --post-commit             Install only post-commit hook
-#   --post-checkout           Install only post-checkout hook
-#   --pre-push                Install only pre-push hook
-#   --prepare-commit-msg      Install only prepare-commit-msg hook
-#   --force                   Overwrite existing hooks
-#   --uninstall               Remove all workspace hooks
-#   --help                    Show this help message
+#   --force          Overwrite existing hooks
+#   --uninstall      Remove workspace hooks
+#   --help           Show this help message
 #
 # Examples:
-#   ./scripts/install-hooks.sh                    # Install all hooks
-#   ./scripts/install-hooks.sh --pre-commit       # Install only pre-commit
-#   ./scripts/install-hooks.sh --force            # Force reinstall all
-#   ./scripts/install-hooks.sh --uninstall        # Remove all hooks
+#   ./scripts/install-hooks.sh           # Install pre-push hook
+#   ./scripts/install-hooks.sh --force   # Force reinstall
+#   ./scripts/install-hooks.sh --uninstall # Remove hook
 
 set -e
 
@@ -47,12 +40,6 @@ else
 fi
 
 # Default options
-INSTALL_ALL=true
-INSTALL_PRE_COMMIT=false
-INSTALL_POST_COMMIT=false
-INSTALL_POST_CHECKOUT=false
-INSTALL_PRE_PUSH=false
-INSTALL_PREPARE_COMMIT_MSG=false
 FORCE=false
 UNINSTALL=false
 
@@ -136,35 +123,6 @@ uninstall_hook() {
 parse_args() {
     while [ $# -gt 0 ]; do
         case "$1" in
-            --all)
-                INSTALL_ALL=true
-                shift
-                ;;
-            --pre-commit)
-                INSTALL_ALL=false
-                INSTALL_PRE_COMMIT=true
-                shift
-                ;;
-            --post-commit)
-                INSTALL_ALL=false
-                INSTALL_POST_COMMIT=true
-                shift
-                ;;
-            --post-checkout)
-                INSTALL_ALL=false
-                INSTALL_POST_CHECKOUT=true
-                shift
-                ;;
-            --pre-push)
-                INSTALL_ALL=false
-                INSTALL_PRE_PUSH=true
-                shift
-                ;;
-            --prepare-commit-msg)
-                INSTALL_ALL=false
-                INSTALL_PREPARE_COMMIT_MSG=true
-                shift
-                ;;
             --force)
                 FORCE=true
                 shift
@@ -199,60 +157,43 @@ main() {
 
     if [ "${UNINSTALL}" = "true" ]; then
         printf "${BLUE}Uninstalling workspace hooks...${NC}\n\n"
-        uninstall_hook "pre-commit"
-        uninstall_hook "post-commit"
-        uninstall_hook "post-checkout"
         uninstall_hook "pre-push"
-        uninstall_hook "prepare-commit-msg"
         printf "\n${GREEN}✓${NC} ${BOLD}Uninstallation complete${NC}\n\n"
         exit 0
     fi
 
     printf "${BLUE}Installing hooks to: ${CYAN}${HOOKS_DIR}${NC}\n\n"
 
-    # Install hooks based on options
-    if [ "${INSTALL_ALL}" = "true" ]; then
-        install_hook "pre-commit"
-        install_hook "post-commit"
-        install_hook "post-checkout"
-        install_hook "pre-push"
-        install_hook "prepare-commit-msg"
-    else
-        if [ "${INSTALL_PRE_COMMIT}" = "true" ]; then
-            install_hook "pre-commit"
-        fi
-        if [ "${INSTALL_POST_COMMIT}" = "true" ]; then
-            install_hook "post-commit"
-        fi
-        if [ "${INSTALL_POST_CHECKOUT}" = "true" ]; then
-            install_hook "post-checkout"
-        fi
-        if [ "${INSTALL_PRE_PUSH}" = "true" ]; then
-            install_hook "pre-push"
-        fi
-        if [ "${INSTALL_PREPARE_COMMIT_MSG}" = "true" ]; then
-            install_hook "prepare-commit-msg"
-        fi
-    fi
+    # Install pre-push hook
+    install_hook "pre-push"
 
     printf "\n${GREEN}✓${NC} ${BOLD}Installation complete!${NC}\n\n"
 
-    # Show what each hook does
-    printf "${BOLD}Installed hooks:${NC}\n"
-    printf "  ${CYAN}pre-commit${NC}           Validates changeset exists\n"
-    printf "  ${CYAN}post-commit${NC}          Adds commit SHA to changeset\n"
-    printf "  ${CYAN}post-checkout${NC}        Creates changeset for new branches\n"
-    printf "  ${CYAN}pre-push${NC}             Validates changeset before push\n"
-    printf "  ${CYAN}prepare-commit-msg${NC}   Enhances commit messages\n"
+    # Show what the hook does
+    printf "${BOLD}Installed hook:${NC}\n"
+    printf "  ${CYAN}pre-push${NC}  Syncs all commits to changeset before pushing\n"
+
+    printf "\n${BOLD}Workflow:${NC}\n"
+    printf "  ${GREEN}1.${NC} Create branch & changeset:  ${CYAN}git checkout -b feature/name && workspace changeset create${NC}\n"
+    printf "  ${GREEN}2.${NC} Make commits:                ${CYAN}git commit -m \"feat: ...\"${NC} ${BLUE}(as many as you want)${NC}\n"
+    printf "  ${GREEN}3.${NC} Push to remote:              ${CYAN}git push${NC}\n"
+    printf "     ${BLUE}→${NC} Hook syncs all commits to changeset\n"
+    printf "     ${BLUE}→${NC} Creates sync commit if needed\n"
+    printf "     ${BLUE}→${NC} Push proceeds automatically\n"
+
+    printf "\n${BOLD}Key points:${NC}\n"
+    printf "  ${YELLOW}•${NC} Sync commits (${CYAN}chore: sync changeset${NC}) are created automatically\n"
+    printf "  ${YELLOW}•${NC} These are maintenance commits and don't need to be in the changeset\n"
+    printf "  ${YELLOW}•${NC} All your feature commits are tracked automatically\n"
 
     printf "\n${BOLD}Configuration:${NC}\n"
     printf "  Add to ${CYAN}.workspace.toml${NC} to customize:\n"
     printf "    ${YELLOW}[git_hooks]${NC}\n"
     printf "    ${YELLOW}enabled = true${NC}\n"
-    printf "    ${YELLOW}require_changeset = true${NC}\n"
+    printf "    ${YELLOW}sync_on_push = true${NC}\n"
 
     printf "\n${BOLD}To disable temporarily:${NC}\n"
-    printf "  ${GREEN}WORKSPACE_SKIP_HOOKS=1 git commit${NC}\n"
+    printf "  ${GREEN}WORKSPACE_SKIP_HOOKS=1 git push${NC}\n"
 
     printf "\n${BOLD}To uninstall:${NC}\n"
     printf "  ${GREEN}./scripts/install-hooks.sh --uninstall${NC}\n"

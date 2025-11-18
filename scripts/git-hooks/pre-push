@@ -2,21 +2,27 @@
 #
 # pre-push hook for workspace (Workspace Tools)
 #
-# This hook updates the changeset with all branch commits before pushing.
-# It creates a commit with the updated changeset automatically.
+# This hook syncs all branch commits to the changeset before pushing.
+# It creates a sync commit if needed (which doesn't need to be in the changeset itself).
 #
 # What it does:
 # 1. Detects current branch
 # 2. Skips main/master branches
 # 3. Checks if changeset exists (blocks push if missing)
-# 4. Adds all branch commits to changeset's changes array (bulk update)
-# 5. Creates a commit with the updated changeset file
-# 6. Allows push to continue (includes the changeset commit)
+# 4. Gets all commits from branch that aren't in main
+# 5. Adds each commit SHA to the changeset (skips duplicates)
+# 6. If changeset was modified:
+#    - Creates a commit: "chore: sync changeset for <branch>"
+#    - This sync commit is included in the push automatically
+# 7. Allows push to proceed
+#
+# Note: Sync commits (chore: sync changeset) are maintenance commits
+# and don't need to be tracked in the changeset itself.
 #
 # Configuration (.workspace.toml):
 # [git_hooks]
 # enabled = true
-# validate_on_push = true
+# sync_on_push = true
 #
 # To disable: Set WORKSPACE_SKIP_HOOKS=1 environment variable
 # Example: WORKSPACE_SKIP_HOOKS=1 git push
@@ -62,13 +68,13 @@ fi
 
 # Check if workspace is installed
 if ! command -v workspace >/dev/null 2>&1; then
-    printf "${YELLOW}⚠${NC} workspace not found. Skipping changeset validation.\n" >&2
+    printf "${YELLOW}⚠${NC} workspace not found. Skipping changeset sync.\n" >&2
     printf "${BLUE}ℹ${NC} Install: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/websublime/workspace-tools/releases/latest/download/sublime_cli_tools-installer.sh | sh\n" >&2
     exit 0
 fi
 
-# Display validation message
-printf "\n${BLUE}🔍 Checking changeset...${NC}\n" >&2
+# Display sync message
+printf "\n${BLUE}🔍 Syncing changeset...${NC}\n" >&2
 
 # Check if changeset exists
 if ! workspace changeset show "${BRANCH}" --format quiet >/dev/null 2>&1; then
@@ -88,44 +94,49 @@ fi
 
 printf "${GREEN}✓${NC} Changeset exists for branch ${CYAN}${BRANCH}${NC}\n" >&2
 
-# Get all commits from this branch that aren't in main
-printf "${BLUE}📝 Adding branch commits to changeset...${NC}\n" >&2
-
 # Determine main branch name
 MAIN_BRANCH="main"
 if ! git rev-parse --verify main >/dev/null 2>&1; then
     MAIN_BRANCH="master"
 fi
 
-# Get commits that are in current branch but not in main
-COMMITS=$(git rev-list ${MAIN_BRANCH}..HEAD 2>/dev/null || echo "")
+# Get all commits that are in current branch but not in main
+# Exclude sync commits (they don't need to be in changeset)
+COMMITS=$(git log ${MAIN_BRANCH}..HEAD --pretty=%H --grep="^chore: sync changeset for" --invert-grep 2>/dev/null || echo "")
 
 if [ -z "${COMMITS}" ]; then
-    printf "${BLUE}ℹ${NC} No commits to add\n" >&2
-else
-    # Count commits
-    COMMIT_COUNT=$(echo "${COMMITS}" | wc -l | tr -d ' ')
-    printf "${BLUE}ℹ${NC} Found ${COMMIT_COUNT} commit(s)\n" >&2
-
-    # Add each commit to changeset (suppress "already contains" errors)
-    echo "${COMMITS}" | while read -r commit_sha; do
-        workspace changeset update "${BRANCH}" --commit "${commit_sha}" --format quiet >/dev/null 2>&1 || true
-    done
-
-    printf "${GREEN}✓${NC} Commits added to changeset\n" >&2
+    printf "${BLUE}ℹ${NC} No commits to sync\n" >&2
+    printf "${GREEN}✓${NC} Ready to push\n\n" >&2
+    exit 0
 fi
+
+# Count commits
+COMMIT_COUNT=$(echo "${COMMITS}" | wc -l | tr -d ' ')
+printf "${BLUE}📊 Syncing ${COMMIT_COUNT} commit(s)...${NC}\n" >&2
+
+# Add each commit to changeset (workspace will skip duplicates)
+echo "${COMMITS}" | while read -r commit_sha; do
+    workspace changeset update "${BRANCH}" --commit "${commit_sha}" --format quiet </dev/null >/dev/null 2>&1 || true
+done
+
+printf "${GREEN}✓${NC} Commits synced to changeset\n" >&2
 
 # Check if changeset was modified
 if ! git diff --quiet .changesets/*.json 2>/dev/null; then
-    # Changeset was updated - commit it
-    printf "${BLUE}📦 Committing updated changeset...${NC}\n" >&2
+    # Changeset was updated - create sync commit
+    printf "${BLUE}📦 Creating sync commit...${NC}\n" >&2
 
-    git add .changesets/*.json 2>/dev/null || true
+    git add .changesets/*.json 2>/dev/null || {
+        printf "${RED}✗${NC} Failed to stage changeset\n" >&2
+        exit 1
+    }
 
-    if git commit -m "chore: update changeset for ${BRANCH}" --no-verify >/dev/null 2>&1; then
-        printf "${GREEN}✓${NC} Changeset committed\n" >&2
+    if git commit -m "chore: sync changeset for ${BRANCH}" --no-verify </dev/null >/dev/null 2>&1; then
+        printf "${GREEN}✓${NC} Sync commit created\n" >&2
+        printf "${BLUE}ℹ${NC} This commit will be included in the push\n" >&2
     else
-        printf "${YELLOW}⚠${NC} Failed to commit changeset (non-fatal)\n" >&2
+        printf "${YELLOW}⚠${NC} Failed to create sync commit\n" >&2
+        printf "${YELLOW}⚠${NC} You may need to commit changeset manually\n" >&2
     fi
 else
     printf "${BLUE}ℹ${NC} Changeset already up-to-date\n" >&2
