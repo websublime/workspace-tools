@@ -1,34 +1,45 @@
 # workspace Git Hooks
 
-Automated changeset management through git hooks for seamless developer workflow.
+Automated changeset management through a single, simple git hook.
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [Quick Start](#quick-start)
-- [Available Hooks](#available-hooks)
+- [How It Works](#how-it-works)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Usage Examples](#usage-examples)
 - [Troubleshooting](#troubleshooting)
-- [Integration with Other Tools](#integration-with-other-tools)
+- [FAQ](#faq)
 
 ## Overview
 
-The workspace git hooks automate changeset management throughout your development workflow:
+The workspace git hook provides automatic changeset synchronization with **one simple hook**:
 
-- **pre-commit**: Validates changeset exists, prompts to create if missing
-- **post-checkout**: Creates changesets when you start new feature branches
-- **pre-push**: Adds all branch commits and creates a commit with updated changeset
-- **prepare-commit-msg**: Enhances commit messages with changeset info
+- **pre-push**: Syncs all branch commits to changeset before pushing
 
-### Benefits
+### Key Benefits
 
-✅ **Zero Friction**: Changesets are managed automatically  
-✅ **Consistency**: Everyone on the team follows the same process  
-✅ **Fewer Mistakes**: Never forget to update your changeset  
-✅ **Better Commits**: Commit messages include changeset context  
-✅ **Validation**: Catch issues before they reach remote
+✅ **Zero Manual Work**: All commits are synced automatically before push  
+✅ **Simple**: Just one hook to understand  
+✅ **No Loops**: Sync commits are maintenance-only, don't need tracking  
+✅ **Clean**: Minimal commits, maximum efficiency  
+✅ **Flexible**: Commit as many times as you want, sync happens once on push
+
+### How It Works
+
+```
+Developer Workflow:
+  1. Create changeset once:  workspace changeset create
+  2. Make commits freely:    git commit (as many as you want)
+  3. Push when ready:        git push
+     → pre-push syncs ALL commits to changeset
+     → Creates "chore: sync changeset" commit if needed
+     → Push proceeds with everything
+```
+
+**Key Insight**: Sync commits (`chore: sync changeset for <branch>`) are **maintenance commits** and don't need to be in the changeset themselves. Only your feature/fix commits are tracked.
 
 ## Quick Start
 
@@ -39,176 +50,74 @@ The workspace git hooks automate changeset management throughout your developmen
 ./scripts/install-hooks.sh
 ```
 
-That's it! The hooks are now active.
-
 ### Basic Workflow
 
 ```bash
 # 1. Create feature branch
-git checkout -b feature/new-thing
-# → Hook prompts to create changeset
+git checkout -b feature/amazing-feature
 
-# 2. Make first commit
-git add file.js
-git commit -m "feat: add new feature"
-# → pre-commit: "No changeset found. Create one? [Y/n]"
-# → User: Y (creates changeset interactively)
-# → Commit proceeds
+# 2. Create changeset (one time)
+workspace changeset create
+# → Interactive prompts for packages, version bump, etc.
 
-# 3. Make more commits (as many as you want)
-git add another.js  
-git commit -m "feat: improve feature"
-# → pre-commit: ✓ Changeset exists
+# 3. Make commits (as many as you want, whenever you want)
+git commit -m "feat: add core functionality"
+git commit -m "feat: add validation"
+git commit -m "test: add tests"
+git commit -m "docs: update documentation"
+git commit -m "refactor: improve performance"
+# ... commit freely, no sync needed yet!
 
-# 4. Push (commits are added here)
-git push origin feature/new-thing
-# → pre-push: Adds ALL branch commits to changeset
-# → pre-push: Creates commit "chore: update changeset for feature/new-thing"
-# → Push includes all your commits + changeset commit
+# 4. Push (one time or whenever ready)
+git push origin feature/amazing-feature
+# → pre-push hook runs:
+#    ✓ Syncs all 5 commits to changeset
+#    ✓ Creates "chore: sync changeset for feature/amazing-feature" commit
+#    ✓ Pushes everything (your 5 commits + sync commit)
 ```
 
-## Available Hooks
+**That's it!** No manual sync, no per-commit overhead, simple and efficient.
 
-### pre-commit
+## How It Works
 
-**Purpose**: Ensure changeset exists, prompting to create interactively if missing
+### The pre-push Hook
 
-**What it does:**
+**When it runs**: Before every `git push`
+
+**What it does**:
 1. Detects current branch
 2. Skips main/master branches
-3. Checks if changeset exists for the branch
-4. If missing (interactive mode):
-   - Prompts: "Create changeset now? [Y/n]"
-   - If yes (default): Runs `workspace changeset create` interactively
-   - If no: Asks if user wants to continue without changeset
-5. If missing (non-interactive mode): Warns but allows commit
-6. Allows commit to proceed
-
-**When it runs**: Before each `git commit`
-
-**Example output (changeset exists):**
-```
-✓ Changeset found for branch feature/my-branch
-```
-
-**Example output (no changeset - user creates):**
-```
-⚠ No changeset found for branch feature/my-branch
-
-? Create changeset now? [Y/n] 
-
-📝 Creating changeset...
-[Interactive prompts...]
-✓ Changeset created successfully
-ℹ Continuing with commit...
-```
-
-**Example output (user declines):**
-```
-⚠ No changeset found for branch feature/my-branch
-
-? Create changeset now? [Y/n] n
-? Continue commit without changeset? [y/N] y
-⚠ Proceeding without changeset
-```
-
-**Skip once:**
-```bash
-WORKSPACE_SKIP_HOOKS=1 git commit -m "message"
-```
-
-### post-commit
-
-**Purpose**: Automatically add commit SHA to changeset after commit is created
-
-**What it does:**
-1. Detects current branch
-2. Skips main/master branches
-3. Gets the SHA of the just-created commit
-4. Adds the SHA to the changeset's changes array
-5. Amends the commit to include the updated changeset
-
-**When it runs**: After each `git commit`
-
-**Example output:**
-```
-📝 Adding commit to changeset...
-✓ Changeset updated and included in commit
-```
-
-**Why amend?**: The commit is amended so that the changeset update is included in the same commit, keeping the history clean without extra "update changeset" commits.
-
-**Skip once:**
-```bash
-WORKSPACE_SKIP_HOOKS=1 git commit -m "message"
-```
-
-### post-checkout
-
-**Purpose**: Create changeset for new feature branches
-
-**What it does:**
-1. Detects branch checkout
-2. Checks if it's a feature branch
-3. Checks if changeset exists
-4. Prompts to create changeset (or creates automatically)
-
-**When it runs**: After `git checkout -b` or `git checkout`
-
-**Example output:**
-```
-📝 New feature branch detected: feature/my-branch
-ℹ  No changeset found for this branch
-
-? Create changeset now? [Y/n]
-```
-
-**Skip once:**
-```bash
-WORKSPACE_SKIP_HOOKS=1 git checkout -b feature/branch
-```
-
-### pre-push
-
-**Purpose**: Add all branch commits to changeset and create a commit with the update before pushing
-
-**What it does:**
-1. Detects current branch
-2. Skips main/master branches
-3. Checks if changeset exists (blocks push if missing)
-4. Gets all commits from branch that aren't in main
-5. Adds each commit SHA to the changeset's changes array (bulk update)
-6. If changeset was modified:
+3. Checks if changeset exists (blocks if missing)
+4. Gets all commits from branch (excluding main/master commits)
+5. Filters out previous sync commits (they don't need tracking)
+6. Adds each commit SHA to changeset (workspace skips duplicates)
+7. If changeset was modified:
    - Stages the changeset file
-   - Creates a commit: `chore: update changeset for <branch-name>`
-   - This commit is included automatically in the push
-7. Allows push to continue
+   - Creates commit: `chore: sync changeset for <branch>`
+   - This commit is included in the push automatically
+8. Allows push to proceed
 
-**When it runs**: Before `git push`
-
-**Example output (with updates):**
+**Example output (first push)**:
 ```
-🔍 Checking changeset...
+🔍 Syncing changeset...
 ✓ Changeset exists for branch feature/my-branch
-📝 Adding branch commits to changeset...
-ℹ Found 3 commit(s)
-✓ Commits added to changeset
-📦 Committing updated changeset...
-✓ Changeset committed
+📊 Syncing 5 commit(s)...
+✓ Commits synced to changeset
+📦 Creating sync commit...
+✓ Sync commit created
+ℹ This commit will be included in the push
 ✓ Ready to push
 ```
 
-**Example output (already up-to-date):**
+**Example output (subsequent push, no new commits)**:
 ```
-🔍 Checking changeset...
+🔍 Syncing changeset...
 ✓ Changeset exists for branch feature/my-branch
-📝 Adding branch commits to changeset...
-ℹ No commits to add
-ℹ Changeset already up-to-date
+ℹ No commits to sync
 ✓ Ready to push
 ```
 
-**Example output (no changeset):**
+**Example output (no changeset)**:
 ```
 ✗ No changeset found for branch feature/my-branch
 
@@ -221,60 +130,28 @@ To skip this check once:
   WORKSPACE_SKIP_HOOKS=1 git push
 ```
 
-**Why bulk update on push?**: Adding commits in bulk before push (instead of per-commit) avoids issues with git commit amending and keeps the workflow simple. You can make multiple commits freely, and they're all tracked when you push. The automatic commit ensures the changeset is always included in the push.
-
 **Skip once:**
 ```bash
 WORKSPACE_SKIP_HOOKS=1 git push
 ```
 
-### prepare-commit-msg
+### Why Sync Commits Don't Need Tracking
 
-**Purpose**: Enhance commit messages with changeset info
+Sync commits (`chore: sync changeset for <branch>`) are **meta-commits** - they exist to update the changeset file, not to add features or fix bugs. Including them in the changeset would be redundant:
 
-**What it does:**
-1. Detects current branch
-2. Checks if changeset exists for the branch
-3. Appends changeset reference to commit message
+- They don't change the package code
+- They only update the changeset JSON file
+- They're created automatically by the hook
+- Tracking them would pollute the changeset with noise
 
-**When it runs**: When preparing commit message
-
-**Example addition to commit:**
-```
-# ──────────────────────────────────────────────────────────────
-# Changeset Info (added by workspace)
-# Branch: feature/my-branch
-# Run 'workspace changeset show feature/my-branch' to see details
-# ──────────────────────────────────────────────────────────────
-```
-
-**Skip once:**
-```bash
-WORKSPACE_SKIP_HOOKS=1 git commit -m "message"
-```
+**Your feature commits ARE tracked**, which is what matters for versioning and changelogs.
 
 ## Installation
 
-### Install All Hooks (Recommended)
+### Install Hook
 
 ```bash
 ./scripts/install-hooks.sh
-```
-
-### Install Specific Hooks
-
-```bash
-# Only pre-commit
-./scripts/install-hooks.sh --pre-commit
-
-# Only post-commit
-./scripts/install-hooks.sh --post-commit
-
-# Only validation (pre-push)
-./scripts/install-hooks.sh --pre-push
-
-# Multiple specific hooks
-./scripts/install-hooks.sh --pre-commit --post-commit --pre-push
 ```
 
 ### Force Reinstall
@@ -299,135 +176,152 @@ Add to `.workspace.toml`:
 
 ```toml
 [git_hooks]
-# Enable/disable hooks
+# Enable/disable hook globally
 enabled = true
 
-# Require changeset before allowing commit (pre-commit)
-require_changeset = true
-
-# Prompt for changeset creation on checkout (post-checkout)
-prompt_for_changeset = true
-
-# Validate changeset exists before push (pre-push)
-validate_on_push = true
-
-# Enhance commit messages with changeset info (prepare-commit-msg)
-enhance_commit_messages = true
+# Sync changeset before push
+sync_on_push = true
 ```
 
 ### Environment Variables
 
 ```bash
-# Disable all hooks temporarily
+# Disable hook temporarily
 export WORKSPACE_SKIP_HOOKS=1
 
 # Disable for single command
-WORKSPACE_SKIP_HOOKS=1 git commit -m "message"
+WORKSPACE_SKIP_HOOKS=1 git push
 ```
 
 ### Per-Repository Settings
 
 ```bash
-# Disable hooks for this repo only
+# Disable hook for this repo only
 git config hooks.workspace.enabled false
-
-# Enable strict validation
-git config hooks.workspace.strict true
 ```
 
 ## Usage Examples
 
-### Scenario 1: Start New Feature
+### Scenario 1: Normal Feature Development
 
 ```bash
 # Create branch
-git checkout -b feature/add-login
+git checkout -b feature/user-authentication
 
-# → Hook prompts:
-📝 New feature branch detected: feature/add-login
-ℹ  No changeset found for this branch
+# Create changeset (one time)
+workspace changeset create
+# → Interactive prompts...
+# ✓ Changeset created: .changesets/feature-user-authentication.json
 
-? Create changeset now? [Y/n] y
+# Develop feature (multiple commits over days/weeks)
+git commit -m "feat: add login form"
+git commit -m "feat: add password validation"  
+git commit -m "test: add authentication tests"
+git commit -m "docs: document authentication flow"
+git commit -m "refactor: extract validation logic"
+git commit -m "fix: handle edge case"
 
-? Select packages (space to select):
-  ❯ ◯ @myorg/api
-    ◯ @myorg/ui
-    ◯ @myorg/auth
-
-? Version bump type: › minor
-
-? Target environments:
-  ❯ ☑ development
-    ☑ staging
-    ☐ production
-
-✓ Changeset created: .changesets/feature-add-login.json
+# Push when ready (maybe days later)
+git push origin feature/user-authentication
+# → pre-push:
+#    ✓ Syncs all 6 commits to changeset
+#    ✓ Creates "chore: sync changeset for feature/user-authentication"
+#    ✓ Pushes 7 commits total (6 feature + 1 sync)
 ```
 
-### Scenario 2: Regular Development
+### Scenario 2: Multiple Pushes
 
 ```bash
-# Work on feature
-vim src/login.js
-
-# Commit changes
-git add src/login.js
-git commit -m "feat: implement login form"
-
-# → Hook automatically:
-📝 Updating changeset...
-✓ Changeset updated and staged
-
-# Result: Single commit with code + updated changeset
-```
-
-### Scenario 3: Push to Remote
-
-```bash
-git push origin feature/add-login
-
-# → Hook validates:
-🔍 Validating changeset...
-✓ Changeset validation passed
-
-# Push proceeds
-```
-
-### Scenario 4: Validation Fails
-
-```bash
+# First push
+git commit -m "feat: add feature part 1"
+git commit -m "feat: add feature part 2"
 git push
+# → Syncs 2 commits, creates sync commit, pushes 3 commits
 
-# → Hook detects issue:
-✗ Changeset validation failed
-
-Validation errors:
-  - Changeset out of sync with commits
-
-How to fix:
-  1. Update: workspace changeset update
-  2. Commit: git commit -m 'chore: update changeset'
-  3. Push:   git push
-
-# Fix it:
-workspace changeset update
-git add .changesets/
-git commit -m "chore: update changeset"
+# Continue working
+git commit -m "feat: add feature part 3"
+git commit -m "test: add more tests"
 git push
+# → Syncs 2 NEW commits (skips already-synced ones), creates sync commit, pushes 3 commits
+
+# Another push with no new commits
+git push
+# → No commits to sync, no sync commit created, push proceeds
+```
+
+### Scenario 3: Starting From Existing Branch (No Changeset Yet)
+
+```bash
+# You already have commits but no changeset
+git checkout feature/existing-branch
+
+# Install hook
+./scripts/install-hooks.sh
+
+# Try to push
+git push
+# → ✗ No changeset found for branch feature/existing-branch
+# → Hook blocks push with instructions
+
+# Create changeset now
+workspace changeset create
+
+# Push again
+git push
+# → pre-push:
+#    ✓ Syncs ALL existing commits to changeset
+#    ✓ Creates sync commit
+#    ✓ Pushes everything
+```
+
+### Scenario 4: Emergency Hotfix (Skip Hook)
+
+```bash
+# Create hotfix branch
+git checkout -b hotfix/critical-bug
+
+# Make emergency fix (skip changeset for speed)
+git commit -m "fix: critical security issue"
+
+# Push immediately (skip hook)
+WORKSPACE_SKIP_HOOKS=1 git push origin hotfix/critical-bug
+
+# After emergency is resolved, create changeset
+workspace changeset create
+git push
+# → Hook syncs the hotfix commit to changeset retroactively
+```
+
+### Scenario 5: Amending or Rebasing Commits
+
+```bash
+# Make commits
+git commit -m "feat: add feature"
+git commit -m "feat: add another feature"
+
+# Oops, need to amend
+git commit --amend -m "feat: add improved feature"
+
+# Or rebase
+git rebase -i HEAD~2
+
+# Push
+git push
+# → Hook syncs the NEW commit SHAs (after amend/rebase)
+# → Old SHAs remain in changeset (no harm, will be ignored)
+# → If needed, manually clean up: workspace changeset update <branch> --remove-commit <old-sha>
 ```
 
 ## Troubleshooting
 
 ### Hook Not Running
 
-**Check if hooks are installed:**
+**Check if hook is installed:**
 ```bash
-ls -la .git/hooks/pre-commit
-ls -la .git/hooks/post-checkout
 ls -la .git/hooks/pre-push
 ```
 
-**Reinstall hooks:**
+**Reinstall hook:**
 ```bash
 ./scripts/install-hooks.sh --force
 ```
@@ -439,182 +333,207 @@ ls -la .git/hooks/pre-push
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/websublime/workspace-tools/releases/latest/download/sublime_cli_tools-installer.sh | sh
 ```
 
-**Or use full path:**
+**Verify installation:**
 ```bash
-# Edit hook file and use absolute path
-/usr/local/bin/workspace changeset update
+workspace --version
 ```
 
-### Hook Fails on Commit
+### Push Blocked (No Changeset)
 
-**Check what's wrong:**
-```bash
-workspace changeset validate
+```
+✗ No changeset found for branch feature/my-branch
 ```
 
-**Skip hook temporarily:**
+**Fix**:
 ```bash
-WORKSPACE_SKIP_HOOKS=1 git commit -m "message"
+# Create changeset
+workspace changeset create
+
+# Push again
+git push
 ```
 
-**Disable permanently:**
+### Hook Hangs or Freezes
+
+**Possible causes**:
+- `workspace` command waiting for input
+- Git lock file present
+
+**Fix**:
 ```bash
-./scripts/uninstall-hooks.sh
+# Cancel with Ctrl+C
+# Check for lock files
+rm -f .git/index.lock
+
+# Try again, or skip hook
+WORKSPACE_SKIP_HOOKS=1 git push
 ```
 
 ### Permission Denied
 
-**Make hooks executable:**
+**Make hook executable:**
 ```bash
-chmod +x .git/hooks/pre-commit
-chmod +x .git/hooks/post-checkout
 chmod +x .git/hooks/pre-push
-chmod +x .git/hooks/prepare-commit-msg
 ```
 
-### Hooks Too Slow
+### Too Many Commits (Slow)
 
-**Disable prepare-commit-msg (optional):**
-```bash
-rm .git/hooks/prepare-commit-msg
-```
-
-**Use --quiet flag:**
-```bash
-# Edit hook files, add --quiet:
-workspace changeset update --quiet
-```
-
-**Disable for large repos:**
-```toml
-# .workspace.toml
-[git_hooks]
-auto_update_on_commit = false  # Use manual updates instead
-```
-
-## Integration with Other Tools
-
-### Husky
-
-If you're using Husky:
+For branches with hundreds of commits:
 
 ```bash
-# .husky/pre-commit
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
+# Sync manually first (faster)
+git log main..HEAD --pretty=%H --grep="^chore: sync changeset" --invert-grep | \
+  xargs -I {} workspace changeset update $(git branch --show-current) --commit {}
 
-# Run workspace changeset update
-workspace changeset update --auto --quiet
-git add .changesets/*.json 2>/dev/null || true
-```
+# Commit the changeset
+git add .changesets/
+git commit -m "chore: bulk sync changeset"
 
-### Lefthook
-
-If you're using Lefthook:
-
-```yaml
-# lefthook.yml
-pre-commit:
-  commands:
-    changeset-update:
-      run: workspace changeset update --auto --quiet && git add .changesets/*.json
-
-pre-push:
-  commands:
-    changeset-validate:
-      run: workspace changeset validate
-```
-
-### Git Aliases
-
-Useful aliases:
-
-```bash
-# Skip hooks for one commit
-git config --global alias.commit-skip 'commit --no-verify'
-
-# Force update changeset
-git config --global alias.cs-update '!workspace changeset update'
-
-# Validate changeset
-git config --global alias.cs-validate '!workspace changeset validate'
-
-# Usage:
-git commit-skip -m "wip"
-git cs-update
-git cs-validate
-```
-
-### CI/CD Integration
-
-GitHub Actions example:
-
-```yaml
-name: Validate Changeset
-
-on:
-  pull_request:
-    branches: [main]
-
-jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install workspace
-        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/websublime/workspace-tools/releases/latest/download/sublime_cli_tools-installer.sh | sh
-      
-      - name: Validate changeset
-        run: workspace changeset validate --strict
+# Push (hook will skip, already synced)
+git push
 ```
 
 ## Best Practices
 
 ### ✅ Do
 
-- Install hooks for all team members
-- Commit the `.workspace.toml` configuration
-- Use `--quiet` flags for faster hooks
-- Document hook behavior in project README
-- Test hooks before deploying to team
+- **Create changeset early** - Right after creating the branch
+- **Commit freely** - Don't worry about syncing until push
+- **Push when ready** - The hook handles everything
+- **Install for all team members** - Ensures consistency
+- **Document in project README** - Explain the workflow to new devs
 
 ### ❌ Don't
 
-- Don't commit `.git/hooks` directory
-- Don't override hooks without understanding them
-- Don't use hooks for heavy operations (keep them fast)
-- Don't skip validation hooks regularly
-- Don't disable hooks without team agreement
+- **Don't use `--no-verify` routinely** - Only for emergencies
+- **Don't manually edit changeset files** - Use `workspace changeset update`
+- **Don't commit `.git/hooks`** - Hooks are installed per-developer
+- **Don't track sync commits in changeset** - They're maintenance-only
+
+### Recommended Workflow
+
+1. **Branch creation**: `git checkout -b feature/name`
+2. **Changeset creation**: `workspace changeset create` (immediately)
+3. **Development**: `git commit` (as many times as needed, over days/weeks)
+4. **Push**: `git push` (whenever ready - hook syncs everything)
+5. **More development**: `git commit` (more commits)
+6. **Push again**: `git push` (hook syncs only new commits)
+7. **PR creation**: Create pull request
+8. **Code review**: Review includes complete changeset
+9. **Merge**: Merge or squash (changeset is complete)
 
 ## FAQ
 
-### Q: Can I customize the hooks?
+### Q: Why only one hook now?
 
-**A:** Yes! The hook scripts are in `scripts/git-hooks/`. Copy and modify them, or configure behavior via `.workspace.toml`.
+**A:** Simplicity and reliability. Previous approaches with multiple hooks (post-commit, etc.) caused issues:
+- Infinite loops with `git commit --amend`
+- Timing problems (last commit always missing)
+- Complexity and confusion
+
+The single pre-push hook is simple, reliable, and efficient.
+
+### Q: Why don't sync commits need to be in the changeset?
+
+**A:** Sync commits (`chore: sync changeset`) are meta-commits that only update the changeset file. They don't:
+- Change package code
+- Add features
+- Fix bugs
+- Need to appear in changelogs
+
+Your actual feature/fix commits ARE tracked, which is what matters.
+
+### Q: What if I push multiple times?
+
+**A:** The hook is smart:
+- First push: Syncs all commits
+- Subsequent pushes: Syncs only NEW commits
+- No new commits: No sync commit created
+
+### Q: What if I have hundreds of commits?
+
+**A:** The hook might be slow. Options:
+1. Bulk sync manually first (see Troubleshooting)
+2. Push more frequently (sync fewer commits each time)
+3. Use `WORKSPACE_SKIP_HOOKS=1` and sync manually
+
+### Q: Can I create the changeset after making commits?
+
+**A:** Yes! Create the changeset anytime, then push. The hook will sync all existing commits automatically.
+
+### Q: What if I amend or rebase commits?
+
+**A:** The hook syncs the current commit SHAs. Old SHAs remain in changeset but are harmless (they're not in the branch anymore, so they're ignored).
 
 ### Q: Do hooks work on Windows?
 
-**A:** Yes, via Git Bash or WSL. Native Windows support coming soon.
-
-### Q: Can I disable hooks temporarily?
-
-**A:** Yes:
-```bash
-WORKSPACE_SKIP_HOOKS=1 git commit
-```
+**A:** Yes, via Git Bash or WSL.
 
 ### Q: What if workspace is not installed?
 
-**A:** Hooks gracefully skip if workspace is not found. They won't break your workflow.
+**A:** Hook shows a warning with installation instructions but doesn't block your workflow.
 
-### Q: Can I use hooks with Husky?
+### Q: Can I disable the hook temporarily?
 
-**A:** Yes! See [Integration with Other Tools](#integration-with-other-tools).
+**A:** Yes:
+```bash
+WORKSPACE_SKIP_HOOKS=1 git push
+```
 
-### Q: Do hooks affect performance?
+### Q: How do I see what's in my changeset?
 
-**A:** Minimal impact (<500ms typically). Use `--quiet` flags for faster execution.
+**A:**
+```bash
+workspace changeset show <branch-name>
+```
+
+### Q: What happens if I force-push?
+
+**A:** The hook still runs before force-push. It syncs commits based on the current branch state.
+
+### Q: Can I use this with rebasing workflows?
+
+**A:** Yes! Rebase/squash your commits as needed, then push. The hook syncs the final commit SHAs.
+
+## Architecture
+
+### Why One Hook?
+
+**Pre-push is the perfect sync point**:
+- Runs once per push (efficient)
+- All commits are finalized (no more changes)
+- Can create sync commit and include it in the same push
+- No loops or timing issues
+- Simple to understand and debug
+
+### Hook Execution Flow
+
+```
+Developer: git push origin feature/my-branch
+  ↓
+1. pre-push hook runs (before push to remote)
+  ↓
+2. Get all commits: main..HEAD (excluding sync commits)
+   Example: [abc123, def456, ghi789]
+  ↓
+3. Add each to changeset:
+   workspace changeset update feature/my-branch --commit abc123
+   workspace changeset update feature/my-branch --commit def456
+   workspace changeset update feature/my-branch --commit ghi789
+  ↓
+4. If changeset changed:
+   git add .changesets/feature-my-branch.json
+   git commit -m "chore: sync changeset for feature/my-branch" --no-verify
+   → Creates commit jkl012
+  ↓
+5. Push proceeds with all commits:
+   - abc123 (your commit)
+   - def456 (your commit)
+   - ghi789 (your commit)
+   - jkl012 (sync commit - NOT in changeset, and that's OK!)
+```
+
+**Key insight**: Sync commit `jkl012` is NOT added to the changeset. It's a maintenance commit. Next push will NOT try to add it (filtered by `--grep --invert-grep`).
 
 ## Support
 
