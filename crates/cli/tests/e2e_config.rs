@@ -262,7 +262,8 @@ async fn test_config_validate_valid_config() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = Output::new(OutputFormat::Human, std::io::sink(), true);
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should succeed
     assert!(result.is_ok(), "Config validate should succeed with valid config: {:?}", result.err());
@@ -284,7 +285,8 @@ async fn test_config_validate_invalid_config() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = Output::new(OutputFormat::Human, std::io::sink(), true);
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should fail
     assert!(result.is_err(), "Config validate should fail with invalid config");
@@ -302,7 +304,8 @@ async fn test_config_validate_missing_file() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate command (no config exists)
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = Output::new(OutputFormat::Human, std::io::sink(), true);
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should fail with missing file error
     assert!(result.is_err(), "Config validate should fail when config file is missing");
@@ -324,7 +327,8 @@ async fn test_config_validate_json_output() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate with JSON format
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Json).await;
+    let output = Output::new(OutputFormat::Json, std::io::sink(), true);
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should succeed and output JSON
     assert!(result.is_ok(), "Config validate with JSON output should succeed: {:?}", result.err());
@@ -347,9 +351,9 @@ async fn test_config_validate_with_custom_path() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate with custom path
+    let output = Output::new(OutputFormat::Human, std::io::sink(), true);
     let result =
-        execute_validate(&args, workspace.root(), Some(&custom_config_path), OutputFormat::Human)
-            .await;
+        execute_validate(&args, &output, workspace.root(), Some(&custom_config_path)).await;
 
     // ASSERT: Validation should succeed
     assert!(result.is_ok(), "Config validate with custom path should succeed: {:?}", result.err());
@@ -368,9 +372,8 @@ async fn test_config_validate_custom_path_not_found() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate with non-existent path
-    let result =
-        execute_validate(&args, workspace.root(), Some(&non_existent_path), OutputFormat::Human)
-            .await;
+    let output = Output::new(OutputFormat::Human, std::io::sink(), true);
+    let result = execute_validate(&args, &output, workspace.root(), Some(&non_existent_path)).await;
 
     // ASSERT: Validation should fail
     assert!(result.is_err(), "Config validate should fail with non-existent custom path");
@@ -392,7 +395,8 @@ async fn test_config_validate_quiet_output() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate with quiet format
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Quiet).await;
+    let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should succeed
     assert!(result.is_ok(), "Config validate with quiet format should succeed: {:?}", result.err());
@@ -489,7 +493,8 @@ async fn test_config_validate_monorepo_unified() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = Output::new(OutputFormat::Human, std::io::sink(), true);
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should succeed
     assert!(
@@ -566,7 +571,8 @@ async fn test_config_validate_conflicting_environments() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = Output::new(OutputFormat::Human, std::io::sink(), true);
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should fail
     assert!(result.is_err(), "Config validate should fail with conflicting environments");
@@ -635,7 +641,8 @@ async fn test_config_validate_invalid_registry_url() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = Output::new(OutputFormat::Human, std::io::sink(), true);
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should fail
     assert!(result.is_err(), "Config validate should fail with invalid registry URL");
@@ -704,7 +711,8 @@ async fn test_config_validate_invalid_snapshot_format() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = Output::new(OutputFormat::Human, std::io::sink(), true);
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should fail
     assert!(result.is_err(), "Config validate should fail with invalid snapshot format");
@@ -918,7 +926,8 @@ min_severity = "info"
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = Output::new(OutputFormat::Human, std::io::sink(), true);
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should succeed with TOML format
     assert!(result.is_ok(), "Config validate should succeed with TOML format: {:?}", result.err());
@@ -988,7 +997,8 @@ audit:
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = Output::new(OutputFormat::Human, std::io::sink(), true);
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should succeed with YAML format
     assert!(result.is_ok(), "Config validate should succeed with YAML format: {:?}", result.err());
