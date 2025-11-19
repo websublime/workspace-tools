@@ -108,7 +108,14 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
 
         Commands::Config(config_cmd) => match config_cmd {
             ConfigCommands::Show(args) => {
-                config::execute_show(args, root, config_path.map(PathBuf::as_path), format).await?;
+                let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
+                config::execute_show(
+                    args,
+                    &output,
+                    root,
+                    config_path.as_ref().map(|p| p.as_path()),
+                )
+                .await?;
             }
             ConfigCommands::Validate(args) => {
                 config::execute_validate(args, root, config_path.map(PathBuf::as_path), format)
