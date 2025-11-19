@@ -152,7 +152,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -174,7 +180,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init failed: {result:?}");
 
@@ -228,7 +240,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init failed: {result:?}");
 
@@ -256,7 +274,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init failed: {result:?}");
 
@@ -288,7 +312,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -314,7 +344,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init with force failed: {result:?}");
 
@@ -340,7 +376,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -362,7 +404,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -384,7 +432,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -406,7 +460,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -428,7 +488,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init with defaults failed: {result:?}");
 
@@ -461,7 +527,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init failed: {result:?}");
 
@@ -488,7 +560,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init on monorepo failed: {result:?}");
 
@@ -513,7 +591,13 @@ mod init_tests {
         };
 
         // This would normally print to stdout, we're just testing it doesn't panic
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Json).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Json, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init with JSON output failed: {result:?}");
     }
@@ -533,7 +617,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init with custom path failed: {result:?}");
 
@@ -561,7 +651,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init with multiple defaults failed: {result:?}");
     }
@@ -582,7 +678,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
         assert!(result.is_ok(), "First init failed: {result:?}");
 
         let gitignore_path = temp_dir.path().join(".gitignore");
@@ -593,7 +695,13 @@ mod init_tests {
         // Initialize again with force
         let args_force = InitArgs { force: true, ..args };
 
-        let result = execute_init(&args_force, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args_force,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
         assert!(result.is_ok(), "Second init failed: {result:?}");
 
         let gitignore_content_after = fs::read_to_string(&gitignore_path)
@@ -628,7 +736,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
         assert!(result.is_ok(), "Init failed for empty monorepo: {result:?}");
 
         // Read generated config
@@ -671,7 +785,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
         assert!(result.is_ok(), "Init failed for monorepo with patterns: {result:?}");
 
         // Read generated config
@@ -712,7 +832,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
         assert!(result.is_ok(), "Init failed for object-format workspaces: {result:?}");
 
         // Read generated config
@@ -754,7 +880,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
         assert!(result.is_ok(), "Init failed for single package: {result:?}");
 
         // Read generated config
@@ -792,7 +924,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
         assert!(result.is_ok(), "Failed to initialize empty monorepo: {result:?}");
 
         // Step 2: Verify all directories created
