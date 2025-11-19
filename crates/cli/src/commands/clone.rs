@@ -904,8 +904,33 @@ pub async fn execute_clone(
         // Execute init command
         debug!("Executing init to create workspace configuration");
 
-        // Use the output parameter directly (execute_init already uses Pattern B)
-        crate::commands::init::execute_init(&init_args, output, &final_destination, None).await?;
+        // For JSON output modes, we need to suppress init's output and only output clone's
+        // comprehensive JSON. For Human mode, we let init output and then add clone's message.
+        match output.format() {
+            OutputFormat::Json | OutputFormat::JsonCompact => {
+                // Create a quiet output for init to prevent double JSON output
+                use std::io::Cursor;
+                let buffer = Cursor::new(Vec::new());
+                let init_output = crate::output::Output::new(
+                    OutputFormat::Quiet,
+                    Box::new(buffer),
+                    output.no_color(),
+                );
+
+                crate::commands::init::execute_init(
+                    &init_args,
+                    &init_output,
+                    &final_destination,
+                    None,
+                )
+                .await?;
+            }
+            OutputFormat::Human | OutputFormat::Quiet => {
+                // For Human and Quiet modes, let init output normally
+                crate::commands::init::execute_init(&init_args, output, &final_destination, None)
+                    .await?;
+            }
+        }
 
         // Output clone completion (with init)
         output_clone_complete_with_init_internal(&final_destination, output)?;
