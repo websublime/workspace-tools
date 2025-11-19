@@ -22,7 +22,7 @@ use common::helpers::read_json_file;
 use std::path::{Path, PathBuf};
 use sublime_cli_tools::cli::commands::CloneArgs;
 use sublime_cli_tools::commands::clone::execute_clone;
-use sublime_cli_tools::output::OutputFormat;
+use sublime_cli_tools::output::{Output, OutputFormat};
 use tempfile::TempDir;
 
 // ============================================================================
@@ -83,7 +83,8 @@ async fn test_clone_without_config_runs_init() {
     };
 
     // Execute clone
-    let result = execute_clone(&args, clone_dest.path(), None, OutputFormat::Quiet).await;
+    let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+    let result = execute_clone(&args, &output, clone_dest.path(), None).await;
     assert!(result.is_ok(), "Clone should succeed: {:?}", result.err());
 
     // Verify repository was cloned and workspace was initialized
@@ -124,7 +125,8 @@ async fn test_clone_with_valid_config_validates() {
     };
 
     // Execute clone
-    let result = execute_clone(&args, clone_dest.path(), None, OutputFormat::Quiet).await;
+    let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+    let result = execute_clone(&args, &output, clone_dest.path(), None).await;
     assert!(result.is_ok(), "Clone should succeed: {:?}", result.err());
 
     // Verify repository was cloned and workspace structure is intact
@@ -165,7 +167,8 @@ async fn test_clone_monorepo_with_valid_config() {
     };
 
     // Execute clone
-    let result = execute_clone(&args, clone_dest.path(), None, OutputFormat::Quiet).await;
+    let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+    let result = execute_clone(&args, &output, clone_dest.path(), None).await;
     assert!(result.is_ok(), "Clone should succeed: {:?}", result.err());
 
     // Verify monorepo structure
@@ -218,7 +221,8 @@ async fn test_clone_force_removes_existing() {
     };
 
     // Execute clone
-    let result = execute_clone(&args, clone_dest.path(), None, OutputFormat::Quiet).await;
+    let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+    let result = execute_clone(&args, &output, clone_dest.path(), None).await;
     assert!(result.is_ok(), "Clone with force should succeed: {:?}", result.err());
 
     // Verify old content is gone
@@ -262,7 +266,8 @@ async fn test_clone_skip_validation() {
     };
 
     // Execute clone - should succeed even though config is invalid
-    let result = execute_clone(&args, clone_dest.path(), None, OutputFormat::Quiet).await;
+    let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+    let result = execute_clone(&args, &output, clone_dest.path(), None).await;
     assert!(result.is_ok(), "Clone with skip validation should succeed: {:?}", result.err());
 
     // Verify repository was cloned
@@ -297,7 +302,8 @@ async fn test_clone_with_config_overrides() {
     };
 
     // Execute clone
-    let result = execute_clone(&args, clone_dest.path(), None, OutputFormat::Quiet).await;
+    let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+    let result = execute_clone(&args, &output, clone_dest.path(), None).await;
     assert!(result.is_ok(), "Clone with overrides should succeed: {:?}", result.err());
 
     // Verify custom configuration was applied
@@ -333,7 +339,8 @@ async fn test_clone_non_interactive() {
     };
 
     // Execute clone - should succeed without prompts
-    let result = execute_clone(&args, clone_dest.path(), None, OutputFormat::Quiet).await;
+    let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+    let result = execute_clone(&args, &output, clone_dest.path(), None).await;
     assert!(result.is_ok(), "Non-interactive clone should succeed: {:?}", result.err());
 
     // Verify workspace was initialized with defaults
@@ -366,7 +373,8 @@ async fn test_clone_invalid_url_fails() {
     };
 
     // Execute clone - should fail
-    let result = execute_clone(&args, clone_dest.path(), None, OutputFormat::Quiet).await;
+    let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+    let result = execute_clone(&args, &output, clone_dest.path(), None).await;
     assert!(result.is_err(), "Clone with invalid URL should fail");
 }
 
@@ -407,7 +415,8 @@ async fn test_clone_destination_exists_fails_without_force() {
     };
 
     // Execute clone - should fail
-    let result = execute_clone(&args, clone_dest.path(), None, OutputFormat::Quiet).await;
+    let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+    let result = execute_clone(&args, &output, clone_dest.path(), None).await;
     assert!(result.is_err(), "Clone should fail when destination exists without force");
 }
 
@@ -445,7 +454,8 @@ async fn test_clone_invalid_config_fails_validation() {
     };
 
     // Execute clone - should fail validation
-    let result = execute_clone(&args, clone_dest.path(), None, OutputFormat::Quiet).await;
+    let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+    let result = execute_clone(&args, &output, clone_dest.path(), None).await;
     assert!(result.is_err(), "Clone should fail validation with invalid config");
 }
 
@@ -486,7 +496,8 @@ async fn test_clone_absolute_vs_relative_paths() {
         depth: None,
     };
 
-    let result = execute_clone(&args_absolute, clone_dest.path(), None, OutputFormat::Quiet).await;
+    let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+    let result = execute_clone(&args_absolute, &output, clone_dest.path(), None).await;
     assert!(result.is_ok(), "Clone with absolute path should succeed");
     assert!(clone_path_absolute.exists(), "Absolute path destination should exist");
 
@@ -507,7 +518,8 @@ async fn test_clone_absolute_vs_relative_paths() {
         depth: None,
     };
 
-    let result = execute_clone(&args_relative, clone_dest.path(), None, OutputFormat::Quiet).await;
+    let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+    let result = execute_clone(&args_relative, &output, clone_dest.path(), None).await;
     assert!(result.is_ok(), "Clone with relative path should succeed");
 
     // Relative path should be resolved relative to root
@@ -547,7 +559,8 @@ async fn test_clone_json_output_structure() {
     };
 
     // Execute clone with JSON output
-    let result = execute_clone(&args, clone_dest.path(), None, OutputFormat::Json).await;
+    let output = Output::new(OutputFormat::Json, std::io::sink(), true);
+    let result = execute_clone(&args, &output, clone_dest.path(), None).await;
     assert!(result.is_ok(), "Clone should succeed");
 
     // Verify repository was cloned
@@ -589,7 +602,8 @@ async fn test_clone_then_changeset_creation() {
     };
 
     // Execute clone
-    let result = execute_clone(&args, clone_dest.path(), None, OutputFormat::Quiet).await;
+    let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+    let result = execute_clone(&args, &output, clone_dest.path(), None).await;
     assert!(result.is_ok(), "Clone should succeed");
 
     // Verify .changesets directory is ready for changesets

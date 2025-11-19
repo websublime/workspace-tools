@@ -768,7 +768,9 @@ fn map_git_error(error: &sublime_git_tools::RepoError, url: &str) -> CliError {
 /// # Arguments
 ///
 /// * `args` - Clone command arguments containing URL, destination, and options
-/// * `format` - Output format for progress and messages
+/// * `output` - Output handler for consistent formatting across all commands
+/// * `root` - Root directory for the workspace
+/// * `config_path` - Optional path to configuration file
 ///
 /// # Returns
 ///
@@ -785,6 +787,9 @@ fn map_git_error(error: &sublime_git_tools::RepoError, url: &str) -> CliError {
 /// # Examples
 ///
 /// ```rust,ignore
+/// use sublime_cli_tools::output::{Output, OutputFormat};
+/// use std::io;
+///
 /// let args = CloneArgs {
 ///     url: "https://github.com/org/repo.git".to_string(),
 ///     destination: None,
@@ -793,13 +798,14 @@ fn map_git_error(error: &sublime_git_tools::RepoError, url: &str) -> CliError {
 ///     // ... other fields
 /// };
 ///
-/// execute_clone(&args, Path::new("."), None, OutputFormat::Human).await?;
+/// let output = Output::new(OutputFormat::Human, io::stdout(), false);
+/// execute_clone(&args, &output, Path::new("."), None).await?;
 /// ```
 pub async fn execute_clone(
     args: &CloneArgs,
+    output: &crate::output::Output,
     root: &Path,
     config_path: Option<&Path>,
-    format: OutputFormat,
 ) -> Result<()> {
     // Step 1: Determine destination directory
     let destination = determine_destination(&args.url, args.destination.as_ref())?;
@@ -828,7 +834,7 @@ pub async fn execute_clone(
 
     // Step 5: Clone repository with progress
     debug!("Cloning repository from {} to {}", args.url, final_destination.display());
-    let _repo = clone_with_progress(&args.url, &final_destination, args.depth, format)?;
+    let _repo = clone_with_progress(&args.url, &final_destination, args.depth, output.format())?;
     info!("Repository cloned successfully to {}", final_destination.display());
 
     // Step 6: Detect workspace configuration (Story 11.3)
@@ -846,7 +852,7 @@ pub async fn execute_clone(
             false
         } else {
             debug!("Validating workspace configuration");
-            output_validation_starting(format);
+            output_validation_starting(output.format());
             let validation = validate_workspace(&final_destination).await?;
 
             if !validation.is_valid {
@@ -857,16 +863,16 @@ pub async fn execute_clone(
             }
 
             info!("Workspace configuration validated successfully");
-            output_validation_success(&validation, format);
+            output_validation_success(&validation, output.format());
             true
         };
 
-        output_clone_complete(&final_destination, validated, format)?;
+        output_clone_complete(&final_destination, validated, output.format())?;
     } else {
         info!("No workspace configuration found, initializing workspace");
 
         // No configuration - run init automatically
-        output_init_starting(format);
+        output_init_starting(output.format());
 
         // Convert CloneArgs to InitArgs with configuration merge
         // Note: No workspace config exists yet, so we only use CLI args + defaults
@@ -875,14 +881,10 @@ pub async fn execute_clone(
         // Execute init command
         debug!("Executing init to create workspace configuration");
 
-        // TODO: will be implemented in Story 4.2 - Clone command will be refactored to use Output struct
-        // For now, create Output instance to match execute_init's Pattern B signature
-        #[allow(clippy::todo)]
-        let init_output = crate::output::Output::new(format, std::io::stdout(), false);
-        crate::commands::init::execute_init(&init_args, &init_output, &final_destination, None)
-            .await?;
+        // Use the output parameter directly (execute_init already uses Pattern B)
+        crate::commands::init::execute_init(&init_args, output, &final_destination, None).await?;
 
-        output_clone_complete_with_init(&final_destination, format)?;
+        output_clone_complete_with_init(&final_destination, output.format())?;
     }
 
     Ok(())
