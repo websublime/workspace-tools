@@ -282,11 +282,12 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
         }
 
         Commands::Clone(args) => {
+            let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
             crate::commands::clone::execute_clone(
                 args,
+                &output,
                 root,
-                config_path.map(PathBuf::as_path),
-                format,
+                config_path.as_ref().map(|p| p.as_path()),
             )
             .await?;
         }
