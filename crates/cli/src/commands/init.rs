@@ -959,7 +959,6 @@ updatedAt: "2024-01-01T00:00:00Z"
 /// Returns an error if:
 /// - JSON serialization fails
 /// - Writing to output stream fails
-#[allow(clippy::print_stdout)]
 fn output_init_result(
     config_path: &Path,
     config: &InitConfig,
