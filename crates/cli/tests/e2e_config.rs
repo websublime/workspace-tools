@@ -23,7 +23,7 @@ use common::fixtures::WorkspaceFixture;
 use serde_json::json;
 use sublime_cli_tools::cli::commands::{ConfigShowArgs, ConfigValidateArgs};
 use sublime_cli_tools::commands::config::{execute_show, execute_validate};
-use sublime_cli_tools::output::OutputFormat;
+use sublime_cli_tools::output::{Output, OutputFormat};
 
 // ============================================================================
 // Helper Functions
@@ -121,7 +121,8 @@ async fn test_config_show_displays_current() {
     let args = ConfigShowArgs {};
 
     // ACT: Execute config show command
-    let result = execute_show(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+    let result = execute_show(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Command should succeed
     assert!(result.is_ok(), "Config show should succeed: {:?}", result.err());
@@ -143,7 +144,8 @@ async fn test_config_show_json_output() {
     let args = ConfigShowArgs {};
 
     // ACT: Execute config show command with JSON format
-    let result = execute_show(&args, workspace.root(), None, OutputFormat::Json).await;
+    let output = Output::new(OutputFormat::Json, std::io::stdout(), false);
+    let result = execute_show(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Command should succeed and output should be valid JSON
     assert!(result.is_ok(), "Config show with JSON format should succeed: {:?}", result.err());
@@ -164,7 +166,8 @@ async fn test_config_show_missing_config_uses_defaults() {
     let args = ConfigShowArgs {};
 
     // ACT: Execute config show command (no config file exists)
-    let result = execute_show(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+    let result = execute_show(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Command should succeed and show defaults
     assert!(result.is_ok(), "Config show should succeed with defaults: {:?}", result.err());
@@ -187,8 +190,9 @@ async fn test_config_show_with_custom_config_path() {
     let args = ConfigShowArgs {};
 
     // ACT: Execute config show with custom path
+    let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
     let result =
-        execute_show(&args, workspace.root(), Some(&custom_config_path), OutputFormat::Human).await;
+        execute_show(&args, &output, workspace.root(), Some(custom_config_path.as_path())).await;
 
     // ASSERT: Command should succeed
     assert!(result.is_ok(), "Config show with custom path should succeed: {:?}", result.err());
@@ -207,8 +211,9 @@ async fn test_config_show_custom_path_not_found() {
     let args = ConfigShowArgs {};
 
     // ACT: Execute config show with non-existent path
+    let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
     let result =
-        execute_show(&args, workspace.root(), Some(&non_existent_path), OutputFormat::Human).await;
+        execute_show(&args, &output, workspace.root(), Some(non_existent_path.as_path())).await;
 
     // ASSERT: Command should fail with appropriate error
     assert!(result.is_err(), "Config show should fail with non-existent custom path");
@@ -230,7 +235,8 @@ async fn test_config_show_quiet_output() {
     let args = ConfigShowArgs {};
 
     // ACT: Execute config show with quiet format
-    let result = execute_show(&args, workspace.root(), None, OutputFormat::Quiet).await;
+    let output = Output::new(OutputFormat::Quiet, std::io::stdout(), false);
+    let result = execute_show(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Command should succeed
     assert!(result.is_ok(), "Config show with quiet format should succeed: {:?}", result.err());
@@ -412,7 +418,8 @@ async fn test_config_show_monorepo_independent() {
     let args = ConfigShowArgs {};
 
     // ACT: Execute config show command
-    let result = execute_show(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+    let result = execute_show(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Command should succeed
     assert!(result.is_ok(), "Config show in monorepo should succeed: {:?}", result.err());
@@ -770,7 +777,8 @@ min_severity = "info"
     let args = ConfigShowArgs {};
 
     // ACT: Execute config show command
-    let result = execute_show(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+    let result = execute_show(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Command should succeed with TOML format
     assert!(result.is_ok(), "Config show should succeed with TOML format: {:?}", result.err());
@@ -840,7 +848,8 @@ audit:
     let args = ConfigShowArgs {};
 
     // ACT: Execute config show command
-    let result = execute_show(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+    let result = execute_show(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Command should succeed with YAML format
     assert!(result.is_ok(), "Config show should succeed with YAML format: {:?}", result.err());

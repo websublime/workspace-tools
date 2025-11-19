@@ -45,7 +45,7 @@
 
 use crate::cli::commands::{ConfigShowArgs, ConfigValidateArgs};
 use crate::error::{CliError, Result};
-use crate::output::{JsonResponse, OutputFormat};
+use crate::output::{JsonResponse, Output, OutputFormat};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
@@ -62,9 +62,9 @@ use tracing::{debug, info, warn};
 /// # Arguments
 ///
 /// * `_args` - Command arguments (currently unused but reserved for future options)
+/// * `output` - Output handler for formatting command results
 /// * `root` - Workspace root directory
 /// * `config_path` - Optional path to config file (from global `--config` option)
-/// * `format` - Output format for the command result
 ///
 /// # Returns
 ///
@@ -82,20 +82,21 @@ use tracing::{debug, info, warn};
 /// ```rust,ignore
 /// use sublime_cli_tools::commands::config::execute_show;
 /// use sublime_cli_tools::cli::commands::ConfigShowArgs;
-/// use sublime_cli_tools::output::OutputFormat;
+/// use sublime_cli_tools::output::{Output, OutputFormat};
 /// use std::path::Path;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let args = ConfigShowArgs {};
-/// execute_show(&args, Path::new("."), None, OutputFormat::Human).await?;
+/// let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+/// execute_show(&args, &output, Path::new("."), None).await?;
 /// # Ok(())
 /// # }
 /// ```
 pub async fn execute_show(
     _args: &ConfigShowArgs,
+    output: &Output,
     root: &Path,
     config_path: Option<&Path>,
-    format: OutputFormat,
 ) -> Result<()> {
     debug!("Loading configuration from: {}", root.display());
 
@@ -152,9 +153,9 @@ pub async fn execute_show(
     };
 
     // Output based on format
-    match format {
+    match output.format() {
         OutputFormat::Human => output_human_format(&config, is_default),
-        OutputFormat::Json | OutputFormat::JsonCompact => output_json_format(&config, format)?,
+        OutputFormat::Json | OutputFormat::JsonCompact => output_json_format(&config, output)?,
         OutputFormat::Quiet => output_quiet_format(&config),
     }
 
@@ -739,27 +740,18 @@ fn output_human_format(config: &PackageToolsConfig, is_default: bool) {
 /// Output configuration in JSON format.
 ///
 /// Serializes the configuration as a JsonResponse structure for machine-readable
-/// output. Uses pretty printing for Json format and compact for JsonCompact.
+/// output. Uses the Output struct to handle formatting (pretty vs compact).
 ///
 /// # Errors
 ///
 /// Returns an error if JSON serialization fails.
-fn output_json_format(config: &PackageToolsConfig, format: OutputFormat) -> Result<()> {
+fn output_json_format(config: &PackageToolsConfig, output: &Output) -> Result<()> {
     // Convert to serializable structure
     let config_data = ConfigShowData::from(config);
     let response = JsonResponse::success(config_data);
 
-    // Serialize based on format
-    let json_str = if format == OutputFormat::JsonCompact {
-        serde_json::to_string(&response)
-            .map_err(|e| CliError::execution(format!("Failed to serialize JSON: {e}")))?
-    } else {
-        serde_json::to_string_pretty(&response)
-            .map_err(|e| CliError::execution(format!("Failed to serialize JSON: {e}")))?
-    };
-
-    println!("{json_str}");
-    Ok(())
+    // Use output.json() to handle serialization and formatting
+    output.json(&response)
 }
 
 /// Output configuration in quiet format.

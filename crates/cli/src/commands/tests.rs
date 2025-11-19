@@ -1266,7 +1266,7 @@ mod changes_tests {
 mod config_tests {
     use crate::cli::commands::{ConfigShowArgs, ConfigValidateArgs};
     use crate::commands::config::{execute_show, execute_validate};
-    use crate::output::OutputFormat;
+    use crate::output::{Output, OutputFormat};
     use std::fs;
     use tempfile::TempDir;
 
@@ -1305,7 +1305,8 @@ mod config_tests {
         create_config_file(&temp_dir, "toml");
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config show failed: {result:?}");
     }
@@ -1316,7 +1317,8 @@ mod config_tests {
         create_config_file(&temp_dir, "json");
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config show with JSON config failed: {result:?}");
     }
@@ -1327,7 +1329,8 @@ mod config_tests {
         create_config_file(&temp_dir, "yaml");
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config show with YAML config failed: {result:?}");
     }
@@ -1338,7 +1341,8 @@ mod config_tests {
         // Don't create config file
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         // Should succeed with default config
         assert!(result.is_ok(), "Config show without config should use defaults: {result:?}");
@@ -1350,7 +1354,8 @@ mod config_tests {
         create_config_file(&temp_dir, "toml");
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::Human).await;
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config show in human format failed: {result:?}");
     }
@@ -1361,7 +1366,8 @@ mod config_tests {
         create_config_file(&temp_dir, "toml");
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::Json).await;
+        let output = Output::new(OutputFormat::Json, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config show in JSON format failed: {result:?}");
     }
@@ -1372,7 +1378,8 @@ mod config_tests {
         create_config_file(&temp_dir, "toml");
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::JsonCompact).await;
+        let output = Output::new(OutputFormat::JsonCompact, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config show in JSON compact format failed: {result:?}");
     }
@@ -1383,7 +1390,8 @@ mod config_tests {
         create_config_file(&temp_dir, "toml");
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config show in quiet format failed: {result:?}");
     }
@@ -2004,8 +2012,9 @@ version_consistency = true
 
         let args = ConfigShowArgs {};
         let custom_path = temp_dir.path().join("custom.toml");
+        let output = Output::new(OutputFormat::Quiet, std::io::stdout(), false);
         let result =
-            execute_show(&args, temp_dir.path(), Some(&custom_path), OutputFormat::Quiet).await;
+            execute_show(&args, &output, temp_dir.path(), Some(custom_path.as_path())).await;
 
         assert!(result.is_ok(), "Config show should work with custom config path: {result:?}");
     }
@@ -2016,8 +2025,9 @@ version_consistency = true
 
         let args = ConfigShowArgs {};
         let custom_path = temp_dir.path().join("nonexistent.toml");
+        let output = Output::new(OutputFormat::Quiet, std::io::stdout(), false);
         let result =
-            execute_show(&args, temp_dir.path(), Some(&custom_path), OutputFormat::Quiet).await;
+            execute_show(&args, &output, temp_dir.path(), Some(custom_path.as_path())).await;
 
         assert!(result.is_err(), "Config show should fail with nonexistent custom config");
         let err = result.unwrap_err();
