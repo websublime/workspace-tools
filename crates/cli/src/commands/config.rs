@@ -154,9 +154,72 @@ pub async fn execute_show(
 
     // Output based on format
     match output.format() {
-        OutputFormat::Human => output_human_format(&config, is_default),
-        OutputFormat::Json | OutputFormat::JsonCompact => output_json_format(&config, output)?,
-        OutputFormat::Quiet => output_quiet_format(&config),
+        OutputFormat::Human => {
+            output.blank_line()?;
+            output.success("Workspace Configuration")?;
+
+            if is_default {
+                output.warning("Using default configuration (no config file found)")?;
+            }
+
+            output.blank_line()?;
+
+            // Strategy
+            let strategy_str = match config.version.strategy {
+                sublime_pkg_tools::types::VersioningStrategy::Independent => "independent",
+                sublime_pkg_tools::types::VersioningStrategy::Unified => "unified",
+            };
+            output.info(&format!("  Strategy: {strategy_str}"))?;
+
+            // Changeset configuration
+            output.info(&format!("  Changeset Path: {}", config.changeset.path))?;
+            let envs = config.changeset.available_environments.join(", ");
+            output.info(&format!("  Environments: {envs}"))?;
+            let default_envs = config.changeset.default_environments.join(", ");
+            output.info(&format!("  Default Environments: {default_envs}"))?;
+
+            // Version configuration
+            output.info(&format!("  Default Bump: {}", config.version.default_bump))?;
+            output.info(&format!("  Snapshot Format: {}", config.version.snapshot_format))?;
+
+            // Registry configuration
+            output.info(&format!("  Registry: {}", config.upgrade.registry.default_registry))?;
+
+            // Additional settings
+            output.blank_line()?;
+            output.info("Additional Settings:")?;
+            output.info(&format!("  History Path: {}", config.changeset.history_path))?;
+            output.info(&format!("  Changelog Enabled: {}", config.changelog.enabled))?;
+            output.info(&format!("  Audit Enabled: {}", config.audit.enabled))?;
+
+            // Dependency propagation settings
+            output.blank_line()?;
+            output.info("Dependency Propagation:")?;
+            output.info(&format!(
+                "  Propagate Dependencies: {}",
+                config.dependency.propagate_dependencies
+            ))?;
+            output.info(&format!(
+                "  Propagate Dev Dependencies: {}",
+                config.dependency.propagate_dev_dependencies
+            ))?;
+            output.info(&format!("  Max Depth: {}", config.dependency.max_depth))?;
+
+            output.blank_line()?;
+        }
+        OutputFormat::Json | OutputFormat::JsonCompact => {
+            // Convert to serializable structure
+            let config_data = ConfigShowData::from(&config);
+            let response = JsonResponse::success(config_data);
+            output.json(&response)?;
+        }
+        OutputFormat::Quiet => {
+            let strategy_str = match config.version.strategy {
+                sublime_pkg_tools::types::VersioningStrategy::Independent => "independent",
+                sublime_pkg_tools::types::VersioningStrategy::Unified => "unified",
+            };
+            output.plain(strategy_str)?;
+        }
     }
 
     Ok(())
@@ -664,105 +727,6 @@ struct ValidationResult {
     valid: bool,
     /// List of validation checks performed
     checks: Vec<ValidationCheck>,
-}
-
-/// Output configuration in human-readable format.</parameter>
-///
-/// Displays configuration in organized sections with clear labels and formatting.
-/// Indicates if default configuration is being used.
-fn output_human_format(config: &PackageToolsConfig, is_default: bool) {
-    use crate::output::styling::{
-        Section, StatusSymbol, print_bullet, print_item, print_separator,
-    };
-    use console::Color;
-
-    // Main section
-    let section = Section::new("Configuration");
-    section.print();
-
-    if is_default {
-        StatusSymbol::Warning.print_line("No configuration file found. Showing default values.");
-        print_separator();
-    }
-
-    // Strategy
-    let strategy_str = match config.version.strategy {
-        sublime_pkg_tools::types::VersioningStrategy::Independent => "independent",
-        sublime_pkg_tools::types::VersioningStrategy::Unified => "unified",
-    };
-    let strategy_color = match config.version.strategy {
-        sublime_pkg_tools::types::VersioningStrategy::Independent => Color::Green,
-        sublime_pkg_tools::types::VersioningStrategy::Unified => Color::Blue,
-    };
-    print_bullet(&format!("Strategy: {strategy_str}"), strategy_color);
-    print_separator();
-
-    // Changeset configuration
-    print_item("Changeset Path", &config.changeset.path, false);
-    let envs = config.changeset.available_environments.join(", ");
-    print_item("Environments", &envs, false);
-    let default_envs = config.changeset.default_environments.join(", ");
-    print_item("Default Environments", &default_envs, false);
-
-    // Version configuration
-    let default_bump = &config.version.default_bump;
-    print_item("Default Bump", default_bump, false);
-    let snapshot_format = &config.version.snapshot_format;
-    print_item("Snapshot Format", snapshot_format, false);
-
-    // Registry configuration
-    let registry = &config.upgrade.registry.default_registry;
-    print_item("Registry", registry, false);
-
-    // Additional settings
-    let section = Section::new("Additional Settings");
-    section.print();
-
-    let history_path = &config.changeset.history_path;
-    print_item("History Path", history_path, false);
-    let changelog_enabled = config.changelog.enabled;
-    print_item("Changelog Enabled", &changelog_enabled.to_string(), false);
-    let audit_enabled = config.audit.enabled;
-    print_item("Audit Enabled", &audit_enabled.to_string(), false);
-
-    // Dependency propagation settings
-    let section = Section::new("Dependency Propagation");
-    section.print();
-
-    let prop_deps = config.dependency.propagate_dependencies;
-    print_item("Propagate Dependencies", &prop_deps.to_string(), false);
-    let prop_dev_deps = config.dependency.propagate_dev_dependencies;
-    print_item("Propagate Dev Dependencies", &prop_dev_deps.to_string(), false);
-    let max_depth = config.dependency.max_depth;
-    print_item("Max Depth", &max_depth.to_string(), true);
-}
-
-/// Output configuration in JSON format.
-///
-/// Serializes the configuration as a JsonResponse structure for machine-readable
-/// output. Uses the Output struct to handle formatting (pretty vs compact).
-///
-/// # Errors
-///
-/// Returns an error if JSON serialization fails.
-fn output_json_format(config: &PackageToolsConfig, output: &Output) -> Result<()> {
-    // Convert to serializable structure
-    let config_data = ConfigShowData::from(config);
-    let response = JsonResponse::success(config_data);
-
-    // Use output.json() to handle serialization and formatting
-    output.json(&response)
-}
-
-/// Output configuration in quiet format.
-///
-/// Displays only essential information in a minimal format.
-fn output_quiet_format(config: &PackageToolsConfig) {
-    let strategy_str = match config.version.strategy {
-        sublime_pkg_tools::types::VersioningStrategy::Independent => "independent",
-        sublime_pkg_tools::types::VersioningStrategy::Unified => "unified",
-    };
-    println!("{strategy_str}");
 }
 
 /// Serializable configuration data for JSON output.
