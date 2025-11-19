@@ -242,9 +242,9 @@ pub async fn execute_show(
 /// # Arguments
 ///
 /// * `_args` - Command arguments (currently unused but reserved for future options)
+/// * `output` - Output handler for formatting command results
 /// * `root` - Workspace root directory
 /// * `config_path` - Optional path to config file (from global `--config` option)
-/// * `format` - Output format for the command result
 ///
 /// # Returns
 ///
@@ -262,20 +262,21 @@ pub async fn execute_show(
 /// ```rust,ignore
 /// use sublime_cli_tools::commands::config::execute_validate;
 /// use sublime_cli_tools::cli::commands::ConfigValidateArgs;
-/// use sublime_cli_tools::output::OutputFormat;
+/// use sublime_cli_tools::output::{Output, OutputFormat};
 /// use std::path::Path;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let args = ConfigValidateArgs {};
-/// execute_validate(&args, Path::new("."), None, OutputFormat::Human).await?;
+/// let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+/// execute_validate(&args, &output, Path::new("."), None).await?;
 /// # Ok(())
 /// # }
 /// ```
 pub async fn execute_validate(
     _args: &ConfigValidateArgs,
+    output: &Output,
     root: &Path,
     config_path: Option<&Path>,
-    format: OutputFormat,
 ) -> Result<()> {
     debug!("Validating configuration from: {}", root.display());
 
@@ -346,14 +347,14 @@ pub async fn execute_validate(
     let is_valid = failed_checks == 0;
 
     // Output results based on format
-    match format {
+    match output.format() {
         OutputFormat::Human => {
-            output_validate_human(&validation_checks, is_valid, &config_file_path);
+            output_validate_human(&validation_checks, is_valid, &config_file_path, output)?;
         }
         OutputFormat::Json | OutputFormat::JsonCompact => {
-            output_validate_json(&validation_checks, is_valid, format)?;
+            output_validate_json(&validation_checks, is_valid, output)?;
         }
-        OutputFormat::Quiet => output_validate_quiet(is_valid),
+        OutputFormat::Quiet => output_validate_quiet(is_valid, output)?,
     }
 
     // Return error if validation failed
@@ -655,42 +656,45 @@ fn validate_snapshot_format(config: &PackageToolsConfig) -> ValidationCheck {
 }
 
 /// Output validation results in human-readable format.
-fn output_validate_human(checks: &[ValidationCheck], is_valid: bool, config_path: &Path) {
-    println!();
+fn output_validate_human(
+    checks: &[ValidationCheck],
+    is_valid: bool,
+    config_path: &Path,
+    output: &Output,
+) -> Result<()> {
+    output.blank_line()?;
+
     if is_valid {
-        println!("✓ Configuration is valid");
-        println!();
-        println!("Config file: {}", config_path.display());
-        println!();
-        println!("All checks passed:");
+        output.success("Configuration is valid")?;
+        output.blank_line()?;
+        output.info(&format!("Config file: {}", config_path.display()))?;
+        output.blank_line()?;
+        output.info("All checks passed:")?;
     } else {
-        println!("✗ Configuration validation failed");
-        println!();
-        println!("Config file: {}", config_path.display());
-        println!();
-        println!("Validation results:");
+        output.error("Configuration validation failed")?;
+        output.blank_line()?;
+        output.info(&format!("Config file: {}", config_path.display()))?;
+        output.blank_line()?;
+        output.info("Validation results:")?;
     }
 
     for check in checks {
         if check.passed {
-            println!("  ✓ {}", check.name);
+            output.success(&format!("  ✓ {}", check.name))?;
         } else {
-            println!("  ✗ {}", check.name);
+            output.error(&format!("  ✗ {}", check.name))?;
             if let Some(error) = &check.error {
-                println!("    Error: {error}");
+                output.info(&format!("    Error: {error}"))?;
             }
         }
     }
 
-    println!();
+    output.blank_line()?;
+    Ok(())
 }
 
 /// Output validation results in JSON format.
-fn output_validate_json(
-    checks: &[ValidationCheck],
-    is_valid: bool,
-    format: OutputFormat,
-) -> Result<()> {
+fn output_validate_json(checks: &[ValidationCheck], is_valid: bool, output: &Output) -> Result<()> {
     let response = if is_valid {
         JsonResponse::success(ValidationResult { valid: true, checks: checks.to_vec() })
     } else {
@@ -699,25 +703,18 @@ fn output_validate_json(
         JsonResponse::success(ValidationResult { valid: false, checks: checks.to_vec() })
     };
 
-    let json_str = if format == OutputFormat::JsonCompact {
-        serde_json::to_string(&response)
-            .map_err(|e| CliError::execution(format!("Failed to serialize JSON: {e}")))?
-    } else {
-        serde_json::to_string_pretty(&response)
-            .map_err(|e| CliError::execution(format!("Failed to serialize JSON: {e}")))?
-    };
-
-    println!("{json_str}");
+    output.json(&response)?;
     Ok(())
 }
 
 /// Output validation results in quiet format.
-fn output_validate_quiet(is_valid: bool) {
+fn output_validate_quiet(is_valid: bool, output: &Output) -> Result<()> {
     if is_valid {
-        println!("valid");
+        output.plain("valid")?;
     } else {
-        println!("invalid");
+        output.plain("invalid")?;
     }
+    Ok(())
 }
 
 /// Validation result structure for JSON output.
