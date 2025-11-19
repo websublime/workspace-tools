@@ -62,7 +62,8 @@ pub fn create_json_output() -> (Output, Cursor<Vec<u8>>) {
 
 /// Shared writer for capturing output in tests with proper buffer sharing.
 pub struct SharedWriter {
-    buffer: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+    /// Shared buffer for capturing output
+    pub buffer: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
 }
 
 impl std::io::Write for SharedWriter {
