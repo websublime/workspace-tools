@@ -103,6 +103,7 @@
 //!     git_commit: true,
 //!     no_changelog: false,
 //!     no_archive: false,
+//!     always_archive: false,
 //!     force: false,
 //!     show_diff: false,
 //! };
