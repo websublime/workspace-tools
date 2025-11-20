@@ -5,12 +5,13 @@ A comprehensive Rust library for managing Node.js package versioning, changesets
 ## Features
 
 - **Changeset Management**: Track and manage changesets for coordinated package releases
-- **Version Resolution**: Intelligent version calculation with dependency propagation
+- **Version Resolution**: Intelligent version calculation with dependency propagation and prerelease support (alpha, beta, RC)
 - **Dependency Upgrades**: Detect and apply external dependency upgrades automatically
 - **Changelog Generation**: Generate changelogs in multiple formats (Keep a Changelog, Conventional Commits)
 - **Changes Analysis**: Analyze working directory and commit ranges to identify affected packages
 - **Audit & Health Checks**: Comprehensive dependency audits and health score calculation
 - **Monorepo Support**: Full support for both independent and unified versioning strategies
+- **Prerelease Workflow**: Full SemVer 2.0.0 prerelease support with create, increment, and promote modes
 - **Flexible Configuration**: TOML-based configuration with environment variable overrides
 
 ## Installation
@@ -158,6 +159,49 @@ read_npmrc = true
 [package_tools.upgrade.registry.scoped]
 "@myorg" = "https://npm.pkg.github.com"
 ```
+
+### Prerelease Workflow
+
+Working with prerelease versions (alpha, beta, RC):
+
+```rust
+use sublime_pkg_tools::types::{Version, VersionBump};
+use sublime_pkg_tools::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+// Start with stable version 1.2.3
+let version = Version::parse("1.2.3")?;
+
+// Phase 1: Create beta prerelease for new features
+let beta_config = PrereleaseConfig::create("beta".to_string());
+let beta_0 = version.bump_with_prerelease(VersionBump::Minor, Some(&beta_config))?;
+// Result: 1.3.0-beta.0
+
+// Phase 2: Increment beta for fixes
+let increment_config = PrereleaseConfig::increment("beta".to_string());
+let beta_1 = beta_0.bump_with_prerelease(VersionBump::None, Some(&increment_config))?;
+// Result: 1.3.0-beta.1
+
+// Phase 3: Create release candidate
+let rc_config = PrereleaseConfig::create("rc".to_string());
+let rc_0 = beta_1.bump_with_prerelease(VersionBump::None, Some(&rc_config))?;
+// Result: 1.3.0-rc.0
+
+// Phase 4: Promote to stable release
+let promote_config = PrereleaseConfig::promote("rc".to_string());
+let stable = rc_0.bump_with_prerelease(VersionBump::None, Some(&promote_config))?;
+// Result: 1.3.0 (stable)
+```
+
+**Prerelease Modes:**
+- **Create**: Generate new prerelease from stable or change prerelease tag
+- **Increment**: Increment the prerelease number for the same tag
+- **Promote**: Remove prerelease tag to create stable version
+
+**SemVer Compliance:**
+- Follows SemVer 2.0.0 specification
+- Prerelease format: `MAJOR.MINOR.PATCH-PRERELEASE` (e.g., `1.3.0-beta.0`)
+- Valid prerelease tags: ASCII alphanumerics and hyphens only (`[0-9A-Za-z-]`)
+- Common conventions: `alpha`, `beta`, `rc` (release candidate)
 
 ## Architecture
 

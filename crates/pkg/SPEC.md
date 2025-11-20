@@ -406,13 +406,14 @@ The `types` module provides fundamental data structures used throughout the pack
 
 #### `Version`
 
-Represents a semantic version (major.minor.patch).
+Represents a semantic version with optional prerelease support (major.minor.patch[-prerelease]).
 
 ```rust
 pub struct Version {
     pub major: u64,
     pub minor: u64,
     pub patch: u64,
+    pub prerelease: Option<String>,
 }
 ```
 
@@ -423,16 +424,22 @@ impl Version {
     pub fn new(major: u64, minor: u64, patch: u64) -> Self;
     pub fn parse(s: &str) -> Result<Self>;
     pub fn bump(&self, bump: VersionBump) -> Result<Self>;
+    pub fn bump_with_prerelease(
+        &self, 
+        bump: VersionBump, 
+        prerelease_config: Option<&PrereleaseConfig>
+    ) -> Result<Self>;
     pub fn to_string(&self) -> String;
     pub fn is_greater_than(&self, other: &Version) -> bool;
     pub fn is_compatible_with(&self, other: &Version) -> bool;
+    pub fn is_prerelease(&self) -> bool;
 }
 ```
 
 **Implements:**
 - `Clone`, `Debug`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`
-- `Display`: Formats as "major.minor.patch"
-- `FromStr`: Parses from string
+- `Display`: Formats as "major.minor.patch" or "major.minor.patch-prerelease"
+- `FromStr`: Parses from string (supports SemVer 2.0.0 prerelease format)
 - `Serialize`, `Deserialize`
 
 #### `VersionBump`
@@ -471,6 +478,116 @@ pub enum VersioningStrategy {
 **Variants:**
 - `Independent`: Each package has its own version
 - `Unified`: All packages share the same version
+
+#### `PrereleaseConfig`
+
+Configuration for prerelease version bumping.
+
+```rust
+pub struct PrereleaseConfig {
+    pub tag: String,
+    pub mode: PrereleaseMode,
+}
+```
+
+**Fields:**
+- `tag`: Prerelease tag (e.g., "alpha", "beta", "rc"). Must contain only ASCII alphanumerics and hyphens `[0-9A-Za-z-]`
+- `mode`: Behavior mode for prerelease version bumping
+
+**Methods:**
+
+```rust
+impl PrereleaseConfig {
+    pub fn new(tag: String, mode: PrereleaseMode) -> Self;
+    pub fn create(tag: String) -> Self;
+    pub fn increment(tag: String) -> Self;
+    pub fn promote(tag: String) -> Self;
+    pub fn is_valid_tag(&self) -> bool;
+}
+```
+
+**Factory Methods:**
+- `create()`: Creates a configuration for creating a new prerelease
+- `increment()`: Creates a configuration for incrementing an existing prerelease
+- `promote()`: Creates a configuration for promoting to stable
+
+**Implements:**
+- `Clone`, `Debug`, `PartialEq`, `Eq`
+- `Serialize`, `Deserialize`
+
+**Examples:**
+```rust
+use sublime_pkg_tools::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+// Create new beta prerelease
+let config = PrereleaseConfig::create("beta".to_string());
+
+// Increment existing beta
+let config = PrereleaseConfig::increment("beta".to_string());
+
+// Promote to stable
+let config = PrereleaseConfig::promote("rc".to_string());
+```
+
+#### `PrereleaseMode`
+
+Prerelease version bump mode.
+
+```rust
+pub enum PrereleaseMode {
+    Create,
+    Increment,
+    Promote,
+}
+```
+
+**Variants:**
+- `Create`: Generate new prerelease from stable version (e.g., `1.2.3` → `1.3.0-beta.0`)
+- `Increment`: Increment existing prerelease number (e.g., `1.3.0-beta.0` → `1.3.0-beta.1`)
+- `Promote`: Remove prerelease tag to create stable version (e.g., `1.3.0-rc.1` → `1.3.0`)
+
+**Methods:**
+
+```rust
+impl PrereleaseMode {
+    pub fn as_str(&self) -> &'static str;
+}
+```
+
+**Implements:**
+- `Clone`, `Copy`, `Debug`, `PartialEq`, `Eq`, `Hash`
+- `Display`: Formats as lowercase string ("create", "increment", "promote")
+- `Serialize`, `Deserialize`: Serializes as lowercase string
+
+**Prerelease Workflow Example:**
+
+```rust
+use sublime_pkg_tools::types::{Version, VersionBump};
+use sublime_pkg_tools::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+// Start with stable version
+let version = Version::parse("1.2.3")?;
+
+// Phase 1: Create beta prerelease
+let beta_config = PrereleaseConfig::create("beta".to_string());
+let beta_0 = version.bump_with_prerelease(VersionBump::Minor, Some(&beta_config))?;
+// Result: 1.3.0-beta.0
+
+// Phase 2: Increment beta
+let increment_config = PrereleaseConfig::increment("beta".to_string());
+let beta_1 = beta_0.bump_with_prerelease(VersionBump::None, Some(&increment_config))?;
+// Result: 1.3.0-beta.1
+
+// Phase 3: Create RC
+let rc_config = PrereleaseConfig::create("rc".to_string());
+let rc_0 = beta_1.bump_with_prerelease(VersionBump::None, Some(&rc_config))?;
+// Result: 1.3.0-rc.0
+
+// Phase 4: Promote to stable
+let promote_config = PrereleaseConfig::promote("rc".to_string());
+let stable = rc_0.bump_with_prerelease(VersionBump::None, Some(&promote_config))?;
+// Result: 1.3.0
+```
 
 ### Package Types
 
