@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.16 - 2025-11-20
+
+### Features
+
+#### WOR-TSK-164
+
+- Implement registry override for upgrade check command
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.15 - 2025-11-20
 
 ### Bug Fixes
