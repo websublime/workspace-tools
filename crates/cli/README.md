@@ -517,7 +517,7 @@ workspace upgrade apply [OPTIONS]
 - `--packages <LIST>` - Comma-separated list of packages to upgrade
 - `--auto-changeset` - Automatically create changeset for upgrades
 - `--changeset-bump <TYPE>` - Changeset bump type (`major`, `minor`, or `patch`; default: `patch`)
-- `--no-backup` - Skip backup creation
+- `--no-backup` - Skip backup creation (use with caution! recommended for CI/CD or when using Git for version control)
 - `--force` - Skip confirmations
 
 **Examples:**
@@ -533,6 +533,10 @@ workspace upgrade apply --patch-only --force
 
 # Apply upgrades for specific packages
 workspace upgrade apply --packages "@myorg/core"
+
+# Apply without backup (CI/CD scenario with Git version control)
+git add . && git commit -m "Pre-upgrade commit"
+workspace upgrade apply --no-backup --force
 ```
 
 #### `upgrade backups` - Manage Upgrade Backups

@@ -182,7 +182,23 @@ pub async fn execute_upgrade_apply(
         }
     }
 
-    // Step 8: Apply upgrades (or dry-run)
+    // Step 8: Determine backup setting
+    let backup_enabled = if args.no_backup {
+        Some(false) // Explicitly disable backups
+    } else {
+        None // Use config default
+    };
+
+    // Step 9: Show warning if backups disabled
+    if args.no_backup && !output.format().is_json() {
+        output.warning(
+            "⚠ Backups disabled. Changes cannot be rolled back via 'workspace upgrade backups restore'."
+        )?;
+        output.info("💡 Consider committing changes to Git before proceeding.")?;
+        output.blank_line()?;
+    }
+
+    // Step 10: Apply upgrades (or dry-run)
     // Note: Changeset creation is controlled by UpgradeManager's config.auto_changeset
     // For now, we'll note this limitation and implement changeset support in a future story
     if args.auto_changeset {
@@ -190,19 +206,19 @@ pub async fn execute_upgrade_apply(
         // TODO: will be implemented on story 6.2 completion - integrate with ChangesetManager
     }
 
-    info!("Applying upgrades (dry_run={})", args.dry_run);
+    info!("Applying upgrades (dry_run={}, backup_enabled={:?})", args.dry_run, backup_enabled);
 
     // Clone selection to use after apply_upgrades (which consumes it)
     let selection_for_result = selection.clone();
 
     let upgrade_result = upgrade_manager
-        .apply_upgrades(selection, args.dry_run)
+        .apply_upgrades(selection, args.dry_run, backup_enabled)
         .await
         .map_err(|e| CliError::execution(format!("Failed to apply upgrades: {e}")))?;
 
     debug!("Applied {} upgrades", upgrade_result.applied.len());
 
-    // Step 9: Convert results and output
+    // Step 11: Convert results and output
     let (applied, skipped, summary) = convert_upgrade_result(
         &upgrade_result,
         &available_upgrades.packages,
@@ -210,7 +226,7 @@ pub async fn execute_upgrade_apply(
         args.dry_run,
     );
 
-    output_results(output, applied, skipped, summary, args.dry_run)?;
+    output_results(output, applied, skipped, summary, args.dry_run, args.no_backup)?;
 
     info!("Upgrade apply completed successfully");
     Ok(())
@@ -556,6 +572,7 @@ fn output_no_upgrades(output: &Output) -> Result<()> {
 /// * `skipped` - Skipped upgrades
 /// * `summary` - Summary statistics
 /// * `is_dry_run` - Whether this was a dry-run operation
+/// * `backups_disabled` - Whether backups were explicitly disabled via --no-backup
 ///
 /// # Returns
 ///
@@ -570,13 +587,14 @@ fn output_results(
     skipped: Vec<SkippedUpgradeInfo>,
     summary: ApplySummary,
     is_dry_run: bool,
+    backups_disabled: bool,
 ) -> Result<()> {
     match output.format() {
         crate::output::OutputFormat::Json | crate::output::OutputFormat::JsonCompact => {
             output_json(output, applied, skipped, summary)
         }
         crate::output::OutputFormat::Human => {
-            output_human(output, &applied, &skipped, &summary, is_dry_run)
+            output_human(output, &applied, &skipped, &summary, is_dry_run, backups_disabled)
         }
         crate::output::OutputFormat::Quiet => output_quiet(output, &summary, is_dry_run),
     }
@@ -615,6 +633,7 @@ fn output_json(
 /// * `skipped` - Skipped upgrades
 /// * `summary` - Summary statistics
 /// * `is_dry_run` - Whether this was a dry-run
+/// * `backups_disabled` - Whether backups were explicitly disabled
 ///
 /// # Returns
 ///
@@ -625,6 +644,7 @@ fn output_human(
     skipped: &[SkippedUpgradeInfo],
     summary: &ApplySummary,
     is_dry_run: bool,
+    backups_disabled: bool,
 ) -> Result<()> {
     use console::style;
 
@@ -685,6 +705,11 @@ fn output_human(
         output.plain(
             &style("  Use `workspace upgrade backups restore <ID>` to rollback").dim().to_string(),
         )?;
+    } else if backups_disabled && !is_dry_run {
+        // Backups were explicitly disabled
+        output.blank_line()?;
+        output.plain(&format!("  Backup created: {}", style("No (disabled)").yellow()))?;
+        output.warning("⚠ No backup created. Use Git to rollback if needed.")?;
     }
 
     if is_dry_run {
