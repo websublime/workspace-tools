@@ -3243,4 +3243,371 @@ mod application_tests {
         );
         assert!(content.contains(r#""version": "1.1.0""#), "Version should be updated");
     }
+
+    // ============================================================================
+    // Prerelease Version Resolution Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_resolve_versions_with_prerelease_create_mode() {
+        use crate::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path().to_path_buf();
+
+        // Create a package
+        let package_json = serde_json::json!({
+            "name": "@test/core",
+            "version": "1.2.3"
+        });
+
+        std::fs::write(
+            root.join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Should serialize JSON"),
+        )
+        .expect("Should write package.json");
+
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("@test/core");
+
+        let prerelease_config =
+            PrereleaseConfig { tag: "beta".to_string(), mode: PrereleaseMode::Create };
+
+        // Resolve with prerelease create mode
+        let resolution = resolver
+            .resolve_versions_with_prerelease(&changeset, Some(&prerelease_config))
+            .await
+            .expect("Should resolve versions");
+
+        // Verify the version was bumped with prerelease tag
+        let update = resolution
+            .updates
+            .iter()
+            .find(|u| u.name == "@test/core")
+            .expect("Should have package update");
+
+        assert_eq!(update.next_version.to_string(), "1.3.0-beta.0");
+    }
+
+    #[tokio::test]
+    async fn test_resolve_versions_with_prerelease_increment_mode() {
+        use crate::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path().to_path_buf();
+
+        // Create a package with existing prerelease version
+        let package_json = serde_json::json!({
+            "name": "@test/core",
+            "version": "1.3.0-beta.0"
+        });
+
+        std::fs::write(
+            root.join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Should serialize JSON"),
+        )
+        .expect("Should write package.json");
+
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("@test/core");
+
+        let prerelease_config =
+            PrereleaseConfig { tag: "beta".to_string(), mode: PrereleaseMode::Increment };
+
+        // Resolve with prerelease increment mode
+        let resolution = resolver
+            .resolve_versions_with_prerelease(&changeset, Some(&prerelease_config))
+            .await
+            .expect("Should resolve versions");
+
+        // Verify the prerelease version was incremented
+        let update = resolution
+            .updates
+            .iter()
+            .find(|u| u.name == "@test/core")
+            .expect("Should have package update");
+
+        assert_eq!(update.next_version.to_string(), "1.3.0-beta.1");
+    }
+
+    #[tokio::test]
+    async fn test_resolve_versions_with_prerelease_promote_mode() {
+        use crate::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path().to_path_buf();
+
+        // Create a package with prerelease version
+        let package_json = serde_json::json!({
+            "name": "@test/core",
+            "version": "1.3.0-rc.2"
+        });
+
+        std::fs::write(
+            root.join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Should serialize JSON"),
+        )
+        .expect("Should write package.json");
+
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("@test/core");
+
+        let prerelease_config =
+            PrereleaseConfig { tag: "rc".to_string(), mode: PrereleaseMode::Promote };
+
+        // Resolve with prerelease promote mode
+        let resolution = resolver
+            .resolve_versions_with_prerelease(&changeset, Some(&prerelease_config))
+            .await
+            .expect("Should resolve versions");
+
+        // Verify the version was promoted to stable
+        let update = resolution
+            .updates
+            .iter()
+            .find(|u| u.name == "@test/core")
+            .expect("Should have package update");
+
+        assert_eq!(update.next_version.to_string(), "1.3.0");
+    }
+
+    #[tokio::test]
+    async fn test_resolve_versions_with_prerelease_none_config() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path().to_path_buf();
+
+        // Create a package
+        let package_json = serde_json::json!({
+            "name": "@test/core",
+            "version": "1.2.3"
+        });
+
+        std::fs::write(
+            root.join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Should serialize JSON"),
+        )
+        .expect("Should write package.json");
+
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("@test/core");
+
+        // Resolve without prerelease config (backward compatibility)
+        let resolution = resolver
+            .resolve_versions_with_prerelease(&changeset, None)
+            .await
+            .expect("Should resolve versions");
+
+        // Verify standard version bump occurred
+        let update = resolution
+            .updates
+            .iter()
+            .find(|u| u.name == "@test/core")
+            .expect("Should have package update");
+
+        assert_eq!(update.next_version.to_string(), "1.3.0");
+    }
+
+    #[tokio::test]
+    async fn test_resolve_versions_with_prerelease_patch_bump() {
+        use crate::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path().to_path_buf();
+
+        // Create a package
+        let package_json = serde_json::json!({
+            "name": "@test/core",
+            "version": "2.1.5"
+        });
+
+        std::fs::write(
+            root.join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Should serialize JSON"),
+        )
+        .expect("Should write package.json");
+
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Patch, vec!["production".to_string()]);
+        changeset.add_package("@test/core");
+
+        let prerelease_config =
+            PrereleaseConfig { tag: "alpha".to_string(), mode: PrereleaseMode::Create };
+
+        // Resolve with prerelease create mode for patch bump
+        let resolution = resolver
+            .resolve_versions_with_prerelease(&changeset, Some(&prerelease_config))
+            .await
+            .expect("Should resolve versions");
+
+        // Verify patch bump with prerelease tag
+        let update = resolution
+            .updates
+            .iter()
+            .find(|u| u.name == "@test/core")
+            .expect("Should have package update");
+
+        assert_eq!(update.next_version.to_string(), "2.1.6-alpha.0");
+    }
+
+    #[tokio::test]
+    async fn test_resolve_versions_with_prerelease_major_bump() {
+        use crate::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path().to_path_buf();
+
+        // Create a package
+        let package_json = serde_json::json!({
+            "name": "@test/core",
+            "version": "1.9.8"
+        });
+
+        std::fs::write(
+            root.join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Should serialize JSON"),
+        )
+        .expect("Should write package.json");
+
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Major, vec!["production".to_string()]);
+        changeset.add_package("@test/core");
+
+        let prerelease_config =
+            PrereleaseConfig { tag: "rc".to_string(), mode: PrereleaseMode::Create };
+
+        // Resolve with prerelease create mode for major bump
+        let resolution = resolver
+            .resolve_versions_with_prerelease(&changeset, Some(&prerelease_config))
+            .await
+            .expect("Should resolve versions");
+
+        // Verify major bump with prerelease tag
+        let update = resolution
+            .updates
+            .iter()
+            .find(|u| u.name == "@test/core")
+            .expect("Should have package update");
+
+        assert_eq!(update.next_version.to_string(), "2.0.0-rc.0");
+    }
+
+    #[tokio::test]
+    async fn test_resolve_versions_with_prerelease_multiple_increments() {
+        use crate::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path().to_path_buf();
+
+        // Create a package with existing prerelease
+        let package_json = serde_json::json!({
+            "name": "@test/core",
+            "version": "1.0.0-beta.5"
+        });
+
+        std::fs::write(
+            root.join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Should serialize JSON"),
+        )
+        .expect("Should write package.json");
+
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("@test/core");
+
+        let prerelease_config =
+            PrereleaseConfig { tag: "beta".to_string(), mode: PrereleaseMode::Increment };
+
+        // Resolve with prerelease increment mode
+        let resolution = resolver
+            .resolve_versions_with_prerelease(&changeset, Some(&prerelease_config))
+            .await
+            .expect("Should resolve versions");
+
+        // Verify the prerelease counter incremented
+        let update = resolution
+            .updates
+            .iter()
+            .find(|u| u.name == "@test/core")
+            .expect("Should have package update");
+
+        assert_eq!(update.next_version.to_string(), "1.0.0-beta.6");
+    }
+
+    #[tokio::test]
+    async fn test_resolve_versions_with_prerelease_custom_tag() {
+        use crate::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path().to_path_buf();
+
+        // Create a package
+        let package_json = serde_json::json!({
+            "name": "@test/core",
+            "version": "3.0.0"
+        });
+
+        std::fs::write(
+            root.join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Should serialize JSON"),
+        )
+        .expect("Should write package.json");
+
+        let config = PackageToolsConfig::default();
+        let resolver =
+            VersionResolver::new(root.clone(), config).await.expect("Should create resolver");
+
+        let mut changeset =
+            Changeset::new("main", VersionBump::Minor, vec!["production".to_string()]);
+        changeset.add_package("@test/core");
+
+        let prerelease_config =
+            PrereleaseConfig { tag: "snapshot".to_string(), mode: PrereleaseMode::Create };
+
+        // Resolve with custom prerelease tag
+        let resolution = resolver
+            .resolve_versions_with_prerelease(&changeset, Some(&prerelease_config))
+            .await
+            .expect("Should resolve versions");
+
+        // Verify custom tag was used
+        let update = resolution
+            .updates
+            .iter()
+            .find(|u| u.name == "@test/core")
+            .expect("Should have package update");
+
+        assert_eq!(update.next_version.to_string(), "3.1.0-snapshot.0");
+    }
 }

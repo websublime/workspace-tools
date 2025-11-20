@@ -200,6 +200,105 @@ fn test_version_bump_overflow_protection() {
 }
 
 #[test]
+fn test_version_bump_with_prerelease_create() {
+    use crate::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+    let version = Version::parse("1.2.3").unwrap();
+    let config = PrereleaseConfig { tag: "beta".to_string(), mode: PrereleaseMode::Create };
+
+    // Test minor bump with prerelease
+    let bumped = version.bump_with_prerelease(VersionBump::Minor, Some(&config)).unwrap();
+    assert_eq!(bumped.to_string(), "1.3.0-beta.0");
+    assert!(bumped.is_prerelease());
+
+    // Test major bump with prerelease
+    let bumped = version.bump_with_prerelease(VersionBump::Major, Some(&config)).unwrap();
+    assert_eq!(bumped.to_string(), "2.0.0-beta.0");
+
+    // Test patch bump with prerelease
+    let bumped = version.bump_with_prerelease(VersionBump::Patch, Some(&config)).unwrap();
+    assert_eq!(bumped.to_string(), "1.2.4-beta.0");
+}
+
+#[test]
+fn test_version_bump_with_prerelease_increment() {
+    use crate::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+    let version = Version::parse("1.3.0-beta.0").unwrap();
+    let config = PrereleaseConfig { tag: "beta".to_string(), mode: PrereleaseMode::Increment };
+
+    let bumped = version.bump_with_prerelease(VersionBump::None, Some(&config)).unwrap();
+    assert_eq!(bumped.to_string(), "1.3.0-beta.1");
+
+    // Test multiple increments
+    let bumped2 = bumped.bump_with_prerelease(VersionBump::None, Some(&config)).unwrap();
+    assert_eq!(bumped2.to_string(), "1.3.0-beta.2");
+}
+
+#[test]
+fn test_version_bump_with_prerelease_promote() {
+    use crate::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+    let version = Version::parse("1.3.0-rc.1").unwrap();
+    let config = PrereleaseConfig { tag: "rc".to_string(), mode: PrereleaseMode::Promote };
+
+    let bumped = version.bump_with_prerelease(VersionBump::None, Some(&config)).unwrap();
+    assert_eq!(bumped.to_string(), "1.3.0");
+    assert!(!bumped.is_prerelease());
+}
+
+#[test]
+fn test_version_bump_with_prerelease_backward_compatible() {
+    let version = Version::parse("1.2.3").unwrap();
+
+    // Without prerelease config, should behave like normal bump
+    let bumped = version.bump_with_prerelease(VersionBump::Minor, None).unwrap();
+    assert_eq!(bumped.to_string(), "1.3.0");
+    assert!(!bumped.is_prerelease());
+}
+
+#[test]
+fn test_version_bump_with_prerelease_increment_errors() {
+    use crate::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+    // Error: increment on stable version
+    let stable = Version::parse("1.2.3").unwrap();
+    let config = PrereleaseConfig { tag: "beta".to_string(), mode: PrereleaseMode::Increment };
+    let result = stable.bump_with_prerelease(VersionBump::None, Some(&config));
+    assert!(result.is_err());
+
+    // Error: tag mismatch
+    let beta = Version::parse("1.3.0-beta.0").unwrap();
+    let alpha_config =
+        PrereleaseConfig { tag: "alpha".to_string(), mode: PrereleaseMode::Increment };
+    let result = beta.bump_with_prerelease(VersionBump::None, Some(&alpha_config));
+    assert!(result.is_err());
+
+    // Error: invalid prerelease format
+    let invalid = Version::parse("1.3.0-invalid").unwrap();
+    let config = PrereleaseConfig { tag: "invalid".to_string(), mode: PrereleaseMode::Increment };
+    let result = invalid.bump_with_prerelease(VersionBump::None, Some(&config));
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_version_bump_with_prerelease_different_tags() {
+    use crate::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+    let version = Version::parse("1.2.3").unwrap();
+
+    // Test with alpha
+    let alpha_config = PrereleaseConfig { tag: "alpha".to_string(), mode: PrereleaseMode::Create };
+    let alpha = version.bump_with_prerelease(VersionBump::Minor, Some(&alpha_config)).unwrap();
+    assert_eq!(alpha.to_string(), "1.3.0-alpha.0");
+
+    // Test with rc
+    let rc_config = PrereleaseConfig { tag: "rc".to_string(), mode: PrereleaseMode::Create };
+    let rc = version.bump_with_prerelease(VersionBump::Minor, Some(&rc_config)).unwrap();
+    assert_eq!(rc.to_string(), "1.3.0-rc.0");
+}
+
+#[test]
 fn test_version_comparison() {
     let v1 = Version::parse("1.0.0").unwrap();
     let v2 = Version::parse("1.0.1").unwrap();

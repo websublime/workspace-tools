@@ -123,6 +123,7 @@ fn test_bump_args_defaults() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: false,
         show_diff: false,
     };
@@ -147,6 +148,7 @@ fn test_execute_bump_preview_args_structure() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: false,
         show_diff: false,
     };
@@ -391,6 +393,7 @@ fn test_snapshot_args_structure() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: false,
         show_diff: false,
     };
@@ -416,6 +419,7 @@ fn test_snapshot_format_customization() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: false,
         show_diff: false,
     };
@@ -438,6 +442,7 @@ fn test_snapshot_default_format() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: false,
         show_diff: false,
     };
@@ -586,6 +591,7 @@ fn test_snapshot_and_execute_mutually_exclusive() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: false,
         show_diff: false,
     };
@@ -602,6 +608,7 @@ fn test_snapshot_and_execute_mutually_exclusive() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: false,
         show_diff: false,
     };
@@ -626,6 +633,7 @@ fn test_show_diff_flag_default() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: false,
         show_diff: false,
     };
@@ -648,6 +656,7 @@ fn test_show_diff_flag_enabled() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: false,
         show_diff: true,
     };
@@ -670,10 +679,486 @@ fn test_show_diff_with_preview_mode() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: false,
         show_diff: true,
     };
 
     assert!(args.dry_run);
     assert!(args.show_diff);
+}
+
+// ============================================================================
+// Prerelease and Archive Policy Tests
+// ============================================================================
+
+/// Tests parse_prerelease_args with valid beta.create format.
+#[test]
+#[allow(clippy::expect_used)]
+fn test_parse_prerelease_args_beta_create() {
+    use super::execute::parse_prerelease_args;
+
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: Some("beta.create".to_string()),
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        always_archive: false,
+        force: false,
+        show_diff: false,
+    };
+
+    let result = parse_prerelease_args(&args);
+    assert!(result.is_ok());
+
+    let config = result.ok().flatten();
+    assert!(config.is_some());
+
+    let config = config.expect("config should be Some");
+    assert_eq!(config.tag, "beta");
+    assert_eq!(config.mode, sublime_pkg_tools::types::PrereleaseMode::Create);
+}
+
+/// Tests parse_prerelease_args with valid alpha.increment format.
+#[test]
+#[allow(clippy::expect_used)]
+fn test_parse_prerelease_args_alpha_increment() {
+    use super::execute::parse_prerelease_args;
+
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: Some("alpha.increment".to_string()),
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        always_archive: false,
+        force: false,
+        show_diff: false,
+    };
+
+    let result = parse_prerelease_args(&args);
+    assert!(result.is_ok());
+
+    let config = result.ok().flatten();
+    assert!(config.is_some());
+
+    let config = config.expect("config should be Some");
+    assert_eq!(config.tag, "alpha");
+    assert_eq!(config.mode, sublime_pkg_tools::types::PrereleaseMode::Increment);
+}
+
+/// Tests parse_prerelease_args with valid rc.promote format.
+#[test]
+#[allow(clippy::expect_used)]
+fn test_parse_prerelease_args_rc_promote() {
+    use super::execute::parse_prerelease_args;
+
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: Some("rc.promote".to_string()),
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        always_archive: false,
+        force: false,
+        show_diff: false,
+    };
+
+    let result = parse_prerelease_args(&args);
+    assert!(result.is_ok());
+
+    let config = result.ok().flatten();
+    assert!(config.is_some());
+
+    let config = config.expect("config should be Some");
+    assert_eq!(config.tag, "rc");
+    assert_eq!(config.mode, sublime_pkg_tools::types::PrereleaseMode::Promote);
+}
+
+/// Tests parse_prerelease_args with None returns None.
+#[test]
+fn test_parse_prerelease_args_none() {
+    use super::execute::parse_prerelease_args;
+
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: None,
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        always_archive: false,
+        force: false,
+        show_diff: false,
+    };
+
+    let result = parse_prerelease_args(&args);
+    assert!(result.is_ok());
+
+    let config = result.ok().flatten();
+    assert!(config.is_none());
+}
+
+/// Tests parse_prerelease_args with invalid format returns error.
+#[test]
+fn test_parse_prerelease_args_invalid_format() {
+    use super::execute::parse_prerelease_args;
+
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: Some("invalid-format".to_string()),
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        always_archive: false,
+        force: false,
+        show_diff: false,
+    };
+
+    let result = parse_prerelease_args(&args);
+    assert!(result.is_err());
+}
+
+/// Tests parse_prerelease_args with invalid mode returns error.
+#[test]
+fn test_parse_prerelease_args_invalid_mode() {
+    use super::execute::parse_prerelease_args;
+
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: Some("beta.invalid".to_string()),
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        always_archive: false,
+        force: false,
+        show_diff: false,
+    };
+
+    let result = parse_prerelease_args(&args);
+    assert!(result.is_err());
+}
+
+/// Tests parse_prerelease_args with custom tag name.
+#[test]
+#[allow(clippy::expect_used)]
+fn test_parse_prerelease_args_custom_tag() {
+    use super::execute::parse_prerelease_args;
+
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: Some("snapshot.create".to_string()),
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        always_archive: false,
+        force: false,
+        show_diff: false,
+    };
+
+    let result = parse_prerelease_args(&args);
+    assert!(result.is_ok());
+
+    let config = result.ok().flatten();
+    assert!(config.is_some());
+
+    let config = config.expect("config should be Some");
+    assert_eq!(config.tag, "snapshot");
+    assert_eq!(config.mode, sublime_pkg_tools::types::PrereleaseMode::Create);
+}
+
+/// Tests determine_archive_policy with no_archive flag returns Never.
+#[test]
+fn test_determine_archive_policy_never() {
+    use super::execute::determine_archive_policy;
+
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: None,
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: true,
+        always_archive: false,
+        force: false,
+        show_diff: false,
+    };
+
+    let policy = determine_archive_policy(&args);
+    assert_eq!(policy, super::types::ChangesetArchivePolicy::Never);
+}
+
+/// Tests determine_archive_policy with always_archive flag returns Always.
+#[test]
+fn test_determine_archive_policy_always() {
+    use super::execute::determine_archive_policy;
+
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: None,
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        always_archive: false,
+        force: false,
+        show_diff: false,
+    };
+
+    let policy = determine_archive_policy(&args);
+    assert_eq!(policy, super::types::ChangesetArchivePolicy::Always);
+}
+
+/// Tests determine_archive_policy with no flags returns Auto.
+#[test]
+fn test_determine_archive_policy_auto() {
+    use super::execute::determine_archive_policy;
+
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: None,
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        always_archive: false,
+        force: false,
+        show_diff: false,
+    };
+
+    let policy = determine_archive_policy(&args);
+    assert_eq!(policy, super::types::ChangesetArchivePolicy::Auto);
+}
+
+/// Tests should_archive with Auto policy and stable version returns true.
+#[test]
+fn test_should_archive_auto_stable() {
+    use super::execute::should_archive;
+    use sublime_pkg_tools::version::VersionResolution;
+
+    let policy = super::types::ChangesetArchivePolicy::Auto;
+
+    // Create a mock stable version resolution
+    let resolution = VersionResolution { updates: vec![], circular_dependencies: vec![] };
+
+    let result = should_archive(policy, &resolution);
+    assert!(result);
+}
+
+/// Tests should_archive with Never policy returns false.
+#[test]
+fn test_should_archive_never() {
+    use super::execute::should_archive;
+    use sublime_pkg_tools::version::VersionResolution;
+
+    let policy = super::types::ChangesetArchivePolicy::Never;
+
+    let resolution = VersionResolution { updates: vec![], circular_dependencies: vec![] };
+
+    let result = should_archive(policy, &resolution);
+    assert!(!result);
+}
+
+/// Tests should_archive with Always policy returns true.
+#[test]
+fn test_should_archive_always() {
+    use super::execute::should_archive;
+    use sublime_pkg_tools::version::VersionResolution;
+
+    let policy = super::types::ChangesetArchivePolicy::Always;
+
+    let resolution = VersionResolution { updates: vec![], circular_dependencies: vec![] };
+
+    let result = should_archive(policy, &resolution);
+    assert!(result);
+}
+
+/// Tests that always_archive flag in BumpArgs defaults to false.
+#[test]
+fn test_bump_args_always_archive_default() {
+    let args = BumpArgs {
+        dry_run: false,
+        execute: false,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: None,
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        always_archive: false,
+        force: false,
+        show_diff: false,
+    };
+
+    assert!(!args.always_archive);
+}
+
+/// Tests that prerelease argument can be set in BumpArgs.
+#[test]
+fn test_bump_args_prerelease_argument() {
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: Some("beta.create".to_string()),
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        always_archive: false,
+        force: false,
+        show_diff: false,
+    };
+
+    assert!(args.prerelease.is_some());
+    assert_eq!(args.prerelease.as_deref(), Some("beta.create"));
+}
+
+/// Tests that prerelease and always_archive can be used together.
+#[test]
+fn test_bump_args_prerelease_with_always_archive() {
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: Some("alpha.create".to_string()),
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        always_archive: false,
+        force: false,
+        show_diff: false,
+    };
+
+    assert!(args.prerelease.is_some());
+    assert!(args.always_archive);
+}
+
+/// Tests that prerelease can be used with no_archive flag.
+#[test]
+fn test_bump_args_prerelease_with_no_archive() {
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: Some("beta.increment".to_string()),
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: true,
+        always_archive: false,
+        force: false,
+        show_diff: false,
+    };
+
+    assert!(args.prerelease.is_some());
+    assert!(args.no_archive);
+    assert!(!args.always_archive);
+}
+
+/// Tests ChangesetArchivePolicy serialization for JSON output.
+#[test]
+#[allow(clippy::expect_used)]
+fn test_changeset_archive_policy_serialization() {
+    use super::types::ChangesetArchivePolicy;
+
+    let auto = ChangesetArchivePolicy::Auto;
+    let never = ChangesetArchivePolicy::Never;
+    let always = ChangesetArchivePolicy::Always;
+
+    let auto_json = serde_json::to_string(&auto).expect("Failed to serialize Auto");
+    let never_json = serde_json::to_string(&never).expect("Failed to serialize Never");
+    let always_json = serde_json::to_string(&always).expect("Failed to serialize Always");
+
+    assert_eq!(auto_json, "\"auto\"");
+    assert_eq!(never_json, "\"never\"");
+    assert_eq!(always_json, "\"always\"");
+}
+
+/// Tests ChangesetArchivePolicy deserialization from JSON.
+#[test]
+#[allow(clippy::expect_used)]
+fn test_changeset_archive_policy_deserialization() {
+    use super::types::ChangesetArchivePolicy;
+
+    let auto: ChangesetArchivePolicy =
+        serde_json::from_str("\"auto\"").expect("Failed to deserialize auto");
+    let never: ChangesetArchivePolicy =
+        serde_json::from_str("\"never\"").expect("Failed to deserialize never");
+    let always: ChangesetArchivePolicy =
+        serde_json::from_str("\"always\"").expect("Failed to deserialize always");
+
+    assert_eq!(auto, ChangesetArchivePolicy::Auto);
+    assert_eq!(never, ChangesetArchivePolicy::Never);
+    assert_eq!(always, ChangesetArchivePolicy::Always);
 }

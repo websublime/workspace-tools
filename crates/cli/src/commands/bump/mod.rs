@@ -76,6 +76,7 @@ pub mod execute;
 pub mod git_integration;
 pub mod preview;
 pub mod snapshot;
+pub mod types;
 
 #[cfg(test)]
 mod tests;
@@ -84,3 +85,6 @@ mod tests;
 pub use execute::execute_bump_apply;
 pub use preview::execute_bump_preview;
 pub use snapshot::execute_bump_snapshot;
+
+// Re-export types for convenience
+pub use types::ChangesetArchivePolicy;

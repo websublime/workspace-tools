@@ -262,6 +262,13 @@ pub async fn execute_bump_apply(
 
     info!("Processing {} changeset(s)", loaded_changesets.len());
 
+    // Step 5: Parse prerelease configuration
+    let prerelease_config = parse_prerelease_args(args)?;
+
+    if let Some(ref config) = prerelease_config {
+        info!("Using prerelease tag: {} (mode: {})", config.tag, config.mode);
+    }
+
     // Step 6: Create VersionResolver and resolve versions
     let resolver = VersionResolver::new(workspace_root.to_path_buf(), config.clone())
         .await
@@ -270,9 +277,9 @@ pub async fn execute_bump_apply(
     // Merge all changesets for resolution
     let merged_changeset = merge_changesets(&loaded_changesets)?;
 
-    // Resolve versions
+    // Resolve versions with prerelease support
     let resolution = resolver
-        .resolve_versions(&merged_changeset)
+        .resolve_versions_with_prerelease(&merged_changeset, prerelease_config.as_ref())
         .await
         .map_err(|e| CliError::execution(format!("Failed to resolve versions: {e}")))?;
 
@@ -419,12 +426,14 @@ pub async fn execute_bump_apply(
         debug!("Changelog generation disabled");
     }
 
-    // Step 10: Archive changesets (if enabled)
+    // Step 10: Determine archive policy and conditionally archive changesets
+    let archive_policy = determine_archive_policy(args);
     let mut archived_count = 0;
-    if args.no_archive {
-        debug!("Changeset archival disabled");
-    } else {
-        info!("Archiving changesets");
+
+    debug!("Archive policy: {:?}", archive_policy);
+
+    if should_archive(archive_policy, &apply_result.resolution) {
+        info!("Archiving changesets (policy: {})", archive_policy);
 
         // Build release info
         let commit_sha = if let Some(ref repo) = git_repo {
@@ -455,6 +464,8 @@ pub async fn execute_bump_apply(
         }
 
         info!("Archived {} changeset(s)", archived_count);
+    } else {
+        debug!("Changeset archival skipped by policy: {:?}", archive_policy);
     }
 
     // Step 11: Git operations
@@ -522,6 +533,146 @@ pub async fn execute_bump_apply(
 
     info!("Version bump completed successfully");
     Ok(())
+}
+
+/// Parses prerelease arguments and determines mode.
+///
+/// # What
+///
+/// Validates the --prerelease flag value and creates a PrereleaseConfig
+/// with the appropriate mode.
+///
+/// # Arguments
+///
+/// * `args` - Bump command arguments
+///
+/// # Errors
+///
+/// Returns error if prerelease tag is invalid.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let config = parse_prerelease_args(&args)?;
+/// if let Some(cfg) = config {
+///     println!("Using prerelease tag: {}", cfg.tag);
+/// }
+/// ```
+pub(crate) fn parse_prerelease_args(
+    args: &BumpArgs,
+) -> Result<Option<sublime_pkg_tools::types::prerelease::PrereleaseConfig>> {
+    use sublime_pkg_tools::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+
+    let Some(prerelease_arg) = &args.prerelease else {
+        return Ok(None);
+    };
+
+    // Parse format: <tag>.<mode> (e.g., "beta.create", "alpha.increment", "rc.promote")
+    let parts: Vec<&str> = prerelease_arg.split('.').collect();
+    if parts.len() != 2 {
+        return Err(CliError::validation(format!(
+            "Invalid prerelease format: '{prerelease_arg}'. Expected format: <tag>.<mode> (e.g., beta.create)"
+        )));
+    }
+
+    let tag = parts[0];
+    let mode_str = parts[1];
+
+    // Parse mode
+    let mode = match mode_str {
+        "create" => PrereleaseMode::Create,
+        "increment" => PrereleaseMode::Increment,
+        "promote" => PrereleaseMode::Promote,
+        _ => {
+            return Err(CliError::validation(format!(
+                "Invalid prerelease mode: '{mode_str}'. Valid values: create, increment, promote"
+            )));
+        }
+    };
+
+    Ok(Some(PrereleaseConfig { tag: tag.to_string(), mode }))
+}
+
+/// Determines changeset archive policy based on arguments.
+///
+/// # What
+///
+/// Decides the policy for archiving changesets based on user flags.
+///
+/// # Arguments
+///
+/// * `args` - Bump command arguments
+///
+/// # Returns
+///
+/// The archive policy to use.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let policy = determine_archive_policy(&args);
+/// println!("Using archive policy: {}", policy);
+/// ```
+pub(crate) fn determine_archive_policy(
+    args: &BumpArgs,
+) -> crate::commands::bump::ChangesetArchivePolicy {
+    use crate::commands::bump::ChangesetArchivePolicy;
+
+    if args.no_archive {
+        return ChangesetArchivePolicy::Never;
+    }
+
+    if args.always_archive {
+        return ChangesetArchivePolicy::Always;
+    }
+
+    // Default to Auto policy
+    ChangesetArchivePolicy::Auto
+}
+
+/// Determines whether to archive changesets based on policy and resolution.
+///
+/// # What
+///
+/// Applies the archive policy to decide if changesets should be archived.
+///
+/// # How
+///
+/// - Auto: Archives only if ALL versions are stable (no prerelease)
+/// - Never: Never archives
+/// - Always: Always archives
+///
+/// # Arguments
+///
+/// * `policy` - Archive policy
+/// * `resolution` - Version resolution result
+///
+/// # Returns
+///
+/// True if changesets should be archived.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let policy = ChangesetArchivePolicy::Auto;
+/// if should_archive(policy, &resolution) {
+///     // Archive changesets
+/// }
+/// ```
+pub(crate) fn should_archive(
+    policy: crate::commands::bump::ChangesetArchivePolicy,
+    resolution: &sublime_pkg_tools::version::VersionResolution,
+) -> bool {
+    use crate::commands::bump::ChangesetArchivePolicy;
+
+    match policy {
+        ChangesetArchivePolicy::Always => true,
+        ChangesetArchivePolicy::Never => false,
+        ChangesetArchivePolicy::Auto => {
+            // Auto: only archive if ALL versions are stable (no prerelease)
+            resolution.updates.iter().all(|u| !u.next_version.is_prerelease())
+        }
+    }
 }
 
 /// Builds a list of operations that will be performed.

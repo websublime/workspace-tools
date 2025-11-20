@@ -193,6 +193,10 @@ pub use dependency::{
     should_skip_protocol,
 };
 
+// Prerelease types (WOR-TSK-162)
+pub mod prerelease;
+pub use prerelease::{PrereleaseConfig, PrereleaseMode};
+
 // Re-export PackageUpdate from version module to avoid duplication
 // The canonical definition is in version::resolution
 pub use crate::version::PackageUpdate;
