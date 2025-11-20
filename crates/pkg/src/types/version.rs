@@ -449,6 +449,233 @@ impl Version {
         !self.inner.pre.is_empty()
     }
 
+    /// Bumps version with optional prerelease support.
+    ///
+    /// # What
+    ///
+    /// Provides flexible version bumping that supports standard semver bumps
+    /// (major, minor, patch) as well as prerelease version creation, increment,
+    /// and promotion to stable.
+    ///
+    /// # How
+    ///
+    /// - If `prerelease_config` is None: Standard bump (removes prerelease)
+    /// - If `prerelease_config` is Some:
+    ///   - Create mode: Bump + add prerelease (1.2.3 → 1.3.0-beta.0)
+    ///   - Increment mode: Increment prerelease (1.3.0-beta.0 → 1.3.0-beta.1)
+    ///   - Promote mode: Remove prerelease (1.3.0-rc.1 → 1.3.0)
+    ///
+    /// # Why
+    ///
+    /// Enables controlled prerelease workflows while maintaining backward
+    /// compatibility with existing version bump behavior.
+    ///
+    /// # Arguments
+    ///
+    /// * `bump_type` - Type of version bump (Major, Minor, Patch, None)
+    /// * `prerelease_config` - Optional prerelease configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Version overflow would occur
+    /// - Invalid prerelease format
+    /// - Attempting to increment prerelease on stable version
+    /// - Prerelease tag mismatch when incrementing
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::types::{Version, VersionBump};
+    /// use sublime_pkg_tools::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let v = Version::parse("1.2.3")?;
+    ///
+    /// // Normal bump (backward compatible)
+    /// let bumped = v.bump_with_prerelease(VersionBump::Minor, None)?;
+    /// assert_eq!(bumped.to_string(), "1.3.0");
+    ///
+    /// // Create prerelease
+    /// let config = PrereleaseConfig {
+    ///     tag: "beta".to_string(),
+    ///     mode: PrereleaseMode::Create,
+    /// };
+    /// let beta = v.bump_with_prerelease(VersionBump::Minor, Some(&config))?;
+    /// assert_eq!(beta.to_string(), "1.3.0-beta.0");
+    ///
+    /// // Increment prerelease
+    /// let config = PrereleaseConfig {
+    ///     tag: "beta".to_string(),
+    ///     mode: PrereleaseMode::Increment,
+    /// };
+    /// let beta1 = beta.bump_with_prerelease(VersionBump::None, Some(&config))?;
+    /// assert_eq!(beta1.to_string(), "1.3.0-beta.1");
+    ///
+    /// // Promote to stable
+    /// let config = PrereleaseConfig {
+    ///     tag: "beta".to_string(),
+    ///     mode: PrereleaseMode::Promote,
+    /// };
+    /// let stable = beta1.bump_with_prerelease(VersionBump::None, Some(&config))?;
+    /// assert_eq!(stable.to_string(), "1.3.0");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn bump_with_prerelease(
+        &self,
+        bump_type: VersionBump,
+        prerelease_config: Option<&crate::types::prerelease::PrereleaseConfig>,
+    ) -> VersionResult<Self> {
+        use crate::types::prerelease::PrereleaseMode;
+
+        match prerelease_config {
+            None => {
+                // Standard bump - maintains current behavior
+                self.bump(bump_type)
+            }
+            Some(config) => match config.mode {
+                PrereleaseMode::Create => {
+                    // Bump version + add prerelease tag
+                    let bumped = self.bump(bump_type)?;
+                    bumped.with_prerelease(&format!("{}.0", config.tag))
+                }
+                PrereleaseMode::Increment => {
+                    // Increment existing prerelease number
+                    self.increment_prerelease(&config.tag)
+                }
+                PrereleaseMode::Promote => {
+                    // Remove prerelease (promote to stable)
+                    self.remove_prerelease()
+                }
+            },
+        }
+    }
+
+    /// Sets or replaces prerelease tag.
+    ///
+    /// # Arguments
+    ///
+    /// * `tag` - Prerelease tag to set (e.g., "beta.0", "rc.1")
+    ///
+    /// # Errors
+    ///
+    /// Returns error if tag format is invalid per SemVer 2.0.0 spec.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::types::Version;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let version = Version::parse("1.2.3")?;
+    /// let beta = version.with_prerelease("beta.0")?;
+    /// assert_eq!(beta.to_string(), "1.2.3-beta.0");
+    /// # Ok(())
+    /// # }
+    /// ```
+    fn with_prerelease(&self, tag: &str) -> VersionResult<Self> {
+        let mut new_version = self.inner.clone();
+        new_version.pre =
+            semver::Prerelease::new(tag).map_err(|e| VersionError::InvalidVersion {
+                version: tag.to_string(),
+                reason: format!("invalid prerelease tag: {}", e),
+            })?;
+        Ok(Self { inner: new_version })
+    }
+
+    /// Increments prerelease number (e.g., beta.0 → beta.1).
+    ///
+    /// # Arguments
+    ///
+    /// * `expected_tag` - Expected prerelease tag base (e.g., "beta")
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Current version is not a prerelease
+    /// - Prerelease format is invalid
+    /// - Tag mismatch (trying to increment beta when current is alpha)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::types::Version;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let beta0 = Version::parse("1.3.0-beta.0")?;
+    /// let beta1 = beta0.increment_prerelease("beta")?;
+    /// assert_eq!(beta1.to_string(), "1.3.0-beta.1");
+    /// # Ok(())
+    /// # }
+    /// ```
+    fn increment_prerelease(&self, expected_tag: &str) -> VersionResult<Self> {
+        let current_pre = self.prerelease();
+        if current_pre.is_empty() {
+            return Err(VersionError::InvalidVersion {
+                version: self.to_string(),
+                reason: "cannot increment prerelease on stable version".to_string(),
+            });
+        }
+
+        // Parse current prerelease: "beta.0" → ("beta", 0)
+        let parts: Vec<&str> = current_pre.split('.').collect();
+        if parts.len() != 2 {
+            return Err(VersionError::InvalidVersion {
+                version: self.to_string(),
+                reason: format!("invalid prerelease format: {}", current_pre),
+            });
+        }
+
+        let tag = parts[0];
+        let num: u64 = parts[1].parse().map_err(|_| VersionError::InvalidVersion {
+            version: self.to_string(),
+            reason: format!("invalid prerelease number: {}", parts[1]),
+        })?;
+
+        // Validate tag matches
+        if tag != expected_tag {
+            return Err(VersionError::InvalidVersion {
+                version: self.to_string(),
+                reason: format!(
+                    "prerelease tag mismatch: expected '{}', found '{}'",
+                    expected_tag, tag
+                ),
+            });
+        }
+
+        // Increment
+        let new_pre = format!("{}.{}", tag, num + 1);
+        self.with_prerelease(&new_pre)
+    }
+
+    /// Removes prerelease tag (promotes to stable).
+    ///
+    /// # What
+    ///
+    /// Creates a stable version by removing the prerelease tag while preserving
+    /// major.minor.patch and build metadata.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::types::Version;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let prerelease = Version::parse("1.3.0-rc.1")?;
+    /// let stable = prerelease.remove_prerelease()?;
+    /// assert_eq!(stable.to_string(), "1.3.0");
+    /// # Ok(())
+    /// # }
+    /// ```
+    fn remove_prerelease(&self) -> VersionResult<Self> {
+        let mut new_version =
+            semver::Version::new(self.inner.major, self.inner.minor, self.inner.patch);
+        // Copy build metadata if present
+        new_version.build = self.inner.build.clone();
+        Ok(Self { inner: new_version })
+    }
+
     /// Returns the inner `semver::Version` reference.
     ///
     /// This is useful for interoperability with other libraries that use `semver::Version`.

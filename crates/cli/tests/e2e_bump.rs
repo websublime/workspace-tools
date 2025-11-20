@@ -46,6 +46,7 @@ async fn test_bump_preview_shows_changes() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -82,6 +83,7 @@ async fn test_bump_preview_independent_strategy() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -123,6 +125,7 @@ async fn test_bump_preview_unified_strategy() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -155,6 +158,7 @@ async fn test_bump_preview_no_changesets() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -189,6 +193,7 @@ async fn test_bump_preview_json_output() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -227,6 +232,7 @@ async fn test_bump_execute_applies_versions() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -261,6 +267,7 @@ async fn test_bump_execute_updates_package_json() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -306,6 +313,7 @@ async fn test_bump_execute_creates_changelog() {
         git_commit: false,
         no_changelog: false, // Enable changelog
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -351,6 +359,7 @@ async fn test_bump_execute_archives_changesets() {
         git_commit: false,
         no_changelog: true,
         no_archive: false, // Enable archival
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -390,6 +399,7 @@ async fn test_bump_execute_with_git_tag() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -433,6 +443,7 @@ async fn test_bump_execute_with_git_commit() {
         git_commit: true, // Enable git commit
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -476,6 +487,7 @@ async fn test_bump_execute_cascading_bumps() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -513,6 +525,7 @@ async fn test_bump_execute_dry_run() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -553,6 +566,7 @@ async fn test_bump_execute_no_changelog() {
         git_commit: false,
         no_changelog: true, // Skip changelog
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -597,6 +611,7 @@ async fn test_bump_execute_unified_version() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -636,6 +651,7 @@ async fn test_bump_execute_multiple_changesets() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -670,6 +686,7 @@ async fn test_bump_execute_major_bump() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -704,6 +721,7 @@ async fn test_bump_execute_independent_only_bumps_changeset_packages() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -741,6 +759,7 @@ async fn test_bump_execute_fails_no_changesets() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -775,6 +794,7 @@ async fn test_bump_execute_fails_uninitialized_workspace() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -812,6 +832,7 @@ async fn test_bump_execute_fails_dirty_git() {
         git_commit: true, // Requires clean git
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -846,6 +867,7 @@ async fn test_bump_preview_with_show_diff() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
+        always_archive: false,
         force: true,
         show_diff: true, // Enable diff display
     };
@@ -885,6 +907,7 @@ async fn test_bump_execute_with_package_filter() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -927,6 +950,7 @@ async fn test_bump_execute_missing_package_json() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -964,6 +988,7 @@ async fn test_bump_execute_rollback_on_error() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -1011,6 +1036,7 @@ async fn test_bump_snapshot_default_format() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -1045,6 +1071,7 @@ async fn test_bump_snapshot_custom_format() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -1081,6 +1108,7 @@ async fn test_bump_snapshot_independent_strategy() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -1119,6 +1147,7 @@ async fn test_bump_snapshot_unified_strategy() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -1152,6 +1181,7 @@ async fn test_bump_snapshot_no_changesets() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -1191,6 +1221,7 @@ async fn test_bump_snapshot_doesnt_consume_changesets() {
         git_commit: false,
         no_changelog: true,
         no_archive: true,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -1233,6 +1264,7 @@ async fn test_bump_prerelease_alpha() {
         git_commit: false,
         no_changelog: true,
         no_archive: false,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -1288,6 +1320,7 @@ async fn test_bump_prerelease_beta() {
         git_commit: false,
         no_changelog: true,
         no_archive: false,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -1340,6 +1373,7 @@ async fn test_bump_prerelease_rc() {
         git_commit: false,
         no_changelog: true,
         no_archive: false,
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -1401,6 +1435,7 @@ async fn test_bump_no_archive_keeps_changesets() {
         git_commit: false,
         no_changelog: true,
         no_archive: true, // Don't archive changesets
+        always_archive: false,
         force: true,
         show_diff: false,
     };
@@ -1455,6 +1490,7 @@ async fn test_bump_force_skips_confirmations() {
         git_commit: false,
         no_changelog: true,
         no_archive: false,
+        always_archive: false,
         force: true, // Skip confirmations
         show_diff: false,
     };

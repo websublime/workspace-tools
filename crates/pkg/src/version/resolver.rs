@@ -603,6 +603,100 @@ impl<F: AsyncFileSystem + Clone + Send + Sync + 'static> VersionResolver<F> {
         Ok(resolution)
     }
 
+    /// Resolves versions with optional prerelease support.
+    ///
+    /// # What
+    ///
+    /// Extends the standard version resolution to support prerelease versions,
+    /// allowing controlled creation and increment of prerelease versions.
+    ///
+    /// # How
+    ///
+    /// Follows the same flow as `resolve_versions()` but passes prerelease
+    /// configuration down to the resolution logic, which then uses
+    /// `Version::bump_with_prerelease()` instead of standard bump.
+    ///
+    /// # Why
+    ///
+    /// Enables prerelease workflows while maintaining the existing resolution
+    /// logic for dependency propagation and strategy handling.
+    ///
+    /// # Arguments
+    ///
+    /// * `changeset` - Changeset containing packages and bump type
+    /// * `prerelease_config` - Optional prerelease configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns error if version resolution or propagation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::version::VersionResolver;
+    /// use sublime_pkg_tools::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let resolver = VersionResolver::new(workspace_root, config).await?;
+    ///
+    /// // Without prerelease (standard behavior)
+    /// let resolution = resolver.resolve_versions_with_prerelease(&changeset, None).await?;
+    ///
+    /// // With prerelease
+    /// let config = PrereleaseConfig {
+    ///     tag: "beta".to_string(),
+    ///     mode: PrereleaseMode::Create,
+    /// };
+    /// let resolution = resolver.resolve_versions_with_prerelease(&changeset, Some(&config)).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn resolve_versions_with_prerelease(
+        &self,
+        changeset: &Changeset,
+        prerelease_config: Option<&crate::types::prerelease::PrereleaseConfig>,
+    ) -> VersionResult<VersionResolution> {
+        // Discover all packages in the workspace
+        let package_list = self.discover_packages().await?;
+
+        // Build dependency graph for propagation (before consuming package_list)
+        let (graph, circular_deps) = if self.config.dependency.propagation_bump != "none" {
+            let g = DependencyGraph::from_packages(&package_list)?;
+            let cycles = g.detect_cycles();
+            (Some(g), cycles)
+        } else {
+            (None, Vec::new())
+        };
+
+        // Build a map of package name to package info (consuming package_list)
+        let mut packages = HashMap::new();
+        for package_info in package_list {
+            let name = package_info.name().to_string();
+            packages.insert(name, package_info);
+        }
+
+        // Step 1: Resolve direct version changes from changeset with prerelease support
+        let mut resolution = crate::version::resolution::resolve_versions_with_prerelease(
+            changeset,
+            &packages,
+            self.strategy,
+            prerelease_config,
+        )
+        .await?;
+
+        // Step 2: Add circular dependencies to resolution
+        resolution.circular_dependencies = circular_deps;
+
+        // Step 3: Apply dependency propagation if configured
+        if let Some(graph) = graph {
+            // Create propagator and apply propagation
+            let propagator = DependencyPropagator::new(&graph, &packages, &self.config.dependency);
+            propagator.propagate(&mut resolution)?;
+        }
+
+        Ok(resolution)
+    }
+
     /// Applies version changes from a changeset to package.json files.
     ///
     /// This method resolves versions for all packages in the changeset and optionally

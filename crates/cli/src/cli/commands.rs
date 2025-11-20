@@ -531,8 +531,15 @@ pub struct BumpArgs {
     /// Don't archive changesets.
     ///
     /// Keeps changesets active after bump.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "always_archive")]
     pub no_archive: bool,
+
+    /// Always archive changesets.
+    ///
+    /// Forces changesets to be archived even for prerelease versions.
+    /// Overrides auto-detection behavior.
+    #[arg(long, conflicts_with = "no_archive")]
+    pub always_archive: bool,
 
     /// Skip confirmations.
     ///
