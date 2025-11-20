@@ -59,6 +59,7 @@ use sublime_pkg_tools::upgrade::{
     DependencyUpgrade, DetectionOptions, PackageUpgrades, UpgradeManager, UpgradeType,
 };
 use tracing::{debug, info, instrument};
+use url::Url;
 
 /// Executes the upgrade check command.
 ///
@@ -123,9 +124,28 @@ pub async fn execute_upgrade_check(
 
     // Step 1: Load configuration
     debug!("Loading configuration");
-    let config = load_config(workspace_root).await?;
+    let mut config = load_config(workspace_root).await?;
 
-    // Step 2: Create detection options from arguments
+    // Step 2: Apply registry override if specified
+    if let Some(ref registry_url) = args.registry {
+        debug!("Registry override requested: {}", registry_url);
+
+        // Validate URL format
+        let validated_url = validate_registry_url(registry_url)?;
+
+        // Override config registry
+        let original_registry = config.upgrade.registry.default_registry.clone();
+        config.upgrade.registry.default_registry.clone_from(&validated_url);
+
+        info!("Registry override applied: {} → {}", original_registry, validated_url);
+
+        // Inform user in human mode
+        if !output.format().is_json() {
+            output.info(&format!("Using custom registry: {validated_url}"))?;
+        }
+    }
+
+    // Step 3: Create detection options from arguments
     debug!("Creating detection options");
     let detection_options = create_detection_options(args)?;
     debug!(
@@ -135,7 +155,7 @@ pub async fn execute_upgrade_check(
         detection_options.include_peer_dependencies
     );
 
-    // Step 3: Detect upgrades
+    // Step 4: Detect upgrades
     info!("Detecting available upgrades");
     let upgrade_manager =
         UpgradeManager::new(workspace_root.to_path_buf(), config.upgrade)
@@ -149,7 +169,7 @@ pub async fn execute_upgrade_check(
 
     debug!("Found upgrades in {} packages", upgrade_preview.packages.len());
 
-    // Step 4: Filter results by upgrade type based on CLI flags
+    // Step 5: Filter results by upgrade type based on CLI flags
     let include_major = args.major && !args.no_major;
     let include_minor = args.minor && !args.no_minor;
     let include_patch = args.patch && !args.no_patch;
@@ -161,10 +181,10 @@ pub async fn execute_upgrade_check(
         include_patch,
     );
 
-    // Step 5: Convert to our CLI types and calculate summary
+    // Step 6: Convert to our CLI types and calculate summary
     let (packages, summary) = convert_and_summarize(&filtered_upgrades);
 
-    // Step 6: Output results
+    // Step 7: Output results
     output_results(output, packages, summary)?;
 
     info!("Upgrade check completed successfully");
@@ -188,6 +208,84 @@ async fn load_config(_workspace_root: &Path) -> Result<PackageToolsConfig> {
     sublime_pkg_tools::config::load_config()
         .await
         .map_err(|e| CliError::configuration(format!("Failed to load configuration: {e}")))
+}
+
+/// Validates and normalizes a registry URL.
+///
+/// # What
+///
+/// Validates that a registry URL is properly formatted and normalizes it
+/// by removing trailing slashes and ensuring the scheme is HTTP or HTTPS.
+///
+/// # How
+///
+/// 1. Parses the URL using the `url` crate
+/// 2. Validates the scheme is `http` or `https`
+/// 3. Validates the host is present
+/// 4. Removes trailing slashes for consistency
+/// 5. Returns the normalized URL string
+///
+/// # Why
+///
+/// Ensures registry URLs are valid before attempting to use them, preventing
+/// obscure HTTP errors and providing clear feedback to users.
+///
+/// # Arguments
+///
+/// * `url_str` - Registry URL to validate
+///
+/// # Returns
+///
+/// Normalized registry URL.
+///
+/// # Errors
+///
+/// Returns error if:
+/// - URL is not a valid HTTP/HTTPS URL
+/// - URL contains invalid characters
+/// - URL scheme is not http or https
+/// - URL does not have a valid host
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sublime_cli_tools::commands::upgrade::check::validate_registry_url;
+///
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let url = validate_registry_url("https://custom.com/")?;
+/// assert_eq!(url, "https://custom.com");
+///
+/// let url = validate_registry_url("https://registry.npmjs.org")?;
+/// assert_eq!(url, "https://registry.npmjs.org");
+/// # Ok(())
+/// # }
+/// ```
+pub(crate) fn validate_registry_url(url_str: &str) -> Result<String> {
+    // Parse URL
+    let parsed = Url::parse(url_str)
+        .map_err(|e| CliError::validation(format!("Invalid registry URL '{url_str}': {e}")))?;
+
+    // Validate scheme
+    match parsed.scheme() {
+        "http" | "https" => {}
+        scheme => {
+            return Err(CliError::validation(format!(
+                "Registry URL must use HTTP or HTTPS scheme, found: {scheme}"
+            )));
+        }
+    }
+
+    // Validate host exists
+    if parsed.host_str().is_none() {
+        return Err(CliError::validation(format!(
+            "Registry URL must have a valid host: {url_str}"
+        )));
+    }
+
+    // Remove trailing slash for consistency
+    let normalized = url_str.trim_end_matches('/').to_string();
+
+    Ok(normalized)
 }
 
 /// Creates detection options from command arguments.

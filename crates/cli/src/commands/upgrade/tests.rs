@@ -28,7 +28,7 @@
 #![allow(clippy::expect_used)]
 
 use crate::cli::commands::UpgradeCheckArgs;
-use crate::commands::upgrade::check::create_detection_options;
+use crate::commands::upgrade::check::{create_detection_options, validate_registry_url};
 use crate::commands::upgrade::types::*;
 
 // TODO: will be implemented on story 6.2
@@ -97,6 +97,172 @@ fn test_create_detection_options_all_disabled() {
 
     let result = create_detection_options(&args);
     assert!(result.is_err(), "Should fail when all upgrade types are disabled");
+}
+
+// ============================================================================
+// Registry URL Validation Tests
+// ============================================================================
+
+#[test]
+fn test_validate_registry_url_valid_https() {
+    let result = validate_registry_url("https://registry.npmjs.org");
+    assert!(result.is_ok());
+    assert_eq!(result.expect("Should be valid"), "https://registry.npmjs.org");
+}
+
+#[test]
+fn test_validate_registry_url_valid_http() {
+    let result = validate_registry_url("http://localhost:4873");
+    assert!(result.is_ok());
+    assert_eq!(result.expect("Should be valid"), "http://localhost:4873");
+}
+
+#[test]
+fn test_validate_registry_url_removes_trailing_slash() {
+    let result = validate_registry_url("https://registry.npmjs.org/");
+    assert!(result.is_ok());
+    assert_eq!(result.expect("Should be valid"), "https://registry.npmjs.org");
+}
+
+#[test]
+fn test_validate_registry_url_removes_multiple_trailing_slashes() {
+    let result = validate_registry_url("https://custom-registry.example.com///");
+    assert!(result.is_ok());
+    assert_eq!(result.expect("Should be valid"), "https://custom-registry.example.com");
+}
+
+#[test]
+fn test_validate_registry_url_with_port() {
+    let result = validate_registry_url("https://npm.company.com:8080");
+    assert!(result.is_ok());
+    assert_eq!(result.expect("Should be valid"), "https://npm.company.com:8080");
+}
+
+#[test]
+fn test_validate_registry_url_with_path() {
+    let result = validate_registry_url("https://nexus.example.com/repository/npm-public");
+    assert!(result.is_ok());
+    assert_eq!(result.expect("Should be valid"), "https://nexus.example.com/repository/npm-public");
+}
+
+#[test]
+fn test_validate_registry_url_with_port_and_trailing_slash() {
+    let result = validate_registry_url("http://localhost:4873/");
+    assert!(result.is_ok());
+    assert_eq!(result.expect("Should be valid"), "http://localhost:4873");
+}
+
+#[test]
+fn test_validate_registry_url_subdomain() {
+    let result = validate_registry_url("https://npm.internal.company.com");
+    assert!(result.is_ok());
+    assert_eq!(result.expect("Should be valid"), "https://npm.internal.company.com");
+}
+
+#[test]
+fn test_validate_registry_url_invalid_scheme_ftp() {
+    let result = validate_registry_url("ftp://registry.example.com");
+    assert!(result.is_err());
+    let error = result.expect_err("Should fail with FTP scheme");
+    assert!(error.to_string().contains("HTTP or HTTPS"));
+    assert!(error.to_string().contains("ftp"));
+}
+
+#[test]
+fn test_validate_registry_url_invalid_scheme_file() {
+    let result = validate_registry_url("file:///tmp/registry");
+    assert!(result.is_err());
+    let error = result.expect_err("Should fail with file scheme");
+    assert!(error.to_string().contains("HTTP or HTTPS"));
+    assert!(error.to_string().contains("file"));
+}
+
+#[test]
+fn test_validate_registry_url_invalid_scheme_custom() {
+    let result = validate_registry_url("custom://registry.example.com");
+    assert!(result.is_err());
+    let error = result.expect_err("Should fail with custom scheme");
+    assert!(error.to_string().contains("HTTP or HTTPS"));
+}
+
+#[test]
+fn test_validate_registry_url_malformed() {
+    let result = validate_registry_url("not a url at all");
+    assert!(result.is_err());
+    let error = result.expect_err("Should fail with malformed URL");
+    assert!(error.to_string().contains("Invalid registry URL"));
+}
+
+#[test]
+fn test_validate_registry_url_empty() {
+    let result = validate_registry_url("");
+    assert!(result.is_err());
+    let error = result.expect_err("Should fail with empty string");
+    assert!(error.to_string().contains("Invalid registry URL"));
+}
+
+#[test]
+fn test_validate_registry_url_no_scheme() {
+    let result = validate_registry_url("registry.npmjs.org");
+    assert!(result.is_err());
+    let error = result.expect_err("Should fail without scheme");
+    assert!(error.to_string().contains("Invalid registry URL"));
+}
+
+#[test]
+fn test_validate_registry_url_scheme_only() {
+    let result = validate_registry_url("https://");
+    assert!(result.is_err());
+    let error = result.expect_err("Should fail with scheme only");
+    // The error message can be either about parsing or about valid host
+    let error_msg = error.to_string();
+    assert!(
+        error_msg.contains("valid host") || error_msg.contains("Invalid registry URL"),
+        "Unexpected error message: {error_msg}",
+    );
+}
+
+#[test]
+fn test_validate_registry_url_with_username_password() {
+    // URLs with authentication should still be valid
+    let result = validate_registry_url("https://user:pass@registry.example.com");
+    assert!(result.is_ok());
+    assert_eq!(result.expect("Should be valid"), "https://user:pass@registry.example.com");
+}
+
+#[test]
+fn test_validate_registry_url_with_query_params() {
+    let result = validate_registry_url("https://registry.example.com?param=value");
+    assert!(result.is_ok());
+    assert_eq!(result.expect("Should be valid"), "https://registry.example.com?param=value");
+}
+
+#[test]
+fn test_validate_registry_url_ipv4_address() {
+    let result = validate_registry_url("http://192.168.1.100:4873");
+    assert!(result.is_ok());
+    assert_eq!(result.expect("Should be valid"), "http://192.168.1.100:4873");
+}
+
+#[test]
+fn test_validate_registry_url_ipv6_address() {
+    let result = validate_registry_url("http://[::1]:4873");
+    assert!(result.is_ok());
+    assert_eq!(result.expect("Should be valid"), "http://[::1]:4873");
+}
+
+#[test]
+fn test_validate_registry_url_localhost() {
+    let result = validate_registry_url("http://localhost");
+    assert!(result.is_ok());
+    assert_eq!(result.expect("Should be valid"), "http://localhost");
+}
+
+#[test]
+fn test_validate_registry_url_special_characters_in_path() {
+    let result = validate_registry_url("https://registry.example.com/npm/@scoped");
+    assert!(result.is_ok());
+    assert_eq!(result.expect("Should be valid"), "https://registry.example.com/npm/@scoped");
 }
 
 // ============================================================================
