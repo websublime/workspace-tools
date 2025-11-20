@@ -81,6 +81,7 @@
 //! ```
 
 use crate::cli::commands::BumpArgs;
+use crate::commands::bump::filter::PackageFilter;
 use crate::commands::bump::snapshot::{BumpSnapshot, BumpSummary, ChangesetInfo, PackageBumpInfo};
 use crate::error::{CliError, Result};
 use crate::output::diff::{DiffRenderer, VersionDiff};
@@ -193,20 +194,61 @@ pub async fn execute_bump_preview(
 
     debug!("Discovered {} workspace package(s)", all_packages.len());
 
-    // Step 6: Resolve versions based on strategy
+    // Step 6: Apply package filter if specified
+    let filtered_changesets = if let Some(ref package_list) = args.packages {
+        debug!("Applying package filter: {:?}", package_list);
+
+        let package_names: Vec<String> =
+            all_packages.iter().map(|p| p.name().to_string()).collect();
+
+        // Create and validate filter
+        let filter = PackageFilter::new(package_list.clone(), false);
+        filter.validate(&package_names)?;
+
+        // Apply filter to changesets
+        let mut filtered = Vec::new();
+        for changeset in &changesets {
+            let filtered_cs = filter.apply_to_changeset(changeset);
+
+            // Only include if filter left some packages
+            if !filtered_cs.packages.is_empty() {
+                filtered.push(filtered_cs);
+            }
+        }
+
+        if filtered.is_empty() {
+            return Err(CliError::validation(
+                "No packages match the filter. No packages to bump.".to_string(),
+            ));
+        }
+
+        info!(
+            "Package filter applied: {} package(s) selected from {} changeset(s)",
+            package_list.len(),
+            filtered.len()
+        );
+
+        filtered
+    } else {
+        changesets
+    };
+
+    // Step 7: Resolve versions based on strategy (using filtered changesets)
     // For Independent: Only packages in changesets bump
     // For Unified: All packages bump with the highest bump type
     let snapshot = if config.version.strategy
         == sublime_pkg_tools::config::VersioningStrategy::Independent
     {
-        build_independent_snapshot(&resolver, &changesets, &all_packages, workspace_root).await?
+        build_independent_snapshot(&resolver, &filtered_changesets, &all_packages, workspace_root)
+            .await?
     } else {
-        build_unified_snapshot(&resolver, &changesets, &all_packages, workspace_root).await?
+        build_unified_snapshot(&resolver, &filtered_changesets, &all_packages, workspace_root)
+            .await?
     };
 
     debug!("Built bump snapshot with {} packages", snapshot.packages.len());
 
-    // Step 7: Output results
+    // Step 8: Output results
     if output.format().is_json() {
         let response: JsonResponse<BumpSnapshot> = JsonResponse::success(snapshot);
         output.json(&response)?;
