@@ -16,6 +16,19 @@ keywords.
 
 Try to do one pull request per change.
 
+### Merge Strategy
+
+**IMPORTANT:** This project uses **"Rebase and merge"** as the merge strategy. **Do NOT use "Squash and merge"**.
+
+**Why?**
+- Our monorepo uses `release-plz` with `git-cliff` to generate separate changelogs for each crate
+- Git-cliff filters commits by path using `--include-path` to determine which changes belong to which package
+- "Squash and merge" combines all commits into one, making it impossible for git-cliff to correctly attribute changes to specific packages
+- This results in empty changelogs for packages that weren't directly modified in the squashed commit
+- "Rebase and merge" preserves individual commits, allowing proper changelog generation per package
+
+When merging a PR, always select **"Rebase and merge"** from the merge button dropdown.
+
 ### Updating the changelog
 
 Update the changes you have made in
