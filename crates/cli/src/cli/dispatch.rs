@@ -93,6 +93,9 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
     let format = cli.output_format();
     let config_path = cli.config_path();
 
+    // Create Output once for all commands (Pattern B optimization)
+    let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
+
     // Display branded header for human-readable output (except for version command which handles its own header)
     if should_show_header(&cli.command, format) {
         branding::print_header(env!("CARGO_PKG_VERSION"));
@@ -100,15 +103,12 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
 
     match &cli.command {
         Commands::Init(args) => {
-            // Create Output for Pattern B signature
-            let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
             init::execute_init(args, &output, root, config_path.as_ref().map(|p| p.as_path()))
                 .await?;
         }
 
         Commands::Config(config_cmd) => match config_cmd {
             ConfigCommands::Show(args) => {
-                let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
                 config::execute_show(
                     args,
                     &output,
@@ -118,7 +118,6 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
                 .await?;
             }
             ConfigCommands::Validate(args) => {
-                let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
                 config::execute_validate(
                     args,
                     &output,
@@ -131,7 +130,6 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
 
         Commands::Changeset(changeset_cmd) => {
             use crate::cli::commands::ChangesetCommands;
-            let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
             match changeset_cmd {
                 ChangesetCommands::Create(args) => {
                     changeset::execute_add(
@@ -204,8 +202,6 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
         }
 
         Commands::Bump(args) => {
-            let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
-
             // Route to snapshot, execute, or preview mode based on flags
             if args.snapshot {
                 // Snapshot mode - generate snapshot versions without consuming changesets
@@ -237,37 +233,32 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
             }
         }
 
-        Commands::Upgrade(upgrade_cmd) => {
-            let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
-            match upgrade_cmd {
-                UpgradeCommands::Check(args) => {
-                    upgrade::execute_upgrade_check(args, &output, root).await?;
-                }
-                UpgradeCommands::Apply(args) => {
-                    upgrade::execute_upgrade_apply(args, &output, root).await?;
-                }
-                UpgradeCommands::Backups(backup_cmd) => match backup_cmd {
-                    UpgradeBackupCommands::List(args) => {
-                        upgrade::execute_backup_list(args, &output, root).await?;
-                    }
-                    UpgradeBackupCommands::Restore(args) => {
-                        upgrade::execute_backup_restore(args, &output, root).await?;
-                    }
-                    UpgradeBackupCommands::Clean(args) => {
-                        upgrade::execute_backup_clean(args, &output, root).await?;
-                    }
-                },
+        Commands::Upgrade(upgrade_cmd) => match upgrade_cmd {
+            UpgradeCommands::Check(args) => {
+                upgrade::execute_upgrade_check(args, &output, root).await?;
             }
-        }
+            UpgradeCommands::Apply(args) => {
+                upgrade::execute_upgrade_apply(args, &output, root).await?;
+            }
+            UpgradeCommands::Backups(backup_cmd) => match backup_cmd {
+                UpgradeBackupCommands::List(args) => {
+                    upgrade::execute_backup_list(args, &output, root).await?;
+                }
+                UpgradeBackupCommands::Restore(args) => {
+                    upgrade::execute_backup_restore(args, &output, root).await?;
+                }
+                UpgradeBackupCommands::Clean(args) => {
+                    upgrade::execute_backup_clean(args, &output, root).await?;
+                }
+            },
+        },
 
         Commands::Audit(args) => {
-            let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
             audit::execute_audit(args, &output, root, config_path.as_ref().map(|p| p.as_path()))
                 .await?;
         }
 
         Commands::Changes(args) => {
-            let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
             crate::commands::changes::execute_changes(
                 args,
                 &output,
@@ -282,7 +273,6 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
         }
 
         Commands::Clone(args) => {
-            let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
             crate::commands::clone::execute_clone(
                 args,
                 &output,
