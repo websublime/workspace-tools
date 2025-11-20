@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.13 - 2025-11-20
+
+### Bug Fixes
+
+#### WOR-TSK-162
+
+- Remove doctests from private prerelease helper methods
+
+### Documentation
+
+#### WOR-TSK-162
+
+- Update pkg crate documentation with prerelease support
+
+### Features
+
+#### WOR-TSK-162
+
+- Implement prerelease parameter support with archive policy
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.12 - 2025-11-17
 
 ### Miscellaneous Tasks

@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.15 - 2025-11-20
+
+### Bug Fixes
+
+#### WOR-TSK-162
+
+- Correct always_archive flag in failing tests
+- Add missing always_archive field to doctest examples
+
+### Documentation
+
+#### WOR-TSK-162
+
+- Add changeset archive policies documentation to README
+
+### Features
+
+#### WOR-TSK-162
+
+- Implement prerelease parameter support with archive policy
+
+#### WOR-TSK-163
+
+- Implement package filtering for bump command
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.14 - 2025-11-20
 
 ### Features
