@@ -952,7 +952,7 @@ fn test_determine_archive_policy_always() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
-        always_archive: false,
+        always_archive: true,
         force: false,
         show_diff: false,
     };
@@ -1092,7 +1092,7 @@ fn test_bump_args_prerelease_with_always_archive() {
         git_commit: false,
         no_changelog: false,
         no_archive: false,
-        always_archive: false,
+        always_archive: true,
         force: false,
         show_diff: false,
     };
