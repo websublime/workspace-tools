@@ -51,8 +51,9 @@ use tracing::{debug, info};
 /// # Arguments
 ///
 /// * `args` - Command arguments from CLI
+/// * `output` - Output handler for consistent formatting across all commands
 /// * `root` - Workspace root directory
-/// * `format` - Output format for the command result
+/// * `config_path` - Optional path to configuration file (for future use)
 ///
 /// # Returns
 ///
@@ -71,8 +72,9 @@ use tracing::{debug, info};
 /// ```rust,ignore
 /// use sublime_cli_tools::commands::init::execute_init;
 /// use sublime_cli_tools::cli::commands::InitArgs;
-/// use sublime_cli_tools::output::OutputFormat;
+/// use sublime_cli_tools::output::{Output, OutputFormat};
 /// use std::path::Path;
+/// use std::io;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let args = InitArgs {
@@ -81,11 +83,17 @@ use tracing::{debug, info};
 ///     ..Default::default()
 /// };
 ///
-/// execute_init(&args, Path::new("."), OutputFormat::Human).await?;
+/// let output = Output::new(OutputFormat::Human, io::stdout(), false);
+/// execute_init(&args, &output, Path::new("."), None).await?;
 /// # Ok(())
 /// # }
 /// ```
-pub async fn execute_init(args: &InitArgs, root: &Path, format: OutputFormat) -> Result<()> {
+pub async fn execute_init(
+    args: &InitArgs,
+    output: &crate::output::Output,
+    root: &Path,
+    config_path: Option<&Path>,
+) -> Result<()> {
     debug!("Initializing workspace at: {}", root.display());
 
     // Validate workspace is a Node.js project
@@ -96,15 +104,24 @@ pub async fn execute_init(args: &InitArgs, root: &Path, format: OutputFormat) ->
     info!("Detected workspace type: {}", workspace_info.kind_description());
 
     // Check for existing configuration
-    let config_path = find_existing_config(root).await?;
-    if let Some(existing_path) = &config_path {
+    // If config_path is provided via --config-path, use it; otherwise search for any config
+    let existing_config_path = if let Some(custom_path) = config_path {
+        check_config_exists(custom_path).await?
+    } else {
+        find_existing_config(root).await?
+    };
+
+    if let Some(existing_path) = &existing_config_path {
         if !args.force {
             return Err(CliError::configuration(format!(
                 "Configuration file already exists: {}. Use --force to overwrite.",
                 existing_path.display()
             )));
         }
-        info!("Force flag set, will overwrite existing configuration");
+        info!(
+            "Force flag set, will overwrite existing configuration at: {}",
+            existing_path.display()
+        );
     }
 
     // Collect configuration
@@ -118,7 +135,22 @@ pub async fn execute_init(args: &InitArgs, root: &Path, format: OutputFormat) ->
     validate_init_config(&init_config)?;
 
     // Generate configuration file
-    let config_file_path = generate_config_file(root, &init_config).await?;
+    // If custom config_path provided, use it; otherwise generate default name
+    let config_file_path = if let Some(custom_path) = config_path {
+        // Detect format from file extension if not explicitly set
+        let detected_format = detect_format_from_path(custom_path)?;
+        let mut final_config = init_config.clone();
+
+        // Override format only if it wasn't explicitly set and we can detect it
+        if args.config_format.is_none() && !detected_format.is_empty() {
+            final_config.config_format = detected_format;
+        }
+
+        generate_config_file_at(custom_path, &final_config).await?
+    } else {
+        generate_config_file(root, &init_config).await?
+    };
+
     info!("Configuration file created: {}", config_file_path.display());
 
     // Create directory structure
@@ -134,7 +166,7 @@ pub async fn execute_init(args: &InitArgs, root: &Path, format: OutputFormat) ->
     info!("Example changeset created");
 
     // Output result
-    output_init_result(&config_file_path, &init_config, format)?;
+    output_init_result(&config_file_path, &init_config, output)?;
 
     Ok(())
 }
@@ -181,7 +213,7 @@ impl WorkspaceInfo {
 }
 
 /// Configuration collected during initialization.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct InitConfig {
     /// Changeset directory path
     changeset_path: String,
@@ -312,6 +344,58 @@ async fn find_existing_config(root: &Path) -> Result<Option<PathBuf>> {
     }
 
     Ok(None)
+}
+
+/// Checks if a specific config path exists.
+///
+/// # Arguments
+///
+/// * `path` - Path to check for existence
+///
+/// # Returns
+///
+/// Returns `Some(PathBuf)` if the path exists, `None` otherwise.
+///
+/// # Errors
+///
+/// Returns an error if filesystem operations fail.
+async fn check_config_exists(path: &Path) -> Result<Option<PathBuf>> {
+    let fs = FileSystemManager::new();
+
+    if fs.exists(path).await { Ok(Some(path.to_path_buf())) } else { Ok(None) }
+}
+
+/// Detects configuration format from file path extension.
+///
+/// # Arguments
+///
+/// * `path` - Path to analyze for format detection
+///
+/// # Returns
+///
+/// Returns the detected format as a string ("toml", "yaml", "yml", "json"),
+/// or an empty string if format cannot be detected.
+///
+/// # Errors
+///
+/// Returns an error if the extension is present but not a valid format.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let format = detect_format_from_path(Path::new("custom.toml"))?;
+/// assert_eq!(format, "toml");
+/// ```
+fn detect_format_from_path(path: &Path) -> Result<String> {
+    let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+
+    match extension {
+        "toml" | "yaml" | "yml" | "json" => Ok(extension.to_string()),
+        "" => Ok(String::new()), // No extension, will use default or explicit format
+        other => Err(CliError::validation(format!(
+            "Unsupported config file extension '.{other}'. Supported formats: .toml, .yaml, .yml, .json"
+        ))),
+    }
 }
 
 /// Collects configuration in non-interactive mode.
@@ -547,6 +631,107 @@ async fn generate_config_file(root: &Path, config: &InitConfig) -> Result<PathBu
     Ok(config_path)
 }
 
+/// Generates the configuration file at a specific path.
+///
+/// # Arguments
+///
+/// * `config_path` - Specific path where to write the configuration file
+/// * `config` - Configuration to serialize and write
+///
+/// # Returns
+///
+/// Returns the path where the configuration was written.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Serialization fails
+/// - File system operations fail
+/// - The parent directory doesn't exist
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let config = InitConfig { /* ... */ };
+/// let path = generate_config_file_at(Path::new("./custom/my-config.toml"), &config).await?;
+/// ```
+async fn generate_config_file_at(config_path: &Path, config: &InitConfig) -> Result<PathBuf> {
+    let fs = FileSystemManager::new();
+
+    // Ensure parent directory exists
+    if let Some(parent) = config_path.parent()
+        && !fs.exists(parent).await
+    {
+        fs.create_dir_all(parent).await.map_err(|e| {
+            CliError::io(format!("Failed to create directory {}: {}", parent.display(), e))
+        })?;
+    }
+
+    // Get root directory for workspace pattern detection (use parent or current dir)
+    let root = config_path.parent().unwrap_or(Path::new("."));
+
+    // Create PackageToolsConfig with user settings
+    let mut pkg_config = PackageToolsConfig::default();
+
+    // Extract workspace patterns from package.json if it's a monorepo
+    let workspace_patterns = extract_workspace_patterns(root, &fs).await?;
+
+    // Set workspace config if this is a monorepo
+    if workspace_patterns.is_empty() {
+        // Check if it should be a monorepo (has workspaces field even if empty)
+        let has_workspace_field = check_has_workspace_field(root, &fs).await?;
+        if has_workspace_field {
+            // Monorepo with empty patterns - still need to include workspace config
+            pkg_config.workspace = Some(sublime_pkg_tools::config::WorkspaceConfig::empty());
+            debug!("Added empty workspace config for monorepo with no patterns yet");
+        }
+        // If no workspaces field, workspace remains None (single-package project)
+    } else {
+        pkg_config.workspace =
+            Some(sublime_pkg_tools::config::WorkspaceConfig::new(workspace_patterns.clone()));
+        debug!("Added workspace patterns to config: {:?}", workspace_patterns);
+    }
+
+    // Set changeset config
+    pkg_config.changeset.path.clone_from(&config.changeset_path);
+    pkg_config.changeset.history_path = format!("{}/history", config.changeset_path);
+    pkg_config.changeset.available_environments.clone_from(&config.environments);
+    pkg_config.changeset.default_environments.clone_from(&config.default_environments);
+
+    // Set version config
+    pkg_config.version.strategy = if config.strategy == "unified" {
+        sublime_pkg_tools::types::VersioningStrategy::Unified
+    } else {
+        sublime_pkg_tools::types::VersioningStrategy::Independent
+    };
+
+    // Set upgrade config registry
+    pkg_config.upgrade.registry.default_registry.clone_from(&config.registry);
+
+    // Serialize based on format
+    let config_content = match config.config_format.as_str() {
+        "json" => serde_json::to_string_pretty(&pkg_config)
+            .map_err(|e| CliError::execution(format!("Failed to serialize JSON: {e}")))?,
+        "yaml" | "yml" => serde_yaml::to_string(&pkg_config)
+            .map_err(|e| CliError::execution(format!("Failed to serialize YAML: {e}")))?,
+        "toml" => toml::to_string_pretty(&pkg_config)
+            .map_err(|e| CliError::execution(format!("Failed to serialize TOML: {e}")))?,
+        _ => {
+            return Err(CliError::validation(format!(
+                "Unsupported format: {}",
+                config.config_format
+            )));
+        }
+    };
+
+    // Write to file
+    fs.write_file(config_path, config_content.as_bytes()).await.map_err(|e| {
+        CliError::io(format!("Failed to write configuration file {}: {}", config_path.display(), e))
+    })?;
+
+    Ok(config_path.to_path_buf())
+}
+
 /// Extracts workspace patterns from package.json.
 ///
 /// Returns a vector of workspace patterns (e.g., `["packages/*", "apps/*"]`).
@@ -758,9 +943,28 @@ updatedAt: "2024-01-01T00:00:00Z"
 }
 
 /// Outputs the initialization result.
-#[allow(clippy::print_stdout)]
-fn output_init_result(config_path: &Path, config: &InitConfig, format: OutputFormat) -> Result<()> {
-    match format {
+///
+/// # Arguments
+///
+/// * `config_path` - Path to the created configuration file
+/// * `config` - Configuration that was initialized
+/// * `output` - Output handler for consistent formatting
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success, or an error if output fails.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - JSON serialization fails
+/// - Writing to output stream fails
+fn output_init_result(
+    config_path: &Path,
+    config: &InitConfig,
+    output: &crate::output::Output,
+) -> Result<()> {
+    match output.format() {
         OutputFormat::Json | OutputFormat::JsonCompact => {
             #[derive(Serialize)]
             #[allow(non_snake_case)]
@@ -789,31 +993,27 @@ fn output_init_result(config_path: &Path, config: &InitConfig, format: OutputFor
             };
 
             let response = JsonResponse::success(result);
-
-            let json = if format == OutputFormat::JsonCompact {
-                serde_json::to_string(&response)
-            } else {
-                serde_json::to_string_pretty(&response)
-            }
-            .map_err(|e| CliError::execution(format!("Failed to serialize JSON: {e}")))?;
-
-            println!("{json}");
+            output.json(&response)?;
         }
         OutputFormat::Quiet => {
-            // Minimal output
-            println!("Configuration initialized");
+            // Minimal output - Output handles quiet mode automatically
+            output.plain("Configuration initialized")?;
         }
         OutputFormat::Human => {
-            println!("\n✓ Configuration initialized successfully\n");
-            println!(
+            output.blank_line()?;
+            output.success("Configuration initialized successfully")?;
+            output.blank_line()?;
+
+            output.info(&format!(
                 "  Config file: {}",
                 config_path.file_name().and_then(|n| n.to_str()).unwrap_or("repo.config")
-            );
-            println!("  Strategy: {}", config.strategy);
-            println!("  Changesets: {}", config.changeset_path);
-            println!("  Environments: {}", config.environments.join(", "));
-            println!("  Default: {}", config.default_environments.join(", "));
-            println!();
+            ))?;
+            output.info(&format!("  Strategy: {}", config.strategy))?;
+            output.info(&format!("  Changesets: {}", config.changeset_path))?;
+            output.info(&format!("  Environments: {}", config.environments.join(", ")))?;
+            output.info(&format!("  Default: {}", config.default_environments.join(", ")))?;
+
+            output.blank_line()?;
         }
     }
 

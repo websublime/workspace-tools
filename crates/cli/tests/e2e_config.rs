@@ -7,11 +7,12 @@
 //! **How**: Creates real temporary workspaces with various configuration states,
 //! executes config commands with different parameters, and validates that
 //! configuration is correctly displayed and validated across all scenarios.
+//! Uses Pattern B with output capture to verify command output.
 //!
 //! **Why**: Ensures the complete configuration workflow works correctly across
 //! different workspace types, configuration formats, validation scenarios, and
 //! output formats. Validates that users can inspect and verify their configuration
-//! reliably.
+//! reliably with proper output verification.
 
 #![allow(clippy::expect_used)]
 #![allow(clippy::panic)]
@@ -20,6 +21,7 @@
 mod common;
 
 use common::fixtures::WorkspaceFixture;
+use common::helpers::{create_quiet_output, create_shared_json_output, create_test_output};
 use serde_json::json;
 use sublime_cli_tools::cli::commands::{ConfigShowArgs, ConfigValidateArgs};
 use sublime_cli_tools::commands::config::{execute_show, execute_validate};
@@ -101,6 +103,73 @@ fn create_valid_config() -> String {
     .to_string()
 }
 
+/// Helper to verify JSON output structure from config show command.
+///
+/// Verifies that the output contains all expected configuration fields.
+fn verify_config_show_json_output(json_str: &str) {
+    let json: serde_json::Value =
+        serde_json::from_str(json_str).expect("Output should be valid JSON");
+
+    // Verify response structure
+    assert!(json.get("success").is_some(), "JSON should have 'success' field");
+    assert_eq!(json["success"], true, "Success should be true");
+
+    // Verify data field exists
+    assert!(json.get("data").is_some(), "JSON should have 'data' field");
+    let data = &json["data"];
+
+    // Verify all required configuration sections
+    assert!(data.get("changeset").is_some(), "Should have changeset config");
+    assert!(data.get("version").is_some(), "Should have version config");
+    assert!(data.get("dependency").is_some(), "Should have dependency config");
+    assert!(data.get("upgrade").is_some(), "Should have upgrade config");
+    assert!(data.get("changelog").is_some(), "Should have changelog config");
+    assert!(data.get("audit").is_some(), "Should have audit config");
+
+    // Verify changeset section (note: field names are camelCase in JSON)
+    let changeset = &data["changeset"];
+    assert!(changeset.get("path").is_some(), "Should have changeset path");
+    assert!(changeset.get("environments").is_some(), "Should have environments");
+    assert!(changeset.get("defaultEnvironments").is_some(), "Should have defaultEnvironments");
+
+    // Verify version section (note: field names are camelCase in JSON)
+    let version = &data["version"];
+    assert!(version.get("strategy").is_some(), "Should have strategy");
+    assert!(version.get("defaultBump").is_some(), "Should have defaultBump");
+    assert!(version.get("snapshotFormat").is_some(), "Should have snapshotFormat");
+}
+
+/// Helper to verify JSON output structure from config validate command.
+///
+/// Verifies that the validation output contains expected fields.
+fn verify_config_validate_json_output(json_str: &str, expected_valid: bool) {
+    let json: serde_json::Value =
+        serde_json::from_str(json_str).expect("Output should be valid JSON");
+
+    // Verify response structure
+    assert!(json.get("success").is_some(), "JSON should have 'success' field");
+    assert_eq!(json["success"], expected_valid, "Success should match validation result");
+
+    // Verify data field exists
+    assert!(json.get("data").is_some(), "JSON should have 'data' field");
+    let data = &json["data"];
+
+    // Verify validation result structure (note: field is "valid", not "is_valid")
+    assert!(data.get("valid").is_some(), "Should have valid field");
+    assert_eq!(data["valid"], expected_valid, "valid should match expected result");
+
+    assert!(data.get("checks").is_some(), "Should have checks field");
+    let checks = data["checks"].as_array().expect("checks should be array");
+    assert!(!checks.is_empty(), "Should have at least one validation check");
+
+    // Verify each check has required fields (note: no "description" field, only "name", "passed", and optional "error")
+    for check in checks {
+        assert!(check.get("name").is_some(), "Check should have name");
+        assert!(check.get("passed").is_some(), "Check should have passed field");
+        // error field is optional, only present when check failed
+    }
+}
+
 // ============================================================================
 // Config Show Command Tests
 // ============================================================================
@@ -120,8 +189,9 @@ async fn test_config_show_displays_current() {
 
     let args = ConfigShowArgs {};
 
-    // ACT: Execute config show command
-    let result = execute_show(&args, workspace.root(), None, OutputFormat::Human).await;
+    // ACT: Execute config show command with captured output
+    let (output, _buffer) = create_test_output(OutputFormat::Human);
+    let result = execute_show(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Command should succeed
     assert!(result.is_ok(), "Config show should succeed: {:?}", result.err());
@@ -130,7 +200,7 @@ async fn test_config_show_displays_current() {
 /// Test: Config show outputs valid JSON format
 ///
 /// Verifies that the `config show` command outputs valid JSON when the
-/// JSON format is requested.
+/// JSON format is requested and that the output contains all expected fields.
 #[tokio::test]
 async fn test_config_show_json_output() {
     // ARRANGE: Create workspace with configuration
@@ -142,14 +212,17 @@ async fn test_config_show_json_output() {
 
     let args = ConfigShowArgs {};
 
-    // ACT: Execute config show command with JSON format
-    let result = execute_show(&args, workspace.root(), None, OutputFormat::Json).await;
+    // ACT: Execute config show command with JSON format and captured output
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_show(&args, &output, workspace.root(), None).await;
 
-    // ASSERT: Command should succeed and output should be valid JSON
+    // ASSERT: Command should succeed
     assert!(result.is_ok(), "Config show with JSON format should succeed: {:?}", result.err());
 
-    // The actual JSON output validation happens in the command implementation
-    // We verify the command completes without errors
+    // Verify JSON output structure
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_config_show_json_output(&json_str);
 }
 
 /// Test: Config show with missing config file uses defaults
@@ -163,11 +236,24 @@ async fn test_config_show_missing_config_uses_defaults() {
 
     let args = ConfigShowArgs {};
 
-    // ACT: Execute config show command (no config file exists)
-    let result = execute_show(&args, workspace.root(), None, OutputFormat::Human).await;
+    // ACT: Execute config show command (no config file exists) with captured output
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_show(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Command should succeed and show defaults
     assert!(result.is_ok(), "Config show should succeed with defaults: {:?}", result.err());
+
+    // Verify JSON output is valid (will have defaults)
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_config_show_json_output(&json_str);
+
+    // Verify it uses default strategy
+    let json: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+    assert_eq!(
+        json["data"]["version"]["strategy"], "independent",
+        "Should use default independent strategy"
+    );
 }
 
 /// Test: Config show with custom config path
@@ -186,12 +272,18 @@ async fn test_config_show_with_custom_config_path() {
 
     let args = ConfigShowArgs {};
 
-    // ACT: Execute config show with custom path
+    // ACT: Execute config show with custom path and captured output
+    let (output, buffer) = create_shared_json_output();
     let result =
-        execute_show(&args, workspace.root(), Some(&custom_config_path), OutputFormat::Human).await;
+        execute_show(&args, &output, workspace.root(), Some(custom_config_path.as_path())).await;
 
     // ASSERT: Command should succeed
     assert!(result.is_ok(), "Config show with custom path should succeed: {:?}", result.err());
+
+    // Verify JSON output
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_config_show_json_output(&json_str);
 }
 
 /// Test: Config show with non-existent custom config path fails
@@ -207,8 +299,9 @@ async fn test_config_show_custom_path_not_found() {
     let args = ConfigShowArgs {};
 
     // ACT: Execute config show with non-existent path
+    let output = create_quiet_output();
     let result =
-        execute_show(&args, workspace.root(), Some(&non_existent_path), OutputFormat::Human).await;
+        execute_show(&args, &output, workspace.root(), Some(non_existent_path.as_path())).await;
 
     // ASSERT: Command should fail with appropriate error
     assert!(result.is_err(), "Config show should fail with non-existent custom path");
@@ -229,8 +322,9 @@ async fn test_config_show_quiet_output() {
 
     let args = ConfigShowArgs {};
 
-    // ACT: Execute config show with quiet format
-    let result = execute_show(&args, workspace.root(), None, OutputFormat::Quiet).await;
+    // ACT: Execute config show with quiet format and captured output
+    let (output, _buffer) = create_test_output(OutputFormat::Quiet);
+    let result = execute_show(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Command should succeed
     assert!(result.is_ok(), "Config show with quiet format should succeed: {:?}", result.err());
@@ -255,11 +349,17 @@ async fn test_config_validate_valid_config() {
 
     let args = ConfigValidateArgs {};
 
-    // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    // ACT: Execute config validate command with captured output
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should succeed
     assert!(result.is_ok(), "Config validate should succeed with valid config: {:?}", result.err());
+
+    // Verify JSON output
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_config_validate_json_output(&json_str, true);
 }
 
 /// Test: Config validate fails with invalid configuration
@@ -277,8 +377,9 @@ async fn test_config_validate_invalid_config() {
 
     let args = ConfigValidateArgs {};
 
-    // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    // ACT: Execute config validate command with captured output
+    let output = create_quiet_output();
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should fail
     assert!(result.is_err(), "Config validate should fail with invalid config");
@@ -296,7 +397,8 @@ async fn test_config_validate_missing_file() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate command (no config exists)
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = create_quiet_output();
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should fail with missing file error
     assert!(result.is_err(), "Config validate should fail when config file is missing");
@@ -317,11 +419,17 @@ async fn test_config_validate_json_output() {
 
     let args = ConfigValidateArgs {};
 
-    // ACT: Execute config validate with JSON format
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Json).await;
+    // ACT: Execute config validate with JSON format and captured output
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should succeed and output JSON
     assert!(result.is_ok(), "Config validate with JSON output should succeed: {:?}", result.err());
+
+    // Verify JSON output structure
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_config_validate_json_output(&json_str, true);
 }
 
 /// Test: Config validate with custom config path
@@ -340,13 +448,18 @@ async fn test_config_validate_with_custom_path() {
 
     let args = ConfigValidateArgs {};
 
-    // ACT: Execute config validate with custom path
+    // ACT: Execute config validate with custom path and captured output
+    let (output, buffer) = create_shared_json_output();
     let result =
-        execute_validate(&args, workspace.root(), Some(&custom_config_path), OutputFormat::Human)
-            .await;
+        execute_validate(&args, &output, workspace.root(), Some(&custom_config_path)).await;
 
     // ASSERT: Validation should succeed
     assert!(result.is_ok(), "Config validate with custom path should succeed: {:?}", result.err());
+
+    // Verify JSON output
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_config_validate_json_output(&json_str, true);
 }
 
 /// Test: Config validate with custom path not found
@@ -362,9 +475,8 @@ async fn test_config_validate_custom_path_not_found() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate with non-existent path
-    let result =
-        execute_validate(&args, workspace.root(), Some(&non_existent_path), OutputFormat::Human)
-            .await;
+    let output = create_quiet_output();
+    let result = execute_validate(&args, &output, workspace.root(), Some(&non_existent_path)).await;
 
     // ASSERT: Validation should fail
     assert!(result.is_err(), "Config validate should fail with non-existent custom path");
@@ -385,8 +497,9 @@ async fn test_config_validate_quiet_output() {
 
     let args = ConfigValidateArgs {};
 
-    // ACT: Execute config validate with quiet format
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Quiet).await;
+    // ACT: Execute config validate with quiet format and captured output
+    let (output, _buffer) = create_test_output(OutputFormat::Quiet);
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should succeed
     assert!(result.is_ok(), "Config validate with quiet format should succeed: {:?}", result.err());
@@ -411,11 +524,24 @@ async fn test_config_show_monorepo_independent() {
 
     let args = ConfigShowArgs {};
 
-    // ACT: Execute config show command
-    let result = execute_show(&args, workspace.root(), None, OutputFormat::Human).await;
+    // ACT: Execute config show command with captured output
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_show(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Command should succeed
     assert!(result.is_ok(), "Config show in monorepo should succeed: {:?}", result.err());
+
+    // Verify JSON output
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_config_show_json_output(&json_str);
+
+    // Verify strategy is independent
+    let json: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+    assert_eq!(
+        json["data"]["version"]["strategy"], "independent",
+        "Strategy should be independent"
+    );
 }
 
 /// Test: Config validate in monorepo with unified strategy
@@ -481,8 +607,9 @@ async fn test_config_validate_monorepo_unified() {
 
     let args = ConfigValidateArgs {};
 
-    // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    // ACT: Execute config validate command with captured output
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should succeed
     assert!(
@@ -490,6 +617,11 @@ async fn test_config_validate_monorepo_unified() {
         "Config validate in unified monorepo should succeed: {:?}",
         result.err()
     );
+
+    // Verify JSON output
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_config_validate_json_output(&json_str, true);
 }
 
 // ============================================================================
@@ -559,7 +691,8 @@ async fn test_config_validate_conflicting_environments() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = create_quiet_output();
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should fail
     assert!(result.is_err(), "Config validate should fail with conflicting environments");
@@ -628,7 +761,8 @@ async fn test_config_validate_invalid_registry_url() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = create_quiet_output();
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should fail
     assert!(result.is_err(), "Config validate should fail with invalid registry URL");
@@ -697,7 +831,8 @@ async fn test_config_validate_invalid_snapshot_format() {
     let args = ConfigValidateArgs {};
 
     // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    let output = create_quiet_output();
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should fail
     assert!(result.is_err(), "Config validate should fail with invalid snapshot format");
@@ -769,11 +904,17 @@ min_severity = "info"
 
     let args = ConfigShowArgs {};
 
-    // ACT: Execute config show command
-    let result = execute_show(&args, workspace.root(), None, OutputFormat::Human).await;
+    // ACT: Execute config show command with captured output
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_show(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Command should succeed with TOML format
     assert!(result.is_ok(), "Config show should succeed with TOML format: {:?}", result.err());
+
+    // Verify JSON output
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_config_show_json_output(&json_str);
 }
 
 /// Test: Config show with YAML format configuration
@@ -839,11 +980,17 @@ audit:
 
     let args = ConfigShowArgs {};
 
-    // ACT: Execute config show command
-    let result = execute_show(&args, workspace.root(), None, OutputFormat::Human).await;
+    // ACT: Execute config show command with captured output
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_show(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Command should succeed with YAML format
     assert!(result.is_ok(), "Config show should succeed with YAML format: {:?}", result.err());
+
+    // Verify JSON output
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_config_show_json_output(&json_str);
 }
 
 /// Test: Config validate with TOML format configuration
@@ -908,11 +1055,17 @@ min_severity = "info"
 
     let args = ConfigValidateArgs {};
 
-    // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    // ACT: Execute config validate command with captured output
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should succeed with TOML format
     assert!(result.is_ok(), "Config validate should succeed with TOML format: {:?}", result.err());
+
+    // Verify JSON output
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_config_validate_json_output(&json_str, true);
 }
 
 /// Test: Config validate with YAML format configuration
@@ -978,9 +1131,15 @@ audit:
 
     let args = ConfigValidateArgs {};
 
-    // ACT: Execute config validate command
-    let result = execute_validate(&args, workspace.root(), None, OutputFormat::Human).await;
+    // ACT: Execute config validate command with captured output
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_validate(&args, &output, workspace.root(), None).await;
 
     // ASSERT: Validation should succeed with YAML format
     assert!(result.is_ok(), "Config validate should succeed with YAML format: {:?}", result.err());
+
+    // Verify JSON output
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_config_validate_json_output(&json_str, true);
 }

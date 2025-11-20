@@ -45,7 +45,7 @@
 
 use crate::cli::commands::{ConfigShowArgs, ConfigValidateArgs};
 use crate::error::{CliError, Result};
-use crate::output::{JsonResponse, OutputFormat};
+use crate::output::{JsonResponse, Output, OutputFormat};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
@@ -62,9 +62,9 @@ use tracing::{debug, info, warn};
 /// # Arguments
 ///
 /// * `_args` - Command arguments (currently unused but reserved for future options)
+/// * `output` - Output handler for formatting command results
 /// * `root` - Workspace root directory
 /// * `config_path` - Optional path to config file (from global `--config` option)
-/// * `format` - Output format for the command result
 ///
 /// # Returns
 ///
@@ -82,20 +82,21 @@ use tracing::{debug, info, warn};
 /// ```rust,ignore
 /// use sublime_cli_tools::commands::config::execute_show;
 /// use sublime_cli_tools::cli::commands::ConfigShowArgs;
-/// use sublime_cli_tools::output::OutputFormat;
+/// use sublime_cli_tools::output::{Output, OutputFormat};
 /// use std::path::Path;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let args = ConfigShowArgs {};
-/// execute_show(&args, Path::new("."), None, OutputFormat::Human).await?;
+/// let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+/// execute_show(&args, &output, Path::new("."), None).await?;
 /// # Ok(())
 /// # }
 /// ```
 pub async fn execute_show(
     _args: &ConfigShowArgs,
+    output: &Output,
     root: &Path,
     config_path: Option<&Path>,
-    format: OutputFormat,
 ) -> Result<()> {
     debug!("Loading configuration from: {}", root.display());
 
@@ -152,10 +153,73 @@ pub async fn execute_show(
     };
 
     // Output based on format
-    match format {
-        OutputFormat::Human => output_human_format(&config, is_default),
-        OutputFormat::Json | OutputFormat::JsonCompact => output_json_format(&config, format)?,
-        OutputFormat::Quiet => output_quiet_format(&config),
+    match output.format() {
+        OutputFormat::Human => {
+            output.blank_line()?;
+            output.success("Workspace Configuration")?;
+
+            if is_default {
+                output.warning("Using default configuration (no config file found)")?;
+            }
+
+            output.blank_line()?;
+
+            // Strategy
+            let strategy_str = match config.version.strategy {
+                sublime_pkg_tools::types::VersioningStrategy::Independent => "independent",
+                sublime_pkg_tools::types::VersioningStrategy::Unified => "unified",
+            };
+            output.info(&format!("  Strategy: {strategy_str}"))?;
+
+            // Changeset configuration
+            output.info(&format!("  Changeset Path: {}", config.changeset.path))?;
+            let envs = config.changeset.available_environments.join(", ");
+            output.info(&format!("  Environments: {envs}"))?;
+            let default_envs = config.changeset.default_environments.join(", ");
+            output.info(&format!("  Default Environments: {default_envs}"))?;
+
+            // Version configuration
+            output.info(&format!("  Default Bump: {}", config.version.default_bump))?;
+            output.info(&format!("  Snapshot Format: {}", config.version.snapshot_format))?;
+
+            // Registry configuration
+            output.info(&format!("  Registry: {}", config.upgrade.registry.default_registry))?;
+
+            // Additional settings
+            output.blank_line()?;
+            output.info("Additional Settings:")?;
+            output.info(&format!("  History Path: {}", config.changeset.history_path))?;
+            output.info(&format!("  Changelog Enabled: {}", config.changelog.enabled))?;
+            output.info(&format!("  Audit Enabled: {}", config.audit.enabled))?;
+
+            // Dependency propagation settings
+            output.blank_line()?;
+            output.info("Dependency Propagation:")?;
+            output.info(&format!(
+                "  Propagate Dependencies: {}",
+                config.dependency.propagate_dependencies
+            ))?;
+            output.info(&format!(
+                "  Propagate Dev Dependencies: {}",
+                config.dependency.propagate_dev_dependencies
+            ))?;
+            output.info(&format!("  Max Depth: {}", config.dependency.max_depth))?;
+
+            output.blank_line()?;
+        }
+        OutputFormat::Json | OutputFormat::JsonCompact => {
+            // Convert to serializable structure
+            let config_data = ConfigShowData::from(&config);
+            let response = JsonResponse::success(config_data);
+            output.json(&response)?;
+        }
+        OutputFormat::Quiet => {
+            let strategy_str = match config.version.strategy {
+                sublime_pkg_tools::types::VersioningStrategy::Independent => "independent",
+                sublime_pkg_tools::types::VersioningStrategy::Unified => "unified",
+            };
+            output.plain(strategy_str)?;
+        }
     }
 
     Ok(())
@@ -178,9 +242,9 @@ pub async fn execute_show(
 /// # Arguments
 ///
 /// * `_args` - Command arguments (currently unused but reserved for future options)
+/// * `output` - Output handler for formatting command results
 /// * `root` - Workspace root directory
 /// * `config_path` - Optional path to config file (from global `--config` option)
-/// * `format` - Output format for the command result
 ///
 /// # Returns
 ///
@@ -198,20 +262,21 @@ pub async fn execute_show(
 /// ```rust,ignore
 /// use sublime_cli_tools::commands::config::execute_validate;
 /// use sublime_cli_tools::cli::commands::ConfigValidateArgs;
-/// use sublime_cli_tools::output::OutputFormat;
+/// use sublime_cli_tools::output::{Output, OutputFormat};
 /// use std::path::Path;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let args = ConfigValidateArgs {};
-/// execute_validate(&args, Path::new("."), None, OutputFormat::Human).await?;
+/// let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+/// execute_validate(&args, &output, Path::new("."), None).await?;
 /// # Ok(())
 /// # }
 /// ```
 pub async fn execute_validate(
     _args: &ConfigValidateArgs,
+    output: &Output,
     root: &Path,
     config_path: Option<&Path>,
-    format: OutputFormat,
 ) -> Result<()> {
     debug!("Validating configuration from: {}", root.display());
 
@@ -282,14 +347,14 @@ pub async fn execute_validate(
     let is_valid = failed_checks == 0;
 
     // Output results based on format
-    match format {
+    match output.format() {
         OutputFormat::Human => {
-            output_validate_human(&validation_checks, is_valid, &config_file_path);
+            output_validate_human(&validation_checks, is_valid, &config_file_path, output)?;
         }
         OutputFormat::Json | OutputFormat::JsonCompact => {
-            output_validate_json(&validation_checks, is_valid, format)?;
+            output_validate_json(&validation_checks, is_valid, output)?;
         }
-        OutputFormat::Quiet => output_validate_quiet(is_valid),
+        OutputFormat::Quiet => output_validate_quiet(is_valid, output)?,
     }
 
     // Return error if validation failed
@@ -591,42 +656,45 @@ fn validate_snapshot_format(config: &PackageToolsConfig) -> ValidationCheck {
 }
 
 /// Output validation results in human-readable format.
-fn output_validate_human(checks: &[ValidationCheck], is_valid: bool, config_path: &Path) {
-    println!();
+fn output_validate_human(
+    checks: &[ValidationCheck],
+    is_valid: bool,
+    config_path: &Path,
+    output: &Output,
+) -> Result<()> {
+    output.blank_line()?;
+
     if is_valid {
-        println!("✓ Configuration is valid");
-        println!();
-        println!("Config file: {}", config_path.display());
-        println!();
-        println!("All checks passed:");
+        output.success("Configuration is valid")?;
+        output.blank_line()?;
+        output.info(&format!("Config file: {}", config_path.display()))?;
+        output.blank_line()?;
+        output.info("All checks passed:")?;
     } else {
-        println!("✗ Configuration validation failed");
-        println!();
-        println!("Config file: {}", config_path.display());
-        println!();
-        println!("Validation results:");
+        output.error("Configuration validation failed")?;
+        output.blank_line()?;
+        output.info(&format!("Config file: {}", config_path.display()))?;
+        output.blank_line()?;
+        output.info("Validation results:")?;
     }
 
     for check in checks {
         if check.passed {
-            println!("  ✓ {}", check.name);
+            output.success(&format!("  ✓ {}", check.name))?;
         } else {
-            println!("  ✗ {}", check.name);
+            output.error(&format!("  ✗ {}", check.name))?;
             if let Some(error) = &check.error {
-                println!("    Error: {error}");
+                output.info(&format!("    Error: {error}"))?;
             }
         }
     }
 
-    println!();
+    output.blank_line()?;
+    Ok(())
 }
 
 /// Output validation results in JSON format.
-fn output_validate_json(
-    checks: &[ValidationCheck],
-    is_valid: bool,
-    format: OutputFormat,
-) -> Result<()> {
+fn output_validate_json(checks: &[ValidationCheck], is_valid: bool, output: &Output) -> Result<()> {
     let response = if is_valid {
         JsonResponse::success(ValidationResult { valid: true, checks: checks.to_vec() })
     } else {
@@ -635,25 +703,18 @@ fn output_validate_json(
         JsonResponse::success(ValidationResult { valid: false, checks: checks.to_vec() })
     };
 
-    let json_str = if format == OutputFormat::JsonCompact {
-        serde_json::to_string(&response)
-            .map_err(|e| CliError::execution(format!("Failed to serialize JSON: {e}")))?
-    } else {
-        serde_json::to_string_pretty(&response)
-            .map_err(|e| CliError::execution(format!("Failed to serialize JSON: {e}")))?
-    };
-
-    println!("{json_str}");
+    output.json(&response)?;
     Ok(())
 }
 
 /// Output validation results in quiet format.
-fn output_validate_quiet(is_valid: bool) {
+fn output_validate_quiet(is_valid: bool, output: &Output) -> Result<()> {
     if is_valid {
-        println!("valid");
+        output.plain("valid")?;
     } else {
-        println!("invalid");
+        output.plain("invalid")?;
     }
+    Ok(())
 }
 
 /// Validation result structure for JSON output.
@@ -663,114 +724,6 @@ struct ValidationResult {
     valid: bool,
     /// List of validation checks performed
     checks: Vec<ValidationCheck>,
-}
-
-/// Output configuration in human-readable format.</parameter>
-///
-/// Displays configuration in organized sections with clear labels and formatting.
-/// Indicates if default configuration is being used.
-fn output_human_format(config: &PackageToolsConfig, is_default: bool) {
-    use crate::output::styling::{
-        Section, StatusSymbol, print_bullet, print_item, print_separator,
-    };
-    use console::Color;
-
-    // Main section
-    let section = Section::new("Configuration");
-    section.print();
-
-    if is_default {
-        StatusSymbol::Warning.print_line("No configuration file found. Showing default values.");
-        print_separator();
-    }
-
-    // Strategy
-    let strategy_str = match config.version.strategy {
-        sublime_pkg_tools::types::VersioningStrategy::Independent => "independent",
-        sublime_pkg_tools::types::VersioningStrategy::Unified => "unified",
-    };
-    let strategy_color = match config.version.strategy {
-        sublime_pkg_tools::types::VersioningStrategy::Independent => Color::Green,
-        sublime_pkg_tools::types::VersioningStrategy::Unified => Color::Blue,
-    };
-    print_bullet(&format!("Strategy: {strategy_str}"), strategy_color);
-    print_separator();
-
-    // Changeset configuration
-    print_item("Changeset Path", &config.changeset.path, false);
-    let envs = config.changeset.available_environments.join(", ");
-    print_item("Environments", &envs, false);
-    let default_envs = config.changeset.default_environments.join(", ");
-    print_item("Default Environments", &default_envs, false);
-
-    // Version configuration
-    let default_bump = &config.version.default_bump;
-    print_item("Default Bump", default_bump, false);
-    let snapshot_format = &config.version.snapshot_format;
-    print_item("Snapshot Format", snapshot_format, false);
-
-    // Registry configuration
-    let registry = &config.upgrade.registry.default_registry;
-    print_item("Registry", registry, false);
-
-    // Additional settings
-    let section = Section::new("Additional Settings");
-    section.print();
-
-    let history_path = &config.changeset.history_path;
-    print_item("History Path", history_path, false);
-    let changelog_enabled = config.changelog.enabled;
-    print_item("Changelog Enabled", &changelog_enabled.to_string(), false);
-    let audit_enabled = config.audit.enabled;
-    print_item("Audit Enabled", &audit_enabled.to_string(), false);
-
-    // Dependency propagation settings
-    let section = Section::new("Dependency Propagation");
-    section.print();
-
-    let prop_deps = config.dependency.propagate_dependencies;
-    print_item("Propagate Dependencies", &prop_deps.to_string(), false);
-    let prop_dev_deps = config.dependency.propagate_dev_dependencies;
-    print_item("Propagate Dev Dependencies", &prop_dev_deps.to_string(), false);
-    let max_depth = config.dependency.max_depth;
-    print_item("Max Depth", &max_depth.to_string(), true);
-}
-
-/// Output configuration in JSON format.
-///
-/// Serializes the configuration as a JsonResponse structure for machine-readable
-/// output. Uses pretty printing for Json format and compact for JsonCompact.
-///
-/// # Errors
-///
-/// Returns an error if JSON serialization fails.
-fn output_json_format(config: &PackageToolsConfig, format: OutputFormat) -> Result<()> {
-    // Convert to serializable structure
-    let config_data = ConfigShowData::from(config);
-    let response = JsonResponse::success(config_data);
-
-    // Serialize based on format
-    let json_str = if format == OutputFormat::JsonCompact {
-        serde_json::to_string(&response)
-            .map_err(|e| CliError::execution(format!("Failed to serialize JSON: {e}")))?
-    } else {
-        serde_json::to_string_pretty(&response)
-            .map_err(|e| CliError::execution(format!("Failed to serialize JSON: {e}")))?
-    };
-
-    println!("{json_str}");
-    Ok(())
-}
-
-/// Output configuration in quiet format.
-///
-/// Displays only essential information in a minimal format.
-fn output_quiet_format(config: &PackageToolsConfig) {
-    let strategy_str = match config.version.strategy {
-        sublime_pkg_tools::types::VersioningStrategy::Independent => "independent",
-        sublime_pkg_tools::types::VersioningStrategy::Unified => "unified",
-    };
-    println!("{strategy_str}");
 }
 
 /// Serializable configuration data for JSON output.

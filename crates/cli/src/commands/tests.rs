@@ -152,7 +152,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -174,7 +180,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init failed: {result:?}");
 
@@ -228,7 +240,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init failed: {result:?}");
 
@@ -256,7 +274,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init failed: {result:?}");
 
@@ -288,7 +312,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -314,7 +344,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init with force failed: {result:?}");
 
@@ -340,7 +376,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -362,7 +404,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -384,7 +432,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -406,7 +460,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -428,7 +488,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init with defaults failed: {result:?}");
 
@@ -461,7 +527,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init failed: {result:?}");
 
@@ -488,7 +560,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init on monorepo failed: {result:?}");
 
@@ -513,7 +591,13 @@ mod init_tests {
         };
 
         // This would normally print to stdout, we're just testing it doesn't panic
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Json).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Json, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init with JSON output failed: {result:?}");
     }
@@ -533,7 +617,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init with custom path failed: {result:?}");
 
@@ -561,7 +651,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
 
         assert!(result.is_ok(), "Init with multiple defaults failed: {result:?}");
     }
@@ -582,7 +678,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
         assert!(result.is_ok(), "First init failed: {result:?}");
 
         let gitignore_path = temp_dir.path().join(".gitignore");
@@ -593,7 +695,13 @@ mod init_tests {
         // Initialize again with force
         let args_force = InitArgs { force: true, ..args };
 
-        let result = execute_init(&args_force, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args_force,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
         assert!(result.is_ok(), "Second init failed: {result:?}");
 
         let gitignore_content_after = fs::read_to_string(&gitignore_path)
@@ -628,7 +736,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
         assert!(result.is_ok(), "Init failed for empty monorepo: {result:?}");
 
         // Read generated config
@@ -671,7 +785,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
         assert!(result.is_ok(), "Init failed for monorepo with patterns: {result:?}");
 
         // Read generated config
@@ -712,7 +832,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
         assert!(result.is_ok(), "Init failed for object-format workspaces: {result:?}");
 
         // Read generated config
@@ -754,7 +880,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
         assert!(result.is_ok(), "Init failed for single package: {result:?}");
 
         // Read generated config
@@ -792,7 +924,13 @@ mod init_tests {
             non_interactive: true,
         };
 
-        let result = execute_init(&args, temp_dir.path(), OutputFormat::Quiet).await;
+        let result = execute_init(
+            &args,
+            &crate::output::Output::new(OutputFormat::Quiet, std::io::sink(), true),
+            temp_dir.path(),
+            None,
+        )
+        .await;
         assert!(result.is_ok(), "Failed to initialize empty monorepo: {result:?}");
 
         // Step 2: Verify all directories created
@@ -1128,7 +1266,7 @@ mod changes_tests {
 mod config_tests {
     use crate::cli::commands::{ConfigShowArgs, ConfigValidateArgs};
     use crate::commands::config::{execute_show, execute_validate};
-    use crate::output::OutputFormat;
+    use crate::output::{Output, OutputFormat};
     use std::fs;
     use tempfile::TempDir;
 
@@ -1167,7 +1305,8 @@ mod config_tests {
         create_config_file(&temp_dir, "toml");
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config show failed: {result:?}");
     }
@@ -1178,7 +1317,8 @@ mod config_tests {
         create_config_file(&temp_dir, "json");
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config show with JSON config failed: {result:?}");
     }
@@ -1189,7 +1329,8 @@ mod config_tests {
         create_config_file(&temp_dir, "yaml");
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config show with YAML config failed: {result:?}");
     }
@@ -1200,7 +1341,8 @@ mod config_tests {
         // Don't create config file
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         // Should succeed with default config
         assert!(result.is_ok(), "Config show without config should use defaults: {result:?}");
@@ -1212,7 +1354,8 @@ mod config_tests {
         create_config_file(&temp_dir, "toml");
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::Human).await;
+        let output = Output::new(OutputFormat::Human, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config show in human format failed: {result:?}");
     }
@@ -1223,7 +1366,8 @@ mod config_tests {
         create_config_file(&temp_dir, "toml");
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::Json).await;
+        let output = Output::new(OutputFormat::Json, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config show in JSON format failed: {result:?}");
     }
@@ -1234,7 +1378,8 @@ mod config_tests {
         create_config_file(&temp_dir, "toml");
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::JsonCompact).await;
+        let output = Output::new(OutputFormat::JsonCompact, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config show in JSON compact format failed: {result:?}");
     }
@@ -1245,7 +1390,8 @@ mod config_tests {
         create_config_file(&temp_dir, "toml");
 
         let args = ConfigShowArgs {};
-        let result = execute_show(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::stdout(), false);
+        let result = execute_show(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config show in quiet format failed: {result:?}");
     }
@@ -1258,7 +1404,8 @@ mod config_tests {
         // Don't create config file
 
         let args = ConfigValidateArgs {};
-        let result = execute_validate(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_err(), "Config validate should fail without config file");
         let err = result.unwrap_err();
@@ -1274,7 +1421,8 @@ mod config_tests {
         create_config_file(&temp_dir, "toml");
 
         let args = ConfigValidateArgs {};
-        let result = execute_validate(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config validate should pass with valid TOML config: {result:?}");
     }
@@ -1285,7 +1433,8 @@ mod config_tests {
         create_config_file(&temp_dir, "json");
 
         let args = ConfigValidateArgs {};
-        let result = execute_validate(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config validate should pass with valid JSON config: {result:?}");
     }
@@ -1296,7 +1445,8 @@ mod config_tests {
         create_config_file(&temp_dir, "yaml");
 
         let args = ConfigValidateArgs {};
-        let result = execute_validate(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config validate should pass with valid YAML config: {result:?}");
     }
@@ -1380,7 +1530,8 @@ version_consistency = true
             .expect("Failed to write config");
 
         let args = ConfigValidateArgs {};
-        let result = execute_validate(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_err(), "Config validate should fail with empty environments");
     }
@@ -1460,7 +1611,8 @@ version_consistency = true
             .expect("Failed to write config");
 
         let args = ConfigValidateArgs {};
-        let result = execute_validate(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), None).await;
 
         assert!(
             result.is_err(),
@@ -1543,7 +1695,8 @@ version_consistency = true
             .expect("Failed to write config");
 
         let args = ConfigValidateArgs {};
-        let result = execute_validate(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_err(), "Config validate should fail with invalid registry URL");
     }
@@ -1623,7 +1776,8 @@ version_consistency = true
             .expect("Failed to write config");
 
         let args = ConfigValidateArgs {};
-        let result = execute_validate(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_err(), "Config validate should fail with invalid bump type");
     }
@@ -1703,7 +1857,8 @@ version_consistency = true
             .expect("Failed to write config");
 
         let args = ConfigValidateArgs {};
-        let result = execute_validate(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), None).await;
 
         assert!(
             result.is_err(),
@@ -1717,7 +1872,8 @@ version_consistency = true
         create_config_file(&temp_dir, "toml");
 
         let args = ConfigValidateArgs {};
-        let result = execute_validate(&args, temp_dir.path(), None, OutputFormat::Human).await;
+        let output = Output::new(OutputFormat::Human, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config validate in human format failed: {result:?}");
     }
@@ -1728,7 +1884,8 @@ version_consistency = true
         create_config_file(&temp_dir, "toml");
 
         let args = ConfigValidateArgs {};
-        let result = execute_validate(&args, temp_dir.path(), None, OutputFormat::Json).await;
+        let output = Output::new(OutputFormat::Json, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config validate in JSON format failed: {result:?}");
     }
@@ -1739,8 +1896,8 @@ version_consistency = true
         create_config_file(&temp_dir, "toml");
 
         let args = ConfigValidateArgs {};
-        let result =
-            execute_validate(&args, temp_dir.path(), None, OutputFormat::JsonCompact).await;
+        let output = Output::new(OutputFormat::JsonCompact, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config validate in JSON compact format failed: {result:?}");
     }
@@ -1751,7 +1908,8 @@ version_consistency = true
         create_config_file(&temp_dir, "toml");
 
         let args = ConfigValidateArgs {};
-        let result = execute_validate(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), None).await;
 
         assert!(result.is_ok(), "Config validate in quiet format failed: {result:?}");
     }
@@ -1831,7 +1989,8 @@ version_consistency = true
             .expect("Failed to write config");
 
         let args = ConfigValidateArgs {};
-        let result = execute_validate(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), None).await;
 
         assert!(
             result.is_err(),
@@ -1847,7 +2006,8 @@ version_consistency = true
         fs::create_dir(temp_dir.path().join(".changesets")).expect("Failed to create directory");
 
         let args = ConfigValidateArgs {};
-        let result = execute_validate(&args, temp_dir.path(), None, OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), None).await;
 
         assert!(
             result.is_ok(),
@@ -1866,8 +2026,9 @@ version_consistency = true
 
         let args = ConfigShowArgs {};
         let custom_path = temp_dir.path().join("custom.toml");
+        let output = Output::new(OutputFormat::Quiet, std::io::stdout(), false);
         let result =
-            execute_show(&args, temp_dir.path(), Some(&custom_path), OutputFormat::Quiet).await;
+            execute_show(&args, &output, temp_dir.path(), Some(custom_path.as_path())).await;
 
         assert!(result.is_ok(), "Config show should work with custom config path: {result:?}");
     }
@@ -1878,8 +2039,9 @@ version_consistency = true
 
         let args = ConfigShowArgs {};
         let custom_path = temp_dir.path().join("nonexistent.toml");
+        let output = Output::new(OutputFormat::Quiet, std::io::stdout(), false);
         let result =
-            execute_show(&args, temp_dir.path(), Some(&custom_path), OutputFormat::Quiet).await;
+            execute_show(&args, &output, temp_dir.path(), Some(custom_path.as_path())).await;
 
         assert!(result.is_err(), "Config show should fail with nonexistent custom config");
         let err = result.unwrap_err();
@@ -1900,8 +2062,8 @@ version_consistency = true
 
         let args = ConfigValidateArgs {};
         let custom_path = temp_dir.path().join("my-config.toml");
-        let result =
-            execute_validate(&args, temp_dir.path(), Some(&custom_path), OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), Some(&custom_path)).await;
 
         assert!(result.is_ok(), "Config validate should work with custom config path: {result:?}");
     }
@@ -1912,8 +2074,8 @@ version_consistency = true
 
         let args = ConfigValidateArgs {};
         let custom_path = temp_dir.path().join("missing.toml");
-        let result =
-            execute_validate(&args, temp_dir.path(), Some(&custom_path), OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), Some(&custom_path)).await;
 
         assert!(result.is_err(), "Config validate should fail with nonexistent custom config");
         let err = result.unwrap_err();
@@ -1937,8 +2099,8 @@ version_consistency = true
 
         let args = ConfigValidateArgs {};
         let custom_path = temp_dir.path().join("config/repo.config.toml");
-        let result =
-            execute_validate(&args, temp_dir.path(), Some(&custom_path), OutputFormat::Quiet).await;
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_validate(&args, &output, temp_dir.path(), Some(&custom_path)).await;
 
         assert!(
             result.is_ok(),

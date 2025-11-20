@@ -768,7 +768,9 @@ fn map_git_error(error: &sublime_git_tools::RepoError, url: &str) -> CliError {
 /// # Arguments
 ///
 /// * `args` - Clone command arguments containing URL, destination, and options
-/// * `format` - Output format for progress and messages
+/// * `output` - Output handler for consistent formatting across all commands
+/// * `root` - Root directory for the workspace
+/// * `config_path` - Optional path to configuration file
 ///
 /// # Returns
 ///
@@ -785,6 +787,9 @@ fn map_git_error(error: &sublime_git_tools::RepoError, url: &str) -> CliError {
 /// # Examples
 ///
 /// ```rust,ignore
+/// use sublime_cli_tools::output::{Output, OutputFormat};
+/// use std::io;
+///
 /// let args = CloneArgs {
 ///     url: "https://github.com/org/repo.git".to_string(),
 ///     destination: None,
@@ -793,13 +798,14 @@ fn map_git_error(error: &sublime_git_tools::RepoError, url: &str) -> CliError {
 ///     // ... other fields
 /// };
 ///
-/// execute_clone(&args, Path::new("."), None, OutputFormat::Human).await?;
+/// let output = Output::new(OutputFormat::Human, io::stdout(), false);
+/// execute_clone(&args, &output, Path::new("."), None).await?;
 /// ```
 pub async fn execute_clone(
     args: &CloneArgs,
+    output: &crate::output::Output,
     root: &Path,
     config_path: Option<&Path>,
-    format: OutputFormat,
 ) -> Result<()> {
     // Step 1: Determine destination directory
     let destination = determine_destination(&args.url, args.destination.as_ref())?;
@@ -828,7 +834,7 @@ pub async fn execute_clone(
 
     // Step 5: Clone repository with progress
     debug!("Cloning repository from {} to {}", args.url, final_destination.display());
-    let _repo = clone_with_progress(&args.url, &final_destination, args.depth, format)?;
+    let _repo = clone_with_progress(&args.url, &final_destination, args.depth, output.format())?;
     info!("Repository cloned successfully to {}", final_destination.display());
 
     // Step 6: Detect workspace configuration (Story 11.3)
@@ -846,7 +852,8 @@ pub async fn execute_clone(
             false
         } else {
             debug!("Validating workspace configuration");
-            output_validation_starting(format);
+            output.info("Validating workspace configuration...")?;
+
             let validation = validate_workspace(&final_destination).await?;
 
             if !validation.is_valid {
@@ -857,16 +864,38 @@ pub async fn execute_clone(
             }
 
             info!("Workspace configuration validated successfully");
-            output_validation_success(&validation, format);
+
+            // Output validation success details
+            output.success("Workspace configuration is valid")?;
+
+            if let Some(strategy) = &validation.strategy {
+                let strategy_str = match strategy {
+                    VersioningStrategy::Independent => "independent",
+                    VersioningStrategy::Unified => "unified",
+                };
+                output.info(&format!("  Strategy: {strategy_str}"))?;
+            }
+
+            output.blank_line()?;
+            output.info("  All validation checks passed:")?;
+            for check in &validation.checks {
+                if check.passed {
+                    output.info(&format!("    ✓ {}", check.name))?;
+                }
+            }
+            output.blank_line()?;
+
             true
         };
 
-        output_clone_complete(&final_destination, validated, format)?;
+        // Output clone completion (without init)
+        output_clone_complete_internal(&final_destination, validated, output)?;
     } else {
         info!("No workspace configuration found, initializing workspace");
 
         // No configuration - run init automatically
-        output_init_starting(format);
+        output.info("No workspace configuration found. Starting initialization...")?;
+        output.blank_line()?;
 
         // Convert CloneArgs to InitArgs with configuration merge
         // Note: No workspace config exists yet, so we only use CLI args + defaults
@@ -874,9 +903,37 @@ pub async fn execute_clone(
 
         // Execute init command
         debug!("Executing init to create workspace configuration");
-        crate::commands::init::execute_init(&init_args, &final_destination, format).await?;
 
-        output_clone_complete_with_init(&final_destination, format)?;
+        // For JSON output modes, we need to suppress init's output and only output clone's
+        // comprehensive JSON. For Human mode, we let init output and then add clone's message.
+        match output.format() {
+            OutputFormat::Json | OutputFormat::JsonCompact => {
+                // Create a quiet output for init to prevent double JSON output
+                use std::io::Cursor;
+                let buffer = Cursor::new(Vec::new());
+                let init_output = crate::output::Output::new(
+                    OutputFormat::Quiet,
+                    Box::new(buffer),
+                    output.no_color(),
+                );
+
+                crate::commands::init::execute_init(
+                    &init_args,
+                    &init_output,
+                    &final_destination,
+                    None,
+                )
+                .await?;
+            }
+            OutputFormat::Human | OutputFormat::Quiet => {
+                // For Human and Quiet modes, let init output normally
+                crate::commands::init::execute_init(&init_args, output, &final_destination, None)
+                    .await?;
+            }
+        }
+
+        // Output clone completion (with init)
+        output_clone_complete_with_init_internal(&final_destination, output)?;
     }
 
     Ok(())
@@ -985,88 +1042,44 @@ pub(crate) fn convert_to_init_args(
     }
 }
 
-/// Outputs "Starting initialization..." message.
-///
-/// # Arguments
-///
-/// * `format` - Output format to control message display
-#[allow(clippy::print_stdout)]
-fn output_init_starting(format: OutputFormat) {
-    match format {
-        OutputFormat::Human => {
-            println!("\n🔧 No workspace configuration found. Starting initialization...\n");
-        }
-        OutputFormat::Json | OutputFormat::JsonCompact | OutputFormat::Quiet => {}
-    }
-}
-
-/// Outputs "Starting validation..." message.
-///
-/// # Arguments
-///
-/// * `format` - Output format to control message display
-#[allow(clippy::print_stdout)]
-fn output_validation_starting(format: OutputFormat) {
-    match format {
-        OutputFormat::Human => {
-            println!("\n🔍 Validating workspace configuration...\n");
-        }
-        OutputFormat::Json | OutputFormat::JsonCompact | OutputFormat::Quiet => {}
-    }
-}
-
-/// Outputs validation success message with results.
-///
-/// # Arguments
-///
-/// * `validation` - Validation result details
-/// * `format` - Output format to control message display
-#[allow(clippy::print_stdout)]
-fn output_validation_success(validation: &ValidationResult, format: OutputFormat) {
-    match format {
-        OutputFormat::Human => {
-            println!("✓ Workspace configuration is valid\n");
-
-            if let Some(strategy) = &validation.strategy {
-                let strategy_str = match strategy {
-                    VersioningStrategy::Independent => "independent",
-                    VersioningStrategy::Unified => "unified",
-                };
-                println!("  Strategy: {strategy_str}");
-            }
-
-            println!("\n  All validation checks passed:");
-            for check in &validation.checks {
-                if check.passed {
-                    println!("    ✓ {}", check.name);
-                }
-            }
-            println!();
-        }
-        OutputFormat::Json | OutputFormat::JsonCompact | OutputFormat::Quiet => {}
-    }
-}
-/// Outputs clone completion message (without init).
+/// Outputs clone completion message (without init) using Output methods.
 ///
 /// # Arguments
 ///
 /// * `destination` - Destination directory path
 /// * `validated` - Whether workspace configuration was validated
-/// * `format` - Output format to control message display
+/// * `output` - Output handler for consistent formatting
 ///
 /// # Errors
 ///
 /// Returns an error if output writing fails.
-#[allow(clippy::print_stdout)]
-fn output_clone_complete(destination: &Path, validated: bool, format: OutputFormat) -> Result<()> {
-    match format {
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sublime_cli_tools::output::{Output, OutputFormat};
+/// use std::io;
+///
+/// let output = Output::new(OutputFormat::Human, io::stdout(), false);
+/// output_clone_complete_internal(Path::new("./repo"), true, &output)?;
+/// ```
+fn output_clone_complete_internal(
+    destination: &Path,
+    validated: bool,
+    output: &crate::output::Output,
+) -> Result<()> {
+    match output.format() {
         OutputFormat::Human => {
-            println!("\n✓ Clone completed successfully!\n");
-            println!("  Location: {}\n", destination.display());
-            println!("Next steps:");
-            println!("  cd {}", destination.display());
-            println!("  workspace changeset add    # Create a changeset");
-            println!("  workspace bump --dry-run   # Preview version bump\n");
+            output.blank_line()?;
+            output.success("Clone completed successfully!")?;
+            output.blank_line()?;
+            output.info(&format!("  Location: {}", destination.display()))?;
+            output.blank_line()?;
+            output.info("Next steps:")?;
+            output.info(&format!("  cd {}", destination.display()))?;
+            output.info("  workspace changeset add    # Create a changeset")?;
+            output.info("  workspace bump --dry-run   # Preview version bump")?;
+            output.blank_line()?;
             Ok(())
         }
         OutputFormat::Json | OutputFormat::JsonCompact => {
@@ -1095,43 +1108,53 @@ fn output_clone_complete(destination: &Path, validated: bool, format: OutputForm
                 },
             };
 
-            let json = if format == OutputFormat::JsonCompact {
-                serde_json::to_string(&response)
-            } else {
-                serde_json::to_string_pretty(&response)
-            }
-            .map_err(|e| CliError::execution(format!("Failed to serialize JSON: {e}")))?;
-
-            println!("{json}");
+            let json_response = crate::output::JsonResponse::success(response);
+            output.json(&json_response)?;
             Ok(())
         }
         OutputFormat::Quiet => {
-            println!("Clone completed: {}", destination.display());
+            output.plain(&format!("Clone completed: {}", destination.display()))?;
             Ok(())
         }
     }
 }
 
-/// Outputs clone completion message (with init).
+/// Outputs clone completion message (with init) using Output methods.
 ///
 /// # Arguments
 ///
 /// * `destination` - Destination directory path
-/// * `format` - Output format to control message display
+/// * `output` - Output handler for consistent formatting
 ///
 /// # Errors
 ///
 /// Returns an error if output writing fails.
-#[allow(clippy::print_stdout)]
-fn output_clone_complete_with_init(destination: &Path, format: OutputFormat) -> Result<()> {
-    match format {
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sublime_cli_tools::output::{Output, OutputFormat};
+/// use std::io;
+///
+/// let output = Output::new(OutputFormat::Human, io::stdout(), false);
+/// output_clone_complete_with_init_internal(Path::new("./repo"), &output)?;
+/// ```
+fn output_clone_complete_with_init_internal(
+    destination: &Path,
+    output: &crate::output::Output,
+) -> Result<()> {
+    match output.format() {
         OutputFormat::Human => {
-            println!("\n✓ Clone and initialization completed successfully!\n");
-            println!("  Location: {}\n", destination.display());
-            println!("Next steps:");
-            println!("  cd {}", destination.display());
-            println!("  workspace changeset add    # Create your first changeset");
-            println!("  workspace bump --dry-run   # Preview version bump\n");
+            output.blank_line()?;
+            output.success("Clone and initialization completed successfully!")?;
+            output.blank_line()?;
+            output.info(&format!("  Location: {}", destination.display()))?;
+            output.blank_line()?;
+            output.info("Next steps:")?;
+            output.info(&format!("  cd {}", destination.display()))?;
+            output.info("  workspace changeset add    # Create your first changeset")?;
+            output.info("  workspace bump --dry-run   # Preview version bump")?;
+            output.blank_line()?;
             Ok(())
         }
         OutputFormat::Json | OutputFormat::JsonCompact => {
@@ -1155,18 +1178,12 @@ fn output_clone_complete_with_init(destination: &Path, format: OutputFormat) -> 
                 outcome: CloneOutcome::NewWorkspaceInitialized,
             };
 
-            let json = if format == OutputFormat::JsonCompact {
-                serde_json::to_string(&response)
-            } else {
-                serde_json::to_string_pretty(&response)
-            }
-            .map_err(|e| CliError::execution(format!("Failed to serialize JSON: {e}")))?;
-
-            println!("{json}");
+            let json_response = crate::output::JsonResponse::success(response);
+            output.json(&json_response)?;
             Ok(())
         }
         OutputFormat::Quiet => {
-            println!("Clone and init completed: {}", destination.display());
+            output.plain(&format!("Clone and init completed: {}", destination.display()))?;
             Ok(())
         }
     }
