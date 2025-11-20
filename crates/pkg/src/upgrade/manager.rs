@@ -172,7 +172,7 @@ impl UpgradeManager {
     /// Applies selected upgrades to package.json files.
     ///
     /// This is the main method for applying dependency upgrades. It:
-    /// 1. Creates automatic backups (if configured)
+    /// 1. Creates automatic backups (if configured and not overridden)
     /// 2. Applies the selected upgrades to package.json files
     /// 3. Creates or updates a changeset (if configured)
     /// 4. Cleans up backups on success (if configured)
@@ -186,6 +186,9 @@ impl UpgradeManager {
     ///
     /// * `selection` - Selection criteria for filtering which upgrades to apply
     /// * `dry_run` - If true, preview changes without modifying files
+    /// * `backup_enabled` - Optional override for backup creation. If `None`, uses config value.
+    ///   If `Some(false)`, skips backup creation regardless of config.
+    ///   If `Some(true)`, forces backup creation regardless of config.
     ///
     /// # Returns
     ///
@@ -195,31 +198,39 @@ impl UpgradeManager {
     /// # Errors
     ///
     /// Returns `UpgradeError` if:
-    /// - Backup creation fails
+    /// - Backup creation fails (when backups are enabled)
     /// - Files cannot be read or written
     /// - Changeset creation fails
     /// - JSON parsing fails
     ///
-    /// On error, any changes are automatically rolled back from the backup.
+    /// On error, any changes are automatically rolled back from the backup (if backup was created).
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust,ignore
     /// use sublime_pkg_tools::upgrade::UpgradeSelection;
     ///
-    /// # async fn example(manager: sublime_pkg_tools::upgrade::UpgradeManager) -> Result<(), Box<dyn std::error::Error>> {
-    /// // Preview changes (dry-run)
-    /// let preview = manager.apply_upgrades(UpgradeSelection::all(), true).await?;
+    /// # async fn example(mut manager: sublime_pkg_tools::upgrade::UpgradeManager) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Preview changes (dry-run) - no backups created
+    /// let preview = manager.apply_upgrades(UpgradeSelection::all(), true, None).await?;
     /// println!("Would upgrade {} dependencies", preview.summary.dependencies_upgraded);
     ///
-    /// // Apply patch upgrades only
-    /// let result = manager.apply_upgrades(UpgradeSelection::patch_only(), false).await?;
+    /// // Apply with default backup behavior from config
+    /// let result = manager.apply_upgrades(UpgradeSelection::patch_only(), false, None).await?;
     /// println!("Applied {} patch upgrades", result.summary.patch_upgrades);
     ///
-    /// // Apply specific dependencies
+    /// // Apply without backups (CI/CD scenario)
+    /// let result = manager.apply_upgrades(
+    ///     UpgradeSelection::all(),
+    ///     false,
+    ///     Some(false) // Explicitly disable backups
+    /// ).await?;
+    ///
+    /// // Apply with forced backups
     /// let result = manager.apply_upgrades(
     ///     UpgradeSelection::dependencies(vec!["lodash".to_string()]),
-    ///     false
+    ///     false,
+    ///     Some(true) // Explicitly enable backups
     /// ).await?;
     /// # Ok(())
     /// # }
@@ -228,6 +239,7 @@ impl UpgradeManager {
         &mut self,
         selection: UpgradeSelection,
         dry_run: bool,
+        backup_enabled: Option<bool>,
     ) -> UpgradeResult<UpgradeResultType> {
         // First, detect available upgrades
         let detection_options = self.selection_to_detection_options(&selection);
@@ -242,8 +254,11 @@ impl UpgradeManager {
             return apply_upgrades(preview.packages, selection, dry_run, &self.fs).await;
         }
 
+        // Determine effective backup setting (override takes precedence over config)
+        let should_backup = backup_enabled.unwrap_or(self.config.backup.enabled);
+
         // Create backup if enabled
-        let backup_id = if self.config.backup.enabled {
+        let backup_id = if should_backup {
             let files_to_backup = self.collect_package_json_files(&preview.packages)?;
             let backup_id = self.backup_manager.create_backup(&files_to_backup, "upgrade").await?;
             Some(backup_id)
@@ -286,23 +301,23 @@ impl UpgradeManager {
                     self.last_backup_id = Some(id.clone());
                 }
 
-                // Clean up backup if configured
-                if self.config.backup.enabled
+                // Clean up backup if configured (only if backup was actually created)
+                if should_backup
                     && !self.config.backup.keep_after_success
                     && let Some(id) = backup_id
                 {
                     let _ = self.backup_manager.delete_backup(&id).await;
                 }
 
-                // Clean up old backups
-                if self.config.backup.enabled {
+                // Clean up old backups (only if backups are enabled)
+                if should_backup {
                     let _ = self.backup_manager.cleanup_old_backups().await;
                 }
 
                 Ok(upgrade_result)
             }
             Err(e) => {
-                // Rollback on failure
+                // Rollback on failure (only if backup was created)
                 if let Some(id) = backup_id {
                     let _ = self.backup_manager.restore_backup(&id).await;
                     self.last_backup_id = Some(id);
@@ -335,7 +350,8 @@ impl UpgradeManager {
     /// // Apply upgrades
     /// let result = manager.apply_upgrades(
     ///     sublime_pkg_tools::upgrade::UpgradeSelection::all(),
-    ///     false
+    ///     false,
+    ///     None
     /// ).await?;
     ///
     /// // Later, if issues are discovered...
@@ -461,12 +477,4 @@ impl UpgradeManager {
     ) -> UpgradeResult<Vec<PathBuf>> {
         Ok(packages.iter().map(|pkg| pkg.package_path.join("package.json")).collect())
     }
-}
-
-#[cfg(test)]
-mod tests {
-    // Note: Full integration tests should be in the tests/ directory
-    // Unit tests for internal helper methods would go here, but the current
-    // implementation doesn't have testable private methods that warrant unit tests.
-    // The public API is better tested through integration tests with real fixtures.
 }

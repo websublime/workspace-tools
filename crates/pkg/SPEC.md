@@ -1822,9 +1822,10 @@ impl UpgradeManager {
     ) -> Result<Vec<PackageUpgrades>>;
     
     pub async fn apply_upgrades(
-        &self,
+        &mut self,
         selection: UpgradeSelection,
         dry_run: bool,
+        backup_enabled: Option<bool>,
     ) -> Result<UpgradeResult>;
     
     pub async fn apply_with_changeset(
@@ -1838,6 +1839,13 @@ impl UpgradeManager {
 }
 ```
 
+**Parameters:**
+
+- `backup_enabled` (optional): Override for backup creation behavior
+  - `None`: Uses the configured backup setting from `PackageToolsConfig`
+  - `Some(true)`: Forces backup creation regardless of configuration
+  - `Some(false)`: Skips backup creation regardless of configuration
+
 **Example:**
 ```rust
 use sublime_pkg_tools::upgrade::{UpgradeManager, DetectionOptions, UpgradeSelection};
@@ -1849,17 +1857,27 @@ let workspace_root = PathBuf::from(".");
 let fs = FileSystemManager::new();
 let config = PackageToolsConfig::default();
 
-let manager = UpgradeManager::new(workspace_root, fs, config).await?;
+let mut manager = UpgradeManager::new(workspace_root, fs, config).await?;
 
 // Detect upgrades
 let options = DetectionOptions::all();
 let available = manager.detect_upgrades(options).await?;
 println!("Found {} packages with upgrades", available.len());
 
-// Apply patch upgrades
+// Apply patch upgrades with default backup behavior (from config)
 let selection = UpgradeSelection::patch_only();
-let result = manager.apply_upgrades(selection, false).await?;
+let result = manager.apply_upgrades(selection, false, None).await?;
 println!("Applied {} upgrades", result.applied.len());
+
+// Apply upgrades without backups (CI/CD scenario)
+let selection = UpgradeSelection::all();
+let result = manager.apply_upgrades(selection, false, Some(false)).await?;
+println!("Applied {} upgrades without backup", result.applied.len());
+
+// Apply upgrades with forced backup
+let selection = UpgradeSelection::minor_and_patch();
+let result = manager.apply_upgrades(selection, false, Some(true)).await?;
+println!("Applied {} upgrades with backup: {:?}", result.applied.len(), result.backup_path);
 ```
 
 ### RegistryClient

@@ -696,7 +696,20 @@ pub struct UpgradeApplyArgs {
 
     /// Skip backup creation.
     ///
-    /// Does not create a backup before upgrading.
+    /// Does not create a backup before upgrading. Use with caution!
+    ///
+    /// Backups allow rollback via 'workspace upgrade backups restore'.
+    /// Without backups, you must rely on Git history for recovery.
+    ///
+    /// Recommended for:
+    /// - CI/CD pipelines with version control
+    /// - Testing environments
+    /// - When Git commits provide sufficient backup
+    ///
+    /// ⚠ Not recommended for:
+    /// - Production environments
+    /// - Uncommitted changes
+    /// - First-time users
     #[arg(long)]
     pub no_backup: bool,
 

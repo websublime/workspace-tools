@@ -223,3 +223,7 @@ mod manager;
 
 // Re-export manager public types
 pub use manager::UpgradeManager;
+
+// Tests module
+#[cfg(test)]
+mod tests;
