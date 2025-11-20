@@ -1,5 +1,9 @@
 # git-cliff ~ configuration file
 # https://git-cliff.org/docs/configuration
+#
+# Monorepo Configuration:
+# This configuration is used by release-plz with --include-path per package
+# to generate separate changelogs for each crate in the workspace.
 
 [changelog]
 # A Tera template to be rendered as the changelog's header.
