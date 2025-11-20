@@ -1162,3 +1162,208 @@ fn test_changeset_archive_policy_deserialization() {
     assert_eq!(never, ChangesetArchivePolicy::Never);
     assert_eq!(always, ChangesetArchivePolicy::Always);
 }
+
+// ============================================================================
+// PackageFilter Tests
+// ============================================================================
+
+/// Tests PackageFilter::new creates filter with packages.
+#[test]
+fn test_filter_new_creates_filter_with_packages() {
+    use super::filter::PackageFilter;
+
+    let packages = vec!["pkg1".to_string(), "pkg2".to_string()];
+    let filter = PackageFilter::new(packages.clone(), false);
+
+    assert_eq!(filter.package_count(), 2);
+    assert!(!filter.includes_dependencies());
+}
+
+/// Tests PackageFilter::should_bump returns true for filtered packages.
+#[test]
+fn test_filter_should_bump_returns_true_for_filtered_packages() {
+    use super::filter::PackageFilter;
+
+    let filter = PackageFilter::new(vec!["pkg1".to_string()], false);
+
+    assert!(filter.should_bump("pkg1"));
+    assert!(!filter.should_bump("pkg2"));
+}
+
+/// Tests PackageFilter::apply_to_changeset filters packages correctly.
+#[test]
+fn test_filter_apply_to_changeset_filters_packages() {
+    use super::filter::PackageFilter;
+    use sublime_pkg_tools::types::{Changeset, VersionBump};
+
+    let filter = PackageFilter::new(vec!["pkg1".to_string()], false);
+
+    let mut changeset = Changeset::new("main", VersionBump::Minor, vec!["prod".to_string()]);
+    changeset.add_package("pkg1");
+    changeset.add_package("pkg2");
+    changeset.add_package("pkg3");
+
+    let filtered = filter.apply_to_changeset(&changeset);
+
+    assert_eq!(filtered.packages.len(), 1);
+    assert!(filtered.packages.contains(&"pkg1".to_string()));
+    assert_eq!(filtered.branch, "main");
+    assert_eq!(filtered.bump, VersionBump::Minor);
+}
+
+/// Tests PackageFilter::apply_to_changeset preserves non-package fields.
+#[test]
+fn test_filter_apply_to_changeset_preserves_non_package_fields() {
+    use super::filter::PackageFilter;
+    use sublime_pkg_tools::types::{Changeset, VersionBump};
+
+    let filter = PackageFilter::new(vec!["pkg1".to_string()], false);
+
+    let mut changeset = Changeset::new("feature", VersionBump::Major, vec!["dev".to_string()]);
+    changeset.add_package("pkg1");
+    changeset.add_commit("abc123");
+
+    let filtered = filter.apply_to_changeset(&changeset);
+
+    assert_eq!(filtered.branch, "feature");
+    assert_eq!(filtered.bump, VersionBump::Major);
+    assert_eq!(filtered.environments, vec!["dev".to_string()]);
+    assert_eq!(filtered.changes.len(), 1);
+}
+
+/// Tests PackageFilter::validate succeeds for existing packages.
+#[test]
+fn test_filter_validate_succeeds_for_existing_packages() {
+    use super::filter::PackageFilter;
+
+    let filter = PackageFilter::new(vec!["pkg1".to_string(), "pkg2".to_string()], false);
+    let available = vec!["pkg1".to_string(), "pkg2".to_string(), "pkg3".to_string()];
+
+    assert!(filter.validate(&available).is_ok());
+}
+
+/// Tests PackageFilter::validate fails for non-existent package.
+#[test]
+fn test_filter_validate_fails_for_non_existent_package() {
+    use super::filter::PackageFilter;
+
+    let filter = PackageFilter::new(vec!["nonexistent".to_string()], false);
+    let available = vec!["pkg1".to_string(), "pkg2".to_string()];
+
+    let result = filter.validate(&available);
+    assert!(result.is_err());
+
+    if let Err(err) = result {
+        assert!(err.to_string().contains("nonexistent"));
+        assert!(err.to_string().contains("not found in workspace"));
+    }
+}
+
+/// Tests PackageFilter::validate error includes available packages.
+#[test]
+fn test_filter_validate_error_includes_available_packages() {
+    use super::filter::PackageFilter;
+
+    let filter = PackageFilter::new(vec!["wrong".to_string()], false);
+    let available = vec!["pkg1".to_string(), "pkg2".to_string()];
+
+    let result = filter.validate(&available);
+    assert!(result.is_err());
+
+    if let Err(err) = result {
+        assert!(err.to_string().contains("pkg1"));
+        assert!(err.to_string().contains("pkg2"));
+    }
+}
+
+/// Tests PackageFilter::includes_dependencies returns correct value.
+#[test]
+fn test_filter_includes_dependencies_returns_correct_value() {
+    use super::filter::PackageFilter;
+
+    let filter_without = PackageFilter::new(vec!["pkg1".to_string()], false);
+    let filter_with = PackageFilter::new(vec!["pkg1".to_string()], true);
+
+    assert!(!filter_without.includes_dependencies());
+    assert!(filter_with.includes_dependencies());
+}
+
+/// Tests PackageFilter::package_count returns correct count.
+#[test]
+fn test_filter_package_count_returns_correct_count() {
+    use super::filter::PackageFilter;
+
+    let filter_empty = PackageFilter::new(vec![], false);
+    let filter_one = PackageFilter::new(vec!["pkg1".to_string()], false);
+    let filter_multiple = PackageFilter::new(vec!["pkg1".to_string(), "pkg2".to_string()], false);
+
+    assert_eq!(filter_empty.package_count(), 0);
+    assert_eq!(filter_one.package_count(), 1);
+    assert_eq!(filter_multiple.package_count(), 2);
+}
+
+/// Tests PackageFilter::packages iterator works correctly.
+#[test]
+fn test_filter_packages_iterator() {
+    use super::filter::PackageFilter;
+
+    let packages = vec!["pkg1".to_string(), "pkg2".to_string()];
+    let filter = PackageFilter::new(packages.clone(), false);
+
+    let collected: Vec<_> = filter.packages().cloned().collect();
+    assert_eq!(collected.len(), 2);
+
+    // HashSet doesn't guarantee order, so check both are present
+    assert!(collected.contains(&"pkg1".to_string()));
+    assert!(collected.contains(&"pkg2".to_string()));
+}
+
+/// Tests PackageFilter with no matching packages in changeset.
+#[test]
+fn test_filter_with_no_matching_packages_in_changeset() {
+    use super::filter::PackageFilter;
+    use sublime_pkg_tools::types::{Changeset, VersionBump};
+
+    let filter = PackageFilter::new(vec!["pkg1".to_string()], false);
+
+    let mut changeset = Changeset::new("main", VersionBump::Patch, vec!["prod".to_string()]);
+    changeset.add_package("pkg2");
+    changeset.add_package("pkg3");
+
+    let filtered = filter.apply_to_changeset(&changeset);
+
+    assert_eq!(filtered.packages.len(), 0);
+    assert!(filtered.packages.is_empty());
+}
+
+/// Tests PackageFilter preserves duplicate package filtering.
+#[test]
+fn test_filter_preserves_duplicate_package_filtering() {
+    use super::filter::PackageFilter;
+    use sublime_pkg_tools::types::{Changeset, VersionBump};
+
+    let filter = PackageFilter::new(vec!["pkg1".to_string()], false);
+
+    let mut changeset = Changeset::new("main", VersionBump::Minor, vec!["prod".to_string()]);
+    changeset.add_package("pkg1");
+    changeset.add_package("pkg1"); // Duplicate (shouldn't happen in practice)
+    changeset.add_package("pkg2");
+
+    let filtered = filter.apply_to_changeset(&changeset);
+
+    // Should still have pkg1 (even if duplicated in original)
+    assert!(filtered.packages.contains(&"pkg1".to_string()));
+    assert!(!filtered.packages.contains(&"pkg2".to_string()));
+}
+
+/// Tests PackageFilter case-sensitive package matching.
+#[test]
+fn test_filter_case_sensitive_package_matching() {
+    use super::filter::PackageFilter;
+
+    let filter = PackageFilter::new(vec!["Pkg1".to_string()], false);
+
+    assert!(filter.should_bump("Pkg1"));
+    assert!(!filter.should_bump("pkg1")); // Different case
+    assert!(!filter.should_bump("PKG1")); // Different case
+}

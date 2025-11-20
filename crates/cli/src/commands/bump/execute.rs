@@ -115,6 +115,7 @@
 //! ```
 
 use crate::cli::commands::BumpArgs;
+use crate::commands::bump::filter::PackageFilter;
 use crate::commands::bump::git_integration::{
     commit_version_changes, create_release_tags, get_current_commit_sha, push_tags_to_remote,
     validate_repository_state,
@@ -263,20 +264,70 @@ pub async fn execute_bump_apply(
 
     info!("Processing {} changeset(s)", loaded_changesets.len());
 
-    // Step 5: Parse prerelease configuration
+    // Step 5: Apply package filter if specified
+    let changesets_to_process = if let Some(ref package_list) = args.packages {
+        debug!("Applying package filter: {:?}", package_list);
+
+        // Create VersionResolver to discover packages for validation
+        let resolver = VersionResolver::new(workspace_root.to_path_buf(), config.clone())
+            .await
+            .map_err(|e| CliError::execution(format!("Failed to create version resolver: {e}")))?;
+
+        // Discover all workspace packages for validation
+        let all_packages = resolver
+            .discover_packages()
+            .await
+            .map_err(|e| CliError::execution(format!("Failed to discover packages: {e}")))?;
+
+        let package_names: Vec<String> =
+            all_packages.iter().map(|p| p.name().to_string()).collect();
+
+        // Create and validate filter
+        let filter = PackageFilter::new(package_list.clone(), false);
+        filter.validate(&package_names)?;
+
+        // Apply filter to changesets
+        let mut filtered = Vec::new();
+        for changeset in &loaded_changesets {
+            let filtered_cs = filter.apply_to_changeset(changeset);
+
+            // Only include if filter left some packages
+            if !filtered_cs.packages.is_empty() {
+                filtered.push(filtered_cs);
+            }
+        }
+
+        if filtered.is_empty() {
+            return Err(CliError::validation(
+                "No packages match the filter. No packages to bump.".to_string(),
+            ));
+        }
+
+        info!(
+            "Package filter applied: {} package(s) selected from {} changeset(s)",
+            package_list.len(),
+            filtered.len()
+        );
+
+        filtered
+    } else {
+        loaded_changesets.clone()
+    };
+
+    // Step 6: Parse prerelease configuration
     let prerelease_config = parse_prerelease_args(args)?;
 
     if let Some(ref config) = prerelease_config {
         info!("Using prerelease tag: {} (mode: {})", config.tag, config.mode);
     }
 
-    // Step 6: Create VersionResolver and resolve versions
+    // Step 7: Create VersionResolver and resolve versions
     let resolver = VersionResolver::new(workspace_root.to_path_buf(), config.clone())
         .await
         .map_err(|e| CliError::execution(format!("Failed to create version resolver: {e}")))?;
 
-    // Merge all changesets for resolution
-    let merged_changeset = merge_changesets(&loaded_changesets)?;
+    // Merge all changesets for resolution (using changesets to process)
+    let merged_changeset = merge_changesets(&changesets_to_process)?;
 
     // Resolve versions with prerelease support
     let resolution = resolver
@@ -309,7 +360,7 @@ pub async fn execute_bump_apply(
         return Ok(());
     }
 
-    // Step 7: Show confirmation prompt (unless --force)
+    // Step 8: Show confirmation prompt (unless --force)
     if !args.force && !output.format().is_json() {
         output.blank_line()?;
         StatusSymbol::Info.print_line("About to bump versions for the following packages:");
@@ -342,7 +393,7 @@ pub async fn execute_bump_apply(
 
     info!("Applying version updates");
 
-    // Step 8: Apply version updates
+    // Step 9: Apply version updates
     let apply_result = resolver.apply_versions(&merged_changeset, false).await.map_err(|e| {
         error!("Failed to apply version updates: {}", e);
         CliError::execution(format!("Failed to apply version updates: {e}"))
@@ -354,7 +405,7 @@ pub async fn execute_bump_apply(
     let mut modified_files: Vec<PathBuf> =
         apply_result.resolution.updates.iter().map(|u| u.path.join("package.json")).collect();
 
-    // Step 9: Generate changelogs (if enabled)
+    // Step 10: Generate changelogs (if enabled)
     if !args.no_changelog && config.changelog.enabled {
         info!("Generating changelogs");
 
@@ -377,7 +428,7 @@ pub async fn execute_bump_apply(
                 CliError::execution(format!("Failed to create changelog generator: {e}"))
             })?;
 
-            for changeset in &loaded_changesets {
+            for changeset in &changesets_to_process {
                 debug!("Generating changelog for changeset: {}", changeset.branch);
 
                 let changelogs = changelog_gen
@@ -427,7 +478,7 @@ pub async fn execute_bump_apply(
         debug!("Changelog generation disabled");
     }
 
-    // Step 10: Determine archive policy and conditionally archive changesets
+    // Step 11: Determine archive policy and conditionally archive changesets
     let archive_policy = determine_archive_policy(args);
     let mut archived_count = 0;
 
@@ -450,7 +501,7 @@ pub async fn execute_bump_apply(
 
         let release_info = ReleaseInfo::new("workspace-cli", commit_sha.as_str(), versions_map);
 
-        for changeset in &loaded_changesets {
+        for changeset in &changesets_to_process {
             debug!("Archiving changeset: {}", changeset.branch);
 
             manager.archive(&changeset.branch, release_info.clone()).await.map_err(|e| {
@@ -469,7 +520,7 @@ pub async fn execute_bump_apply(
         debug!("Changeset archival skipped by policy: {:?}", archive_policy);
     }
 
-    // Step 11: Git operations
+    // Step 12: Git operations
     let mut commit_sha = None;
     let mut tags_created = Vec::new();
 
@@ -510,7 +561,7 @@ pub async fn execute_bump_apply(
         }
     }
 
-    // Step 12: Build and display result
+    // Step 13: Build and display result
     let result = ExecuteResult {
         strategy: config.version.strategy.to_string(),
         packages_updated: apply_result.summary.packages_updated,
@@ -521,7 +572,7 @@ pub async fn execute_bump_apply(
         snapshot: build_result_snapshot(
             &config,
             &apply_result.resolution.updates,
-            &loaded_changesets,
+            &changesets_to_process,
         ),
     };
 

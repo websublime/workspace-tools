@@ -74,6 +74,7 @@
 //! ```
 
 pub mod execute;
+pub mod filter;
 pub mod git_integration;
 pub mod preview;
 pub mod snapshot;
@@ -88,4 +89,5 @@ pub use preview::execute_bump_preview;
 pub use snapshot::execute_bump_snapshot;
 
 // Re-export types for convenience
+pub use filter::PackageFilter;
 pub use types::ChangesetArchivePolicy;
