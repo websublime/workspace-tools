@@ -28,6 +28,10 @@ semver_check = false
 
 changelog_path = "./CHANGELOG.md"
 
+# Only bump packages when they have actual code changes
+# This prevents cascade bumps due to workspace dependencies
+release_commits = "^(feat|fix|perf|refactor|docs|test|chore)[(:]"
+
 # Publish order based on dependencies
 # 1. standard (no internal deps)
 # 2. git (depends on standard)
@@ -38,18 +42,26 @@ changelog_path = "./CHANGELOG.md"
 name = "sublime_standard_tools"
 changelog_path = "crates/standard/CHANGELOG.md"
 changelog_update = true
+# Filter commits to only those affecting this crate
+git_cliff_args = ["--include-path", "crates/standard/**/*"]
 
 [[package]]
 name = "sublime_git_tools"
 changelog_path = "crates/git/CHANGELOG.md"
 changelog_update = true
+# Filter commits to only those affecting this crate
+git_cliff_args = ["--include-path", "crates/git/**/*"]
 
 [[package]]
 name = "sublime_pkg_tools"
 changelog_path = "crates/pkg/CHANGELOG.md"
 changelog_update = true
+# Filter commits to only those affecting this crate
+git_cliff_args = ["--include-path", "crates/pkg/**/*"]
 
 [[package]]
 name = "sublime_cli_tools"
 changelog_path = "crates/cli/CHANGELOG.md"
 changelog_update = true
+# Filter commits to only those affecting this crate
+git_cliff_args = ["--include-path", "crates/cli/**/*"]
