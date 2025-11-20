@@ -643,6 +643,12 @@ pub struct UpgradeCheckArgs {
     /// Override registry URL.
     ///
     /// Uses this registry instead of the configured one.
+    /// Must be a valid HTTP or HTTPS URL.
+    ///
+    /// Examples:
+    ///   <https://custom-registry.example.com>
+    ///   <https://registry.npmjs.org>
+    ///   <http://localhost:4873>
     #[arg(long, value_name = "URL")]
     pub registry: Option<String>,
 }
