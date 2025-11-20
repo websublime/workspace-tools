@@ -378,6 +378,90 @@ workspace bump --prerelease beta --execute
 workspace bump --dry-run --show-diff
 ```
 
+#### Changeset Archive Policies
+
+When bumping versions, the CLI can automatically archive processed changesets based on configurable policies. This prevents changesets from being reused in future bumps while maintaining a complete history.
+
+**Available Policies:**
+
+| Policy | Flags | Behavior | Use Case |
+|--------|-------|----------|----------|
+| **Auto** | *(none)* | Archives only stable versions | Default behavior - keeps prereleases active for iterative development |
+| **Never** | `--no-archive` | Never archives changesets | Keep all changesets for review or manual cleanup |
+| **Always** | `--always-archive` | Always archives changesets | Archive every bump, including prereleases |
+
+**Policy Behavior:**
+
+1. **Auto Policy** (Default)
+   ```bash
+   workspace bump --execute
+   # Stable version: 1.2.3 → 1.3.0
+   # Result: Changesets are ARCHIVED ✅
+   
+   workspace bump --execute --prerelease beta.create
+   # Prerelease version: 1.2.3 → 1.3.0-beta.0
+   # Result: Changesets are NOT archived ❌ (kept for next bump)
+   ```
+
+2. **Never Policy**
+   ```bash
+   workspace bump --execute --no-archive
+   # Any version: 1.2.3 → 1.3.0
+   # Result: Changesets are NOT archived ❌ (manual cleanup required)
+   ```
+
+3. **Always Policy**
+   ```bash
+   workspace bump --execute --always-archive
+   # Stable version: 1.2.3 → 1.3.0
+   # Result: Changesets are ARCHIVED ✅
+   
+   workspace bump --execute --prerelease beta.create --always-archive
+   # Prerelease version: 1.2.3 → 1.3.0-beta.0
+   # Result: Changesets are ARCHIVED ✅ (even for prereleases)
+   ```
+
+**Prerelease Workflow Example:**
+
+The Auto policy enables clean prerelease workflows:
+
+```bash
+# Phase 1: Create initial beta (changesets NOT archived)
+workspace bump --execute --prerelease beta.create
+# 1.2.3 → 1.3.0-beta.0
+# Changesets remain active ✓
+
+# Phase 2: Increment beta (changesets NOT archived)
+workspace bump --execute --prerelease beta.increment
+# 1.3.0-beta.0 → 1.3.0-beta.1
+# Changesets remain active ✓
+
+# Phase 3: Create release candidate (changesets NOT archived)
+workspace bump --execute --prerelease rc.create
+# 1.3.0-beta.1 → 1.3.0-rc.0
+# Changesets remain active ✓
+
+# Phase 4: Promote to stable (changesets ARCHIVED)
+workspace bump --execute --prerelease rc.promote
+# 1.3.0-rc.0 → 1.3.0
+# Changesets archived automatically ✓
+```
+
+**Conflict Protection:**
+
+The `--no-archive` and `--always-archive` flags are mutually exclusive. The CLI prevents using both flags simultaneously:
+
+```bash
+workspace bump --execute --no-archive --always-archive
+# Error: The argument '--no-archive' cannot be used with '--always-archive'
+```
+
+**When to Use Each Policy:**
+
+- **Auto** (recommended): Standard workflow with prerelease support
+- **Never**: Auditing, manual changeset management, or keeping full history active
+- **Always**: Strict cleanup even for prereleases, or when changesets are single-use
+
 ---
 
 ### `upgrade` - Manage Dependency Upgrades
