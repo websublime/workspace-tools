@@ -69,6 +69,7 @@
 //!     git_commit: false,
 //!     no_changelog: false,
 //!     no_archive: false,
+//!     always_archive: false,
 //!     force: false,
 //!     show_diff: false,
 //! };
