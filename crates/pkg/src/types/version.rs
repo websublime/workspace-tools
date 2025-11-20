@@ -561,19 +561,6 @@ impl Version {
     /// # Errors
     ///
     /// Returns error if tag format is invalid per SemVer 2.0.0 spec.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sublime_pkg_tools::types::Version;
-    ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let version = Version::parse("1.2.3")?;
-    /// let beta = version.with_prerelease("beta.0")?;
-    /// assert_eq!(beta.to_string(), "1.2.3-beta.0");
-    /// # Ok(())
-    /// # }
-    /// ```
     fn with_prerelease(&self, tag: &str) -> VersionResult<Self> {
         let mut new_version = self.inner.clone();
         new_version.pre =
@@ -596,19 +583,6 @@ impl Version {
     /// - Current version is not a prerelease
     /// - Prerelease format is invalid
     /// - Tag mismatch (trying to increment beta when current is alpha)
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sublime_pkg_tools::types::Version;
-    ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let beta0 = Version::parse("1.3.0-beta.0")?;
-    /// let beta1 = beta0.increment_prerelease("beta")?;
-    /// assert_eq!(beta1.to_string(), "1.3.0-beta.1");
-    /// # Ok(())
-    /// # }
-    /// ```
     fn increment_prerelease(&self, expected_tag: &str) -> VersionResult<Self> {
         let current_pre = self.prerelease();
         if current_pre.is_empty() {
@@ -655,19 +629,6 @@ impl Version {
     ///
     /// Creates a stable version by removing the prerelease tag while preserving
     /// major.minor.patch and build metadata.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sublime_pkg_tools::types::Version;
-    ///
-    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let prerelease = Version::parse("1.3.0-rc.1")?;
-    /// let stable = prerelease.remove_prerelease()?;
-    /// assert_eq!(stable.to_string(), "1.3.0");
-    /// # Ok(())
-    /// # }
-    /// ```
     fn remove_prerelease(&self) -> VersionResult<Self> {
         let mut new_version =
             semver::Version::new(self.inner.major, self.inner.minor, self.inner.patch);
