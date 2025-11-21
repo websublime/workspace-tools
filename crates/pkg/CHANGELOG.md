@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.14 - 2025-11-21
+
+### Features
+
+#### WOR-TSK-165
+
+- Implement backup control parameter for upgrade apply command
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.13 - 2025-11-20
 
 ### Bug Fixes
