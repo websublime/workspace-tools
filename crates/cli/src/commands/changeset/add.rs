@@ -375,15 +375,94 @@ async fn load_workspace_packages(
     }
 }
 
+/// Gets commits that are unique to the current branch compared to the base branch.
+///
+/// This function determines which commits are part of the current feature branch
+/// by finding the merge base with the main branch (main or master) and returning
+/// only the commits between that point and HEAD.
+///
+/// # Parameters
+///
+/// * `repo` - Git repository instance
+/// * `detector` - Package detector for fallback commit retrieval
+///
+/// # Returns
+///
+/// A vector of commits that are unique to the current branch.
+/// Falls back to `get_commits_since(None)` if merge base cannot be determined.
+///
+/// # Algorithm
+///
+/// 1. Get current branch name
+/// 2. Try to find merge base with "main", then "master" as fallback
+/// 3. Get commits between merge base and HEAD
+/// 4. If any step fails, fall back to recent commits
+fn get_branch_commits(
+    repo: &Repo,
+    detector: &sublime_pkg_tools::changeset::PackageDetector<'_>,
+) -> std::result::Result<Vec<sublime_git_tools::RepoCommit>, String> {
+    // Get current branch
+    let current_branch = match repo.get_current_branch() {
+        Ok(branch) => branch,
+        Err(e) => {
+            debug!("Could not get current branch: {}, falling back to recent commits", e);
+            return detector.get_commits_since(None).map_err(|e| e.to_string());
+        }
+    };
+
+    debug!("Current branch: {}", current_branch);
+
+    // Skip merge base detection if we're on main/master
+    if current_branch == "main" || current_branch == "master" {
+        debug!("On main/master branch, using recent commits");
+        return detector.get_commits_since(None).map_err(|e| e.to_string());
+    }
+
+    // Try to find merge base with main, then master
+    let base_branches = ["main", "master"];
+    let mut merge_base: Option<String> = None;
+
+    for base_branch in &base_branches {
+        match repo.get_merge_base(base_branch, &current_branch) {
+            Ok(base) => {
+                debug!("Found merge base with {}: {}", base_branch, base);
+                merge_base = Some(base);
+                break;
+            }
+            Err(e) => {
+                debug!("Could not find merge base with {}: {}", base_branch, e);
+            }
+        }
+    }
+
+    // Get commits between merge base and HEAD
+    match merge_base {
+        Some(base) => match repo.get_commits_between(&base, "HEAD", &None) {
+            Ok(commits) => {
+                debug!("Found {} commits between merge base and HEAD", commits.len());
+                Ok(commits)
+            }
+            Err(e) => {
+                debug!("Failed to get commits between merge base and HEAD: {}, falling back", e);
+                detector.get_commits_since(None).map_err(|e| e.to_string())
+            }
+        },
+        None => {
+            debug!("No merge base found, falling back to recent commits");
+            detector.get_commits_since(None).map_err(|e| e.to_string())
+        }
+    }
+}
+
 /// Detects affected packages from git changes.
 ///
 /// Uses the `PackageDetector` to analyze git changes and determine which
-/// packages are affected by recent commits.
+/// packages are affected by commits on the current branch.
 ///
 /// # How it works
 ///
 /// 1. Creates a `PackageDetector` instance with the workspace context
-/// 2. Gets recent commits since the last tag or base branch
+/// 2. Gets commits unique to current branch (compared to main/master)
 /// 3. Uses the detector to map changed files to affected packages
 /// 4. Returns the list of unique package names
 ///
@@ -435,9 +514,9 @@ pub(crate) async fn detect_affected_packages(
     // Create PackageDetector
     let detector = PackageDetector::new(workspace_root, repo, fs.clone());
 
-    // Get recent commits (since last tag or all recent commits)
-    // We use None to get recent commits without a specific reference
-    let commits = match detector.get_commits_since(None) {
+    // Get commits by comparing current branch against base branch (main/master)
+    // This ensures we only analyze commits that are part of the current feature branch
+    let commits = match get_branch_commits(repo, &detector) {
         Ok(commits) => {
             debug!("Found {} commits for analysis", commits.len());
             commits
