@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.19 - 2025-11-21
+
+### Bug Fixes
+
+#### WOR-TSK-167
+
+- Detect affected packages from branch diff instead of all commits
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.18 - 2025-11-21
 
 ### Miscellaneous Tasks
