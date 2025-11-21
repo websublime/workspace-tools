@@ -327,8 +327,11 @@ impl<'a> PackageDetector<'a> {
     /// Gets all files changed in the given commits.
     ///
     /// This method retrieves the list of files that were modified, added, or deleted
-    /// in each commit. If there's only one commit, it compares against its parent.
-    /// For multiple commits, it finds the range and gets all changes.
+    /// in each commit. This method uses `get_files_changed_in_commit` which
+    /// properly handles initial commits (commits without a parent) by comparing
+    /// against an empty tree.
+    ///
+    /// For multiple commits, it collects all changed files from each commit.
     fn get_changed_files_from_commits(
         &self,
         commit_ids: &[String],
@@ -339,37 +342,17 @@ impl<'a> PackageDetector<'a> {
 
         let mut all_files = HashSet::new();
 
-        if commit_ids.len() == 1 {
-            // Single commit - compare with parent
-            let commit_id = &commit_ids[0];
-            let parent_id = format!("{}^", commit_id);
-
-            let files =
-                self.repo.get_files_changed_between(&parent_id, commit_id).map_err(|e| {
-                    ChangesetError::GitIntegration {
-                        operation: format!("get files changed in commit {}", commit_id),
-                        reason: format!("Failed to get changed files: {}", e),
-                    }
-                })?;
+        // Use get_files_changed_in_commit for each commit, which properly handles
+        // initial commits (those without a parent) by comparing against an empty tree
+        for commit_id in commit_ids {
+            let files = self.repo.get_files_changed_in_commit(commit_id).map_err(|e| {
+                ChangesetError::GitIntegration {
+                    operation: format!("get files changed in commit {}", commit_id),
+                    reason: format!("Failed to get changed files: {}", e),
+                }
+            })?;
 
             all_files.extend(files.into_iter().map(|f| PathBuf::from(f.path)));
-        } else {
-            // Multiple commits - need to find the range from oldest to newest
-            // Commits might come in any order, so we need to determine which is oldest
-            // We'll get all changed files for each commit and combine them
-            for commit_id in commit_ids {
-                let parent_id = format!("{}^", commit_id);
-
-                let files =
-                    self.repo.get_files_changed_between(&parent_id, commit_id).map_err(|e| {
-                        ChangesetError::GitIntegration {
-                            operation: format!("get files changed in commit {}", commit_id),
-                            reason: format!("Failed to get changed files: {}", e),
-                        }
-                    })?;
-
-                all_files.extend(files.into_iter().map(|f| PathBuf::from(f.path)));
-            }
         }
 
         Ok(all_files.into_iter().collect())

@@ -801,6 +801,12 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
             return Ok(packages);
         }
 
+        // Track discovered package names to avoid duplicates when multiple patterns
+        // match the same package (e.g., "packages/*" and "packages/foo" both matching
+        // the same package directory)
+        let mut discovered_package_names: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+
         // Find all package.json files in workspace directories
         for pattern in workspace_patterns {
             let full_pattern = root.join(&pattern).to_string_lossy().to_string();
@@ -820,7 +826,10 @@ impl<F: AsyncFileSystem + Clone> MonorepoDetectorTrait for MonorepoDetector<F> {
                                 .load_workspace_package(&package_json_path, &discovered_scopes)
                                 .await
                         {
-                            packages.push(package);
+                            // Only add package if not already discovered (deduplication)
+                            if discovered_package_names.insert(package.name.clone()) {
+                                packages.push(package);
+                            }
                         }
                     }
                 }
