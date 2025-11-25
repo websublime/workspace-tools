@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.13 - 2025-11-25
+
+### Documentation
+
+#### Standard
+
+- Remove references to removed *_with_project_config methods
+
+### Refactor
+
+#### Config
+
+- Decouple config discovery from base crates
+
+### Testing
+
+#### Standard
+
+- Add comprehensive e2e tests for all modules
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.12 - 2025-11-21
 
 ### Bug Fixes
