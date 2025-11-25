@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.16 - 2025-11-25
+
+### Refactor
+
+#### Config
+
+- Decouple config discovery from base crates
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.15 - 2025-11-21
 
 ### Bug Fixes
