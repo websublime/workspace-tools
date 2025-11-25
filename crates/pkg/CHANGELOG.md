@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.17 - 2025-11-25
+
+### Bug Fixes
+
+#### WOR-TSK-168
+
+- Remove include_str for SPEC.md and README.md from lib.rs
+
+### Refactor
+
+#### WOR-TSK-168
+
+- Improve CLI parameter consistency and test organization
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.16 - 2025-11-25
 
 ### Refactor
