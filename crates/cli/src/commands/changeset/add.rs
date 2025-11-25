@@ -52,6 +52,7 @@
 //!     message: Some("Add new feature".to_string()),
 //!     packages: None,
 //!     non_interactive: true,
+//!     force: false,
 //! };
 //!
 //! let output = Output::new(OutputFormat::Human, io::stdout(), false);
@@ -136,6 +137,7 @@ struct ChangesetAddResponse {
 ///     message: Some("Add new feature".to_string()),
 ///     packages: Some(vec!["my-package".to_string()]),
 ///     non_interactive: true,
+///     force: false,
 /// };
 ///
 /// let output = Output::new(OutputFormat::Human, io::stdout(), false);
@@ -198,9 +200,21 @@ pub async fn execute_add(
     let exists = changeset_manager.load(&branch).await.is_ok();
 
     if exists {
-        return Err(CliError::validation(format!(
-            "Changeset already exists for branch '{branch}'. Use 'workspace changeset update' to modify it."
-        )));
+        if args.force {
+            debug!("Changeset exists for branch '{}', removing due to --force flag", branch);
+            changeset_manager.delete(&branch).await.map_err(|e| {
+                CliError::execution(format!(
+                    "Failed to remove existing changeset for branch '{branch}': {e}"
+                ))
+            })?;
+            output.warning(&format!(
+                "Existing changeset for branch '{branch}' was removed (--force)"
+            ))?;
+        } else {
+            return Err(CliError::validation(format!(
+                "Changeset already exists for branch '{branch}'. Use 'workspace changeset update' to modify it, or --force to overwrite."
+            )));
+        }
     }
 
     // Load packages from workspace

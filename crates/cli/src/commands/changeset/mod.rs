@@ -49,6 +49,7 @@
 //!     message: Some("Add new feature".to_string()),
 //!     packages: None,
 //!     non_interactive: true,
+//!     force: false,
 //! };
 //!
 //! let output = Output::new(OutputFormat::Human, io::stdout(), false);

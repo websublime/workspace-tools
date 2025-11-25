@@ -61,6 +61,7 @@ async fn test_changeset_create_single_package() {
         message: Some("Add new feature".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -96,6 +97,7 @@ async fn test_changeset_create_with_major_bump() {
         message: Some("Breaking changes".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -125,6 +127,7 @@ async fn test_changeset_create_with_patch_bump() {
         message: Some("Fix bug".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -154,6 +157,7 @@ async fn test_changeset_create_monorepo_multiple_packages() {
         message: Some("Update multiple packages".to_string()),
         packages: Some(vec!["@test/pkg-a".to_string(), "@test/pkg-b".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -208,6 +212,7 @@ async fn test_changeset_create_with_multiple_environments() {
         message: Some("Multi-environment release".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -246,6 +251,7 @@ async fn test_changeset_create_detects_git_branch() {
         message: Some("Auto-detect branch".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -276,6 +282,7 @@ async fn test_changeset_create_fails_duplicate_branch() {
         message: Some("Duplicate".to_string()),
         packages: None,
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -672,6 +679,7 @@ async fn test_complete_changeset_workflow() {
         message: Some("First feature".to_string()),
         packages: Some(vec!["@test/pkg-a".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _) = create_test_output();
@@ -685,6 +693,7 @@ async fn test_complete_changeset_workflow() {
         message: Some("Bug fix".to_string()),
         packages: Some(vec!["@test/pkg-b".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _) = create_test_output();
@@ -788,11 +797,11 @@ async fn test_changeset_history_shows_archived() {
     }
 
     let args = ChangesetHistoryArgs {
-        package: None,
+        filter_package: None,
         since: None,
         until: None,
-        env: None,
-        bump: None,
+        filter_env: None,
+        filter_bump: None,
         limit: None,
     };
 
@@ -830,11 +839,11 @@ async fn test_changeset_history_filters_by_package() {
     }
 
     let args = ChangesetHistoryArgs {
-        package: Some("@test/pkg-a".to_string()),
+        filter_package: Some("@test/pkg-a".to_string()),
         since: None,
         until: None,
-        env: None,
-        bump: None,
+        filter_env: None,
+        filter_bump: None,
         limit: None,
     };
 
@@ -873,11 +882,11 @@ async fn test_changeset_history_with_limit() {
     }
 
     let args = ChangesetHistoryArgs {
-        package: None,
+        filter_package: None,
         since: None,
         until: None,
-        env: None,
-        bump: None,
+        filter_env: None,
+        filter_bump: None,
         limit: Some(2),
     };
 
@@ -900,11 +909,11 @@ async fn test_changeset_history_empty() {
         .finalize();
 
     let args = ChangesetHistoryArgs {
-        package: None,
+        filter_package: None,
         since: None,
         until: None,
-        env: None,
-        bump: None,
+        filter_env: None,
+        filter_bump: None,
         limit: None,
     };
 
@@ -965,6 +974,7 @@ async fn test_changeset_edit_no_changes() {
         message: Some("Initial changeset".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -1009,6 +1019,7 @@ async fn test_changeset_edit_with_modifications() {
         message: Some("Initial changeset".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -1069,6 +1080,7 @@ async fn test_changeset_edit_invalid_json_fails() {
         message: Some("Valid changeset".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -1123,6 +1135,7 @@ async fn test_changeset_edit_empty_packages_fails() {
         message: Some("Valid changeset".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -1176,6 +1189,7 @@ async fn test_changeset_edit_empty_environments_reverts() {
         message: Some("Valid changeset".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -1227,6 +1241,7 @@ async fn test_changeset_edit_branch_name_change_reverts() {
         message: Some("Valid changeset".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -1278,6 +1293,7 @@ async fn test_changeset_edit_editor_fails() {
         message: Some("Test changeset".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -1338,6 +1354,7 @@ async fn test_changeset_edit_auto_detect_branch() {
         message: Some("Test changeset".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -1379,6 +1396,7 @@ async fn test_changeset_edit_monorepo() {
         message: Some("Multi-package change".to_string()),
         packages: Some(vec!["@test/pkg-a".to_string(), "@test/pkg-b".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -1423,6 +1441,7 @@ async fn test_changeset_edit_json_output() {
         message: Some("Test changeset".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -1481,6 +1500,7 @@ async fn test_changeset_create_with_custom_message() {
         message: Some("feat: Added new authentication system".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -1519,6 +1539,7 @@ async fn test_changeset_create_with_custom_branch() {
         message: None,
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -1553,6 +1574,7 @@ async fn test_changeset_create_auto_detect_packages_vs_manual() {
         message: None,
         packages: Some(vec!["@test/pkg-a".to_string()]), // Manual override
         non_interactive: true,
+        force: false,
     };
 
     let (output, _buffer) = create_test_output();
@@ -1863,11 +1885,11 @@ async fn test_changeset_history_date_range() {
     // For testing, we'll verify the command accepts date parameters
 
     let args = ChangesetHistoryArgs {
-        package: None,
+        filter_package: None,
         since: Some("2024-01-01".to_string()),
         until: Some("2024-12-31".to_string()),
-        env: None,
-        bump: None,
+        filter_env: None,
+        filter_bump: None,
         limit: None,
     };
 
@@ -1894,11 +1916,11 @@ async fn test_changeset_history_filter_by_environment() {
         .finalize();
 
     let args = ChangesetHistoryArgs {
-        package: None,
+        filter_package: None,
         since: None,
         until: None,
-        env: Some("production".to_string()),
-        bump: None,
+        filter_env: Some("production".to_string()),
+        filter_bump: None,
         limit: None,
     };
 
@@ -1925,11 +1947,11 @@ async fn test_changeset_history_filter_by_bump() {
         .finalize();
 
     let args = ChangesetHistoryArgs {
-        package: None,
+        filter_package: None,
         since: None,
         until: None,
-        env: None,
-        bump: Some("major".to_string()),
+        filter_env: None,
+        filter_bump: Some("major".to_string()),
         limit: None,
     };
 
@@ -1957,11 +1979,11 @@ async fn test_changeset_history_combined_filters() {
 
     // Use multiple filters together
     let args = ChangesetHistoryArgs {
-        package: Some("test-package".to_string()),
+        filter_package: Some("test-package".to_string()),
         since: Some("2024-01-01".to_string()),
         until: Some("2024-12-31".to_string()),
-        env: Some("production".to_string()),
-        bump: Some("minor".to_string()),
+        filter_env: Some("production".to_string()),
+        filter_bump: Some("minor".to_string()),
         limit: Some(10),
     };
 
@@ -1988,11 +2010,11 @@ async fn test_changeset_history_respects_limit() {
         .finalize();
 
     let args = ChangesetHistoryArgs {
-        package: None,
+        filter_package: None,
         since: None,
         until: None,
-        env: None,
-        bump: None,
+        filter_env: None,
+        filter_bump: None,
         limit: Some(5),
     };
 
@@ -2032,6 +2054,7 @@ async fn test_changeset_check_exists_for_current_branch() {
         message: Some("Add new API".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _) = create_test_output();
@@ -2077,6 +2100,7 @@ async fn test_changeset_check_exists_for_specific_branch() {
         message: Some("Bug fix".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _) = create_test_output();
@@ -2172,6 +2196,7 @@ async fn test_changeset_check_exit_code_for_git_hooks() {
         message: Some("Feature for hook test".to_string()),
         packages: Some(vec!["test-package".to_string()]),
         non_interactive: true,
+        force: false,
     };
 
     let (output, _) = create_test_output();

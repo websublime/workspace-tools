@@ -238,10 +238,10 @@ impl FromStr for LogLevel {
             "error" => Ok(Self::Error),
             "warn" | "warning" => Ok(Self::Warn),
             "info" => Ok(Self::Info),
-            "debug" => Ok(Self::Debug),
+            "debug" | "verbose" => Ok(Self::Debug),
             "trace" => Ok(Self::Trace),
             _ => Err(format!(
-                "Invalid log level '{s}'. Valid options: silent, error, warn, info, debug, trace"
+                "Invalid log level '{s}'. Valid options: silent, error, warn, info, debug, verbose, trace"
             )),
         }
     }

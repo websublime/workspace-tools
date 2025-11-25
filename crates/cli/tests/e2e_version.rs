@@ -78,10 +78,10 @@ async fn test_version_displays_info() {
     // ARRANGE: Create minimal workspace (version command doesn't need specific setup)
     let workspace = WorkspaceFixture::single_package().finalize();
 
-    let args = VersionArgs { verbose: false };
+    let args = VersionArgs {};
 
-    // ACT: Execute version command with human output
-    let result = execute_version(&args, workspace.root(), OutputFormat::Human);
+    // ACT: Execute version command with human output (verbose=false)
+    let result = execute_version(&args, workspace.root(), OutputFormat::Human, false);
 
     // ASSERT: Command should succeed
     assert!(result.is_ok(), "Version command should succeed: {:?}", result.err());
@@ -97,10 +97,10 @@ async fn test_version_verbose_shows_details() {
     // ARRANGE: Create minimal workspace
     let workspace = WorkspaceFixture::single_package().finalize();
 
-    let args = VersionArgs { verbose: true };
+    let args = VersionArgs {};
 
-    // ACT: Execute version command with verbose flag
-    let result = execute_version(&args, workspace.root(), OutputFormat::Human);
+    // ACT: Execute version command with verbose flag (verbose=true)
+    let result = execute_version(&args, workspace.root(), OutputFormat::Human, true);
 
     // ASSERT: Command should succeed and display verbose info
     assert!(result.is_ok(), "Version verbose command should succeed: {:?}", result.err());
@@ -125,10 +125,10 @@ async fn test_version_json_output() {
     // ARRANGE: Create minimal workspace
     let workspace = WorkspaceFixture::single_package().finalize();
 
-    let args = VersionArgs { verbose: false };
+    let args = VersionArgs {};
 
     // ACT: Execute version command with JSON format
-    let result = execute_version(&args, workspace.root(), OutputFormat::Json);
+    let result = execute_version(&args, workspace.root(), OutputFormat::Json, false);
 
     // ASSERT: Command should succeed
     assert!(result.is_ok(), "Version command with JSON format should succeed: {:?}", result.err());
@@ -156,10 +156,10 @@ async fn test_version_json_compact_output() {
     // ARRANGE: Create minimal workspace
     let workspace = WorkspaceFixture::single_package().finalize();
 
-    let args = VersionArgs { verbose: false };
+    let args = VersionArgs {};
 
     // ACT: Execute version command with JSON compact format
-    let result = execute_version(&args, workspace.root(), OutputFormat::JsonCompact);
+    let result = execute_version(&args, workspace.root(), OutputFormat::JsonCompact, false);
 
     // ASSERT: Command should succeed
     assert!(
@@ -206,10 +206,10 @@ async fn test_version_quiet_output() {
     // ARRANGE: Create minimal workspace
     let workspace = WorkspaceFixture::single_package().finalize();
 
-    let args = VersionArgs { verbose: false };
+    let args = VersionArgs {};
 
     // ACT: Execute version command with quiet format
-    let result = execute_version(&args, workspace.root(), OutputFormat::Quiet);
+    let result = execute_version(&args, workspace.root(), OutputFormat::Quiet, false);
 
     // ASSERT: Command should succeed
     assert!(result.is_ok(), "Version command with quiet format should succeed: {:?}", result.err());
@@ -309,18 +309,18 @@ async fn test_version_info_json_serialization() {
 async fn test_version_works_in_all_workspace_types() {
     // Test in single package workspace
     let single_workspace = WorkspaceFixture::single_package().finalize();
-    let args = VersionArgs { verbose: false };
-    let result = execute_version(&args, single_workspace.root(), OutputFormat::Human);
+    let args = VersionArgs {};
+    let result = execute_version(&args, single_workspace.root(), OutputFormat::Human, false);
     assert!(result.is_ok(), "Version should work in single package workspace");
 
     // Test in monorepo independent workspace
     let mono_independent = WorkspaceFixture::monorepo_independent().finalize();
-    let result = execute_version(&args, mono_independent.root(), OutputFormat::Human);
+    let result = execute_version(&args, mono_independent.root(), OutputFormat::Human, false);
     assert!(result.is_ok(), "Version should work in monorepo independent workspace");
 
     // Test in monorepo unified workspace
     let mono_unified = WorkspaceFixture::monorepo_unified().finalize();
-    let result = execute_version(&args, mono_unified.root(), OutputFormat::Human);
+    let result = execute_version(&args, mono_unified.root(), OutputFormat::Human, false);
     assert!(result.is_ok(), "Version should work in monorepo unified workspace");
 }
 
@@ -333,10 +333,10 @@ async fn test_version_works_without_git() {
     // ARRANGE: Create workspace WITHOUT Git
     let workspace = WorkspaceFixture::single_package().finalize();
 
-    let args = VersionArgs { verbose: false };
+    let args = VersionArgs {};
 
     // ACT: Execute version command
-    let result = execute_version(&args, workspace.root(), OutputFormat::Human);
+    let result = execute_version(&args, workspace.root(), OutputFormat::Human, false);
 
     // ASSERT: Should succeed even without Git
     assert!(result.is_ok(), "Version command should work without Git initialization");
@@ -352,13 +352,14 @@ async fn test_version_verbose_flag_with_json_format() {
     let workspace = WorkspaceFixture::single_package().finalize();
 
     // Test with verbose=false
-    let args_no_verbose = VersionArgs { verbose: false };
-    let result_no_verbose = execute_version(&args_no_verbose, workspace.root(), OutputFormat::Json);
+    let args_no_verbose = VersionArgs {};
+    let result_no_verbose =
+        execute_version(&args_no_verbose, workspace.root(), OutputFormat::Json, false);
     assert!(result_no_verbose.is_ok(), "Version with JSON should succeed (verbose=false)");
 
     // Test with verbose=true
-    let args_verbose = VersionArgs { verbose: true };
-    let result_verbose = execute_version(&args_verbose, workspace.root(), OutputFormat::Json);
+    let args_verbose = VersionArgs {};
+    let result_verbose = execute_version(&args_verbose, workspace.root(), OutputFormat::Json, true);
     assert!(result_verbose.is_ok(), "Version with JSON should succeed (verbose=true)");
 
     // Both should produce the same structured JSON output
@@ -390,12 +391,12 @@ async fn test_version_with_invalid_workspace_root() {
     let workspace = WorkspaceFixture::single_package().finalize();
     let invalid_root = workspace.root().join("non-existent-directory");
 
-    let args = VersionArgs { verbose: false };
+    let args = VersionArgs {};
 
     // ACT: Execute version command with invalid root
     // Note: execute_version doesn't actually use the root parameter (_root),
     // so this should still succeed
-    let result = execute_version(&args, &invalid_root, OutputFormat::Human);
+    let result = execute_version(&args, &invalid_root, OutputFormat::Human, false);
 
     // ASSERT: Should succeed since version is workspace-independent
     assert!(result.is_ok(), "Version command should succeed even with invalid workspace root");

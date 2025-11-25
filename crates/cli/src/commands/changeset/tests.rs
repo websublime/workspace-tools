@@ -182,6 +182,7 @@ mod tests {
             message: None,
             packages: None,
             non_interactive: false,
+            force: false,
         };
 
         assert!(args.bump.is_none());
@@ -190,6 +191,7 @@ mod tests {
         assert!(args.message.is_none());
         assert!(args.packages.is_none());
         assert!(!args.non_interactive);
+        assert!(!args.force);
     }
 
     // Tests for changeset remove command
@@ -266,6 +268,7 @@ mod tests {
             message: Some("Add new feature".to_string()),
             packages: Some(vec!["pkg-a".to_string(), "pkg-b".to_string()]),
             non_interactive: true,
+            force: false,
         };
 
         assert_eq!(args.bump.as_deref(), Some("minor"));
@@ -288,6 +291,7 @@ mod tests {
             message: Some("Test message".to_string()),
             packages: Some(vec!["pkg-a".to_string()]),
             non_interactive: true,
+            force: false,
         };
 
         // All required fields are present
@@ -306,6 +310,7 @@ mod tests {
             message: Some("Test message".to_string()),
             packages: Some(vec!["pkg-a".to_string()]),
             non_interactive: true,
+            force: false,
         };
 
         assert!(args.bump.is_none());
@@ -322,6 +327,7 @@ mod tests {
             message: Some("Test message".to_string()),
             packages: None,
             non_interactive: true,
+            force: false,
         };
 
         assert!(args.packages.is_none());
@@ -338,6 +344,7 @@ mod tests {
             message: None,
             packages: Some(vec!["pkg-a".to_string()]),
             non_interactive: true,
+            force: false,
         };
 
         assert!(args.env.is_none());
@@ -518,6 +525,7 @@ mod tests {
             message: None, // Optional
             packages: Some(vec!["pkg-a".to_string()]),
             non_interactive: true,
+            force: false,
         };
 
         assert!(args.message.is_none());
@@ -534,6 +542,7 @@ mod tests {
             message: Some("Multi-package change".to_string()),
             packages: Some(vec!["pkg-a".to_string(), "pkg-b".to_string(), "pkg-c".to_string()]),
             non_interactive: true,
+            force: false,
         };
 
         assert_eq!(args.packages.as_ref().map(Vec::len), Some(3));
@@ -550,6 +559,7 @@ mod tests {
             message: None,
             packages: Some(vec!["pkg-a".to_string()]),
             non_interactive: true,
+            force: false,
         };
 
         assert_eq!(args.env.as_ref().map(Vec::len), Some(3));
@@ -566,6 +576,7 @@ mod tests {
             message: None,
             packages: None, // Will be prompted
             non_interactive: false,
+            force: false,
         };
 
         assert!(!args.non_interactive);
@@ -689,6 +700,7 @@ mod tests {
             message: Some("Custom branch".to_string()),
             packages: Some(vec!["pkg-a".to_string()]),
             non_interactive: true,
+            force: false,
         };
 
         assert_eq!(args.branch.as_deref(), Some("custom/branch-name"));
@@ -704,6 +716,7 @@ mod tests {
             message: Some("Use current branch".to_string()),
             packages: Some(vec!["pkg-a".to_string()]),
             non_interactive: true,
+            force: false,
         };
 
         assert!(args.branch.is_none());
@@ -719,6 +732,7 @@ mod tests {
             message: None,
             packages: Some(vec![]), // Empty list
             non_interactive: true,
+            force: false,
         };
 
         assert!(args.packages.as_ref().is_some_and(Vec::is_empty));
@@ -734,6 +748,7 @@ mod tests {
             message: None,
             packages: Some(vec!["pkg-a".to_string()]),
             non_interactive: true,
+            force: false,
         };
 
         assert!(args.env.as_ref().is_some_and(Vec::is_empty));
@@ -1408,34 +1423,34 @@ mod tests {
     #[test]
     fn test_history_args_defaults() {
         let args = ChangesetHistoryArgs {
-            package: None,
+            filter_package: None,
             since: None,
             until: None,
-            env: None,
-            bump: None,
+            filter_env: None,
+            filter_bump: None,
             limit: None,
         };
 
-        assert!(args.package.is_none());
+        assert!(args.filter_package.is_none());
         assert!(args.since.is_none());
         assert!(args.until.is_none());
-        assert!(args.env.is_none());
-        assert!(args.bump.is_none());
+        assert!(args.filter_env.is_none());
+        assert!(args.filter_bump.is_none());
         assert!(args.limit.is_none());
     }
 
     #[test]
     fn test_history_args_with_package_filter() {
         let args = ChangesetHistoryArgs {
-            package: Some("my-package".to_string()),
+            filter_package: Some("my-package".to_string()),
             since: None,
             until: None,
-            env: None,
-            bump: None,
+            filter_env: None,
+            filter_bump: None,
             limit: None,
         };
 
-        assert_eq!(args.package.as_deref(), Some("my-package"));
+        assert_eq!(args.filter_package.as_deref(), Some("my-package"));
         assert!(args.since.is_none());
         assert!(args.until.is_none());
     }
@@ -1443,11 +1458,11 @@ mod tests {
     #[test]
     fn test_history_args_with_date_range() {
         let args = ChangesetHistoryArgs {
-            package: None,
+            filter_package: None,
             since: Some("2025-01-01".to_string()),
             until: Some("2025-12-31".to_string()),
-            env: None,
-            bump: None,
+            filter_env: None,
+            filter_bump: None,
             limit: None,
         };
 
@@ -1458,39 +1473,39 @@ mod tests {
     #[test]
     fn test_history_args_with_env_filter() {
         let args = ChangesetHistoryArgs {
-            package: None,
+            filter_package: None,
             since: None,
             until: None,
-            env: Some("production".to_string()),
-            bump: None,
+            filter_env: Some("production".to_string()),
+            filter_bump: None,
             limit: None,
         };
 
-        assert_eq!(args.env.as_deref(), Some("production"));
+        assert_eq!(args.filter_env.as_deref(), Some("production"));
     }
 
     #[test]
     fn test_history_args_with_bump_filter() {
         let args = ChangesetHistoryArgs {
-            package: None,
+            filter_package: None,
             since: None,
             until: None,
-            env: None,
-            bump: Some("major".to_string()),
+            filter_env: None,
+            filter_bump: Some("major".to_string()),
             limit: None,
         };
 
-        assert_eq!(args.bump.as_deref(), Some("major"));
+        assert_eq!(args.filter_bump.as_deref(), Some("major"));
     }
 
     #[test]
     fn test_history_args_with_limit() {
         let args = ChangesetHistoryArgs {
-            package: None,
+            filter_package: None,
             since: None,
             until: None,
-            env: None,
-            bump: None,
+            filter_env: None,
+            filter_bump: None,
             limit: Some(50),
         };
 
@@ -1500,30 +1515,30 @@ mod tests {
     #[test]
     fn test_history_args_with_all_filters() {
         let args = ChangesetHistoryArgs {
-            package: Some("core".to_string()),
+            filter_package: Some("core".to_string()),
             since: Some("2025-01-01".to_string()),
             until: Some("2025-10-31".to_string()),
-            env: Some("staging".to_string()),
-            bump: Some("minor".to_string()),
+            filter_env: Some("staging".to_string()),
+            filter_bump: Some("minor".to_string()),
             limit: Some(20),
         };
 
-        assert!(args.package.is_some());
+        assert!(args.filter_package.is_some());
         assert!(args.since.is_some());
         assert!(args.until.is_some());
-        assert!(args.env.is_some());
-        assert!(args.bump.is_some());
+        assert!(args.filter_env.is_some());
+        assert!(args.filter_bump.is_some());
         assert!(args.limit.is_some());
     }
 
     #[test]
     fn test_history_args_only_since_date() {
         let args = ChangesetHistoryArgs {
-            package: None,
+            filter_package: None,
             since: Some("2025-06-01".to_string()),
             until: None,
-            env: None,
-            bump: None,
+            filter_env: None,
+            filter_bump: None,
             limit: None,
         };
 
@@ -1534,11 +1549,11 @@ mod tests {
     #[test]
     fn test_history_args_only_until_date() {
         let args = ChangesetHistoryArgs {
-            package: None,
+            filter_package: None,
             since: None,
             until: Some("2025-10-31".to_string()),
-            env: None,
-            bump: None,
+            filter_env: None,
+            filter_bump: None,
             limit: None,
         };
 
@@ -1549,32 +1564,32 @@ mod tests {
     #[test]
     fn test_history_args_package_and_limit() {
         let args = ChangesetHistoryArgs {
-            package: Some("my-pkg".to_string()),
+            filter_package: Some("my-pkg".to_string()),
             since: None,
             until: None,
-            env: None,
-            bump: None,
+            filter_env: None,
+            filter_bump: None,
             limit: Some(10),
         };
 
-        assert!(args.package.is_some());
+        assert!(args.filter_package.is_some());
         assert!(args.limit.is_some());
     }
 
     #[test]
     fn test_history_args_date_and_bump() {
         let args = ChangesetHistoryArgs {
-            package: None,
+            filter_package: None,
             since: Some("2025-01-01".to_string()),
             until: Some("2025-12-31".to_string()),
-            env: None,
-            bump: Some("patch".to_string()),
+            filter_env: None,
+            filter_bump: Some("patch".to_string()),
             limit: None,
         };
 
         assert!(args.since.is_some());
         assert!(args.until.is_some());
-        assert!(args.bump.is_some());
+        assert!(args.filter_bump.is_some());
     }
 
     #[test]
@@ -1696,11 +1711,11 @@ mod tests {
     #[test]
     fn test_history_limit_zero() {
         let args = ChangesetHistoryArgs {
-            package: None,
+            filter_package: None,
             since: None,
             until: None,
-            env: None,
-            bump: None,
+            filter_env: None,
+            filter_bump: None,
             limit: Some(0),
         };
 
@@ -1710,11 +1725,11 @@ mod tests {
     #[test]
     fn test_history_limit_large_value() {
         let args = ChangesetHistoryArgs {
-            package: None,
+            filter_package: None,
             since: None,
             until: None,
-            env: None,
-            bump: None,
+            filter_env: None,
+            filter_bump: None,
             limit: Some(1000),
         };
 
@@ -1725,21 +1740,21 @@ mod tests {
     fn test_history_date_format_variations() {
         // Test different valid date formats
         let iso_date = ChangesetHistoryArgs {
-            package: None,
+            filter_package: None,
             since: Some("2025-01-15".to_string()),
             until: None,
-            env: None,
-            bump: None,
+            filter_env: None,
+            filter_bump: None,
             limit: None,
         };
         assert_eq!(iso_date.since.as_deref(), Some("2025-01-15"));
 
         let rfc3339 = ChangesetHistoryArgs {
-            package: None,
+            filter_package: None,
             since: Some("2025-01-15T10:30:00Z".to_string()),
             until: None,
-            env: None,
-            bump: None,
+            filter_env: None,
+            filter_bump: None,
             limit: None,
         };
         assert_eq!(rfc3339.since.as_deref(), Some("2025-01-15T10:30:00Z"));
@@ -1749,40 +1764,40 @@ mod tests {
     fn test_history_multiple_filter_combinations() {
         // Test package + environment
         let combo1 = ChangesetHistoryArgs {
-            package: Some("core".to_string()),
+            filter_package: Some("core".to_string()),
             since: None,
             until: None,
-            env: Some("production".to_string()),
-            bump: None,
+            filter_env: Some("production".to_string()),
+            filter_bump: None,
             limit: None,
         };
-        assert!(combo1.package.is_some() && combo1.env.is_some());
+        assert!(combo1.filter_package.is_some() && combo1.filter_env.is_some());
 
         // Test date range + bump
         let combo2 = ChangesetHistoryArgs {
-            package: None,
+            filter_package: None,
             since: Some("2025-01-01".to_string()),
             until: Some("2025-12-31".to_string()),
-            env: None,
-            bump: Some("major".to_string()),
+            filter_env: None,
+            filter_bump: Some("major".to_string()),
             limit: None,
         };
-        assert!(combo2.since.is_some() && combo2.until.is_some() && combo2.bump.is_some());
+        assert!(combo2.since.is_some() && combo2.until.is_some() && combo2.filter_bump.is_some());
 
         // Test all filters except limit
         let combo3 = ChangesetHistoryArgs {
-            package: Some("pkg".to_string()),
+            filter_package: Some("pkg".to_string()),
             since: Some("2025-01-01".to_string()),
             until: Some("2025-12-31".to_string()),
-            env: Some("staging".to_string()),
-            bump: Some("minor".to_string()),
+            filter_env: Some("staging".to_string()),
+            filter_bump: Some("minor".to_string()),
             limit: None,
         };
-        assert!(combo3.package.is_some());
+        assert!(combo3.filter_package.is_some());
         assert!(combo3.since.is_some());
         assert!(combo3.until.is_some());
-        assert!(combo3.env.is_some());
-        assert!(combo3.bump.is_some());
+        assert!(combo3.filter_env.is_some());
+        assert!(combo3.filter_bump.is_some());
     }
 
     #[test]

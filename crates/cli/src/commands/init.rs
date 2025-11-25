@@ -35,6 +35,7 @@
 use crate::cli::commands::InitArgs;
 use crate::error::{CliError, Result};
 use crate::output::{JsonResponse, OutputFormat};
+use crate::utils::validation::validate_registry_url;
 use dialoguer::{Input, MultiSelect, Select};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -556,10 +557,8 @@ fn validate_init_config(config: &InitConfig) -> Result<()> {
         return Err(CliError::validation("Changeset path cannot be empty"));
     }
 
-    // Validate registry URL format
-    if !config.registry.starts_with("http://") && !config.registry.starts_with("https://") {
-        return Err(CliError::validation("Registry URL must start with http:// or https://"));
-    }
+    // Validate registry URL format using centralized validation
+    validate_registry_url(&config.registry)?;
 
     Ok(())
 }

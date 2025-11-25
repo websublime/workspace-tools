@@ -145,6 +145,7 @@ workspace changeset create [OPTIONS]
 - `--message <TEXT>` - Optional description of changes
 - `--packages <LIST>` - Comma-separated list of packages (auto-detected if not provided)
 - `--non-interactive` - Use provided flags without prompting
+- `--force` - Overwrite existing changeset if one exists for the branch
 
 **Examples:**
 ```bash
@@ -156,6 +157,9 @@ workspace changeset create --bump minor --env "staging,prod" --non-interactive
 
 # Create with message
 workspace changeset create --bump patch --message "Fix critical bug"
+
+# Overwrite existing changeset
+workspace changeset create --bump major --force
 ```
 
 #### `changeset update` - Update Existing Changeset
@@ -291,11 +295,11 @@ workspace changeset history [OPTIONS]
 ```
 
 **Options:**
-- `--package <NAME>` - Filter by package name
+- `--filter-package <NAME>` - Filter by package name
 - `--since <DATE>` - Since date (ISO 8601, e.g., `2024-01-01`)
 - `--until <DATE>` - Until date (ISO 8601)
-- `--env <ENV>` - Filter by environment
-- `--bump <TYPE>` - Filter by bump type
+- `--filter-env <ENV>` - Filter by environment
+- `--filter-bump <TYPE>` - Filter by bump type
 - `--limit <N>` - Limit number of results
 
 **Examples:**
@@ -304,7 +308,10 @@ workspace changeset history [OPTIONS]
 workspace changeset history
 
 # Filter by package and date range
-workspace changeset history --package "@myorg/core" --since "2024-01-01"
+workspace changeset history --filter-package "@myorg/core" --since "2024-01-01"
+
+# Filter by environment and bump type
+workspace changeset history --filter-env production --filter-bump major
 
 # Limit results
 workspace changeset history --limit 10
@@ -345,9 +352,9 @@ workspace bump [OPTIONS]
 **Options:**
 - `--dry-run` - Preview changes without applying (safe, default behavior)
 - `--execute` - Apply version changes (required for actual changes)
-- `--snapshot` - Generate snapshot versions
+- `--snapshot` - Generate snapshot versions (mutually exclusive with `--prerelease`)
 - `--snapshot-format <FORMAT>` - Snapshot format template (variables: `{version}`, `{branch}`, `{short_commit}`, `{commit}`)
-- `--prerelease <TAG>` - Pre-release tag (`alpha`, `beta`, or `rc`)
+- `--prerelease <TAG>` - Pre-release tag (`alpha`, `beta`, or `rc`) (mutually exclusive with `--snapshot`)
 - `--packages <LIST>` - Comma-separated list of packages to bump (overrides changeset packages)
 - `--git-tag` - Create Git tags for releases (format: `package@version`)
 - `--git-push` - Push Git tags to remote (requires `--git-tag`)
@@ -356,6 +363,8 @@ workspace bump [OPTIONS]
 - `--no-archive` - Keep changesets active after bump
 - `--force` - Skip confirmations
 - `--show-diff` - Show detailed version diffs (preview mode only)
+
+**Note:** The `--snapshot` and `--prerelease` flags cannot be used together as they represent different versioning strategies.
 
 **Examples:**
 ```bash
@@ -478,27 +487,36 @@ workspace upgrade check [OPTIONS]
 ```
 
 **Options:**
-- `--major` / `--no-major` - Include/exclude major version upgrades (default: include)
-- `--minor` / `--no-minor` - Include/exclude minor version upgrades (default: include)
-- `--patch` / `--no-patch` - Include/exclude patch version upgrades (default: include)
-- `--dev` - Include dev dependencies (default: true)
-- `--peer` - Include peer dependencies (default: false)
+- `--no-major` - Exclude major version upgrades from results (default: included)
+- `--no-minor` - Exclude minor version upgrades from results (default: included)
+- `--no-patch` - Exclude patch version upgrades from results (default: included)
+- `--no-dev` - Exclude dev dependencies from results (default: included)
+- `--peer` - Include peer dependencies in results (default: excluded)
 - `--packages <LIST>` - Comma-separated list of packages to check
-- `--registry <URL>` - Override registry URL
+- `--registry <URL>` - Override registry URL (must be valid HTTP/HTTPS URL)
 
 **Examples:**
 ```bash
 # Check all upgrades
 workspace upgrade check
 
-# Check only non-breaking upgrades
+# Check only non-breaking upgrades (exclude major)
 workspace upgrade check --no-major
+
+# Check only patch and minor upgrades
+workspace upgrade check --no-major
+
+# Exclude dev dependencies
+workspace upgrade check --no-dev
 
 # Check specific packages
 workspace upgrade check --packages "@myorg/core,@myorg/utils"
 
 # Include peer dependencies
 workspace upgrade check --peer
+
+# Use custom registry
+workspace upgrade check --registry "https://npm.mycompany.com"
 ```
 
 #### `upgrade apply` - Apply Dependency Upgrades
@@ -949,7 +967,16 @@ All commands support these global options that control behavior across the entir
 - `-l, --log-level <LEVEL>` - Logging level (default: `info`)
   - Controls verbosity of operation logs written to **stderr**
   - Does NOT affect command output (stdout)
-  - Levels: `silent`, `error`, `warn`, `info`, `debug`, `trace`
+  - Levels: `silent`, `error`, `warn`, `info`, `debug`, `trace`, `verbose`
+  - Note: `verbose` is an alias for `info` level
+  
+- `-q, --quiet` - Suppress all output
+  - Shortcut that sets both `--log-level silent` and `--format quiet`
+  - Useful for scripts that only care about exit codes
+  
+- `-v, --verbose` - Enable verbose output
+  - Shortcut that sets `--log-level debug`
+  - Useful for debugging and troubleshooting
   
 - `-f, --format <FORMAT>` - Output format (default: `human`)
   - Controls format of command output written to **stdout**

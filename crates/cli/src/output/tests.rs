@@ -2016,7 +2016,7 @@ fn test_log_level_from_str_invalid() {
     use crate::cli::LogLevel;
 
     assert!("invalid".parse::<LogLevel>().is_err());
-    assert!("verbose".parse::<LogLevel>().is_err());
+    // "verbose" is now a valid alias for Info level
     assert!("critical".parse::<LogLevel>().is_err());
     assert!("".parse::<LogLevel>().is_err());
 }

@@ -28,8 +28,9 @@
 #![allow(clippy::expect_used)]
 
 use crate::cli::commands::UpgradeCheckArgs;
-use crate::commands::upgrade::check::{create_detection_options, validate_registry_url};
+use crate::commands::upgrade::check::create_detection_options;
 use crate::commands::upgrade::types::*;
+use crate::utils::validation::validate_registry_url;
 
 // TODO: will be implemented on story 6.2
 // Integration tests will be added when we implement mock UpgradeManager
@@ -42,13 +43,10 @@ use crate::commands::upgrade::types::*;
 #[test]
 fn test_create_detection_options_defaults() {
     let args = UpgradeCheckArgs {
-        major: true,
         no_major: false,
-        minor: true,
         no_minor: false,
-        patch: true,
         no_patch: false,
-        dev: true,
+        no_dev: false,
         peer: false,
         packages: None,
         registry: None,
@@ -63,13 +61,10 @@ fn test_create_detection_options_defaults() {
 #[test]
 fn test_create_detection_options_no_major() {
     let args = UpgradeCheckArgs {
-        major: true,
         no_major: true,
-        minor: true,
         no_minor: false,
-        patch: true,
         no_patch: false,
-        dev: true,
+        no_dev: false,
         peer: false,
         packages: None,
         registry: None,
@@ -83,13 +78,10 @@ fn test_create_detection_options_no_major() {
 #[test]
 fn test_create_detection_options_all_disabled() {
     let args = UpgradeCheckArgs {
-        major: true,
         no_major: true,
-        minor: true,
         no_minor: true,
-        patch: true,
         no_patch: true,
-        dev: true,
+        no_dev: false,
         peer: false,
         packages: None,
         registry: None,

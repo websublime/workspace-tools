@@ -47,13 +47,10 @@ async fn test_upgrade_check_detects_outdated() {
     add_dependency(&package_json_path, "lodash", "4.17.20"); // Old version, latest is 4.17.21
 
     let args = UpgradeCheckArgs {
-        major: true,
         no_major: false,
-        minor: true,
         no_minor: false,
-        patch: true,
         no_patch: false,
-        dev: true,
+        no_dev: false,
         peer: false,
         packages: None,
         registry: None,
@@ -100,13 +97,10 @@ async fn test_upgrade_check_respects_npmrc() {
     add_dependency(&package_json_path, "lodash", "4.17.20");
 
     let args = UpgradeCheckArgs {
-        major: true,
         no_major: false,
-        minor: true,
         no_minor: false,
-        patch: true,
         no_patch: false,
-        dev: true,
+        no_dev: false,
         peer: false,
         packages: None,
         registry: None,
@@ -152,15 +146,12 @@ async fn test_upgrade_check_filters_by_type() {
     let package_json_path = workspace.root().join("package.json");
     add_dependency(&package_json_path, "lodash", "4.17.20");
 
-    // Test: Only patch upgrades
+    // Test: Only patch upgrades (exclude major and minor)
     let args = UpgradeCheckArgs {
-        major: false,
         no_major: true,
-        minor: false,
         no_minor: true,
-        patch: true,
         no_patch: false,
-        dev: true,
+        no_dev: false,
         peer: false,
         packages: None,
         registry: None,
@@ -200,13 +191,10 @@ async fn test_upgrade_check_json_output() {
     add_dependency(&package_json_path, "lodash", "4.17.20");
 
     let args = UpgradeCheckArgs {
-        major: true,
         no_major: false,
-        minor: true,
         no_minor: false,
-        patch: true,
         no_patch: false,
-        dev: true,
+        no_dev: false,
         peer: false,
         packages: None,
         registry: None,
@@ -941,13 +929,10 @@ async fn test_upgrade_check_no_major() {
     let workspace = WorkspaceFixture::single_package().with_default_config().finalize();
 
     let args = UpgradeCheckArgs {
-        major: false,
         no_major: true,
-        minor: true,
         no_minor: false,
-        patch: true,
         no_patch: false,
-        dev: true,
+        no_dev: false,
         peer: false,
         packages: None,
         registry: None,
@@ -970,13 +955,10 @@ async fn test_upgrade_check_no_minor() {
     let workspace = WorkspaceFixture::single_package().with_default_config().finalize();
 
     let args = UpgradeCheckArgs {
-        major: true,
         no_major: false,
-        minor: false,
         no_minor: true,
-        patch: true,
         no_patch: false,
-        dev: true,
+        no_dev: false,
         peer: false,
         packages: None,
         registry: None,
@@ -1000,13 +982,10 @@ async fn test_upgrade_check_no_patch() {
         WorkspaceFixture::single_package().with_default_config().with_default_config().finalize();
 
     let args = UpgradeCheckArgs {
-        major: true,
         no_major: false,
-        minor: true,
         no_minor: false,
-        patch: false,
         no_patch: true,
-        dev: true,
+        no_dev: false,
         peer: false,
         packages: None,
         registry: None,
@@ -1029,13 +1008,10 @@ async fn test_upgrade_check_with_peer_dependencies() {
     let workspace = WorkspaceFixture::single_package().with_default_config().finalize();
 
     let args = UpgradeCheckArgs {
-        major: true,
         no_major: false,
-        minor: true,
         no_minor: false,
-        patch: true,
         no_patch: false,
-        dev: true,
+        no_dev: false,
         peer: true,
         packages: None,
         registry: None,
@@ -1071,13 +1047,10 @@ async fn test_upgrade_check_without_dev_dependencies() {
     let workspace = WorkspaceFixture::single_package().with_default_config().finalize();
 
     let args = UpgradeCheckArgs {
-        major: true,
         no_major: false,
-        minor: true,
         no_minor: false,
-        patch: true,
         no_patch: false,
-        dev: false,
+        no_dev: true,
         peer: false,
         packages: None,
         registry: None,
@@ -1113,13 +1086,10 @@ async fn test_upgrade_check_specific_packages() {
     let workspace = WorkspaceFixture::monorepo_independent().with_default_config().finalize();
 
     let args = UpgradeCheckArgs {
-        major: true,
         no_major: false,
-        minor: true,
         no_minor: false,
-        patch: true,
         no_patch: false,
-        dev: true,
+        no_dev: false,
         peer: false,
         packages: Some(vec!["@test/pkg-a".to_string()]),
         registry: None,
@@ -1156,13 +1126,10 @@ async fn test_upgrade_check_custom_registry() {
     let workspace = WorkspaceFixture::single_package().with_default_config().finalize();
 
     let args = UpgradeCheckArgs {
-        major: true,
         no_major: false,
-        minor: true,
         no_minor: false,
-        patch: true,
         no_patch: false,
-        dev: true,
+        no_dev: false,
         peer: false,
         packages: None,
         registry: Some("https://custom-registry.example.com".to_string()),

@@ -470,7 +470,10 @@ mod init_tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.to_string().contains("http"));
+        // Error message contains "Invalid registry URL" for malformed URLs
+        assert!(
+            err.to_string().contains("Invalid registry URL") || err.to_string().contains("http")
+        );
     }
 
     #[tokio::test]
@@ -2409,7 +2412,7 @@ mod clone_tests {
             depth: None,
         };
 
-        let init_args = convert_to_init_args(&clone_args, None);
+        let init_args = convert_to_init_args(&clone_args, None).unwrap();
         assert_eq!(init_args.changeset_path, PathBuf::from(".custom-changesets"));
         assert_eq!(init_args.environments, Some(vec!["dev".to_string(), "prod".to_string()]));
         assert_eq!(init_args.default_env, Some(vec!["prod".to_string()]));
@@ -2445,7 +2448,7 @@ mod clone_tests {
             depth: None,
         };
 
-        let init_args = convert_to_init_args(&clone_args, Some(&workspace_config));
+        let init_args = convert_to_init_args(&clone_args, Some(&workspace_config)).unwrap();
         assert_eq!(init_args.changeset_path, PathBuf::from(".ws-changesets"));
         assert_eq!(
             init_args.environments,
@@ -2474,7 +2477,7 @@ mod clone_tests {
             depth: None,
         };
 
-        let init_args = convert_to_init_args(&clone_args, None);
+        let init_args = convert_to_init_args(&clone_args, None).unwrap();
         assert_eq!(init_args.changeset_path, PathBuf::from(".changesets"));
         assert_eq!(init_args.environments, None);
         assert_eq!(init_args.default_env, None);
@@ -2507,7 +2510,7 @@ mod clone_tests {
             depth: None,
         };
 
-        let init_args = convert_to_init_args(&clone_args, Some(&workspace_config));
+        let init_args = convert_to_init_args(&clone_args, Some(&workspace_config)).unwrap();
         assert_eq!(init_args.changeset_path, PathBuf::from(".cli-changesets"));
         assert_eq!(init_args.environments, Some(vec!["dev".to_string()]));
         assert_eq!(init_args.strategy, Some("unified".to_string()));
@@ -2535,7 +2538,7 @@ mod clone_tests {
             depth: None,
         };
 
-        let init_args = convert_to_init_args(&clone_args, Some(&workspace_config));
+        let init_args = convert_to_init_args(&clone_args, Some(&workspace_config)).unwrap();
         assert_eq!(init_args.strategy, Some("independent".to_string()));
     }
 
@@ -2559,7 +2562,7 @@ mod clone_tests {
             depth: None,
         };
 
-        let init_args = convert_to_init_args(&clone_args, Some(&workspace_config));
+        let init_args = convert_to_init_args(&clone_args, Some(&workspace_config)).unwrap();
         assert_eq!(init_args.strategy, Some("unified".to_string()));
     }
 
@@ -2580,7 +2583,7 @@ mod clone_tests {
             depth: None,
         };
 
-        let init_args = convert_to_init_args(&clone_args, None);
+        let init_args = convert_to_init_args(&clone_args, None).unwrap();
         assert!(!init_args.force);
     }
 
@@ -2601,7 +2604,7 @@ mod clone_tests {
             depth: None,
         };
 
-        let init_args = convert_to_init_args(&clone_args, None);
+        let init_args = convert_to_init_args(&clone_args, None).unwrap();
         assert!(init_args.non_interactive);
     }
 
@@ -2627,7 +2630,7 @@ mod clone_tests {
             depth: None,
         };
 
-        let init_args = convert_to_init_args(&clone_args, Some(&workspace_config));
+        let init_args = convert_to_init_args(&clone_args, Some(&workspace_config)).unwrap();
         assert_eq!(init_args.changeset_path, PathBuf::from(".cli-changesets"));
         assert_eq!(init_args.environments, Some(vec!["dev".to_string()]));
         assert_eq!(init_args.strategy, Some("unified".to_string()));
@@ -3297,7 +3300,7 @@ custom/backups/
             depth: None,
         };
 
-        let init_args = convert_to_init_args(&clone_args, None);
+        let init_args = convert_to_init_args(&clone_args, None).unwrap();
 
         // Verify CLI args are preserved
         assert_eq!(init_args.changeset_path, PathBuf::from("custom-changesets"));
@@ -3328,7 +3331,7 @@ custom/backups/
             depth: None,
         };
 
-        let init_args = convert_to_init_args(&clone_args, None);
+        let init_args = convert_to_init_args(&clone_args, None).unwrap();
 
         // Force should always be false for init
         assert!(!init_args.force);
@@ -3352,7 +3355,7 @@ custom/backups/
             depth: None,
         };
 
-        let init_args_interactive = convert_to_init_args(&clone_args_interactive, None);
+        let init_args_interactive = convert_to_init_args(&clone_args_interactive, None).unwrap();
         assert!(!init_args_interactive.non_interactive);
 
         let clone_args_non_interactive = CloneArgs {
@@ -3370,7 +3373,8 @@ custom/backups/
             depth: None,
         };
 
-        let init_args_non_interactive = convert_to_init_args(&clone_args_non_interactive, None);
+        let init_args_non_interactive =
+            convert_to_init_args(&clone_args_non_interactive, None).unwrap();
         assert!(init_args_non_interactive.non_interactive);
     }
 }

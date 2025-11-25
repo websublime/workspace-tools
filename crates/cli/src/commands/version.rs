@@ -189,9 +189,10 @@ impl Default for VersionInfo {
 ///
 /// # Arguments
 ///
-/// * `args` - Version command arguments (e.g., verbose flag)
+/// * `_args` - Version command arguments (currently unused, kept for consistency)
 /// * `_root` - Root directory (unused but kept for consistency)
 /// * `format` - Output format (Human, Json, or Quiet)
+/// * `verbose` - Whether to show detailed version information (from global --verbose flag)
 ///
 /// # Returns
 ///
@@ -212,20 +213,25 @@ impl Default for VersionInfo {
 /// use std::path::Path;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let args = VersionArgs { verbose: false };
-/// execute_version(&args, Path::new("."), OutputFormat::Human).await?;
+/// let args = VersionArgs {};
+/// execute_version(&args, Path::new("."), OutputFormat::Human, false)?;
 /// # Ok(())
 /// # }
 /// ```
 #[allow(clippy::print_stdout)]
-pub fn execute_version(args: &VersionArgs, _root: &Path, format: OutputFormat) -> Result<()> {
+pub fn execute_version(
+    _args: &VersionArgs,
+    _root: &Path,
+    format: OutputFormat,
+    verbose: bool,
+) -> Result<()> {
     info!("Executing version command");
 
     let version_info = VersionInfo::new();
 
     match format {
         OutputFormat::Human => {
-            display_human_version(&version_info, args.verbose);
+            display_human_version(&version_info, verbose);
         }
         OutputFormat::Json | OutputFormat::JsonCompact => {
             let json_response = JsonResponse::success(version_info);
@@ -327,36 +333,36 @@ mod tests {
 
     #[test]
     fn test_execute_version_human() {
-        let args = VersionArgs { verbose: false };
-        let result = execute_version(&args, Path::new("."), OutputFormat::Human);
+        let args = VersionArgs {};
+        let result = execute_version(&args, Path::new("."), OutputFormat::Human, false);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_execute_version_verbose() {
-        let args = VersionArgs { verbose: true };
-        let result = execute_version(&args, Path::new("."), OutputFormat::Human);
+        let args = VersionArgs {};
+        let result = execute_version(&args, Path::new("."), OutputFormat::Human, true);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_execute_version_json() {
-        let args = VersionArgs { verbose: false };
-        let result = execute_version(&args, Path::new("."), OutputFormat::Json);
+        let args = VersionArgs {};
+        let result = execute_version(&args, Path::new("."), OutputFormat::Json, false);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_execute_version_json_compact() {
-        let args = VersionArgs { verbose: false };
-        let result = execute_version(&args, Path::new("."), OutputFormat::JsonCompact);
+        let args = VersionArgs {};
+        let result = execute_version(&args, Path::new("."), OutputFormat::JsonCompact, false);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_execute_version_quiet() {
-        let args = VersionArgs { verbose: false };
-        let result = execute_version(&args, Path::new("."), OutputFormat::Quiet);
+        let args = VersionArgs {};
+        let result = execute_version(&args, Path::new("."), OutputFormat::Quiet, false);
         assert!(result.is_ok());
     }
 
