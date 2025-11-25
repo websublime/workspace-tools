@@ -1301,9 +1301,6 @@ impl MonorepoDetector<FileSystemManager> {
     
     /// Creates a new MonorepoDetector with custom configuration.
     pub fn new_with_config(config: MonorepoConfig) -> Self;
-    
-    /// Creates a new MonorepoDetector with project-specific configuration.
-    pub async fn new_with_project_config(project_root: &Path) -> Result<Self, Error>;
 }
 
 impl<F: AsyncFileSystem + Clone> MonorepoDetector<F> {
@@ -1390,7 +1387,7 @@ let config = MonorepoConfig {
     ..Default::default()
 };
 
-let detector = MonorepoDetector::new_with_project_config(Path::new(".")).await?;
+let detector = MonorepoDetector::new_with_config(config);
 
 if let Some(kind) = detector.is_monorepo_root(".").await? {
     println!("This directory is a {} monorepo", kind.name());
@@ -1497,9 +1494,6 @@ pub struct DefaultCommandExecutor {
 impl DefaultCommandExecutor {
     /// Creates a new DefaultCommandExecutor.
     pub fn new() -> Self;
-    
-    /// Creates a new DefaultCommandExecutor with project configuration.
-    pub async fn new_with_project_config(project_root: &Path) -> Result<Self, Error>;
     
     /// Creates a new DefaultCommandExecutor with custom configuration.
     pub fn with_config(config: CommandConfig) -> Self;
@@ -1864,8 +1858,8 @@ use sublime_standard_tools::command::{
 };
 use std::time::Duration;
 
-// Configuration-aware command execution
-let executor = DefaultCommandExecutor::new_with_project_config(Path::new(".")).await?;
+// Create command executor (use with_config for custom configuration)
+let executor = DefaultCommandExecutor::new();
 
 let cmd = CommandBuilder::new("npm")
     .arg("install")
@@ -2030,9 +2024,6 @@ impl FileSystemManager {
     /// Creates a new FileSystemManager with async I/O configuration.
     pub fn with_async_io_config(async_io_config: &AsyncIoConfig) -> Self;
     
-    /// Creates a new FileSystemManager with project configuration.
-    pub async fn new_with_project_config(project_root: &Path) -> Result<Self, Error>;
-    
     /// Returns the current configuration.
     pub fn config(&self) -> &AsyncFileSystemConfig;
 }
@@ -2193,9 +2184,6 @@ let config = AsyncFileSystemConfig {
 };
 
 let fs = FileSystemManager::new_with_config(config);
-
-// Or load with project configuration
-let fs = FileSystemManager::new_with_project_config(Path::new(".")).await?;
 
 // Basic file operations
 if fs.exists(Path::new("package.json")).await? {

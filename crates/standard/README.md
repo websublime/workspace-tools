@@ -399,9 +399,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create filesystem manager with default configuration
     let fs = FileSystemManager::new();
     
-    // Or load with project configuration
-    let fs_with_config = FileSystemManager::new_with_project_config(Path::new(".")).await?;
-    
     // Basic file operations
     let package_json_path = Path::new("package.json");
     
@@ -1083,13 +1080,17 @@ use std::path::Path;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Each component can auto-load from project config files
+    // Each component can be created with default or custom configuration
     let project_detector = ProjectDetector::new(); // Uses default config
-    let monorepo_detector = MonorepoDetector::new_with_project_config(Path::new(".")).await?;
-    let filesystem = FileSystemManager::new_with_project_config(Path::new(".")).await?;
-    let executor = DefaultCommandExecutor::new_with_project_config(Path::new(".")).await?;
+    let monorepo_detector = MonorepoDetector::new(); // Or use new_with_config(config)
+    let filesystem = FileSystemManager::new(); // Or use new_with_config(config)
+    let executor = DefaultCommandExecutor::new(); // Or use with_config(config)
     
-    // Configuration is applied automatically
+    // For custom configuration, pass config structs directly:
+    // let monorepo_detector = MonorepoDetector::new_with_config(monorepo_config);
+    // let filesystem = FileSystemManager::new_with_config(fs_config);
+    // let executor = DefaultCommandExecutor::with_config(cmd_config);
+    
     Ok(())
 }
 ```
@@ -1203,7 +1204,7 @@ async fn main() -> Result<()> {
              config.monorepo.workspace_patterns.len());
 
     // Initialize filesystem and command executor
-    let fs = FileSystemManager::new_with_project_config(Path::new(".")).await?;
+    let fs = FileSystemManager::new();
     let executor = DefaultCommandExecutor::new();
     let mut command_queue = CommandQueue::new().start()?;
 
@@ -1467,9 +1468,15 @@ The SPEC.md file provides:
 
 #### Initialize with Configuration
 ```rust
-let detector = MonorepoDetector::new_with_project_config(Path::new(".")).await?;
-let fs = FileSystemManager::new_with_project_config(Path::new(".")).await?;
-let executor = DefaultCommandExecutor::new_with_project_config(Path::new(".")).await?;
+// Use default configuration
+let detector = MonorepoDetector::new();
+let fs = FileSystemManager::new();
+let executor = DefaultCommandExecutor::new();
+
+// Or with custom configuration
+let detector = MonorepoDetector::new_with_config(monorepo_config);
+let fs = FileSystemManager::new_with_config(fs_config);
+let executor = DefaultCommandExecutor::with_config(cmd_config);
 ```
 
 #### Error Handling Pattern
