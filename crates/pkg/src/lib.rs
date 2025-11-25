@@ -137,8 +137,6 @@
 //! Most types in this crate are `Send + Sync` and can be used safely across async tasks.
 //! Shared state is protected with appropriate synchronization primitives.
 
-#![doc = include_str!("../SPEC.md")]
-#![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 #![warn(rustdoc::missing_crate_level_docs)]
 #![deny(unused_must_use)]
