@@ -88,15 +88,20 @@
 //!     monorepo::MonorepoDetector,
 //!     filesystem::FileSystemManager,
 //!     command::DefaultCommandExecutor,
+//!     config::StandardConfig,
 //! };
 //! use std::path::Path;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! // Each component can auto-load from repo.config.* files
-//! let project_detector = ProjectDetector::new(); // Auto-loads config during detection
-//! let monorepo_detector = MonorepoDetector::new_with_project_config(Path::new(".")).await?;
-//! let filesystem = FileSystemManager::new_with_project_config(Path::new(".")).await?;
-//! let executor = DefaultCommandExecutor::new_with_project_config(Path::new(".")).await?;
+//! // Each component uses default config or accepts explicit configuration
+//! let project_detector = ProjectDetector::new();
+//! let monorepo_detector = MonorepoDetector::new(); // Uses default config
+//! let filesystem = FileSystemManager::new(); // Uses default config
+//! let executor = DefaultCommandExecutor::new(); // Uses default config
+//!
+//! // Or with explicit configuration
+//! let config = StandardConfig::default();
+//! let monorepo_detector_with_config = MonorepoDetector::new_with_config(config.monorepo);
 //! # Ok(())
 //! # }
 //! ```

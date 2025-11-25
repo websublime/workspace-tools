@@ -347,56 +347,79 @@ pub struct GitConfig {
 - `branch_base`: Base branch for comparisons
 - `detect_affected_packages`: Auto-detect affected packages from Git
 
-### Configuration Loader
+### Configuration Parsing
 
-#### `load_config()`
+This crate is **configuration-agnostic** - it does not search for or load configuration
+files from the filesystem. The CLI layer is responsible for discovering and reading
+configuration files, then passing the content to this crate for parsing.
+
+#### `PackageToolsConfig::from_str()`
 
 ```rust
-pub async fn load_config(workspace_root: &Path) -> Result<PackageToolsConfig>
+impl PackageToolsConfig {
+    pub fn from_str(content: &str, format: ConfigFormat) -> ConfigResult<Self>
+}
 ```
 
-Loads package tools configuration from the workspace.
+Parses configuration from string content in the specified format.
 
 **Parameters:**
-- `workspace_root`: Path to the workspace root directory
+- `content`: The configuration content as a string
+- `format`: The format of the configuration (`ConfigFormat::Toml`, `ConfigFormat::Yaml`, or `ConfigFormat::Json`)
 
 **Returns:**
-- `Result<PackageToolsConfig>`: Loaded configuration or error
+- `ConfigResult<PackageToolsConfig>`: Parsed and validated configuration or error
 
 **Example:**
 ```rust
-use sublime_pkg_tools::config::load_config;
-use std::path::Path;
+use sublime_pkg_tools::config::{ConfigFormat, PackageToolsConfig};
 
-let config = load_config(Path::new(".")).await?;
+// Parse from TOML
+let toml_content = r#"
+    [package_tools.changeset]
+    path = ".changesets"
+    
+    [package_tools.version]
+    strategy = "independent"
+"#;
+let config = PackageToolsConfig::from_str(toml_content, ConfigFormat::Toml)?;
+
+// Parse from JSON
+let json_content = r#"{"package_tools": {"version": {"strategy": "unified"}}}"#;
+let config = PackageToolsConfig::from_str(json_content, ConfigFormat::Json)?;
+
+// Parse from YAML
+let yaml_content = "package_tools:\n  version:\n    strategy: independent";
+let config = PackageToolsConfig::from_str(yaml_content, ConfigFormat::Yaml)?;
+
 println!("Changeset path: {}", config.changeset.path);
 ```
 
-#### `load_config_from_file()`
+#### `ConfigFormat`
+
+Re-exported from `sublime_standard_tools::config::ConfigFormat`.
 
 ```rust
-pub async fn load_config_from_file(path: &Path) -> Result<PackageToolsConfig>
-```
-
-Loads configuration from a specific file.
-
-**Parameters:**
-- `path`: Path to the configuration file
-
-**Returns:**
-- `Result<PackageToolsConfig>`: Loaded configuration or error
-
-#### `ConfigLoader`
-
-```rust
-pub struct ConfigLoader;
-
-impl ConfigLoader {
-    pub async fn load(workspace_root: &Path) -> Result<PackageToolsConfig>;
-    pub async fn load_from_file(path: &Path) -> Result<PackageToolsConfig>;
-    pub async fn load_with_defaults() -> PackageToolsConfig;
+pub enum ConfigFormat {
+    Toml,
+    Json,
+    Yaml,
 }
 ```
+
+Represents the supported configuration file formats.
+
+#### `PackageToolsConfig::default()`
+
+```rust
+impl Default for PackageToolsConfig {
+    fn default() -> Self
+}
+```
+
+Creates a configuration with sensible defaults. All configuration sections support
+partial configuration via `#[serde(default)]`, so you only need to specify the
+values you want to override.
 
 ## Types Module
 
@@ -2906,7 +2929,7 @@ pub mod recovery {
 
 ```rust
 use sublime_pkg_tools::{
-    config::load_config,
+    config::PackageToolsConfig,
     changeset::ChangesetManager,
     version::VersionResolver,
     changelog::ChangelogGenerator,
@@ -2919,8 +2942,8 @@ use std::path::PathBuf;
 async fn complete_workflow() -> Result<(), Box<dyn std::error::Error>> {
     let workspace_root = PathBuf::from(".");
     
-    // Load configuration
-    let config = load_config(&workspace_root).await?;
+    // Use default configuration (in real usage, CLI would parse config and pass it here)
+    let config = PackageToolsConfig::default();
     
     // Initialize managers
     let fs = FileSystemManager::new();
@@ -2987,14 +3010,15 @@ async fn complete_workflow() -> Result<(), Box<dyn std::error::Error>> {
 ```rust
 use sublime_pkg_tools::{
     upgrade::{UpgradeManager, DetectionOptions, UpgradeSelection},
-    config::load_config,
+    config::PackageToolsConfig,
 };
 use sublime_standard_tools::filesystem::FileSystemManager;
 use std::path::PathBuf;
 
 async fn upgrade_workflow() -> Result<(), Box<dyn std::error::Error>> {
     let workspace_root = PathBuf::from(".");
-    let config = load_config(&workspace_root).await?;
+    // Use default configuration (in real usage, CLI would parse config and pass it here)
+    let config = PackageToolsConfig::default();
     let fs = FileSystemManager::new();
     
     let manager = UpgradeManager::new(
@@ -3033,13 +3057,14 @@ async fn upgrade_workflow() -> Result<(), Box<dyn std::error::Error>> {
 ```rust
 use sublime_pkg_tools::{
     audit::{AuditManager, format_markdown, FormatOptions, Verbosity},
-    config::load_config,
+    config::PackageToolsConfig,
 };
 use std::path::PathBuf;
 
 async fn audit_workflow() -> Result<(), Box<dyn std::error::Error>> {
     let workspace_root = PathBuf::from(".");
-    let config = load_config(&workspace_root).await?;
+    // Use default configuration (in real usage, CLI would parse config and pass it here)
+    let config = PackageToolsConfig::default();
     
     let manager = AuditManager::new(workspace_root, config).await?;
     

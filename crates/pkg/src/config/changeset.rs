@@ -46,6 +46,7 @@ use sublime_standard_tools::config::{ConfigResult, Configurable};
 /// default_environments = ["production"]
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct ChangesetConfig {
     /// Path to the directory where active changesets are stored.
     ///

@@ -136,7 +136,6 @@ mod changelog;
 mod changeset;
 mod dependency;
 mod git;
-mod loader;
 mod types;
 mod upgrade;
 mod validation;
@@ -159,7 +158,7 @@ pub use changelog::{
 pub use changeset::ChangesetConfig;
 pub use dependency::DependencyConfig;
 pub use git::GitConfig;
-pub use loader::{ConfigLoader, load_config, load_config_from_file};
+pub use sublime_standard_tools::config::ConfigFormat;
 pub use types::PackageToolsConfig;
 pub use upgrade::{BackupConfig, RegistryConfig, UpgradeConfig};
 pub use validation::{path_exists, validate_config, validate_path_format, validate_url_format};

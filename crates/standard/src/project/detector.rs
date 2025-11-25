@@ -17,7 +17,7 @@
 
 use super::Project;
 use super::types::{ProjectDescriptor, ProjectKind, ProjectValidationStatus};
-use crate::config::{ConfigManager, Configurable, StandardConfig};
+use crate::config::StandardConfig;
 use crate::error::{Error, Result};
 use crate::filesystem::{AsyncFileSystem, FileSystemManager};
 use crate::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
@@ -354,78 +354,6 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
         Self { fs }
     }
 
-    /// Loads or creates project configuration by checking for repo.config.* files.
-    ///
-    /// This method automatically detects and loads configuration from project-specific
-    /// files (repo.config.toml, repo.config.yml, repo.config.json) and merges them
-    /// with default configuration values.
-    ///
-    /// # Arguments
-    ///
-    /// * `project_root` - The project root directory to search for config files
-    /// * `base_config` - Optional base configuration to use, defaults to StandardConfig::default()
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(StandardConfig)` - The merged configuration
-    /// * `Err(Error)` - If configuration loading or merging fails
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use sublime_standard_tools::project::ProjectDetector;
-    /// # use std::path::Path;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let detector = ProjectDetector::new();
-    /// let config = detector.load_project_config(Path::new("."), None).await?;
-    /// println!("Loaded configuration version: {}", config.version);
-    /// # Ok(())
-    /// # }
-    /// ```
-    async fn load_project_config(
-        &self,
-        project_root: &Path,
-        base_config: Option<StandardConfig>,
-    ) -> Result<StandardConfig>
-    where
-        F: 'static,
-    {
-        let mut builder = ConfigManager::<StandardConfig>::builder().with_defaults();
-
-        // Check for repo.config.* files in order of preference
-        let config_files = [
-            project_root.join("repo.config.toml"),
-            project_root.join("repo.config.yml"),
-            project_root.join("repo.config.yaml"),
-            project_root.join("repo.config.json"),
-        ];
-
-        // Add existing config files to the builder
-        for config_file in &config_files {
-            if self.fs.exists(config_file).await {
-                builder = builder.with_file(config_file);
-            }
-        }
-
-        let manager = builder
-            .build(self.fs.clone())
-            .map_err(|e| Error::operation(format!("Failed to create config manager: {e}")))?;
-
-        let mut config = manager
-            .load()
-            .await
-            .map_err(|e| Error::operation(format!("Failed to load configuration: {e}")))?;
-
-        // Merge with base config if provided
-        if let Some(base) = base_config {
-            config
-                .merge_with(base)
-                .map_err(|e| Error::operation(format!("Failed to merge configurations: {e}")))?;
-        }
-
-        Ok(config)
-    }
-
     /// Loads project metadata using configuration settings.
     ///
     /// This method loads project metadata taking into account configuration
@@ -552,7 +480,7 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
     /// # Arguments
     ///
     /// * `path` - The path to analyze for a Node.js project
-    /// * `config` - Optional configuration (if None, auto-loads from repo.config.* files)
+    /// * `config` - Optional configuration (if None, uses default configuration)
     ///
     /// # Errors
     ///
@@ -560,7 +488,6 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
     /// - The path does not exist or cannot be accessed
     /// - The path does not contain a valid Node.js project
     /// - An I/O error occurs while reading project files
-    /// - Configuration files cannot be parsed
     ///
     /// # Returns
     ///
@@ -576,10 +503,10 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectDetector<F> {
         // First validate basic path requirements
         self.validate_project_path(path).await?;
 
-        // Load or use provided configuration
+        // Use provided configuration or default
         let effective_config = match config {
             Some(cfg) => cfg.clone(),
-            None => self.load_project_config(path, None).await?,
+            None => StandardConfig::default(),
         };
 
         // Create a unified project structure using configuration

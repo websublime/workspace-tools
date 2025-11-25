@@ -204,10 +204,10 @@ pub async fn execute_upgrade_check(
 /// # Errors
 ///
 /// Returns an error if configuration cannot be loaded or validated.
-async fn load_config(_workspace_root: &Path) -> Result<PackageToolsConfig> {
-    sublime_pkg_tools::config::load_config()
-        .await
-        .map_err(|e| CliError::configuration(format!("Failed to load configuration: {e}")))
+async fn load_config(workspace_root: &Path) -> Result<PackageToolsConfig> {
+    crate::commands::find_and_load_config(workspace_root, None).await?.ok_or_else(|| {
+        CliError::configuration("Workspace not initialized. Run 'workspace init' first.")
+    })
 }
 
 /// Validates and normalizes a registry URL.

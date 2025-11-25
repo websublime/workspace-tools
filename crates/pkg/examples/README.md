@@ -2,6 +2,15 @@
 
 This directory contains example configuration files and Rust programs demonstrating how to use the `sublime_pkg_tools` configuration system.
 
+## Architecture Note
+
+The `sublime_pkg_tools` crate is **agnostic to file discovery**. The crate provides:
+
+- `PackageToolsConfig::default()` - Default configuration
+- `PackageToolsConfig::from_str(content, format)` - Parse configuration from content
+
+File discovery, reading, and environment variable overrides are the responsibility of the calling application (typically the CLI). This design enables flexibility for library users who may want to implement their own configuration loading strategies.
+
 ## TOML Configuration Examples
 
 ### Basic Configuration
@@ -12,9 +21,7 @@ This directory contains example configuration files and Rust programs demonstrat
 
 ```bash
 # Copy to your project root
-cp examples/basic-config.toml package-tools.toml
-# Or use with custom path
-cp examples/basic-config.toml .sublime/package-tools.toml
+cp examples/basic-config.toml repo.config.toml
 ```
 
 ### Minimal Configuration
@@ -25,7 +32,7 @@ cp examples/basic-config.toml .sublime/package-tools.toml
 
 ```bash
 # Start with minimal config
-cp examples/minimal-config.toml package-tools.toml
+cp examples/minimal-config.toml repo.config.toml
 # Then add only what you need to customize
 ```
 
@@ -42,19 +49,20 @@ cp examples/minimal-config.toml package-tools.toml
 
 ```bash
 # For monorepo projects
-cp examples/monorepo-config.toml package-tools.toml
+cp examples/monorepo-config.toml repo.config.toml
 ```
 
 ## Rust Code Examples
 
-### Loading Configuration
+### Parsing Configuration
 
-[`load_config.rs`](./load_config.rs) - Demonstrates four different methods for loading configuration:
+[`load_config.rs`](./load_config.rs) - Demonstrates different methods for working with configuration:
 
-1. Using the convenience `load_config()` function
-2. Using `ConfigManager` with builder pattern
-3. Loading from specific file paths
-4. Creating configuration programmatically
+1. Using `PackageToolsConfig::default()` for default configuration
+2. Using `PackageToolsConfig::from_str()` to parse TOML content
+3. Using `PackageToolsConfig::from_str()` to parse JSON content
+4. Using `PackageToolsConfig::from_str()` to parse YAML content
+5. Creating configuration programmatically
 
 **Run the example:**
 
@@ -80,60 +88,24 @@ cargo run --example load_config
 cargo run --example audit_report_formatting
 ```
 
-**Output examples:**
+### Changeset Storage
+
+[`changeset_storage.rs`](./changeset_storage.rs) - Demonstrates changeset storage operations.
+
+**Run the example:**
 
 ```bash
-# Default markdown format
-cargo run --example audit_report_formatting | grep -A 50 "Default Markdown"
-
-# JSON export
-cargo run --example audit_report_formatting | grep -A 20 "JSON Format"
-
-# Report queries
-cargo run --example audit_report_formatting | grep -A 10 "Report Query"
+cargo run --example changeset_storage
 ```
 
-### Environment Variable Overrides
+### Snapshot Versions
 
-[`env_override.rs`](./env_override.rs) - Shows how to override configuration settings using environment variables.
+[`snapshot_version.rs`](./snapshot_version.rs) - Demonstrates snapshot version generation.
 
-**Run without overrides:**
-
-```bash
-cargo run --example env_override
-```
-
-**Run with environment variable overrides:**
+**Run the example:**
 
 ```bash
-SUBLIME_PKG_VERSION_STRATEGY=unified \
-SUBLIME_PKG_CHANGESET_PATH=".custom-changesets" \
-SUBLIME_PKG_AUDIT_MIN_SEVERITY=info \
-cargo run --example env_override
-```
-
-**Common environment variables:**
-
-```bash
-# Changeset settings
-export SUBLIME_PKG_CHANGESET_PATH=".changesets"
-export SUBLIME_PKG_CHANGESET_HISTORY_PATH=".changesets/history"
-
-# Version settings
-export SUBLIME_PKG_VERSION_STRATEGY="unified"
-export SUBLIME_PKG_VERSION_DEFAULT_BUMP="minor"
-
-# Registry settings
-export SUBLIME_PKG_UPGRADE_REGISTRY_DEFAULT_REGISTRY="https://registry.npmjs.org"
-export SUBLIME_PKG_UPGRADE_REGISTRY_TIMEOUT_SECS="60"
-
-# Changelog settings
-export SUBLIME_PKG_CHANGELOG_FORMAT="conventional"
-SUBLIME_PKG_CHANGELOG_REPOSITORY_URL="https://github.com/org/repo"
-
-# Audit settings
-export SUBLIME_PKG_AUDIT_MIN_SEVERITY="warning"
-export SUBLIME_PKG_AUDIT_SECTIONS_UPGRADES="true"
+cargo run --example snapshot_version
 ```
 
 ## Quick Start
@@ -148,11 +120,20 @@ use sublime_pkg_tools::config::PackageToolsConfig;
 let config = PackageToolsConfig::default();
 ```
 
-2. **Or create minimal config file:**
+2. **Or parse from config content:**
 
-```bash
-cp examples/minimal-config.toml package-tools.toml
-# Edit to set your repository URL
+```rust
+use sublime_pkg_tools::config::{PackageToolsConfig, ConfigFormat};
+
+let toml_content = r#"
+[changeset]
+path = ".changesets"
+
+[version]
+default_bump = "minor"
+"#;
+
+let config = PackageToolsConfig::from_str(toml_content, ConfigFormat::Toml)?;
 ```
 
 ### For a Monorepo Project
@@ -160,31 +141,22 @@ cp examples/minimal-config.toml package-tools.toml
 1. **Copy monorepo configuration:**
 
 ```bash
-cp examples/monorepo-config.toml package-tools.toml
+cp examples/monorepo-config.toml repo.config.toml
 ```
 
 2. **Customize for your project:**
 
 ```toml
-[package_tools.version]
+[changeset]
+path = ".changesets"
+
+[version]
 # Choose versioning strategy
 strategy = "independent"  # or "unified"
 
-[package_tools.changelog]
+[changelog]
 # Set your repository URL
 repository_url = "https://github.com/your-org/your-repo"
-```
-
-### For CI/CD Pipelines
-
-Use environment variables to override settings per environment:
-
-```yaml
-# GitHub Actions example
-env:
-  SUBLIME_PKG_VERSION_STRATEGY: "unified"
-  SUBLIME_PKG_AUDIT_MIN_SEVERITY: "warning"
-  SUBLIME_PKG_CHANGELOG_REPOSITORY_URL: ${{ github.repository_url }}
 ```
 
 ## Configuration Sections
@@ -212,22 +184,26 @@ let config = PackageToolsConfig::default();
 
 // Validate returns Result<(), ConfigError>
 match config.validate() {
-    Ok(_) => println!("✓ Configuration is valid"),
-    Err(e) => eprintln!("✗ Configuration error: {}", e),
+    Ok(_) => println!("Configuration is valid"),
+    Err(e) => eprintln!("Configuration error: {}", e),
 }
 ```
 
 ## Common Patterns
 
-### Pattern 1: Load with Fallback to Defaults
+### Pattern 1: Parse from String Content
 
 ```rust
-use sublime_pkg_tools::config::{load_config, ConfigLoader};
+use sublime_pkg_tools::config::{PackageToolsConfig, ConfigFormat};
 
-// Try to load config, fall back to defaults
-let config = load_config()
-    .await
-    .unwrap_or_else(|_| async { ConfigLoader::load_defaults().await.unwrap() });
+// Parse TOML
+let config = PackageToolsConfig::from_str(toml_content, ConfigFormat::Toml)?;
+
+// Parse JSON
+let config = PackageToolsConfig::from_str(json_content, ConfigFormat::Json)?;
+
+// Parse YAML
+let config = PackageToolsConfig::from_str(yaml_content, ConfigFormat::Yaml)?;
 ```
 
 ### Pattern 2: Override Specific Settings
@@ -240,69 +216,90 @@ config.version.default_bump = "minor".to_string();
 config.changeset.path = ".custom-changesets".to_string();
 ```
 
-### Pattern 3: Environment-Specific Configuration
+### Pattern 3: Partial Configuration with Defaults
+
+Configuration uses `#[serde(default)]`, so you only need to specify fields you want to override:
+
+```toml
+# Only override what you need - everything else uses defaults
+[version]
+default_bump = "minor"
+
+[changelog]
+include_authors = true
+```
+
+### Pattern 4: CLI Integration Example
+
+If you're building a CLI that uses this library, you would handle file discovery:
 
 ```rust
-use sublime_pkg_tools::config::load_config_from_file;
+use sublime_pkg_tools::config::{PackageToolsConfig, ConfigFormat};
+use std::fs;
 
-// Determine config file based on environment
-let config_file = if std::env::var("ENV").unwrap_or_default() == "production" {
-    "config/production.toml"
-} else {
-    "config/development.toml"
-};
+// CLI discovers and reads the config file
+let content = fs::read_to_string("repo.config.toml")?;
 
-let config = load_config_from_file(config_file).await?;
+// Parse using the library
+let config = PackageToolsConfig::from_str(&content, ConfigFormat::Toml)?;
+```
+
+## Configuration Formats
+
+The library supports three configuration formats:
+
+### TOML (Recommended)
+
+```toml
+[changeset]
+path = ".changesets"
+
+[version]
+strategy = "independent"
+default_bump = "patch"
+```
+
+### JSON
+
+```json
+{
+    "changeset": {
+        "path": ".changesets"
+    },
+    "version": {
+        "strategy": "independent",
+        "default_bump": "patch"
+    }
+}
+```
+
+### YAML
+
+```yaml
+changeset:
+  path: ".changesets"
+
+version:
+  strategy: independent
+  default_bump: patch
 ```
 
 ## Further Reading
 
-- [Configuration Guide](../docs/guides/configuration.md) - Comprehensive configuration documentation
-- [API Documentation](../docs/api/) - Detailed API reference for all configuration types
+- [SPEC.md](../SPEC.md) - Detailed specification for the pkg crate
 - [CONCEPT.md](../CONCEPT.md) - High-level design and concepts
 - [PLAN.md](../PLAN.md) - Implementation plan and module structure
 
 ## Troubleshooting
 
-### Configuration File Not Found
+### Validation Errors
 
-If you get a "configuration file not found" error:
+If validation fails:
 
-1. Check that the file exists in the expected location
-2. Use an absolute path or ensure your working directory is correct
-3. Use `load_config()` instead which looks in default locations
-4. Use `ConfigLoader::load_from_files()` for multiple optional files
-
-```rust
-use sublime_pkg_tools::config::{load_config, ConfigLoader};
-
-// Option 1: Load from default locations (won't fail if files missing)
-let config = load_config().await?;
-
-// Option 2: Load from multiple files (skips missing files)
-let config = ConfigLoader::load_from_files(vec![
-    "package-tools.toml",
-    ".sublime/package-tools.toml",
-]).await?;
-```
-
-### Environment Variables Not Working
-
-Ensure you:
-
-1. Use the correct prefix (default: `SUBLIME_PKG_`)
-2. Use uppercase with underscores
-3. Nested fields use the full path separated by underscores
-
-```bash
-# Correct
-export SUBLIME_PKG_VERSION_STRATEGY="unified"
-
-# Incorrect
-export PKG_TOOLS_VERSION_STRATEGY="unified"  # Wrong prefix
-export sublime_pkg_version_strategy="unified"  # Not uppercase
-export SUBLIMEPKG_VERSION_STRATEGY="unified"  # Missing underscore
-```
+1. Check error message for specific field
+2. Verify enum values are correct (e.g., "independent" not "Independent")
+3. Ensure paths are valid
+4. Check that default environments are subset of available environments
 
 ### Report Formatting
 
@@ -327,20 +324,10 @@ let json = report.to_json()?;
 std::fs::write("audit-report.json", json)?;
 ```
 
-### Validation Errors
-
-If validation fails:
-
-1. Check error message for specific field
-2. Verify enum values are correct (e.g., "independent" not "Independent")
-3. Ensure paths are valid
-4. Check that default environments are subset of available environments
-
 ## Support
 
 For more help:
 
-- Check the [Configuration Guide](../docs/guides/configuration.md)
 - Review [TOML documentation](https://toml.io/)
 - See the API documentation for configuration structs
 - Open an issue with your configuration file and error message

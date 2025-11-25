@@ -29,6 +29,7 @@ use std::{
 
 use sublime_standard_tools::{
     command::{CommandBuilder, DefaultCommandExecutor, Executor},
+    config::StandardConfig,
     error::{Error, Result},
     filesystem::{AsyncFileSystem, FileSystemManager, NodePathKind, PathExt},
     monorepo::{MonorepoDetector, MonorepoDetectorTrait},
@@ -109,14 +110,14 @@ impl SimpleRepoAnalyzer {
         }
     }
 
-    /// Creates a new simple repository analyzer with project-specific configuration
-    async fn new_with_project_config(project_path: &Path) -> Result<Self> {
-        Ok(Self {
-            fs: FileSystemManager::new_with_project_config(project_path).await?,
-            executor: DefaultCommandExecutor::new_with_project_config(project_path).await?,
+    /// Creates a new simple repository analyzer with explicit configuration
+    fn new_with_config(config: &StandardConfig) -> Self {
+        Self {
+            fs: FileSystemManager::with_standard_config(&config.filesystem),
+            executor: DefaultCommandExecutor::new_with_config(config.commands.clone()),
             project_detector: ProjectDetector::new(),
             project_manager: ProjectManager::new(),
-        })
+        }
     }
 
     /// Analyzes a simple Node.js repository
@@ -267,13 +268,13 @@ impl MonorepoAnalyzer {
         }
     }
 
-    /// Creates a new monorepo analyzer with project-specific configuration
-    async fn new_with_project_config(project_path: &Path) -> Result<Self> {
-        Ok(Self {
-            fs: FileSystemManager::new_with_project_config(project_path).await?,
-            executor: DefaultCommandExecutor::new_with_project_config(project_path).await?,
-            monorepo_detector: MonorepoDetector::new_with_project_config(project_path).await?,
-        })
+    /// Creates a new monorepo analyzer with explicit configuration
+    fn new_with_config(config: &StandardConfig) -> Self {
+        Self {
+            fs: FileSystemManager::with_standard_config(&config.filesystem),
+            executor: DefaultCommandExecutor::new_with_config(config.commands.clone()),
+            monorepo_detector: MonorepoDetector::new_with_config(config.monorepo.clone()),
+        }
     }
 
     /// Analyzes a monorepo structure
@@ -606,11 +607,11 @@ export class ApiClient {
     async fetchData(endpoint: string): Promise<any> {
         try {
             const response = await fetch(`${this.baseUrl}${endpoint}`);
-            
+
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            
+
             return await response.json();
         } catch (error) {
             console.error('API fetch error:', error);
@@ -687,7 +688,7 @@ detect_from_env = true
 fallback = "Npm"
 
 [commands]
-# Faster timeouts for simple projects  
+# Faster timeouts for simple projects
 max_concurrent_commands = 2
 
 [validation]
@@ -700,7 +701,7 @@ validate_dependencies = true
 # Simple project ignore patterns
 ignore_patterns = [
     ".git",
-    "node_modules", 
+    "node_modules",
     "dist",
     ".DS_Store"
 ]
@@ -918,7 +919,7 @@ custom_workspace_fields = ["@scope/"]
 # Extended workspace patterns for our monorepo structure
 workspace_patterns = [
     "packages/*",
-    "apps/*", 
+    "apps/*",
     "libs/*",
     "tools/*"
 ]
@@ -927,7 +928,7 @@ workspace_patterns = [
 package_directories = [
     "packages",
     "apps",
-    "libs", 
+    "libs",
     "tools",
     "services"
 ]
@@ -936,7 +937,7 @@ package_directories = [
 exclude_patterns = [
     "node_modules",
     ".git",
-    "dist", 
+    "dist",
     "build",
     ".next",
     ".nuxt",
@@ -959,7 +960,7 @@ queue_collection_sleep_us = 50
 ignore_patterns = [
     ".git",
     "node_modules",
-    ".pnpm-store", 
+    ".pnpm-store",
     "dist",
     "build",
     ".DS_Store"
@@ -989,13 +990,10 @@ async fn test_simple_repository_analysis() -> Result<()> {
 
     let repo_path = setup_simple_repo(&temp_dir).await?;
 
-    // Create analyzer with project-specific configuration from repo.config.toml
-    println!("🔧 Loading project-specific configuration from repo.config.toml...");
-    let analyzer =
-        SimpleRepoAnalyzer::new_with_project_config(&repo_path).await.unwrap_or_else(|_| {
-            println!("⚠️ Failed to load project config, falling back to defaults");
-            SimpleRepoAnalyzer::new()
-        });
+    // Create analyzer with default configuration
+    // Note: Configuration should be loaded by the CLI layer and passed explicitly if needed
+    println!("🔧 Creating analyzer with default configuration...");
+    let analyzer = SimpleRepoAnalyzer::new();
 
     // Analyze the repository
     let repo_info = analyzer.analyze_simple_repo(&repo_path).await?;
@@ -1163,12 +1161,9 @@ async fn test_project_type_detection() -> Result<()> {
 
     let project_detector = ProjectDetector::new();
 
-    // Create monorepo detector with project-specific configuration for better detection
-    let monorepo_detector =
-        MonorepoDetector::new_with_project_config(&monorepo_path).await.unwrap_or_else(|_| {
-            println!("⚠️ Using default monorepo detector config");
-            MonorepoDetector::new()
-        });
+    // Create monorepo detector with default configuration
+    // Note: Configuration should be loaded by the CLI layer and passed explicitly if needed
+    let monorepo_detector = MonorepoDetector::new();
 
     // Test simple repository detection
     println!("\n🔍 Testing simple repository detection:");
@@ -1220,19 +1215,11 @@ async fn test_comprehensive_real_world_scenario() -> Result<()> {
     // Step 2: Project discovery and analysis
     println!("\n🔍 Step 2: Discovering and analyzing projects...");
 
-    // Create analyzers with project-specific configurations
-    println!("🔧 Loading project-specific configurations...");
-    let simple_analyzer =
-        SimpleRepoAnalyzer::new_with_project_config(&simple_path).await.unwrap_or_else(|_| {
-            println!("⚠️ Simple repo config load failed, using defaults");
-            SimpleRepoAnalyzer::new()
-        });
-
-    let monorepo_analyzer =
-        MonorepoAnalyzer::new_with_project_config(&monorepo_path).await.unwrap_or_else(|_| {
-            println!("⚠️ Monorepo config load failed, using defaults");
-            MonorepoAnalyzer::new()
-        });
+    // Create analyzers with default configurations
+    // Note: Configuration should be loaded by the CLI layer and passed explicitly if needed
+    println!("🔧 Creating analyzers with default configurations...");
+    let simple_analyzer = SimpleRepoAnalyzer::new();
+    let monorepo_analyzer = MonorepoAnalyzer::new();
 
     let simple_info = simple_analyzer.analyze_simple_repo(&simple_path).await?;
     let monorepo_info = monorepo_analyzer.analyze_monorepo(&monorepo_path).await?;

@@ -43,10 +43,9 @@
 use crate::error::{CliError, Result};
 use std::path::{Path, PathBuf};
 use sublime_git_tools::Repo;
-use sublime_pkg_tools::config::{ConfigLoader, PackageToolsConfig};
+use sublime_pkg_tools::config::PackageToolsConfig;
 use sublime_pkg_tools::types::VersionBump;
-use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
-use tracing::{debug, info};
+use tracing::debug;
 
 /// Loads workspace configuration from file or defaults.
 ///
@@ -90,62 +89,18 @@ pub(crate) async fn load_config(
 ) -> Result<PackageToolsConfig> {
     debug!("Loading workspace configuration from: {}", workspace_root.display());
 
-    let fs = FileSystemManager::new();
+    // Use the centralized config loading function
+    let config = crate::commands::find_and_load_config(workspace_root, config_path).await?;
 
-    // Try to find and load config file
-    let mut found_config = None;
-    if let Some(config) = config_path {
-        // Use the explicitly provided config file
-        let config_file =
-            if config.is_absolute() { config.to_path_buf() } else { workspace_root.join(config) };
-
-        if fs.exists(&config_file).await {
-            found_config = Some(config_file);
-        } else {
-            return Err(CliError::configuration(format!(
-                "Config file not found: {}",
-                config_file.display()
-            )));
+    match config {
+        Some(config) => {
+            debug!("Configuration loaded successfully");
+            Ok(config)
         }
-    } else {
-        // Search for standard config file names
-        let candidates = vec![
-            workspace_root.join("repo.config.toml"),
-            workspace_root.join("repo.config.json"),
-            workspace_root.join("repo.config.yaml"),
-            workspace_root.join("repo.config.yml"),
-        ];
-
-        for candidate in candidates {
-            if fs.exists(&candidate).await {
-                found_config = Some(candidate);
-                break;
-            }
-        }
-    }
-
-    // Load configuration
-    let config = if let Some(config_path) = found_config {
-        match ConfigLoader::load_from_file(&config_path).await {
-            Ok(config) => {
-                info!("Configuration loaded from: {}", config_path.display());
-                config
-            }
-            Err(e) => {
-                return Err(CliError::configuration(format!(
-                    "Failed to load configuration from {}: {e}",
-                    config_path.display()
-                )));
-            }
-        }
-    } else {
-        return Err(CliError::configuration(
+        None => Err(CliError::configuration(
             "Workspace not initialized. Run 'workspace init' first.".to_string(),
-        ));
-    };
-
-    debug!("Configuration loaded successfully");
-    Ok(config)
+        )),
+    }
 }
 
 /// Detects the current Git branch.

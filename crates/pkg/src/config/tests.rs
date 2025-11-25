@@ -1038,34 +1038,21 @@ mod audit_config {
 }
 
 // =============================================================================
-// Configuration Loading Tests
+// Configuration Parsing Tests
 // =============================================================================
 
 #[cfg(test)]
-mod loader_tests {
-    use std::fs;
-    use tempfile::TempDir;
+mod parsing_tests {
+    use crate::config::{ConfigFormat, PackageToolsConfig};
 
-    use crate::config::ConfigLoader;
-
-    #[tokio::test]
-    async fn test_load_defaults() {
-        let result = ConfigLoader::load_defaults().await;
-        assert!(result.is_ok());
+    #[test]
+    fn test_default_config_is_valid() {
+        let config = PackageToolsConfig::default();
+        assert_eq!(config.changeset.path, ".changesets");
     }
 
-    #[tokio::test]
-    async fn test_load_from_nonexistent_files() {
-        // Should succeed with just defaults
-        let result = ConfigLoader::load_from_files(vec!["nonexistent.toml"]).await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_load_from_toml_file() {
-        let temp_dir = TempDir::new().unwrap();
-        let config_path = temp_dir.path().join("test-config.toml");
-
+    #[test]
+    fn test_from_str_toml() {
         let toml_content = r#"
 [changeset]
 path = ".custom-changesets"
@@ -1078,16 +1065,64 @@ strategy = "unified"
 default_bump = "minor"
 "#;
 
-        fs::write(&config_path, toml_content).unwrap();
-
-        let result = ConfigLoader::load_from_file(&config_path).await;
+        let result = PackageToolsConfig::from_str(toml_content, ConfigFormat::Toml);
         assert!(result.is_ok());
 
-        if let Ok(config) = result {
-            assert_eq!(config.changeset.path, ".custom-changesets");
-            assert_eq!(config.changeset.history_path, ".custom-history");
-            assert_eq!(config.version.default_bump, "minor");
-        }
+        let config = result.unwrap();
+        assert_eq!(config.changeset.path, ".custom-changesets");
+        assert_eq!(config.changeset.history_path, ".custom-history");
+        assert_eq!(config.version.default_bump, "minor");
+    }
+
+    #[test]
+    fn test_from_str_json() {
+        let json_content = r#"{
+            "changeset": {
+                "path": ".json-changesets",
+                "history_path": ".json-history",
+                "available_environments": ["staging"],
+                "default_environments": ["staging"]
+            }
+        }"#;
+
+        let result = PackageToolsConfig::from_str(json_content, ConfigFormat::Json);
+        assert!(result.is_ok());
+
+        let config = result.unwrap();
+        assert_eq!(config.changeset.path, ".json-changesets");
+    }
+
+    #[test]
+    fn test_from_str_yaml() {
+        let yaml_content = r#"
+changeset:
+  path: ".yaml-changesets"
+  history_path: ".yaml-history"
+  available_environments:
+    - production
+  default_environments:
+    - production
+"#;
+
+        let result = PackageToolsConfig::from_str(yaml_content, ConfigFormat::Yaml);
+        assert!(result.is_ok());
+
+        let config = result.unwrap();
+        assert_eq!(config.changeset.path, ".yaml-changesets");
+    }
+
+    #[test]
+    fn test_from_str_invalid_toml() {
+        let invalid_toml = "this is not valid toml [[[";
+        let result = PackageToolsConfig::from_str(invalid_toml, ConfigFormat::Toml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_from_str_invalid_json() {
+        let invalid_json = "{ invalid json }";
+        let result = PackageToolsConfig::from_str(invalid_json, ConfigFormat::Json);
+        assert!(result.is_err());
     }
 }
 

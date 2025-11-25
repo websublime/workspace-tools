@@ -43,6 +43,7 @@ use sublime_standard_tools::config::{ConfigResult, Configurable};
 /// breaking_warning_template = "⚠️ BREAKING CHANGES\n\n{changes}"
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct GitConfig {
     /// Template for single-package release merge commits.
     ///

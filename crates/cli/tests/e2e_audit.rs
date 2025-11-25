@@ -839,12 +839,12 @@ async fn test_audit_invalid_verbosity_fails_gracefully() {
     assert!(result.is_err(), "Audit should fail with invalid verbosity");
 }
 
-/// Test: Audit with missing config file uses defaults
+/// Test: Audit requires workspace initialization (config file)
 #[tokio::test]
-async fn test_audit_missing_config_uses_defaults() {
+async fn test_audit_requires_workspace_initialization() {
     let workspace = WorkspaceFixture::single_package().with_git().with_commits(1).finalize();
 
-    // Don't create config file
+    // Don't create config file - workspace is not initialized
 
     let args = AuditArgs {
         sections: vec!["dependencies".to_string()],
@@ -859,8 +859,13 @@ async fn test_audit_missing_config_uses_defaults() {
     let (output, _buffer) = create_test_output();
     let result = execute_audit(&args, &output, workspace.root(), None).await;
 
-    // Should succeed with default configuration
-    assert!(result.is_ok(), "Audit should use defaults when config missing: {:?}", result.err());
+    // Should fail because workspace is not initialized
+    assert!(result.is_err(), "Audit should fail when workspace is not initialized");
+    let err = result.unwrap_err();
+    assert!(
+        err.to_string().contains("not initialized"),
+        "Error should mention initialization: {err}"
+    );
 }
 
 // ============================================================================

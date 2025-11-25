@@ -234,7 +234,7 @@ pub async fn execute_backup_list(
     debug!("Workspace root: {}", workspace_root.display());
 
     // Load configuration
-    let config = load_config().await?;
+    let config = load_config(workspace_root).await?;
 
     // Create filesystem manager
     let fs = FileSystemManager::new();
@@ -327,7 +327,7 @@ pub async fn execute_backup_restore(
     debug!("Force: {}", args.force);
 
     // Load configuration
-    let config = load_config().await?;
+    let config = load_config(workspace_root).await?;
 
     // Create filesystem manager
     let fs = FileSystemManager::new();
@@ -433,7 +433,7 @@ pub async fn execute_backup_clean(
     debug!("Force: {}", args.force);
 
     // Load configuration
-    let config = load_config().await?;
+    let config = load_config(workspace_root).await?;
 
     // Create filesystem manager
     let fs = FileSystemManager::new();
@@ -497,10 +497,10 @@ pub async fn execute_backup_clean(
 /// # Errors
 ///
 /// Returns an error if configuration cannot be loaded or validated.
-async fn load_config() -> Result<PackageToolsConfig> {
-    sublime_pkg_tools::config::load_config()
-        .await
-        .map_err(|e| CliError::configuration(format!("Failed to load configuration: {e}")))
+async fn load_config(workspace_root: &Path) -> Result<PackageToolsConfig> {
+    crate::commands::find_and_load_config(workspace_root, None).await?.ok_or_else(|| {
+        CliError::configuration("Workspace not initialized. Run 'workspace init' first.")
+    })
 }
 
 /// Prompts the user to confirm backup restore.

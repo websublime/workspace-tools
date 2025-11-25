@@ -28,12 +28,19 @@ sublime_pkg_tools = "0.1.0"
 ### Basic Usage
 
 ```rust
-use sublime_pkg_tools::config::{load_config, PackageToolsConfig};
+use sublime_pkg_tools::config::{ConfigFormat, PackageToolsConfig};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load configuration from default locations with environment overrides
-    let config = load_config().await?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Parse configuration from string content
+    let toml_content = r#"
+        [package_tools.changeset]
+        path = ".changesets"
+        
+        [package_tools.version]
+        strategy = "independent"
+    "#;
+    
+    let config = PackageToolsConfig::from_str(toml_content, ConfigFormat::Toml)?;
     
     // Or use defaults
     let config = PackageToolsConfig::default();
@@ -42,6 +49,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+> **Note:** This crate is configuration-agnostic. It does not search for or load
+> configuration files from the filesystem. The CLI layer (`sublime_cli_tools`) is
+> responsible for discovering and reading configuration files, then passing the
+> parsed content to this crate via `PackageToolsConfig::from_str()`.
 
 ### Configuration
 
@@ -100,17 +112,13 @@ Check out the [`examples/`](examples/) directory for:
   - `monorepo-config.toml` - Advanced monorepo configuration
 
 - **Code Examples**:
-  - `load_config.rs` - Different methods for loading configuration
-  - `env_override.rs` - Environment variable override examples
+  - `load_config.rs` - Parsing configuration from string content
 
 Run examples:
 
 ```bash
 # Load configuration example
 cargo run --example load_config
-
-# Environment variable override example
-SUBLIME_PKG_VERSION_STRATEGY=unified cargo run --example env_override
 ```
 
 ## Documentation

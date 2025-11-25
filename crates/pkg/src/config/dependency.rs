@@ -57,6 +57,7 @@ use sublime_standard_tools::config::{ConfigResult, Configurable};
 /// skip_portal_protocol = true
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct DependencyConfig {
     /// Version bump type to use when propagating updates.
     ///

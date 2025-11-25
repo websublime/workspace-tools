@@ -52,7 +52,7 @@ pub mod version;
 // Common utilities
 use crate::error::{CliError, Result};
 use std::path::Path;
-use sublime_pkg_tools::config::{ConfigLoader, PackageToolsConfig};
+use sublime_pkg_tools::config::{ConfigFormat, PackageToolsConfig};
 use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
 use tracing::{debug, info};
 
@@ -124,13 +124,36 @@ pub async fn find_and_load_config(
 
     // Load configuration if found
     if let Some(config_file) = found_config {
-        match ConfigLoader::load_from_file(&config_file).await {
+        // Read file content
+        let content = fs.read_file_string(&config_file).await.map_err(|e| {
+            CliError::configuration(format!(
+                "Failed to read config from {}: {}",
+                config_file.display(),
+                e
+            ))
+        })?;
+
+        // Determine format from extension
+        let format = match config_file.extension().and_then(|e| e.to_str()) {
+            Some("toml") => ConfigFormat::Toml,
+            Some("json") => ConfigFormat::Json,
+            Some("yaml" | "yml") => ConfigFormat::Yaml,
+            _ => {
+                return Err(CliError::configuration(format!(
+                    "Unsupported config file extension: {}",
+                    config_file.display()
+                )));
+            }
+        };
+
+        // Parse configuration
+        match PackageToolsConfig::from_str(&content, format) {
             Ok(config) => {
                 info!("Configuration loaded from: {}", config_file.display());
                 Ok(Some(config))
             }
             Err(e) => Err(CliError::configuration(format!(
-                "Failed to load config from {}: {}",
+                "Failed to parse config from {}: {}",
                 config_file.display(),
                 e
             ))),
