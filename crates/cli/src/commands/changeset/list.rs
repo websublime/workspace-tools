@@ -65,9 +65,9 @@ use crate::output::{JsonResponse, Output};
 use serde::Serialize;
 use std::path::Path;
 use sublime_pkg_tools::changeset::ChangesetManager;
-use sublime_pkg_tools::config::{ConfigLoader, PackageToolsConfig};
+use sublime_pkg_tools::config::PackageToolsConfig;
 use sublime_pkg_tools::types::{Changeset, VersionBump};
-use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
+use sublime_standard_tools::filesystem::FileSystemManager;
 use tracing::{debug, info};
 
 /// Response data for changeset list command (JSON output).
@@ -241,48 +241,11 @@ async fn load_config(
 ) -> Result<PackageToolsConfig> {
     debug!("Loading workspace configuration");
 
-    let fs = FileSystemManager::new();
-
-    // Try to find and load config file
-    let mut found_config = None;
-    if let Some(config) = config_path {
-        found_config = Some(config.to_path_buf());
-    } else {
-        // Search for standard config file names
-        let candidates = vec![
-            workspace_root.join("repo.config.toml"),
-            workspace_root.join("repo.config.json"),
-            workspace_root.join("repo.config.yaml"),
-            workspace_root.join("repo.config.yml"),
-        ];
-
-        for candidate in candidates {
-            if fs.exists(&candidate).await {
-                found_config = Some(candidate);
-                break;
-            }
-        }
-    }
-
-    let config = if let Some(config_path) = found_config {
-        match ConfigLoader::load_from_file(&config_path).await {
-            Ok(config) => {
-                info!("Configuration loaded from: {}", config_path.display());
-                config
-            }
-            Err(e) => {
-                return Err(CliError::Configuration(format!(
-                    "Workspace not initialized. Run 'workspace init' first.\nDetails: {e}"
-                )));
-            }
-        }
-    } else {
-        return Err(CliError::Configuration(
+    crate::commands::find_and_load_config(workspace_root, config_path).await?.ok_or_else(|| {
+        CliError::Configuration(
             "Workspace not initialized. Run 'workspace init' first.".to_string(),
-        ));
-    };
-
-    Ok(config)
+        )
+    })
 }
 
 /// Sort changesets by the specified field.

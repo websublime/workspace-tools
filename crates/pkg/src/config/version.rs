@@ -43,6 +43,7 @@ use sublime_standard_tools::config::{ConfigResult, Configurable};
 /// snapshot_format = "{version}-{branch}.{timestamp}"
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct VersionConfig {
     /// The versioning strategy to use.
     ///

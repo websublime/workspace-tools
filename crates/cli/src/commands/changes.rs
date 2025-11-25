@@ -87,7 +87,7 @@ use serde::Serialize;
 use std::path::Path;
 use sublime_git_tools::Repo;
 use sublime_pkg_tools::changes::ChangesAnalyzer;
-use sublime_pkg_tools::config::ConfigLoader;
+
 use sublime_standard_tools::filesystem::FileSystemManager;
 use tracing::{debug, info, warn};
 
@@ -154,17 +154,8 @@ pub async fn execute_changes(
     debug!("Analysis mode: {:?}", determine_mode(args));
 
     // Load configuration
-    let config = if let Some(path) = config_path {
-        debug!("Loading config from: {}", path.display());
-        ConfigLoader::load_from_file(path).await.map_err(|e| {
-            CliError::configuration(format!("Failed to load config from {}: {e}", path.display()))
-        })?
-    } else {
-        debug!("Loading config from workspace root");
-        ConfigLoader::load_defaults()
-            .await
-            .map_err(|e| CliError::configuration(format!("Failed to load config: {e}")))?
-    };
+    let config =
+        crate::commands::find_and_load_config(root, config_path).await?.unwrap_or_default();
 
     // Open Git repository
     debug!("Opening Git repository at: {}", root.display());

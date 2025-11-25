@@ -91,10 +91,10 @@ use crate::output::{JsonResponse, Output};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use sublime_pkg_tools::changeset::ChangesetManager;
-use sublime_pkg_tools::config::ConfigLoader;
+use sublime_pkg_tools::config::PackageToolsConfig;
 use sublime_pkg_tools::types::{Changeset, PackageInfo, Version, VersionBump};
 use sublime_pkg_tools::version::VersionResolver;
-use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
+use sublime_standard_tools::filesystem::FileSystemManager;
 use tracing::{debug, info, warn};
 
 /// Execute the bump preview command.
@@ -550,65 +550,14 @@ fn calculate_bump_type(current: &Version, next: &Version) -> VersionBump {
 pub(crate) async fn load_config(
     workspace_root: &Path,
     config_path: Option<&Path>,
-) -> Result<sublime_pkg_tools::config::PackageToolsConfig> {
+) -> Result<PackageToolsConfig> {
     debug!("Loading workspace configuration from: {}", workspace_root.display());
 
-    let fs = FileSystemManager::new();
-
-    // Try to find and load config file
-    let mut found_config = None;
-    if let Some(config) = config_path {
-        // Use the explicitly provided config file
-        let config_file =
-            if config.is_absolute() { config.to_path_buf() } else { workspace_root.join(config) };
-
-        if fs.exists(&config_file).await {
-            found_config = Some(config_file);
-        } else {
-            return Err(CliError::configuration(format!(
-                "Config file not found: {}",
-                config_file.display()
-            )));
-        }
-    } else {
-        // Search for standard config file names
-        let candidates = vec![
-            workspace_root.join("repo.config.toml"),
-            workspace_root.join("repo.config.json"),
-            workspace_root.join("repo.config.yaml"),
-            workspace_root.join("repo.config.yml"),
-        ];
-
-        for candidate in candidates {
-            if fs.exists(&candidate).await {
-                found_config = Some(candidate);
-                break;
-            }
-        }
-    }
-
-    // Load configuration
-    let config = if let Some(config_path) = found_config {
-        match ConfigLoader::load_from_file(&config_path).await {
-            Ok(config) => {
-                info!("Configuration loaded from: {}", config_path.display());
-                config
-            }
-            Err(e) => {
-                return Err(CliError::configuration(format!(
-                    "Failed to load configuration from {}: {e}",
-                    config_path.display()
-                )));
-            }
-        }
-    } else {
-        return Err(CliError::configuration(
+    crate::commands::find_and_load_config(workspace_root, config_path).await?.ok_or_else(|| {
+        CliError::configuration(
             "Workspace not initialized. Run 'workspace init' first.".to_string(),
-        ));
-    };
-
-    debug!("Configuration loaded successfully");
-    Ok(config)
+        )
+    })
 }
 
 /// Outputs bump preview results as a formatted table.

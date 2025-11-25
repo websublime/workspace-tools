@@ -29,6 +29,7 @@ use sublime_standard_tools::config::{ConfigResult, Configurable};
 /// assert_eq!(config.min_severity, "warning");
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct AuditConfig {
     /// Whether auditing is enabled.
     ///
@@ -75,6 +76,7 @@ pub struct AuditConfig {
 /// assert!(config.dependencies);
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct AuditSectionsConfig {
     /// Whether to run upgrade availability audits.
     ///
@@ -116,6 +118,7 @@ pub struct AuditSectionsConfig {
 /// assert!(config.deprecated_as_critical);
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct UpgradeAuditConfig {
     /// Whether to include patch version upgrades.
     ///
@@ -152,6 +155,7 @@ pub struct UpgradeAuditConfig {
 /// assert!(config.check_version_conflicts);
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct DependencyAuditConfig {
     /// Whether to detect circular dependencies.
     ///
@@ -188,6 +192,7 @@ pub struct DependencyAuditConfig {
 /// assert!(config.check_changelog);
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct BreakingChangesAuditConfig {
     /// Whether to check for breaking changes in conventional commits.
     ///
@@ -214,6 +219,7 @@ pub struct BreakingChangesAuditConfig {
 /// assert!(config.warn_on_inconsistency);
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct VersionConsistencyAuditConfig {
     /// Whether to fail when version inconsistencies are detected.
     ///
@@ -302,6 +308,7 @@ impl Default for VersionConsistencyAuditConfig {
 /// assert_eq!(config.security_multiplier, 1.5);
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct HealthScoreWeightsConfig {
     /// Points deducted per critical issue.
     ///

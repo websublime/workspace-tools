@@ -95,7 +95,7 @@ pub async fn execute_version_consistency_audit(
     let verbosity = parse_verbosity(verbosity_str)?;
 
     // Load configuration
-    let config = load_audit_config(config_path).await?;
+    let config = load_audit_config(workspace_root, config_path).await?;
 
     // Initialize audit manager
     output.info("Initializing version consistency audit...")?;
@@ -470,19 +470,10 @@ fn write_version_consistency_report_to_file(
 /// - Configuration file cannot be parsed
 /// - Configuration is invalid
 async fn load_audit_config(
+    workspace_root: &Path,
     config_path: Option<&Path>,
 ) -> Result<sublime_pkg_tools::config::PackageToolsConfig> {
-    use sublime_pkg_tools::config::ConfigLoader;
-
-    let config = if let Some(path) = config_path {
-        ConfigLoader::load_from_file(path).await.map_err(|e| {
-            CliError::configuration(format!("Failed to load config from {}: {e}", path.display()))
-        })?
-    } else {
-        ConfigLoader::load_defaults()
-            .await
-            .map_err(|e| CliError::configuration(format!("Failed to load default config: {e}")))?
-    };
-
-    Ok(config)
+    crate::commands::find_and_load_config(workspace_root, config_path).await?.ok_or_else(|| {
+        CliError::configuration("Workspace not initialized. Run 'workspace init' first.")
+    })
 }

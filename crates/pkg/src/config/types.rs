@@ -10,7 +10,7 @@
 //! consistent access to settings across all modules while maintaining clear organization.
 
 use serde::{Deserialize, Serialize};
-use sublime_standard_tools::config::{ConfigResult, Configurable, StandardConfig};
+use sublime_standard_tools::config::{ConfigFormat, ConfigResult, Configurable, StandardConfig};
 
 use super::{
     audit::AuditConfig, changelog::ChangelogConfig, changeset::ChangesetConfig,
@@ -80,7 +80,7 @@ use super::{
 /// enabled = true
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename = "package_tools")]
+#[serde(default, rename = "package_tools")]
 pub struct PackageToolsConfig {
     /// Changeset management configuration.
     ///
@@ -312,5 +312,60 @@ impl PackageToolsConfig {
     #[must_use]
     pub fn with_standard_config(standard_config: StandardConfig) -> Self {
         Self { standard_config, ..Self::default() }
+    }
+
+    /// Parses configuration from a string in the specified format.
+    ///
+    /// This method deserializes configuration content from TOML, YAML, or JSON format
+    /// and validates the result before returning.
+    ///
+    /// # Arguments
+    ///
+    /// * `content` - The configuration content as a string
+    /// * `format` - The format of the content (TOML, YAML, or JSON)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(PackageToolsConfig)` - The parsed and validated configuration
+    /// * `Err(ConfigError)` - If parsing or validation fails
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The content cannot be parsed in the specified format
+    /// - The parsed configuration fails validation
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use sublime_standard_tools::config::ConfigFormat;
+    ///
+    /// let toml_content = r#"
+    /// [changeset]
+    /// path = ".changesets"
+    /// "#;
+    ///
+    /// let config = PackageToolsConfig::from_str(toml_content, ConfigFormat::Toml)
+    ///     .expect("Should parse TOML config");
+    /// assert_eq!(config.changeset.path, ".changesets");
+    /// ```
+    pub fn from_str(content: &str, format: ConfigFormat) -> ConfigResult<Self> {
+        use sublime_standard_tools::error::ConfigError;
+
+        let config: Self = match format {
+            ConfigFormat::Toml => {
+                toml::from_str(content).map_err(|e| ConfigError::parse("TOML", e.to_string()))?
+            }
+            ConfigFormat::Yaml => serde_yaml::from_str(content)
+                .map_err(|e| ConfigError::parse("YAML", e.to_string()))?,
+            ConfigFormat::Json => serde_json::from_str(content)
+                .map_err(|e| ConfigError::parse("JSON", e.to_string()))?,
+        };
+
+        // Validate the parsed configuration
+        config.validate()?;
+
+        Ok(config)
     }
 }

@@ -29,6 +29,7 @@ use sublime_standard_tools::config::{ConfigResult, Configurable};
 /// assert_eq!(config.filename, "CHANGELOG.md");
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct ChangelogConfig {
     /// Whether changelog generation is enabled.
     ///
@@ -136,6 +137,7 @@ pub enum MonorepoMode {
 ///
 /// Controls how conventional commit messages are parsed and categorized.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct ConventionalConfig {
     /// Whether conventional commits parsing is enabled.
     ///
@@ -173,6 +175,7 @@ pub struct ExcludeConfig {
 ///
 /// Defines templates for various parts of the changelog.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct TemplateConfig {
     /// Template for the changelog header.
     ///

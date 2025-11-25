@@ -49,7 +49,7 @@ use crate::output::{JsonResponse, Output, OutputFormat};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
-use sublime_pkg_tools::config::{ConfigLoader, PackageToolsConfig, validate_config};
+use sublime_pkg_tools::config::{ConfigFormat, PackageToolsConfig, validate_config};
 use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
 use tracing::{debug, info, warn};
 
@@ -92,6 +92,7 @@ use tracing::{debug, info, warn};
 /// # Ok(())
 /// # }
 /// ```
+#[allow(clippy::too_many_lines)]
 pub async fn execute_show(
     _args: &ConfigShowArgs,
     output: &Output,
@@ -137,13 +138,34 @@ pub async fn execute_show(
 
     // Load configuration
     let (config, is_default) = if let Some(config_path) = found_config {
-        match ConfigLoader::load_from_file(&config_path).await {
-            Ok(config) => {
-                info!("Configuration loaded from: {}", config_path.display());
-                (config, false)
+        // Read file content
+        match fs.read_file_string(&config_path).await {
+            Ok(content) => {
+                // Determine format from extension
+                let format = match config_path.extension().and_then(|e| e.to_str()) {
+                    Some("toml") => ConfigFormat::Toml,
+                    Some("json") => ConfigFormat::Json,
+                    Some("yaml" | "yml") => ConfigFormat::Yaml,
+                    _ => {
+                        warn!("Unsupported config file extension, using defaults");
+                        return Ok(());
+                    }
+                };
+
+                // Parse configuration
+                match PackageToolsConfig::from_str(&content, format) {
+                    Ok(config) => {
+                        info!("Configuration loaded from: {}", config_path.display());
+                        (config, false)
+                    }
+                    Err(e) => {
+                        warn!("Failed to parse config file, using defaults: {}", e);
+                        (PackageToolsConfig::default(), true)
+                    }
+                }
             }
             Err(e) => {
-                warn!("Failed to load config file, using defaults: {}", e);
+                warn!("Failed to read config file, using defaults: {}", e);
                 (PackageToolsConfig::default(), true)
             }
         }
@@ -327,10 +349,31 @@ pub async fn execute_validate(
 
     info!("Found configuration file: {}", config_file_path.display());
 
-    // Load configuration - this checks parseability
-    let config = ConfigLoader::load_from_file(&config_file_path).await.map_err(|e| {
+    // Read file content
+    let content = fs.read_file_string(&config_file_path).await.map_err(|e| {
         CliError::configuration(format!(
-            "Failed to load configuration file: {e}\n\
+            "Failed to read configuration file: {e}\n\
+            Please check the file exists and is readable."
+        ))
+    })?;
+
+    // Determine format from extension
+    let format = match config_file_path.extension().and_then(|e| e.to_str()) {
+        Some("toml") => ConfigFormat::Toml,
+        Some("json") => ConfigFormat::Json,
+        Some("yaml" | "yml") => ConfigFormat::Yaml,
+        _ => {
+            return Err(CliError::configuration(format!(
+                "Unsupported config file extension: {}",
+                config_file_path.display()
+            )));
+        }
+    };
+
+    // Load configuration - this checks parseability
+    let config = PackageToolsConfig::from_str(&content, format).map_err(|e| {
+        CliError::configuration(format!(
+            "Failed to parse configuration file: {e}\n\
             Please check the file syntax and format."
         ))
     })?;

@@ -74,6 +74,7 @@ use sublime_standard_tools::config::ConfigResult;
 /// patterns = ["packages/*", "apps/*"]
 /// ```
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct WorkspaceConfig {
     /// Workspace patterns from package.json.
     ///

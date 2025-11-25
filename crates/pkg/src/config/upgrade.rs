@@ -28,6 +28,7 @@ use sublime_standard_tools::config::{ConfigResult, Configurable};
 /// assert_eq!(config.changeset_bump, "patch");
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct UpgradeConfig {
     /// Registry configuration for package lookups.
     pub registry: RegistryConfig,
@@ -67,6 +68,7 @@ pub struct UpgradeConfig {
 /// assert_eq!(config.retry_attempts, 3);
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct RegistryConfig {
     /// Default registry URL for package lookups.
     ///
@@ -127,6 +129,7 @@ pub struct RegistryConfig {
 /// assert_eq!(config.max_backups, 5);
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct BackupConfig {
     /// Whether automatic backups are enabled.
     ///

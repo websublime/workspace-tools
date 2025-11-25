@@ -16,7 +16,7 @@
 //! approach eliminates confusion and provides consistent API across all operations.
 
 use super::{MonorepoDescriptor, MonorepoKind, WorkspacePackage};
-use crate::config::{ConfigManager, StandardConfig, traits::Configurable};
+
 use crate::error::{Error, Result};
 use crate::filesystem::{AsyncFileSystem, FileSystemManager};
 use crate::project::ProjectValidationStatus;
@@ -423,106 +423,6 @@ impl MonorepoDetector<FileSystemManager> {
     #[must_use]
     pub fn new_with_config(config: crate::config::MonorepoConfig) -> Self {
         Self { fs: FileSystemManager::new(), config }
-    }
-
-    /// Creates a new `MonorepoDetector` that automatically loads configuration from project files.
-    ///
-    /// This method searches for configuration files (repo.config.*) in the specified path and
-    /// loads the monorepo configuration from them. If no config files are found, it uses
-    /// default configuration with environment variable overrides.
-    ///
-    /// # Arguments
-    ///
-    /// * `project_root` - The path to search for configuration files
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(MonorepoDetector)` - A detector with loaded configuration
-    /// * `Err(Error)` - If configuration loading fails
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use sublime_standard_tools::monorepo::MonorepoDetector;
-    /// use std::path::Path;
-    ///
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let detector = MonorepoDetector::new_with_project_config(Path::new(".")).await?;
-    /// // Configuration loaded from repo.config.toml/yml/json or defaults + env vars
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if configuration files exist but cannot be parsed.
-    pub async fn new_with_project_config(project_root: &Path) -> Result<Self> {
-        let fs = FileSystemManager::new();
-        let config = Self::load_project_config(&fs, project_root, None).await?;
-
-        Ok(Self { fs, config: config.monorepo })
-    }
-
-    /// Loads configuration from project files in the specified directory.
-    ///
-    /// This method searches for configuration files in the following order:
-    /// - repo.config.toml
-    /// - repo.config.yml/yaml
-    /// - repo.config.json
-    ///
-    /// # Arguments
-    ///
-    /// * `fs` - The filesystem implementation to use
-    /// * `project_root` - The directory to search for configuration files
-    /// * `base_config` - Optional base configuration to merge with
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(StandardConfig)` - The loaded and merged configuration
-    /// * `Err(Error)` - If configuration loading fails
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if configuration files exist but cannot be parsed.
-    async fn load_project_config(
-        fs: &FileSystemManager,
-        project_root: &Path,
-        base_config: Option<StandardConfig>,
-    ) -> Result<StandardConfig> {
-        let mut builder = ConfigManager::<StandardConfig>::builder().with_defaults();
-
-        // Check for repo.config.* files in order of preference
-        let config_files = [
-            project_root.join("repo.config.toml"),
-            project_root.join("repo.config.yml"),
-            project_root.join("repo.config.yaml"),
-            project_root.join("repo.config.json"),
-        ];
-
-        // Add existing config files to the builder
-        for config_file in &config_files {
-            if fs.exists(config_file).await {
-                builder = builder.with_file(config_file);
-            }
-        }
-
-        let manager = builder
-            .build(fs.clone())
-            .map_err(|e| Error::operation(format!("Failed to create config manager: {e}")))?;
-
-        let mut config = manager
-            .load()
-            .await
-            .map_err(|e| Error::operation(format!("Failed to load configuration: {e}")))?;
-
-        // Merge with base config if provided
-        if let Some(base) = base_config {
-            config
-                .merge_with(base)
-                .map_err(|e| Error::operation(format!("Failed to merge configurations: {e}")))?;
-        }
-
-        Ok(config)
     }
 }
 
