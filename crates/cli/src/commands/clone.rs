@@ -60,6 +60,7 @@ use crate::cli::commands::{CloneArgs, InitArgs};
 use crate::error::{CliError, Result};
 use crate::output::OutputFormat;
 use crate::output::progress::ProgressBar;
+use crate::utils::validation::validate_optional_registry_url;
 use regex::Regex;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -899,7 +900,7 @@ pub async fn execute_clone(
 
         // Convert CloneArgs to InitArgs with configuration merge
         // Note: No workspace config exists yet, so we only use CLI args + defaults
-        let init_args = convert_to_init_args(args, None);
+        let init_args = convert_to_init_args(args, None)?;
 
         // Execute init command
         debug!("Executing init to create workspace configuration");
@@ -980,7 +981,7 @@ pub async fn execute_clone(
 pub(crate) fn convert_to_init_args(
     args: &CloneArgs,
     workspace_config: Option<&PackageToolsConfig>,
-) -> InitArgs {
+) -> Result<InitArgs> {
     // Merge changeset_path: CLI > workspace > default
     let changeset_path = if let Some(ref path) = args.changeset_path {
         PathBuf::from(path)
@@ -1015,8 +1016,10 @@ pub(crate) fn convert_to_init_args(
     };
 
     // Merge registry: CLI > workspace > default
-    let registry = if let Some(ref reg) = args.registry {
-        reg.clone()
+    // Validate CLI registry if provided
+    let validated_registry = validate_optional_registry_url(args.registry.clone())?;
+    let registry = if let Some(reg) = validated_registry {
+        reg
     } else if let Some(config) = workspace_config {
         config.upgrade.registry.default_registry.clone()
     } else {
@@ -1030,7 +1033,7 @@ pub(crate) fn convert_to_init_args(
         None // Will use init's default prompts
     };
 
-    InitArgs {
+    Ok(InitArgs {
         changeset_path,
         environments,
         default_env,
@@ -1039,7 +1042,7 @@ pub(crate) fn convert_to_init_args(
         config_format,
         force: false, // Never force during clone
         non_interactive: args.non_interactive,
-    }
+    })
 }
 
 /// Outputs clone completion message (without init) using Output methods.

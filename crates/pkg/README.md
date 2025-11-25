@@ -124,9 +124,9 @@ cargo run --example load_config
 ## Documentation
 
 - [Configuration Guide](docs/guides/configuration.md) - Complete configuration reference
-- [Concept Document](CONCEPT.md) - High-level design and architecture
-- [Implementation Plan](PLAN.md) - Detailed implementation roadmap
-- [Story Map](STORY_MAP.md) - Development story breakdown
+- [Concept Document](docs/CONCEPT.md) - High-level design and architecture
+- [Implementation Plan](docs/PLAN.md) - Detailed implementation roadmap
+- [Story Map](docs/STORY_MAP.md) - Development story breakdown
 - API Documentation - Run `cargo doc --open`
 
 ## Use Cases
@@ -249,7 +249,7 @@ This library is under active development. Current status:
 - 🚧 Error Handling (Epic 3) - In Progress
 - 📋 Core Types (Epic 4) - Planned
 - 📋 Versioning Engine (Epic 5) - Planned
-- 📋 Additional features - See [Story Map](STORY_MAP.md)
+- 📋 Additional features - See [Story Map](docs/STORY_MAP.md)
 
 ## Contributing
 

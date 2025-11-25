@@ -24,6 +24,7 @@
 //! allows the library (lib.rs) to be used in other contexts without the
 //! binary overhead.
 
+#![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 #![warn(rustdoc::missing_crate_level_docs)]
 #![deny(unused_must_use)]
@@ -109,8 +110,12 @@ async fn async_main() -> Result<()> {
     // 1. Parse CLI arguments
     let cli = Cli::parse();
 
-    // 2. Initialize logging based on --log-level (affects stderr only)
-    sublime_cli_tools::output::logger::init_logging(cli.log_level(), cli.is_color_disabled())?;
+    // 2. Initialize logging based on effective log level (affects stderr only)
+    // This accounts for --quiet and --verbose flags
+    sublime_cli_tools::output::logger::init_logging(
+        cli.effective_log_level(),
+        cli.is_color_disabled(),
+    )?;
 
     // 3. Change to root directory if specified
     if let Some(root) = cli.root() {

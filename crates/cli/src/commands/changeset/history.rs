@@ -46,11 +46,11 @@
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let args = ChangesetHistoryArgs {
-//!     package: Some("my-package".to_string()),
+//!     filter_package: Some("my-package".to_string()),
 //!     since: None,
 //!     until: None,
-//!     env: None,
-//!     bump: None,
+//!     filter_env: None,
+//!     filter_bump: None,
 //!     limit: Some(10),
 //! };
 //!
@@ -215,7 +215,7 @@ async fn query_changesets(
     let mut used_bump_primary = false;
 
     // Start with the most specific filter first
-    if let Some(package) = &args.package {
+    if let Some(package) = &args.filter_package {
         debug!("Querying by package: {}", package);
         changesets = history.query_by_package(package).await.map_err(|e| {
             CliError::Execution(format!("Failed to query changesets by package: {e}"))
@@ -247,13 +247,13 @@ async fn query_changesets(
             .await
             .map_err(|e| CliError::Execution(format!("Failed to query changesets by date: {e}")))?;
         used_date_primary = true;
-    } else if let Some(env) = &args.env {
+    } else if let Some(env) = &args.filter_env {
         debug!("Querying by environment: {}", env);
         changesets = history.query_by_environment(env).await.map_err(|e| {
             CliError::Execution(format!("Failed to query changesets by environment: {e}"))
         })?;
         used_env_primary = true;
-    } else if let Some(bump_str) = &args.bump {
+    } else if let Some(bump_str) = &args.filter_bump {
         let bump = parse_bump_type(bump_str)?;
         debug!("Querying by bump type: {:?}", bump);
         changesets = history.query_by_bump(bump).await.map_err(|e| {
@@ -270,17 +270,17 @@ async fn query_changesets(
     }
 
     // Apply additional filters that weren't used as primary query
-    if !used_package_primary && let Some(package) = &args.package {
+    if !used_package_primary && let Some(package) = &args.filter_package {
         debug!("Applying package filter: {}", package);
         changesets.retain(|cs| cs.changeset.has_package(package));
     }
 
-    if !used_env_primary && let Some(env) = &args.env {
+    if !used_env_primary && let Some(env) = &args.filter_env {
         debug!("Applying environment filter: {}", env);
         changesets.retain(|cs| cs.changeset.environments.contains(env));
     }
 
-    if !used_bump_primary && let Some(bump_str) = &args.bump {
+    if !used_bump_primary && let Some(bump_str) = &args.filter_bump {
         let bump = parse_bump_type(bump_str)?;
         debug!("Applying bump type filter: {:?}", bump);
         changesets.retain(|cs| cs.changeset.bump == bump);

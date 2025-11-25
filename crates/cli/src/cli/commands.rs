@@ -315,6 +315,13 @@ pub struct ChangesetCreateArgs {
     /// Uses provided flags without prompting.
     #[arg(long)]
     pub non_interactive: bool,
+
+    /// Overwrite existing changeset.
+    ///
+    /// Forces creation even if a changeset already exists for the branch.
+    /// The existing changeset will be replaced.
+    #[arg(long)]
+    pub force: bool,
 }
 
 /// Arguments for the `changeset update` command.
@@ -409,30 +416,37 @@ pub struct ChangesetDeleteArgs {
 #[derive(Debug, Args)]
 pub struct ChangesetHistoryArgs {
     /// Filter by package name.
-    #[arg(long, value_name = "NAME")]
-    pub package: Option<String>,
-
-    /// Since date (ISO 8601).
     ///
+    /// Only shows changesets that affected the specified package.
+    #[arg(long = "filter-package", value_name = "NAME")]
+    pub filter_package: Option<String>,
+
+    /// Filter by environment.
+    ///
+    /// Only shows changesets from the specified environment.
+    #[arg(long = "filter-env", value_name = "ENV")]
+    pub filter_env: Option<String>,
+
+    /// Filter by bump type.
+    ///
+    /// Only shows changesets with the specified bump type.
+    /// Options: major, minor, patch
+    #[arg(long = "filter-bump", value_name = "TYPE")]
+    pub filter_bump: Option<String>,
+
+    /// Filter by start date (ISO 8601).
+    ///
+    /// Only shows changesets created on or after this date.
     /// Example: "2024-01-01"
     #[arg(long, value_name = "DATE")]
     pub since: Option<String>,
 
-    /// Until date (ISO 8601).
+    /// Filter by end date (ISO 8601).
     ///
+    /// Only shows changesets created on or before this date.
     /// Example: "2024-12-31"
     #[arg(long, value_name = "DATE")]
     pub until: Option<String>,
-
-    /// Filter by environment.
-    #[arg(long, value_name = "ENV")]
-    pub env: Option<String>,
-
-    /// Filter by bump type.
-    ///
-    /// Options: major, minor, patch
-    #[arg(long, value_name = "TYPE")]
-    pub bump: Option<String>,
 
     /// Limit number of results.
     #[arg(long, value_name = "N")]
@@ -479,23 +493,34 @@ pub struct BumpArgs {
     #[arg(long, conflicts_with = "dry_run")]
     pub execute: bool,
 
-    /// Generate snapshot versions.
+    /// Generate snapshot versions for testing.
     ///
-    /// Creates snapshot versions based on the snapshot format template.
-    #[arg(long)]
+    /// Creates temporary, non-persisted versions for branch builds and preview deployments.
+    /// Snapshot versions are NOT semver-compliant and should only be used for testing.
+    ///
+    /// Default format: `{version}-snapshot.{short_commit}`
+    /// Custom format can be specified via --snapshot-format.
+    ///
+    /// Cannot be combined with --prerelease (they are mutually exclusive).
+    #[arg(long, conflicts_with = "prerelease")]
     pub snapshot: bool,
 
     /// Snapshot format template.
     ///
-    /// Variables: {version}, {branch}, {short_commit}, {commit}
+    /// Variables: {version}, {branch}, {short_commit}, {commit}, {timestamp}
     /// Example: "{version}-{branch}.{short_commit}"
     #[arg(long, value_name = "FORMAT")]
     pub snapshot_format: Option<String>,
 
-    /// Pre-release tag.
+    /// Pre-release tag for official pre-release versions.
     ///
-    /// Options: alpha, beta, rc
-    #[arg(long, value_name = "TAG")]
+    /// Creates semver-compliant pre-release versions (alpha, beta, rc).
+    /// These are persisted versions for staging/development releases.
+    ///
+    /// Options: alpha, beta, rc (or custom tag)
+    ///
+    /// Cannot be combined with --snapshot (they are mutually exclusive).
+    #[arg(long, value_name = "TAG", conflicts_with = "snapshot")]
     pub prerelease: Option<String>,
 
     /// Comma-separated list of packages to bump.
@@ -592,45 +617,33 @@ pub enum UpgradeCommands {
 #[derive(Debug, Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct UpgradeCheckArgs {
-    /// Include major version upgrades.
+    /// Exclude major version upgrades from results.
     ///
-    /// Default: true
-    #[arg(long, default_value = "true")]
-    pub major: bool,
-
-    /// Don't include major version upgrades.
-    #[arg(long, conflicts_with = "major")]
+    /// By default, major upgrades are included. Use this flag to exclude them.
+    #[arg(long)]
     pub no_major: bool,
 
-    /// Include minor version upgrades.
+    /// Exclude minor version upgrades from results.
     ///
-    /// Default: true
-    #[arg(long, default_value = "true")]
-    pub minor: bool,
-
-    /// Don't include minor version upgrades.
-    #[arg(long, conflicts_with = "minor")]
+    /// By default, minor upgrades are included. Use this flag to exclude them.
+    #[arg(long)]
     pub no_minor: bool,
 
-    /// Include patch version upgrades.
+    /// Exclude patch version upgrades from results.
     ///
-    /// Default: true
-    #[arg(long, default_value = "true")]
-    pub patch: bool,
-
-    /// Don't include patch version upgrades.
-    #[arg(long, conflicts_with = "patch")]
+    /// By default, patch upgrades are included. Use this flag to exclude them.
+    #[arg(long)]
     pub no_patch: bool,
 
-    /// Include dev dependencies.
+    /// Exclude dev dependencies from results.
     ///
-    /// Default: true
-    #[arg(long, default_value = "true")]
-    pub dev: bool,
+    /// By default, dev dependencies are included. Use this flag to exclude them.
+    #[arg(long)]
+    pub no_dev: bool,
 
-    /// Include peer dependencies.
+    /// Include peer dependencies in results.
     ///
-    /// Default: false
+    /// By default, peer dependencies are excluded. Use this flag to include them.
     #[arg(long)]
     pub peer: bool,
 
@@ -909,11 +922,8 @@ pub struct ChangesArgs {
 /// ```
 #[derive(Debug, Args)]
 pub struct VersionArgs {
-    /// Show detailed version information.
-    ///
-    /// Includes Rust version, dependencies, and build information.
-    #[arg(long)]
-    pub verbose: bool,
+    // No command-specific arguments.
+    // The --verbose flag is now global and passed separately to execute_version.
 }
 
 // ============================================================================

@@ -146,3 +146,91 @@ mod editor_tests {
     // actual file creation and editor launching, which is not suitable for
     // unit tests. These are covered by integration tests.
 }
+
+#[cfg(test)]
+mod validation_tests {
+    use crate::utils::validation::{validate_optional_registry_url, validate_registry_url};
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_validate_registry_url_valid_https() {
+        let result = validate_registry_url("https://registry.npmjs.org");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "https://registry.npmjs.org");
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_validate_registry_url_valid_http() {
+        let result = validate_registry_url("http://localhost:4873");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "http://localhost:4873");
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_validate_registry_url_removes_trailing_slash() {
+        let result = validate_registry_url("https://registry.npmjs.org/");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "https://registry.npmjs.org");
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_validate_registry_url_removes_multiple_trailing_slashes() {
+        let result = validate_registry_url("https://registry.npmjs.org///");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "https://registry.npmjs.org");
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_validate_registry_url_invalid_scheme() {
+        let result = validate_registry_url("ftp://registry.npmjs.org");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("HTTP or HTTPS"));
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_validate_registry_url_invalid_url() {
+        let result = validate_registry_url("not-a-valid-url");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid registry URL"));
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_validate_registry_url_missing_host() {
+        // Note: "https:///path" is considered invalid by the url crate and fails
+        // at parse time, but "https://:8080" has no host
+        let result = validate_registry_url("https://:8080/path");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("host") || err.contains("Invalid"));
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_validate_optional_registry_url_none() {
+        let result = validate_optional_registry_url(None);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), None);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_validate_optional_registry_url_some_valid() {
+        let result = validate_optional_registry_url(Some("https://custom.com/".to_string()));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Some("https://custom.com".to_string()));
+    }
+
+    #[test]
+    fn test_validate_optional_registry_url_some_invalid() {
+        let result = validate_optional_registry_url(Some("invalid".to_string()));
+        assert!(result.is_err());
+    }
+}

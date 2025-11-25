@@ -374,26 +374,26 @@ fn test_changeset_history_command() {
         "workspace",
         "changeset",
         "history",
-        "--package",
+        "--filter-package",
         "core",
         "--since",
         "2024-01-01",
         "--until",
         "2024-12-31",
-        "--env",
+        "--filter-env",
         "prod",
-        "--bump",
+        "--filter-bump",
         "minor",
         "--limit",
         "10",
     ]);
 
     if let Commands::Changeset(ChangesetCommands::History(args)) = cli.command {
-        assert_eq!(args.package, Some("core".to_string()));
+        assert_eq!(args.filter_package, Some("core".to_string()));
         assert_eq!(args.since, Some("2024-01-01".to_string()));
         assert_eq!(args.until, Some("2024-12-31".to_string()));
-        assert_eq!(args.env, Some("prod".to_string()));
-        assert_eq!(args.bump, Some("minor".to_string()));
+        assert_eq!(args.filter_env, Some("prod".to_string()));
+        assert_eq!(args.filter_bump, Some("minor".to_string()));
         assert_eq!(args.limit, Some(10));
     } else {
         panic!("Expected Changeset History command");
@@ -543,7 +543,7 @@ fn test_upgrade_check_with_options() {
         "upgrade",
         "check",
         "--no-major",
-        "--dev",
+        "--no-dev",
         "--peer",
         "--packages",
         "typescript,eslint",
@@ -553,7 +553,7 @@ fn test_upgrade_check_with_options() {
 
     if let Commands::Upgrade(UpgradeCommands::Check(args)) = cli.command {
         assert!(args.no_major);
-        assert!(args.dev);
+        assert!(args.no_dev);
         assert!(args.peer);
         assert_eq!(args.packages, Some(vec!["typescript".to_string(), "eslint".to_string()]));
         assert_eq!(args.registry, Some("https://npm.example.com".to_string()));
@@ -750,22 +750,17 @@ fn test_changes_command_unstaged() {
 fn test_version_command_basic() {
     let cli = Cli::parse_from(["workspace", "version"]);
 
-    if let Commands::Version(args) = cli.command {
-        assert!(!args.verbose);
-    } else {
-        panic!("Expected Version command");
-    }
+    assert!(matches!(cli.command, Commands::Version(_)));
+    assert!(!cli.verbose);
 }
 
 #[test]
 fn test_version_command_verbose() {
-    let cli = Cli::parse_from(["workspace", "version", "--verbose"]);
+    // --verbose is now a global flag
+    let cli = Cli::parse_from(["workspace", "--verbose", "version"]);
 
-    if let Commands::Version(args) = cli.command {
-        assert!(args.verbose);
-    } else {
-        panic!("Expected Version command");
-    }
+    assert!(matches!(cli.command, Commands::Version(_)));
+    assert!(cli.verbose);
 }
 
 // ============================================================================

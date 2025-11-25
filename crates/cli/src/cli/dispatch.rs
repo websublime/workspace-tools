@@ -90,10 +90,11 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
 
     // Extract global options
     let root = cli.root.as_deref().unwrap_or_else(|| Path::new("."));
-    let format = cli.output_format();
+    let format = cli.effective_output_format();
     let config_path = cli.config_path();
 
     // Create Output once for all commands (Pattern B optimization)
+    // Uses effective format which accounts for --quiet flag
     let output = Output::new(format, std::io::stdout(), cli.is_color_disabled());
 
     // Display branded header for human-readable output (except for version command which handles its own header)
@@ -269,7 +270,7 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
         }
 
         Commands::Version(args) => {
-            version::execute_version(args, root, format)?;
+            version::execute_version(args, root, format, cli.verbose)?;
         }
 
         Commands::Clone(args) => {

@@ -178,10 +178,32 @@ pub struct Cli {
     /// Default: Auto-detect (.changesets.{toml,json,yaml,yml})
     #[arg(global = true, short = 'c', long, value_name = "PATH")]
     pub config: Option<PathBuf>,
+
+    /// Quiet mode.
+    ///
+    /// Minimizes both logs (stderr) and output (stdout).
+    /// Equivalent to `--log-level silent --format quiet`.
+    ///
+    /// Useful for scripts and automation where only exit code matters.
+    /// Cannot be combined with --log-level, --format, or --verbose.
+    #[arg(global = true, short = 'q', long, conflicts_with_all = ["log_level", "format", "verbose"])]
+    pub quiet: bool,
+
+    /// Verbose output mode.
+    ///
+    /// Increases detail level in command output (stdout) and enables debug logs (stderr).
+    /// Equivalent to `--log-level debug`.
+    ///
+    /// Different from --log-level which only controls operational logs.
+    /// Cannot be combined with --log-level or --quiet.
+    #[arg(global = true, short = 'v', long, conflicts_with_all = ["log_level", "quiet"])]
+    pub verbose: bool,
 }
 
 impl Cli {
-    /// Returns the log level.
+    /// Returns the raw log level from command line.
+    ///
+    /// Note: Prefer `effective_log_level()` which accounts for --quiet and --verbose flags.
     ///
     /// # Examples
     ///
@@ -197,7 +219,45 @@ impl Cli {
         self.log_level
     }
 
-    /// Returns the output format.
+    /// Returns the effective log level, accounting for --quiet and --verbose flags.
+    ///
+    /// Priority:
+    /// 1. --quiet: Returns `Silent`
+    /// 2. --verbose: Returns `Debug`
+    /// 3. Otherwise: Returns the value from --log-level
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use clap::Parser;
+    /// use sublime_cli_tools::cli::{Cli, LogLevel};
+    ///
+    /// // --quiet overrides to silent
+    /// let cli = Cli::parse_from(["workspace", "--quiet", "version"]);
+    /// assert_eq!(cli.effective_log_level(), LogLevel::Silent);
+    ///
+    /// // --verbose sets debug level
+    /// let cli = Cli::parse_from(["workspace", "--verbose", "version"]);
+    /// assert_eq!(cli.effective_log_level(), LogLevel::Debug);
+    ///
+    /// // Default uses --log-level value
+    /// let cli = Cli::parse_from(["workspace", "--log-level", "warn", "version"]);
+    /// assert_eq!(cli.effective_log_level(), LogLevel::Warn);
+    /// ```
+    #[must_use]
+    pub const fn effective_log_level(&self) -> LogLevel {
+        if self.quiet {
+            LogLevel::Silent
+        } else if self.verbose {
+            LogLevel::Debug
+        } else {
+            self.log_level
+        }
+    }
+
+    /// Returns the raw output format from command line.
+    ///
+    /// Note: Prefer `effective_output_format()` which accounts for --quiet flag.
     ///
     /// # Examples
     ///
@@ -212,6 +272,32 @@ impl Cli {
     #[must_use]
     pub const fn output_format(&self) -> OutputFormat {
         self.format.0
+    }
+
+    /// Returns the effective output format, accounting for --quiet flag.
+    ///
+    /// Priority:
+    /// 1. --quiet: Returns `Quiet`
+    /// 2. Otherwise: Returns the value from --format
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use clap::Parser;
+    /// use sublime_cli_tools::cli::Cli;
+    /// use sublime_cli_tools::output::OutputFormat;
+    ///
+    /// // --quiet overrides to quiet format
+    /// let cli = Cli::parse_from(["workspace", "--quiet", "version"]);
+    /// assert_eq!(cli.effective_output_format(), OutputFormat::Quiet);
+    ///
+    /// // Default uses --format value
+    /// let cli = Cli::parse_from(["workspace", "--format", "json", "version"]);
+    /// assert_eq!(cli.effective_output_format(), OutputFormat::Json);
+    /// ```
+    #[must_use]
+    pub const fn effective_output_format(&self) -> OutputFormat {
+        if self.quiet { OutputFormat::Quiet } else { self.format.0 }
     }
 
     /// Returns whether color output is disabled.
