@@ -45,7 +45,9 @@ pub mod changes;
 pub mod changeset;
 pub mod clone;
 pub mod config;
+pub mod execute;
 pub mod init;
+pub mod status;
 pub mod upgrade;
 pub mod version;
 

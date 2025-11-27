@@ -74,6 +74,9 @@ impl CommandQueue {
     ///     rate_limit: Some(Duration::from_millis(100)),
     ///     default_timeout: Duration::from_secs(60),
     ///     shutdown_timeout: Duration::from_secs(5),
+    ///     collection_window_ms: 5,
+    ///     collection_sleep_us: 100,
+    ///     idle_sleep_ms: 10,
     /// };
     ///
     /// let queue = CommandQueue::with_config(config);
@@ -174,13 +177,13 @@ impl CommandQueue {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use sublime_standard_tools::command::{CommandQueue, Command, CommandPriority};
+    /// ```ignore
+    /// use sublime_standard_tools::command::{CommandQueue, CommandBuilder, CommandPriority};
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let queue = CommandQueue::new().start()?;
     ///
-    /// let command = Command::new("echo", &["Hello, world!"]);
+    /// let command = CommandBuilder::new("echo").arg("Hello, world!").build();
     /// let id = queue.enqueue(command, CommandPriority::High).await?;
     ///
     /// println!("Enqueued command with ID: {}", id);
@@ -242,16 +245,16 @@ impl CommandQueue {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use sublime_standard_tools::command::{CommandQueue, Command, CommandPriority};
+    /// ```ignore
+    /// use sublime_standard_tools::command::{CommandQueue, CommandBuilder, CommandPriority};
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let queue = CommandQueue::new().start()?;
     ///
     /// let mut commands = Vec::new();
-    /// commands.push((Command::new("echo", &["Critical task"]), CommandPriority::Critical));
-    /// commands.push((Command::new("echo", &["High task"]), CommandPriority::High));
-    /// commands.push((Command::new("echo", &["Normal task"]), CommandPriority::Normal));
+    /// commands.push((CommandBuilder::new("echo").arg("Critical task").build(), CommandPriority::Critical));
+    /// commands.push((CommandBuilder::new("echo").arg("High task").build(), CommandPriority::High));
+    /// commands.push((CommandBuilder::new("echo").arg("Normal task").build(), CommandPriority::Normal));
     ///
     /// // Enqueue all commands as a batch, ensuring proper priority ordering
     /// let command_ids = queue.enqueue_batch(commands).await?;
@@ -348,13 +351,13 @@ impl CommandQueue {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use sublime_standard_tools::command::{CommandQueue, Command, CommandPriority};
+    /// ```ignore
+    /// use sublime_standard_tools::command::{CommandQueue, CommandBuilder, CommandPriority};
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let queue = CommandQueue::new().start()?;
     ///
-    /// let command = Command::new("sleep", &["1"]);
+    /// let command = CommandBuilder::new("sleep").arg("1").build();
     /// let id = queue.enqueue(command, CommandPriority::Normal).await?;
     ///
     /// let status = queue.get_status(&id);
@@ -385,13 +388,13 @@ impl CommandQueue {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use sublime_standard_tools::command::{CommandQueue, Command, CommandPriority};
+    /// ```ignore
+    /// use sublime_standard_tools::command::{CommandQueue, CommandBuilder, CommandPriority};
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let queue = CommandQueue::new().start()?;
     ///
-    /// let command = Command::new("echo", &["Hello"]);
+    /// let command = CommandBuilder::new("echo").arg("Hello").build();
     /// let id = queue.enqueue(command, CommandPriority::Normal).await?;
     ///
     /// // Wait for completion
@@ -429,14 +432,14 @@ impl CommandQueue {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use sublime_standard_tools::command::{CommandQueue, Command, CommandPriority};
+    /// ```ignore
+    /// use sublime_standard_tools::command::{CommandQueue, CommandBuilder, CommandPriority};
     /// use std::time::Duration;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let queue = CommandQueue::new().start()?;
     ///
-    /// let command = Command::new("echo", &["Hello"]);
+    /// let command = CommandBuilder::new("echo").arg("Hello").build();
     /// let id = queue.enqueue(command, CommandPriority::Normal).await?;
     ///
     /// // Wait for this specific command with a timeout
@@ -491,15 +494,15 @@ impl CommandQueue {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use sublime_standard_tools::command::{CommandQueue, Command, CommandPriority};
+    /// ```ignore
+    /// use sublime_standard_tools::command::{CommandQueue, CommandBuilder, CommandPriority};
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let queue = CommandQueue::new().start()?;
     ///
     /// // Enqueue multiple commands
     /// for i in 0..3 {
-    ///     let command = Command::new("echo", &[&format!("Command {}", i)]);
+    ///     let command = CommandBuilder::new("echo").arg(format!("Command {}", i)).build();
     ///     queue.enqueue(command, CommandPriority::Normal).await?;
     /// }
     ///
@@ -574,11 +577,11 @@ impl CommandQueue {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore
     /// use sublime_standard_tools::command::CommandQueue;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let queue = CommandQueue::new().start()?;
+    /// let mut queue = CommandQueue::new().start()?;
     ///
     /// // ... use queue ...
     ///

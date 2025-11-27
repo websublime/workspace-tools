@@ -72,24 +72,21 @@ impl QueueProcessor {
     ///
     /// # Examples
     ///
-    /// This method is typically called from inside a spawned task:
+    /// This method is typically called from inside a spawned task.
+    /// Note: `QueueProcessor` is an internal type and is not directly accessible
+    /// from external code. It is used internally by `CommandQueue`.
     ///
-    /// ```no_run
-    /// use sublime_standard_tools::command::CommandQueueConfig;
-    /// use std::sync::Arc;
-    ///
-    /// # async fn example() {
-    /// # use sublime_standard_tools::command::DefaultCommandExecutor;
+    /// ```ignore
+    /// // Internal usage example - QueueProcessor is pub(crate)
     /// let processor = QueueProcessor::new(
-    ///     CommandQueueConfig::default(),
+    ///     config,
     ///     receiver,
-    ///     Arc::new(DefaultCommandExecutor::new()),
+    ///     executor,
     ///     statuses,
     ///     results
     /// );
     ///
     /// tokio::spawn(processor.process_queue());
-    /// # }
     /// ```
     pub(crate) async fn process_queue(mut self) {
         while self.running {

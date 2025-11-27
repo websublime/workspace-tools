@@ -22,18 +22,14 @@ use std::{collections::HashMap, path::PathBuf, time::Duration};
 /// # Examples
 ///
 /// ```
-/// use sublime_standard_tools::command::types::CommandOutput;
+/// use sublime_standard_tools::command::CommandOutput;
 /// use std::time::Duration;
 ///
-/// let output = CommandOutput {
-///     status: 0,
-///     stdout: "Hello, world!".to_string(),
-///     stderr: "".to_string(),
-///     duration: Duration::from_millis(50),
-/// };
+/// // Create output using the constructor
+/// let output = CommandOutput::new(0, "Hello, world!".to_string(), "".to_string(), Duration::from_millis(50));
 ///
-/// assert_eq!(output.status, 0);
-/// assert_eq!(output.stdout, "Hello, world!");
+/// assert_eq!(output.status(), 0);
+/// assert_eq!(output.stdout(), "Hello, world!");
 /// ```
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CommandOutput {
@@ -55,8 +51,7 @@ pub struct CommandOutput {
 /// # Examples
 ///
 /// ```
-/// use sublime_standard_tools::command::types::{Command, CommandBuilder};
-/// use std::collections::HashMap;
+/// use sublime_standard_tools::command::CommandBuilder;
 /// use std::time::Duration;
 ///
 /// // Create a command using CommandBuilder
@@ -87,13 +82,14 @@ pub struct Command {
 /// # Examples
 ///
 /// ```
-/// use sublime_standard_tools::command::types::CommandBuilder;
+/// use sublime_standard_tools::command::CommandBuilder;
 /// use std::path::PathBuf;
 /// use std::time::Duration;
 ///
 /// let command = CommandBuilder::new("cargo")
 ///     .arg("test")
-///     .args(&["--all-features", "--no-fail-fast"])
+///     .arg("--all-features")
+///     .arg("--no-fail-fast")
 ///     .env("RUST_BACKTRACE", "1")
 ///     .current_dir(PathBuf::from("./my-project"))
 ///     .timeout(Duration::from_secs(120))

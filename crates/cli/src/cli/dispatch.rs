@@ -39,7 +39,7 @@
 
 use super::branding;
 use crate::cli::{Cli, Commands};
-use crate::commands::{audit, bump, changeset, config, init, upgrade, version};
+use crate::commands::{audit, bump, changeset, config, execute, init, status, upgrade, version};
 use crate::error::Result;
 use crate::output::{Output, OutputFormat};
 use std::path::{Path, PathBuf};
@@ -281,6 +281,15 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
                 config_path.as_ref().map(|p| p.as_path()),
             )
             .await?;
+        }
+
+        Commands::Status(args) => {
+            status::execute_status(args, &output, root, config_path.as_ref().map(|p| p.as_path()))
+                .await?;
+        }
+
+        Commands::Execute(args) => {
+            execute::execute_execute(args, &output, root).await?;
         }
     }
 

@@ -108,6 +108,18 @@ pub enum Commands {
     /// Clones a Git repository and automatically initializes or validates
     /// workspace configuration for immediate development.
     Clone(CloneArgs),
+
+    /// Display workspace status information.
+    ///
+    /// Shows repository type, package manager, active branch,
+    /// pending changesets, and all workspace packages with versions.
+    Status(StatusArgs),
+
+    /// Execute commands across workspace packages.
+    ///
+    /// Runs npm scripts or system commands in workspace packages
+    /// with optional filtering and parallel execution.
+    Execute(ExecuteArgs),
 }
 
 // ============================================================================
@@ -1015,4 +1027,85 @@ pub struct CloneArgs {
     /// Performs a shallow clone with the specified number of commits.
     #[arg(long)]
     pub depth: Option<u32>,
+}
+
+// ============================================================================
+// Workspace Commands
+// ============================================================================
+
+/// Arguments for the `status` command.
+///
+/// # Examples
+///
+/// ```rust
+/// use clap::Parser;
+/// use sublime_cli_tools::cli::Cli;
+///
+/// let cli = Cli::parse_from(["workspace", "status"]);
+/// ```
+#[derive(Debug, Args)]
+pub struct StatusArgs {
+    // No additional arguments - uses global options (--format, --root, etc.)
+}
+
+/// Arguments for the `execute` command.
+///
+/// # Examples
+///
+/// ```rust
+/// use clap::Parser;
+/// use sublime_cli_tools::cli::Cli;
+///
+/// // Run npm script
+/// let cli = Cli::parse_from([
+///     "workspace", "execute",
+///     "--cmd", "npm:lint"
+/// ]);
+///
+/// // Run system command with filter
+/// let cli = Cli::parse_from([
+///     "workspace", "execute",
+///     "--cmd", "ls -la",
+///     "--filter-package", "@scope/core,@scope/utils"
+/// ]);
+/// ```
+#[derive(Debug, Args)]
+pub struct ExecuteArgs {
+    /// Command to execute.
+    ///
+    /// Supports two formats:
+    /// - `npm:<script>`: Runs an npm script (e.g., `npm:lint`, `npm:build`)
+    /// - Plain command: Runs a system command (e.g., `ls -la`, `node index.js`)
+    ///
+    /// For npm scripts, the appropriate package manager (npm, yarn, pnpm, bun)
+    /// is automatically detected and used.
+    #[arg(long, value_name = "COMMAND")]
+    pub cmd: String,
+
+    /// Filter packages to run command on (comma-separated).
+    ///
+    /// Only executes the command in the specified packages.
+    /// Package names should match exactly (e.g., `@scope/package`).
+    ///
+    /// If not provided, runs on all workspace packages.
+    #[arg(long = "filter-package", value_name = "PACKAGES", value_delimiter = ',')]
+    pub filter_package: Option<Vec<String>>,
+
+    /// Run commands in parallel across packages.
+    ///
+    /// By default, commands run sequentially. With this flag,
+    /// all package commands run concurrently.
+    ///
+    /// Note: Parallel execution may interleave output from different packages.
+    #[arg(long)]
+    pub parallel: bool,
+
+    /// Additional arguments passed to the command.
+    ///
+    /// These arguments are appended to the command.
+    /// Use `--` to separate from workspace execute options.
+    ///
+    /// Example: `workspace execute --cmd npm:test -- --coverage`
+    #[arg(last = true)]
+    pub args: Vec<String>,
 }

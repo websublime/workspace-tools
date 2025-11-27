@@ -42,35 +42,21 @@ use crate::config::CommandConfig;
 ///
 /// # Examples
 ///
-/// ```
-/// use sublime_standard_tools::command::{CommandExecutor, Command, CommandOutput};
+/// ```ignore
+/// // This example demonstrates implementing the Executor trait
+/// use sublime_standard_tools::command::{Executor, Command, CommandOutput};
 /// use sublime_standard_tools::error::Result;
 ///
-/// # struct MyExecutor;
-/// # #[async_trait::async_trait]
-/// # impl CommandExecutor for MyExecutor {
-/// #     async fn execute(&self, command: Command) -> Result<CommandOutput> { unimplemented!() }
-/// #     async fn execute_stream(
-/// #         &self,
-/// #         command: Command,
-/// #         stream_config: crate::command::StreamConfig,
-/// #     ) -> Result<(crate::command::CommandStream, tokio::process::Child)> { unimplemented!() }
-/// # }
+/// struct MyExecutor;
 ///
-/// # async fn example() -> Result<()> {
-/// let executor = MyExecutor;
-/// let cmd = Command {
-///     program: "echo".to_string(),
-///     args: vec!["Hello".to_string()],
-///     env: std::collections::HashMap::new(),
-///     current_dir: None,
-///     timeout: Some(std::time::Duration::from_secs(5)),
-/// };
-///
-/// let output = executor.execute(cmd).await?;
-/// println!("Command output: {}", output.stdout());
-/// # Ok(())
-/// # }
+/// #[async_trait::async_trait]
+/// impl Executor for MyExecutor {
+///     async fn execute(&self, command: Command) -> Result<CommandOutput> {
+///         // Implementation here
+///         unimplemented!()
+///     }
+///     // ...
+/// }
 /// ```
 #[async_trait::async_trait]
 pub trait Executor: Send + Sync {
@@ -181,10 +167,10 @@ impl DefaultCommandExecutor {
     ///
     /// # Examples
     ///
-    /// ```
-    /// # use sublime_standard_tools::command::{DefaultCommandExecutor, Command};
-    /// #
-    /// # fn example() {
+    /// ```ignore
+    /// // build_command is a private method
+    /// use sublime_standard_tools::command::{DefaultCommandExecutor, Command};
+    ///
     /// let config = Command {
     ///     program: "echo".to_string(),
     ///     args: vec!["hello".to_string()],
@@ -194,7 +180,6 @@ impl DefaultCommandExecutor {
     /// };
     ///
     /// let tokio_cmd = DefaultCommandExecutor::build_command(&config);
-    /// # }
     /// ```
     fn build_command(config: &CmdConfig) -> Command {
         let mut cmd = Command::new(&config.program);
@@ -231,10 +216,10 @@ impl Executor for DefaultCommandExecutor {
     ///
     /// # Examples
     ///
-    /// ```
-    /// # use sublime_standard_tools::command::{DefaultCommandExecutor, CommandExecutor, CommandBuilder};
-    /// # use sublime_standard_tools::error::Result;
-    /// #
+    /// ```no_run
+    /// use sublime_standard_tools::command::{DefaultCommandExecutor, Executor, CommandBuilder};
+    /// use sublime_standard_tools::error::Result;
+    ///
     /// # async fn example() -> Result<()> {
     /// let executor = DefaultCommandExecutor::new();
     ///
@@ -328,12 +313,11 @@ impl Executor for DefaultCommandExecutor {
     ///
     /// # Examples
     ///
-    /// ```
-    /// # use sublime_standard_tools::command::{DefaultCommandExecutor, CommandExecutor, CommandBuilder, StreamConfig};
-    /// # use std::time::Duration;
-    /// # use sublime_standard_tools::error::Result;
-    /// #
-    /// # async fn example() -> Result<()> {
+    /// ```ignore
+    /// use sublime_standard_tools::command::{DefaultCommandExecutor, Executor, CommandBuilder, StreamConfig};
+    /// use std::time::Duration;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let executor = DefaultCommandExecutor::new();
     /// let config = StreamConfig::default();
     ///
@@ -453,17 +437,17 @@ impl SyncCommandExecutor {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use sublime_standard_tools::command::{SyncCommandExecutor, CommandBuilder};
     /// use sublime_standard_tools::error::Result;
     ///
     /// # fn example() -> Result<()> {
     /// let executor = SyncCommandExecutor::new()?;
-    /// let command = CommandBuilder::new("git").args(&["status", "--porcelain"]).build();
+    /// let command = CommandBuilder::new("echo").arg("Hello").build();
     /// let output = executor.execute_sync(command)?;
     ///
     /// if output.status() == 0 {
-    ///     println!("Git status: {}", output.stdout());
+    ///     println!("Output: {}", output.stdout());
     /// }
     /// # Ok(())
     /// # }

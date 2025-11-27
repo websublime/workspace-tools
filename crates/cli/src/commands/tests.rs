@@ -3378,3 +3378,513 @@ custom/backups/
         assert!(init_args_non_interactive.non_interactive);
     }
 }
+
+// ============================================================================
+// Status Command Tests
+// ============================================================================
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+#[allow(clippy::unwrap_used)]
+#[allow(clippy::panic)]
+mod status_tests {
+    use crate::cli::commands::StatusArgs;
+    use crate::commands::status::execute_status;
+    use crate::output::{Output, OutputFormat};
+    use std::fs;
+    use tempfile::TempDir;
+
+    /// Helper to create a test workspace with package.json
+    fn create_test_workspace() -> TempDir {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let package_json = serde_json::json!({
+            "name": "test-project",
+            "version": "1.0.0"
+        });
+        fs::write(
+            temp_dir.path().join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Failed to serialize"),
+        )
+        .expect("Failed to write package.json");
+
+        // Create package-lock.json for npm detection
+        let package_lock = serde_json::json!({
+            "name": "test-project",
+            "lockfileVersion": 3
+        });
+        fs::write(
+            temp_dir.path().join("package-lock.json"),
+            serde_json::to_string_pretty(&package_lock).expect("Failed to serialize"),
+        )
+        .expect("Failed to write package-lock.json");
+
+        temp_dir
+    }
+
+    /// Helper to create a test monorepo workspace
+    fn create_test_monorepo() -> TempDir {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let package_json = serde_json::json!({
+            "name": "test-monorepo",
+            "version": "1.0.0",
+            "workspaces": ["packages/*"]
+        });
+        fs::write(
+            temp_dir.path().join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Failed to serialize"),
+        )
+        .expect("Failed to write package.json");
+
+        // Create package-lock.json for npm detection
+        let package_lock = serde_json::json!({
+            "name": "test-monorepo",
+            "lockfileVersion": 3
+        });
+        fs::write(
+            temp_dir.path().join("package-lock.json"),
+            serde_json::to_string_pretty(&package_lock).expect("Failed to serialize"),
+        )
+        .expect("Failed to write package-lock.json");
+
+        // Create a workspace package
+        let packages_dir = temp_dir.path().join("packages");
+        fs::create_dir_all(&packages_dir).expect("Failed to create packages dir");
+
+        let pkg1_dir = packages_dir.join("pkg1");
+        fs::create_dir_all(&pkg1_dir).expect("Failed to create pkg1 dir");
+        let pkg1_json = serde_json::json!({
+            "name": "@test/pkg1",
+            "version": "1.0.0"
+        });
+        fs::write(
+            pkg1_dir.join("package.json"),
+            serde_json::to_string_pretty(&pkg1_json).expect("Failed to serialize"),
+        )
+        .expect("Failed to write pkg1 package.json");
+
+        let pkg2_dir = packages_dir.join("pkg2");
+        fs::create_dir_all(&pkg2_dir).expect("Failed to create pkg2 dir");
+        let pkg2_json = serde_json::json!({
+            "name": "@test/pkg2",
+            "version": "2.0.0"
+        });
+        fs::write(
+            pkg2_dir.join("package.json"),
+            serde_json::to_string_pretty(&pkg2_json).expect("Failed to serialize"),
+        )
+        .expect("Failed to write pkg2 package.json");
+
+        temp_dir
+    }
+
+    #[tokio::test]
+    async fn test_status_single_package_quiet_output() {
+        let temp_dir = create_test_workspace();
+
+        let args = StatusArgs {};
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_status(&args, &output, temp_dir.path(), None).await;
+
+        assert!(result.is_ok(), "Status command failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_status_single_package_human_output() {
+        let temp_dir = create_test_workspace();
+
+        let args = StatusArgs {};
+        let output = Output::new(OutputFormat::Human, std::io::sink(), true);
+        let result = execute_status(&args, &output, temp_dir.path(), None).await;
+
+        assert!(result.is_ok(), "Status command with human output failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_status_single_package_json_output() {
+        let temp_dir = create_test_workspace();
+
+        let args = StatusArgs {};
+        let output = Output::new(OutputFormat::Json, std::io::sink(), true);
+        let result = execute_status(&args, &output, temp_dir.path(), None).await;
+
+        assert!(result.is_ok(), "Status command with JSON output failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_status_monorepo_quiet_output() {
+        let temp_dir = create_test_monorepo();
+
+        let args = StatusArgs {};
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_status(&args, &output, temp_dir.path(), None).await;
+
+        assert!(result.is_ok(), "Status command for monorepo failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_status_monorepo_json_output() {
+        let temp_dir = create_test_monorepo();
+
+        let args = StatusArgs {};
+        let output = Output::new(OutputFormat::Json, std::io::sink(), true);
+        let result = execute_status(&args, &output, temp_dir.path(), None).await;
+
+        assert!(result.is_ok(), "Status command for monorepo with JSON failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_status_fails_without_package_json() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+
+        let args = StatusArgs {};
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_status(&args, &output, temp_dir.path(), None).await;
+
+        assert!(result.is_err(), "Status should fail without package.json");
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("package.json"),
+            "Error should mention package.json: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_status_with_changesets_directory() {
+        let temp_dir = create_test_workspace();
+
+        // Create .changesets directory with a changeset
+        let changesets_dir = temp_dir.path().join(".changesets");
+        fs::create_dir_all(&changesets_dir).expect("Failed to create changesets dir");
+
+        let changeset = r"---
+packages:
+  - name: test-project
+    bump: patch
+---
+
+Test changeset
+";
+        fs::write(changesets_dir.join("test-changeset.yaml"), changeset)
+            .expect("Failed to write changeset");
+
+        let args = StatusArgs {};
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_status(&args, &output, temp_dir.path(), None).await;
+
+        assert!(result.is_ok(), "Status with changesets failed: {result:?}");
+    }
+}
+
+// ============================================================================
+// Execute Command Tests
+// ============================================================================
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+#[allow(clippy::unwrap_used)]
+#[allow(clippy::panic)]
+mod execute_tests {
+    use crate::cli::commands::ExecuteArgs;
+    use crate::commands::execute::execute_execute;
+    use crate::output::{Output, OutputFormat};
+    use std::fs;
+    use tempfile::TempDir;
+
+    /// Helper to create a test workspace with package.json and scripts
+    fn create_test_workspace_with_scripts() -> TempDir {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let package_json = serde_json::json!({
+            "name": "test-project",
+            "version": "1.0.0",
+            "scripts": {
+                "test": "echo 'Running tests'",
+                "build": "echo 'Building project'",
+                "lint": "echo 'Linting code'"
+            }
+        });
+        fs::write(
+            temp_dir.path().join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Failed to serialize"),
+        )
+        .expect("Failed to write package.json");
+
+        // Create package-lock.json for npm detection
+        let package_lock = serde_json::json!({
+            "name": "test-project",
+            "lockfileVersion": 3
+        });
+        fs::write(
+            temp_dir.path().join("package-lock.json"),
+            serde_json::to_string_pretty(&package_lock).expect("Failed to serialize"),
+        )
+        .expect("Failed to write package-lock.json");
+
+        temp_dir
+    }
+
+    /// Helper to create a test monorepo workspace with scripts
+    fn create_test_monorepo_with_scripts() -> TempDir {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let package_json = serde_json::json!({
+            "name": "test-monorepo",
+            "version": "1.0.0",
+            "workspaces": ["packages/*"]
+        });
+        fs::write(
+            temp_dir.path().join("package.json"),
+            serde_json::to_string_pretty(&package_json).expect("Failed to serialize"),
+        )
+        .expect("Failed to write package.json");
+
+        // Create package-lock.json for npm detection
+        let package_lock = serde_json::json!({
+            "name": "test-monorepo",
+            "lockfileVersion": 3
+        });
+        fs::write(
+            temp_dir.path().join("package-lock.json"),
+            serde_json::to_string_pretty(&package_lock).expect("Failed to serialize"),
+        )
+        .expect("Failed to write package-lock.json");
+
+        // Create workspace packages with scripts
+        let packages_dir = temp_dir.path().join("packages");
+        fs::create_dir_all(&packages_dir).expect("Failed to create packages dir");
+
+        let pkg1_dir = packages_dir.join("pkg1");
+        fs::create_dir_all(&pkg1_dir).expect("Failed to create pkg1 dir");
+        let pkg1_json = serde_json::json!({
+            "name": "@test/pkg1",
+            "version": "1.0.0",
+            "scripts": {
+                "test": "echo 'Testing pkg1'",
+                "build": "echo 'Building pkg1'"
+            }
+        });
+        fs::write(
+            pkg1_dir.join("package.json"),
+            serde_json::to_string_pretty(&pkg1_json).expect("Failed to serialize"),
+        )
+        .expect("Failed to write pkg1 package.json");
+
+        let pkg2_dir = packages_dir.join("pkg2");
+        fs::create_dir_all(&pkg2_dir).expect("Failed to create pkg2 dir");
+        let pkg2_json = serde_json::json!({
+            "name": "@test/pkg2",
+            "version": "2.0.0",
+            "scripts": {
+                "test": "echo 'Testing pkg2'",
+                "build": "echo 'Building pkg2'"
+            }
+        });
+        fs::write(
+            pkg2_dir.join("package.json"),
+            serde_json::to_string_pretty(&pkg2_json).expect("Failed to serialize"),
+        )
+        .expect("Failed to write pkg2 package.json");
+
+        temp_dir
+    }
+
+    #[tokio::test]
+    async fn test_execute_system_command_single_package() {
+        let temp_dir = create_test_workspace_with_scripts();
+
+        let args = ExecuteArgs {
+            cmd: "echo hello".to_string(),
+            filter_package: None,
+            parallel: false,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        assert!(result.is_ok(), "Execute system command failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_execute_npm_script_single_package() {
+        let temp_dir = create_test_workspace_with_scripts();
+
+        let args = ExecuteArgs {
+            cmd: "npm:test".to_string(),
+            filter_package: None,
+            parallel: false,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        assert!(result.is_ok(), "Execute npm script failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_execute_fails_with_missing_npm_script() {
+        let temp_dir = create_test_workspace_with_scripts();
+
+        let args = ExecuteArgs {
+            cmd: "npm:nonexistent".to_string(),
+            filter_package: None,
+            parallel: false,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        assert!(result.is_err(), "Execute should fail with missing npm script");
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("not found") || err.to_string().contains("Script"),
+            "Error should mention missing script: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_execute_monorepo_sequential() {
+        let temp_dir = create_test_monorepo_with_scripts();
+
+        let args = ExecuteArgs {
+            cmd: "echo hello".to_string(),
+            filter_package: None,
+            parallel: false,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        assert!(result.is_ok(), "Execute on monorepo sequential failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_execute_monorepo_parallel() {
+        let temp_dir = create_test_monorepo_with_scripts();
+
+        let args = ExecuteArgs {
+            cmd: "echo hello".to_string(),
+            filter_package: None,
+            parallel: true,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        assert!(result.is_ok(), "Execute on monorepo parallel failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_execute_with_package_filter() {
+        let temp_dir = create_test_monorepo_with_scripts();
+
+        let args = ExecuteArgs {
+            cmd: "echo hello".to_string(),
+            filter_package: Some(vec!["@test/pkg1".to_string()]),
+            parallel: false,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        assert!(result.is_ok(), "Execute with filter failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_execute_fails_with_invalid_filter() {
+        let temp_dir = create_test_monorepo_with_scripts();
+
+        let args = ExecuteArgs {
+            cmd: "echo hello".to_string(),
+            filter_package: Some(vec!["nonexistent-package".to_string()]),
+            parallel: false,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        assert!(result.is_err(), "Execute should fail with invalid filter");
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("match filter") || err.to_string().contains("No packages"),
+            "Error should mention filter issue: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_execute_json_output() {
+        let temp_dir = create_test_workspace_with_scripts();
+
+        let args = ExecuteArgs {
+            cmd: "echo hello".to_string(),
+            filter_package: None,
+            parallel: false,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Json, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        assert!(result.is_ok(), "Execute with JSON output failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_execute_fails_without_package_json() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+
+        let args = ExecuteArgs {
+            cmd: "echo hello".to_string(),
+            filter_package: None,
+            parallel: false,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        assert!(result.is_err(), "Execute should fail without package.json");
+    }
+
+    #[tokio::test]
+    async fn test_execute_npm_script_monorepo() {
+        let temp_dir = create_test_monorepo_with_scripts();
+
+        let args = ExecuteArgs {
+            cmd: "npm:test".to_string(),
+            filter_package: None,
+            parallel: false,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        assert!(result.is_ok(), "Execute npm script on monorepo failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_execute_npm_script_with_filter() {
+        let temp_dir = create_test_monorepo_with_scripts();
+
+        let args = ExecuteArgs {
+            cmd: "npm:build".to_string(),
+            filter_package: Some(vec!["@test/pkg1".to_string(), "@test/pkg2".to_string()]),
+            parallel: true,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        assert!(result.is_ok(), "Execute npm script with filter failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_execute_with_extra_args() {
+        let temp_dir = create_test_workspace_with_scripts();
+
+        let args = ExecuteArgs {
+            cmd: "echo".to_string(),
+            filter_package: None,
+            parallel: false,
+            args: vec!["extra".to_string(), "arguments".to_string()],
+        };
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        assert!(result.is_ok(), "Execute with extra args failed: {result:?}");
+    }
+}

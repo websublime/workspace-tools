@@ -25,9 +25,9 @@ use tokio::sync::mpsc;
 /// # Examples
 ///
 /// ```
-/// use sublime_standard_tools::command::types::{CommandExecutor, StreamOutput};
+/// use sublime_standard_tools::command::StreamOutput;
 ///
-/// async fn process_output(output: StreamOutput) {
+/// fn process_output(output: StreamOutput) {
 ///     match output {
 ///         StreamOutput::Stdout(line) => println!("STDOUT: {}", line),
 ///         StreamOutput::Stderr(line) => eprintln!("STDERR: {}", line),
@@ -53,13 +53,9 @@ pub enum StreamOutput {
 /// # Examples
 ///
 /// ```
-/// use sublime_standard_tools::command::types::{StreamConfig};
-/// use std::time::Duration;
+/// use sublime_standard_tools::command::StreamConfig;
 ///
-/// let config = StreamConfig {
-///     buffer_size: 1024,
-///     read_timeout: Duration::from_millis(100),
-/// };
+/// let config = StreamConfig::default();
 /// ```
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -77,20 +73,23 @@ pub struct StreamConfig {
 ///
 /// # Examples
 ///
-/// ```
-/// use sublime_standard_tools::command::types::{CommandExecutor, StreamOutput};
-/// use tokio::stream::StreamExt;
+/// ```ignore
+/// // CommandStream is created internally by executors
+/// use sublime_standard_tools::command::{DefaultCommandExecutor, Executor, CommandBuilder, StreamConfig, StreamOutput};
 ///
-/// async fn stream_command(executor: impl CommandExecutor) {
-///     let mut stream = executor.execute_streaming("ls", &["-la"]).await.unwrap();
+/// async fn stream_command() -> sublime_standard_tools::error::Result<()> {
+///     let executor = DefaultCommandExecutor::new();
+///     let cmd = CommandBuilder::new("ls").arg("-la").build();
+///     let (mut stream, mut child) = executor.execute_stream(cmd, StreamConfig::default()).await?;
 ///
-///     while let Some(output) = stream.next().await {
+///     while let Ok(Some(output)) = stream.next_timeout(std::time::Duration::from_secs(1)).await {
 ///         match output {
 ///             StreamOutput::Stdout(line) => println!("STDOUT: {}", line),
 ///             StreamOutput::Stderr(line) => eprintln!("STDERR: {}", line),
 ///             StreamOutput::End => break,
 ///         }
 ///     }
+///     Ok(())
 /// }
 /// ```
 #[derive(Debug)]

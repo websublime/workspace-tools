@@ -20,11 +20,16 @@
 /// # Examples
 ///
 /// ```
-/// use sublime_standard_tools::command::types::{CommandPriority, CommandQueue};
+/// use sublime_standard_tools::command::CommandPriority;
 ///
-/// // Queue a high priority command
-/// let queue = CommandQueue::new();
-/// let command_id = queue.enqueue_with_priority("npm", &["install"], CommandPriority::High);
+/// // Define priorities for different command types
+/// let urgent_priority = CommandPriority::Critical;
+/// let normal_priority = CommandPriority::Normal;
+/// let background_priority = CommandPriority::Low;
+///
+/// // Priorities can be compared
+/// assert!(urgent_priority > normal_priority);
+/// assert!(normal_priority > background_priority);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CommandPriority {
@@ -45,15 +50,17 @@ pub enum CommandPriority {
 /// # Examples
 ///
 /// ```
-/// use sublime_standard_tools::command::types::{CommandQueue, CommandStatus};
+/// use sublime_standard_tools::command::CommandStatus;
 ///
-/// let queue = CommandQueue::new();
-/// let command_id = queue.enqueue("npm", &["install"]);
+/// // Check various command statuses
+/// let status = CommandStatus::Queued;
 ///
-/// // Check the status of the command
-/// let status = queue.get_status(&command_id);
-/// if status == CommandStatus::Queued {
-///     println!("Command is waiting to be executed");
+/// match status {
+///     CommandStatus::Queued => println!("Command is waiting to be executed"),
+///     CommandStatus::Running => println!("Command is currently executing"),
+///     CommandStatus::Completed => println!("Command finished successfully"),
+///     CommandStatus::Failed => println!("Command execution failed"),
+///     CommandStatus::Cancelled => println!("Command was cancelled"),
 /// }
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

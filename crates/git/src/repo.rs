@@ -87,8 +87,9 @@ use crate::{GitChangedFile, GitFileStatus, Repo, RepoCommit, RepoError, RepoTags
 ///
 /// # Examples
 ///
-/// ```
-/// use git::repo::canonicalize_path;
+/// ```ignore
+/// // This function is private (pub(crate)) and cannot be used in doc tests
+/// use sublime_git_tools::repo::canonicalize_path;
 ///
 /// let path = canonicalize_path("./src").expect("Failed to canonicalize path");
 /// println!("Canonical path: {}", path);
@@ -327,8 +328,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::create("/tmp/new-repo").expect("Failed to create repository");
     /// println!("Repository created at: {}", repo.get_repo_path().display());
@@ -361,7 +362,7 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// use sublime_git_tools::{Repo, SystemEnvProvider};
     /// use std::sync::Arc;
     ///
@@ -412,8 +413,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-project").expect("Failed to open repository");
     /// let branch = repo.get_current_branch().expect("Failed to get current branch");
@@ -448,7 +449,7 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// use sublime_git_tools::{Repo, SystemEnvProvider};
     /// use std::sync::Arc;
     ///
@@ -491,8 +492,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::clone("https://github.com/example/repo.git", "./cloned-repo")
     ///     .expect("Failed to clone repository");
@@ -528,7 +529,7 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// use sublime_git_tools::{Repo, SystemEnvProvider};
     /// use std::sync::Arc;
     ///
@@ -811,8 +812,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// println!("Repository path: {}", repo.get_repo_path().display());
@@ -843,8 +844,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// repo.config("Jane Doe", "jane@example.com").expect("Failed to configure repository");
@@ -880,8 +881,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// repo.create_branch("feature/new-feature").expect("Failed to create branch");
@@ -910,8 +911,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let branches = repo.list_branches().expect("Failed to list branches");
@@ -957,8 +958,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let exists = repo.branch_exists("main").expect("Failed to check branch");
@@ -1000,8 +1001,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let merge_base = repo.get_merge_base("main", "feature-branch")
@@ -1040,8 +1041,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let changed_files = repo.get_files_changed_between("main", "feature-branch")
@@ -1240,8 +1241,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let config = repo.list_config().expect("Failed to list config");
@@ -1289,8 +1290,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// repo.checkout("feature-branch").expect("Failed to checkout branch");
@@ -1337,8 +1338,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let branch = repo.get_current_branch().expect("Failed to get current branch");
@@ -1510,8 +1511,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// repo.create_tag("v1.0.0", Some("Version 1.0.0 release".to_string()))
@@ -1564,8 +1565,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// repo.add("src/main.rs").expect("Failed to add file");
@@ -1601,8 +1602,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// repo.add_all().expect("Failed to add all changes");
@@ -1636,8 +1637,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// match repo.get_last_tag() {
@@ -1673,8 +1674,9 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```ignore
+    /// // This is a private method and cannot be tested directly in doc tests
+    /// use sublime_git_tools::Repo;
     /// use std::cmp::Ordering;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
@@ -1723,8 +1725,9 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```ignore
+    /// // This is a private method and cannot be tested directly in doc tests
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let version = repo.parse_semantic_version("v1.2.3-alpha");
@@ -1821,8 +1824,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let sha = repo.get_current_sha().expect("Failed to get current SHA");
@@ -1855,8 +1858,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let prev_sha = repo.get_previous_sha().expect("Failed to get previous SHA");
@@ -1905,8 +1908,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// // First add some files
@@ -1959,8 +1962,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let commit_id = repo.commit_changes("feat: add new feature").expect("Failed to commit changes");
@@ -2007,8 +2010,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let status = repo.status_porcelain().expect("Failed to get status");
@@ -2056,8 +2059,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let detailed_status = repo.get_status_detailed()
@@ -2127,8 +2130,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let staged_files = repo.get_staged_files()
@@ -2227,8 +2230,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let commit_sha = repo.get_current_sha().expect("Failed to get current SHA");
@@ -2303,8 +2306,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let commit_sha = repo.get_current_sha().expect("Failed to get current SHA");
@@ -2386,16 +2389,12 @@ impl Repo {
     /// # Examples
     ///
     /// ```no_run
-    /// # // Example needs a repo setup
-    /// use git::repo::Repo;
+    /// use sublime_git_tools::Repo;
     ///
-    /// # fn example() -> Result<(), git::repo::RepoError> {
-    /// let repo = Repo::open("./my-repo")?;
-    /// repo.checkout("main")?; // Ensure we are on the target branch
-    /// repo.merge("feature-branch")?; // Merge feature-branch into main
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// repo.checkout("main").expect("Failed to checkout main");
+    /// repo.merge("feature-branch").expect("Failed to merge");
     /// println!("Merge successful!");
-    /// # Ok(())
-    /// # }
     /// ```
     pub fn merge(&self, branch_name: &str) -> Result<(), RepoError> {
         // 1. Get HEAD commit (the branch we are merging INTO)
@@ -2549,8 +2548,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// // Push current branch with tags
@@ -2632,8 +2631,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// // Fetch with default refspecs and no pruning
@@ -2741,8 +2740,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// // Pull from the tracking branch
@@ -2875,8 +2874,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     /// use std::path::PathBuf;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
@@ -2957,8 +2956,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let merge_base = repo.get_diverged_commit("feature-branch")
@@ -3006,8 +3005,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let changed_files = repo.get_all_files_changed_since_sha_with_status("v1.0.0")
@@ -3177,8 +3176,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let changed_files = repo.get_all_files_changed_since_sha("v1.0.0")
@@ -3220,8 +3219,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     /// let packages = vec!["packages/pkg1".to_string(), "packages/pkg2".to_string()];
@@ -3296,8 +3295,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     ///
@@ -3431,8 +3430,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     ///
@@ -3547,8 +3546,8 @@ impl Repo {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use git::repo::Repo;
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
     ///
     /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
     ///

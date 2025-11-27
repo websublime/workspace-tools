@@ -83,8 +83,9 @@ impl CommandStream {
     ///
     /// let stdout = child.stdout.take().unwrap();
     /// let stderr = child.stderr.take().unwrap();
+    /// let config = StreamConfig::default();
     ///
-    /// let stream = CommandStream::new(stdout, stderr, StreamConfig::default());
+    /// let stream = CommandStream::new(stdout, stderr, &config);
     /// # }
     /// ```
     #[must_use]

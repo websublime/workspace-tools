@@ -10,8 +10,8 @@ use thiserror::Error;
 ///
 /// # Examples
 ///
-/// ```
-/// use git::repo::Repo;
+/// ```no_run
+/// use sublime_git_tools::Repo;
 ///
 /// // Open an existing repository
 /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
@@ -35,13 +35,14 @@ pub struct Repo {
 /// # Examples
 ///
 /// ```
-/// use git::repo::GitFileStatus;
+/// use sublime_git_tools::GitFileStatus;
 ///
 /// let status = GitFileStatus::Modified;
 /// match status {
 ///     GitFileStatus::Added => println!("File was added"),
 ///     GitFileStatus::Modified => println!("File was modified"),
 ///     GitFileStatus::Deleted => println!("File was deleted"),
+///     GitFileStatus::Untracked => println!("File is untracked"),
 /// }
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -61,7 +62,7 @@ pub enum GitFileStatus {
 /// # Examples
 ///
 /// ```
-/// use git::repo::{GitChangedFile, GitFileStatus};
+/// use sublime_git_tools::{GitChangedFile, GitFileStatus};
 ///
 /// let file = GitChangedFile {
 ///     path: "src/main.rs".to_string(),
@@ -103,7 +104,7 @@ pub struct GitChangedFile {
 /// # Examples
 ///
 /// ```
-/// use git::repo::GitDiffStats;
+/// use sublime_git_tools::GitDiffStats;
 ///
 /// let stats = GitDiffStats {
 ///     lines_added: 15,
@@ -125,7 +126,7 @@ pub struct GitDiffStats {
 /// # Examples
 ///
 /// ```
-/// use git::repo::RepoCommit;
+/// use sublime_git_tools::RepoCommit;
 ///
 /// let commit = RepoCommit {
 ///     hash: "abcdef123456".to_string(),
@@ -156,7 +157,7 @@ pub struct RepoCommit {
 /// # Examples
 ///
 /// ```
-/// use git::repo::RepoTags;
+/// use sublime_git_tools::RepoTags;
 ///
 /// let tag = RepoTags {
 ///     hash: "abcdef123456".to_string(),
@@ -181,7 +182,7 @@ pub struct RepoTags {
 /// # Examples
 ///
 /// ```
-/// use git::repo::{Repo, RepoError};
+/// use sublime_git_tools::{Repo, RepoError};
 ///
 /// match Repo::open("/non/existent/path") {
 ///     Ok(_) => println!("Repository opened successfully"),

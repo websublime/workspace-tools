@@ -50,13 +50,11 @@ impl MonorepoDescriptor {
     ///     // Package definitions would go here
     /// ];
     ///
-    /// let descriptor = MonorepoDescriptor::new(
+    /// // Use minimal() for simple cases with default values
+    /// let descriptor = MonorepoDescriptor::minimal(
     ///     MonorepoKind::YarnWorkspaces,
     ///     root,
     ///     packages,
-    ///     None, // package_manager
-    ///     None, // package_json
-    ///     ProjectValidationStatus::NotValidated
     /// );
     /// ```
     #[must_use]
@@ -135,7 +133,7 @@ impl MonorepoDescriptor {
     /// # use std::path::PathBuf;
     /// # use sublime_standard_tools::monorepo::{MonorepoDescriptor, MonorepoKind};
     /// #
-    /// # let descriptor = MonorepoDescriptor::new(
+    /// # let descriptor = MonorepoDescriptor::minimal(
     /// #     MonorepoKind::YarnWorkspaces,
     /// #     PathBuf::from("/fake/path"),
     /// #     vec![]
@@ -161,7 +159,7 @@ impl MonorepoDescriptor {
     /// # use std::path::PathBuf;
     /// # use sublime_standard_tools::monorepo::{MonorepoDescriptor, MonorepoKind};
     /// #
-    /// # let descriptor = MonorepoDescriptor::new(
+    /// # let descriptor = MonorepoDescriptor::minimal(
     /// #     MonorepoKind::YarnWorkspaces,
     /// #     PathBuf::from("/projects/my-monorepo"),
     /// #     vec![]
@@ -187,7 +185,7 @@ impl MonorepoDescriptor {
     /// # use std::path::PathBuf;
     /// # use sublime_standard_tools::monorepo::{MonorepoDescriptor, MonorepoKind};
     /// #
-    /// # let descriptor = MonorepoDescriptor::new(
+    /// # let descriptor = MonorepoDescriptor::minimal(
     /// #     MonorepoKind::YarnWorkspaces,
     /// #     PathBuf::from("/fake/path"),
     /// #     vec![]
@@ -227,7 +225,7 @@ impl MonorepoDescriptor {
     /// #     workspace_dev_dependencies: vec![],
     /// # };
     /// #
-    /// # let descriptor = MonorepoDescriptor::new(
+    /// # let descriptor = MonorepoDescriptor::minimal(
     /// #     MonorepoKind::YarnWorkspaces,
     /// #     PathBuf::from("/projects/monorepo"),
     /// #     vec![ui_pkg]
@@ -275,7 +273,7 @@ impl MonorepoDescriptor {
     /// #     workspace_dev_dependencies: vec![],
     /// # };
     /// #
-    /// # let descriptor = MonorepoDescriptor::new(
+    /// # let descriptor = MonorepoDescriptor::minimal(
     /// #     MonorepoKind::YarnWorkspaces,
     /// #     PathBuf::from("/fake/path"),
     /// #     vec![pkg1, pkg2]
@@ -355,7 +353,7 @@ impl MonorepoDescriptor {
     /// #     workspace_dev_dependencies: vec![],
     /// # };
     /// #
-    /// # let descriptor = MonorepoDescriptor::new(
+    /// # let descriptor = MonorepoDescriptor::minimal(
     /// #     MonorepoKind::YarnWorkspaces,
     /// #     PathBuf::from("/fake/path"),
     /// #     vec![pkg1, pkg2]
@@ -411,7 +409,7 @@ impl MonorepoDescriptor {
     /// #     workspace_dev_dependencies: vec![],
     /// # };
     /// #
-    /// # let descriptor = MonorepoDescriptor::new(
+    /// # let descriptor = MonorepoDescriptor::minimal(
     /// #     MonorepoKind::YarnWorkspaces,
     /// #     PathBuf::from("/projects/monorepo"),
     /// #     vec![pkg]

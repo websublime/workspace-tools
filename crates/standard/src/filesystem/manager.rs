@@ -32,8 +32,8 @@ use tokio::{fs, time::timeout};
 ///
 /// # Examples
 ///
-/// ```rust
-/// use sublime_standard_tools::filesystem::FileSystemManager;
+/// ```no_run
+/// use sublime_standard_tools::filesystem::{FileSystemManager, AsyncFileSystem};
 /// use std::path::Path;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
@@ -64,7 +64,7 @@ impl FileSystemManager {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use sublime_standard_tools::filesystem::FileSystemManager;
     ///
     /// let fs_manager = FileSystemManager::new();
@@ -86,7 +86,7 @@ impl FileSystemManager {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use sublime_standard_tools::filesystem::{FileSystemManager, AsyncFileSystemConfig};
     /// use std::time::Duration;
     ///
@@ -114,7 +114,7 @@ impl FileSystemManager {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use sublime_standard_tools::filesystem::FileSystemManager;
     /// use sublime_standard_tools::config::{StandardConfig, FilesystemConfig};
     ///
@@ -141,7 +141,7 @@ impl FileSystemManager {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use sublime_standard_tools::filesystem::FileSystemManager;
     /// use sublime_standard_tools::config::StandardConfig;
     ///
@@ -161,7 +161,7 @@ impl FileSystemManager {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use sublime_standard_tools::filesystem::FileSystemManager;
     ///
     /// let fs = FileSystemManager::new();
@@ -186,8 +186,9 @@ impl FileSystemManager {
     ///
     /// # Examples
     ///
-    /// ```rust
-    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// ```ignore
+    /// // This is a private method, example for internal documentation only
+    /// use sublime_standard_tools::filesystem::{FileSystemManager, AsyncFileSystem};
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {

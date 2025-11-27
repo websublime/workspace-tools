@@ -27,12 +27,12 @@ use std::path::Path;
 ///
 /// # Examples
 ///
-/// ```rust
-/// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
+/// ```no_run
+/// use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
 /// use std::path::Path;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let fs = AsyncFileSystemManager::new();
+/// let fs = FileSystemManager::new();
 /// let contents = fs.read_file_string(Path::new("Cargo.toml")).await?;
 /// println!("Cargo.toml contents: {}", contents);
 /// # Ok(())
@@ -53,12 +53,12 @@ pub trait AsyncFileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
-    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
+    /// ```no_run
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = AsyncFileSystemManager::new();
+    /// let fs = FileSystemManager::new();
     /// let contents = fs.read_file(Path::new("Cargo.toml")).await?;
     /// println!("Read {} bytes", contents.len());
     /// # Ok(())
@@ -84,12 +84,12 @@ pub trait AsyncFileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
-    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
+    /// ```no_run
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = AsyncFileSystemManager::new();
+    /// let fs = FileSystemManager::new();
     /// let data = b"Hello, world!";
     /// fs.write_file(Path::new("example.txt"), data).await?;
     /// # Ok(())
@@ -114,12 +114,12 @@ pub trait AsyncFileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
-    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
+    /// ```no_run
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = AsyncFileSystemManager::new();
+    /// let fs = FileSystemManager::new();
     /// let contents = fs.read_file_string(Path::new("Cargo.toml")).await?;
     /// println!("First line: {}", contents.lines().next().unwrap_or_default());
     /// # Ok(())
@@ -145,12 +145,12 @@ pub trait AsyncFileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
-    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
+    /// ```no_run
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = AsyncFileSystemManager::new();
+    /// let fs = FileSystemManager::new();
     /// fs.write_file_string(Path::new("example.txt"), "Hello, world!").await?;
     /// # Ok(())
     /// # }
@@ -174,12 +174,12 @@ pub trait AsyncFileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
-    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
+    /// ```no_run
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = AsyncFileSystemManager::new();
+    /// let fs = FileSystemManager::new();
     /// fs.create_dir_all(Path::new("nested/directory/structure")).await?;
     /// # Ok(())
     /// # }
@@ -203,12 +203,12 @@ pub trait AsyncFileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
-    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
+    /// ```no_run
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = AsyncFileSystemManager::new();
+    /// let fs = FileSystemManager::new();
     /// // Create a file, then remove it
     /// fs.write_file_string(Path::new("temp.txt"), "temporary content").await?;
     /// fs.remove(Path::new("temp.txt")).await?;
@@ -234,12 +234,12 @@ pub trait AsyncFileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
-    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
+    /// ```no_run
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
     /// use std::path::Path;
     ///
     /// # async fn example() {
-    /// let fs = AsyncFileSystemManager::new();
+    /// let fs = FileSystemManager::new();
     /// if fs.exists(Path::new("Cargo.toml")).await {
     ///     println!("Cargo.toml exists");
     /// } else {
@@ -262,12 +262,12 @@ pub trait AsyncFileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
-    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
+    /// ```no_run
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = AsyncFileSystemManager::new();
+    /// let fs = FileSystemManager::new();
     /// let entries = fs.read_dir(Path::new("src")).await?;
     /// for entry in entries {
     ///     println!("Found: {}", entry.display());
@@ -294,12 +294,12 @@ pub trait AsyncFileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
-    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
+    /// ```no_run
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = AsyncFileSystemManager::new();
+    /// let fs = FileSystemManager::new();
     /// let all_entries = fs.walk_dir(Path::new("src")).await?;
     /// println!("Found {} total entries", all_entries.len());
     /// # Ok(())
@@ -324,12 +324,12 @@ pub trait AsyncFileSystem: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
-    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, AsyncFileSystemManager};
+    /// ```no_run
+    /// use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let fs = AsyncFileSystemManager::new();
+    /// let fs = FileSystemManager::new();
     /// let metadata = fs.metadata(Path::new("Cargo.toml")).await?;
     /// println!("File size: {} bytes", metadata.len());
     /// # Ok(())

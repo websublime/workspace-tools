@@ -240,6 +240,55 @@ workspace --format json audit
 - **Version Consistency**: Version alignment across monorepo
 - **Breaking Changes**: Detect breaking changes from commits and dependencies
 
+### Workspace Status
+
+Get a quick overview of your workspace:
+
+```bash
+# Display workspace status
+workspace status
+
+# JSON output for automation
+workspace --format json status
+```
+
+**Shows:**
+- Repository type (simple or monorepo)
+- Package manager (npm, yarn, pnpm, bun)
+- Current Git branch
+- Pending changesets
+- All packages with versions
+
+### Command Execution
+
+Run commands across all workspace packages:
+
+```bash
+# Run npm scripts across all packages
+workspace execute --cmd npm:lint
+workspace execute --cmd npm:test
+workspace execute --cmd npm:build
+
+# Run in parallel for faster execution
+workspace execute --cmd npm:test --parallel
+
+# Filter to specific packages
+workspace execute --cmd npm:build --filter-package "@myorg/core,@myorg/utils"
+
+# Run system commands
+workspace execute --cmd "echo hello"
+
+# Pass extra arguments
+workspace execute --cmd npm:test -- --coverage
+```
+
+**Features:**
+- Sequential (default) or parallel execution
+- npm script validation before execution
+- Package filtering support
+- Streaming output with execution summary
+- JSON output for CI/CD integration
+
 ### CI/CD Integration
 
 Designed for automation with JSON output and silent operation:
