@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.22 - 2025-11-27
+
+### Bug Fixes
+
+#### WOR-TSK-169
+
+- Use cross-platform echo syntax in test scripts
+
+### Features
+
+#### WOR-TSK-169
+
+- Add status and execute commands with doc test fixes
+
+### Miscellaneous Tasks
+
+#### WOR-TSK-169
+
+- Move plan file to cli docs directory
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.21 - 2025-11-25
 
 ### Refactor

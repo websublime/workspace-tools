@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.14 - 2025-11-27
+
+### Bug Fixes
+
+#### WOR-TSK-169
+
+- Wrap commands with cmd /C on Windows
+- Handle command not found error on Windows
+- Fix clippy unnested_or_patterns lint
+
+### Features
+
+#### WOR-TSK-169
+
+- Add status and execute commands with doc test fixes
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.13 - 2025-11-25
 
 ### Documentation
