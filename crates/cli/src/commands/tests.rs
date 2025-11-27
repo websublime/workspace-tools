@@ -3593,13 +3593,15 @@ mod execute_tests {
     /// Helper to create a test workspace with package.json and scripts
     fn create_test_workspace_with_scripts() -> TempDir {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        // Use echo without quotes for cross-platform compatibility (Windows cmd.exe
+        // treats single quotes literally, not as string delimiters)
         let package_json = serde_json::json!({
             "name": "test-project",
             "version": "1.0.0",
             "scripts": {
-                "test": "echo 'Running tests'",
-                "build": "echo 'Building project'",
-                "lint": "echo 'Linting code'"
+                "test": "echo running-tests",
+                "build": "echo building-project",
+                "lint": "echo linting-code"
             }
         });
         fs::write(
@@ -3653,12 +3655,13 @@ mod execute_tests {
 
         let pkg1_dir = packages_dir.join("pkg1");
         fs::create_dir_all(&pkg1_dir).expect("Failed to create pkg1 dir");
+        // Use echo without quotes for cross-platform compatibility
         let pkg1_json = serde_json::json!({
             "name": "@test/pkg1",
             "version": "1.0.0",
             "scripts": {
-                "test": "echo 'Testing pkg1'",
-                "build": "echo 'Building pkg1'"
+                "test": "echo testing-pkg1",
+                "build": "echo building-pkg1"
             }
         });
         fs::write(
@@ -3673,8 +3676,8 @@ mod execute_tests {
             "name": "@test/pkg2",
             "version": "2.0.0",
             "scripts": {
-                "test": "echo 'Testing pkg2'",
-                "build": "echo 'Building pkg2'"
+                "test": "echo testing-pkg2",
+                "build": "echo building-pkg2"
             }
         });
         fs::write(
