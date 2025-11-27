@@ -246,11 +246,10 @@ mod tests {
         // On Windows: cmd /C wrapping means cmd.exe spawns successfully but
         // returns non-zero exit code when the command is not found
         match result {
-            Err(Error::Command(CommandError::SpawnFailed { cmd: _, message: _ })) => {
-                // Expected on Unix
-            }
-            Err(Error::Command(CommandError::NonZeroExitCode { cmd: _, code: _, stderr: _ })) => {
-                // Expected on Windows (cmd /C returns non-zero for missing commands)
+            Err(Error::Command(
+                CommandError::SpawnFailed { .. } | CommandError::NonZeroExitCode { .. },
+            )) => {
+                // Both are valid: SpawnFailed on Unix, NonZeroExitCode on Windows
             }
             _ => panic!("Unexpected error type"),
         }
