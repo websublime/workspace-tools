@@ -157,6 +157,10 @@ impl DefaultCommandExecutor {
 
     /// Builds a tokio Command from our command configuration.
     ///
+    /// On Windows, commands are wrapped with `cmd /C` to enable proper resolution
+    /// of `.cmd` and `.bat` scripts (like npm, npx, yarn, pnpm) through PATHEXT.
+    /// On Unix systems, commands are executed directly.
+    ///
     /// # Arguments
     ///
     /// * `config` - The command configuration
@@ -182,8 +186,26 @@ impl DefaultCommandExecutor {
     /// let tokio_cmd = DefaultCommandExecutor::build_command(&config);
     /// ```
     fn build_command(config: &CmdConfig) -> Command {
-        let mut cmd = Command::new(&config.program);
-        cmd.args(&config.args).envs(&config.env).stdout(Stdio::piped()).stderr(Stdio::piped());
+        // On Windows, we need to wrap commands with cmd /C to properly resolve
+        // .cmd and .bat scripts (npm, npx, yarn, pnpm are all .cmd files).
+        // Without this, Command::new("npm") fails because Windows doesn't
+        // resolve PATHEXT extensions when spawning processes directly.
+        #[cfg(target_os = "windows")]
+        let mut cmd = {
+            let mut cmd = Command::new("cmd");
+            cmd.arg("/C").arg(&config.program);
+            cmd.args(&config.args);
+            cmd
+        };
+
+        #[cfg(not(target_os = "windows"))]
+        let mut cmd = {
+            let mut cmd = Command::new(&config.program);
+            cmd.args(&config.args);
+            cmd
+        };
+
+        cmd.envs(&config.env).stdout(Stdio::piped()).stderr(Stdio::piped());
 
         if let Some(dir) = &config.current_dir {
             cmd.current_dir(dir);
