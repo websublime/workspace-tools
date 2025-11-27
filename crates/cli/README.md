@@ -42,6 +42,8 @@ workspace bump [options]              # Bump package versions
 workspace upgrade <subcommand>        # Manage dependency upgrades
 workspace audit [options]             # Run project health audit
 workspace changes [options]           # Analyze repository changes
+workspace status                      # Display workspace status information
+workspace execute [options]           # Execute commands across packages
 workspace version [options]           # Display version information
 workspace clone <url> [destination]   # Clone repository with workspace setup
 ```
@@ -670,6 +672,166 @@ workspace changes --branch main
 
 # Filter specific packages
 workspace changes --packages "@myorg/core"
+```
+
+---
+
+### `status` - Display Workspace Status
+
+Shows comprehensive workspace information including repository type, package manager, active branch, pending changesets, and all workspace packages.
+
+**Usage:**
+```bash
+workspace status
+```
+
+**Output Includes:**
+- **Repository Type**: `simple` (single package) or `monorepo` (with type: npm, yarn, pnpm, bun)
+- **Package Manager**: Detected package manager (npm, yarn, pnpm, bun) and lock file
+- **Git Branch**: Current branch name (if in a Git repository)
+- **Pending Changesets**: List of active changeset IDs
+- **Packages**: Table with name, version, and path for all workspace packages
+
+**Examples:**
+```bash
+# Display workspace status (human-readable)
+workspace status
+
+# Display as JSON (for automation)
+workspace --format json status
+
+# Quiet mode (minimal output)
+workspace --quiet status
+```
+
+**JSON Output Structure:**
+```json
+{
+  "success": true,
+  "data": {
+    "repository": {
+      "kind": "monorepo",
+      "monorepoType": "npm"
+    },
+    "packageManager": {
+      "name": "npm",
+      "lockFile": "package-lock.json"
+    },
+    "branch": {
+      "name": "feature/new-api"
+    },
+    "changesets": [
+      { "id": "feature-new-api" }
+    ],
+    "packages": [
+      { "name": "@myorg/core", "version": "1.2.0", "path": "packages/core" },
+      { "name": "@myorg/utils", "version": "1.0.5", "path": "packages/utils" }
+    ]
+  }
+}
+```
+
+---
+
+### `execute` - Execute Commands Across Packages
+
+Runs commands across workspace packages with optional filtering and parallel execution. Supports both npm scripts and system commands.
+
+**Usage:**
+```bash
+workspace execute --cmd <COMMAND> [OPTIONS]
+```
+
+**Options:**
+- `--cmd <COMMAND>` - Command to execute (required)
+  - `npm:<script>` - Run npm script (e.g., `npm:lint`, `npm:build`, `npm:test`)
+  - Plain command - Run system command (e.g., `echo hello`, `ls -la`)
+- `--filter-package <PACKAGES>` - Comma-separated list of packages to run on (default: all)
+- `--parallel` - Run commands in parallel across packages (default: sequential)
+- `-- <ARGS>` - Additional arguments to pass to the command
+
+**Command Formats:**
+
+| Format | Description | Example |
+|--------|-------------|---------|
+| `npm:<script>` | Runs npm script via detected package manager | `npm:lint`, `npm:build` |
+| Plain command | Runs system command directly | `echo hello`, `ls -la` |
+
+**Examples:**
+```bash
+# Run npm lint script in all packages
+workspace execute --cmd npm:lint
+
+# Run npm test in specific packages
+workspace execute --cmd npm:test --filter-package "@myorg/core,@myorg/utils"
+
+# Run commands in parallel (faster for independent packages)
+workspace execute --cmd npm:build --parallel
+
+# Run system command in all packages
+workspace execute --cmd "echo hello"
+
+# Pass extra arguments to npm script
+workspace execute --cmd npm:test -- --coverage --watch
+
+# Run lint only in core package
+workspace execute --cmd npm:lint --filter-package "@myorg/core"
+
+# JSON output for CI/CD
+workspace --format json execute --cmd npm:test
+```
+
+**Execution Behavior:**
+
+- **Sequential (default)**: Commands run one package at a time, with streaming output
+- **Parallel (`--parallel`)**: Commands run concurrently, output collected and displayed per package
+- **npm Scripts**: Validates script exists in package.json before execution
+- **Failure Handling**: Continues on failure, reports all failures at end with summary
+
+**JSON Output Structure:**
+```json
+{
+  "success": true,
+  "data": {
+    "command": "npm:test",
+    "results": [
+      {
+        "package": "@myorg/core",
+        "success": true,
+        "duration_ms": 1234,
+        "exit_code": 0
+      },
+      {
+        "package": "@myorg/utils",
+        "success": true,
+        "duration_ms": 567,
+        "exit_code": 0
+      }
+    ],
+    "summary": {
+      "total": 2,
+      "succeeded": 2,
+      "failed": 0,
+      "duration_ms": 1801
+    }
+  }
+}
+```
+
+**Use Cases:**
+
+```bash
+# CI/CD: Run tests across all packages
+workspace execute --cmd npm:test --parallel
+
+# Development: Lint before commit
+workspace execute --cmd npm:lint
+
+# Build specific packages
+workspace execute --cmd npm:build --filter-package "@myorg/core"
+
+# Run custom script with arguments
+workspace execute --cmd npm:test -- --updateSnapshot
 ```
 
 ---

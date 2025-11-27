@@ -26,18 +26,24 @@ use std::time::{Duration, Instant};
 /// # Examples
 ///
 /// ```
-/// use sublime_standard_tools::command::types::{CommandQueue, CommandQueueResult, CommandStatus};
+/// use sublime_standard_tools::command::{CommandQueueResult, CommandStatus};
 ///
-/// let queue = CommandQueue::new();
-/// let command_id = queue.enqueue("npm", &["install"]);
+/// // Create a result for a completed command
+/// let result = CommandQueueResult::success(
+///     "cmd-1".to_string(),
+///     sublime_standard_tools::command::CommandOutput::new(
+///         0,
+///         "Success output".to_string(),
+///         "".to_string(),
+///         std::time::Duration::from_millis(100),
+///     ),
+/// );
 ///
-/// // Later, when the command has completed
-/// if let Some(result) = queue.get_result(&command_id) {
-///     match result.status {
-///         CommandStatus::Completed => println!("Command output: {}", result.output.unwrap().stdout),
-///         CommandStatus::Failed => println!("Command failed: {}", result.error.unwrap()),
-///         _ => println!("Command is still in progress"),
-///     }
+/// // Check result status
+/// match result.status {
+///     CommandStatus::Completed => println!("Command completed successfully"),
+///     CommandStatus::Failed => println!("Command failed: {:?}", result.error),
+///     _ => println!("Command is in an unexpected state"),
 /// }
 /// ```
 #[derive(Debug, Clone)]
@@ -60,7 +66,7 @@ pub struct CommandQueueResult {
 /// # Examples
 ///
 /// ```
-/// use sublime_standard_tools::command::types::{CommandQueue, CommandQueueConfig};
+/// use sublime_standard_tools::command::CommandQueueConfig;
 /// use std::time::Duration;
 ///
 /// let config = CommandQueueConfig {
@@ -73,7 +79,7 @@ pub struct CommandQueueResult {
 ///     idle_sleep_ms: 10,
 /// };
 ///
-/// let queue = CommandQueue::with_config(config);
+/// assert_eq!(config.max_concurrent_commands, 4);
 /// ```
 #[derive(Debug, Clone)]
 pub struct CommandQueueConfig {

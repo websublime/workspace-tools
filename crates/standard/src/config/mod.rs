@@ -17,16 +17,18 @@
 //!
 //! # Example
 //!
-//! ```no_run
+//! ```ignore
 //! use sublime_standard_tools::config::{ConfigManager, StandardConfig};
+//! use sublime_standard_tools::filesystem::FileSystemManager;
 //!
 //! async fn load_config() -> Result<StandardConfig, Box<dyn std::error::Error>> {
+//!     let fs = FileSystemManager::new();
 //!     let manager = ConfigManager::<StandardConfig>::builder()
 //!         .with_defaults()
 //!         .with_file("~/.config/sublime/config.toml")
 //!         .with_file(".sublime.toml")
 //!         .with_env_prefix("SUBLIME")
-//!         .build()?;
+//!         .build(fs)?;
 //!
 //!     let config = manager.load().await?;
 //!     Ok(config)

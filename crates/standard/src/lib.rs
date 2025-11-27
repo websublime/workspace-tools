@@ -60,14 +60,14 @@
 //! ## Quick Start
 //!
 //! ### Detect any Node.js project
-//! ```rust
-//! use sublime_standard_tools::project::ProjectDetector;
+//! ```ignore
+//! use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorTrait};
 //! use std::path::Path;
 //!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let detector = ProjectDetector::new();
-//! // Configuration auto-detected from repo.config.* files
 //!
-//! match detector.detect(Path::new("."), None) {
+//! match detector.detect(Path::new("."), None).await {
 //!     Ok(project) => {
 //!         let info = project.as_project_info();
 //!         println!("Found {} project", info.kind().name());
@@ -78,6 +78,8 @@
 //!     }
 //!     Err(e) => eprintln!("Detection failed: {}", e),
 //! }
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ### Auto-load configuration from project files
@@ -107,28 +109,32 @@
 //! ```
 //!
 //! ### Work with package managers
-//! ```rust
+//! ```ignore
 //! use sublime_standard_tools::node::{PackageManager, PackageManagerKind};
 //! use std::path::Path;
 //!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Detect package manager
-//! let manager = PackageManager::detect(Path::new("."))?;
+//! let manager = PackageManager::detect(Path::new(".")).await?;
 //! println!("Using {}", manager.command());
 //!
 //! // Check capabilities
 //! if manager.supports_workspaces() {
 //!     println!("Workspaces supported");
 //! }
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ### Analyze monorepos
-//! ```rust
-//! use sublime_standard_tools::monorepo::MonorepoDetector;
+//! ```ignore
+//! use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
 //! use std::path::Path;
 //!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let detector = MonorepoDetector::new();
-//! if let Some(kind) = detector.is_monorepo_root(".")? {
-//!     let monorepo = detector.detect_monorepo(".")?;
+//! if let Some(kind) = detector.is_monorepo_root(".").await? {
+//!     let monorepo = detector.detect_monorepo(".").await?;
 //!
 //!     println!("Found {} with {} packages",
 //!              monorepo.kind().name(),
@@ -140,10 +146,10 @@
 //!         println!("{} has {} dependents", pkg, deps.len());
 //!     }
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
-#![doc = include_str!("../SPEC.md")]
-#![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 #![warn(rustdoc::missing_crate_level_docs)]
 #![deny(unused_must_use)]

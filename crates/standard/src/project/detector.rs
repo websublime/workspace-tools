@@ -69,14 +69,13 @@ impl ProjectMetadata {
 ///
 /// # Examples
 ///
-/// ```rust
-/// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorTrait, ProjectConfig};
+/// ```no_run
+/// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorTrait};
 /// use std::path::Path;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let detector = ProjectDetector::new();
-/// let config = ProjectConfig::new();
-/// let project = detector.detect(Path::new("."), &config).await?;
+/// let project = detector.detect(Path::new("."), None).await?;
 /// println!("Found project: {:?}", project.as_project_info().kind());
 /// # Ok(())
 /// # }
@@ -97,14 +96,13 @@ pub trait ProjectDetectorTrait: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
-    /// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorTrait, ProjectConfig};
+    /// ```no_run
+    /// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorTrait};
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let detector = ProjectDetector::new();
-    /// let config = ProjectConfig::new();
-    /// let project = detector.detect(Path::new("."), &config).await?;
+    /// let project = detector.detect(Path::new("."), None).await?;
     /// println!("Detected project kind: {:?}", project.as_project_info().kind());
     /// # Ok(())
     /// # }
@@ -139,7 +137,7 @@ pub trait ProjectDetectorTrait: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorTrait};
     /// use std::path::Path;
     ///
@@ -175,7 +173,7 @@ pub trait ProjectDetectorTrait: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorTrait};
     /// use std::path::Path;
     ///
@@ -202,16 +200,15 @@ pub trait ProjectDetectorTrait: Send + Sync {
 ///
 /// # Examples
 ///
-/// ```rust
-/// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorWithFs, ProjectConfig};
+/// ```no_run
+/// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorWithFs, ProjectDetectorTrait};
 /// use sublime_standard_tools::filesystem::FileSystemManager;
 /// use std::path::Path;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let fs = FileSystemManager::new();
 /// let detector = ProjectDetector::with_filesystem(fs);
-/// let config = ProjectConfig::new();
-/// let project = detector.detect(Path::new("."), &config).await?;
+/// let project = detector.detect(Path::new("."), None).await?;
 /// println!("Found project: {:?}", project.as_project_info().kind());
 /// # Ok(())
 /// # }
@@ -241,17 +238,16 @@ pub trait ProjectDetectorWithFs<F: AsyncFileSystem>: ProjectDetectorTrait {
     ///
     /// # Examples
     ///
-    /// ```rust
-    /// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorWithFs, ProjectConfig};
+    /// ```no_run
+    /// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorWithFs};
     /// use sublime_standard_tools::filesystem::FileSystemManager;
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let fs = FileSystemManager::new();
     /// let detector = ProjectDetector::with_filesystem(fs);
-    /// let config = ProjectConfig::new();
     /// let paths = vec![Path::new("."), Path::new("../other-project")];
-    /// let results = detector.detect_multiple(&paths, &config).await;
+    /// let results = detector.detect_multiple(&paths, None).await;
     /// for (i, result) in results.iter().enumerate() {
     ///     match result {
     ///         Ok(project) => println!("Path {}: {:?}", i, project.as_project_info().kind()),
@@ -285,15 +281,14 @@ pub trait ProjectDetectorWithFs<F: AsyncFileSystem>: ProjectDetectorTrait {
 ///
 /// # Examples
 ///
-/// ```
-/// use sublime_standard_tools::project::{ProjectDetector, ProjectConfig};
+/// ```no_run
+/// use sublime_standard_tools::project::{ProjectDetector, ProjectDetectorTrait};
 /// use std::path::Path;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let detector = ProjectDetector::new();
-/// let config = ProjectConfig::new();
 ///
-/// match detector.detect(Path::new("."), &config).await {
+/// match detector.detect(Path::new("."), None).await {
 ///     Ok(project) => {
 ///         println!("Detected {} project", project.as_project_info().kind().name());
 ///     }

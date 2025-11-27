@@ -31,7 +31,7 @@ use std::path::{Path, PathBuf};
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```no_run
 /// use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
 /// use std::path::Path;
 ///
@@ -59,7 +59,7 @@ pub trait MonorepoDetectorTrait: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
     /// use std::path::Path;
     ///
@@ -95,7 +95,7 @@ pub trait MonorepoDetectorTrait: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
     /// use std::path::Path;
     ///
@@ -133,7 +133,7 @@ pub trait MonorepoDetectorTrait: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
     /// use std::path::Path;
     ///
@@ -172,7 +172,7 @@ pub trait MonorepoDetectorTrait: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
     /// use std::path::Path;
     ///
@@ -212,7 +212,7 @@ pub trait MonorepoDetectorTrait: Send + Sync {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
     /// use std::path::Path;
     ///
@@ -239,8 +239,8 @@ pub trait MonorepoDetectorTrait: Send + Sync {
 ///
 /// # Examples
 ///
-/// ```rust
-/// use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorWithFs};
+/// ```no_run
+/// use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorWithFs, MonorepoDetectorTrait};
 /// use sublime_standard_tools::filesystem::FileSystemManager;
 /// use std::path::Path;
 ///
@@ -276,7 +276,7 @@ pub trait MonorepoDetectorWithFs<F: AsyncFileSystem>: MonorepoDetectorTrait {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorWithFs};
     /// use sublime_standard_tools::filesystem::FileSystemManager;
     /// use std::path::Path;
@@ -319,7 +319,7 @@ pub trait MonorepoDetectorWithFs<F: AsyncFileSystem>: MonorepoDetectorTrait {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorWithFs};
     /// use sublime_standard_tools::filesystem::FileSystemManager;
     /// use std::path::Path;
@@ -358,8 +358,8 @@ pub trait MonorepoDetectorWithFs<F: AsyncFileSystem>: MonorepoDetectorTrait {
 ///
 /// # Examples
 ///
-/// ```
-/// use sublime_standard_tools::monorepo::MonorepoDetector;
+/// ```no_run
+/// use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
 /// use std::path::Path;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {

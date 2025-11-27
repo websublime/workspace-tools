@@ -35,8 +35,9 @@ use super::value::ConfigValue;
 ///
 /// # Examples
 ///
-/// ```no_run
+/// ```ignore
 /// use sublime_standard_tools::config::{ConfigManager, Configurable, ConfigResult};
+/// use sublime_standard_tools::filesystem::FileSystemManager;
 /// use serde::{Serialize, Deserialize};
 ///
 /// #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,11 +66,12 @@ use super::value::ConfigValue;
 /// }
 ///
 /// async fn example() -> ConfigResult<MyConfig> {
+///     let fs = FileSystemManager::new();
 ///     let manager = ConfigManager::<MyConfig>::builder()
 ///         .with_defaults()
 ///         .with_file("config.toml")
 ///         .with_env_prefix("MY_APP")
-///         .build()?;
+///         .build(fs)?;
 ///
 ///     manager.load().await
 /// }

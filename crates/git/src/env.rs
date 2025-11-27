@@ -30,7 +30,7 @@
 //! ## Production Usage
 //!
 //! ```rust
-//! use sublime_git_tools::env::{EnvProvider, SystemEnvProvider};
+//! use sublime_git_tools::{EnvProvider, SystemEnvProvider};
 //! use std::sync::Arc;
 //!
 //! let env = Arc::new(SystemEnvProvider);
@@ -42,8 +42,9 @@
 //!
 //! ## Testing Usage
 //!
-//! ```rust
-//! use sublime_git_tools::env::{EnvProvider, MockEnvProvider};
+//! ```ignore
+//! // MockEnvProvider is only available in test builds (#[cfg(test)])
+//! use sublime_git_tools::{EnvProvider, MockEnvProvider};
 //! use std::sync::Arc;
 //!
 //! let env = Arc::new(
@@ -73,7 +74,7 @@ use std::collections::HashMap;
 /// # Examples
 ///
 /// ```rust
-/// use sublime_git_tools::env::{EnvProvider, SystemEnvProvider};
+/// use sublime_git_tools::{EnvProvider, SystemEnvProvider};
 ///
 /// let env = SystemEnvProvider;
 /// match env.var("PATH") {
@@ -97,7 +98,7 @@ pub trait EnvProvider: Send + Sync {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_git_tools::env::{EnvProvider, SystemEnvProvider};
+    /// use sublime_git_tools::{EnvProvider, SystemEnvProvider};
     ///
     /// let env = SystemEnvProvider;
     /// if let Ok(user) = env.var("USER") {
@@ -121,7 +122,7 @@ pub trait EnvProvider: Send + Sync {
 /// # Examples
 ///
 /// ```rust
-/// use sublime_git_tools::env::{EnvProvider, SystemEnvProvider};
+/// use sublime_git_tools::{EnvProvider, SystemEnvProvider};
 /// use std::sync::Arc;
 ///
 /// let env = Arc::new(SystemEnvProvider);
@@ -153,7 +154,7 @@ impl EnvProvider for SystemEnvProvider {
 /// ## Basic Usage
 ///
 /// ```rust
-/// use sublime_git_tools::env::{EnvProvider, MockEnvProvider};
+/// use sublime_git_tools::{EnvProvider, MockEnvProvider};
 ///
 /// let env = MockEnvProvider::new()
 ///     .with_var("GITHUB_REF_NAME", "main")
@@ -167,7 +168,7 @@ impl EnvProvider for SystemEnvProvider {
 /// ## Testing CI Environments
 ///
 /// ```rust
-/// use sublime_git_tools::env::{EnvProvider, MockEnvProvider};
+/// use sublime_git_tools::{EnvProvider, MockEnvProvider};
 ///
 /// // Simulate GitHub Actions environment
 /// let github_env = MockEnvProvider::new()
@@ -201,7 +202,7 @@ impl MockEnvProvider {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_git_tools::env::MockEnvProvider;
+    /// use sublime_git_tools::MockEnvProvider;
     ///
     /// let env = MockEnvProvider::new();
     /// assert!(env.var("ANY_VAR").is_err());
@@ -227,7 +228,7 @@ impl MockEnvProvider {
     /// # Examples
     ///
     /// ```rust
-    /// use sublime_git_tools::env::{EnvProvider, MockEnvProvider};
+    /// use sublime_git_tools::{EnvProvider, MockEnvProvider};
     ///
     /// let env = MockEnvProvider::new()
     ///     .with_var("VAR1", "value1")

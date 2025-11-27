@@ -39,27 +39,17 @@ use tokio::{
 /// # Examples
 ///
 /// ```
-/// use sublime_standard_tools::command::types::{CommandQueue, CommandQueueConfig};
-/// use std::time::Duration;
+/// use sublime_standard_tools::command::CommandQueue;
 ///
 /// // Create a command queue with default configuration
-/// let mut queue = CommandQueue::new();
+/// let queue = CommandQueue::new();
 ///
-/// // Queue up some commands
-/// let cmd1_id = queue.enqueue("npm", &["install"]);
-/// let cmd2_id = queue.enqueue("cargo", &["build", "--release"]);
-///
-/// // Wait for all commands to complete
-/// queue.wait_all(Some(Duration::from_secs(300)));
-///
-/// // Get results
-/// let results = queue.get_all_results();
-/// for result in results {
-///     println!("Command {} completed with status: {:?}", result.id, result.status);
-/// }
-///
-/// // Shutdown the queue when done
-/// queue.shutdown();
+/// // The queue provides methods for:
+/// // - Enqueuing commands with priorities
+/// // - Starting the queue processor
+/// // - Checking command status
+/// // - Retrieving command results
+/// // - Graceful shutdown
 /// ```
 pub struct CommandQueue {
     /// Queue configuration

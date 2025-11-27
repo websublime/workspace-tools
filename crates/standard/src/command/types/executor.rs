@@ -22,8 +22,7 @@ use std::sync::Arc;
 /// # Examples
 ///
 /// ```
-/// use sublime_standard_tools::command::types::{DefaultCommandExecutor, CommandExecutor};
-/// use sublime_standard_tools::command::types::Command;
+/// use sublime_standard_tools::command::DefaultCommandExecutor;
 /// use sublime_standard_tools::config::CommandConfig;
 ///
 /// let config = CommandConfig::default();

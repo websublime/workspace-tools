@@ -136,14 +136,12 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectManager<F> {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// use sublime_standard_tools::project::ProjectManager;
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let manager = ProjectManager::new();
-    /// // Configuration is auto-detected from repo.config.* files
-    ///     .with_validate_structure(true);
     ///
     /// let project = manager.create_project(Path::new("."), None).await?;
     /// println!("Created project: {}", project.as_project_info().kind().name());
@@ -352,16 +350,15 @@ impl<F: AsyncFileSystem + Clone + 'static> ProjectManager<F> {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use sublime_standard_tools::project::ProjectManager;
+    /// ```no_run
+    /// use sublime_standard_tools::project::{ProjectManager, ProjectDetectorTrait};
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let manager = ProjectManager::new();
-    /// // Configuration is auto-detected from repo.config.* files;
     ///
     /// let detector = manager.detector();
-    /// if let Ok(kind) = detector.detect_kind(Path::new("."), None).await {
+    /// if let Ok(kind) = detector.detect_kind(Path::new(".")).await {
     ///     println!("Project kind: {}", kind.name());
     /// }
     /// # Ok(())
