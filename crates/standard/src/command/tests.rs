@@ -242,9 +242,15 @@ mod tests {
         let result = executor.execute(cmd).await;
         assert!(result.is_err());
 
+        // On Unix: Command::new() fails directly with SpawnFailed
+        // On Windows: cmd /C wrapping means cmd.exe spawns successfully but
+        // returns non-zero exit code when the command is not found
         match result {
             Err(Error::Command(CommandError::SpawnFailed { cmd: _, message: _ })) => {
-                // This is the expected error
+                // Expected on Unix
+            }
+            Err(Error::Command(CommandError::NonZeroExitCode { cmd: _, code: _, stderr: _ })) => {
+                // Expected on Windows (cmd /C returns non-zero for missing commands)
             }
             _ => panic!("Unexpected error type"),
         }
