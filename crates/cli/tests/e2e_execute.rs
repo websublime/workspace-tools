@@ -899,6 +899,13 @@ async fn test_execute_affected_with_branch() {
         .with_package_lock()
         .finalize();
 
+    // Ensure the initial branch is named "main" (git init may use "master" or other names)
+    std::process::Command::new("git")
+        .args(["branch", "-M", "main"])
+        .current_dir(workspace.root())
+        .output()
+        .expect("Failed to rename branch to main");
+
     // Create and checkout a new branch, then make changes
     std::process::Command::new("git")
         .args(["checkout", "-b", "feature-branch"])
