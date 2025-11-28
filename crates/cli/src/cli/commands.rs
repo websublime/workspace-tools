@@ -1068,6 +1068,21 @@ pub struct StatusArgs {
 ///     "--cmd", "ls -la",
 ///     "--filter-package", "@scope/core,@scope/utils"
 /// ]);
+///
+/// // Run on affected packages only
+/// let cli = Cli::parse_from([
+///     "workspace", "execute",
+///     "--cmd", "npm:test",
+///     "--affected"
+/// ]);
+///
+/// // Run on packages affected since main branch
+/// let cli = Cli::parse_from([
+///     "workspace", "execute",
+///     "--cmd", "npm:lint",
+///     "--affected",
+///     "--branch", "main"
+/// ]);
 /// ```
 #[derive(Debug, Args)]
 pub struct ExecuteArgs {
@@ -1088,8 +1103,51 @@ pub struct ExecuteArgs {
     /// Package names should match exactly (e.g., `@scope/package`).
     ///
     /// If not provided, runs on all workspace packages.
-    #[arg(long = "filter-package", value_name = "PACKAGES", value_delimiter = ',')]
+    /// Cannot be used with --affected.
+    #[arg(
+        long = "filter-package",
+        value_name = "PACKAGES",
+        value_delimiter = ',',
+        conflicts_with = "affected"
+    )]
     pub filter_package: Option<Vec<String>>,
+
+    /// Execute only on packages affected by changes.
+    ///
+    /// Automatically detects packages with changes and runs commands only on them.
+    /// By default, analyzes working directory changes (staged + unstaged).
+    ///
+    /// Use --since/--until for commit range analysis, or --branch for branch comparison.
+    /// Cannot be used with --filter-package.
+    #[arg(long, conflicts_with = "filter_package")]
+    pub affected: bool,
+
+    /// Since commit/branch/tag for affected detection.
+    ///
+    /// Used with --affected to analyze changes since this Git reference.
+    /// If not specified with --affected, analyzes working directory changes.
+    ///
+    /// Example: `--affected --since HEAD~5`
+    #[arg(long, value_name = "REF", requires = "affected")]
+    pub since: Option<String>,
+
+    /// Until commit/branch/tag for affected detection.
+    ///
+    /// Used with --affected to analyze changes until this Git reference.
+    /// Default: HEAD (when --since is specified).
+    ///
+    /// Example: `--affected --since v1.0.0 --until v2.0.0`
+    #[arg(long, value_name = "REF", requires = "affected")]
+    pub until: Option<String>,
+
+    /// Compare against branch for affected detection.
+    ///
+    /// Used with --affected to compare current branch against target branch.
+    /// Detects packages changed between current branch and the specified branch.
+    ///
+    /// Example: `--affected --branch main`
+    #[arg(long, value_name = "NAME", requires = "affected")]
+    pub branch: Option<String>,
 
     /// Run commands in parallel across packages.
     ///

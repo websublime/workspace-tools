@@ -735,7 +735,7 @@ workspace --quiet status
 
 ### `execute` - Execute Commands Across Packages
 
-Runs commands across workspace packages with optional filtering and parallel execution. Supports both npm scripts and system commands.
+Runs commands across workspace packages with optional filtering, affected package detection, and parallel execution. Supports both npm scripts and system commands.
 
 **Usage:**
 ```bash
@@ -746,7 +746,11 @@ workspace execute --cmd <COMMAND> [OPTIONS]
 - `--cmd <COMMAND>` - Command to execute (required)
   - `npm:<script>` - Run npm script (e.g., `npm:lint`, `npm:build`, `npm:test`)
   - Plain command - Run system command (e.g., `echo hello`, `ls -la`)
-- `--filter-package <PACKAGES>` - Comma-separated list of packages to run on (default: all)
+- `--filter-package <PACKAGES>` - Comma-separated list of packages to run on (default: all). Cannot be used with `--affected`.
+- `--affected` - Execute only on packages affected by changes. Cannot be used with `--filter-package`.
+- `--since <REF>` - Since commit/branch/tag for affected detection (requires `--affected`)
+- `--until <REF>` - Until commit/branch/tag for affected detection (requires `--affected`, default: `HEAD`)
+- `--branch <NAME>` - Compare against branch for affected detection (requires `--affected`)
 - `--parallel` - Run commands in parallel across packages (default: sequential)
 - `-- <ARGS>` - Additional arguments to pass to the command
 
@@ -756,6 +760,16 @@ workspace execute --cmd <COMMAND> [OPTIONS]
 |--------|-------------|---------|
 | `npm:<script>` | Runs npm script via detected package manager | `npm:lint`, `npm:build` |
 | Plain command | Runs system command directly | `echo hello`, `ls -la` |
+
+**Affected Package Detection:**
+
+The `--affected` flag enables intelligent package detection based on Git changes. It supports three modes:
+
+| Mode | Flags | Description |
+|------|-------|-------------|
+| Working Directory | `--affected` | Analyzes uncommitted changes (staged + unstaged) |
+| Commit Range | `--affected --since <REF>` | Analyzes changes between commits |
+| Branch Comparison | `--affected --branch <NAME>` | Compares current branch against target branch |
 
 **Examples:**
 ```bash
@@ -779,6 +793,23 @@ workspace execute --cmd npm:lint --filter-package "@myorg/core"
 
 # JSON output for CI/CD
 workspace --format json execute --cmd npm:test
+
+# --- Affected Package Examples ---
+
+# Run tests only on packages with uncommitted changes
+workspace execute --cmd npm:test --affected
+
+# Run lint on packages changed since main branch (great for PRs)
+workspace execute --cmd npm:lint --affected --branch main
+
+# Run build on packages changed in last 5 commits
+workspace execute --cmd npm:build --affected --since HEAD~5
+
+# Run tests on affected packages in parallel
+workspace execute --cmd npm:test --affected --parallel
+
+# CI/CD: Run tests on affected packages comparing with main
+workspace execute --cmd npm:test --affected --branch main --parallel
 ```
 
 **Execution Behavior:**
@@ -787,6 +818,7 @@ workspace --format json execute --cmd npm:test
 - **Parallel (`--parallel`)**: Commands run concurrently, output collected and displayed per package
 - **npm Scripts**: Validates script exists in package.json before execution
 - **Failure Handling**: Continues on failure, reports all failures at end with summary
+- **Affected Mode**: When no packages are affected, exits successfully with "No affected packages" message
 
 **JSON Output Structure:**
 ```json
@@ -824,14 +856,23 @@ workspace --format json execute --cmd npm:test
 # CI/CD: Run tests across all packages
 workspace execute --cmd npm:test --parallel
 
-# Development: Lint before commit
-workspace execute --cmd npm:lint
+# CI/CD: Run tests only on affected packages (faster CI)
+workspace execute --cmd npm:test --affected --branch main --parallel
+
+# Development: Lint before commit (only changed packages)
+workspace execute --cmd npm:lint --affected
+
+# PR Validation: Test only what changed
+workspace execute --cmd npm:test --affected --branch origin/main
 
 # Build specific packages
 workspace execute --cmd npm:build --filter-package "@myorg/core"
 
 # Run custom script with arguments
 workspace execute --cmd npm:test -- --updateSnapshot
+
+# Release: Build only packages changed since last release
+workspace execute --cmd npm:build --affected --since v1.0.0
 ```
 
 ---

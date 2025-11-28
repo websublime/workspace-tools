@@ -61,6 +61,8 @@ use crate::output::{JsonResponse, Output};
 use serde::Serialize;
 use std::path::Path;
 use std::time::{Duration, Instant};
+use sublime_git_tools::Repo;
+use sublime_pkg_tools::changes::ChangesAnalyzer;
 use sublime_standard_tools::command::{Command, CommandBuilder, DefaultCommandExecutor, Executor};
 use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
 use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait, WorkspacePackage};
@@ -242,6 +244,7 @@ pub async fn execute_execute(args: &ExecuteArgs, output: &Output, root: &Path) -
     info!("Executing workspace execute command");
     debug!("Command: {}", args.cmd);
     debug!("Filter: {:?}", args.filter_package);
+    debug!("Affected: {}", args.affected);
     debug!("Parallel: {}", args.parallel);
 
     let fs = FileSystemManager::new();
@@ -250,11 +253,35 @@ pub async fn execute_execute(args: &ExecuteArgs, output: &Output, root: &Path) -
     let cmd_type = CommandType::parse(&args.cmd);
     debug!("Parsed command type: {:?}", cmd_type);
 
-    // Detect workspace packages
+    // Detect workspace packages based on mode (filter, affected, or all)
     let detector = MonorepoDetector::new();
-    let packages = get_target_packages(&detector, root, args.filter_package.as_ref()).await?;
+    let packages = if args.affected {
+        get_affected_packages(&detector, &fs, root, args, output).await?
+    } else {
+        get_target_packages(&detector, root, args.filter_package.as_ref()).await?
+    };
 
+    // Handle empty packages case
     if packages.is_empty() {
+        if args.affected {
+            // For --affected mode, no packages is a success (nothing to do)
+            if output.format().is_json() {
+                let response = ExecuteJsonResponse {
+                    command: cmd_type.display(),
+                    results: vec![],
+                    summary: ExecuteSummaryJson {
+                        total: 0,
+                        succeeded: 0,
+                        failed: 0,
+                        total_duration_ms: 0,
+                    },
+                };
+                output.json(&JsonResponse::success(response))?;
+            } else {
+                output.info("No affected packages found. Nothing to execute.")?;
+            }
+            return Ok(());
+        }
         return Err(CliError::validation("No packages found in workspace"));
     }
 
@@ -380,6 +407,162 @@ async fn get_target_packages(
     } else {
         Ok(packages)
     }
+}
+
+/// Gets affected packages based on Git changes.
+///
+/// Uses the `ChangesAnalyzer` to detect which packages have been modified.
+/// Supports three analysis modes:
+/// - Working directory (default): Analyzes staged + unstaged changes
+/// - Commit range: When `--since` is specified, analyzes changes between refs
+/// - Branch comparison: When `--branch` is specified, compares against target branch
+///
+/// # Arguments
+///
+/// * `detector` - Monorepo detector for getting all packages
+/// * `fs` - Filesystem manager for file operations
+/// * `root` - Workspace root directory path
+/// * `args` - Execute arguments containing affected detection options
+/// * `output` - Output handler for displaying analysis mode info
+///
+/// # Returns
+///
+/// Returns a vector of `WorkspacePackage` that have been affected by changes.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Git repository cannot be opened
+/// - Changes analysis fails
+/// - Invalid Git references are provided
+async fn get_affected_packages(
+    detector: &MonorepoDetector,
+    fs: &FileSystemManager,
+    root: &Path,
+    args: &ExecuteArgs,
+    output: &Output,
+) -> Result<Vec<WorkspacePackage>> {
+    debug!("Detecting affected packages");
+    debug!("Since: {:?}, Until: {:?}, Branch: {:?}", args.since, args.until, args.branch);
+
+    // Open Git repository
+    let repo = Repo::open(root.to_str().ok_or_else(|| {
+        CliError::execution("Workspace root path contains invalid UTF-8".to_string())
+    })?)
+    .map_err(|e| {
+        CliError::git(format!("Failed to open Git repository at {}: {e}", root.display()))
+    })?;
+
+    // Load configuration (use default if not found)
+    let config = crate::commands::find_and_load_config(root, None).await?.unwrap_or_default();
+
+    // Create changes analyzer
+    let analyzer = ChangesAnalyzer::new(root.to_path_buf(), repo, fs.clone(), config)
+        .await
+        .map_err(|e| CliError::execution(format!("Failed to create changes analyzer: {e}")))?;
+
+    // Determine analysis mode and perform analysis
+    let report = if let Some(ref branch) = args.branch {
+        // Branch comparison mode
+        if !output.format().is_json() {
+            output.info(&format!("Analyzing affected packages (comparing with {branch})..."))?;
+        }
+        info!("Analyzing changes comparing with branch: {branch}");
+
+        let current_branch = analyzer
+            .git_repo()
+            .get_current_branch()
+            .map_err(|e| CliError::git(format!("Failed to get current branch: {e}")))?;
+
+        analyzer.analyze_commit_range(branch, &current_branch).await.map_err(|e| {
+            CliError::execution(format!(
+                "Failed to compare branches {branch}..{current_branch}: {e}"
+            ))
+        })?
+    } else if args.since.is_some() || args.until.is_some() {
+        // Commit range mode
+        let from = args.since.as_deref().unwrap_or("HEAD~1");
+        let to = args.until.as_deref().unwrap_or("HEAD");
+
+        if !output.format().is_json() {
+            output.info(&format!("Analyzing affected packages ({from}..{to})..."))?;
+        }
+        info!("Analyzing changes in commit range: {from}..{to}");
+
+        analyzer.analyze_commit_range(from, to).await.map_err(|e| {
+            CliError::execution(format!("Failed to analyze commit range {from}..{to}: {e}"))
+        })?
+    } else {
+        // Working directory mode (default)
+        if !output.format().is_json() {
+            output.info("Analyzing affected packages (working directory)...")?;
+        }
+        info!("Analyzing working directory changes");
+
+        analyzer
+            .analyze_working_directory()
+            .await
+            .map_err(|e| CliError::execution(format!("Failed to analyze working directory: {e}")))?
+    };
+
+    // Extract affected package names from the report (only packages with actual changes)
+    let affected_names: Vec<String> =
+        report.packages_with_changes().iter().map(|p| p.package_name.clone()).collect();
+
+    if affected_names.is_empty() {
+        debug!("No affected packages found");
+        return Ok(vec![]);
+    }
+
+    info!("Found {} affected packages: {:?}", affected_names.len(), affected_names);
+
+    // Get all workspace packages and filter to only affected ones
+    let all_packages = match detector.detect_packages(root).await {
+        Ok(pkgs) if !pkgs.is_empty() => pkgs,
+        Ok(_) | Err(_) => {
+            // Fall back to root package for simple repos
+            let package_json_path = root.join("package.json");
+
+            if !fs.exists(&package_json_path).await {
+                return Err(CliError::validation(
+                    "No package.json found. Not a valid Node.js project.",
+                ));
+            }
+
+            let content = fs
+                .read_file_string(&package_json_path)
+                .await
+                .map_err(|e| CliError::validation(format!("Failed to read package.json: {e}")))?;
+
+            let json: serde_json::Value = serde_json::from_str(&content)
+                .map_err(|e| CliError::validation(format!("Failed to parse package.json: {e}")))?;
+
+            let name = json.get("name").and_then(|v| v.as_str()).unwrap_or("unnamed").to_string();
+            let version =
+                json.get("version").and_then(|v| v.as_str()).unwrap_or("0.0.0").to_string();
+
+            vec![WorkspacePackage {
+                name,
+                version,
+                location: ".".into(),
+                absolute_path: root.to_path_buf(),
+                workspace_dependencies: Vec::new(),
+                workspace_dev_dependencies: Vec::new(),
+            }]
+        }
+    };
+
+    // Filter to only affected packages
+    let affected_packages: Vec<WorkspacePackage> =
+        all_packages.into_iter().filter(|p| affected_names.contains(&p.name)).collect();
+
+    if !output.format().is_json() && !affected_packages.is_empty() {
+        let names: Vec<&str> = affected_packages.iter().map(|p| p.name.as_str()).collect();
+        output.info(&format!("Affected packages: {}", names.join(", ")))?;
+        output.blank_line()?;
+    }
+
+    Ok(affected_packages)
 }
 
 /// Validates that npm scripts exist in all target packages.

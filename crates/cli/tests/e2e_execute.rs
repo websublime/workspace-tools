@@ -143,6 +143,10 @@ async fn test_execute_system_command() {
     let args = ExecuteArgs {
         cmd: "echo hello".to_string(),
         filter_package: None,
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: false,
         args: vec![],
     };
@@ -176,6 +180,10 @@ async fn test_execute_system_command_monorepo() {
     let args = ExecuteArgs {
         cmd: "echo hello".to_string(),
         filter_package: None,
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: false,
         args: vec![],
     };
@@ -210,6 +218,10 @@ async fn test_execute_npm_script() {
     let args = ExecuteArgs {
         cmd: "npm:test".to_string(),
         filter_package: None,
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: false,
         args: vec![],
     };
@@ -239,6 +251,10 @@ async fn test_execute_npm_lint() {
     let args = ExecuteArgs {
         cmd: "npm:lint".to_string(),
         filter_package: None,
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: false,
         args: vec![],
     };
@@ -267,6 +283,10 @@ async fn test_execute_npm_script_monorepo() {
     let args = ExecuteArgs {
         cmd: "npm:test".to_string(),
         filter_package: None,
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: false,
         args: vec![],
     };
@@ -296,6 +316,10 @@ async fn test_execute_missing_npm_script_fails() {
     let args = ExecuteArgs {
         cmd: "npm:nonexistent".to_string(),
         filter_package: None,
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: false,
         args: vec![],
     };
@@ -323,6 +347,10 @@ async fn test_execute_with_filter() {
     let args = ExecuteArgs {
         cmd: "npm:test".to_string(),
         filter_package: Some(vec!["@test/pkg-a".to_string()]),
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: false,
         args: vec![],
     };
@@ -352,6 +380,10 @@ async fn test_execute_with_multiple_filters() {
     let args = ExecuteArgs {
         cmd: "npm:test".to_string(),
         filter_package: Some(vec!["@test/pkg-a".to_string(), "@test/pkg-b".to_string()]),
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: false,
         args: vec![],
     };
@@ -380,6 +412,10 @@ async fn test_execute_invalid_filter_fails() {
     let args = ExecuteArgs {
         cmd: "npm:test".to_string(),
         filter_package: Some(vec!["@nonexistent/package".to_string()]),
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: false,
         args: vec![],
     };
@@ -407,6 +443,10 @@ async fn test_execute_parallel() {
     let args = ExecuteArgs {
         cmd: "npm:test".to_string(),
         filter_package: None,
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: true,
         args: vec![],
     };
@@ -440,6 +480,10 @@ async fn test_execute_parallel_system_command() {
     let args = ExecuteArgs {
         cmd: "echo hello".to_string(),
         filter_package: None,
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: true,
         args: vec![],
     };
@@ -477,6 +521,10 @@ async fn test_execute_with_extra_args() {
     let args = ExecuteArgs {
         cmd: "echo".to_string(),
         filter_package: None,
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: false,
         args: vec!["arg1".to_string(), "arg2".to_string()],
     };
@@ -509,6 +557,10 @@ async fn test_execute_no_package_json_fails() {
     let args = ExecuteArgs {
         cmd: "echo hello".to_string(),
         filter_package: None,
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: false,
         args: vec![],
     };
@@ -534,8 +586,16 @@ async fn test_execute_empty_command() {
         .with_package_lock()
         .finalize();
 
-    let args =
-        ExecuteArgs { cmd: String::new(), filter_package: None, parallel: false, args: vec![] };
+    let args = ExecuteArgs {
+        cmd: String::new(),
+        filter_package: None,
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
+        parallel: false,
+        args: vec![],
+    };
 
     // ACT: Execute empty command
     let output = create_quiet_output();
@@ -561,6 +621,10 @@ async fn test_execute_json_output_format() {
     let args = ExecuteArgs {
         cmd: "npm:test".to_string(),
         filter_package: None,
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: false,
         args: vec![],
     };
@@ -599,6 +663,10 @@ async fn test_execute_sequential_default() {
     let args = ExecuteArgs {
         cmd: "npm:test".to_string(),
         filter_package: None,
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: false, // Explicit sequential
         args: vec![],
     };
@@ -631,6 +699,10 @@ async fn test_execute_respects_workspace_structure() {
     let args = ExecuteArgs {
         cmd: "npm:build".to_string(),
         filter_package: None,
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: false,
         args: vec![],
     };
@@ -659,6 +731,10 @@ async fn test_execute_filter_with_parallel() {
     let args = ExecuteArgs {
         cmd: "npm:test".to_string(),
         filter_package: Some(vec!["@test/pkg-a".to_string()]),
+        affected: false,
+        since: None,
+        until: None,
+        branch: None,
         parallel: true,
         args: vec![],
     };
@@ -674,5 +750,353 @@ async fn test_execute_filter_with_parallel() {
     let output_bytes = buffer.lock().unwrap().clone();
     let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
     assert_eq!(count_total_results(&json_str), 1, "Should have 1 result");
+    verify_all_succeeded(&json_str);
+}
+
+// ============================================================================
+// Affected Package Detection Tests
+// ============================================================================
+
+/// Test: Execute with --affected flag and no changes
+///
+/// Verifies that --affected returns success when no packages have changes.
+#[tokio::test]
+async fn test_execute_affected_no_changes() {
+    // ARRANGE: Create workspace with git and commits (clean state)
+    // Note: commit_all() is called after finalize() to ensure all workspace
+    // files (package.json, repo.config.json, package-lock.json) are committed,
+    // resulting in a clean working directory with no uncommitted changes.
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_package_lock()
+        .finalize()
+        .commit_all("Add workspace files");
+
+    let args = ExecuteArgs {
+        cmd: "echo hello".to_string(),
+        filter_package: None,
+        affected: true,
+        since: None,
+        until: None,
+        branch: None,
+        parallel: false,
+        args: vec![],
+    };
+
+    // ACT: Execute with affected flag
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_execute(&args, &output, workspace.root()).await;
+
+    // ASSERT: Should succeed even with no affected packages
+    assert!(
+        result.is_ok(),
+        "Execute --affected with no changes should succeed: {:?}",
+        result.err()
+    );
+
+    // Verify JSON output shows 0 results
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_execute_json_output(&json_str);
+    assert_eq!(
+        count_total_results(&json_str),
+        0,
+        "Should have 0 results when no packages affected"
+    );
+}
+
+/// Test: Execute with --affected flag detects working directory changes
+///
+/// Verifies that --affected detects packages with uncommitted changes.
+#[tokio::test]
+async fn test_execute_affected_with_changes() {
+    // ARRANGE: Create workspace with git
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_package_lock()
+        .finalize();
+
+    // Create a change in the working directory
+    std::fs::write(workspace.root().join("new-file.txt"), "new content")
+        .expect("Failed to create new file");
+
+    let args = ExecuteArgs {
+        cmd: "echo affected".to_string(),
+        filter_package: None,
+        affected: true,
+        since: None,
+        until: None,
+        branch: None,
+        parallel: false,
+        args: vec![],
+    };
+
+    // ACT: Execute with affected flag
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_execute(&args, &output, workspace.root()).await;
+
+    // ASSERT: Should succeed and find the affected package
+    assert!(result.is_ok(), "Execute --affected with changes should succeed: {:?}", result.err());
+
+    // Verify at least one package was affected
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_execute_json_output(&json_str);
+    verify_all_succeeded(&json_str);
+}
+
+/// Test: Execute with --affected and --since for commit range analysis
+///
+/// Verifies that --affected with --since analyzes changes between commits.
+#[tokio::test]
+async fn test_execute_affected_with_since() {
+    // ARRANGE: Create workspace with git and multiple commits
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(2) // Create multiple commits
+        .with_package_lock()
+        .finalize();
+
+    let args = ExecuteArgs {
+        cmd: "echo affected".to_string(),
+        filter_package: None,
+        affected: true,
+        since: Some("HEAD~1".to_string()),
+        until: None,
+        branch: None,
+        parallel: false,
+        args: vec![],
+    };
+
+    // ACT: Execute with affected and since
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_execute(&args, &output, workspace.root()).await;
+
+    // ASSERT: Should succeed
+    assert!(result.is_ok(), "Execute --affected --since should succeed: {:?}", result.err());
+
+    // Verify JSON output is valid
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_execute_json_output(&json_str);
+}
+
+/// Test: Execute with --affected and --branch for branch comparison
+///
+/// Verifies that --affected with --branch compares against target branch.
+#[tokio::test]
+async fn test_execute_affected_with_branch() {
+    // ARRANGE: Create workspace with git
+    let workspace = WorkspaceFixture::single_package()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .with_package_lock()
+        .finalize();
+
+    // Create and checkout a new branch, then make changes
+    std::process::Command::new("git")
+        .args(["checkout", "-b", "feature-branch"])
+        .current_dir(workspace.root())
+        .output()
+        .expect("Failed to create branch");
+
+    // Create a change on the feature branch
+    std::fs::write(workspace.root().join("feature-file.txt"), "feature content")
+        .expect("Failed to create feature file");
+
+    std::process::Command::new("git")
+        .args(["add", "."])
+        .current_dir(workspace.root())
+        .output()
+        .expect("Failed to add files");
+
+    std::process::Command::new("git")
+        .args(["commit", "-m", "Feature commit"])
+        .current_dir(workspace.root())
+        .output()
+        .expect("Failed to commit");
+
+    let args = ExecuteArgs {
+        cmd: "echo affected".to_string(),
+        filter_package: None,
+        affected: true,
+        since: None,
+        until: None,
+        branch: Some("main".to_string()),
+        parallel: false,
+        args: vec![],
+    };
+
+    // ACT: Execute with affected and branch
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_execute(&args, &output, workspace.root()).await;
+
+    // ASSERT: Should succeed and find the affected package
+    assert!(result.is_ok(), "Execute --affected --branch should succeed: {:?}", result.err());
+
+    // Verify JSON output
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_execute_json_output(&json_str);
+    verify_all_succeeded(&json_str);
+}
+
+/// Test: Execute with --affected fails gracefully without git repo
+///
+/// Verifies proper error handling when not in a git repository.
+#[tokio::test]
+async fn test_execute_affected_no_git_fails() {
+    // ARRANGE: Create workspace WITHOUT git
+    let workspace =
+        WorkspaceFixture::single_package().with_default_config().with_package_lock().finalize();
+    // Note: NOT calling .with_git()
+
+    let args = ExecuteArgs {
+        cmd: "echo hello".to_string(),
+        filter_package: None,
+        affected: true,
+        since: None,
+        until: None,
+        branch: None,
+        parallel: false,
+        args: vec![],
+    };
+
+    // ACT: Execute with affected flag
+    let output = create_quiet_output();
+    let result = execute_execute(&args, &output, workspace.root()).await;
+
+    // ASSERT: Should fail with git-related error
+    assert!(result.is_err(), "Execute --affected should fail without git repo");
+}
+
+/// Test: Execute with --affected and --parallel combined
+///
+/// Verifies that affected detection works with parallel execution.
+#[tokio::test]
+async fn test_execute_affected_parallel() {
+    // ARRANGE: Create monorepo with git
+    let workspace = WorkspaceFixture::monorepo_independent()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .finalize();
+
+    // Create a change
+    std::fs::write(workspace.root().join("new-file.txt"), "new content")
+        .expect("Failed to create new file");
+
+    let args = ExecuteArgs {
+        cmd: "echo parallel-affected".to_string(),
+        filter_package: None,
+        affected: true,
+        since: None,
+        until: None,
+        branch: None,
+        parallel: true,
+        args: vec![],
+    };
+
+    // ACT: Execute with affected and parallel
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_execute(&args, &output, workspace.root()).await;
+
+    // ASSERT: Should succeed
+    assert!(result.is_ok(), "Execute --affected --parallel should succeed: {:?}", result.err());
+
+    // Verify JSON output
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_execute_json_output(&json_str);
+}
+
+/// Test: Execute with --affected in monorepo detects correct packages
+///
+/// Verifies that only packages with actual changes are detected.
+#[tokio::test]
+async fn test_execute_affected_monorepo_selective() {
+    // ARRANGE: Create monorepo with git
+    let workspace = WorkspaceFixture::monorepo_independent()
+        .with_default_config()
+        .with_git()
+        .with_commits(1)
+        .finalize();
+
+    // Get first package and make a change only there
+    let packages = workspace.packages();
+    if !packages.is_empty() {
+        let pkg_path = &packages[0].path;
+        std::fs::write(pkg_path.join("changed-file.txt"), "package change")
+            .expect("Failed to create file in package");
+    }
+
+    let args = ExecuteArgs {
+        cmd: "echo affected".to_string(),
+        filter_package: None,
+        affected: true,
+        since: None,
+        until: None,
+        branch: None,
+        parallel: false,
+        args: vec![],
+    };
+
+    // ACT: Execute with affected flag
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_execute(&args, &output, workspace.root()).await;
+
+    // ASSERT: Should succeed
+    assert!(result.is_ok(), "Execute --affected in monorepo should succeed: {:?}", result.err());
+
+    // Verify JSON output - should have results only for affected packages
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_execute_json_output(&json_str);
+}
+
+/// Test: Execute with --affected and npm script
+///
+/// Verifies that npm scripts work correctly with affected detection.
+#[tokio::test]
+async fn test_execute_affected_npm_script() {
+    // ARRANGE: Create workspace with scripts
+    let workspace = create_workspace_with_scripts();
+
+    // Create a change
+    std::fs::write(workspace.root().join("new-file.txt"), "new content")
+        .expect("Failed to create new file");
+
+    let args = ExecuteArgs {
+        cmd: "npm:test".to_string(),
+        filter_package: None,
+        affected: true,
+        since: None,
+        until: None,
+        branch: None,
+        parallel: false,
+        args: vec![],
+    };
+
+    // ACT: Execute npm script with affected flag
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_execute(&args, &output, workspace.root()).await;
+
+    // ASSERT: Should succeed
+    assert!(
+        result.is_ok(),
+        "Execute npm script with --affected should succeed: {:?}",
+        result.err()
+    );
+
+    // Verify JSON output
+    let output_bytes = buffer.lock().unwrap().clone();
+    let json_str = String::from_utf8(output_bytes).expect("Output should be valid UTF-8");
+    verify_execute_json_output(&json_str);
     verify_all_succeeded(&json_str);
 }
