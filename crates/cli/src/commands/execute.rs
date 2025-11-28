@@ -46,6 +46,10 @@
 //! let args = ExecuteArgs {
 //!     cmd: "npm:lint".to_string(),
 //!     filter_package: None,
+//!     affected: false,
+//!     since: None,
+//!     until: None,
+//!     branch: None,
 //!     parallel: false,
 //!     args: vec![],
 //! };
