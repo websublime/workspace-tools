@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.23 - 2025-11-28
+
+### Bug Fixes
+
+#### WOR-TSK-170
+
+- Ensure main branch exists in e2e branch comparison test
+- Add missing fields to execute module doctest example
+
+### Features
+
+#### WOR-TSK-170
+
+- Add --affected flag to execute command
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.22 - 2025-11-27
 
 ### Bug Fixes
