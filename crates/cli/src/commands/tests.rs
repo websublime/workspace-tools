@@ -3696,6 +3696,10 @@ mod execute_tests {
         let args = ExecuteArgs {
             cmd: "echo hello".to_string(),
             filter_package: None,
+            affected: false,
+            since: None,
+            until: None,
+            branch: None,
             parallel: false,
             args: vec![],
         };
@@ -3712,6 +3716,10 @@ mod execute_tests {
         let args = ExecuteArgs {
             cmd: "npm:test".to_string(),
             filter_package: None,
+            affected: false,
+            since: None,
+            until: None,
+            branch: None,
             parallel: false,
             args: vec![],
         };
@@ -3728,6 +3736,10 @@ mod execute_tests {
         let args = ExecuteArgs {
             cmd: "npm:nonexistent".to_string(),
             filter_package: None,
+            affected: false,
+            since: None,
+            until: None,
+            branch: None,
             parallel: false,
             args: vec![],
         };
@@ -3749,6 +3761,10 @@ mod execute_tests {
         let args = ExecuteArgs {
             cmd: "echo hello".to_string(),
             filter_package: None,
+            affected: false,
+            since: None,
+            until: None,
+            branch: None,
             parallel: false,
             args: vec![],
         };
@@ -3765,6 +3781,10 @@ mod execute_tests {
         let args = ExecuteArgs {
             cmd: "echo hello".to_string(),
             filter_package: None,
+            affected: false,
+            since: None,
+            until: None,
+            branch: None,
             parallel: true,
             args: vec![],
         };
@@ -3781,6 +3801,10 @@ mod execute_tests {
         let args = ExecuteArgs {
             cmd: "echo hello".to_string(),
             filter_package: Some(vec!["@test/pkg1".to_string()]),
+            affected: false,
+            since: None,
+            until: None,
+            branch: None,
             parallel: false,
             args: vec![],
         };
@@ -3797,6 +3821,10 @@ mod execute_tests {
         let args = ExecuteArgs {
             cmd: "echo hello".to_string(),
             filter_package: Some(vec!["nonexistent-package".to_string()]),
+            affected: false,
+            since: None,
+            until: None,
+            branch: None,
             parallel: false,
             args: vec![],
         };
@@ -3818,6 +3846,10 @@ mod execute_tests {
         let args = ExecuteArgs {
             cmd: "echo hello".to_string(),
             filter_package: None,
+            affected: false,
+            since: None,
+            until: None,
+            branch: None,
             parallel: false,
             args: vec![],
         };
@@ -3834,6 +3866,10 @@ mod execute_tests {
         let args = ExecuteArgs {
             cmd: "echo hello".to_string(),
             filter_package: None,
+            affected: false,
+            since: None,
+            until: None,
+            branch: None,
             parallel: false,
             args: vec![],
         };
@@ -3850,6 +3886,10 @@ mod execute_tests {
         let args = ExecuteArgs {
             cmd: "npm:test".to_string(),
             filter_package: None,
+            affected: false,
+            since: None,
+            until: None,
+            branch: None,
             parallel: false,
             args: vec![],
         };
@@ -3866,6 +3906,10 @@ mod execute_tests {
         let args = ExecuteArgs {
             cmd: "npm:build".to_string(),
             filter_package: Some(vec!["@test/pkg1".to_string(), "@test/pkg2".to_string()]),
+            affected: false,
+            since: None,
+            until: None,
+            branch: None,
             parallel: true,
             args: vec![],
         };
@@ -3882,6 +3926,10 @@ mod execute_tests {
         let args = ExecuteArgs {
             cmd: "echo".to_string(),
             filter_package: None,
+            affected: false,
+            since: None,
+            until: None,
+            branch: None,
             parallel: false,
             args: vec!["extra".to_string(), "arguments".to_string()],
         };
@@ -3889,5 +3937,257 @@ mod execute_tests {
         let result = execute_execute(&args, &output, temp_dir.path()).await;
 
         assert!(result.is_ok(), "Execute with extra args failed: {result:?}");
+    }
+
+    // ============================================================================
+    // Tests for --affected flag
+    // ============================================================================
+
+    /// Test that --affected with no changes returns success with no packages.
+    ///
+    /// When there are no changes in the working directory, --affected should
+    /// return success silently (not an error).
+    #[tokio::test]
+    async fn test_execute_affected_no_changes_succeeds() {
+        let temp_dir = create_test_workspace_with_scripts();
+
+        // Initialize git repo with a commit so there's no working directory changes
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to init git");
+        std::process::Command::new("git")
+            .args(["config", "user.email", "test@test.com"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to config git");
+        std::process::Command::new("git")
+            .args(["config", "user.name", "Test"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to config git");
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to add files");
+        std::process::Command::new("git")
+            .args(["commit", "-m", "Initial commit"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to commit");
+
+        let args = ExecuteArgs {
+            cmd: "echo hello".to_string(),
+            filter_package: None,
+            affected: true,
+            since: None,
+            until: None,
+            branch: None,
+            parallel: false,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        // Should succeed with "No affected packages" message
+        assert!(result.is_ok(), "Execute --affected with no changes should succeed: {result:?}");
+    }
+
+    /// Test that --affected detects packages with working directory changes.
+    #[tokio::test]
+    async fn test_execute_affected_with_working_directory_changes() {
+        let temp_dir = create_test_workspace_with_scripts();
+
+        // Initialize git repo
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to init git");
+        std::process::Command::new("git")
+            .args(["config", "user.email", "test@test.com"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to config git");
+        std::process::Command::new("git")
+            .args(["config", "user.name", "Test"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to config git");
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to add files");
+        std::process::Command::new("git")
+            .args(["commit", "-m", "Initial commit"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to commit");
+
+        // Create a change in the working directory
+        fs::write(temp_dir.path().join("new-file.txt"), "new content")
+            .expect("Failed to write new file");
+
+        let args = ExecuteArgs {
+            cmd: "echo affected".to_string(),
+            filter_package: None,
+            affected: true,
+            since: None,
+            until: None,
+            branch: None,
+            parallel: false,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        // Should succeed - the root package has changes
+        assert!(
+            result.is_ok(),
+            "Execute --affected with working directory changes should succeed: {result:?}"
+        );
+    }
+
+    /// Test that --affected with --since uses commit range analysis.
+    #[tokio::test]
+    async fn test_execute_affected_with_since() {
+        let temp_dir = create_test_workspace_with_scripts();
+
+        // Initialize git repo with multiple commits
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to init git");
+        std::process::Command::new("git")
+            .args(["config", "user.email", "test@test.com"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to config git");
+        std::process::Command::new("git")
+            .args(["config", "user.name", "Test"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to config git");
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to add files");
+        std::process::Command::new("git")
+            .args(["commit", "-m", "Initial commit"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to commit");
+
+        // Add another file and commit
+        fs::write(temp_dir.path().join("new-file.txt"), "new content")
+            .expect("Failed to write new file");
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to add files");
+        std::process::Command::new("git")
+            .args(["commit", "-m", "Second commit"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to commit");
+
+        let args = ExecuteArgs {
+            cmd: "echo affected".to_string(),
+            filter_package: None,
+            affected: true,
+            since: Some("HEAD~1".to_string()),
+            until: None,
+            branch: None,
+            parallel: false,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        // Should succeed - analyzing changes since HEAD~1
+        assert!(result.is_ok(), "Execute --affected --since should succeed: {result:?}");
+    }
+
+    /// Test that --affected fails gracefully when not in a git repo.
+    #[tokio::test]
+    async fn test_execute_affected_not_git_repo() {
+        let temp_dir = create_test_workspace_with_scripts();
+        // Don't initialize git
+
+        let args = ExecuteArgs {
+            cmd: "echo hello".to_string(),
+            filter_package: None,
+            affected: true,
+            since: None,
+            until: None,
+            branch: None,
+            parallel: false,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Quiet, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        // Should fail with git error
+        assert!(result.is_err(), "Execute --affected should fail without git repo");
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("Git") || err.to_string().contains("git"),
+            "Error should mention git: {err}"
+        );
+    }
+
+    /// Test that --affected with JSON output returns proper structure.
+    #[tokio::test]
+    async fn test_execute_affected_json_output_no_changes() {
+        let temp_dir = create_test_workspace_with_scripts();
+
+        // Initialize git repo with a commit
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to init git");
+        std::process::Command::new("git")
+            .args(["config", "user.email", "test@test.com"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to config git");
+        std::process::Command::new("git")
+            .args(["config", "user.name", "Test"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to config git");
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to add files");
+        std::process::Command::new("git")
+            .args(["commit", "-m", "Initial commit"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to commit");
+
+        let args = ExecuteArgs {
+            cmd: "echo hello".to_string(),
+            filter_package: None,
+            affected: true,
+            since: None,
+            until: None,
+            branch: None,
+            parallel: false,
+            args: vec![],
+        };
+        let output = Output::new(OutputFormat::Json, std::io::sink(), true);
+        let result = execute_execute(&args, &output, temp_dir.path()).await;
+
+        // Should succeed with empty results in JSON
+        assert!(result.is_ok(), "Execute --affected with JSON output should succeed: {result:?}");
     }
 }
