@@ -17,6 +17,12 @@ version = "0.0.2"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+# Exclude from cargo-dist builds - this crate uses cdylib which is not supported
+# on all targets (e.g., x86_64-unknown-linux-musl). Node.js bindings are built
+# separately via napi-rs in the packages/workspace-tools directory.
+[package.metadata.dist]
+dist = false
+
 [lib]
 crate-type = ["cdylib"]
 doctest = false
