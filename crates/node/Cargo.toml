@@ -1,0 +1,56 @@
+[package]
+name = "sublime_node_tools"
+description = "Node.js bindings for Sublime Workspace CLI Tools via napi-rs"
+documentation = "https://docs.rs/sublime_node_tools"
+readme = "README.md"
+keywords = ["napi-rs", "nodejs", "workspace", "tools", "bindings"]
+categories = ["development-tools", "api-bindings"]
+
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+version = "0.0.1"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lib]
+crate-type = ["cdylib"]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# NAPI - Node.js bindings
+napi = { version = "3.6.0", features = ["async", "tokio_rt", "napi9"] }
+napi-derive = "3.4.0"
+
+# Workspace crates
+sublime_cli_tools = { workspace = true }
+sublime_git_tools = { workspace = true }
+sublime_pkg_tools = { workspace = true }
+sublime_standard_tools = { workspace = true }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["full", "time"] }
+
+# Logging and diagnostics
+tracing = "0.1"
+
+# Error handling
+thiserror = { workspace = true }
+
+[build-dependencies]
+napi-build = "2.3.1"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["full", "test-util", "macros"] }
