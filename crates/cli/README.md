@@ -24,7 +24,33 @@ A comprehensive command-line interface for managing Node.js workspaces and monor
 
 ## Installation & Quick Start
 
-For installation instructions and quick start guide, see the [main README](../../README.md#-quick-start).
+### Quick Install (Recommended)
+
+**macOS/Linux:**
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/websublime/workspace-tools/releases/latest/download/sublime_cli_tools-installer.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/websublime/workspace-tools/releases/latest/download/sublime_cli_tools-installer.ps1 | iex"
+```
+
+### Alternative Installation Methods
+
+**From crates.io:**
+```bash
+cargo install sublime_cli_tools
+```
+
+**From source:**
+```bash
+git clone https://github.com/websublime/workspace-tools.git
+cd workspace-tools
+cargo install --path crates/cli
+```
+
+For more details, see the [main README](../../README.md#-quick-start).
 
 ---
 
