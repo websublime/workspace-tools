@@ -1,6 +1,27 @@
 [workspace]
-members = ["crates/*"]
+members = [
+    "crates/cli",
+    "crates/git",
+    "crates/pkg",
+    "crates/standard",
+]
+exclude = ["crates/node"]
 resolver = "2"
+
+# IMPORTANT: The `crates/node` directory (sublime_node_tools) is intentionally
+# excluded from workspace members because:
+#
+# 1. It uses `crate-type = ["cdylib"]` which is NOT supported on musl targets
+#    (e.g., x86_64-unknown-linux-musl). Including it causes cargo-dist to fail
+#    with: "cannot produce cdylib for sublime_node_tools as the target does not
+#    support these crate types"
+#
+# 2. The Node.js bindings are built separately via napi-rs in the workflow at
+#    `packages/workspace-tools/.github/workflows/CI.yml` which uses zig for
+#    cross-compilation to musl targets with the `-x` flag.
+#
+# 3. The crate can still be built explicitly when needed:
+#    `cargo build --manifest-path crates/node/Cargo.toml`
 
 [workspace.package]
 authors = ["WebSublime"]
