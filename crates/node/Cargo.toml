@@ -6,12 +6,19 @@ readme = "README.md"
 keywords = ["napi-rs", "nodejs", "workspace", "tools", "bindings"]
 categories = ["development-tools", "api-bindings"]
 
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
-authors.workspace = true
-rust-version.workspace = true
+# Standalone crate configuration - not part of workspace due to cdylib
+# incompatibility with musl targets. See root Cargo.toml for details.
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/websublime/workspace-tools"
+authors = ["WebSublime"]
+rust-version = "1.90.0"
 version = "0.0.4"
+
+# This crate is not published to crates.io. It uses cdylib which is built
+# and distributed via napi-rs to npm instead. Additionally, cdylib is not
+# supported on all targets (e.g., x86_64-unknown-linux-musl).
+publish = false
 
 [package.metadata.docs.rs]
 all-features = true
@@ -27,36 +34,61 @@ dist = false
 crate-type = ["cdylib"]
 doctest = false
 
-[lints]
-workspace = true
+[lints.clippy]
+# Guidelines
+dbg_macro = "deny"
+print_stdout = "deny"
+clone_on_ref_ptr = "deny"
+empty_drop = "deny"
+exit = "deny"
+filetype_is_file = "deny"
+get_unwrap = "deny"
+rc_buffer = "deny"
+rc_mutex = "deny"
+rest_pat_in_fully_bound_structs = "deny"
+unnecessary_safety_comment = "deny"
+pedantic = { level = "deny", priority = -1 }
+module_inception = "allow"
+module_name_repetitions = "allow"
+similar_names = "allow"
+missing_errors_doc = "allow"
+must_use_candidate = "allow"
+doc_markdown = "allow"
+missing_const_for_fn = "allow"
+needless_for_each = "allow"
+new_without_default = "allow"
+missing_panics_doc = "allow"
+inconsistent_struct_constructor = "allow"
+single_match = "allow"
+single_match_else = "allow"
 
 [dependencies]
 # NAPI - Node.js bindings
 napi = { version = "3.6.0", features = ["async", "tokio_rt", "napi9"] }
 napi-derive = "3.4.0"
 
-# Workspace crates
-sublime_cli_tools = { workspace = true }
-sublime_git_tools = { workspace = true }
-sublime_pkg_tools = { workspace = true }
-sublime_standard_tools = { workspace = true }
+# Workspace crates - using path dependencies
+sublime_cli_tools = { version = "0.0.25", path = "../cli" }
+sublime_git_tools = { version = "0.0.14", path = "../git" }
+sublime_pkg_tools = { version = "0.0.18", path = "../pkg" }
+sublime_standard_tools = { version = "0.0.14", path = "../standard" }
 
 # Serialization
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
+serde = { version = "1.0.203", features = ["derive"] }
+serde_json = "1.0.117"
 
 # Async runtime
-tokio = { workspace = true, features = ["full", "time"] }
+tokio = { version = "1.38.0", features = ["full", "time"] }
 
 # Logging and diagnostics
 tracing = "0.1"
 
 # Error handling
-thiserror = { workspace = true }
+thiserror = "1.0.64"
 
 [build-dependencies]
 napi-build = "2.3.1"
 
 [dev-dependencies]
-tempfile = { workspace = true }
-tokio = { workspace = true, features = ["full", "test-util", "macros"] }
+tempfile = "3.8.1"
+tokio = { version = "1.38.0", features = ["full", "test-util", "macros"] }

@@ -57,3 +57,6 @@ changelog_update = true
 name = "sublime_cli_tools"
 changelog_path = "crates/cli/CHANGELOG.md"
 changelog_update = true
+
+# Note: sublime_node_tools is excluded from the workspace (see root Cargo.toml)
+# and is built/published separately via napi-rs to npm.
