@@ -1,3 +1,3 @@
-import { getVersion, MonorepoProject, MonorepoRepository } from './binding'
+import { getVersion } from './binding'
 
-export { getVersion, MonorepoProject, MonorepoRepository }
+export { getVersion }
