@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.0.2 - 2025-12-03
+
+### Miscellaneous Tasks
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.1 - 2025-12-03
 
 ### Features
