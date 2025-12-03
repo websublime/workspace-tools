@@ -150,24 +150,6 @@ jobs:
           ls -la src/binding.js
         working-directory: packages/workspace-tools
 
-      - name: Build distribution package
-        run: pnpm build:node
-        working-directory: packages/workspace-tools
-
-      - name: Verify distribution files
-        shell: bash
-        run: |
-          echo "Checking distribution files..."
-          ls -la dist/
-          ls -la dist/cjs/
-          ls -la dist/esm/
-          ls -la dist/types/
-        working-directory: packages/workspace-tools
-
-      - name: Test CJS module loading
-        run: node -e "const { getVersion } = require('./dist/cjs/index.cjs'); console.log('CJS Version:', getVersion());"
-        working-directory: packages/workspace-tools
-
-      - name: Test ESM module loading
-        run: node --experimental-vm-modules -e "import('./dist/esm/index.mjs').then(m => console.log('ESM Version:', m.getVersion()));"
+      - name: Test native module loading
+        run: node -e "const { getVersion } = require('./src/binding.js'); console.log('Version:', getVersion());"
         working-directory: packages/workspace-tools

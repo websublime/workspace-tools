@@ -258,9 +258,11 @@ build-node-bindings:
 This job:
 1. Builds the native module with `pnpm build-binding:release`
 2. Verifies generated files exist (`binding.d.ts`, `binding.js`, `.node`)
-3. Builds the distribution package with `pnpm build:node`
-4. Verifies distribution files exist
-5. Tests CJS and ESM module loading
+3. Tests native module loading via `binding.js`
+
+> **Note**: The `build:node` step (distribution bundling) is not run in PR checks
+> because `rolldown` requires native bindings that may not be available on all
+> CI runners. Distribution builds are performed in the release workflow.
 
 ### Platforms Tested
 
