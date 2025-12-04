@@ -123,53 +123,16 @@ jobs:
         working-directory: packages/workspace-tools
         shell: bash
 
-      - name: List dist
-        run: ls -la packages/workspace-tools/dist
-        shell: bash
+      - name: Test binding
+        run: node -e "const { getVersion } = require('./dist/cjs/index.cjs'); console.log('Version:', getVersion());"
+        working-directory: packages/workspace-tools
 
-      #- name: Upload artifact
-      #  uses: actions/upload-artifact@v4
-      #  with:
-      #    name: bindings-${{ matrix.settings.target }}
-      #    path: packages/workspace-tools/src/*.node
-      #    if-no-files-found: error
-
-  # Test native bindings
-  #test:
-  #  name: Test - ${{ matrix.settings.target }}
-  #  needs: build
-  #  strategy:
-  #    fail-fast: false
-  #    matrix:
-  #      settings:
-  #        - host: macos-latest
-  #          target: aarch64-apple-darwin
-  #        - host: macos-13
-  #          target: x86_64-apple-darwin
-  #        - host: ubuntu-latest
-  #          target: x86_64-unknown-linux-gnu
-  #        - host: windows-latest
-  #          target: x86_64-pc-windows-msvc
-  #  runs-on: ${{ matrix.settings.host }}
-  #  steps:
-  #    - uses: actions/checkout@v4
-
-  #    - name: Set up Node
-  #     uses: ./.github/actions/setup-node
-
-  #  - name: Download artifact
-  #    uses: actions/download-artifact@v4
-  #    with:
-  #      name: bindings-${{ matrix.settings.target }}
-  #      path: packages/workspace-tools/src
-
-  #  - name: List artifacts
-  #    run: ls -la packages/workspace-tools/src
-  #    shell: bash
-
-  #- name: Test binding
-  #  run: node -e "const { getVersion } = require('./index.js'); console.log('Version:', getVersion());"
-  #  working-directory: packages/workspace-tools
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.settings.target }}
+          path: packages/workspace-tools/dist
+          if-no-files-found: error
 
   # Lint Node.js package
   lint-node:
