@@ -8,6 +8,13 @@ on:
     paths-ignore:
       - 'packages/workspace-tools/**'
       - 'crates/node/**'
+      - '.github/workflows/pull-request-node.yml'
+      - '.github/workflows/release-node.yml'
+      - '.github/actions/setup-node/**'
+      - '.npmrc'
+      - '.node-version'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
   merge_group:
   push:
     branches:
