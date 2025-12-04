@@ -84,7 +84,7 @@ jobs:
           - host: macos-latest
             target: aarch64-apple-darwin
             build: pnpm build-binding --target aarch64-apple-darwin
-          - host: macos-13
+          - host: macos-15
             target: x86_64-apple-darwin
             build: pnpm build-binding --target x86_64-apple-darwin
           - host: ubuntu-latest
@@ -118,7 +118,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bindings-${{ matrix.settings.target }}
-          path: packages/workspace-tools/*.node
+          path: packages/workspace-tools/src/*.node
           if-no-files-found: error
 
   # Test native bindings
