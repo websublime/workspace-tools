@@ -119,7 +119,7 @@ jobs:
         shell: bash
 
       - name: Compile typescript
-        run: pnpm build-types && pnpm build:node
+        run: pnpm build:node
         working-directory: packages/workspace-tools
         shell: bash
 
