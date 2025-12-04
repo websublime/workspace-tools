@@ -10,7 +10,7 @@
 //!
 //! The module provides:
 //! - `ErrorInfo`: A NAPI-compatible struct with error code, message, context, and kind
-//! - `ErrorCode`: An enumeration of all possible error codes
+//! - `ErrorCode`: An internal enumeration of all possible error codes
 //! - Conversion traits from `CliError` to `ErrorInfo`
 //!
 //! Error codes follow Node.js conventions:
@@ -50,15 +50,33 @@ use sublime_cli_tools::error::CliError;
 /// These codes follow Node.js conventions and provide a familiar interface
 /// for JavaScript/TypeScript developers to handle errors programmatically.
 ///
+/// This enum is used internally to generate the appropriate error code strings.
+/// The string representations are exposed to JavaScript via the `ErrorInfo.code` field.
+///
+/// # Error Code Mapping
+///
+/// | ErrorCode   | String       | Description                      |
+/// |-------------|--------------|----------------------------------|
+/// | Config      | "ECONFIG"    | Configuration-related errors     |
+/// | Validation  | "EVALIDATION"| Parameter validation errors      |
+/// | Execution   | "EEXEC"      | Execution/command errors         |
+/// | Git         | "EGIT"       | Git-related errors               |
+/// | Package     | "EPKG"       | Package-related errors           |
+/// | NotFound    | "ENOENT"     | File or path not found           |
+/// | Io          | "EIO"        | Generic I/O errors               |
+/// | Network     | "ENETWORK"   | Network-related errors           |
+/// | User        | "EUSER"      | User-caused errors               |
+/// | Timeout     | "ETIMEOUT"   | Timeout errors                   |
+///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// use sublime_node_tools::error::ErrorCode;
 ///
 /// let code = ErrorCode::Validation;
 /// assert_eq!(code.as_str(), "EVALIDATION");
 /// ```
-// Allow dead code for placeholder types that will be used in future stories
+// Allow dead_code for Timeout variant - TODO: will be used on story 6.3 (execute command with timeout)
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ErrorCode {
@@ -95,7 +113,7 @@ impl ErrorCode {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use sublime_node_tools::error::ErrorCode;
     ///
     /// assert_eq!(ErrorCode::NotFound.as_str(), "ENOENT");
@@ -129,6 +147,8 @@ impl std::fmt::Display for ErrorCode {
 ///
 /// This structure is exposed to JavaScript/TypeScript via napi-rs and provides
 /// detailed error information in a format familiar to Node.js developers.
+/// The `#[napi(object)]` attribute enables automatic conversion to JavaScript
+/// objects and TypeScript type generation.
 ///
 /// # Fields
 ///
@@ -136,6 +156,21 @@ impl std::fmt::Display for ErrorCode {
 /// - `message`: Human-readable error message
 /// - `context`: Optional additional context (field name, path, etc.)
 /// - `kind`: Error category from the CLI layer
+///
+/// # TypeScript Definition
+///
+/// ```typescript
+/// export interface ErrorInfo {
+///   /** Node.js-style error code (e.g., "EVALIDATION", "EGIT") */
+///   code: string;
+///   /** Human-readable error message */
+///   message: string;
+///   /** Optional additional context about the error */
+///   context?: string;
+///   /** Error category from CLI (for debugging) */
+///   kind: string;
+/// }
+/// ```
 ///
 /// # Examples
 ///
@@ -149,37 +184,47 @@ impl std::fmt::Display for ErrorCode {
 ///   }
 /// }
 /// ```
-// TODO: will be implemented on story 2.1
-// The #[napi(object)] attribute will be added when implementing the full ErrorInfo
-#[allow(dead_code)]
+#[napi(object)]
 #[derive(Debug, Clone)]
-pub(crate) struct ErrorInfo {
+pub struct ErrorInfo {
     /// Node.js-style error code (e.g., "EVALIDATION", "EGIT").
     ///
     /// These codes follow Node.js conventions and can be used for
     /// programmatic error handling in JavaScript/TypeScript.
-    pub(crate) code: String,
+    ///
+    /// # Available Codes
+    ///
+    /// - `ECONFIG`: Configuration errors
+    /// - `EVALIDATION`: Validation errors
+    /// - `EEXEC`: Execution errors
+    /// - `EGIT`: Git errors
+    /// - `EPKG`: Package errors
+    /// - `ENOENT`: File/path not found
+    /// - `EIO`: I/O errors
+    /// - `ENETWORK`: Network errors
+    /// - `EUSER`: User errors
+    /// - `ETIMEOUT`: Timeout errors
+    pub code: String,
 
     /// Human-readable error message.
     ///
     /// This message is suitable for displaying to end users and
     /// provides a clear description of what went wrong.
-    pub(crate) message: String,
+    pub message: String,
 
     /// Optional additional context for the error.
     ///
     /// This may contain the field name that caused a validation error,
     /// the path that was not found, or other relevant context information.
-    pub(crate) context: Option<String>,
+    pub context: Option<String>,
 
     /// Error category from the CLI layer.
     ///
     /// This corresponds to the `CliError` variant name (e.g., "Configuration",
     /// "Validation", "Git") and can be used for logging and debugging.
-    pub(crate) kind: String,
+    pub kind: String,
 }
 
-#[allow(dead_code)]
 impl ErrorInfo {
     /// Creates a new `ErrorInfo` instance.
     ///
@@ -196,7 +241,7 @@ impl ErrorInfo {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use sublime_node_tools::error::ErrorInfo;
     ///
     /// let error = ErrorInfo::new(
@@ -207,7 +252,7 @@ impl ErrorInfo {
     /// );
     /// ```
     #[must_use]
-    pub(crate) fn new(
+    pub fn new(
         code: impl Into<String>,
         message: impl Into<String>,
         context: Option<impl Into<String>>,
@@ -234,14 +279,14 @@ impl ErrorInfo {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use sublime_node_tools::error::ErrorInfo;
     ///
     /// let error = ErrorInfo::validation("Package name cannot be empty", Some("packages"));
     /// assert_eq!(error.code, "EVALIDATION");
     /// ```
     #[must_use]
-    pub(crate) fn validation(message: impl Into<String>, field: Option<impl Into<String>>) -> Self {
+    pub fn validation(message: impl Into<String>, field: Option<impl Into<String>>) -> Self {
         Self::new(ErrorCode::Validation.as_str(), message, field, "Validation")
     }
 
@@ -254,8 +299,19 @@ impl ErrorInfo {
     /// # Returns
     ///
     /// A new `ErrorInfo` with code "ECONFIG".
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::error::ErrorInfo;
+    ///
+    /// let error = ErrorInfo::configuration("Config file not found");
+    /// assert_eq!(error.code, "ECONFIG");
+    /// ```
     #[must_use]
-    pub(crate) fn configuration(message: impl Into<String>) -> Self {
+    // TODO: will be used on story 7.2 (configShow command)
+    #[allow(dead_code)]
+    pub fn configuration(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::Config.as_str(), message, None::<String>, "Configuration")
     }
 
@@ -269,8 +325,17 @@ impl ErrorInfo {
     /// # Returns
     ///
     /// A new `ErrorInfo` with code "ENOENT".
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::error::ErrorInfo;
+    ///
+    /// let error = ErrorInfo::not_found("File not found", Some("/path/to/file"));
+    /// assert_eq!(error.code, "ENOENT");
+    /// ```
     #[must_use]
-    pub(crate) fn not_found(message: impl Into<String>, path: Option<impl Into<String>>) -> Self {
+    pub fn not_found(message: impl Into<String>, path: Option<impl Into<String>>) -> Self {
         Self::new(ErrorCode::NotFound.as_str(), message, path, "Io")
     }
 
@@ -283,8 +348,19 @@ impl ErrorInfo {
     /// # Returns
     ///
     /// A new `ErrorInfo` with code "EGIT".
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::error::ErrorInfo;
+    ///
+    /// let error = ErrorInfo::git("Repository not found");
+    /// assert_eq!(error.code, "EGIT");
+    /// ```
     #[must_use]
-    pub(crate) fn git(message: impl Into<String>) -> Self {
+    // TODO: will be used on story 3.2 (status command)
+    #[allow(dead_code)]
+    pub fn git(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::Git.as_str(), message, None::<String>, "Git")
     }
 
@@ -297,8 +373,19 @@ impl ErrorInfo {
     /// # Returns
     ///
     /// A new `ErrorInfo` with code "EEXEC".
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::error::ErrorInfo;
+    ///
+    /// let error = ErrorInfo::execution("Command failed to execute");
+    /// assert_eq!(error.code, "EEXEC");
+    /// ```
     #[must_use]
-    pub(crate) fn execution(message: impl Into<String>) -> Self {
+    // TODO: will be used on story 6.3 (execute command)
+    #[allow(dead_code)]
+    pub fn execution(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::Execution.as_str(), message, None::<String>, "Execution")
     }
 
@@ -311,8 +398,19 @@ impl ErrorInfo {
     /// # Returns
     ///
     /// A new `ErrorInfo` with code "EPKG".
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::error::ErrorInfo;
+    ///
+    /// let error = ErrorInfo::package("Package not found in workspace");
+    /// assert_eq!(error.code, "EPKG");
+    /// ```
     #[must_use]
-    pub(crate) fn package(message: impl Into<String>) -> Self {
+    // TODO: will be used on story 4.2 (changesetAdd command)
+    #[allow(dead_code)]
+    pub fn package(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::Package.as_str(), message, None::<String>, "Package")
     }
 
@@ -326,8 +424,19 @@ impl ErrorInfo {
     /// # Returns
     ///
     /// A new `ErrorInfo` with code "EIO".
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::error::ErrorInfo;
+    ///
+    /// let error = ErrorInfo::io("Permission denied", Some("/etc/passwd"));
+    /// assert_eq!(error.code, "EIO");
+    /// ```
     #[must_use]
-    pub(crate) fn io(message: impl Into<String>, path: Option<impl Into<String>>) -> Self {
+    // TODO: will be used on story 3.2 (status command)
+    #[allow(dead_code)]
+    pub fn io(message: impl Into<String>, path: Option<impl Into<String>>) -> Self {
         Self::new(ErrorCode::Io.as_str(), message, path, "Io")
     }
 
@@ -340,8 +449,19 @@ impl ErrorInfo {
     /// # Returns
     ///
     /// A new `ErrorInfo` with code "ENETWORK".
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::error::ErrorInfo;
+    ///
+    /// let error = ErrorInfo::network("Registry unreachable");
+    /// assert_eq!(error.code, "ENETWORK");
+    /// ```
     #[must_use]
-    pub(crate) fn network(message: impl Into<String>) -> Self {
+    // TODO: will be used on story 8.2 (upgradeCheck command)
+    #[allow(dead_code)]
+    pub fn network(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::Network.as_str(), message, None::<String>, "Network")
     }
 
@@ -354,8 +474,19 @@ impl ErrorInfo {
     /// # Returns
     ///
     /// A new `ErrorInfo` with code "EUSER".
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::error::ErrorInfo;
+    ///
+    /// let error = ErrorInfo::user("Operation cancelled by user");
+    /// assert_eq!(error.code, "EUSER");
+    /// ```
     #[must_use]
-    pub(crate) fn user(message: impl Into<String>) -> Self {
+    // TODO: will be used on story 4.6 (changesetRemove command)
+    #[allow(dead_code)]
+    pub fn user(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::User.as_str(), message, None::<String>, "User")
     }
 
@@ -368,10 +499,49 @@ impl ErrorInfo {
     /// # Returns
     ///
     /// A new `ErrorInfo` with code "ETIMEOUT".
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::error::ErrorInfo;
+    ///
+    /// let error = ErrorInfo::timeout("Operation exceeded 30 second timeout");
+    /// assert_eq!(error.code, "ETIMEOUT");
+    /// ```
     #[must_use]
-    pub(crate) fn timeout(message: impl Into<String>) -> Self {
+    // TODO: will be used on story 6.3 (execute command with timeout)
+    #[allow(dead_code)]
+    pub fn timeout(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::Timeout.as_str(), message, None::<String>, "Timeout")
     }
+}
+
+/// Determines if an I/O error message indicates a "not found" condition.
+///
+/// This function checks for common patterns in error messages that indicate
+/// a file, path, or resource was not found. This is used to distinguish
+/// between ENOENT (not found) and EIO (generic I/O error) codes.
+///
+/// # Arguments
+///
+/// * `message` - The error message to check
+///
+/// # Returns
+///
+/// `true` if the message indicates a "not found" condition, `false` otherwise.
+///
+/// # Patterns Detected
+///
+/// - "not found" (case insensitive)
+/// - "No such file" (case insensitive)
+/// - "does not exist" (case insensitive)
+/// - "doesn't exist" (case insensitive)
+fn is_not_found_error(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    lower.contains("not found")
+        || lower.contains("no such file")
+        || lower.contains("does not exist")
+        || lower.contains("doesn't exist")
 }
 
 impl From<&CliError> for ErrorInfo {
@@ -382,29 +552,64 @@ impl From<&CliError> for ErrorInfo {
     ///
     /// # Mapping
     ///
-    /// | CliError Variant | ErrorCode |
-    /// |------------------|-----------|
-    /// | Configuration    | ECONFIG   |
-    /// | Validation       | EVALIDATION |
-    /// | Execution        | EEXEC     |
-    /// | Git              | EGIT      |
-    /// | Package          | EPKG      |
-    /// | Io               | EIO       |
-    /// | Network          | ENETWORK  |
-    /// | User             | EUSER     |
+    /// | CliError Variant | ErrorCode   | Notes                                    |
+    /// |------------------|-------------|------------------------------------------|
+    /// | Configuration    | ECONFIG     | Configuration file/parsing errors        |
+    /// | Validation       | EVALIDATION | Invalid arguments/parameters             |
+    /// | Execution        | EEXEC       | Command execution failures               |
+    /// | Git              | EGIT        | Git repository/operation errors          |
+    /// | Package          | EPKG        | Package.json/dependency errors           |
+    /// | Io               | ENOENT/EIO  | ENOENT if "not found", otherwise EIO     |
+    /// | Network          | ENETWORK    | Network/registry errors                  |
+    /// | User             | EUSER       | User-caused/cancelled errors             |
+    ///
+    /// # I/O Error Differentiation
+    ///
+    /// The `Io` variant is specially handled to differentiate between:
+    /// - `ENOENT`: When the error message contains "not found", "No such file",
+    ///   "does not exist", or "doesn't exist"
+    /// - `EIO`: For all other I/O errors (permission denied, disk full, etc.)
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_cli_tools::error::CliError;
+    /// use sublime_node_tools::error::ErrorInfo;
+    ///
+    /// let cli_error = CliError::validation("Invalid version format");
+    /// let error_info = ErrorInfo::from(&cli_error);
+    /// assert_eq!(error_info.code, "EVALIDATION");
+    /// assert_eq!(error_info.kind, "Validation");
+    ///
+    /// // I/O not found errors map to ENOENT
+    /// let io_error = CliError::io("File not found: /path/to/file");
+    /// let error_info = ErrorInfo::from(&io_error);
+    /// assert_eq!(error_info.code, "ENOENT");
+    ///
+    /// // Other I/O errors map to EIO
+    /// let io_error = CliError::io("Permission denied");
+    /// let error_info = ErrorInfo::from(&io_error);
+    /// assert_eq!(error_info.code, "EIO");
+    /// ```
     fn from(error: &CliError) -> Self {
-        let code = match error {
-            CliError::Configuration(_) => ErrorCode::Config,
-            CliError::Validation(_) => ErrorCode::Validation,
-            CliError::Execution(_) => ErrorCode::Execution,
-            CliError::Git(_) => ErrorCode::Git,
-            CliError::Package(_) => ErrorCode::Package,
-            CliError::Io(_) => ErrorCode::Io,
-            CliError::Network(_) => ErrorCode::Network,
-            CliError::User(_) => ErrorCode::User,
+        let (code, kind) = match error {
+            CliError::Configuration(_) => (ErrorCode::Config, "Configuration"),
+            CliError::Validation(_) => (ErrorCode::Validation, "Validation"),
+            CliError::Execution(_) => (ErrorCode::Execution, "Execution"),
+            CliError::Git(_) => (ErrorCode::Git, "Git"),
+            CliError::Package(_) => (ErrorCode::Package, "Package"),
+            CliError::Io(msg) => {
+                if is_not_found_error(msg) {
+                    (ErrorCode::NotFound, "Io")
+                } else {
+                    (ErrorCode::Io, "Io")
+                }
+            }
+            CliError::Network(_) => (ErrorCode::Network, "Network"),
+            CliError::User(_) => (ErrorCode::User, "User"),
         };
 
-        Self::new(code.as_str(), error.to_string(), None::<String>, error.kind())
+        Self::new(code.as_str(), error.to_string(), None::<String>, kind)
     }
 }
 
@@ -413,7 +618,72 @@ impl From<CliError> for ErrorInfo {
     ///
     /// This is a convenience implementation that delegates to the reference
     /// conversion implementation.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_cli_tools::error::CliError;
+    /// use sublime_node_tools::error::ErrorInfo;
+    ///
+    /// let cli_error = CliError::git("Repository not found");
+    /// let error_info = ErrorInfo::from(cli_error);
+    /// assert_eq!(error_info.code, "EGIT");
+    /// ```
     fn from(error: CliError) -> Self {
         Self::from(&error)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_not_found_error() {
+        // Should return true for "not found" patterns
+        assert!(is_not_found_error("File not found"));
+        assert!(is_not_found_error("Path NOT FOUND"));
+        assert!(is_not_found_error("No such file or directory"));
+        assert!(is_not_found_error("NO SUCH FILE"));
+        assert!(is_not_found_error("The file does not exist"));
+        assert!(is_not_found_error("Path doesn't exist"));
+
+        // Should return false for other errors
+        assert!(!is_not_found_error("Permission denied"));
+        assert!(!is_not_found_error("Disk full"));
+        assert!(!is_not_found_error("Read error"));
+        assert!(!is_not_found_error(""));
+    }
+
+    #[test]
+    fn test_from_cli_error_io_not_found() {
+        let cli_error = CliError::io("File not found: /path/to/file");
+        let error_info = ErrorInfo::from(&cli_error);
+        assert_eq!(error_info.code, "ENOENT");
+        assert_eq!(error_info.kind, "Io");
+    }
+
+    #[test]
+    fn test_from_cli_error_io_no_such_file() {
+        let cli_error = CliError::io("No such file or directory");
+        let error_info = ErrorInfo::from(&cli_error);
+        assert_eq!(error_info.code, "ENOENT");
+        assert_eq!(error_info.kind, "Io");
+    }
+
+    #[test]
+    fn test_from_cli_error_io_does_not_exist() {
+        let cli_error = CliError::io("The path does not exist");
+        let error_info = ErrorInfo::from(&cli_error);
+        assert_eq!(error_info.code, "ENOENT");
+        assert_eq!(error_info.kind, "Io");
+    }
+
+    #[test]
+    fn test_from_cli_error_io_generic() {
+        let cli_error = CliError::io("Permission denied");
+        let error_info = ErrorInfo::from(&cli_error);
+        assert_eq!(error_info.code, "EIO");
+        assert_eq!(error_info.kind, "Io");
     }
 }

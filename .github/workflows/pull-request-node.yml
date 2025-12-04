@@ -5,11 +5,10 @@
 # 2. The node crate is excluded from the Cargo workspace to avoid cargo-dist failures
 # 3. Node bindings have specific version dependencies on workspace crates
 #
-# Note: Clippy and tests for the node crate are NOT run here because they depend
-# on specific versions of workspace crates that may not be published yet.
-# Those checks run in the release-node.yml workflow after crates are published.
+# This workflow validates both the Rust code in crates/node and the Node.js package,
+# including building and testing the native bindings.
 #
-# Trigger: Pull requests that modify packages/workspace-tools
+# Trigger: Pull requests that modify packages/workspace-tools or crates/node
 
 name: Pull Request Node.js Bindings
 
@@ -18,6 +17,7 @@ on:
     types: [opened, synchronize]
     paths:
       - 'packages/workspace-tools/**'
+      - 'crates/node/**'
       - '.github/workflows/pull-request-node.yml'
       - '.github/workflows/release-node.yml'
   workflow_dispatch:
@@ -31,43 +31,144 @@ env:
   MACOSX_DEPLOYMENT_TARGET: '10.13'
 
 jobs:
+  # Rust checks for the node crate (crates/node)
+  cargo-node-checks:
+    name: Rust Checks (Node Crate)
+    strategy:
+      matrix:
+        target: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          components: clippy rustfmt
+          cache-key: node-crate-debug
+
+      - name: Set up Node
+        uses: ./.github/actions/setup-node
+
+      - name: Set up Git
+        uses: ./.github/actions/setup-git
+        with:
+          user: committer
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+        working-directory: crates/node
+
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: crates/node
+
+      - name: Run Tests
+        run: cargo test --lib -- --test-threads=1 --nocapture
+        working-directory: crates/node
+
+      - name: Check documentation
+        run: cargo doc --no-deps
+        working-directory: crates/node
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  # Build native bindings for testing
+  build:
+    name: Build - ${{ matrix.settings.target }}
+    needs: cargo-node-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: macos-latest
+            target: aarch64-apple-darwin
+            build: pnpm build-binding --target aarch64-apple-darwin
+          - host: macos-13
+            target: x86_64-apple-darwin
+            build: pnpm build-binding --target x86_64-apple-darwin
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            build: pnpm build-binding --target x86_64-unknown-linux-gnu
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+            build: pnpm build-binding --target x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: node-build-${{ matrix.settings.target }}
+
+      - name: Add Rust target
+        run: rustup target add ${{ matrix.settings.target }}
+
+      - name: Set up Node
+        uses: ./.github/actions/setup-node
+
+      - name: Build native module
+        run: ${{ matrix.settings.build }}
+        working-directory: packages/workspace-tools
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.settings.target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.settings.target }}
+          path: packages/workspace-tools/*.node
+          if-no-files-found: error
+
+  # Test native bindings
+  test:
+    name: Test - ${{ matrix.settings.target }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: macos-latest
+            target: aarch64-apple-darwin
+          - host: macos-13
+            target: x86_64-apple-darwin
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: ./.github/actions/setup-node
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-${{ matrix.settings.target }}
+          path: packages/workspace-tools
+
+      - name: List artifacts
+        run: ls -la packages/workspace-tools/*.node
+        shell: bash
+
+      - name: Test binding
+        run: node -e "const { getVersion } = require('./index.js'); console.log('Version:', getVersion());"
+        working-directory: packages/workspace-tools
+
+  # Lint Node.js package
   lint-node:
     name: Lint Node.js Package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Set up Node
+        uses: ./.github/actions/setup-node
 
       - name: Check TypeScript types
         run: pnpm tsc --noEmit
         working-directory: packages/workspace-tools
         continue-on-error: true
-
-  check-package-json:
-    name: Check Package Configuration
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Validate package.json
-        run: |
-          echo "Checking package.json structure..."
-          cat packages/workspace-tools/package.json | jq -e '.name' > /dev/null
-          cat packages/workspace-tools/package.json | jq -e '.version' > /dev/null
-          cat packages/workspace-tools/package.json | jq -e '.napi' > /dev/null
-          echo "Package.json is valid"
-
-      - name: Check napi configuration
-        run: |
-          echo "Checking napi targets..."
-          cat packages/workspace-tools/package.json | jq '.napi.targets'

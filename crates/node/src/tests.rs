@@ -252,6 +252,65 @@ mod error_tests {
         let error_info = ErrorInfo::from(cli_error);
         assert_eq!(error_info.code, "EVALIDATION");
     }
+
+    // Tests for I/O error differentiation (ENOENT vs EIO)
+
+    #[test]
+    fn test_from_cli_error_io_not_found() {
+        let cli_error = CliError::io("File not found: /path/to/file");
+        let error_info = ErrorInfo::from(&cli_error);
+        assert_eq!(error_info.code, "ENOENT");
+        assert_eq!(error_info.kind, "Io");
+    }
+
+    #[test]
+    fn test_from_cli_error_io_no_such_file() {
+        let cli_error = CliError::io("No such file or directory");
+        let error_info = ErrorInfo::from(&cli_error);
+        assert_eq!(error_info.code, "ENOENT");
+        assert_eq!(error_info.kind, "Io");
+    }
+
+    #[test]
+    fn test_from_cli_error_io_does_not_exist() {
+        let cli_error = CliError::io("The path does not exist");
+        let error_info = ErrorInfo::from(&cli_error);
+        assert_eq!(error_info.code, "ENOENT");
+        assert_eq!(error_info.kind, "Io");
+    }
+
+    #[test]
+    fn test_from_cli_error_io_doesnt_exist() {
+        let cli_error = CliError::io("The file doesn't exist");
+        let error_info = ErrorInfo::from(&cli_error);
+        assert_eq!(error_info.code, "ENOENT");
+        assert_eq!(error_info.kind, "Io");
+    }
+
+    #[test]
+    fn test_from_cli_error_io_permission_denied() {
+        let cli_error = CliError::io("Permission denied");
+        let error_info = ErrorInfo::from(&cli_error);
+        assert_eq!(error_info.code, "EIO");
+        assert_eq!(error_info.kind, "Io");
+    }
+
+    #[test]
+    fn test_from_cli_error_io_disk_full() {
+        let cli_error = CliError::io("Disk full");
+        let error_info = ErrorInfo::from(&cli_error);
+        assert_eq!(error_info.code, "EIO");
+        assert_eq!(error_info.kind, "Io");
+    }
+
+    #[test]
+    fn test_from_cli_error_io_case_insensitive() {
+        // Test that "NOT FOUND" (uppercase) also matches
+        let cli_error = CliError::io("PATH NOT FOUND");
+        let error_info = ErrorInfo::from(&cli_error);
+        assert_eq!(error_info.code, "ENOENT");
+        assert_eq!(error_info.kind, "Io");
+    }
 }
 
 /// Tests for validation module (validation.rs).

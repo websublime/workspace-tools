@@ -6,7 +6,8 @@ on:
   pull_request:
     types: [opened, synchronize]
     paths-ignore:
-      - 'packages/workspace-tools'
+      - 'packages/workspace-tools/**'
+      - 'crates/node/**'
   merge_group:
   push:
     branches:
