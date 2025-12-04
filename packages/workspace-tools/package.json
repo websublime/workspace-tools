@@ -68,6 +68,7 @@
     "build-types": "tsc -p ./tsconfig.json",
     "build:debug": "napi build --platform",
     "build:node": "tsx ./build.ts",
+    "build": "napi build --platform --release --no-const-enum",
     "format": "run-p format:prettier format:rs format:toml",
     "format:prettier": "prettier . -w",
     "format:toml": "taplo format",
