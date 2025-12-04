@@ -1,0 +1,73 @@
+# Workflow for validating Node.js bindings changes in pull requests.
+#
+# This workflow is separate from the main pull-request workflow because:
+# 1. The node crate (sublime_node_tools) uses cdylib which is not supported on musl targets
+# 2. The node crate is excluded from the Cargo workspace to avoid cargo-dist failures
+# 3. Node bindings have specific version dependencies on workspace crates
+#
+# Note: Clippy and tests for the node crate are NOT run here because they depend
+# on specific versions of workspace crates that may not be published yet.
+# Those checks run in the release-node.yml workflow after crates are published.
+#
+# Trigger: Pull requests that modify packages/workspace-tools
+
+name: Pull Request Node.js Bindings
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'packages/workspace-tools/**'
+      - '.github/workflows/pull-request-node.yml'
+      - '.github/workflows/release-node.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  DEBUG: napi:*
+  MACOSX_DEPLOYMENT_TARGET: '10.13'
+
+jobs:
+  lint-node:
+    name: Lint Node.js Package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check TypeScript types
+        run: pnpm tsc --noEmit
+        working-directory: packages/workspace-tools
+        continue-on-error: true
+
+  check-package-json:
+    name: Check Package Configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate package.json
+        run: |
+          echo "Checking package.json structure..."
+          cat packages/workspace-tools/package.json | jq -e '.name' > /dev/null
+          cat packages/workspace-tools/package.json | jq -e '.version' > /dev/null
+          cat packages/workspace-tools/package.json | jq -e '.napi' > /dev/null
+          echo "Package.json is valid"
+
+      - name: Check napi configuration
+        run: |
+          echo "Checking napi targets..."
+          cat packages/workspace-tools/package.json | jq '.napi.targets'

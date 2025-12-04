@@ -5,6 +5,8 @@ name: Pull Request
 on:
   pull_request:
     types: [opened, synchronize]
+    paths-ignore:
+      - 'packages/workspace-tools'
   merge_group:
   push:
     branches:
@@ -42,7 +44,6 @@ jobs:
               - '.gitattributes'
             node-changes:
               - *rust-changes
-              - 'packages/**'
               - 'examples/**'
               - 'scripts/**'
               - 'package.json'
@@ -108,48 +109,10 @@ jobs:
       - name: Run cargo audit
         run: cargo audit
 
-  build-node-bindings:
-    name: Build Node.js Bindings
-    needs: changes
-    if: ${{ needs.changes.outputs.node-changes == 'true' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        settings:
-          - host: macos-latest
-            target: aarch64-apple-darwin
-          - host: macos-13
-            target: x86_64-apple-darwin
-          - host: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - host: windows-latest
-            target: x86_64-pc-windows-msvc
-    runs-on: ${{ matrix.settings.host }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-        with:
-          cache-key: node-bindings
-          targets: ${{ matrix.settings.target }}
-
-      - name: Set Node
-        uses: ./.github/actions/setup-node
-
-      - name: Build native module (release)
-        run: pnpm build-binding:release
-        working-directory: packages/workspace-tools
-
-      - name: Verify generated files exist
-        shell: bash
-        run: |
-          echo "Checking generated files..."
-          ls -la src/*.node || echo "No .node files found"
-          ls -la src/binding.d.ts
-          ls -la src/binding.js
-        working-directory: packages/workspace-tools
-
-      - name: Test native module loading
-        run: node -e "const { getVersion } = require('./src/binding.js'); console.log('Version:', getVersion());"
-        working-directory: packages/workspace-tools
+  # Node.js bindings are built separately in the release-node.yml workflow
+  # This is because:
+  # 1. The node crate uses cdylib which is not supported on musl targets
+  # 2. The node crate depends on specific versions of workspace crates
+  # 3. Building requires the crates to be published to crates.io first
+  #
+  # See: .github/workflows/release-node.yml

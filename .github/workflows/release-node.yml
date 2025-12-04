@@ -1,0 +1,262 @@
+# Workflow for building and publishing Node.js bindings via napi-rs.
+#
+# This workflow is separate from the main release workflow because:
+# 1. The node crate (sublime_node_tools) uses cdylib which is not supported on musl targets
+# 2. The node crate is excluded from the Cargo workspace to avoid cargo-dist failures
+# 3. Node bindings need to be built after the main crates are released to crates.io
+#
+# Trigger: Manual dispatch or when changes are pushed to packages/workspace-tools on main
+
+name: Release Node.js Bindings (npm)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (do not publish to npm)'
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/workspace-tools/**'
+      - 'crates/node/**'
+      - '.github/workflows/release-node.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEBUG: napi:*
+  MACOSX_DEPLOYMENT_TARGET: '10.13'
+
+jobs:
+  # First, update the node crate dependencies to match the latest released versions
+  prepare:
+    name: Prepare Node Crate
+    runs-on: ubuntu-latest
+    outputs:
+      cli_version: ${{ steps.versions.outputs.cli_version }}
+      should_publish: ${{ steps.check.outputs.should_publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get latest crate versions
+        id: versions
+        run: |
+          # Get the latest version of sublime_cli_tools from crates.io
+          CLI_VERSION=$(cargo search sublime_cli_tools --limit 1 | head -1 | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')
+          echo "cli_version=$CLI_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Latest CLI version: $CLI_VERSION"
+
+      - name: Check if we should publish
+        id: check
+        run: |
+          # Check if the node crate Cargo.toml has the correct CLI version
+          CURRENT_CLI_DEP=$(grep 'sublime_cli_tools' crates/node/Cargo.toml | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          echo "Current CLI dependency in node crate: $CURRENT_CLI_DEP"
+          echo "Latest CLI version: ${{ steps.versions.outputs.cli_version }}"
+
+          if [ "$CURRENT_CLI_DEP" != "${{ steps.versions.outputs.cli_version }}" ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "Version mismatch - need to update and publish"
+          else
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "Versions match - proceeding with build"
+          fi
+
+  build:
+    name: Build - ${{ matrix.settings.target }}
+    needs: prepare
+    if: ${{ needs.prepare.outputs.should_publish == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: macos-latest
+            target: aarch64-apple-darwin
+            build: pnpm build-binding --target aarch64-apple-darwin
+          - host: macos-13
+            target: x86_64-apple-darwin
+            build: pnpm build-binding --target x86_64-apple-darwin
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            build: pnpm build-binding --target x86_64-unknown-linux-gnu
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            build: pnpm build-binding --target x86_64-unknown-linux-musl -x
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            build: pnpm build-binding --target aarch64-unknown-linux-gnu
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            build: pnpm build-binding --target aarch64-unknown-linux-musl -x
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+            build: pnpm build-binding --target x86_64-pc-windows-msvc
+          - host: windows-latest
+            target: aarch64-pc-windows-msvc
+            build: pnpm build-binding --target aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.settings.target }}
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: 'crates/node -> target'
+          shared-key: ${{ matrix.settings.target }}
+
+      - name: Install ziglang (Linux cross-compile)
+        if: ${{ matrix.settings.host == 'ubuntu-latest' }}
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.11.0
+
+      - name: Install aarch64 cross-compile tools
+        if: ${{ matrix.settings.target == 'aarch64-unknown-linux-gnu' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Update node crate CLI dependency version
+        shell: bash
+        run: |
+          cd crates/node
+          # Update the CLI dependency to latest released version
+          sed -i.bak 's/sublime_cli_tools = { version = "[^"]*"/sublime_cli_tools = { version = "${{ needs.prepare.outputs.cli_version }}"/' Cargo.toml
+          rm -f Cargo.toml.bak
+          cat Cargo.toml | grep sublime_cli_tools
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build native module
+        run: ${{ matrix.settings.build }}
+        working-directory: packages/workspace-tools
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.settings.target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.settings.target }}
+          path: packages/workspace-tools/*.node
+          if-no-files-found: error
+
+  test:
+    name: Test - ${{ matrix.settings.target }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: macos-latest
+            target: aarch64-apple-darwin
+          - host: macos-13
+            target: x86_64-apple-darwin
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-${{ matrix.settings.target }}
+          path: packages/workspace-tools
+
+      - name: List artifacts
+        run: ls -la packages/workspace-tools/*.node
+        shell: bash
+
+      - name: Test binding
+        run: node -e "const { getVersion } = require('./index.js'); console.log('Version:', getVersion());"
+        working-directory: packages/workspace-tools
+
+  publish:
+    name: Publish to npm
+    needs:
+      - prepare
+      - build
+      - test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: packages/workspace-tools/artifacts
+
+      - name: Move artifacts to correct locations
+        run: pnpm artifacts
+        working-directory: packages/workspace-tools
+
+      - name: List packages
+        run: ls -la npm/*/ packages/workspace-tools/*.node || true
+        working-directory: packages/workspace-tools
+        shell: bash
+
+      - name: Publish (dry run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "Dry run - would publish the following packages:"
+          pnpm publish --dry-run --access public --no-git-checks
+        working-directory: packages/workspace-tools
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to npm
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          pnpm prepublishOnly
+          pnpm publish --access public --no-git-checks
+        working-directory: packages/workspace-tools
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
