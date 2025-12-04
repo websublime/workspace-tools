@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.26 - 2025-12-04
+
+### Documentation
+
+#### WOR-TSK-173
+
+- Add installation methods to CLI README
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.25 - 2025-12-03
 
 ### Miscellaneous Tasks
