@@ -326,20 +326,87 @@ pub struct ErrorInfo {
 
 ### Fase 4: Core Commands - Bump (Semana 4)
 
-**Objectivo**: Implementar 3 funções de bump.
+**Objectivo**: Implementar 3 funções de bump com suporte completo a prerelease e snapshot.
 
 #### Tarefas
 
 | ID | Tarefa | Ficheiros | Estimativa |
 |----|--------|-----------|------------|
-| B4.1 | Implementar `types/bump.rs` | `src/types/bump.rs` | 3h |
+| B4.1 | Implementar `types/bump.rs` | `src/types/bump.rs` | 4h |
 | B4.2 | Implementar `bumpPreview` | `src/commands/bump.rs` | 4h |
-| B4.3 | Implementar `bumpApply` | `src/commands/bump.rs` | 4h |
+| B4.3 | Implementar `bumpApply` (com prerelease) | `src/commands/bump.rs` | 5h |
 | B4.4 | Implementar `bumpSnapshot` | `src/commands/bump.rs` | 3h |
-| B4.5 | Testes Node.js para bump | `__test__/bump.test.ts` | 4h |
+| B4.5 | Implementar validadores prerelease/snapshot | `src/validation.rs` | 2h |
+| B4.6 | Testes Node.js para bump | `__test__/bump.test.ts` | 5h |
+
+#### Especificação de Tipos (B4.1)
+
+**BumpPreviewParams:**
+```typescript
+interface BumpPreviewParams {
+  root?: string;
+  configPath?: string;
+  packages?: string[];
+  showDiff?: boolean;
+}
+```
+
+**BumpApplyParams:**
+```typescript
+interface BumpApplyParams {
+  root?: string;
+  configPath?: string;
+  packages?: string[];
+  
+  // Git operations
+  gitCommit?: boolean;
+  gitTag?: boolean;
+  gitPush?: boolean;
+  
+  // Prerelease support
+  prerelease?: string;  // alpha, beta, rc, or custom tag
+  
+  // Changelog/Archive control
+  noChangelog?: boolean;
+  noArchive?: boolean;
+  alwaysArchive?: boolean;
+  
+  // Behavior
+  force?: boolean;
+}
+```
+
+**BumpSnapshotParams:**
+```typescript
+interface BumpSnapshotParams {
+  root?: string;
+  configPath?: string;
+  packages?: string[];
+  format?: string;  // Template: {version}-snapshot.{short_commit}
+}
+```
+
+#### Prerelease vs Snapshot
+
+| Aspecto | Prerelease | Snapshot |
+|---------|------------|----------|
+| SemVer Compliant | ✅ Yes | ❌ No |
+| Persisted | ✅ Yes (changesets archived) | ❌ No |
+| Use Case | Staging/Beta releases | Testing/CI preview |
+| Example | `1.3.0-beta.0` | `1.2.3-snapshot.abc123f` |
+| Changelogs | Generated | Not generated |
+| Git Tags | Optional | Not created |
+
+#### Validação Adicional (B4.5)
+
+- `prerelease_tag`: Validates tag contains only `[0-9A-Za-z-]`
+- `snapshot_format`: Validates format contains valid variables
 
 **Entregáveis**:
 - 3 funções bump funcionais
+- Suporte completo a prerelease
+- Suporte completo a snapshot
+- Validadores específicos
 - Workflow de release testado
 
 ---
@@ -1176,9 +1243,9 @@ pnpm test -- --coverage
 | 9 | `execute_remove` | `changesetRemove` | `ChangesetRemoveParams` | `void` |
 | 10 | `execute_history` | `changesetHistory` | `ChangesetHistoryParams` | `ChangesetHistoryData` |
 | 11 | `execute_check` | `changesetCheck` | `ChangesetCheckParams` | `ChangesetCheckData` |
-| 12 | `execute_bump_preview` | `bumpPreview` | `BumpParams` | `BumpPreviewData` |
-| 13 | `execute_bump_apply` | `bumpApply` | `BumpParams` | `BumpApplyData` |
-| 14 | `execute_bump_snapshot` | `bumpSnapshot` | `BumpParams` | `BumpSnapshotData` |
+| 12 | `execute_bump_preview` | `bumpPreview` | `BumpPreviewParams` | `BumpPreviewData` |
+| 13 | `execute_bump_apply` | `bumpApply` | `BumpApplyParams` | `BumpApplyData` |
+| 14 | `execute_bump_snapshot` | `bumpSnapshot` | `BumpSnapshotParams` | `BumpSnapshotData` |
 | 15 | `execute_upgrade_check` | `upgradeCheck` | `UpgradeCheckParams` | `UpgradeCheckData` |
 | 16 | `execute_upgrade_apply` | `upgradeApply` | `UpgradeApplyParams` | `UpgradeApplyData` |
 | 17 | `execute_backup_list` | `backupList` | `BackupListParams` | `BackupListData` |

@@ -321,6 +321,7 @@ pub struct ChangesetCreateArgs {
     pub message: Option<String>,
     pub packages: Option<Vec<String>>,
     pub non_interactive: bool,
+    pub force: bool,  // Overwrites existing changeset for the branch
 }
 ```
 
@@ -338,10 +339,30 @@ pub struct BumpArgs {
     pub git_commit: bool,
     pub no_changelog: bool,
     pub no_archive: bool,
+    pub always_archive: bool,  // Forces archiving even for prerelease versions
     pub force: bool,
     pub show_diff: bool,
 }
 ```
+
+**Prerelease vs Snapshot Modes:**
+
+| Mode | Flag | Purpose | SemVer | Persisted |
+|------|------|---------|--------|-----------|
+| Prerelease | `--prerelease <TAG>` | Official pre-releases (alpha, beta, rc) | ✅ Yes | ✅ Yes |
+| Snapshot | `--snapshot` | Temporary versions for testing/CI | ❌ No | ❌ No |
+
+**Prerelease Examples:**
+- `--prerelease alpha` → `1.2.3` → `1.3.0-alpha.0`
+- `--prerelease beta` → `1.3.0-alpha.0` → `1.3.0-beta.0`
+- `--prerelease rc` → `1.3.0-beta.1` → `1.3.0-rc.0`
+
+**Snapshot Format Variables:**
+- `{version}` - Base version (e.g., `1.2.3`)
+- `{branch}` - Git branch name (sanitized)
+- `{commit}` - Full commit hash
+- `{short_commit}` - Short commit hash (7 chars)
+- `{timestamp}` - Unix timestamp
 
 #### StatusArgs
 ```rust
@@ -1530,7 +1551,415 @@ fn parse_execute_response(json: &str) -> Result<ExecuteData, ErrorInfo> {
 }
 ```
 
-### 11.3 Resumo de Todas as Funções
+### 11.3 Funções: `bumpPreview`, `bumpApply`, `bumpSnapshot`
+
+#### Parâmetros (TypeScript)
+
+```typescript
+/** Parameters for bumpPreview - preview version changes without applying */
+interface BumpPreviewParams {
+  /** Workspace root directory path */
+  root?: string;
+  /** Optional custom config file path */
+  configPath?: string;
+  /** Filter to specific packages */
+  packages?: string[];
+  /** Show detailed version diffs */
+  showDiff?: boolean;
+}
+
+/** Parameters for bumpApply - apply version changes */
+interface BumpApplyParams {
+  /** Workspace root directory path */
+  root?: string;
+  /** Optional custom config file path */
+  configPath?: string;
+  /** Filter to specific packages */
+  packages?: string[];
+  
+  // Git operations
+  /** Create a Git commit with version changes */
+  gitCommit?: boolean;
+  /** Create Git tags for releases (format: package@version) */
+  gitTag?: boolean;
+  /** Push Git tags to remote (requires gitTag) */
+  gitPush?: boolean;
+  
+  // Prerelease support
+  /** 
+   * Pre-release tag for official pre-release versions.
+   * Creates semver-compliant pre-release versions.
+   * Options: "alpha", "beta", "rc" (or custom tag)
+   * Example: "beta" → 1.2.3 → 1.3.0-beta.0
+   */
+  prerelease?: string;
+  
+  // Changelog/Archive control
+  /** Skip changelog generation/updates */
+  noChangelog?: boolean;
+  /** Keep changesets active after bump (don't archive) */
+  noArchive?: boolean;
+  /** Force archiving even for prerelease versions */
+  alwaysArchive?: boolean;
+  
+  // Behavior
+  /** Skip confirmation prompts */
+  force?: boolean;
+}
+
+/** Parameters for bumpSnapshot - generate snapshot versions for testing */
+interface BumpSnapshotParams {
+  /** Workspace root directory path */
+  root?: string;
+  /** Optional custom config file path */
+  configPath?: string;
+  /** Filter to specific packages */
+  packages?: string[];
+  
+  /**
+   * Snapshot format template.
+   * Variables: {version}, {branch}, {short_commit}, {commit}, {timestamp}
+   * Default: "{version}-snapshot.{short_commit}"
+   * Example: "{version}-{branch}.{short_commit}" → "1.2.3-feature-x.abc123f"
+   */
+  format?: string;
+}
+```
+
+#### Respostas (TypeScript)
+
+```typescript
+/** Package version information */
+interface PackageVersionInfo {
+  /** Package name (may include scope) */
+  name: string;
+  /** Package path relative to workspace root */
+  path: string;
+  /** Current version before bump */
+  currentVersion: string;
+  /** Next version after bump */
+  nextVersion: string;
+  /** Bump type applied */
+  bump: 'major' | 'minor' | 'patch' | 'none';
+  /** Dependency updates for this package */
+  dependencyUpdates: DependencyUpdate[];
+}
+
+/** Dependency update information */
+interface DependencyUpdate {
+  /** Dependency name */
+  name: string;
+  /** Dependency type */
+  type: 'regular' | 'dev' | 'peer' | 'optional';
+  /** Old version spec */
+  oldVersion: string;
+  /** New version spec */
+  newVersion: string;
+}
+
+/** Response data for bumpPreview */
+interface BumpPreviewData {
+  /** Version strategy used */
+  strategy: 'independent' | 'unified';
+  /** Packages that will be bumped */
+  packages: PackageVersionInfo[];
+  /** Summary of changes */
+  summary: {
+    totalPackages: number;
+    majorBumps: number;
+    minorBumps: number;
+    patchBumps: number;
+  };
+  /** Changesets that will be consumed */
+  changesets: string[];
+}
+
+/** Response data for bumpApply */
+interface BumpApplyData {
+  /** Version strategy used */
+  strategy: 'independent' | 'unified';
+  /** Packages that were bumped */
+  packagesUpdated: number;
+  /** Changesets that were archived */
+  changesetsArchived: number;
+  /** Files that were modified */
+  filesModified: string[];
+  /** Git tags that were created */
+  tagsCreated: string[];
+  /** Git commit SHA (if gitCommit was true) */
+  commitSha?: string;
+}
+
+/** Snapshot version information */
+interface SnapshotVersionInfo {
+  /** Package name */
+  name: string;
+  /** Package path */
+  path: string;
+  /** Original version */
+  originalVersion: string;
+  /** Generated snapshot version */
+  snapshotVersion: string;
+}
+
+/** Response data for bumpSnapshot */
+interface BumpSnapshotData {
+  /** Version strategy used */
+  strategy: 'independent' | 'unified';
+  /** Packages with snapshot versions */
+  packages: SnapshotVersionInfo[];
+  /** Format template used */
+  format: string;
+}
+```
+
+#### Implementação Rust
+
+```rust
+use crate::error::{cli_error_to_info, ErrorInfo};
+use crate::response::ApiResponse;
+use crate::types::bump::{
+    BumpPreviewParams, BumpPreviewData, BumpApplyParams, BumpApplyData,
+    BumpSnapshotParams, BumpSnapshotData,
+};
+use crate::validation::validators;
+use napi_derive::napi;
+
+/// Preview version bumps without applying changes.
+///
+/// Shows what versions would change based on pending changesets.
+/// No files are modified.
+///
+/// @param params - Preview parameters
+/// @returns Promise<ApiResponse<BumpPreviewData>> - Preview data or error
+#[napi]
+pub async fn bump_preview(params: BumpPreviewParams) -> ApiResponse<BumpPreviewData> {
+    // 1. Validate root path if provided
+    if let Some(ref root) = params.root {
+        if let Err(e) = validators::path_exists(root) {
+            return ApiResponse::failure(e.into());
+        }
+    }
+
+    // 2. Create BumpArgs with dry_run = true
+    let args = BumpArgs {
+        dry_run: true,
+        execute: false,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: None,
+        packages: params.packages.clone(),
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: false,
+        no_archive: false,
+        always_archive: false,
+        force: false,
+        show_diff: params.show_diff.unwrap_or(false),
+    };
+
+    // 3. Execute CLI command and parse response
+    // ... implementation
+    todo!()
+}
+
+/// Apply version bumps to packages.
+///
+/// Applies version changes based on pending changesets.
+/// Optionally creates Git commits and tags.
+///
+/// @param params - Apply parameters
+/// @returns Promise<ApiResponse<BumpApplyData>> - Apply result or error
+#[napi]
+pub async fn bump_apply(params: BumpApplyParams) -> ApiResponse<BumpApplyData> {
+    // 1. Validate root path if provided
+    if let Some(ref root) = params.root {
+        if let Err(e) = validators::path_exists(root) {
+            return ApiResponse::failure(e.into());
+        }
+    }
+
+    // 2. Validate prerelease tag if provided
+    if let Some(ref tag) = params.prerelease {
+        if let Err(e) = validators::prerelease_tag(tag) {
+            return ApiResponse::failure(e.into());
+        }
+    }
+
+    // 3. Create BumpArgs with execute = true
+    let args = BumpArgs {
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: params.prerelease.clone(),
+        packages: params.packages.clone(),
+        git_tag: params.git_tag.unwrap_or(false),
+        git_push: params.git_push.unwrap_or(false),
+        git_commit: params.git_commit.unwrap_or(false),
+        no_changelog: params.no_changelog.unwrap_or(false),
+        no_archive: params.no_archive.unwrap_or(false),
+        always_archive: params.always_archive.unwrap_or(false),
+        force: params.force.unwrap_or(true), // API is non-interactive
+        show_diff: false,
+    };
+
+    // 4. Execute CLI command and parse response
+    // ... implementation
+    todo!()
+}
+
+/// Generate snapshot versions for testing.
+///
+/// Creates temporary, non-persisted versions for branch builds
+/// and preview deployments. Does NOT consume changesets.
+///
+/// @param params - Snapshot parameters
+/// @returns Promise<ApiResponse<BumpSnapshotData>> - Snapshot versions or error
+#[napi]
+pub async fn bump_snapshot(params: BumpSnapshotParams) -> ApiResponse<BumpSnapshotData> {
+    // 1. Validate root path if provided
+    if let Some(ref root) = params.root {
+        if let Err(e) = validators::path_exists(root) {
+            return ApiResponse::failure(e.into());
+        }
+    }
+
+    // 2. Validate snapshot format if provided
+    if let Some(ref format) = params.format {
+        if let Err(e) = validators::snapshot_format(format) {
+            return ApiResponse::failure(e.into());
+        }
+    }
+
+    // 3. Create BumpArgs with snapshot = true
+    let args = BumpArgs {
+        dry_run: false,
+        execute: false,
+        snapshot: true,
+        snapshot_format: params.format.clone(),
+        prerelease: None,
+        packages: params.packages.clone(),
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: true,
+        no_archive: true,
+        always_archive: false,
+        force: true,
+        show_diff: false,
+    };
+
+    // 4. Execute CLI command and parse response
+    // ... implementation
+    todo!()
+}
+```
+
+#### Validação Adicional
+
+```rust
+pub mod validators {
+    use crate::validation::ValidationError;
+
+    /// Validates a prerelease tag.
+    /// 
+    /// Valid tags contain only ASCII alphanumerics and hyphens [0-9A-Za-z-].
+    pub fn prerelease_tag(tag: &str) -> Result<(), ValidationError> {
+        if tag.is_empty() {
+            return Err(ValidationError::required("prerelease"));
+        }
+        
+        // Check for valid characters (SemVer 2.0.0 spec)
+        if !tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return Err(ValidationError::invalid(
+                "prerelease",
+                tag,
+                "must contain only ASCII alphanumerics and hyphens [0-9A-Za-z-]",
+            ));
+        }
+        
+        Ok(())
+    }
+
+    /// Validates a snapshot format template.
+    /// 
+    /// Valid variables: {version}, {branch}, {short_commit}, {commit}, {timestamp}
+    pub fn snapshot_format(format: &str) -> Result<(), ValidationError> {
+        if format.is_empty() {
+            return Err(ValidationError::required("format"));
+        }
+        
+        // Check for at least one valid variable
+        let valid_vars = ["{version}", "{branch}", "{short_commit}", "{commit}", "{timestamp}"];
+        let has_valid_var = valid_vars.iter().any(|v| format.contains(v));
+        
+        if !has_valid_var {
+            return Err(ValidationError::invalid(
+                "format",
+                format,
+                "must contain at least one variable: {version}, {branch}, {short_commit}, {commit}, {timestamp}",
+            ));
+        }
+        
+        Ok(())
+    }
+}
+```
+
+#### Exemplos de Uso
+
+```typescript
+import { bumpPreview, bumpApply, bumpSnapshot } from '@websublime/workspace-tools';
+
+// 1. Preview what will change
+const preview = await bumpPreview({ 
+    root: '/path/to/project',
+    showDiff: true 
+});
+
+if (preview.success) {
+    console.log(`Will bump ${preview.data.packages.length} packages`);
+    for (const pkg of preview.data.packages) {
+        console.log(`  ${pkg.name}: ${pkg.currentVersion} → ${pkg.nextVersion} (${pkg.bump})`);
+    }
+}
+
+// 2. Apply changes with Git integration
+const apply = await bumpApply({
+    root: '/path/to/project',
+    gitCommit: true,
+    gitTag: true,
+    gitPush: true,
+});
+
+if (apply.success) {
+    console.log(`Updated ${apply.data.packagesUpdated} packages`);
+    console.log(`Commit: ${apply.data.commitSha}`);
+}
+
+// 3. Create prerelease version
+const prerelease = await bumpApply({
+    root: '/path/to/project',
+    prerelease: 'beta',
+    gitCommit: true,
+    gitTag: true,
+});
+
+// 4. Generate snapshot versions for CI
+const snapshot = await bumpSnapshot({
+    root: '/path/to/project',
+    format: '{version}-{branch}.{short_commit}',
+});
+
+if (snapshot.success) {
+    for (const pkg of snapshot.data.packages) {
+        console.log(`${pkg.name}: ${pkg.snapshotVersion}`);
+        // Output: @org/core: 1.2.3-feature-x.abc123f
+    }
+}
+```
 
 | Função | Params Struct | Response Struct | Pattern |
 |--------|---------------|-----------------|---------|
@@ -1544,9 +1973,9 @@ fn parse_execute_response(json: &str) -> Result<ExecuteData, ErrorInfo> {
 | `changesetRemove` | `ChangesetRemoveParams` | `RemoveResult` | Moderno |
 | `changesetHistory` | `ChangesetHistoryParams` | `HistoryData` | Moderno |
 | `changesetCheck` | `ChangesetCheckParams` | `CheckResult` | Moderno |
-| `bumpPreview` | `BumpParams` | `BumpPreviewData` | Moderno |
-| `bumpApply` | `BumpParams` | `BumpApplyData` | Moderno |
-| `bumpSnapshot` | `BumpParams` | `SnapshotData` | Moderno |
+| `bumpPreview` | `BumpPreviewParams` | `BumpPreviewData` | Moderno |
+| `bumpApply` | `BumpApplyParams` | `BumpApplyData` | Moderno |
+| `bumpSnapshot` | `BumpSnapshotParams` | `BumpSnapshotData` | Moderno |
 | `upgradeCheck` | `UpgradeCheckParams` | `UpgradeCheckData` | Moderno |
 | `upgradeApply` | `UpgradeApplyParams` | `UpgradeApplyData` | Moderno |
 | `backupList` | `BackupListParams` | `BackupListData` | Moderno |

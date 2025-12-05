@@ -876,7 +876,15 @@ Define NAPI types for all changeset command parameters and responses.
    - **Effort**: Minimal
 
 2. Define ChangesetAddParams
-   - Add all fields from CLI args
+   - Add all fields from CLI args:
+     - `root?: string`
+     - `configPath?: string`
+     - `bump?: 'major' | 'minor' | 'patch'`
+     - `environments?: string[]`
+     - `branch?: string`
+     - `message?: string`
+     - `packages?: string[]`
+     - `force?: boolean` (overwrites existing changeset)
    - Map `non_interactive` as internal (always true)
    - **Effort**: Medium
 
@@ -920,6 +928,8 @@ Define NAPI types for all changeset command parameters and responses.
 - [ ] All response types defined
 - [ ] TypeScript types generate correctly
 - [ ] Documentation complete
+- [ ] force parameter included in ChangesetAddParams
+- [ ] force parameter included in ChangesetRemoveParams
 
 **Definition of Done**:
 - [ ] Code compiles
@@ -953,6 +963,7 @@ Implement the `changesetAdd` NAPI function.
 2. Implement changesetAdd
    - Validate parameters
    - Create ChangesetCreateArgs with non_interactive=true
+   - Support force parameter to overwrite existing changeset
    - Call execute_add
    - Parse response
    - Return ApiResponse<ChangesetData>
@@ -965,6 +976,7 @@ Implement the `changesetAdd` NAPI function.
 - [ ] Function callable from Node.js
 - [ ] Creates changeset successfully
 - [ ] non_interactive always true
+- [ ] force parameter overwrites existing changeset
 - [ ] Error handling correct
 
 **Definition of Done**:
@@ -1131,27 +1143,49 @@ Create comprehensive Node.js tests for all changeset commands.
 **Phase**: 3  
 **Total Effort**: High  
 **Dependencies**: Epic 4  
-**Goal**: Implement all 3 bump commands
+**Goal**: Implement all 3 bump commands with full prerelease and snapshot support
 
 ### Story 5.1: Implement Bump Types
 **Effort**: Medium  
 **Priority**: High
 
 **Description**:
-Define NAPI types for bump command parameters and responses.
+Define NAPI types for bump command parameters and responses. Each command has its own params struct to support different use cases.
 
 **Tasks**:
 1. Create `src/types/bump.rs`
-2. Define BumpParams (shared across preview/apply/snapshot)
-3. Define BumpPreviewData
-4. Define BumpApplyData
-5. Define BumpSnapshotData
-6. Define BumpChange type
+2. Define `BumpPreviewParams`:
+   - `root?: string`
+   - `configPath?: string`
+   - `packages?: string[]`
+   - `showDiff?: boolean`
+3. Define `BumpApplyParams`:
+   - `root?: string`
+   - `configPath?: string`
+   - `packages?: string[]`
+   - `gitCommit?: boolean`
+   - `gitTag?: boolean`
+   - `gitPush?: boolean`
+   - `prerelease?: string` (alpha, beta, rc, or custom)
+   - `noChangelog?: boolean`
+   - `noArchive?: boolean`
+   - `alwaysArchive?: boolean`
+   - `force?: boolean`
+4. Define `BumpSnapshotParams`:
+   - `root?: string`
+   - `configPath?: string`
+   - `packages?: string[]`
+   - `format?: string` (template with variables)
+5. Define `BumpPreviewData`, `BumpApplyData`, `BumpSnapshotData`
+6. Define `PackageVersionInfo`, `SnapshotVersionInfo`, `DependencyUpdate`
    - **Effort**: Medium
 
 **Acceptance Criteria**:
 - [ ] All types defined with #[napi(object)]
-- [ ] TypeScript types correct
+- [ ] TypeScript types generated correctly
+- [ ] Prerelease parameter included in BumpApplyParams
+- [ ] Snapshot format parameter included in BumpSnapshotParams
+- [ ] alwaysArchive parameter included in BumpApplyParams
 
 **Dependencies**: Story 4.9
 
@@ -1168,12 +1202,15 @@ Implement the `bumpPreview` NAPI function.
 1. Create `src/commands/bump.rs`
 2. Implement bumpPreview
    - Set dry_run = true internally
-   - Parse preview results
+   - Support showDiff parameter
+   - Parse preview results including package versions and dependency updates
    - **Effort**: High
 
 **Acceptance Criteria**:
 - [ ] Returns preview of changes
 - [ ] No actual changes made
+- [ ] showDiff option works correctly
+- [ ] Returns strategy, packages, summary, and changesets
 
 **Dependencies**: Story 5.1
 
@@ -1184,17 +1221,29 @@ Implement the `bumpPreview` NAPI function.
 **Priority**: High
 
 **Description**:
-Implement the `bumpApply` NAPI function.
+Implement the `bumpApply` NAPI function with full prerelease support.
 
 **Tasks**:
 1. Implement bumpApply
    - Set execute = true internally
-   - Support git options
+   - Support all git options (gitCommit, gitTag, gitPush)
+   - Support prerelease parameter for alpha/beta/rc versions
+   - Support changelog/archive control (noChangelog, noArchive, alwaysArchive)
+   - Validate prerelease tag format
    - **Effort**: High
+
+**Prerelease Workflow**:
+- `prerelease: "beta"` → `1.2.3` → `1.3.0-beta.0`
+- `prerelease: "rc"` → `1.3.0-beta.1` → `1.3.0-rc.0`
+- Without prerelease → `1.3.0-rc.0` → `1.3.0` (promoted to stable)
 
 **Acceptance Criteria**:
 - [ ] Applies version bumps
 - [ ] Git operations work if enabled
+- [ ] Prerelease versions created correctly (SemVer compliant)
+- [ ] alwaysArchive forces changeset archiving for prereleases
+- [ ] noChangelog skips changelog generation
+- [ ] Returns packagesUpdated, changesetsArchived, filesModified, tagsCreated, commitSha
 
 **Dependencies**: Story 5.2
 
@@ -1205,40 +1254,135 @@ Implement the `bumpApply` NAPI function.
 **Priority**: Medium
 
 **Description**:
-Implement the `bumpSnapshot` NAPI function.
+Implement the `bumpSnapshot` NAPI function for generating temporary test versions.
 
 **Tasks**:
 1. Implement bumpSnapshot
    - Set snapshot = true internally
-   - Support format option
+   - Support format template option
+   - Validate format contains valid variables
+   - Does NOT consume/archive changesets
    - **Effort**: Medium
 
+**Snapshot Format Variables**:
+- `{version}` - Base version (e.g., 1.2.3)
+- `{branch}` - Git branch name (sanitized)
+- `{commit}` - Full commit hash
+- `{short_commit}` - Short commit hash (7 chars)
+- `{timestamp}` - Unix timestamp
+
+**Default Format**: `{version}-snapshot.{short_commit}`
+
 **Acceptance Criteria**:
-- [ ] Creates snapshot versions
+- [ ] Creates snapshot versions (NOT SemVer compliant)
+- [ ] Format template with variables works
+- [ ] Changesets are NOT archived
+- [ ] Returns packages with originalVersion and snapshotVersion
 
 **Dependencies**: Story 5.2
 
 ---
 
-### Story 5.5: Bump Integration Tests
+### Story 5.5: Implement Bump Validators
+**Effort**: Low  
+**Priority**: High
+
+**Description**:
+Implement validators for prerelease tags and snapshot formats.
+
+**Tasks**:
+1. Add `prerelease_tag` validator
+   - Must contain only `[0-9A-Za-z-]`
+   - Common values: alpha, beta, rc
+2. Add `snapshot_format` validator
+   - Must contain at least one valid variable
+   - Valid: {version}, {branch}, {short_commit}, {commit}, {timestamp}
+
+**Acceptance Criteria**:
+- [ ] prerelease_tag validator rejects invalid characters
+- [ ] snapshot_format validator requires valid variables
+- [ ] Clear error messages for validation failures
+
+**Dependencies**: Story 2.2
+
+---
+
+### Story 5.6: Bump Integration Tests
 **Effort**: High  
 **Priority**: High
 
 **Description**:
-Create Node.js tests for bump commands.
+Create Node.js tests for bump commands including prerelease and snapshot workflows.
 
 **Tasks**:
 1. Create `__test__/bump.test.ts`
-2. Test preview, apply, snapshot
-3. Test git integration
-4. Test error cases
+2. Test bumpPreview:
+   - Returns preview with packages, versions, and bump types
+   - showDiff option works
+   - No changes made to files
+3. Test bumpApply:
+   - Applies version bumps correctly
+   - Git commit created when gitCommit=true
+   - Git tags created when gitTag=true
+   - Git push works when gitPush=true
+4. Test bumpApply with prerelease:
+   - `prerelease: "alpha"` creates alpha version
+   - `prerelease: "beta"` creates beta version
+   - `prerelease: "rc"` creates release candidate
+   - Custom prerelease tags work
+   - noArchive keeps changesets active for prereleases
+   - alwaysArchive forces archiving for prereleases
+5. Test bumpSnapshot:
+   - Default format generates correct snapshot version
+   - Custom format template works
+   - All variables work: {version}, {branch}, {short_commit}, {commit}, {timestamp}
+   - Changesets NOT archived after snapshot
+6. Test error cases:
+   - Invalid root path returns ENOENT
+   - Invalid prerelease tag returns EVALIDATION
+   - Invalid snapshot format returns EVALIDATION
+   - No changesets returns appropriate message
    - **Effort**: High
 
+**Test Scenarios**:
+
+```typescript
+// Prerelease workflow test
+describe('prerelease workflow', () => {
+  it('creates beta prerelease', async () => {
+    const result = await bumpApply({
+      root: testWorkspace,
+      prerelease: 'beta',
+      gitCommit: true,
+      gitTag: true,
+    });
+    expect(result.success).toBe(true);
+    // Version should be like 1.3.0-beta.0
+  });
+});
+
+// Snapshot workflow test
+describe('snapshot workflow', () => {
+  it('creates snapshot with custom format', async () => {
+    const result = await bumpSnapshot({
+      root: testWorkspace,
+      format: '{version}-{branch}.{short_commit}',
+    });
+    expect(result.success).toBe(true);
+    // Version should be like 1.2.3-feature-x.abc123f
+  });
+});
+```
+
 **Acceptance Criteria**:
-- [ ] All 3 functions tested
+- [ ] All 3 functions tested (preview, apply, snapshot)
+- [ ] Prerelease workflow tested with alpha, beta, rc
+- [ ] Snapshot workflow tested with custom format
+- [ ] Git integration tested (commit, tag, push)
+- [ ] Error cases tested with proper error codes
 - [ ] Workflow tested end-to-end
 
-**Dependencies**: Story 5.4
+**Dependencies**: Story 5.5
 
 ---
 
@@ -1763,14 +1907,14 @@ Implement backupList, backupRestore, backupClean.
 | Epic 2: Error & Validation | 3 | Critical |
 | Epic 3: POC Commands | 5 | Critical |
 | Epic 4: Changeset Commands | 9 | High |
-| Epic 5: Bump Commands | 5 | High |
+| Epic 5: Bump Commands | 6 | High |
 | Epic 6: Execute Command | 4 | High |
 | Epic 7: Config Commands | 4 | Medium |
 | Epic 8: Upgrade Commands | 5 | Medium |
 | Epic 9: Remaining Commands | 4 | Medium |
 | Epic 10: Testing & Quality | 4 | Critical |
 | Epic 11: Documentation & Release | 4 | High |
-| **Total** | **50** | |
+| **Total** | **51** | |
 
 ### Effort Distribution
 
