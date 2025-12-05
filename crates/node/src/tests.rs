@@ -505,6 +505,7 @@ mod validators_tests {
     }
 
     // Tests for bump_type validator
+    // Valid bump types are: major, minor, patch, none (as per VersionBump enum in sublime_pkg_tools)
     #[test]
     fn test_bump_type_valid_major() {
         assert!(validators::bump_type("major").is_ok());
@@ -521,23 +522,8 @@ mod validators_tests {
     }
 
     #[test]
-    fn test_bump_type_valid_premajor() {
-        assert!(validators::bump_type("premajor").is_ok());
-    }
-
-    #[test]
-    fn test_bump_type_valid_preminor() {
-        assert!(validators::bump_type("preminor").is_ok());
-    }
-
-    #[test]
-    fn test_bump_type_valid_prepatch() {
-        assert!(validators::bump_type("prepatch").is_ok());
-    }
-
-    #[test]
-    fn test_bump_type_valid_prerelease() {
-        assert!(validators::bump_type("prerelease").is_ok());
+    fn test_bump_type_valid_none() {
+        assert!(validators::bump_type("none").is_ok());
     }
 
     #[test]
@@ -642,20 +628,17 @@ mod validators_tests {
     }
 }
 
-/// Tests for validation module (validation.rs) - Legacy validators.
+/// Tests for validators module - ErrorInfo returning validators.
 #[cfg(test)]
 mod validation_tests {
-    use crate::validation::{
-        validate_bump_type, validate_message_not_empty, validate_mutual_exclusion,
-        validate_optional_timeout, validate_packages_not_empty, validate_root, validate_semver,
-        validate_timeout,
-    };
+    use crate::validation::validators;
     use std::fs;
     use tempfile::TempDir;
 
+    // Tests for root validator
     #[test]
     fn test_validate_root_empty() {
-        let result = validate_root("");
+        let result = validators::root("");
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert_eq!(error.code, "EVALIDATION");
@@ -664,7 +647,7 @@ mod validation_tests {
 
     #[test]
     fn test_validate_root_not_exists() {
-        let result = validate_root("/this/path/does/not/exist/at/all");
+        let result = validators::root("/this/path/does/not/exist/at/all");
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert_eq!(error.code, "ENOENT");
@@ -673,7 +656,7 @@ mod validation_tests {
     #[test]
     fn test_validate_root_valid() {
         let temp_dir = TempDir::new().unwrap();
-        let result = validate_root(temp_dir.path().to_str().unwrap());
+        let result = validators::root(temp_dir.path().to_str().unwrap());
         assert!(result.is_ok());
     }
 
@@ -683,43 +666,43 @@ mod validation_tests {
         let file_path = temp_dir.path().join("test.txt");
         fs::write(&file_path, "test").unwrap();
 
-        let result = validate_root(file_path.to_str().unwrap());
+        let result = validators::root(file_path.to_str().unwrap());
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert_eq!(error.code, "EVALIDATION");
     }
 
+    // Tests for packages_not_empty validator
     #[test]
     fn test_validate_packages_not_empty_valid() {
         let packages = vec!["@scope/pkg1".to_string()];
-        let result = validate_packages_not_empty(&packages);
+        let result = validators::packages_not_empty(&packages);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_packages_not_empty_empty() {
         let packages: Vec<String> = vec![];
-        let result = validate_packages_not_empty(&packages);
+        let result = validators::packages_not_empty(&packages);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert_eq!(error.code, "EVALIDATION");
         assert_eq!(error.context, Some("packages".to_string()));
     }
 
+    // Tests for bump_type_info validator (returns ErrorInfo)
     #[test]
     fn test_validate_bump_type_valid() {
-        assert!(validate_bump_type("major").is_ok());
-        assert!(validate_bump_type("minor").is_ok());
-        assert!(validate_bump_type("patch").is_ok());
-        assert!(validate_bump_type("premajor").is_ok());
-        assert!(validate_bump_type("preminor").is_ok());
-        assert!(validate_bump_type("prepatch").is_ok());
-        assert!(validate_bump_type("prerelease").is_ok());
+        // Valid bump types as per VersionBump enum: major, minor, patch, none
+        assert!(validators::bump_type_info("major").is_ok());
+        assert!(validators::bump_type_info("minor").is_ok());
+        assert!(validators::bump_type_info("patch").is_ok());
+        assert!(validators::bump_type_info("none").is_ok());
     }
 
     #[test]
     fn test_validate_bump_type_invalid() {
-        let result = validate_bump_type("invalid");
+        let result = validators::bump_type_info("invalid");
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert_eq!(error.code, "EVALIDATION");
@@ -727,14 +710,22 @@ mod validation_tests {
     }
 
     #[test]
+    fn test_validate_bump_type_prerelease_invalid() {
+        // prerelease is NOT a valid bump type in sublime_pkg_tools
+        let result = validators::bump_type_info("prerelease");
+        assert!(result.is_err());
+    }
+
+    // Tests for message_not_empty validator
+    #[test]
     fn test_validate_message_not_empty_valid() {
-        let result = validate_message_not_empty("Add feature", "message");
+        let result = validators::message_not_empty("Add feature", "message");
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_message_not_empty_empty() {
-        let result = validate_message_not_empty("", "message");
+        let result = validators::message_not_empty("", "message");
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert_eq!(error.code, "EVALIDATION");
@@ -742,81 +733,85 @@ mod validation_tests {
 
     #[test]
     fn test_validate_message_not_empty_whitespace() {
-        let result = validate_message_not_empty("   ", "message");
+        let result = validators::message_not_empty("   ", "message");
         assert!(result.is_err());
     }
 
+    // Tests for semver validator
     #[test]
     fn test_validate_semver_valid() {
-        assert!(validate_semver("1.0.0", "version").is_ok());
-        assert!(validate_semver("2.3.4", "version").is_ok());
-        assert!(validate_semver("10.20.30", "version").is_ok());
-        assert!(validate_semver("1.0.0-beta.1", "version").is_ok());
+        assert!(validators::semver("1.0.0", "version").is_ok());
+        assert!(validators::semver("2.3.4", "version").is_ok());
+        assert!(validators::semver("10.20.30", "version").is_ok());
+        assert!(validators::semver("1.0.0-beta.1", "version").is_ok());
     }
 
     #[test]
     fn test_validate_semver_invalid() {
-        let result = validate_semver("invalid", "version");
+        let result = validators::semver("invalid", "version");
         assert!(result.is_err());
 
-        let result = validate_semver("1.0", "version");
+        let result = validators::semver("1.0", "version");
         assert!(result.is_err());
 
-        let result = validate_semver("a.b.c", "version");
+        let result = validators::semver("a.b.c", "version");
         assert!(result.is_err());
     }
 
+    // Tests for mutual_exclusion validator
     #[test]
     fn test_validate_mutual_exclusion_none_set() {
-        let result = validate_mutual_exclusion(&[("a", false), ("b", false)]);
+        let result = validators::mutual_exclusion(&[("a", false), ("b", false)]);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_mutual_exclusion_one_set() {
-        let result = validate_mutual_exclusion(&[("a", true), ("b", false)]);
+        let result = validators::mutual_exclusion(&[("a", true), ("b", false)]);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_mutual_exclusion_both_set() {
-        let result = validate_mutual_exclusion(&[("filterPackage", true), ("affected", true)]);
+        let result = validators::mutual_exclusion(&[("filterPackage", true), ("affected", true)]);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert_eq!(error.code, "EVALIDATION");
     }
 
+    // Tests for timeout_positive validator
     #[test]
     fn test_validate_timeout_valid() {
-        assert!(validate_timeout(1, "timeout").is_ok());
-        assert!(validate_timeout(30, "timeout").is_ok());
-        assert!(validate_timeout(3600, "timeout").is_ok());
+        assert!(validators::timeout_positive(1, "timeout").is_ok());
+        assert!(validators::timeout_positive(30, "timeout").is_ok());
+        assert!(validators::timeout_positive(3600, "timeout").is_ok());
     }
 
     #[test]
     fn test_validate_timeout_zero() {
-        let result = validate_timeout(0, "timeoutSecs");
+        let result = validators::timeout_positive(0, "timeoutSecs");
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert_eq!(error.code, "EVALIDATION");
         assert_eq!(error.context, Some("timeoutSecs".to_string()));
     }
 
+    // Tests for optional_timeout validator
     #[test]
     fn test_validate_optional_timeout_none() {
-        let result = validate_optional_timeout(None, "timeout");
+        let result = validators::optional_timeout(None, "timeout");
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_optional_timeout_valid() {
-        let result = validate_optional_timeout(Some(30), "timeout");
+        let result = validators::optional_timeout(Some(30), "timeout");
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_optional_timeout_zero() {
-        let result = validate_optional_timeout(Some(0), "timeout");
+        let result = validators::optional_timeout(Some(0), "timeout");
         assert!(result.is_err());
     }
 }
@@ -825,7 +820,14 @@ mod validation_tests {
 #[cfg(test)]
 mod response_tests {
     use crate::error::ErrorInfo;
-    use crate::response::{ApiResponseExt, JsonResponse, result_to_response};
+    use crate::response::{ApiResponse, ApiResponseExt, JsonResponse, result_to_response};
+    use serde::Serialize;
+    use std::io::{Error as IoError, ErrorKind};
+    use sublime_cli_tools::error::CliError;
+
+    // =====================================
+    // JsonResponse Tests (existing)
+    // =====================================
 
     #[test]
     fn test_json_response_success() {
@@ -897,6 +899,486 @@ mod response_tests {
 
         assert!(response.is_error());
         assert!(response.error.is_some());
+    }
+
+    // =====================================
+    // ApiResponse Tests (Story 2.3)
+    // =====================================
+
+    /// Test data structure for ApiResponse tests.
+    #[derive(Debug, Clone, PartialEq, Serialize)]
+    struct TestData {
+        value: String,
+        count: u32,
+    }
+
+    #[test]
+    fn test_api_response_success() {
+        let data = TestData { value: "test".to_string(), count: 42 };
+        let response = ApiResponse::success(data.clone());
+
+        assert!(response.success);
+        assert!(response.is_success());
+        assert!(!response.is_failure());
+        assert_eq!(response.data, Some(data));
+        assert!(response.error.is_none());
+    }
+
+    #[test]
+    fn test_api_response_success_with_string() {
+        let response = ApiResponse::success("simple string".to_string());
+
+        assert!(response.success);
+        assert!(response.is_success());
+        assert_eq!(response.data, Some("simple string".to_string()));
+        assert!(response.error.is_none());
+    }
+
+    #[test]
+    fn test_api_response_success_with_unit() {
+        let response: ApiResponse<()> = ApiResponse::success(());
+
+        assert!(response.success);
+        assert!(response.is_success());
+        assert_eq!(response.data, Some(()));
+        assert!(response.error.is_none());
+    }
+
+    #[test]
+    fn test_api_response_failure() {
+        let error = ErrorInfo::validation("Invalid input", Some("field_name"));
+        let response: ApiResponse<TestData> = ApiResponse::failure(error.clone());
+
+        assert!(!response.success);
+        assert!(!response.is_success());
+        assert!(response.is_failure());
+        assert!(response.data.is_none());
+        assert!(response.error.is_some());
+
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "EVALIDATION");
+        assert_eq!(err.message, "Invalid input");
+        assert_eq!(err.context, Some("field_name".to_string()));
+        assert_eq!(err.kind, "Validation");
+    }
+
+    #[test]
+    fn test_api_response_failure_different_error_types() {
+        // Test various error types
+        let test_cases = vec![
+            (ErrorInfo::validation("msg", None::<String>), "EVALIDATION"),
+            (ErrorInfo::not_found("msg", None::<String>), "ENOENT"),
+            (ErrorInfo::io("msg", None::<String>), "EIO"),
+            (ErrorInfo::network("msg"), "ENETWORK"),
+            (ErrorInfo::user("msg"), "EUSER"),
+            (ErrorInfo::timeout("msg"), "ETIMEOUT"),
+            (ErrorInfo::execution("msg"), "EEXEC"),
+            (ErrorInfo::package("msg"), "EPKG"),
+            (ErrorInfo::configuration("msg"), "ECONFIG"),
+            (ErrorInfo::git("msg"), "EGIT"),
+        ];
+
+        for (error, expected_code) in test_cases {
+            let response: ApiResponse<String> = ApiResponse::failure(error);
+            assert!(response.is_failure());
+            assert_eq!(response.error.as_ref().map(|e| e.code.as_str()), Some(expected_code));
+        }
+    }
+
+    #[test]
+    fn test_api_response_failure_from_io_not_found() {
+        let io_error = IoError::new(ErrorKind::NotFound, "File not found: config.json");
+        let response: ApiResponse<String> = ApiResponse::failure_from_io(io_error);
+
+        assert!(response.is_failure());
+        assert!(response.error.is_some());
+
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "ENOENT");
+        assert!(err.message.contains("File not found"));
+    }
+
+    #[test]
+    fn test_api_response_failure_from_io_permission_denied() {
+        let io_error = IoError::new(ErrorKind::PermissionDenied, "Access denied");
+        let response: ApiResponse<String> = ApiResponse::failure_from_io(io_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "EIO");
+        assert!(err.message.contains("Permission denied"));
+    }
+
+    #[test]
+    fn test_api_response_failure_from_io_already_exists() {
+        let io_error = IoError::new(ErrorKind::AlreadyExists, "File already exists");
+        let response: ApiResponse<String> = ApiResponse::failure_from_io(io_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "EIO");
+        assert!(err.message.contains("Already exists"));
+    }
+
+    #[test]
+    fn test_api_response_failure_from_io_invalid_input() {
+        let io_error = IoError::new(ErrorKind::InvalidInput, "Invalid argument");
+        let response: ApiResponse<String> = ApiResponse::failure_from_io(io_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "EVALIDATION");
+    }
+
+    #[test]
+    fn test_api_response_failure_from_io_invalid_data() {
+        let io_error = IoError::new(ErrorKind::InvalidData, "Corrupted data");
+        let response: ApiResponse<String> = ApiResponse::failure_from_io(io_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "EVALIDATION");
+        assert!(err.message.contains("Invalid data"));
+    }
+
+    #[test]
+    fn test_api_response_failure_from_io_timed_out() {
+        let io_error = IoError::new(ErrorKind::TimedOut, "Operation timed out");
+        let response: ApiResponse<String> = ApiResponse::failure_from_io(io_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "ETIMEOUT");
+    }
+
+    #[test]
+    fn test_api_response_failure_from_io_connection_refused() {
+        let io_error = IoError::new(ErrorKind::ConnectionRefused, "Connection refused");
+        let response: ApiResponse<String> = ApiResponse::failure_from_io(io_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "ENETWORK");
+    }
+
+    #[test]
+    fn test_api_response_failure_from_io_connection_reset() {
+        let io_error = IoError::new(ErrorKind::ConnectionReset, "Connection reset");
+        let response: ApiResponse<String> = ApiResponse::failure_from_io(io_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "ENETWORK");
+    }
+
+    #[test]
+    fn test_api_response_failure_from_io_connection_aborted() {
+        let io_error = IoError::new(ErrorKind::ConnectionAborted, "Connection aborted");
+        let response: ApiResponse<String> = ApiResponse::failure_from_io(io_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "ENETWORK");
+    }
+
+    #[test]
+    fn test_api_response_failure_from_io_not_connected() {
+        let io_error = IoError::new(ErrorKind::NotConnected, "Not connected");
+        let response: ApiResponse<String> = ApiResponse::failure_from_io(io_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "ENETWORK");
+    }
+
+    #[test]
+    fn test_api_response_failure_from_io_other() {
+        let io_error = IoError::other("Unknown error");
+        let response: ApiResponse<String> = ApiResponse::failure_from_io(io_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "EIO");
+    }
+
+    #[test]
+    fn test_api_response_failure_from_cli_validation() {
+        let cli_error = CliError::validation("Invalid package name");
+        let response: ApiResponse<String> = ApiResponse::failure_from_cli(cli_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "EVALIDATION");
+        assert_eq!(err.kind, "Validation");
+    }
+
+    #[test]
+    fn test_api_response_failure_from_cli_configuration() {
+        let cli_error = CliError::configuration("Config file not found");
+        let response: ApiResponse<String> = ApiResponse::failure_from_cli(cli_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "ECONFIG");
+        assert_eq!(err.kind, "Configuration");
+    }
+
+    #[test]
+    fn test_api_response_failure_from_cli_git() {
+        let cli_error = CliError::git("Repository not found");
+        let response: ApiResponse<String> = ApiResponse::failure_from_cli(cli_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "EGIT");
+        assert_eq!(err.kind, "Git");
+    }
+
+    #[test]
+    fn test_api_response_failure_from_cli_package() {
+        let cli_error = CliError::package("Package not in workspace");
+        let response: ApiResponse<String> = ApiResponse::failure_from_cli(cli_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "EPKG");
+        assert_eq!(err.kind, "Package");
+    }
+
+    #[test]
+    fn test_api_response_failure_from_cli_io_not_found() {
+        let cli_error = CliError::io("File not found: /path/to/file");
+        let response: ApiResponse<String> = ApiResponse::failure_from_cli(cli_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "ENOENT");
+        assert_eq!(err.kind, "Io");
+    }
+
+    #[test]
+    fn test_api_response_failure_from_cli_io_other() {
+        let cli_error = CliError::io("Permission denied");
+        let response: ApiResponse<String> = ApiResponse::failure_from_cli(cli_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "EIO");
+        assert_eq!(err.kind, "Io");
+    }
+
+    #[test]
+    fn test_api_response_failure_from_cli_network() {
+        let cli_error = CliError::network("Registry unreachable");
+        let response: ApiResponse<String> = ApiResponse::failure_from_cli(cli_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "ENETWORK");
+        assert_eq!(err.kind, "Network");
+    }
+
+    #[test]
+    fn test_api_response_failure_from_cli_user() {
+        let cli_error = CliError::user("Operation cancelled");
+        let response: ApiResponse<String> = ApiResponse::failure_from_cli(cli_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "EUSER");
+        assert_eq!(err.kind, "User");
+    }
+
+    #[test]
+    fn test_api_response_failure_from_cli_execution() {
+        let cli_error = CliError::execution("Command failed");
+        let response: ApiResponse<String> = ApiResponse::failure_from_cli(cli_error);
+
+        assert!(response.is_failure());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, "EEXEC");
+        assert_eq!(err.kind, "Execution");
+    }
+
+    #[test]
+    fn test_api_response_map_success() {
+        let response = ApiResponse::success(42i32);
+        let mapped = response.map(|n| n.to_string());
+
+        assert!(mapped.is_success());
+        assert_eq!(mapped.data, Some("42".to_string()));
+        assert!(mapped.error.is_none());
+    }
+
+    #[test]
+    fn test_api_response_map_failure() {
+        let error = ErrorInfo::validation("error", None::<String>);
+        let response: ApiResponse<i32> = ApiResponse::failure(error);
+        let mapped = response.map(|n| n.to_string());
+
+        assert!(mapped.is_failure());
+        assert!(mapped.data.is_none());
+        assert!(mapped.error.is_some());
+        assert_eq!(mapped.error.as_ref().map(|e| e.code.as_str()), Some("EVALIDATION"));
+    }
+
+    #[test]
+    fn test_api_response_map_complex_transformation() {
+        let data = TestData { value: "test".to_string(), count: 10 };
+        let response = ApiResponse::success(data);
+        let mapped = response.map(|d| d.count * 2);
+
+        assert!(mapped.is_success());
+        assert_eq!(mapped.data, Some(20));
+    }
+
+    #[test]
+    fn test_api_response_into_result_success() {
+        let response = ApiResponse::success("data".to_string());
+        let result = response.into_result();
+
+        assert!(result.is_ok());
+        assert_eq!(result.ok(), Some("data".to_string()));
+    }
+
+    #[test]
+    fn test_api_response_into_result_failure() {
+        let error = ErrorInfo::validation("error message", Some("field"));
+        let response: ApiResponse<String> = ApiResponse::failure(error);
+        let result = response.into_result();
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code, "EVALIDATION");
+        assert_eq!(err.message, "error message");
+    }
+
+    #[test]
+    fn test_api_response_into_result_malformed_success() {
+        // Manually create a malformed response (success=true but data=None)
+        let response: ApiResponse<String> = ApiResponse { success: true, data: None, error: None };
+        let result = response.into_result();
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code, "EEXEC");
+        assert!(err.message.contains("Malformed response"));
+    }
+
+    #[test]
+    fn test_api_response_into_result_malformed_failure() {
+        // Manually create a malformed response (success=false but error=None)
+        let response: ApiResponse<String> = ApiResponse { success: false, data: None, error: None };
+        let result = response.into_result();
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code, "EEXEC");
+        assert!(err.message.contains("Malformed response"));
+    }
+
+    #[test]
+    fn test_api_response_from_result_ok_error_info() {
+        let result: Result<String, ErrorInfo> = Ok("success".to_string());
+        let response: ApiResponse<String> = result.into();
+
+        assert!(response.is_success());
+        assert_eq!(response.data, Some("success".to_string()));
+    }
+
+    #[test]
+    fn test_api_response_from_result_err_error_info() {
+        let result: Result<String, ErrorInfo> = Err(ErrorInfo::validation("error", None::<String>));
+        let response: ApiResponse<String> = result.into();
+
+        assert!(response.is_failure());
+        assert_eq!(response.error.as_ref().map(|e| e.code.as_str()), Some("EVALIDATION"));
+    }
+
+    #[test]
+    fn test_api_response_from_result_ok_cli_error() {
+        let result: Result<String, CliError> = Ok("success".to_string());
+        let response: ApiResponse<String> = result.into();
+
+        assert!(response.is_success());
+        assert_eq!(response.data, Some("success".to_string()));
+    }
+
+    #[test]
+    fn test_api_response_from_result_err_cli_error() {
+        let result: Result<String, CliError> = Err(CliError::git("Git error"));
+        let response: ApiResponse<String> = result.into();
+
+        assert!(response.is_failure());
+        assert_eq!(response.error.as_ref().map(|e| e.code.as_str()), Some("EGIT"));
+    }
+
+    #[test]
+    fn test_api_response_from_result_ok_io_error() {
+        let result: Result<String, IoError> = Ok("success".to_string());
+        let response: ApiResponse<String> = result.into();
+
+        assert!(response.is_success());
+        assert_eq!(response.data, Some("success".to_string()));
+    }
+
+    #[test]
+    fn test_api_response_from_result_err_io_error() {
+        let result: Result<String, IoError> = Err(IoError::new(ErrorKind::NotFound, "not found"));
+        let response: ApiResponse<String> = result.into();
+
+        assert!(response.is_failure());
+        assert_eq!(response.error.as_ref().map(|e| e.code.as_str()), Some("ENOENT"));
+    }
+
+    #[test]
+    fn test_api_response_serialization() {
+        let response = ApiResponse::success(TestData { value: "test".to_string(), count: 42 });
+
+        let json = serde_json::to_string(&response);
+        assert!(json.is_ok());
+
+        let json_str = json.unwrap();
+        assert!(json_str.contains("\"success\":true"));
+        assert!(json_str.contains("\"value\":\"test\""));
+        assert!(json_str.contains("\"count\":42"));
+        // error should be skipped when None
+        assert!(!json_str.contains("\"error\""));
+    }
+
+    #[test]
+    fn test_api_response_serialization_failure() {
+        let error = ErrorInfo::validation("Invalid input", Some("field"));
+        let response: ApiResponse<String> = ApiResponse::failure(error);
+
+        let json = serde_json::to_string(&response);
+        assert!(json.is_ok());
+
+        let json_str = json.unwrap();
+        assert!(json_str.contains("\"success\":false"));
+        assert!(json_str.contains("\"code\":\"EVALIDATION\""));
+        assert!(json_str.contains("\"message\":\"Invalid input\""));
+        // data should be skipped when None
+        assert!(!json_str.contains("\"data\""));
+    }
+
+    #[test]
+    fn test_api_response_clone() {
+        let response = ApiResponse::success("data".to_string());
+        let cloned = response.clone();
+
+        assert_eq!(response.success, cloned.success);
+        assert_eq!(response.data, cloned.data);
+    }
+
+    #[test]
+    fn test_api_response_debug() {
+        let response = ApiResponse::success("data".to_string());
+        let debug_str = format!("{response:?}");
+
+        assert!(debug_str.contains("ApiResponse"));
+        assert!(debug_str.contains("success: true"));
+        assert!(debug_str.contains("data"));
     }
 }
 
