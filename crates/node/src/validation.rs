@@ -9,15 +9,16 @@
 //! # How
 //!
 //! The module provides:
-//! - `ValidationError`: Structured validation error type
+//! - `ValidationError`: Structured validation error type with field context and optional value
 //! - `ValidationResult<T>`: Type alias for validation results
-//! - `Validator`: Trait for implementing custom validators
-//! - Common validators: `validate_root`, `validate_packages`, `validate_bump_type`, etc.
+//! - `validators`: Module containing common parameter validators
+//! - Legacy validators for backward compatibility
 //!
 //! Validation follows these principles:
 //! 1. Fail fast: Return on first validation error
 //! 2. Clear messages: Error messages should indicate the exact problem and field
 //! 3. Type safety: Leverage Rust's type system for compile-time validation where possible
+//! 4. Value context: Include the invalid value in errors when appropriate
 //!
 //! # Why
 //!
@@ -26,8 +27,46 @@
 //! - Clear, user-friendly error messages with field context
 //! - Consistent validation across all NAPI functions
 //! - Prevention of unnecessary work when parameters are invalid
+//! - The `value` field in `ValidationError` helps debugging by showing what was passed
 //!
 //! # Examples
+//!
+//! ## Using ValidationError directly
+//!
+//! ```rust,ignore
+//! use sublime_node_tools::validation::{ValidationError, validators};
+//! use sublime_node_tools::error::ErrorInfo;
+//!
+//! // Create a required field error
+//! let error = ValidationError::required("packages");
+//! let error_info: ErrorInfo = error.into();
+//! assert_eq!(error_info.code, "EVALIDATION");
+//!
+//! // Create an invalid value error
+//! let error = ValidationError::invalid("bumpType", "must be major, minor, or patch", Some("invalid"));
+//! let error_info: ErrorInfo = error.into();
+//! assert!(error_info.message.contains("must be major"));
+//! ```
+//!
+//! ## Using validators module
+//!
+//! ```rust,ignore
+//! use sublime_node_tools::validation::validators;
+//!
+//! // Validate a path exists
+//! validators::path_exists("/path/to/project")?;
+//!
+//! // Validate a field is not empty
+//! validators::not_empty("message", "Add new feature")?;
+//!
+//! // Validate bump type
+//! validators::bump_type("minor")?;
+//!
+//! // Validate timeout within bounds
+//! validators::timeout("timeoutSecs", 30, 1, 3600)?;
+//! ```
+//!
+//! ## In NAPI functions
 //!
 //! ```typescript
 //! import { changesetAdd } from '@websublime/workspace-tools';
@@ -48,6 +87,393 @@
 
 use crate::error::ErrorInfo;
 use std::path::Path;
+
+/// Structured validation error with field context and optional value.
+///
+/// `ValidationError` provides detailed information about validation failures,
+/// including which field failed validation, a descriptive message, and optionally
+/// the value that caused the failure.
+///
+/// This type is designed to be converted into `ErrorInfo` for use in NAPI responses,
+/// ensuring that validation errors are properly formatted with the `EVALIDATION` code.
+///
+/// # Fields
+///
+/// * `field` - The name of the field that failed validation
+/// * `message` - A descriptive error message explaining the validation failure
+/// * `value` - Optional: The actual value that failed validation (useful for debugging)
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sublime_node_tools::validation::ValidationError;
+///
+/// // Required field error (no value provided)
+/// let error = ValidationError::required("username");
+/// assert_eq!(error.field, "username");
+/// assert!(error.message.contains("required"));
+/// assert!(error.value.is_none());
+///
+/// // Invalid value error (with the problematic value)
+/// let error = ValidationError::invalid(
+///     "bumpType",
+///     "must be one of: major, minor, patch",
+///     Some("invalid"),
+/// );
+/// assert_eq!(error.field, "bumpType");
+/// assert_eq!(error.value, Some("invalid".to_string()));
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
+pub(crate) struct ValidationError {
+    /// The name of the field that failed validation.
+    ///
+    /// This should match the JavaScript/TypeScript parameter name for
+    /// consistency in error messages shown to users.
+    pub field: String,
+
+    /// A descriptive error message explaining why validation failed.
+    ///
+    /// The message should be clear and actionable, explaining what
+    /// the valid values or format should be.
+    pub message: String,
+
+    /// The optional value that failed validation.
+    ///
+    /// Including the actual value helps with debugging and provides
+    /// better context in error messages. This is `None` for errors
+    /// like "required field" where no value was provided.
+    pub value: Option<String>,
+}
+
+#[allow(dead_code)]
+impl ValidationError {
+    /// Creates a new `ValidationError` for a required field that was not provided.
+    ///
+    /// Use this constructor when a mandatory field is missing or empty.
+    ///
+    /// # Arguments
+    ///
+    /// * `field` - The name of the required field
+    ///
+    /// # Returns
+    ///
+    /// A `ValidationError` with a message indicating the field is required.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::validation::ValidationError;
+    ///
+    /// let error = ValidationError::required("packages");
+    /// assert_eq!(error.field, "packages");
+    /// assert_eq!(error.message, "packages is required");
+    /// assert!(error.value.is_none());
+    /// ```
+    #[must_use]
+    pub fn required(field: &str) -> Self {
+        Self { field: field.to_string(), message: format!("{field} is required"), value: None }
+    }
+
+    /// Creates a new `ValidationError` for an invalid value.
+    ///
+    /// Use this constructor when a value is provided but doesn't meet
+    /// validation requirements.
+    ///
+    /// # Arguments
+    ///
+    /// * `field` - The name of the field with the invalid value
+    /// * `message` - A description of why the value is invalid
+    /// * `value` - The invalid value (optional, for debugging context)
+    ///
+    /// # Returns
+    ///
+    /// A `ValidationError` with the provided message and value context.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::validation::ValidationError;
+    ///
+    /// // With value context
+    /// let error = ValidationError::invalid(
+    ///     "timeout",
+    ///     "must be between 1 and 3600 seconds",
+    ///     Some("0"),
+    /// );
+    /// assert_eq!(error.field, "timeout");
+    /// assert_eq!(error.value, Some("0".to_string()));
+    ///
+    /// // Without value context
+    /// let error = ValidationError::invalid(
+    ///     "packages",
+    ///     "array cannot be empty",
+    ///     None::<String>,
+    /// );
+    /// assert!(error.value.is_none());
+    /// ```
+    #[must_use]
+    pub fn invalid<S: Into<String>>(field: &str, message: &str, value: Option<S>) -> Self {
+        Self {
+            field: field.to_string(),
+            message: message.to_string(),
+            value: value.map(Into::into),
+        }
+    }
+}
+
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.value {
+            Some(val) => write!(f, "{}: {} (got: {})", self.field, self.message, val),
+            None => write!(f, "{}: {}", self.field, self.message),
+        }
+    }
+}
+
+impl std::error::Error for ValidationError {}
+
+#[allow(dead_code)]
+/// Converts a `ValidationError` into an `ErrorInfo`.
+///
+/// This conversion ensures that validation errors are properly formatted
+/// with the `EVALIDATION` error code and include the field name in the context.
+///
+/// # Conversion Details
+///
+/// - `code`: Always set to `"EVALIDATION"`
+/// - `message`: The validation error message
+/// - `context`: Set to the field name
+/// - `kind`: Always set to `"Validation"`
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sublime_node_tools::validation::ValidationError;
+/// use sublime_node_tools::error::ErrorInfo;
+///
+/// let validation_error = ValidationError::required("root");
+/// let error_info: ErrorInfo = validation_error.into();
+///
+/// assert_eq!(error_info.code, "EVALIDATION");
+/// assert_eq!(error_info.kind, "Validation");
+/// assert_eq!(error_info.context, Some("root".to_string()));
+/// ```
+impl From<ValidationError> for ErrorInfo {
+    fn from(err: ValidationError) -> Self {
+        ErrorInfo::validation(err.message, Some(&err.field))
+    }
+}
+
+/// Validators module containing common parameter validation functions.
+///
+/// This module provides a collection of validators for common parameter patterns
+/// used across NAPI functions. Each validator returns `Result<(), ValidationError>`
+/// to enable proper error handling and conversion to `ErrorInfo`.
+///
+/// # Available Validators
+///
+/// - `path_exists`: Validates that a file system path exists
+/// - `not_empty`: Validates that a string is not empty or whitespace-only
+/// - `bump_type`: Validates that a bump type is valid (major, minor, patch, etc.)
+/// - `timeout`: Validates that a timeout is within specified bounds
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sublime_node_tools::validation::validators;
+///
+/// // Chain multiple validations
+/// fn validate_params(root: &str, message: &str, bump: &str) -> Result<(), ValidationError> {
+///     validators::path_exists(root)?;
+///     validators::not_empty("message", message)?;
+///     validators::bump_type(bump)?;
+///     Ok(())
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) mod validators {
+    use super::{Path, ValidationError};
+
+    /// Validates that a path exists on the file system.
+    ///
+    /// This validator checks if the given path exists, regardless of whether
+    /// it's a file or directory. For directory-specific validation, use
+    /// the `validate_root` function instead.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The file system path to validate
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the path exists
+    /// * `Err(ValidationError)` if the path does not exist
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::validation::validators;
+    ///
+    /// // Valid path (assuming /tmp exists)
+    /// assert!(validators::path_exists("/tmp").is_ok());
+    ///
+    /// // Invalid path
+    /// let result = validators::path_exists("/nonexistent/path");
+    /// assert!(result.is_err());
+    /// let error = result.unwrap_err();
+    /// assert_eq!(error.field, "path");
+    /// ```
+    pub fn path_exists(path: &str) -> Result<(), ValidationError> {
+        if !Path::new(path).exists() {
+            return Err(ValidationError::invalid(
+                "path",
+                &format!("path does not exist: {path}"),
+                Some(path),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Validates that a string value is not empty or whitespace-only.
+    ///
+    /// This validator checks that the provided string contains meaningful content,
+    /// rejecting empty strings and strings containing only whitespace.
+    ///
+    /// # Arguments
+    ///
+    /// * `field` - The name of the field being validated (for error messages)
+    /// * `value` - The string value to validate
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the value is not empty
+    /// * `Err(ValidationError)` if the value is empty or whitespace-only
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::validation::validators;
+    ///
+    /// // Valid values
+    /// assert!(validators::not_empty("message", "Add feature").is_ok());
+    /// assert!(validators::not_empty("cmd", "npm test").is_ok());
+    ///
+    /// // Invalid values
+    /// assert!(validators::not_empty("message", "").is_err());
+    /// assert!(validators::not_empty("message", "   ").is_err());
+    /// ```
+    pub fn not_empty(field: &str, value: &str) -> Result<(), ValidationError> {
+        if value.trim().is_empty() {
+            return Err(ValidationError::invalid(field, "cannot be empty", None::<String>));
+        }
+        Ok(())
+    }
+
+    /// Validates that a bump type is valid.
+    ///
+    /// Valid bump types are: `major`, `minor`, `patch`, `premajor`, `preminor`,
+    /// `prepatch`, and `prerelease`.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The bump type string to validate
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the bump type is valid
+    /// * `Err(ValidationError)` if the bump type is not recognized
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::validation::validators;
+    ///
+    /// // Valid bump types
+    /// assert!(validators::bump_type("major").is_ok());
+    /// assert!(validators::bump_type("minor").is_ok());
+    /// assert!(validators::bump_type("patch").is_ok());
+    /// assert!(validators::bump_type("prerelease").is_ok());
+    ///
+    /// // Invalid bump type
+    /// let result = validators::bump_type("invalid");
+    /// assert!(result.is_err());
+    /// let error = result.unwrap_err();
+    /// assert_eq!(error.value, Some("invalid".to_string()));
+    /// ```
+    pub fn bump_type(value: &str) -> Result<(), ValidationError> {
+        const VALID_BUMP_TYPES: &[&str] =
+            &["major", "minor", "patch", "premajor", "preminor", "prepatch", "prerelease"];
+
+        if !VALID_BUMP_TYPES.contains(&value) {
+            return Err(ValidationError::invalid(
+                "bumpType",
+                &format!("must be one of: {}", VALID_BUMP_TYPES.join(", ")),
+                Some(value),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Validates that a timeout value is within specified bounds.
+    ///
+    /// This validator ensures that a timeout value falls within an acceptable
+    /// range, providing clear error messages for values outside the bounds.
+    ///
+    /// # Arguments
+    ///
+    /// * `field` - The name of the field being validated (for error messages)
+    /// * `value` - The timeout value in seconds
+    /// * `min` - The minimum allowed timeout (inclusive)
+    /// * `max` - The maximum allowed timeout (inclusive)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the timeout is within bounds
+    /// * `Err(ValidationError)` if the timeout is outside bounds
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::validation::validators;
+    ///
+    /// // Valid timeout (within 1-3600 range)
+    /// assert!(validators::timeout("timeoutSecs", 30, 1, 3600).is_ok());
+    /// assert!(validators::timeout("timeoutSecs", 1, 1, 3600).is_ok());
+    /// assert!(validators::timeout("timeoutSecs", 3600, 1, 3600).is_ok());
+    ///
+    /// // Invalid timeout (below minimum)
+    /// let result = validators::timeout("timeoutSecs", 0, 1, 3600);
+    /// assert!(result.is_err());
+    ///
+    /// // Invalid timeout (above maximum)
+    /// let result = validators::timeout("timeoutSecs", 7200, 1, 3600);
+    /// assert!(result.is_err());
+    /// ```
+    pub fn timeout(field: &str, value: u64, min: u64, max: u64) -> Result<(), ValidationError> {
+        if value < min {
+            return Err(ValidationError::invalid(
+                field,
+                &format!("must be at least {min} seconds"),
+                Some(value.to_string()),
+            ));
+        }
+        if value > max {
+            return Err(ValidationError::invalid(
+                field,
+                &format!("cannot exceed {max} seconds"),
+                Some(value.to_string()),
+            ));
+        }
+        Ok(())
+    }
+}
+
+// ============================================================================
+// Legacy validators - Maintained for backward compatibility
+// These validators return Result<(), ErrorInfo> directly and are used by
+// existing code. New code should prefer the validators module above.
+// ============================================================================
 
 /// Result type for validation operations.
 ///
