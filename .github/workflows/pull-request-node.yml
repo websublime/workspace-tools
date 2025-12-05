@@ -109,16 +109,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup node
+        uses: actions/setup-node@v4
         with:
-          cache-key: node-build-${{ matrix.settings.target }}
+          node-version: 20
+          cache: pnpm
 
-      - name: Add Rust target
-        run: rustup target add ${{ matrix.settings.target }}
-
-      - name: Set up Node
-        uses: ./.github/actions/setup-node
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.settings.target }}
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -129,7 +133,7 @@ jobs:
             ~/.cargo/git/db/
             ~/.napi-rs
             .cargo-cache
-            crates/node/target/
+            target/
           key: ${{ matrix.settings.target }}-cargo-${{ matrix.settings.host }}
 
       - name: Install ziglang (Linux musl cross-compile)
@@ -138,11 +142,13 @@ jobs:
         with:
           version: 0.12.0
 
+      - name: Install dependencies
+        run: pnpm install
+
       - name: Build native module
         run: ${{ matrix.settings.build }}
         working-directory: packages/workspace-tools
-        env:
-          CARGO_BUILD_TARGET: ${{ matrix.settings.target }}
+        shell: bash
 
       - name: List artifacts
         run: ls -la packages/workspace-tools/src
