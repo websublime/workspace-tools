@@ -6,7 +6,11 @@
 # 3. Node bindings have specific version dependencies on workspace crates
 #
 # This workflow validates both the Rust code in crates/node and the Node.js package,
-# including building and testing the native bindings.
+# including building and testing the native bindings on all supported platforms.
+#
+# Testing strategy:
+# - macOS and Windows: Native testing on actual runners
+# - Linux (including ARM): Testing via QEMU emulation in Docker containers
 #
 # Trigger: Pull requests that modify packages/workspace-tools or crates/node
 
@@ -73,7 +77,7 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
-  # Build native bindings for testing
+  # Build native bindings for all targets
   build:
     name: Build - ${{ matrix.settings.target }}
     needs: cargo-node-checks
@@ -161,25 +165,136 @@ jobs:
         working-directory: packages/workspace-tools
         shell: bash
 
-      # Only compile TypeScript and test on native targets (not cross-compiled)
-      - name: Compile typescript
-        if: ${{ !contains(matrix.settings.target, 'aarch64-unknown-linux') && !contains(matrix.settings.target, 'musl') && !contains(matrix.settings.target, 'aarch64-pc-windows') }}
-        run: pnpm build:node
-        working-directory: packages/workspace-tools
-        shell: bash
-
-      - name: Test binding
-        if: ${{ !contains(matrix.settings.target, 'aarch64-unknown-linux') && !contains(matrix.settings.target, 'musl') && !contains(matrix.settings.target, 'aarch64-pc-windows') }}
-        run: node -e "const { getVersion } = require('./dist/cjs/index.cjs'); console.log('Version:', getVersion());"
-        working-directory: packages/workspace-tools
-
-      # Upload the .node binary for all targets (same as release workflow)
+      # Upload the .node binary for all targets
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
           name: bindings-${{ matrix.settings.target }}
           path: packages/workspace-tools/src/workspace-tools.*.node
           if-no-files-found: error
+
+  # Test bindings on macOS and Windows (native runners)
+  test-macos-windows-binding:
+    name: Test bindings on ${{ matrix.settings.target }} - node@${{ matrix.node }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+            architecture: x64
+          - host: macos-15-intel
+            target: x86_64-apple-darwin
+            architecture: x64
+          - host: macos-latest
+            target: aarch64-apple-darwin
+            architecture: arm64
+        node:
+          - '20'
+          - '22'
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: ./.github/actions/setup-node
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-${{ matrix.settings.target }}
+          path: packages/workspace-tools/src
+
+      - name: List downloaded artifacts
+        run: ls -la packages/workspace-tools/src
+        shell: bash
+
+      - name: Build TypeScript
+        run: pnpm build:node
+        working-directory: packages/workspace-tools
+
+      - name: Test bindings
+        run: node -e "const { getVersion } = require('./dist/cjs/index.cjs'); console.log('Version:', getVersion());"
+        working-directory: packages/workspace-tools
+
+  # Test bindings on Linux targets using QEMU emulation
+  test-linux-binding:
+    name: Test ${{ matrix.target }} - node@${{ matrix.node }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-gnu
+          - aarch64-unknown-linux-musl
+        node:
+          - '20'
+          - '22'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: ./.github/actions/setup-node
+
+      - name: Determine Docker platform and image
+        id: docker
+        run: |
+          node -e "
+            if ('${{ matrix.target }}'.startsWith('aarch64')) {
+              console.log('PLATFORM=linux/arm64')
+            } else {
+              console.log('PLATFORM=linux/amd64')
+            }
+          " >> $GITHUB_OUTPUT
+          node -e "
+            if ('${{ matrix.target }}'.endsWith('-musl')) {
+              console.log('IMAGE=node:${{ matrix.node }}-alpine')
+            } else {
+              console.log('IMAGE=node:${{ matrix.node }}-slim')
+            }
+          " >> $GITHUB_OUTPUT
+          echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-${{ matrix.target }}
+          path: packages/workspace-tools/src
+
+      - name: List downloaded artifacts
+        run: ls -la packages/workspace-tools/src
+
+      - name: Build TypeScript
+        run: pnpm build:node
+        working-directory: packages/workspace-tools
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+
+      - name: Enable QEMU for multi-arch
+        run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
+      - name: Test bindings in Docker
+        uses: addnab/docker-run-action@v3
+        with:
+          image: ${{ steps.docker.outputs.IMAGE }}
+          options: |
+            -v ${{ steps.docker.outputs.PNPM_STORE_PATH }}:${{ steps.docker.outputs.PNPM_STORE_PATH }}
+            -v ${{ github.workspace }}:${{ github.workspace }}
+            -w ${{ github.workspace }}/packages/workspace-tools
+            --platform ${{ steps.docker.outputs.PLATFORM }}
+          run: |
+            echo "Testing on ${{ matrix.target }} with Node.js ${{ matrix.node }}"
+            echo "Platform: ${{ steps.docker.outputs.PLATFORM }}"
+            echo "Image: ${{ steps.docker.outputs.IMAGE }}"
+            node -e "const { getVersion } = require('./dist/cjs/index.cjs'); console.log('Version:', getVersion());"
+            echo "✅ Binding test passed!"
 
   # Lint Node.js package
   lint-node:
