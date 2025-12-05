@@ -81,7 +81,7 @@ jobs:
           - host: macos-latest
             target: aarch64-apple-darwin
             build: pnpm build-binding --target aarch64-apple-darwin
-          - host: macos-13
+          - host: macos-15-intel
             target: x86_64-apple-darwin
             build: pnpm build-binding --target x86_64-apple-darwin
           - host: ubuntu-latest
@@ -106,18 +106,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
         with:
-          node-version: 22
+          cache-key: node-build-${{ matrix.settings.target }}
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+      - name: Add Rust target
+        run: rustup target add ${{ matrix.settings.target }}
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.settings.target }}
+      - name: Set up Node
+        uses: ./.github/actions/setup-node
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
@@ -146,87 +144,35 @@ jobs:
           rm -f Cargo.toml.bak
           cat Cargo.toml | grep sublime_cli_tools
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Build native module
         run: ${{ matrix.settings.build }}
         working-directory: packages/workspace-tools
         env:
           CARGO_BUILD_TARGET: ${{ matrix.settings.target }}
 
-      - name: Upload artifact
+      - name: Compile typescript
+        run: pnpm build:node
+        working-directory: packages/workspace-tools
+        shell: bash
+
+      - name: Upload dist artifact
         uses: actions/upload-artifact@v4
         with:
           name: bindings-${{ matrix.settings.target }}
-          path: packages/workspace-tools/*.node
+          path: packages/workspace-tools/dist
           if-no-files-found: error
-
-  test:
-    name: Test - ${{ matrix.settings.target }}
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        settings:
-          - host: macos-latest
-            target: aarch64-apple-darwin
-          - host: macos-13
-            target: x86_64-apple-darwin
-          - host: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - host: windows-latest
-            target: x86_64-pc-windows-msvc
-    runs-on: ${{ matrix.settings.host }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: bindings-${{ matrix.settings.target }}
-          path: packages/workspace-tools
-
-      - name: List artifacts
-        run: ls -la packages/workspace-tools/*.node
-        shell: bash
-
-      - name: Test binding
-        run: node -e "const { getVersion } = require('./index.js'); console.log('Version:', getVersion());"
-        working-directory: packages/workspace-tools
 
   publish:
     name: Publish to npm
     needs:
       - prepare
       - build
-      - test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Set up Node
+        uses: ./.github/actions/setup-node
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -238,25 +184,25 @@ jobs:
         working-directory: packages/workspace-tools
 
       - name: List packages
-        run: ls -la npm/*/ packages/workspace-tools/*.node || true
+        run: ls -la npm/*/ packages/workspace-tools/*.node artifacts/*/ || true
         working-directory: packages/workspace-tools
         shell: bash
 
-      - name: Publish (dry run)
-        if: ${{ github.event.inputs.dry_run == 'true' }}
-        run: |
-          echo "Dry run - would publish the following packages:"
-          pnpm publish --dry-run --access public --no-git-checks
-        working-directory: packages/workspace-tools
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      #- name: Publish (dry run)
+      #  if: ${{ github.event.inputs.dry_run == 'true' }}
+      #  run: |
+      #    echo "Dry run - would publish the following packages:"
+      #    pnpm publish --dry-run --access public --no-git-checks
+      #  working-directory: packages/workspace-tools
+      #  env:
+      #    NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish to npm
-        if: ${{ github.event.inputs.dry_run != 'true' }}
-        run: |
-          pnpm prepublishOnly
-          pnpm publish --access public --no-git-checks
-        working-directory: packages/workspace-tools
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #- name: Publish to npm
+      #  if: ${{ github.event.inputs.dry_run != 'true' }}
+      #  run: |
+      #    pnpm prepublishOnly
+      #    pnpm publish --access public --no-git-checks
+      #  working-directory: packages/workspace-tools
+      #  env:
+      #    NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

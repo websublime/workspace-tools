@@ -31,7 +31,7 @@
 /// Tests for lib.rs version functions and constants.
 #[cfg(test)]
 mod version_tests {
-    use crate::{VERSION, get_version};
+    use crate::{get_version, VERSION};
 
     #[test]
     #[allow(clippy::const_is_empty)]
@@ -313,7 +313,336 @@ mod error_tests {
     }
 }
 
-/// Tests for validation module (validation.rs).
+/// Tests for ValidationError struct and From<ValidationError> for ErrorInfo.
+#[cfg(test)]
+mod validation_error_tests {
+    use crate::error::ErrorInfo;
+    use crate::validation::ValidationError;
+
+    #[test]
+    fn test_validation_error_required() {
+        let error = ValidationError::required("packages");
+        assert_eq!(error.field, "packages");
+        assert_eq!(error.message, "packages is required");
+        assert!(error.value.is_none());
+    }
+
+    #[test]
+    fn test_validation_error_required_different_fields() {
+        let error1 = ValidationError::required("root");
+        assert_eq!(error1.field, "root");
+        assert_eq!(error1.message, "root is required");
+
+        let error2 = ValidationError::required("message");
+        assert_eq!(error2.field, "message");
+        assert_eq!(error2.message, "message is required");
+    }
+
+    #[test]
+    fn test_validation_error_invalid_with_value() {
+        let error = ValidationError::invalid(
+            "bumpType",
+            "must be one of: major, minor, patch",
+            Some("invalid"),
+        );
+        assert_eq!(error.field, "bumpType");
+        assert_eq!(error.message, "must be one of: major, minor, patch");
+        assert_eq!(error.value, Some("invalid".to_string()));
+    }
+
+    #[test]
+    fn test_validation_error_invalid_without_value() {
+        let error = ValidationError::invalid("packages", "array cannot be empty", None::<String>);
+        assert_eq!(error.field, "packages");
+        assert_eq!(error.message, "array cannot be empty");
+        assert!(error.value.is_none());
+    }
+
+    #[test]
+    fn test_validation_error_invalid_with_string_value() {
+        let error =
+            ValidationError::invalid("timeout", "must be positive", Some(String::from("0")));
+        assert_eq!(error.value, Some("0".to_string()));
+    }
+
+    #[test]
+    fn test_validation_error_display_with_value() {
+        let error = ValidationError::invalid("timeout", "must be positive", Some("0"));
+        let display = format!("{error}");
+        assert_eq!(display, "timeout: must be positive (got: 0)");
+    }
+
+    #[test]
+    fn test_validation_error_display_without_value() {
+        let error = ValidationError::required("packages");
+        let display = format!("{error}");
+        assert_eq!(display, "packages: packages is required");
+    }
+
+    #[test]
+    fn test_validation_error_clone() {
+        let error = ValidationError::invalid("field", "message", Some("value"));
+        let cloned = error.clone();
+        assert_eq!(error, cloned);
+    }
+
+    #[test]
+    fn test_validation_error_eq() {
+        let error1 = ValidationError::required("packages");
+        let error2 = ValidationError::required("packages");
+        let error3 = ValidationError::required("root");
+
+        assert_eq!(error1, error2);
+        assert_ne!(error1, error3);
+    }
+
+    #[test]
+    fn test_from_validation_error_for_error_info_required() {
+        let validation_error = ValidationError::required("root");
+        let error_info: ErrorInfo = validation_error.into();
+
+        assert_eq!(error_info.code, "EVALIDATION");
+        assert_eq!(error_info.kind, "Validation");
+        assert_eq!(error_info.context, Some("root".to_string()));
+        assert!(error_info.message.contains("root is required"));
+    }
+
+    #[test]
+    fn test_from_validation_error_for_error_info_invalid() {
+        let validation_error =
+            ValidationError::invalid("bumpType", "must be major, minor, or patch", Some("bad"));
+        let error_info: ErrorInfo = validation_error.into();
+
+        assert_eq!(error_info.code, "EVALIDATION");
+        assert_eq!(error_info.kind, "Validation");
+        assert_eq!(error_info.context, Some("bumpType".to_string()));
+        assert!(error_info.message.contains("must be major"));
+    }
+
+    #[test]
+    fn test_validation_error_is_error_trait() {
+        let error = ValidationError::required("field");
+        // Verify it implements std::error::Error
+        let _: &dyn std::error::Error = &error;
+    }
+}
+
+/// Tests for validators module.
+#[cfg(test)]
+mod validators_tests {
+    use crate::validation::validators;
+    use std::fs;
+    use tempfile::TempDir;
+
+    // Tests for path_exists validator
+    #[test]
+    fn test_path_exists_valid_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let result = validators::path_exists(temp_dir.path().to_str().unwrap());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_path_exists_valid_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+        fs::write(&file_path, "test content").unwrap();
+
+        let result = validators::path_exists(file_path.to_str().unwrap());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_path_exists_nonexistent() {
+        let result = validators::path_exists("/this/path/definitely/does/not/exist");
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        assert_eq!(error.field, "path");
+        assert!(error.message.contains("does not exist"));
+        assert!(error.value.is_some());
+    }
+
+    #[test]
+    fn test_path_exists_empty_path() {
+        // Empty string is a valid path that doesn't exist
+        let result = validators::path_exists("");
+        assert!(result.is_err());
+    }
+
+    // Tests for not_empty validator
+    #[test]
+    fn test_not_empty_valid() {
+        assert!(validators::not_empty("message", "Add feature").is_ok());
+        assert!(validators::not_empty("cmd", "npm test").is_ok());
+        assert!(validators::not_empty("field", "x").is_ok());
+    }
+
+    #[test]
+    fn test_not_empty_empty_string() {
+        let result = validators::not_empty("message", "");
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        assert_eq!(error.field, "message");
+        assert!(error.message.contains("cannot be empty"));
+        assert!(error.value.is_none());
+    }
+
+    #[test]
+    fn test_not_empty_whitespace_only() {
+        assert!(validators::not_empty("message", "   ").is_err());
+        assert!(validators::not_empty("message", "\t").is_err());
+        assert!(validators::not_empty("message", "\n").is_err());
+        assert!(validators::not_empty("message", "  \t\n  ").is_err());
+    }
+
+    #[test]
+    fn test_not_empty_preserves_field_name() {
+        let result = validators::not_empty("customField", "");
+        let error = result.unwrap_err();
+        assert_eq!(error.field, "customField");
+    }
+
+    // Tests for bump_type validator
+    #[test]
+    fn test_bump_type_valid_major() {
+        assert!(validators::bump_type("major").is_ok());
+    }
+
+    #[test]
+    fn test_bump_type_valid_minor() {
+        assert!(validators::bump_type("minor").is_ok());
+    }
+
+    #[test]
+    fn test_bump_type_valid_patch() {
+        assert!(validators::bump_type("patch").is_ok());
+    }
+
+    #[test]
+    fn test_bump_type_valid_premajor() {
+        assert!(validators::bump_type("premajor").is_ok());
+    }
+
+    #[test]
+    fn test_bump_type_valid_preminor() {
+        assert!(validators::bump_type("preminor").is_ok());
+    }
+
+    #[test]
+    fn test_bump_type_valid_prepatch() {
+        assert!(validators::bump_type("prepatch").is_ok());
+    }
+
+    #[test]
+    fn test_bump_type_valid_prerelease() {
+        assert!(validators::bump_type("prerelease").is_ok());
+    }
+
+    #[test]
+    fn test_bump_type_invalid() {
+        let result = validators::bump_type("invalid");
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        assert_eq!(error.field, "bumpType");
+        assert!(error.message.contains("must be one of"));
+        assert_eq!(error.value, Some("invalid".to_string()));
+    }
+
+    #[test]
+    fn test_bump_type_case_sensitive() {
+        // Bump types are case-sensitive
+        assert!(validators::bump_type("Major").is_err());
+        assert!(validators::bump_type("MINOR").is_err());
+        assert!(validators::bump_type("Patch").is_err());
+    }
+
+    #[test]
+    fn test_bump_type_empty() {
+        let result = validators::bump_type("");
+        assert!(result.is_err());
+    }
+
+    // Tests for timeout validator
+    #[test]
+    fn test_timeout_valid_within_bounds() {
+        assert!(validators::timeout("timeoutSecs", 30, 1, 3600).is_ok());
+        assert!(validators::timeout("timeoutSecs", 100, 1, 3600).is_ok());
+        assert!(validators::timeout("timeoutSecs", 1800, 1, 3600).is_ok());
+    }
+
+    #[test]
+    fn test_timeout_valid_at_min() {
+        assert!(validators::timeout("timeoutSecs", 1, 1, 3600).is_ok());
+    }
+
+    #[test]
+    fn test_timeout_valid_at_max() {
+        assert!(validators::timeout("timeoutSecs", 3600, 1, 3600).is_ok());
+    }
+
+    #[test]
+    fn test_timeout_below_min() {
+        let result = validators::timeout("timeoutSecs", 0, 1, 3600);
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        assert_eq!(error.field, "timeoutSecs");
+        assert!(error.message.contains("at least 1 seconds"));
+        assert_eq!(error.value, Some("0".to_string()));
+    }
+
+    #[test]
+    fn test_timeout_above_max() {
+        let result = validators::timeout("timeoutSecs", 7200, 1, 3600);
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        assert_eq!(error.field, "timeoutSecs");
+        assert!(error.message.contains("cannot exceed 3600 seconds"));
+        assert_eq!(error.value, Some("7200".to_string()));
+    }
+
+    #[test]
+    fn test_timeout_custom_bounds() {
+        // Test with different min/max bounds
+        assert!(validators::timeout("delay", 5, 5, 10).is_ok());
+        assert!(validators::timeout("delay", 10, 5, 10).is_ok());
+        assert!(validators::timeout("delay", 4, 5, 10).is_err());
+        assert!(validators::timeout("delay", 11, 5, 10).is_err());
+    }
+
+    #[test]
+    fn test_timeout_preserves_field_name() {
+        let result = validators::timeout("perPackageTimeoutSecs", 0, 1, 3600);
+        let error = result.unwrap_err();
+        assert_eq!(error.field, "perPackageTimeoutSecs");
+    }
+
+    #[test]
+    fn test_timeout_zero_min_allowed() {
+        // If min is 0, then 0 should be valid
+        assert!(validators::timeout("optional", 0, 0, 100).is_ok());
+    }
+
+    // Integration tests - converting validator errors to ErrorInfo
+    #[test]
+    fn test_validator_error_converts_to_error_info() {
+        use crate::error::ErrorInfo;
+
+        let result = validators::bump_type("invalid");
+        let validation_error = result.unwrap_err();
+        let error_info: ErrorInfo = validation_error.into();
+
+        assert_eq!(error_info.code, "EVALIDATION");
+        assert_eq!(error_info.kind, "Validation");
+        assert_eq!(error_info.context, Some("bumpType".to_string()));
+    }
+}
+
+/// Tests for validation module (validation.rs) - Legacy validators.
 #[cfg(test)]
 mod validation_tests {
     use crate::validation::{
@@ -496,7 +825,7 @@ mod validation_tests {
 #[cfg(test)]
 mod response_tests {
     use crate::error::ErrorInfo;
-    use crate::response::{ApiResponseExt, JsonResponse, result_to_response};
+    use crate::response::{result_to_response, ApiResponseExt, JsonResponse};
 
     #[test]
     fn test_json_response_success() {
