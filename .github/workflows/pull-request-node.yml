@@ -89,13 +89,13 @@ jobs:
             build: pnpm build-binding --target x86_64-apple-darwin
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            build: pnpm build-binding --target x86_64-unknown-linux-gnu --use-napi-cross
+            build: pnpm build-binding --target x86_64-unknown-linux-gnu -x
           - host: ubuntu-latest
             target: x86_64-unknown-linux-musl
             build: pnpm build-binding --target x86_64-unknown-linux-musl -x
           - host: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            build: pnpm build-binding --target aarch64-unknown-linux-gnu --use-napi-cross
+            build: pnpm build-binding --target aarch64-unknown-linux-gnu -x
           - host: ubuntu-latest
             target: aarch64-unknown-linux-musl
             build: pnpm build-binding --target aarch64-unknown-linux-musl -x
@@ -118,6 +118,10 @@ jobs:
           toolchain: stable
           targets: ${{ matrix.settings.target }}
 
+      # Ensure target is installed explicitly for cross-compilation
+      - name: Install Rust target
+        run: rustup target add ${{ matrix.settings.target }}
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -130,11 +134,11 @@ jobs:
             target/
           key: ${{ matrix.settings.target }}-cargo-${{ matrix.settings.host }}
 
-      - name: Install ziglang (Linux musl cross-compile)
-        if: ${{ contains(matrix.settings.target, 'musl') }}
+      - name: Install ziglang (Linux cross-compile)
+        if: ${{ runner.os == 'Linux' }}
         uses: goto-bus-stop/setup-zig@v2
         with:
-          version: 0.12.0
+          version: 0.13.0
 
       - name: Build native module
         run: ${{ matrix.settings.build }}

@@ -2158,6 +2158,7 @@ dependencies = [
  "dirs 6.0.0",
  "git2",
  "libgit2-sys",
+ "libz-sys",
  "serde",
  "sublime_standard_tools",
  "tempfile",
