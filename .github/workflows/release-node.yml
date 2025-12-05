@@ -117,17 +117,23 @@ jobs:
       - name: Set up Node
         uses: ./.github/actions/setup-node
 
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Cache cargo
+        uses: actions/cache@v4
         with:
-          workspaces: 'crates/node -> target'
-          shared-key: ${{ matrix.settings.target }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.napi-rs
+            .cargo-cache
+            crates/node/target/
+          key: ${{ matrix.settings.target }}-cargo-${{ matrix.settings.host }}
 
-      - name: Install ziglang (Linux cross-compile)
-        if: ${{ matrix.settings.host == 'ubuntu-latest' }}
+      - name: Install ziglang (Linux musl cross-compile)
+        if: ${{ contains(matrix.settings.target, 'musl') }}
         uses: goto-bus-stop/setup-zig@v2
         with:
-          version: 0.11.0
+          version: 0.12.0
 
       - name: Update node crate CLI dependency version
         shell: bash
