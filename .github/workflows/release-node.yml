@@ -40,6 +40,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       cli_version: ${{ steps.versions.outputs.cli_version }}
+      git_version: ${{ steps.versions.outputs.git_version }}
+      pkg_version: ${{ steps.versions.outputs.pkg_version }}
+      std_version: ${{ steps.versions.outputs.std_version }}
       should_publish: ${{ steps.check.outputs.should_publish }}
     steps:
       - uses: actions/checkout@v4
@@ -49,26 +52,41 @@ jobs:
       - name: Get latest crate versions
         id: versions
         run: |
-          # Get the latest version of sublime_cli_tools from crates.io
+          # Get the latest versions of all workspace crates from crates.io
           CLI_VERSION=$(cargo search sublime_cli_tools --limit 1 | head -1 | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')
+          GIT_VERSION=$(cargo search sublime_git_tools --limit 1 | head -1 | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')
+          PKG_VERSION=$(cargo search sublime_pkg_tools --limit 1 | head -1 | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')
+          STD_VERSION=$(cargo search sublime_standard_tools --limit 1 | head -1 | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')
+
           echo "cli_version=$CLI_VERSION" >> "$GITHUB_OUTPUT"
-          echo "Latest CLI version: $CLI_VERSION"
+          echo "git_version=$GIT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "pkg_version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
+          echo "std_version=$STD_VERSION" >> "$GITHUB_OUTPUT"
+
+          echo "Latest versions from crates.io:"
+          echo "  sublime_cli_tools: $CLI_VERSION"
+          echo "  sublime_git_tools: $GIT_VERSION"
+          echo "  sublime_pkg_tools: $PKG_VERSION"
+          echo "  sublime_standard_tools: $STD_VERSION"
 
       - name: Check if we should publish
         id: check
         run: |
-          # Check if the node crate Cargo.toml has the correct CLI version
+          # Check if the node crate Cargo.toml has the correct versions
           CURRENT_CLI_DEP=$(grep 'sublime_cli_tools' crates/node/Cargo.toml | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-          echo "Current CLI dependency in node crate: $CURRENT_CLI_DEP"
-          echo "Latest CLI version: ${{ steps.versions.outputs.cli_version }}"
+          CURRENT_GIT_DEP=$(grep 'sublime_git_tools' crates/node/Cargo.toml | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          CURRENT_PKG_DEP=$(grep 'sublime_pkg_tools' crates/node/Cargo.toml | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          CURRENT_STD_DEP=$(grep 'sublime_standard_tools' crates/node/Cargo.toml | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 
-          if [ "$CURRENT_CLI_DEP" != "${{ steps.versions.outputs.cli_version }}" ]; then
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            echo "Version mismatch - need to update and publish"
-          else
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            echo "Versions match - proceeding with build"
-          fi
+          echo "Current versions in node crate Cargo.toml:"
+          echo "  sublime_cli_tools: $CURRENT_CLI_DEP"
+          echo "  sublime_git_tools: $CURRENT_GIT_DEP"
+          echo "  sublime_pkg_tools: $CURRENT_PKG_DEP"
+          echo "  sublime_standard_tools: $CURRENT_STD_DEP"
+
+          # Always publish - the version check is informational
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          echo "Proceeding with build"
 
   build:
     name: Build - ${{ matrix.settings.target }}
@@ -137,14 +155,19 @@ jobs:
         with:
           version: 0.13.0
 
-      - name: Update node crate CLI dependency version
+      - name: Update node crate dependency versions
         shell: bash
         run: |
           cd crates/node
-          # Update the CLI dependency to latest released version
+          # Update all workspace crate dependencies to latest released versions
           sed -i.bak 's/sublime_cli_tools = { version = "[^"]*"/sublime_cli_tools = { version = "${{ needs.prepare.outputs.cli_version }}"/' Cargo.toml
+          sed -i.bak 's/sublime_git_tools = { version = "[^"]*"/sublime_git_tools = { version = "${{ needs.prepare.outputs.git_version }}"/' Cargo.toml
+          sed -i.bak 's/sublime_pkg_tools = { version = "[^"]*"/sublime_pkg_tools = { version = "${{ needs.prepare.outputs.pkg_version }}"/' Cargo.toml
+          sed -i.bak 's/sublime_standard_tools = { version = "[^"]*"/sublime_standard_tools = { version = "${{ needs.prepare.outputs.std_version }}"/' Cargo.toml
           rm -f Cargo.toml.bak
-          cat Cargo.toml | grep sublime_cli_tools
+
+          echo "Updated dependency versions in Cargo.toml:"
+          grep -E 'sublime_(cli|git|pkg|standard)_tools' Cargo.toml
 
       - name: Build native module
         run: ${{ matrix.settings.build }}
