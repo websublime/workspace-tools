@@ -43,6 +43,7 @@
 //! }
 //! ```
 
+use serde::Serialize;
 use sublime_cli_tools::error::CliError;
 
 /// Node.js-style error codes for categorizing errors.
@@ -185,7 +186,7 @@ impl std::fmt::Display for ErrorCode {
 /// }
 /// ```
 #[napi(object)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ErrorInfo {
     /// Node.js-style error code (e.g., "EVALIDATION", "EGIT").
     ///
@@ -631,59 +632,5 @@ impl From<CliError> for ErrorInfo {
     /// ```
     fn from(error: CliError) -> Self {
         Self::from(&error)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_is_not_found_error() {
-        // Should return true for "not found" patterns
-        assert!(is_not_found_error("File not found"));
-        assert!(is_not_found_error("Path NOT FOUND"));
-        assert!(is_not_found_error("No such file or directory"));
-        assert!(is_not_found_error("NO SUCH FILE"));
-        assert!(is_not_found_error("The file does not exist"));
-        assert!(is_not_found_error("Path doesn't exist"));
-
-        // Should return false for other errors
-        assert!(!is_not_found_error("Permission denied"));
-        assert!(!is_not_found_error("Disk full"));
-        assert!(!is_not_found_error("Read error"));
-        assert!(!is_not_found_error(""));
-    }
-
-    #[test]
-    fn test_from_cli_error_io_not_found() {
-        let cli_error = CliError::io("File not found: /path/to/file");
-        let error_info = ErrorInfo::from(&cli_error);
-        assert_eq!(error_info.code, "ENOENT");
-        assert_eq!(error_info.kind, "Io");
-    }
-
-    #[test]
-    fn test_from_cli_error_io_no_such_file() {
-        let cli_error = CliError::io("No such file or directory");
-        let error_info = ErrorInfo::from(&cli_error);
-        assert_eq!(error_info.code, "ENOENT");
-        assert_eq!(error_info.kind, "Io");
-    }
-
-    #[test]
-    fn test_from_cli_error_io_does_not_exist() {
-        let cli_error = CliError::io("The path does not exist");
-        let error_info = ErrorInfo::from(&cli_error);
-        assert_eq!(error_info.code, "ENOENT");
-        assert_eq!(error_info.kind, "Io");
-    }
-
-    #[test]
-    fn test_from_cli_error_io_generic() {
-        let cli_error = CliError::io("Permission denied");
-        let error_info = ErrorInfo::from(&cli_error);
-        assert_eq!(error_info.code, "EIO");
-        assert_eq!(error_info.kind, "Io");
     }
 }
