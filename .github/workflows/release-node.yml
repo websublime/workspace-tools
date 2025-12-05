@@ -150,16 +150,12 @@ jobs:
         env:
           CARGO_BUILD_TARGET: ${{ matrix.settings.target }}
 
-      - name: Compile typescript
-        run: pnpm build:node
-        working-directory: packages/workspace-tools
-        shell: bash
-
-      - name: Upload dist artifact
+      # Upload ONLY the .node binary file - napi artifacts expects this structure
+      - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
           name: bindings-${{ matrix.settings.target }}
-          path: packages/workspace-tools/dist
+          path: packages/workspace-tools/src/workspace-tools.*.node
           if-no-files-found: error
 
   publish:
@@ -174,17 +170,65 @@ jobs:
       - name: Set up Node
         uses: ./.github/actions/setup-node
 
+      # Download all binary artifacts to artifacts/ directory
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: packages/workspace-tools/artifacts
 
-      - name: Move artifacts to correct locations
+      - name: List downloaded artifacts
+        run: |
+          echo "=== Downloaded artifacts structure ==="
+          find artifacts -type f -name "*.node" | head -20
+          echo "=== Full structure ==="
+          ls -laR artifacts/ || true
+        working-directory: packages/workspace-tools
+
+      # Move binaries to npm/*/ directories using napi artifacts
+      - name: Move artifacts to npm directories
         run: pnpm artifacts
         working-directory: packages/workspace-tools
 
-      - name: List packages
-        run: ls -la npm/*/ packages/workspace-tools/*.node artifacts/*/ || true
+      - name: List npm packages
+        run: |
+          echo "=== npm packages after artifacts ==="
+          for dir in npm/*/; do
+            echo "--- $dir ---"
+            ls -la "$dir"
+          done
+        working-directory: packages/workspace-tools
+
+      # Now compile TypeScript - this runs ONCE with all binaries in place
+      # The build:node script will generate dist/ with ESM/CJS/types
+      - name: Compile TypeScript
+        run: pnpm build:node
+        working-directory: packages/workspace-tools
+        env:
+          RELEASING_CI: 'true'
+
+      - name: Verify dist structure
+        run: |
+          echo "=== dist/ structure ==="
+          ls -laR dist/
+          echo "=== dist/package.json ==="
+          cat dist/package.json || echo "No dist/package.json"
+        working-directory: packages/workspace-tools
+
+      # Prepare for publishing - this updates versions in npm/**/package.json
+      - name: Prepare for publish
+        run: pnpm prepublishOnly
+        working-directory: packages/workspace-tools
+
+      - name: List final packages
+        run: |
+          echo "=== Main package ==="
+          cat package.json | head -30
+          echo ""
+          echo "=== npm packages versions ==="
+          for dir in npm/*/; do
+            echo "--- $dir ---"
+            cat "$dir/package.json" | grep -E '"(name|version)"' | head -2
+          done
         working-directory: packages/workspace-tools
         shell: bash
 

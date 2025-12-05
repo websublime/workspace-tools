@@ -34,15 +34,13 @@
     "binaryName": "workspace-tools",
     "packageName": "@websublime/workspace-tools",
     "targets": [
+      "aarch64-apple-darwin",
       "x86_64-apple-darwin",
-      "x86_64-pc-windows-msvc",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-linux-musl",
-      "i686-pc-windows-msvc",
-      "armv7-unknown-linux-gnueabihf",
       "aarch64-unknown-linux-gnu",
-      "aarch64-apple-darwin",
       "aarch64-unknown-linux-musl",
+      "x86_64-pc-windows-msvc",
       "aarch64-pc-windows-msvc"
     ],
     "wasm": {
@@ -103,15 +101,11 @@
   "optionalDependencies": {
     "@websublime/workspace-tools-darwin-arm64": "workspace:*",
     "@websublime/workspace-tools-darwin-x64": "workspace:*",
-    "@websublime/workspace-tools-freebsd-x64": "workspace:*",
-    "@websublime/workspace-tools-linux-arm-gnueabihf": "workspace:*",
     "@websublime/workspace-tools-linux-arm64-gnu": "workspace:*",
     "@websublime/workspace-tools-linux-arm64-musl": "workspace:*",
     "@websublime/workspace-tools-linux-x64-gnu": "workspace:*",
     "@websublime/workspace-tools-linux-x64-musl": "workspace:*",
-    "@websublime/workspace-tools-wasm32-wasi": "workspace:*",
     "@websublime/workspace-tools-win32-arm64-msvc": "workspace:*",
-    "@websublime/workspace-tools-win32-ia32-msvc": "workspace:*",
     "@websublime/workspace-tools-win32-x64-msvc": "workspace:*"
   },
   "ava": {
