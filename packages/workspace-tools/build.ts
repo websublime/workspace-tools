@@ -8,7 +8,7 @@ import pkgJson from './package.json' with { type: 'json' }
 
 const outputDir = 'dist'
 
-const IS_RELEASING_CI = !!process.env.RELEASING
+const IS_RELEASING_CI = !!process.env.RELEASING_CI
 
 const shared = defineConfig({
   input: {
@@ -26,6 +26,67 @@ const shared = defineConfig({
     ...Object.keys(pkgJson?.dependencies || {}),
   ],
 })
+
+/**
+ * Generate the dist/package.json with correct relative paths for npm publishing.
+ *
+ * When publishing the dist/ folder, paths must be relative to dist/, not the root.
+ * For example: "./cjs/index.cjs" instead of "./dist/cjs/index.cjs"
+ */
+function generateDistPackageJson() {
+  const distPkgJson = {
+    name: pkgJson.name,
+    version: pkgJson.version,
+    description: pkgJson.description,
+    // Paths are relative to dist/ folder
+    main: './cjs/index.cjs',
+    module: './esm/index.mjs',
+    types: './types/index.d.ts',
+    exports: {
+      '.': {
+        types: './types/index.d.ts',
+        import: './esm/index.mjs',
+        require: './cjs/index.cjs',
+      },
+      './package.json': './package.json',
+    },
+    repository: pkgJson.repository,
+    license: pkgJson.license,
+    keywords: pkgJson.keywords,
+    engines: pkgJson.engines,
+    publishConfig: pkgJson.publishConfig,
+    // Include the optional dependencies for platform-specific binaries
+    optionalDependencies: pkgJson.optionalDependencies,
+    // Files to include when publishing (relative to dist/)
+    files: [
+      'cjs',
+      'esm',
+      'types',
+      'shared',
+    ],
+    // napi configuration for runtime binary loading
+    napi: pkgJson.napi,
+  }
+
+  const distPath = nodePath.resolve(outputDir, 'package.json')
+  fsExtra.writeJsonSync(distPath, distPkgJson, { spaces: 2 })
+  console.log('[build:done]', 'Generated dist/package.json with correct relative paths')
+}
+
+/**
+ * Generate index.d.ts that re-exports from binding.d.ts
+ */
+function generateIndexTypes() {
+  const distTypesDir = nodePath.resolve(outputDir, 'types')
+  fsExtra.ensureDirSync(distTypesDir)
+
+  const indexDtsContent = `// Auto-generated type definitions
+export * from './binding';
+`
+  const indexDtsPath = nodePath.join(distTypesDir, 'index.d.ts')
+  fsExtra.writeFileSync(indexDtsPath, indexDtsContent)
+  console.log('[build:done]', 'Generated dist/types/index.d.ts')
+}
 
 const configs = defineConfig([
   {
@@ -55,14 +116,17 @@ const configs = defineConfig([
           const wasiShims = globSync(['./src/*.wasi.js', './src/*.wasi.cjs', './src/*.mjs'], {
             absolute: true,
           })
-          // Binary build is on the separate step on CI
-          if (!process.env.CI && nodeFiles.length === 0) {
-            throw new Error('No binary files found')
+
+          // Binary build is on the separate step on CI - allow missing binaries in CI
+          if (!process.env.CI && !IS_RELEASING_CI && nodeFiles.length === 0 && wasmFiles.length === 0) {
+            throw new Error('No binary files found. Run `pnpm build-binding` first.')
           }
 
           const copyTo = nodePath.resolve(outputDir)
           fsExtra.ensureDirSync(copyTo)
 
+          // In CI release mode, binaries are in npm/*/ directories, not in dist/
+          // Only copy binaries to dist/ for local development
           if (!IS_RELEASING_CI) {
             if (isWasmBuild) {
               // Move the binary file to dist
@@ -78,7 +142,7 @@ const configs = defineConfig([
                   fsExtra.rmSync(file)
                 } catch {}
               })
-            } else {
+            } else if (nodeFiles.length > 0) {
               // biome-ignore lint/complexity/noForEach: <explanation>
               nodeFiles.forEach((file) => {
                 const fileName = nodePath.basename(file)
@@ -91,12 +155,12 @@ const configs = defineConfig([
             // biome-ignore lint/complexity/noForEach: <explanation>
             wasiShims.forEach((file) => {
               const fileName = nodePath.basename(file)
-              console.log('[build:done]', 'Copying', file, 'to ./dist/shared')
+              console.log('[build:done]', 'Copying', file, 'to ./dist/')
               fsExtra.copyFileSync(file, nodePath.join(copyTo, fileName))
             })
           }
 
-          // Copy binding types to dist
+          // Copy binding types to dist/types/
           const distTypesDir = nodePath.resolve(outputDir, 'types')
           fsExtra.ensureDirSync(distTypesDir)
           const types = globSync(['./src/*.d.ts'], {
@@ -105,9 +169,15 @@ const configs = defineConfig([
           // biome-ignore lint/complexity/noForEach: <explanation>
           types.forEach((file) => {
             const fileName = nodePath.basename(file)
-            console.log('[build:done]', 'Copying', file, 'to ./dist/shared')
+            console.log('[build:done]', 'Copying', file, 'to ./dist/types/')
             fsExtra.copyFileSync(file, nodePath.join(distTypesDir, fileName))
           })
+
+          // Generate index.d.ts that re-exports from binding.d.ts
+          generateIndexTypes()
+
+          // Generate dist/package.json with correct paths
+          generateDistPackageJson()
         },
       },
 
