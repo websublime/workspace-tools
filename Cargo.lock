@@ -1253,9 +1253,9 @@ checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
 name = "mio"
-version = "1.1.0"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69d83b0086dc8ecf3ce9ae2874b2d1290252e2a30720bea58a5c6639b0092873"
+checksum = "a69bcab0ad47271a0234d9422b131806bf3968021e5dc9328caf2d4cd58557fc"
 dependencies = [
  "libc",
  "log",
@@ -2120,7 +2120,7 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "sublime_cli_tools"
-version = "0.0.26"
+version = "0.0.27"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2152,7 +2152,7 @@ dependencies = [
 
 [[package]]
 name = "sublime_git_tools"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "chrono",
  "dirs 6.0.0",
@@ -2168,7 +2168,7 @@ dependencies = [
 
 [[package]]
 name = "sublime_pkg_tools"
-version = "0.0.18"
+version = "0.0.19"
 dependencies = [
  "async-trait",
  "base64 0.21.7",
