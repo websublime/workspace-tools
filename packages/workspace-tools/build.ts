@@ -34,6 +34,15 @@ const shared = defineConfig({
  * For example: "./cjs/index.cjs" instead of "./dist/cjs/index.cjs"
  */
 function generateDistPackageJson() {
+  // Convert workspace:* references to actual version for npm publish
+  const optionalDeps: Record<string, string> = {}
+  if (pkgJson.optionalDependencies) {
+    for (const [name, version] of Object.entries(pkgJson.optionalDependencies)) {
+      // Replace workspace:* with the actual package version
+      optionalDeps[name] = (version as string) === 'workspace:*' ? pkgJson.version : (version as string)
+    }
+  }
+
   const distPkgJson = {
     name: pkgJson.name,
     version: pkgJson.version,
@@ -56,7 +65,8 @@ function generateDistPackageJson() {
     engines: pkgJson.engines,
     publishConfig: pkgJson.publishConfig,
     // Include the optional dependencies for platform-specific binaries
-    optionalDependencies: pkgJson.optionalDependencies,
+    // These are converted from workspace:* to actual versions
+    optionalDependencies: optionalDeps,
     // Files to include when publishing (relative to dist/)
     files: [
       'cjs',

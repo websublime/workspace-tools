@@ -232,21 +232,45 @@ jobs:
         working-directory: packages/workspace-tools
         shell: bash
 
-      #- name: Publish (dry run)
-      #  if: ${{ github.event.inputs.dry_run == 'true' }}
-      #  run: |
-      #    echo "Dry run - would publish the following packages:"
-      #    pnpm publish --dry-run --access public --no-git-checks
-      #  working-directory: packages/workspace-tools
-      #  env:
-      #    NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Publish platform-specific packages first (npm/*/)
+      - name: Publish platform packages (dry run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "Dry run - would publish platform packages:"
+          for dir in npm/*/; do
+            echo "--- $dir ---"
+            npm publish "$dir" --access public --dry-run
+          done
+        working-directory: packages/workspace-tools
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      #- name: Publish to npm
-      #  if: ${{ github.event.inputs.dry_run != 'true' }}
-      #  run: |
-      #    pnpm prepublishOnly
-      #    pnpm publish --access public --no-git-checks
-      #  working-directory: packages/workspace-tools
-      #  env:
-      #    NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish platform packages
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          for dir in npm/*/; do
+            echo "Publishing $dir..."
+            npm publish "$dir" --access public || echo "Failed to publish $dir (may already exist)"
+          done
+        working-directory: packages/workspace-tools
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Publish main package from dist/ (which has its own package.json with correct paths)
+      - name: Publish main package (dry run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "Dry run - would publish main package from dist/:"
+          npm publish dist/ --access public --dry-run
+        working-directory: packages/workspace-tools
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish main package
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          echo "Publishing main package from dist/..."
+          npm publish dist/ --access public
+        working-directory: packages/workspace-tools
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
