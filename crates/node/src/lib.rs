@@ -2,8 +2,6 @@
 //!
 //! Node.js bindings for Sublime Workspace CLI Tools via napi-rs.
 //!
-//! Release trigger: fix npm authentication in CI workflow
-//!
 //! ## What
 //!
 //! This crate provides Node.js bindings via napi-rs for the workspace-tools CLI,

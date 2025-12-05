@@ -239,8 +239,9 @@ jobs:
         working-directory: packages/workspace-tools
 
       # Prepare for publishing - this updates versions in npm/**/package.json
+      # Skip GitHub release creation as we handle releases separately
       - name: Prepare for publish
-        run: pnpm prepublishOnly
+        run: pnpm napi prepublish -t npm --no-gh-release
         working-directory: packages/workspace-tools
 
       - name: List final packages
@@ -256,6 +257,11 @@ jobs:
         working-directory: packages/workspace-tools
         shell: bash
 
+      # Configure npm authentication
+      - name: Configure npm authentication
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
+
       # Publish platform-specific packages first (npm/*/)
       - name: Publish platform packages (dry run)
         if: ${{ github.event.inputs.dry_run == 'true' }}
@@ -266,8 +272,6 @@ jobs:
             npm publish "$dir" --access public --dry-run
           done
         working-directory: packages/workspace-tools
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish platform packages
         if: ${{ github.event.inputs.dry_run != 'true' }}
@@ -277,8 +281,6 @@ jobs:
             npm publish "$dir" --access public || echo "Failed to publish $dir (may already exist)"
           done
         working-directory: packages/workspace-tools
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Publish main package from dist/ (which has its own package.json with correct paths)
       - name: Publish main package (dry run)
@@ -287,8 +289,6 @@ jobs:
           echo "Dry run - would publish main package from dist/:"
           npm publish dist/ --access public --dry-run
         working-directory: packages/workspace-tools
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish main package
         if: ${{ github.event.inputs.dry_run != 'true' }}
@@ -296,5 +296,3 @@ jobs:
           echo "Publishing main package from dist/..."
           npm publish dist/ --access public
         working-directory: packages/workspace-tools
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
