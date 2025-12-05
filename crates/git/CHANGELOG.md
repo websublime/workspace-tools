@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.15 - 2025-12-05
+
+### Bug Fixes
+
+#### WOR-TSK-176
+
+- Resolve Linux cross-compilation errors in CI pipeline
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.14 - 2025-11-27
 
 ### Features
