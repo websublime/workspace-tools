@@ -1,6 +1,12 @@
 name: 'Setup Node'
 
-description: 'Setup node and pnpm'
+description: 'Setup node and pnpm with optional version override'
+
+inputs:
+  node-version:
+    description: 'Node.js version to use. If not provided, reads from .node-version file'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -8,10 +14,18 @@ runs:
     - name: Install pnpm
       uses: pnpm/action-setup@v4
 
-    - name: Install Node.js
+    - name: Install Node.js (from .node-version)
+      if: ${{ inputs.node-version == '' }}
       uses: actions/setup-node@v4
       with:
         node-version-file: .node-version
+        cache: 'pnpm'
+
+    - name: Install Node.js (custom version)
+      if: ${{ inputs.node-version != '' }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
         cache: 'pnpm'
 
     - name: Get pnpm store directory
