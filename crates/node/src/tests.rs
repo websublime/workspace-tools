@@ -31,7 +31,7 @@
 /// Tests for lib.rs version functions and constants.
 #[cfg(test)]
 mod version_tests {
-    use crate::{get_version, VERSION};
+    use crate::{VERSION, get_version};
 
     #[test]
     #[allow(clippy::const_is_empty)]
@@ -825,7 +825,7 @@ mod validation_tests {
 #[cfg(test)]
 mod response_tests {
     use crate::error::ErrorInfo;
-    use crate::response::{result_to_response, ApiResponseExt, JsonResponse};
+    use crate::response::{ApiResponseExt, JsonResponse, result_to_response};
 
     #[test]
     fn test_json_response_success() {
