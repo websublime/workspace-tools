@@ -1,6 +1,6 @@
 {
   "name": "@websublime/workspace-tools",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Bindings for node from crate workspace-tools",
   "main": "./dist/cjs/index.cjs",
   "types": "./dist/types/index.d.cts",
@@ -73,7 +73,7 @@
     "lint": "oxlint",
     "prepublishOnly": "napi prepublish -t npm",
     "test": "ava",
-    "version": "napi version"
+    "build:version": "napi version"
   },
   "dependencies": {},
   "devDependencies": {
