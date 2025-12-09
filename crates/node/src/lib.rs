@@ -133,7 +133,8 @@ pub(crate) mod validation;
 // Status command (Story 3.2)
 pub use commands::status;
 
-// TODO: will be implemented on story 3.4 (init command)
+// Init command (Story 3.4)
+pub use commands::init;
 // TODO: will be implemented on story 4.2-4.8 (changeset commands)
 // TODO: will be implemented on story 5.2-5.4 (bump commands)
 // TODO: will be implemented on story 6.3 (execute command)
