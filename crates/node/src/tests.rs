@@ -2441,3 +2441,871 @@ mod init_types_tests {
         assert_eq!(params.registry, Some("https://npm.pkg.github.com/@myorg".to_string()));
     }
 }
+
+// ============================================================================
+// Changeset Types Tests (Story 4.1)
+// ============================================================================
+
+mod changeset_api_response_tests {
+    use crate::error::ErrorInfo;
+    use crate::types::changeset::{
+        ChangesetAddApiResponse, ChangesetAddData, ChangesetCheckApiResponse, ChangesetCheckData,
+        ChangesetDetailInfo, ChangesetHistoryApiResponse, ChangesetHistoryData,
+        ChangesetListApiResponse, ChangesetListData, ChangesetRemoveApiResponse,
+        ChangesetRemoveData, ChangesetShowApiResponse, ChangesetShowData,
+        ChangesetUpdateApiResponse, ChangesetUpdateData, UpdateSummaryInfo,
+    };
+
+    // ========================================================================
+    // ChangesetAddApiResponse Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_add_api_response_success() {
+        let data =
+            ChangesetAddData::new("feature-api", "feature/api", "minor", "2024-01-15T10:30:00Z")
+                .with_packages(vec!["@scope/pkg1".to_string()])
+                .with_environments(vec!["staging".to_string()]);
+        let response = ChangesetAddApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.data.is_some());
+        assert!(response.error.is_none());
+        assert!(response.is_success());
+        assert!(!response.is_failure());
+    }
+
+    #[test]
+    fn test_changeset_add_api_response_failure() {
+        let error = ErrorInfo::validation("Invalid bump type", Some("bump"));
+        let response = ChangesetAddApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(response.data.is_none());
+        assert!(response.error.is_some());
+        assert!(!response.is_success());
+        assert!(response.is_failure());
+    }
+
+    #[test]
+    fn test_changeset_add_api_response_clone() {
+        let data = ChangesetAddData::new("test-id", "test-branch", "patch", "2024-01-15T10:30:00Z");
+        let response = ChangesetAddApiResponse::success(data);
+        let cloned = response.clone();
+
+        assert_eq!(cloned.success, response.success);
+        assert!(cloned.data.is_some());
+    }
+
+    #[test]
+    fn test_changeset_add_api_response_serialize() {
+        let data = ChangesetAddData::new("test-id", "test-branch", "minor", "2024-01-15T10:30:00Z");
+        let response = ChangesetAddApiResponse::success(data);
+        let json = serde_json::to_string(&response).unwrap_or_default();
+        assert!(json.contains("\"success\":true"));
+        assert!(json.contains("\"id\":\"test-id\""));
+    }
+
+    // ========================================================================
+    // ChangesetUpdateApiResponse Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_update_api_response_success() {
+        let summary = UpdateSummaryInfo::new(
+            2,
+            vec!["@scope/new".to_string()],
+            vec!["@scope/existing".to_string()],
+        );
+        let data = ChangesetUpdateData::success(summary);
+        let response = ChangesetUpdateApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.data.is_some());
+        assert!(response.is_success());
+    }
+
+    #[test]
+    fn test_changeset_update_api_response_no_changes() {
+        let data = ChangesetUpdateData::no_changes();
+        let response = ChangesetUpdateApiResponse::success(data);
+
+        assert!(response.success);
+        let data = response.data.as_ref().unwrap();
+        assert!(!data.updated);
+        assert_eq!(data.summary.commits_added, 0);
+    }
+
+    #[test]
+    fn test_changeset_update_api_response_failure() {
+        let error = ErrorInfo::not_found("Changeset not found", Some("feature/old"));
+        let response = ChangesetUpdateApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(response.error.is_some());
+        assert_eq!(response.error.as_ref().map(|e| e.code.as_str()), Some("ENOENT"));
+    }
+
+    // ========================================================================
+    // ChangesetListApiResponse Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_list_api_response_success_with_items() {
+        let changeset = ChangesetDetailInfo::new(
+            "cs-1",
+            "feature/one",
+            "minor",
+            "2024-01-15T10:00:00Z",
+            "2024-01-15T10:00:00Z",
+        );
+        let data = ChangesetListData::new(vec![changeset]);
+        let response = ChangesetListApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.data.is_some());
+        assert_eq!(response.data.as_ref().unwrap().count, 1);
+    }
+
+    #[test]
+    fn test_changeset_list_api_response_success_empty() {
+        let data = ChangesetListData::empty();
+        let response = ChangesetListApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.data.is_some());
+        assert_eq!(response.data.as_ref().unwrap().count, 0);
+        assert!(response.data.as_ref().unwrap().changesets.is_empty());
+    }
+
+    #[test]
+    fn test_changeset_list_api_response_failure() {
+        let error = ErrorInfo::configuration("Invalid config path");
+        let response = ChangesetListApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(response.is_failure());
+    }
+
+    // ========================================================================
+    // ChangesetShowApiResponse Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_show_api_response_success() {
+        let changeset = ChangesetDetailInfo::new(
+            "feature-api",
+            "feature/api",
+            "major",
+            "2024-01-15T10:00:00Z",
+            "2024-01-16T14:30:00Z",
+        )
+        .with_packages(vec!["@scope/core".to_string(), "@scope/utils".to_string()])
+        .with_environments(vec!["production".to_string()])
+        .with_commits(vec!["abc123".to_string(), "def456".to_string()])
+        .with_message("Breaking API change");
+
+        let data = ChangesetShowData::new(changeset);
+        let response = ChangesetShowApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.data.is_some());
+        let show_data = response.data.as_ref().unwrap();
+        assert_eq!(show_data.changeset.id, "feature-api");
+        assert_eq!(show_data.changeset.packages.len(), 2);
+        assert_eq!(show_data.changeset.message, Some("Breaking API change".to_string()));
+    }
+
+    #[test]
+    fn test_changeset_show_api_response_failure() {
+        let error = ErrorInfo::not_found("Changeset not found", Some("feature/nonexistent"));
+        let response = ChangesetShowApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(response.error.is_some());
+    }
+
+    // ========================================================================
+    // ChangesetRemoveApiResponse Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_remove_api_response_success() {
+        let data = ChangesetRemoveData::success("feature/old");
+        let response = ChangesetRemoveApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.data.is_some());
+        assert!(response.data.as_ref().unwrap().removed);
+        assert_eq!(response.data.as_ref().unwrap().branch, "feature/old");
+    }
+
+    #[test]
+    fn test_changeset_remove_api_response_failure() {
+        let error = ErrorInfo::validation("Cannot remove changeset in production", None::<String>);
+        let response = ChangesetRemoveApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(response.is_failure());
+    }
+
+    // ========================================================================
+    // ChangesetHistoryApiResponse Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_history_api_response_success_empty() {
+        let data = ChangesetHistoryData::empty();
+        let response = ChangesetHistoryApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.data.is_some());
+        assert_eq!(response.data.as_ref().unwrap().count, 0);
+    }
+
+    #[test]
+    fn test_changeset_history_api_response_failure() {
+        let error = ErrorInfo::io("Cannot read history file", None::<String>);
+        let response = ChangesetHistoryApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(response.error.is_some());
+    }
+
+    // ========================================================================
+    // ChangesetCheckApiResponse Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_check_api_response_exists() {
+        let data = ChangesetCheckData::exists("feature/api", vec!["@scope/core".to_string()]);
+        let response = ChangesetCheckApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.data.is_some());
+        let check_data = response.data.as_ref().unwrap();
+        assert!(check_data.has_changeset);
+        assert_eq!(check_data.branch, Some("feature/api".to_string()));
+        assert!(check_data.packages.is_some());
+    }
+
+    #[test]
+    fn test_changeset_check_api_response_not_found() {
+        let data = ChangesetCheckData::not_found();
+        let response = ChangesetCheckApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.data.is_some());
+        let check_data = response.data.as_ref().unwrap();
+        assert!(!check_data.has_changeset);
+        assert!(check_data.branch.is_none());
+        assert!(check_data.packages.is_none());
+    }
+
+    #[test]
+    fn test_changeset_check_api_response_failure() {
+        let error = ErrorInfo::git("Cannot determine current branch");
+        let response = ChangesetCheckApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(response.error.is_some());
+        assert_eq!(response.error.as_ref().map(|e| e.code.as_str()), Some("EGIT"));
+    }
+}
+
+mod changeset_params_tests {
+    use crate::types::changeset::{
+        ChangesetAddParams, ChangesetCheckParams, ChangesetHistoryParams, ChangesetListParams,
+        ChangesetRemoveParams, ChangesetShowParams, ChangesetUpdateParams, VALID_SORT_OPTIONS,
+    };
+
+    // ========================================================================
+    // ChangesetAddParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_add_params_new() {
+        let params = ChangesetAddParams::new(".");
+
+        assert_eq!(params.root, ".");
+        assert!(params.config_path.is_none());
+        assert!(params.bump.is_none());
+        assert!(params.environments.is_none());
+        assert!(params.branch.is_none());
+        assert!(params.message.is_none());
+        assert!(params.packages.is_none());
+        assert!(params.force.is_none());
+    }
+
+    #[test]
+    fn test_changeset_add_params_builder_chain() {
+        let params = ChangesetAddParams::new("/workspace")
+            .with_config_path("/workspace/repo.config.json")
+            .with_bump("minor")
+            .with_environments(vec!["staging".to_string(), "production".to_string()])
+            .with_branch("feature/new-api")
+            .with_message("Add new REST API endpoints")
+            .with_packages(vec!["@scope/api".to_string(), "@scope/client".to_string()])
+            .with_force(true);
+
+        assert_eq!(params.root, "/workspace");
+        assert_eq!(params.config_path, Some("/workspace/repo.config.json".to_string()));
+        assert_eq!(params.bump, Some("minor".to_string()));
+        assert_eq!(
+            params.environments,
+            Some(vec!["staging".to_string(), "production".to_string()])
+        );
+        assert_eq!(params.branch, Some("feature/new-api".to_string()));
+        assert_eq!(params.message, Some("Add new REST API endpoints".to_string()));
+        assert_eq!(
+            params.packages,
+            Some(vec!["@scope/api".to_string(), "@scope/client".to_string()])
+        );
+        assert_eq!(params.force, Some(true));
+    }
+
+    #[test]
+    fn test_changeset_add_params_clone() {
+        let params = ChangesetAddParams::new("/workspace")
+            .with_bump("major")
+            .with_packages(vec!["@scope/core".to_string()]);
+        let cloned = params.clone();
+
+        assert_eq!(cloned.root, params.root);
+        assert_eq!(cloned.bump, params.bump);
+        assert_eq!(cloned.packages, params.packages);
+    }
+
+    #[test]
+    fn test_changeset_add_params_serialize() {
+        let params = ChangesetAddParams::new("/workspace").with_bump("patch");
+        let json = serde_json::to_string(&params).unwrap_or_default();
+
+        assert!(json.contains("\"root\":\"/workspace\""));
+        assert!(json.contains("\"bump\":\"patch\""));
+        // Optional fields that are None should not be present
+        assert!(!json.contains("\"config_path\""));
+    }
+
+    // ========================================================================
+    // ChangesetUpdateParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_update_params_new() {
+        let params = ChangesetUpdateParams::new(".");
+
+        assert_eq!(params.root, ".");
+        assert!(params.id.is_none());
+        assert!(params.commit.is_none());
+        assert!(params.packages.is_none());
+        assert!(params.bump.is_none());
+        assert!(params.environments.is_none());
+    }
+
+    #[test]
+    fn test_changeset_update_params_builder_chain() {
+        let params = ChangesetUpdateParams::new("/workspace")
+            .with_id("feature/api")
+            .with_commit("abc123def456")
+            .with_packages(vec!["@scope/new".to_string()])
+            .with_bump("major")
+            .with_environments(vec!["production".to_string()]);
+
+        assert_eq!(params.id, Some("feature/api".to_string()));
+        assert_eq!(params.commit, Some("abc123def456".to_string()));
+        assert_eq!(params.packages, Some(vec!["@scope/new".to_string()]));
+        assert_eq!(params.bump, Some("major".to_string()));
+        assert_eq!(params.environments, Some(vec!["production".to_string()]));
+    }
+
+    // ========================================================================
+    // ChangesetListParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_list_params_new() {
+        let params = ChangesetListParams::new(".");
+
+        assert_eq!(params.root, ".");
+        assert!(params.filter_package.is_none());
+        assert!(params.filter_bump.is_none());
+        assert!(params.filter_env.is_none());
+        assert!(params.sort.is_none());
+    }
+
+    #[test]
+    fn test_changeset_list_params_with_filters() {
+        let params = ChangesetListParams::new("/workspace")
+            .with_filter_package("@scope/core")
+            .with_filter_bump("major")
+            .with_filter_env("production")
+            .with_sort("date");
+
+        assert_eq!(params.filter_package, Some("@scope/core".to_string()));
+        assert_eq!(params.filter_bump, Some("major".to_string()));
+        assert_eq!(params.filter_env, Some("production".to_string()));
+        assert_eq!(params.sort, Some("date".to_string()));
+    }
+
+    #[test]
+    fn test_valid_sort_options() {
+        assert!(VALID_SORT_OPTIONS.contains(&"date"));
+        assert!(VALID_SORT_OPTIONS.contains(&"bump"));
+        assert!(VALID_SORT_OPTIONS.contains(&"branch"));
+        assert!(!VALID_SORT_OPTIONS.contains(&"invalid"));
+    }
+
+    // ========================================================================
+    // ChangesetShowParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_show_params_new() {
+        let params = ChangesetShowParams::new(".", "feature/api");
+
+        assert_eq!(params.root, ".");
+        assert_eq!(params.branch, "feature/api");
+        assert!(params.config_path.is_none());
+    }
+
+    #[test]
+    fn test_changeset_show_params_with_config() {
+        let params = ChangesetShowParams::new("/workspace", "feature/api")
+            .with_config_path("/workspace/repo.config.json");
+
+        assert_eq!(params.config_path, Some("/workspace/repo.config.json".to_string()));
+    }
+
+    // ========================================================================
+    // ChangesetRemoveParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_remove_params_new() {
+        let params = ChangesetRemoveParams::new(".", "feature/old");
+
+        assert_eq!(params.root, ".");
+        assert_eq!(params.branch, "feature/old");
+        assert!(params.force.is_none());
+    }
+
+    #[test]
+    fn test_changeset_remove_params_with_force() {
+        let params = ChangesetRemoveParams::new("/workspace", "feature/old").with_force(true);
+
+        assert_eq!(params.force, Some(true));
+    }
+
+    // ========================================================================
+    // ChangesetHistoryParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_history_params_new() {
+        let params = ChangesetHistoryParams::new(".");
+
+        assert_eq!(params.root, ".");
+        assert!(params.filter_package.is_none());
+        assert!(params.filter_env.is_none());
+        assert!(params.filter_bump.is_none());
+        assert!(params.since.is_none());
+        assert!(params.until.is_none());
+        assert!(params.limit.is_none());
+    }
+
+    #[test]
+    fn test_changeset_history_params_builder_chain() {
+        let params = ChangesetHistoryParams::new("/workspace")
+            .with_filter_package("@scope/core")
+            .with_filter_env("production")
+            .with_filter_bump("major")
+            .with_since("2024-01-01")
+            .with_until("2024-12-31")
+            .with_limit(50);
+
+        assert_eq!(params.filter_package, Some("@scope/core".to_string()));
+        assert_eq!(params.filter_env, Some("production".to_string()));
+        assert_eq!(params.filter_bump, Some("major".to_string()));
+        assert_eq!(params.since, Some("2024-01-01".to_string()));
+        assert_eq!(params.until, Some("2024-12-31".to_string()));
+        assert_eq!(params.limit, Some(50));
+    }
+
+    // ========================================================================
+    // ChangesetCheckParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_check_params_new() {
+        let params = ChangesetCheckParams::new(".");
+
+        assert_eq!(params.root, ".");
+        assert!(params.branch.is_none());
+    }
+
+    #[test]
+    fn test_changeset_check_params_with_branch() {
+        let params = ChangesetCheckParams::new("/workspace").with_branch("feature/api");
+
+        assert_eq!(params.branch, Some("feature/api".to_string()));
+    }
+}
+
+mod changeset_data_tests {
+    use crate::types::changeset::{
+        ArchivedChangesetInfo, ChangesetAddData, ChangesetCheckData, ChangesetDetailInfo,
+        ChangesetHistoryData, ChangesetListData, ChangesetRemoveData, ChangesetShowData,
+        ChangesetUpdateData, ReleaseInfoData, ReleasedVersionEntry, UpdateSummaryInfo,
+    };
+
+    // ========================================================================
+    // ChangesetDetailInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_detail_info_new() {
+        let info = ChangesetDetailInfo::new(
+            "feature-api",
+            "feature/api",
+            "minor",
+            "2024-01-15T10:00:00Z",
+            "2024-01-15T10:00:00Z",
+        );
+
+        assert_eq!(info.id, "feature-api");
+        assert_eq!(info.branch, "feature/api");
+        assert_eq!(info.bump, "minor");
+        assert!(info.packages.is_empty());
+        assert!(info.environments.is_empty());
+        assert!(info.commits.is_empty());
+        assert!(info.message.is_none());
+        assert_eq!(info.created_at, "2024-01-15T10:00:00Z");
+        assert_eq!(info.updated_at, "2024-01-15T10:00:00Z");
+    }
+
+    #[test]
+    fn test_changeset_detail_info_builder_chain() {
+        let info = ChangesetDetailInfo::new(
+            "feature-api",
+            "feature/api",
+            "major",
+            "2024-01-15T10:00:00Z",
+            "2024-01-16T14:30:00Z",
+        )
+        .with_packages(vec!["@scope/core".to_string(), "@scope/utils".to_string()])
+        .with_environments(vec!["staging".to_string(), "production".to_string()])
+        .with_commits(vec!["abc123".to_string(), "def456".to_string()])
+        .with_message("Breaking API change");
+
+        assert_eq!(info.packages.len(), 2);
+        assert_eq!(info.environments.len(), 2);
+        assert_eq!(info.commits.len(), 2);
+        assert_eq!(info.message, Some("Breaking API change".to_string()));
+    }
+
+    #[test]
+    fn test_changeset_detail_info_clone() {
+        let info = ChangesetDetailInfo::new(
+            "test-id",
+            "test-branch",
+            "patch",
+            "2024-01-15T10:00:00Z",
+            "2024-01-15T10:00:00Z",
+        )
+        .with_packages(vec!["@scope/pkg".to_string()]);
+        let cloned = info.clone();
+
+        assert_eq!(cloned.id, info.id);
+        assert_eq!(cloned.packages, info.packages);
+    }
+
+    #[test]
+    fn test_changeset_detail_info_serialize() {
+        let info = ChangesetDetailInfo::new(
+            "test-id",
+            "test-branch",
+            "minor",
+            "2024-01-15T10:00:00Z",
+            "2024-01-15T10:00:00Z",
+        );
+        let json = serde_json::to_string(&info).unwrap_or_default();
+
+        assert!(json.contains("\"id\":\"test-id\""));
+        assert!(json.contains("\"branch\":\"test-branch\""));
+        assert!(json.contains("\"bump\":\"minor\""));
+    }
+
+    // ========================================================================
+    // UpdateSummaryInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_update_summary_info_new() {
+        let summary = UpdateSummaryInfo::new(
+            3,
+            vec!["@scope/new1".to_string(), "@scope/new2".to_string()],
+            vec!["@scope/existing".to_string()],
+        );
+
+        assert_eq!(summary.commits_added, 3);
+        assert_eq!(summary.new_packages.len(), 2);
+        assert_eq!(summary.existing_packages.len(), 1);
+    }
+
+    #[test]
+    fn test_update_summary_info_empty() {
+        let summary = UpdateSummaryInfo::empty();
+
+        assert_eq!(summary.commits_added, 0);
+        assert!(summary.new_packages.is_empty());
+        assert!(summary.existing_packages.is_empty());
+    }
+
+    // ========================================================================
+    // ReleasedVersionEntry Tests
+    // ========================================================================
+
+    #[test]
+    fn test_released_version_entry_new() {
+        let entry = ReleasedVersionEntry::new("@scope/core", "2.0.0");
+
+        assert_eq!(entry.package_name, "@scope/core");
+        assert_eq!(entry.version, "2.0.0");
+    }
+
+    // ========================================================================
+    // ReleaseInfoData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_release_info_data_new() {
+        let versions = vec![
+            ReleasedVersionEntry::new("@scope/core", "2.0.0"),
+            ReleasedVersionEntry::new("@scope/utils", "1.5.0"),
+        ];
+        let info = ReleaseInfoData::new(
+            "2024-01-15T10:00:00Z",
+            "developer@example.com",
+            "abc123def456",
+            versions,
+        );
+
+        assert_eq!(info.released_at, "2024-01-15T10:00:00Z");
+        assert_eq!(info.released_by, "developer@example.com");
+        assert_eq!(info.release_commit, "abc123def456");
+        assert_eq!(info.released_versions.len(), 2);
+    }
+
+    // ========================================================================
+    // ArchivedChangesetInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_archived_changeset_info_new() {
+        let changeset = ChangesetDetailInfo::new(
+            "feature-api",
+            "feature/api",
+            "major",
+            "2024-01-10T10:00:00Z",
+            "2024-01-14T10:00:00Z",
+        )
+        .with_packages(vec!["@scope/core".to_string()]);
+
+        let release_info = ReleaseInfoData::new(
+            "2024-01-15T10:00:00Z",
+            "developer@example.com",
+            "abc123",
+            vec![ReleasedVersionEntry::new("@scope/core", "2.0.0")],
+        );
+
+        let archived = ArchivedChangesetInfo::new(changeset, release_info);
+
+        assert_eq!(archived.changeset.id, "feature-api");
+        assert_eq!(archived.release_info.released_by, "developer@example.com");
+    }
+
+    // ========================================================================
+    // ChangesetAddData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_add_data_new() {
+        let data =
+            ChangesetAddData::new("feature-api", "feature/api", "minor", "2024-01-15T10:00:00Z");
+
+        assert_eq!(data.id, "feature-api");
+        assert_eq!(data.branch, "feature/api");
+        assert_eq!(data.bump, "minor");
+        assert!(data.packages.is_empty());
+        assert!(data.environments.is_empty());
+        assert_eq!(data.created_at, "2024-01-15T10:00:00Z");
+    }
+
+    #[test]
+    fn test_changeset_add_data_with_packages_and_environments() {
+        let data =
+            ChangesetAddData::new("feature-api", "feature/api", "major", "2024-01-15T10:00:00Z")
+                .with_packages(vec!["@scope/core".to_string(), "@scope/utils".to_string()])
+                .with_environments(vec!["staging".to_string()]);
+
+        assert_eq!(data.packages.len(), 2);
+        assert_eq!(data.environments.len(), 1);
+    }
+
+    // ========================================================================
+    // ChangesetUpdateData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_update_data_success() {
+        let summary = UpdateSummaryInfo::new(1, vec!["@scope/new".to_string()], vec![]);
+        let data = ChangesetUpdateData::success(summary);
+
+        assert!(data.updated);
+        assert_eq!(data.summary.commits_added, 1);
+    }
+
+    #[test]
+    fn test_changeset_update_data_no_changes() {
+        let data = ChangesetUpdateData::no_changes();
+
+        assert!(!data.updated);
+        assert_eq!(data.summary.commits_added, 0);
+    }
+
+    #[test]
+    fn test_changeset_update_data_new() {
+        let summary = UpdateSummaryInfo::empty();
+        let data = ChangesetUpdateData::new(true, summary);
+
+        assert!(data.updated);
+    }
+
+    // ========================================================================
+    // ChangesetListData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_list_data_new() {
+        let changesets = vec![
+            ChangesetDetailInfo::new(
+                "cs-1",
+                "branch-1",
+                "minor",
+                "2024-01-15T10:00:00Z",
+                "2024-01-15T10:00:00Z",
+            ),
+            ChangesetDetailInfo::new(
+                "cs-2",
+                "branch-2",
+                "patch",
+                "2024-01-14T10:00:00Z",
+                "2024-01-14T10:00:00Z",
+            ),
+        ];
+        let data = ChangesetListData::new(changesets);
+
+        assert_eq!(data.count, 2);
+        assert_eq!(data.changesets.len(), 2);
+    }
+
+    #[test]
+    fn test_changeset_list_data_empty() {
+        let data = ChangesetListData::empty();
+
+        assert_eq!(data.count, 0);
+        assert!(data.changesets.is_empty());
+    }
+
+    // ========================================================================
+    // ChangesetShowData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_show_data_new() {
+        let changeset = ChangesetDetailInfo::new(
+            "feature-api",
+            "feature/api",
+            "major",
+            "2024-01-15T10:00:00Z",
+            "2024-01-15T10:00:00Z",
+        );
+        let data = ChangesetShowData::new(changeset);
+
+        assert_eq!(data.changeset.id, "feature-api");
+    }
+
+    // ========================================================================
+    // ChangesetRemoveData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_remove_data_new() {
+        let data = ChangesetRemoveData::new(true, "feature/old");
+
+        assert!(data.removed);
+        assert_eq!(data.branch, "feature/old");
+    }
+
+    #[test]
+    fn test_changeset_remove_data_success() {
+        let data = ChangesetRemoveData::success("feature/old");
+
+        assert!(data.removed);
+        assert_eq!(data.branch, "feature/old");
+    }
+
+    // ========================================================================
+    // ChangesetHistoryData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_history_data_new() {
+        let changeset = ChangesetDetailInfo::new(
+            "feature-old",
+            "feature/old",
+            "minor",
+            "2024-01-10T10:00:00Z",
+            "2024-01-10T10:00:00Z",
+        );
+        let release_info =
+            ReleaseInfoData::new("2024-01-15T10:00:00Z", "dev@example.com", "abc123", vec![]);
+        let archived = ArchivedChangesetInfo::new(changeset, release_info);
+        let data = ChangesetHistoryData::new(vec![archived]);
+
+        assert_eq!(data.count, 1);
+        assert_eq!(data.archived.len(), 1);
+    }
+
+    #[test]
+    fn test_changeset_history_data_empty() {
+        let data = ChangesetHistoryData::empty();
+
+        assert_eq!(data.count, 0);
+        assert!(data.archived.is_empty());
+    }
+
+    // ========================================================================
+    // ChangesetCheckData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_check_data_exists() {
+        let data = ChangesetCheckData::exists("feature/api", vec!["@scope/core".to_string()]);
+
+        assert!(data.has_changeset);
+        assert_eq!(data.branch, Some("feature/api".to_string()));
+        assert!(data.packages.is_some());
+        assert_eq!(data.packages.as_ref().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_changeset_check_data_not_found() {
+        let data = ChangesetCheckData::not_found();
+
+        assert!(!data.has_changeset);
+        assert!(data.branch.is_none());
+        assert!(data.packages.is_none());
+    }
+}

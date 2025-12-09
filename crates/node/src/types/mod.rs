@@ -78,8 +78,46 @@ pub(crate) use init::{
 // TODO: will be implemented on story 7.1 (config types)
 pub(crate) mod config;
 
-// TODO: will be implemented on story 4.1 (changeset types)
+// Changeset types (Story 4.1 - Implemented)
 pub(crate) mod changeset;
+
+// Re-export changeset types for easier access
+// Allow unused imports - these will be used by changeset commands (Stories 4.2-4.8)
+#[allow(unused_imports)]
+pub(crate) use changeset::{
+    // Supporting Types
+    ArchivedChangesetInfo,
+    // API Responses
+    ChangesetAddApiResponse,
+    // Response Data
+    ChangesetAddData,
+    // Input Parameters
+    ChangesetAddParams,
+    ChangesetCheckApiResponse,
+    ChangesetCheckData,
+    ChangesetCheckParams,
+    ChangesetDetailInfo,
+    ChangesetHistoryApiResponse,
+    ChangesetHistoryData,
+    ChangesetHistoryParams,
+    ChangesetListApiResponse,
+    ChangesetListData,
+    ChangesetListParams,
+    ChangesetRemoveApiResponse,
+    ChangesetRemoveData,
+    ChangesetRemoveParams,
+    ChangesetShowApiResponse,
+    ChangesetShowData,
+    ChangesetShowParams,
+    ChangesetUpdateApiResponse,
+    ChangesetUpdateData,
+    ChangesetUpdateParams,
+    ReleaseInfoData,
+    ReleasedVersionEntry,
+    UpdateSummaryInfo,
+    // Constants
+    VALID_SORT_OPTIONS,
+};
 
 // TODO: will be implemented on story 5.1 (bump types)
 pub(crate) mod bump;

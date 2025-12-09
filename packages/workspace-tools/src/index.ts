@@ -10,6 +10,7 @@
  * - `getVersion()` - Get the version of the native bindings
  * - `status()` - Get workspace status information
  * - `init()` - Initialize workspace with changeset-based version management
+ * - Changeset types for upcoming changeset commands (Stories 4.2-4.8)
  *
  * ## How
  *
@@ -54,4 +55,39 @@ export type {
   BranchInfo,
   ChangesetInfo,
   PackageInfo,
+
+  // Changeset command types (Story 4.1)
+  // Input parameters
+  ChangesetAddParams,
+  ChangesetUpdateParams,
+  ChangesetListParams,
+  ChangesetShowParams,
+  ChangesetRemoveParams,
+  ChangesetHistoryParams,
+  ChangesetCheckParams,
+
+  // Response data
+  ChangesetAddData,
+  ChangesetUpdateData,
+  ChangesetListData,
+  ChangesetShowData,
+  ChangesetRemoveData,
+  ChangesetHistoryData,
+  ChangesetCheckData,
+
+  // API responses
+  ChangesetAddApiResponse,
+  ChangesetUpdateApiResponse,
+  ChangesetListApiResponse,
+  ChangesetShowApiResponse,
+  ChangesetRemoveApiResponse,
+  ChangesetHistoryApiResponse,
+  ChangesetCheckApiResponse,
+
+  // Supporting types
+  ChangesetDetailInfo,
+  UpdateSummaryInfo,
+  ArchivedChangesetInfo,
+  ReleaseInfoData,
+  ReleasedVersionEntry,
 } from './binding'
