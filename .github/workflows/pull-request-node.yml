@@ -212,12 +212,17 @@ jobs:
         run: ls -la packages/workspace-tools/src
         shell: bash
 
+      - name: Set up Git
+        uses: ./.github/actions/setup-git
+        with:
+          user: committer
+
       - name: Build TypeScript
         run: pnpm build:node
         working-directory: packages/workspace-tools
 
-      - name: Test bindings
-        run: node -e "const { getVersion } = require('./dist/cjs/index.cjs'); console.log('Version:', getVersion());"
+      - name: Run integration tests
+        run: pnpm test
         working-directory: packages/workspace-tools
 
   # Test bindings on Linux targets using QEMU emulation
@@ -297,8 +302,39 @@ jobs:
             echo "Testing on ${{ matrix.target }} with Node.js ${{ matrix.node }}"
             echo "Platform: ${{ steps.docker.outputs.PLATFORM }}"
             echo "Image: ${{ steps.docker.outputs.IMAGE }}"
+            echo ""
+            echo "=== Testing getVersion() ==="
             node -e "const { getVersion } = require('./dist/cjs/index.cjs'); console.log('Version:', getVersion());"
-            echo "✅ Binding test passed!"
+            echo ""
+            echo "=== Testing status() with validation error ==="
+            node -e "
+              const { status } = require('./dist/cjs/index.cjs');
+              status({ root: '/nonexistent/path' }).then(result => {
+                if (!result.success && result.error && result.error.code) {
+                  console.log('Error handling works:', result.error.code, '-', result.error.message);
+                } else {
+                  console.error('Unexpected result:', JSON.stringify(result));
+                  process.exit(1);
+                }
+              });
+            "
+            echo ""
+            echo "=== Testing status() with valid workspace ==="
+            node -e "
+              const { status } = require('./dist/cjs/index.cjs');
+              status({ root: '${{ github.workspace }}' }).then(result => {
+                if (result.success && result.data) {
+                  console.log('Repository:', result.data.repository.kind);
+                  console.log('Package Manager:', result.data.packageManager.name);
+                  console.log('Packages:', result.data.packages.length);
+                } else {
+                  console.error('Status failed:', JSON.stringify(result.error));
+                  process.exit(1);
+                }
+              });
+            "
+            echo ""
+            echo "✅ All binding tests passed!"
 
   # Lint Node.js package
   lint-node:
