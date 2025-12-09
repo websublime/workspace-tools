@@ -56,12 +56,15 @@ pub(crate) mod status;
 // Re-export the status function for lib.rs
 pub use status::status;
 
+// Init command - Story 3.4
+pub(crate) mod init;
+
+// Re-export the init function for lib.rs
+pub use init::init;
+
 // Tests module for all command implementations
 #[cfg(test)]
 mod tests;
-
-// TODO: will be implemented on story 3.4 (init command)
-pub(crate) mod init;
 
 // TODO: will be implemented on story 7.2-7.3 (config commands)
 pub(crate) mod config;
