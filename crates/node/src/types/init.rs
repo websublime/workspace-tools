@@ -119,24 +119,16 @@ use crate::error::ErrorInfo;
 ///
 /// # TypeScript Definition
 ///
-/// ```typescript
+/// ```text
 /// interface InitParams {
-///   /** Workspace root directory path */
-///   root: string;
-///   /** Changeset directory path (default: ".changesets") */
-///   changesetPath?: string;
-///   /** Available environments (e.g., ["dev", "staging", "prod"]) */
-///   environments?: string[];
-///   /** Default environments (e.g., ["prod"]) */
-///   defaultEnv?: string[];
-///   /** Versioning strategy: "independent" or "unified" */
-///   strategy?: string;
-///   /** NPM registry URL (default: "https://registry.npmjs.org") */
-///   registry?: string;
-///   /** Config file format: "json", "yaml", or "toml" */
-///   configFormat?: string;
-///   /** Overwrite existing configuration */
-///   force?: boolean;
+///   root: string;                    // Workspace root directory path
+///   changesetPath?: string;          // Changeset directory path (default: ".changesets")
+///   environments?: string[];         // Available environments (e.g., ["dev", "staging", "prod"])
+///   defaultEnv?: string[];           // Default environments (e.g., ["prod"])
+///   strategy?: string;               // Versioning strategy: "independent" or "unified"
+///   registry?: string;               // NPM registry URL (default: "https://registry.npmjs.org")
+///   configFormat?: string;           // Config file format: "json", "yaml", or "toml"
+///   force?: boolean;                 // Overwrite existing configuration
 /// }
 /// ```
 ///
@@ -321,22 +313,15 @@ pub struct InitParams {
 ///
 /// # TypeScript Definition
 ///
-/// ```typescript
+/// ```text
 /// interface InitData {
-///   /** Name of the created config file (e.g., "repo.config.toml") */
-///   configFile: string;
-///   /** Format of the config file: "json", "yaml", or "toml" */
-///   configFormat: string;
-///   /** Versioning strategy: "independent" or "unified" */
-///   strategy: string;
-///   /** Path to the changeset directory */
-///   changesetPath: string;
-///   /** Configured environments */
-///   environments: string[];
-///   /** Default environments */
-///   defaultEnvironments: string[];
-///   /** NPM registry URL */
-///   registry: string;
+///   configFile: string;              // Name of the created config file (e.g., "repo.config.toml")
+///   configFormat: string;            // Format of the config file: "json", "yaml", or "toml"
+///   strategy: string;                // Versioning strategy: "independent" or "unified"
+///   changesetPath: string;           // Path to the changeset directory
+///   environments: string[];          // Configured environments
+///   defaultEnvironments: string[];   // Default environments
+///   registry: string;                // NPM registry URL
 /// }
 /// ```
 ///
@@ -739,14 +724,11 @@ impl InitData {
 ///
 /// # TypeScript Definition
 ///
-/// ```typescript
+/// ```text
 /// interface InitApiResponse {
-///   /** Whether the operation succeeded */
-///   success: boolean;
-///   /** Init data (present on success) */
-///   data?: InitData;
-///   /** Error information (present on failure) */
-///   error?: ErrorInfo;
+///   success: boolean;       // Whether the operation succeeded
+///   data?: InitData;        // Init data (present on success)
+///   error?: ErrorInfo;      // Error information (present on failure)
 /// }
 /// ```
 ///
