@@ -54,15 +54,15 @@
 //! };
 //! ```
 
-// Status types (Story 3.1 - Implemented)
+// Status types (Story 3.1 - Implemented, Story 3.2 - Status command implemented)
 pub(crate) mod status;
 
 // Re-export status types for easier access
-// Allow unused imports until Story 3.2 implements the status command
+// Allow unused imports - these will be used by future commands (changeset, bump, etc.)
 #[allow(unused_imports)]
 pub(crate) use status::{
-    BranchInfo, ChangesetInfo, PackageInfo, PackageManagerInfo, RepositoryInfo, StatusData,
-    StatusParams,
+    BranchInfo, ChangesetInfo, PackageInfo, PackageManagerInfo, RepositoryInfo, StatusApiResponse,
+    StatusData, StatusParams,
 };
 
 // TODO: will be implemented on story 3.3 (init types)

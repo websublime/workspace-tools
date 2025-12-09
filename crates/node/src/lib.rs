@@ -130,7 +130,9 @@ pub(crate) mod types;
 pub(crate) mod validation;
 
 // Re-export NAPI functions from commands module
-// TODO: will be implemented on story 3.2 (status command)
+// Status command (Story 3.2)
+pub use commands::status;
+
 // TODO: will be implemented on story 3.4 (init command)
 // TODO: will be implemented on story 4.2-4.8 (changeset commands)
 // TODO: will be implemented on story 5.2-5.4 (bump commands)

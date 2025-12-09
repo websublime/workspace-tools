@@ -25,7 +25,7 @@
 //! 1. Validates input parameters using the `validation` module
 //! 2. Calls the appropriate `execute_*` function from `sublime_cli_tools`
 //! 3. Captures and parses the JSON output
-//! 4. Returns a `JsonResponse<T>` with the result
+//! 4. Returns an `ApiResponse<T>` with the result
 //!
 //! # Why
 //!
@@ -39,7 +39,7 @@
 //! ```typescript
 //! import { status, changesetAdd, bumpPreview } from '@websublime/workspace-tools';
 //!
-//! // All functions return JsonResponse<T>
+//! // All functions return ApiResponse<T>
 //! const statusResult = await status({ root: '.' });
 //! const changesetResult = await changesetAdd({
 //!   root: '.',
@@ -50,8 +50,15 @@
 //! const previewResult = await bumpPreview({ root: '.', showDiff: true });
 //! ```
 
-// TODO: will be implemented on story 3.2 (status command)
+// Status command - Story 3.2
 pub(crate) mod status;
+
+// Re-export the status function for lib.rs
+pub use status::status;
+
+// Tests module for all command implementations
+#[cfg(test)]
+mod tests;
 
 // TODO: will be implemented on story 3.4 (init command)
 pub(crate) mod init;
