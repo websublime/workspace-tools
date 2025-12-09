@@ -1414,3 +1414,460 @@ mod types_tests {
         assert!(!response.is_error());
     }
 }
+
+/// Tests for status types (Story 3.1).
+///
+/// These tests verify that the status command types are correctly defined
+/// and can be used for parameter validation and response construction.
+mod status_types_tests {
+    use crate::types::status::{
+        BranchInfo, ChangesetInfo, PackageInfo, PackageManagerInfo, RepositoryInfo, StatusData,
+        StatusParams,
+    };
+
+    // ========================================================================
+    // StatusParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_status_params_new() {
+        let params = StatusParams::new("/path/to/workspace");
+        assert_eq!(params.root, "/path/to/workspace");
+        assert!(params.config_path.is_none());
+    }
+
+    #[test]
+    fn test_status_params_with_config() {
+        let params = StatusParams::with_config("/path/to/workspace", "/path/to/config.json");
+        assert_eq!(params.root, "/path/to/workspace");
+        assert_eq!(params.config_path, Some("/path/to/config.json".to_string()));
+    }
+
+    #[test]
+    fn test_status_params_clone() {
+        let params = StatusParams::with_config("/workspace", "/config.json");
+        let cloned = params.clone();
+        assert_eq!(cloned.root, params.root);
+        assert_eq!(cloned.config_path, params.config_path);
+    }
+
+    #[test]
+    fn test_status_params_debug() {
+        let params = StatusParams::new("/workspace");
+        let debug_str = format!("{params:?}");
+        assert!(debug_str.contains("StatusParams"));
+        assert!(debug_str.contains("/workspace"));
+    }
+
+    #[test]
+    fn test_status_params_serialize() {
+        let params = StatusParams::with_config("/workspace", "/config.json");
+        let json = serde_json::to_string(&params).unwrap_or_default();
+        assert!(json.contains("\"root\":\"/workspace\""));
+        assert!(json.contains("\"config_path\":\"/config.json\""));
+    }
+
+    // ========================================================================
+    // RepositoryInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_repository_info_simple() {
+        let info = RepositoryInfo::simple();
+        assert_eq!(info.kind, "simple");
+        assert!(info.monorepo_type.is_none());
+        assert!(info.is_simple());
+        assert!(!info.is_monorepo());
+    }
+
+    #[test]
+    fn test_repository_info_monorepo() {
+        let info = RepositoryInfo::monorepo("pnpm");
+        assert_eq!(info.kind, "monorepo");
+        assert_eq!(info.monorepo_type, Some("pnpm".to_string()));
+        assert!(!info.is_simple());
+        assert!(info.is_monorepo());
+    }
+
+    #[test]
+    fn test_repository_info_monorepo_types() {
+        let npm = RepositoryInfo::monorepo("npm");
+        assert_eq!(npm.monorepo_type, Some("npm".to_string()));
+
+        let yarn = RepositoryInfo::monorepo("yarn");
+        assert_eq!(yarn.monorepo_type, Some("yarn".to_string()));
+
+        let bun = RepositoryInfo::monorepo("bun");
+        assert_eq!(bun.monorepo_type, Some("bun".to_string()));
+
+        let deno = RepositoryInfo::monorepo("deno");
+        assert_eq!(deno.monorepo_type, Some("deno".to_string()));
+
+        let custom = RepositoryInfo::monorepo("custom");
+        assert_eq!(custom.monorepo_type, Some("custom".to_string()));
+    }
+
+    #[test]
+    fn test_repository_info_unknown() {
+        let info = RepositoryInfo::unknown();
+        assert_eq!(info.kind, "unknown");
+        assert!(info.monorepo_type.is_none());
+        assert!(!info.is_simple());
+        assert!(!info.is_monorepo());
+    }
+
+    #[test]
+    fn test_repository_info_clone() {
+        let info = RepositoryInfo::monorepo("pnpm");
+        let cloned = info.clone();
+        assert_eq!(cloned.kind, info.kind);
+        assert_eq!(cloned.monorepo_type, info.monorepo_type);
+    }
+
+    #[test]
+    fn test_repository_info_serialize() {
+        let info = RepositoryInfo::monorepo("pnpm");
+        let json = serde_json::to_string(&info).unwrap_or_default();
+        assert!(json.contains("\"kind\":\"monorepo\""));
+        assert!(json.contains("\"monorepo_type\":\"pnpm\""));
+    }
+
+    #[test]
+    fn test_repository_info_serialize_simple() {
+        let info = RepositoryInfo::simple();
+        let json = serde_json::to_string(&info).unwrap_or_default();
+        assert!(json.contains("\"kind\":\"simple\""));
+        // monorepo_type should not be present when None
+        assert!(!json.contains("monorepo_type"));
+    }
+
+    // ========================================================================
+    // PackageManagerInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_package_manager_info_new() {
+        let info = PackageManagerInfo::new("pnpm", "pnpm-lock.yaml");
+        assert_eq!(info.name, "pnpm");
+        assert_eq!(info.lock_file, "pnpm-lock.yaml");
+    }
+
+    #[test]
+    fn test_package_manager_info_npm() {
+        let info = PackageManagerInfo::npm();
+        assert_eq!(info.name, "npm");
+        assert_eq!(info.lock_file, "package-lock.json");
+    }
+
+    #[test]
+    fn test_package_manager_info_yarn() {
+        let info = PackageManagerInfo::yarn();
+        assert_eq!(info.name, "yarn");
+        assert_eq!(info.lock_file, "yarn.lock");
+    }
+
+    #[test]
+    fn test_package_manager_info_pnpm() {
+        let info = PackageManagerInfo::pnpm();
+        assert_eq!(info.name, "pnpm");
+        assert_eq!(info.lock_file, "pnpm-lock.yaml");
+    }
+
+    #[test]
+    fn test_package_manager_info_bun() {
+        let info = PackageManagerInfo::bun();
+        assert_eq!(info.name, "bun");
+        assert_eq!(info.lock_file, "bun.lockb");
+    }
+
+    #[test]
+    fn test_package_manager_info_unknown() {
+        let info = PackageManagerInfo::unknown();
+        assert_eq!(info.name, "unknown");
+        assert_eq!(info.lock_file, "");
+    }
+
+    #[test]
+    fn test_package_manager_info_clone() {
+        let info = PackageManagerInfo::pnpm();
+        let cloned = info.clone();
+        assert_eq!(cloned.name, info.name);
+        assert_eq!(cloned.lock_file, info.lock_file);
+    }
+
+    #[test]
+    fn test_package_manager_info_serialize() {
+        let info = PackageManagerInfo::pnpm();
+        let json = serde_json::to_string(&info).unwrap_or_default();
+        assert!(json.contains("\"name\":\"pnpm\""));
+        assert!(json.contains("\"lock_file\":\"pnpm-lock.yaml\""));
+    }
+
+    // ========================================================================
+    // BranchInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_branch_info_new() {
+        let branch = BranchInfo::new("main");
+        assert_eq!(branch.name, "main");
+    }
+
+    #[test]
+    fn test_branch_info_feature_branch() {
+        let branch = BranchInfo::new("feature/add-login");
+        assert_eq!(branch.name, "feature/add-login");
+    }
+
+    #[test]
+    fn test_branch_info_clone() {
+        let branch = BranchInfo::new("develop");
+        let cloned = branch.clone();
+        assert_eq!(cloned.name, branch.name);
+    }
+
+    #[test]
+    fn test_branch_info_serialize() {
+        let branch = BranchInfo::new("main");
+        let json = serde_json::to_string(&branch).unwrap_or_default();
+        assert!(json.contains("\"name\":\"main\""));
+    }
+
+    // ========================================================================
+    // ChangesetInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_changeset_info_new() {
+        let changeset = ChangesetInfo::new("feature-login");
+        assert_eq!(changeset.id, "feature-login");
+    }
+
+    #[test]
+    fn test_changeset_info_with_slashes() {
+        let changeset = ChangesetInfo::new("feature/add-new-api");
+        assert_eq!(changeset.id, "feature/add-new-api");
+    }
+
+    #[test]
+    fn test_changeset_info_clone() {
+        let changeset = ChangesetInfo::new("fix-bug");
+        let cloned = changeset.clone();
+        assert_eq!(cloned.id, changeset.id);
+    }
+
+    #[test]
+    fn test_changeset_info_serialize() {
+        let changeset = ChangesetInfo::new("feature-login");
+        let json = serde_json::to_string(&changeset).unwrap_or_default();
+        assert!(json.contains("\"id\":\"feature-login\""));
+    }
+
+    // ========================================================================
+    // PackageInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_package_info_new() {
+        let pkg = PackageInfo::new("@org/core", "1.2.3", "packages/core");
+        assert_eq!(pkg.name, "@org/core");
+        assert_eq!(pkg.version, "1.2.3");
+        assert_eq!(pkg.path, "packages/core");
+    }
+
+    #[test]
+    fn test_package_info_unscoped() {
+        let pkg = PackageInfo::new("utils", "0.1.0", "packages/utils");
+        assert_eq!(pkg.name, "utils");
+        assert_eq!(pkg.version, "0.1.0");
+        assert_eq!(pkg.path, "packages/utils");
+    }
+
+    #[test]
+    fn test_package_info_root_path() {
+        let pkg = PackageInfo::new("my-package", "1.0.0", ".");
+        assert_eq!(pkg.path, ".");
+    }
+
+    #[test]
+    fn test_package_info_prerelease_version() {
+        let pkg = PackageInfo::new("@org/core", "1.0.0-beta.1", "packages/core");
+        assert_eq!(pkg.version, "1.0.0-beta.1");
+    }
+
+    #[test]
+    fn test_package_info_clone() {
+        let pkg = PackageInfo::new("@org/core", "1.2.3", "packages/core");
+        let cloned = pkg.clone();
+        assert_eq!(cloned.name, pkg.name);
+        assert_eq!(cloned.version, pkg.version);
+        assert_eq!(cloned.path, pkg.path);
+    }
+
+    #[test]
+    fn test_package_info_serialize() {
+        let pkg = PackageInfo::new("@org/core", "1.2.3", "packages/core");
+        let json = serde_json::to_string(&pkg).unwrap_or_default();
+        assert!(json.contains("\"name\":\"@org/core\""));
+        assert!(json.contains("\"version\":\"1.2.3\""));
+        assert!(json.contains("\"path\":\"packages/core\""));
+    }
+
+    // ========================================================================
+    // StatusData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_status_data_new() {
+        let data = StatusData::new(RepositoryInfo::simple(), PackageManagerInfo::pnpm());
+        assert!(data.repository.is_simple());
+        assert_eq!(data.package_manager.name, "pnpm");
+        assert!(data.branch.is_none());
+        assert!(data.changesets.is_empty());
+        assert!(data.packages.is_empty());
+    }
+
+    #[test]
+    fn test_status_data_with_branch() {
+        let data = StatusData::new(RepositoryInfo::simple(), PackageManagerInfo::pnpm())
+            .with_branch(BranchInfo::new("main"));
+        assert!(data.branch.is_some());
+        assert_eq!(data.branch.as_ref().map(|b| b.name.as_str()), Some("main"));
+    }
+
+    #[test]
+    fn test_status_data_with_changesets() {
+        let changesets = vec![ChangesetInfo::new("feature-a"), ChangesetInfo::new("feature-b")];
+        let data = StatusData::new(RepositoryInfo::simple(), PackageManagerInfo::pnpm())
+            .with_changesets(changesets);
+        assert_eq!(data.changesets.len(), 2);
+        assert_eq!(data.changesets[0].id, "feature-a");
+        assert_eq!(data.changesets[1].id, "feature-b");
+    }
+
+    #[test]
+    fn test_status_data_with_packages() {
+        let packages = vec![
+            PackageInfo::new("@org/core", "1.0.0", "packages/core"),
+            PackageInfo::new("@org/utils", "0.5.0", "packages/utils"),
+        ];
+        let data = StatusData::new(RepositoryInfo::monorepo("pnpm"), PackageManagerInfo::pnpm())
+            .with_packages(packages);
+        assert_eq!(data.packages.len(), 2);
+        assert_eq!(data.packages[0].name, "@org/core");
+        assert_eq!(data.packages[1].name, "@org/utils");
+    }
+
+    #[test]
+    fn test_status_data_builder_chain() {
+        let data = StatusData::new(RepositoryInfo::monorepo("pnpm"), PackageManagerInfo::pnpm())
+            .with_branch(BranchInfo::new("main"))
+            .with_changesets(vec![ChangesetInfo::new("feature-x")])
+            .with_packages(vec![PackageInfo::new("@org/core", "1.0.0", "packages/core")]);
+
+        assert!(data.repository.is_monorepo());
+        assert_eq!(data.repository.monorepo_type, Some("pnpm".to_string()));
+        assert_eq!(data.package_manager.name, "pnpm");
+        assert!(data.branch.is_some());
+        assert_eq!(data.changesets.len(), 1);
+        assert_eq!(data.packages.len(), 1);
+    }
+
+    #[test]
+    fn test_status_data_clone() {
+        let data = StatusData::new(RepositoryInfo::monorepo("pnpm"), PackageManagerInfo::pnpm())
+            .with_branch(BranchInfo::new("main"))
+            .with_packages(vec![PackageInfo::new("@org/core", "1.0.0", "packages/core")]);
+
+        let cloned = data.clone();
+        assert_eq!(cloned.repository.kind, data.repository.kind);
+        assert_eq!(cloned.package_manager.name, data.package_manager.name);
+        assert_eq!(
+            cloned.branch.as_ref().map(|b| b.name.as_str()),
+            data.branch.as_ref().map(|b| b.name.as_str())
+        );
+        assert_eq!(cloned.packages.len(), data.packages.len());
+    }
+
+    #[test]
+    fn test_status_data_serialize() {
+        let data = StatusData::new(RepositoryInfo::monorepo("pnpm"), PackageManagerInfo::pnpm())
+            .with_branch(BranchInfo::new("main"))
+            .with_changesets(vec![ChangesetInfo::new("feature-x")])
+            .with_packages(vec![PackageInfo::new("@org/core", "1.0.0", "packages/core")]);
+
+        let json = serde_json::to_string(&data).unwrap_or_default();
+        assert!(json.contains("\"kind\":\"monorepo\""));
+        assert!(json.contains("\"monorepo_type\":\"pnpm\""));
+        assert!(json.contains("\"name\":\"pnpm\""));
+        assert!(json.contains("\"name\":\"main\""));
+        assert!(json.contains("\"id\":\"feature-x\""));
+        assert!(json.contains("\"name\":\"@org/core\""));
+    }
+
+    #[test]
+    fn test_status_data_serialize_without_optional_fields() {
+        let data = StatusData::new(RepositoryInfo::simple(), PackageManagerInfo::npm());
+
+        let json = serde_json::to_string(&data).unwrap_or_default();
+        assert!(json.contains("\"kind\":\"simple\""));
+        // branch should not be present when None
+        assert!(!json.contains("\"branch\":null"));
+        // changesets and packages should be empty arrays
+        assert!(json.contains("\"changesets\":[]"));
+        assert!(json.contains("\"packages\":[]"));
+    }
+
+    // ========================================================================
+    // Integration-style Tests
+    // ========================================================================
+
+    #[test]
+    fn test_complete_status_response_simple_repo() {
+        let data = StatusData::new(RepositoryInfo::simple(), PackageManagerInfo::npm())
+            .with_branch(BranchInfo::new("main"))
+            .with_packages(vec![PackageInfo::new("my-app", "1.0.0", ".")]);
+
+        assert!(data.repository.is_simple());
+        assert!(!data.repository.is_monorepo());
+        assert_eq!(data.package_manager.name, "npm");
+        assert_eq!(data.package_manager.lock_file, "package-lock.json");
+        assert_eq!(data.branch.as_ref().map(|b| b.name.as_str()), Some("main"));
+        assert!(data.changesets.is_empty());
+        assert_eq!(data.packages.len(), 1);
+        assert_eq!(data.packages[0].path, ".");
+    }
+
+    #[test]
+    fn test_complete_status_response_monorepo() {
+        let data = StatusData::new(RepositoryInfo::monorepo("pnpm"), PackageManagerInfo::pnpm())
+            .with_branch(BranchInfo::new("develop"))
+            .with_changesets(vec![
+                ChangesetInfo::new("feature/add-auth"),
+                ChangesetInfo::new("fix/memory-leak"),
+            ])
+            .with_packages(vec![
+                PackageInfo::new("@myorg/core", "2.0.0", "packages/core"),
+                PackageInfo::new("@myorg/utils", "1.5.0", "packages/utils"),
+                PackageInfo::new("@myorg/cli", "1.0.0-beta.1", "packages/cli"),
+            ]);
+
+        assert!(data.repository.is_monorepo());
+        assert_eq!(data.repository.monorepo_type, Some("pnpm".to_string()));
+        assert_eq!(data.package_manager.name, "pnpm");
+        assert_eq!(data.package_manager.lock_file, "pnpm-lock.yaml");
+        assert_eq!(data.branch.as_ref().map(|b| b.name.as_str()), Some("develop"));
+        assert_eq!(data.changesets.len(), 2);
+        assert_eq!(data.packages.len(), 3);
+    }
+
+    #[test]
+    fn test_status_response_without_git() {
+        // Simulate a response when Git is not available
+        let data = StatusData::new(RepositoryInfo::simple(), PackageManagerInfo::npm())
+            .with_packages(vec![PackageInfo::new("my-package", "1.0.0", ".")]);
+
+        assert!(data.branch.is_none());
+        assert!(data.changesets.is_empty());
+    }
+}
