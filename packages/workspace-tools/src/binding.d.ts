@@ -183,6 +183,426 @@ export interface ErrorInfo {
 export declare function getVersion(): string
 
 /**
+ * Initialize a workspace with changeset-based version management.
+ *
+ * Creates a configuration file (repo.config), sets up the changeset directory
+ * structure, and configures versioning settings for the workspace.
+ *
+ * This function is the main entry point for Node.js applications to initialize
+ * workspaces. It handles all the complexity of CLI invocation and response
+ * parsing internally.
+ *
+ * **Note**: This function always runs in non-interactive mode. All required
+ * configuration must be provided via parameters or will use sensible defaults.
+ *
+ * @param params - Init parameters containing:
+ *   - `root`: Workspace root directory path (required)
+ *   - `changesetPath`: Directory for changeset files (default: ".changesets")
+ *   - `environments`: Available environments (default: `["dev", "staging", "production"]`)
+ *   - `defaultEnv`: Default environments (default: `["production"]`)
+ *   - `strategy`: Versioning strategy - "independent" or "unified"
+ *   - `registry`: NPM registry URL (default: `https://registry.npmjs.org`)
+ *   - `configFormat`: Config file format - "json", "yaml", or "toml" (default: "toml")
+ *   - `force`: Overwrite existing configuration (default: false)
+ *
+ * @returns `Promise<ApiResponse<InitData>>` containing:
+ *   - On success: `{ success: true, data: InitData }`
+ *   - On failure: `{ success: false, error: ErrorInfo }`
+ *
+ * @example Basic initialization
+ * ```typescript
+ * const result = await init({ root: '.' });
+ * if (result.success) {
+ *   console.log(`Created: ${result.data.configFile}`);
+ *   console.log(`Strategy: ${result.data.strategy}`);
+ * } else {
+ *   console.error(`Error: ${result.error.code} - ${result.error.message}`);
+ * }
+ * ```
+ *
+ * @example With custom configuration
+ * ```typescript
+ * const result = await init({
+ *   root: '/path/to/project',
+ *   strategy: 'independent',
+ *   configFormat: 'toml',
+ *   environments: ['dev', 'staging', 'prod'],
+ *   defaultEnv: ['prod']
+ * });
+ * ```
+ *
+ * @example Force overwrite existing config
+ * ```typescript
+ * const result = await init({
+ *   root: '.',
+ *   force: true,
+ *   strategy: 'unified'
+ * });
+ * ```
+ *
+ * @example Error handling
+ * ```typescript
+ * const result = await init({ root: '/nonexistent' });
+ * if (!result.success) {
+ *   if (result.error.code === 'ENOENT') {
+ *     console.error('Path not found');
+ *   } else if (result.error.code === 'ECONFIG') {
+ *     console.error('Config already exists, use force: true to overwrite');
+ *   }
+ * }
+ * ```
+ */
+export declare function init(params: InitParams): Promise<InitApiResponse>
+
+/**
+ * API response for the init command.
+ *
+ * This is a concrete (non-generic) response type specifically for the init
+ * command. It uses `#[napi(object)]` to enable automatic conversion to
+ * JavaScript objects.
+ *
+ * napi-rs cannot use generic types with `#[napi(object)]`, so each command
+ * that returns structured data needs its own concrete response type.
+ *
+ * # Fields
+ *
+ * - `success`: Whether the operation succeeded
+ * - `data`: The init data (present when success is true)
+ * - `error`: Error information (present when success is false)
+ *
+ * # TypeScript Definition
+ *
+ * ```text
+ * interface InitApiResponse {
+ *   success: boolean;       // Whether the operation succeeded
+ *   data?: InitData;        // Init data (present on success)
+ *   error?: ErrorInfo;      // Error information (present on failure)
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const result = await init({ root: '.', strategy: 'independent' });
+ *
+ * if (result.success) {
+ *   // result.data is InitData
+ *   console.log(`Created: ${result.data.configFile}`);
+ *   console.log(`Strategy: ${result.data.strategy}`);
+ * } else {
+ *   // result.error is ErrorInfo
+ *   console.error(`[${result.error.code}] ${result.error.message}`);
+ * }
+ * ```
+ */
+export interface InitApiResponse {
+  /**
+   * Whether the operation succeeded.
+   *
+   * - `true`: Operation completed successfully, `data` field will be present
+   * - `false`: Operation failed, `error` field will be present
+   */
+  success: boolean
+  /**
+   * The init data (only present when `success` is `true`).
+   *
+   * Contains information about the created configuration file and
+   * the settings that were applied.
+   */
+  data?: InitData | undefined
+  /**
+   * Error information (only present when `success` is `false`).
+   *
+   * Contains structured error information with a Node.js-style error code,
+   * message, optional context, and error kind.
+   */
+  error?: ErrorInfo | undefined
+}
+
+/**
+ * Initialization result data.
+ *
+ * Contains information about the created configuration file and the
+ * settings that were applied during initialization.
+ *
+ * # Fields
+ *
+ * - `config_file`: Name of the created configuration file
+ * - `config_format`: Format of the configuration file
+ * - `strategy`: Versioning strategy applied
+ * - `changeset_path`: Path to the changeset directory
+ * - `environments`: List of configured environments
+ * - `default_environments`: List of default environments
+ * - `registry`: NPM registry URL
+ *
+ * # TypeScript Definition
+ *
+ * ```text
+ * interface InitData {
+ *   configFile: string;              // Name of the created config file (e.g., "repo.config.toml")
+ *   configFormat: string;            // Format of the config file: "json", "yaml", or "toml"
+ *   strategy: string;                // Versioning strategy: "independent" or "unified"
+ *   changesetPath: string;           // Path to the changeset directory
+ *   environments: string[];          // Configured environments
+ *   defaultEnvironments: string[];   // Default environments
+ *   registry: string;                // NPM registry URL
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const result = await init({ root: '.', strategy: 'independent' });
+ *
+ * if (result.success) {
+ *   const data: InitData = result.data;
+ *   console.log(`Config created: ${data.configFile}`);
+ *   console.log(`Format: ${data.configFormat}`);
+ *   console.log(`Strategy: ${data.strategy}`);
+ *   console.log(`Changesets: ${data.changesetPath}`);
+ *   console.log(`Environments: ${data.environments.join(', ')}`);
+ *   console.log(`Defaults: ${data.defaultEnvironments.join(', ')}`);
+ *   console.log(`Registry: ${data.registry}`);
+ * }
+ * ```
+ */
+export interface InitData {
+  /**
+   * Name of the created configuration file.
+   *
+   * This is the filename without the full path, e.g., `"repo.config.toml"`.
+   */
+  configFile: string
+  /**
+   * Format of the configuration file.
+   *
+   * Possible values:
+   * - `"json"`: JSON format
+   * - `"yaml"`: YAML format
+   * - `"toml"`: TOML format
+   */
+  configFormat: string
+  /**
+   * Versioning strategy applied.
+   *
+   * Possible values:
+   * - `"independent"`: Each package versions independently
+   * - `"unified"`: All packages share the same version
+   */
+  strategy: string
+  /**
+   * Path to the changeset directory.
+   *
+   * Relative to the workspace root, e.g., `".changesets"`.
+   */
+  changesetPath: string
+  /**
+   * List of configured environments.
+   *
+   * Empty array if no environments were configured.
+   */
+  environments: Array<string>
+  /**
+   * List of default environments.
+   *
+   * Empty array if no default environments were configured.
+   */
+  defaultEnvironments: Array<string>
+  /**
+   * NPM registry URL.
+   *
+   * The registry URL configured for package publishing,
+   * e.g., `"https://registry.npmjs.org"`.
+   */
+  registry: string
+}
+
+/**
+ * Input parameters for the init command.
+ *
+ * This structure defines the parameters that can be passed to the `init`
+ * function from JavaScript/TypeScript. The root path is required, while
+ * all other parameters are optional and will use CLI defaults if not specified.
+ *
+ * # Fields
+ *
+ * - `root`: The workspace root directory path (required)
+ * - `changeset_path`: Directory where changeset files will be stored
+ * - `environments`: List of available environments
+ * - `default_env`: List of default environments
+ * - `strategy`: Versioning strategy ("independent" or "unified")
+ * - `registry`: NPM registry URL
+ * - `config_format`: Configuration file format ("json", "yaml", or "toml")
+ * - `force`: Whether to overwrite existing configuration
+ *
+ * # TypeScript Definition
+ *
+ * ```text
+ * interface InitParams {
+ *   root: string;                    // Workspace root directory path
+ *   changesetPath?: string;          // Changeset directory path (default: ".changesets")
+ *   environments?: string[];         // Available environments (e.g., ["dev", "staging", "prod"])
+ *   defaultEnv?: string[];           // Default environments (e.g., ["prod"])
+ *   strategy?: string;               // Versioning strategy: "independent" or "unified"
+ *   registry?: string;               // NPM registry URL (default: "https://registry.npmjs.org")
+ *   configFormat?: string;           // Config file format: "json", "yaml", or "toml"
+ *   force?: boolean;                 // Overwrite existing configuration
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * // Minimal params with just root
+ * const params: InitParams = { root: '.' };
+ *
+ * // Full configuration
+ * const fullParams: InitParams = {
+ *   root: '/path/to/workspace',
+ *   changesetPath: '.changesets',
+ *   environments: ['dev', 'staging', 'prod'],
+ *   defaultEnv: ['prod'],
+ *   strategy: 'independent',
+ *   registry: 'https://registry.npmjs.org',
+ *   configFormat: 'toml',
+ *   force: false
+ * };
+ * ```
+ */
+export interface InitParams {
+  /**
+   * Workspace root directory path.
+   *
+   * This is the absolute or relative path to the root of the workspace.
+   * For monorepos, this should point to the root where the package manager
+   * configuration (e.g., `pnpm-workspace.yaml`) is located.
+   */
+  root: string
+  /**
+   * Changeset directory path.
+   *
+   * Directory where changeset files will be stored. If not provided,
+   * defaults to `.changesets` in the workspace root.
+   *
+   * # Example
+   *
+   * ```typescript
+   * const params: InitParams = {
+   *   root: '.',
+   *   changesetPath: '.changesets'
+   * };
+   * ```
+   */
+  changesetPath?: string | undefined
+  /**
+   * List of available environments.
+   *
+   * Environments are used to configure different release channels
+   * or deployment targets. If not provided, no environments are configured.
+   *
+   * # Example
+   *
+   * ```typescript
+   * const params: InitParams = {
+   *   root: '.',
+   *   environments: ['dev', 'staging', 'prod']
+   * };
+   * ```
+   */
+  environments?: string[] | undefined
+  /**
+   * List of default environments.
+   *
+   * Default environments are applied when no specific environment
+   * is specified during changeset creation or version bumping.
+   *
+   * # Example
+   *
+   * ```typescript
+   * const params: InitParams = {
+   *   root: '.',
+   *   environments: ['dev', 'staging', 'prod'],
+   *   defaultEnv: ['prod']
+   * };
+   * ```
+   */
+  defaultEnv?: string[] | undefined
+  /**
+   * Versioning strategy.
+   *
+   * Determines how packages are versioned:
+   * - `"independent"`: Each package versions independently
+   * - `"unified"`: All packages share the same version
+   *
+   * If not provided, the CLI will determine an appropriate default
+   * based on the workspace structure.
+   *
+   * # Example
+   *
+   * ```typescript
+   * const params: InitParams = {
+   *   root: '.',
+   *   strategy: 'independent'
+   * };
+   * ```
+   */
+  strategy?: string | undefined
+  /**
+   * NPM registry URL.
+   *
+   * The registry URL used for package publishing and version checks.
+   * If not provided, defaults to `https://registry.npmjs.org`.
+   *
+   * # Example
+   *
+   * ```typescript
+   * const params: InitParams = {
+   *   root: '.',
+   *   registry: 'https://npm.pkg.github.com'
+   * };
+   * ```
+   */
+  registry?: string | undefined
+  /**
+   * Configuration file format.
+   *
+   * The format to use for the generated configuration file:
+   * - `"json"`: Creates `repo.config.json`
+   * - `"yaml"`: Creates `repo.config.yaml`
+   * - `"toml"`: Creates `repo.config.toml`
+   *
+   * If not provided, the CLI will default to JSON format.
+   *
+   * # Example
+   *
+   * ```typescript
+   * const params: InitParams = {
+   *   root: '.',
+   *   configFormat: 'toml'
+   * };
+   * ```
+   */
+  configFormat?: string | undefined
+  /**
+   * Force overwrite existing configuration.
+   *
+   * If `true`, overwrites any existing configuration file.
+   * If `false` or not provided, the command will fail if a
+   * configuration file already exists.
+   *
+   * # Example
+   *
+   * ```typescript
+   * const params: InitParams = {
+   *   root: '.',
+   *   force: true  // Overwrite existing config
+   * };
+   * ```
+   */
+  force?: boolean | undefined
+}
+
+/**
  * Package information.
  *
  * Contains metadata about a single package within the workspace,
