@@ -31,7 +31,7 @@
 /// Tests for lib.rs version functions and constants.
 #[cfg(test)]
 mod version_tests {
-    use crate::{VERSION, get_version};
+    use crate::{get_version, VERSION};
 
     #[test]
     #[allow(clippy::const_is_empty)]
@@ -820,7 +820,7 @@ mod validation_tests {
 #[cfg(test)]
 mod response_tests {
     use crate::error::ErrorInfo;
-    use crate::response::{ApiResponse, ApiResponseExt, JsonResponse, result_to_response};
+    use crate::response::{result_to_response, ApiResponse, ApiResponseExt, JsonResponse};
     use serde::Serialize;
     use std::io::{Error as IoError, ErrorKind};
     use sublime_cli_tools::error::CliError;
@@ -1419,6 +1419,117 @@ mod types_tests {
 ///
 /// These tests verify that the status command types are correctly defined
 /// and can be used for parameter validation and response construction.
+mod status_api_response_tests {
+    use crate::error::ErrorInfo;
+    use crate::types::status::{PackageManagerInfo, RepositoryInfo, StatusApiResponse, StatusData};
+
+    #[test]
+    fn test_status_api_response_success() {
+        let data = StatusData::new(RepositoryInfo::simple(), PackageManagerInfo::npm());
+        let response = StatusApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.is_success());
+        assert!(!response.is_failure());
+        assert!(response.data.is_some());
+        assert!(response.error.is_none());
+    }
+
+    #[test]
+    fn test_status_api_response_failure() {
+        let error = ErrorInfo::validation("Invalid root path", Some("root"));
+        let response = StatusApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(!response.is_success());
+        assert!(response.is_failure());
+        assert!(response.data.is_none());
+        assert!(response.error.is_some());
+        assert_eq!(response.error.as_ref().map(|e| e.code.as_str()), Some("EVALIDATION"));
+    }
+
+    #[test]
+    fn test_status_api_response_failure_with_different_error_codes() {
+        // Test with ENOENT
+        let error = ErrorInfo::not_found("Path not found", Some("/invalid/path"));
+        let response = StatusApiResponse::failure(error);
+        assert_eq!(response.error.as_ref().map(|e| e.code.as_str()), Some("ENOENT"));
+
+        // Test with EEXEC
+        let error = ErrorInfo::execution("Command failed");
+        let response = StatusApiResponse::failure(error);
+        assert_eq!(response.error.as_ref().map(|e| e.code.as_str()), Some("EEXEC"));
+
+        // Test with EGIT
+        let error = ErrorInfo::git("Git operation failed");
+        let response = StatusApiResponse::failure(error);
+        assert_eq!(response.error.as_ref().map(|e| e.code.as_str()), Some("EGIT"));
+    }
+
+    #[test]
+    fn test_status_api_response_clone() {
+        let data = StatusData::new(RepositoryInfo::simple(), PackageManagerInfo::npm());
+        let response = StatusApiResponse::success(data);
+        let cloned = response.clone();
+
+        assert_eq!(response.success, cloned.success);
+        assert!(cloned.data.is_some());
+    }
+
+    #[test]
+    fn test_status_api_response_debug() {
+        let data = StatusData::new(RepositoryInfo::simple(), PackageManagerInfo::npm());
+        let response = StatusApiResponse::success(data);
+        let debug_str = format!("{response:?}");
+
+        assert!(debug_str.contains("StatusApiResponse"));
+        assert!(debug_str.contains("success: true"));
+    }
+
+    #[test]
+    fn test_status_api_response_serialize_success() {
+        let data = StatusData::new(RepositoryInfo::simple(), PackageManagerInfo::npm());
+        let response = StatusApiResponse::success(data);
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"success\":true"));
+        assert!(json.contains("\"data\""));
+        assert!(!json.contains("\"error\""));
+    }
+
+    #[test]
+    fn test_status_api_response_serialize_failure() {
+        let error = ErrorInfo::validation("Invalid", Some("field"));
+        let response = StatusApiResponse::failure(error);
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"success\":false"));
+        assert!(json.contains("\"error\""));
+        assert!(json.contains("\"code\":\"EVALIDATION\""));
+        assert!(!json.contains("\"data\""));
+    }
+
+    #[test]
+    fn test_status_api_response_with_full_data() {
+        use crate::types::status::{BranchInfo, ChangesetInfo, PackageInfo};
+
+        let data = StatusData::new(RepositoryInfo::monorepo("pnpm"), PackageManagerInfo::pnpm())
+            .with_branch(BranchInfo::new("main"))
+            .with_changesets(vec![ChangesetInfo::new("feature-1")])
+            .with_packages(vec![PackageInfo::new("@org/pkg", "1.0.0", "packages/pkg")]);
+
+        let response = StatusApiResponse::success(data);
+
+        assert!(response.success);
+        let data = response.data.as_ref().unwrap();
+        assert_eq!(data.repository.kind, "monorepo");
+        assert_eq!(data.repository.monorepo_type, Some("pnpm".to_string()));
+        assert!(data.branch.is_some());
+        assert_eq!(data.changesets.len(), 1);
+        assert_eq!(data.packages.len(), 1);
+    }
+}
+
 mod status_types_tests {
     use crate::types::status::{
         BranchInfo, ChangesetInfo, PackageInfo, PackageManagerInfo, RepositoryInfo, StatusData,

@@ -95,6 +95,8 @@
 use napi_derive::napi;
 use serde::Serialize;
 
+use crate::error::ErrorInfo;
+
 // ============================================================================
 // Input Parameters
 // ============================================================================
@@ -133,8 +135,6 @@ use serde::Serialize;
 ///   configPath: '/path/to/custom/repo.config.json'
 /// };
 /// ```
-// Allow dead_code until Story 3.2 implements the status command
-#[allow(dead_code)]
 #[napi(object)]
 #[derive(Debug, Clone, Serialize)]
 pub struct StatusParams {
@@ -192,8 +192,6 @@ pub struct StatusParams {
 ///   monorepoType: 'pnpm'
 /// };
 /// ```
-// Allow dead_code until Story 3.2 implements the status command
-#[allow(dead_code)]
 #[napi(object)]
 #[derive(Debug, Clone, Serialize)]
 pub struct RepositoryInfo {
@@ -256,8 +254,6 @@ pub struct RepositoryInfo {
 ///   lockFile: 'package-lock.json'
 /// };
 /// ```
-// Allow dead_code until Story 3.2 implements the status command
-#[allow(dead_code)]
 #[napi(object)]
 #[derive(Debug, Clone, Serialize)]
 pub struct PackageManagerInfo {
@@ -307,8 +303,6 @@ pub struct PackageManagerInfo {
 /// const branch: BranchInfo = { name: 'main' };
 /// const feature: BranchInfo = { name: 'feature/add-new-api' };
 /// ```
-// Allow dead_code until Story 3.2 implements the status command
-#[allow(dead_code)]
 #[napi(object)]
 #[derive(Debug, Clone, Serialize)]
 pub struct BranchInfo {
@@ -344,8 +338,6 @@ pub struct BranchInfo {
 /// const changeset: ChangesetInfo = { id: 'feature-add-login' };
 /// const fix: ChangesetInfo = { id: 'fix-memory-leak' };
 /// ```
-// Allow dead_code until Story 3.2 implements the status command
-#[allow(dead_code)]
 #[napi(object)]
 #[derive(Debug, Clone, Serialize)]
 pub struct ChangesetInfo {
@@ -398,8 +390,6 @@ pub struct ChangesetInfo {
 ///   path: 'packages/utils'
 /// };
 /// ```
-// Allow dead_code until Story 3.2 implements the status command
-#[allow(dead_code)]
 #[napi(object)]
 #[derive(Debug, Clone, Serialize)]
 pub struct PackageInfo {
@@ -467,8 +457,6 @@ pub struct PackageInfo {
 ///   ]
 /// };
 /// ```
-// Allow dead_code until Story 3.2 implements the status command
-#[allow(dead_code)]
 #[napi(object)]
 #[derive(Debug, Clone, Serialize)]
 pub struct StatusData {
@@ -510,7 +498,6 @@ pub struct StatusData {
 // Constructors and Helper Methods
 // ============================================================================
 
-#[allow(dead_code)]
 impl StatusParams {
     /// Creates a new `StatusParams` instance with the given root path.
     ///
@@ -568,7 +555,6 @@ impl StatusParams {
     }
 }
 
-#[allow(dead_code)]
 impl RepositoryInfo {
     /// Creates a new `RepositoryInfo` for a simple (single package) repository.
     ///
@@ -655,7 +641,6 @@ impl RepositoryInfo {
     }
 }
 
-#[allow(dead_code)]
 impl PackageManagerInfo {
     /// Creates a new `PackageManagerInfo` instance.
     ///
@@ -713,7 +698,6 @@ impl PackageManagerInfo {
     }
 }
 
-#[allow(dead_code)]
 impl BranchInfo {
     /// Creates a new `BranchInfo` instance.
     ///
@@ -739,7 +723,6 @@ impl BranchInfo {
     }
 }
 
-#[allow(dead_code)]
 impl ChangesetInfo {
     /// Creates a new `ChangesetInfo` instance.
     ///
@@ -765,7 +748,6 @@ impl ChangesetInfo {
     }
 }
 
-#[allow(dead_code)]
 impl PackageInfo {
     /// Creates a new `PackageInfo` instance.
     ///
@@ -799,7 +781,6 @@ impl PackageInfo {
     }
 }
 
-#[allow(dead_code)]
 impl StatusData {
     /// Creates a new `StatusData` builder for constructing status responses.
     ///
@@ -881,5 +862,152 @@ impl StatusData {
     pub fn with_packages(mut self, packages: Vec<PackageInfo>) -> Self {
         self.packages = packages;
         self
+    }
+}
+
+// ============================================================================
+// API Response Type (Concrete, non-generic for NAPI compatibility)
+// ============================================================================
+
+/// API response for the status command.
+///
+/// This is a concrete (non-generic) response type specifically for the status
+/// command. It uses `#[napi(object)]` to enable automatic conversion to
+/// JavaScript objects.
+///
+/// napi-rs cannot use generic types with `#[napi(object)]`, so each command
+/// that returns structured data needs its own concrete response type.
+///
+/// # Fields
+///
+/// - `success`: Whether the operation succeeded
+/// - `data`: The status data (present when success is true)
+/// - `error`: Error information (present when success is false)
+///
+/// # TypeScript Definition
+///
+/// ```typescript
+/// interface StatusApiResponse {
+///   /** Whether the operation succeeded */
+///   success: boolean;
+///   /** Status data (present on success) */
+///   data?: StatusData;
+///   /** Error information (present on failure) */
+///   error?: ErrorInfo;
+/// }
+/// ```
+///
+/// # Examples
+///
+/// ```typescript
+/// const result = await status({ root: '.' });
+///
+/// if (result.success) {
+///   // result.data is StatusData
+///   console.log(result.data.repository.kind);
+/// } else {
+///   // result.error is ErrorInfo
+///   console.error(`[${result.error.code}] ${result.error.message}`);
+/// }
+/// ```
+#[napi(object)]
+#[derive(Debug, Clone, Serialize)]
+pub struct StatusApiResponse {
+    /// Whether the operation succeeded.
+    ///
+    /// - `true`: Operation completed successfully, `data` field will be present
+    /// - `false`: Operation failed, `error` field will be present
+    pub success: bool,
+
+    /// The status data (only present when `success` is `true`).
+    ///
+    /// Contains comprehensive workspace information including repository type,
+    /// package manager, Git branch, pending changesets, and packages.
+    #[napi(ts_type = "StatusData | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<StatusData>,
+
+    /// Error information (only present when `success` is `false`).
+    ///
+    /// Contains structured error information with a Node.js-style error code,
+    /// message, optional context, and error kind.
+    #[napi(ts_type = "ErrorInfo | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorInfo>,
+}
+
+impl StatusApiResponse {
+    /// Creates a successful status response with data.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The status data to include
+    ///
+    /// # Returns
+    ///
+    /// A new `StatusApiResponse` with `success = true` and the provided data.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::types::status::{StatusApiResponse, StatusData, RepositoryInfo, PackageManagerInfo};
+    ///
+    /// let data = StatusData::new(
+    ///     RepositoryInfo::simple(),
+    ///     PackageManagerInfo::npm(),
+    /// );
+    /// let response = StatusApiResponse::success(data);
+    /// assert!(response.success);
+    /// assert!(response.data.is_some());
+    /// ```
+    #[must_use]
+    pub fn success(data: StatusData) -> Self {
+        Self { success: true, data: Some(data), error: None }
+    }
+
+    /// Creates a failed status response with error information.
+    ///
+    /// # Arguments
+    ///
+    /// * `error` - The error information to include
+    ///
+    /// # Returns
+    ///
+    /// A new `StatusApiResponse` with `success = false` and the provided error.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::types::status::StatusApiResponse;
+    /// use sublime_node_tools::error::ErrorInfo;
+    ///
+    /// let error = ErrorInfo::validation("Invalid root path", Some("root"));
+    /// let response = StatusApiResponse::failure(error);
+    /// assert!(!response.success);
+    /// assert!(response.error.is_some());
+    /// ```
+    #[must_use]
+    pub fn failure(error: ErrorInfo) -> Self {
+        Self { success: false, data: None, error: Some(error) }
+    }
+
+    /// Returns whether this response represents a success.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the operation succeeded, `false` otherwise.
+    #[must_use]
+    pub fn is_success(&self) -> bool {
+        self.success
+    }
+
+    /// Returns whether this response represents a failure.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the operation failed, `false` otherwise.
+    #[must_use]
+    pub fn is_failure(&self) -> bool {
+        !self.success
     }
 }

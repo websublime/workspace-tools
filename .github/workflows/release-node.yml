@@ -238,6 +238,11 @@ jobs:
           cat dist/package.json || echo "No dist/package.json"
         working-directory: packages/workspace-tools
 
+      # Configure npm authentication
+      - name: Configure npm authentication
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
+
       # Prepare for publishing - this updates versions in npm/**/package.json
       # Skip GitHub release creation as we handle releases separately
       - name: Prepare for publish
@@ -256,11 +261,6 @@ jobs:
           done
         working-directory: packages/workspace-tools
         shell: bash
-
-      # Configure npm authentication
-      - name: Configure npm authentication
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
 
       # Publish platform-specific packages first (npm/*/)
       - name: Publish platform packages (dry run)

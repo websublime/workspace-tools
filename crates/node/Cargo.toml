@@ -64,7 +64,8 @@ single_match_else = "allow"
 
 [dependencies]
 # NAPI - Node.js bindings
-napi = { version = "3.6.0", features = ["async", "tokio_rt", "napi9"] }
+# serde-json feature enables automatic serialization of Serialize types to JS objects
+napi = { version = "3.6.0", features = ["async", "tokio_rt", "napi9", "serde-json"] }
 napi-derive = "3.4.0"
 
 # Workspace crates - using path dependencies

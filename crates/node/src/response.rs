@@ -159,7 +159,7 @@ pub(crate) use sublime_cli_tools::output::JsonResponse;
 /// let failure_response: ApiResponse<MyData> = ApiResponse::failure(error);
 /// assert!(!failure_response.success);
 /// ```
-// TODO: will be used on story 3.2 (status command) and all subsequent command implementations
+// Used by status command (Story 3.2) and all subsequent command implementations
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 pub struct ApiResponse<T>
@@ -636,7 +636,7 @@ where
 /// let response: JsonResponse<String> = JsonResponse::from_error_info(error);
 /// assert!(response.is_error());
 /// ```
-// TODO: will be used on story 3.2 (status command) for parsing CLI JSON output
+// Used by status command (Story 3.2) for parsing CLI JSON output
 #[allow(dead_code)]
 pub(crate) trait ApiResponseExt<T> {
     /// Creates an error response from an `ErrorInfo`.
@@ -713,7 +713,7 @@ impl<T> ApiResponseExt<T> for JsonResponse<T> {
 /// let response = result_to_response(err_result);
 /// assert!(response.is_error());
 /// ```
-// TODO: will be used on story 3.2 (status command) for parsing CLI JSON output
+// Used by status command (Story 3.2) for parsing CLI JSON output
 #[allow(dead_code)]
 pub(crate) fn result_to_response<T>(result: Result<T, ErrorInfo>) -> JsonResponse<T> {
     match result {
