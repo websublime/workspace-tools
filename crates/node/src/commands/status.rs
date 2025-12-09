@@ -319,11 +319,7 @@ pub(crate) fn convert_to_napi_status(cli_data: CliStatusData) -> StatusData {
             lock_file: cli_data.package_manager.lock_file,
         },
         branch: cli_data.branch.map(|b| BranchInfo { name: b.name }),
-        changesets: cli_data
-            .changesets
-            .into_iter()
-            .map(|c| ChangesetInfo { id: c.id })
-            .collect(),
+        changesets: cli_data.changesets.into_iter().map(|c| ChangesetInfo { id: c.id }).collect(),
         packages: cli_data
             .packages
             .into_iter()
@@ -351,9 +347,8 @@ pub(crate) fn convert_to_napi_status(cli_data: CliStatusData) -> StatusData {
 /// - The CLI returned `success: true` but `data` is missing
 pub(crate) fn parse_status_response(json_bytes: &[u8]) -> Result<StatusData, ErrorInfo> {
     // Convert bytes to string first for better error messages
-    let json_str = std::str::from_utf8(json_bytes).map_err(|e| {
-        ErrorInfo::execution(format!("Invalid UTF-8 in CLI response: {e}"))
-    })?;
+    let json_str = std::str::from_utf8(json_bytes)
+        .map_err(|e| ErrorInfo::execution(format!("Invalid UTF-8 in CLI response: {e}")))?;
 
     // Handle empty response
     if json_str.trim().is_empty() {
@@ -361,13 +356,12 @@ pub(crate) fn parse_status_response(json_bytes: &[u8]) -> Result<StatusData, Err
     }
 
     // Parse the JSON response
-    let response: CliJsonResponse<CliStatusData> =
-        serde_json::from_str(json_str).map_err(|e| {
-            ErrorInfo::execution(format!(
-                "Failed to parse CLI JSON response: {e} (length={})",
-                json_str.len()
-            ))
-        })?;
+    let response: CliJsonResponse<CliStatusData> = serde_json::from_str(json_str).map_err(|e| {
+        ErrorInfo::execution(format!(
+            "Failed to parse CLI JSON response: {e} (length={})",
+            json_str.len()
+        ))
+    })?;
 
     // Check for CLI-level errors
     if !response.success {
@@ -376,9 +370,8 @@ pub(crate) fn parse_status_response(json_bytes: &[u8]) -> Result<StatusData, Err
     }
 
     // Extract and convert data
-    let cli_data = response.data.ok_or_else(|| {
-        ErrorInfo::execution("CLI returned success but no data")
-    })?;
+    let cli_data =
+        response.data.ok_or_else(|| ErrorInfo::execution("CLI returned success but no data"))?;
 
     Ok(convert_to_napi_status(cli_data))
 }
@@ -474,15 +467,10 @@ pub async fn status(params: StatusParams) -> StatusApiResponse {
     let result = tokio::task::spawn_blocking(move || {
         // Create a new tokio runtime for the blocking context
         // This is necessary because execute_status is async but we're in a blocking context
-        let rt = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
+        let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
             Ok(rt) => rt,
             Err(e) => {
-                return Err(ErrorInfo::execution(format!(
-                    "Failed to create runtime: {e}"
-                )));
+                return Err(ErrorInfo::execution(format!("Failed to create runtime: {e}")));
             }
         };
 

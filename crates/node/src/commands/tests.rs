@@ -34,9 +34,9 @@ mod status_tests {
     use std::io::Write;
 
     use crate::commands::status::{
-        convert_to_napi_status, parse_status_response, validate_params, CliBranchInfo,
-        CliChangesetInfo, CliPackageInfo, CliPackageManagerInfo, CliRepositoryInfo, CliStatusData,
-        SharedBuffer,
+        CliBranchInfo, CliChangesetInfo, CliPackageInfo, CliPackageManagerInfo, CliRepositoryInfo,
+        CliStatusData, SharedBuffer, convert_to_napi_status, parse_status_response,
+        validate_params,
     };
     use crate::types::status::StatusParams;
 
