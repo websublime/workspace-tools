@@ -116,9 +116,9 @@ use crate::error::ErrorInfo;
 ///
 /// ```typescript
 /// interface StatusParams {
-///   /** Workspace root directory path */
+///   Workspace root directory path
 ///   root: string;
-///   /** Optional custom config file path */
+///   Optional custom config file path
 ///   configPath?: string;
 /// }
 /// ```
@@ -173,9 +173,9 @@ pub struct StatusParams {
 ///
 /// ```typescript
 /// interface RepositoryInfo {
-///   /** Repository kind: "simple", "monorepo", or "unknown" */
+///   Repository kind: "simple", "monorepo", or "unknown"
 ///   kind: string;
-///   /** Monorepo type if applicable (npm, yarn, pnpm, bun, deno, custom) */
+///   Monorepo type if applicable (npm, yarn, pnpm, bun, deno, custom)
 ///   monorepoType?: string;
 /// }
 /// ```
@@ -232,9 +232,9 @@ pub struct RepositoryInfo {
 ///
 /// ```typescript
 /// interface PackageManagerInfo {
-///   /** Package manager name (npm, yarn, pnpm, bun, jsr, unknown) */
+///   Package manager name (npm, yarn, pnpm, bun, jsr, unknown)
 ///   name: string;
-///   /** Lock file name */
+///   Lock file name
 ///   lockFile: string;
 /// }
 /// ```
@@ -292,7 +292,7 @@ pub struct PackageManagerInfo {
 ///
 /// ```typescript
 /// interface BranchInfo {
-///   /** Branch name */
+///   Branch name
 ///   name: string;
 /// }
 /// ```
@@ -327,7 +327,7 @@ pub struct BranchInfo {
 ///
 /// ```typescript
 /// interface ChangesetInfo {
-///   /** Changeset ID (derived from branch name) */
+///   Changeset ID (derived from branch name)
 ///   id: string;
 /// }
 /// ```
@@ -364,11 +364,11 @@ pub struct ChangesetInfo {
 ///
 /// ```typescript
 /// interface PackageInfo {
-///   /** Package name (may include scope like @org/package) */
+///   Package name (may include scope like @org/package)
 ///   name: string;
-///   /** Package version (semver) */
+///   Package version (semver)
 ///   version: string;
-///   /** Package path relative to workspace root */
+///   Package path relative to workspace root
 ///   path: string;
 /// }
 /// ```
@@ -430,15 +430,15 @@ pub struct PackageInfo {
 ///
 /// ```typescript
 /// interface StatusData {
-///   /** Repository information */
+///   Repository information
 ///   repository: RepositoryInfo;
-///   /** Package manager information */
+///   Package manager information
 ///   packageManager: PackageManagerInfo;
-///   /** Current branch (if available) */
+///   Current branch (if available)
 ///   branch?: BranchInfo;
-///   /** Pending changesets */
+///   Pending changesets
 ///   changesets: ChangesetInfo[];
-///   /** Workspace packages */
+///   Workspace packages
 ///   packages: PackageInfo[];
 /// }
 /// ```
@@ -888,11 +888,11 @@ impl StatusData {
 ///
 /// ```typescript
 /// interface StatusApiResponse {
-///   /** Whether the operation succeeded */
+///   Whether the operation succeeded
 ///   success: boolean;
-///   /** Status data (present on success) */
+///   Status data (present on success)
 ///   data?: StatusData;
-///   /** Error information (present on failure) */
+///   Error information (present on failure)
 ///   error?: ErrorInfo;
 /// }
 /// ```

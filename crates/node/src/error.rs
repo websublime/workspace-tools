@@ -162,13 +162,13 @@ impl std::fmt::Display for ErrorCode {
 ///
 /// ```typescript
 /// export interface ErrorInfo {
-///   /** Node.js-style error code (e.g., "EVALIDATION", "EGIT") */
+///   Node.js-style error code (e.g., "EVALIDATION", "EGIT")
 ///   code: string;
-///   /** Human-readable error message */
+///   Human-readable error message
 ///   message: string;
-///   /** Optional additional context about the error */
+///   Optional additional context about the error
 ///   context?: string;
-///   /** Error category from CLI (for debugging) */
+///   Error category from CLI (for debugging)
 ///   kind: string;
 /// }
 /// ```
