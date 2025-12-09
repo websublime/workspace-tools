@@ -1982,3 +1982,462 @@ mod status_types_tests {
         assert!(data.changesets.is_empty());
     }
 }
+
+// ============================================================================
+// Init Types Tests (Story 3.3)
+// ============================================================================
+
+mod init_api_response_tests {
+    use crate::error::ErrorInfo;
+    use crate::types::init::{InitApiResponse, InitData};
+
+    #[test]
+    fn test_init_api_response_success() {
+        let data = InitData::with_defaults("repo.config.json", "independent");
+        let response = InitApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.data.is_some());
+        assert!(response.error.is_none());
+        assert!(response.is_success());
+        assert!(!response.is_failure());
+    }
+
+    #[test]
+    fn test_init_api_response_failure() {
+        let error = ErrorInfo::validation("Invalid strategy", Some("strategy"));
+        let response = InitApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(response.data.is_none());
+        assert!(response.error.is_some());
+        assert!(!response.is_success());
+        assert!(response.is_failure());
+    }
+
+    #[test]
+    fn test_init_api_response_failure_with_different_error_codes() {
+        let config_error = ErrorInfo::configuration("Config already exists");
+        let response1 = InitApiResponse::failure(config_error);
+        assert_eq!(response1.error.as_ref().map(|e| e.code.as_str()), Some("ECONFIG"));
+
+        let not_found_error = ErrorInfo::not_found("Path not found", Some("/invalid"));
+        let response2 = InitApiResponse::failure(not_found_error);
+        assert_eq!(response2.error.as_ref().map(|e| e.code.as_str()), Some("ENOENT"));
+
+        let validation_error = ErrorInfo::validation("Invalid format", Some("configFormat"));
+        let response3 = InitApiResponse::failure(validation_error);
+        assert_eq!(response3.error.as_ref().map(|e| e.code.as_str()), Some("EVALIDATION"));
+    }
+
+    #[test]
+    fn test_init_api_response_clone() {
+        let data = InitData::with_defaults("repo.config.toml", "unified");
+        let response = InitApiResponse::success(data);
+        let cloned = response.clone();
+
+        assert_eq!(cloned.success, response.success);
+        assert!(cloned.data.is_some());
+    }
+
+    #[test]
+    fn test_init_api_response_debug() {
+        let data = InitData::with_defaults("repo.config.json", "independent");
+        let response = InitApiResponse::success(data);
+        let debug_str = format!("{response:?}");
+        assert!(debug_str.contains("InitApiResponse"));
+        assert!(debug_str.contains("success: true"));
+    }
+
+    #[test]
+    fn test_init_api_response_serialize_success() {
+        let data = InitData::with_defaults("repo.config.json", "independent");
+        let response = InitApiResponse::success(data);
+        let json = serde_json::to_string(&response).unwrap_or_default();
+        assert!(json.contains("\"success\":true"));
+        assert!(json.contains("\"config_file\":\"repo.config.json\""));
+    }
+
+    #[test]
+    fn test_init_api_response_serialize_failure() {
+        let error = ErrorInfo::validation("Invalid strategy", Some("strategy"));
+        let response = InitApiResponse::failure(error);
+        let json = serde_json::to_string(&response).unwrap_or_default();
+        assert!(json.contains("\"success\":false"));
+        assert!(json.contains("\"code\":\"EVALIDATION\""));
+    }
+}
+
+mod init_types_tests {
+    use crate::types::init::{InitData, InitParams, VALID_CONFIG_FORMATS, VALID_STRATEGIES};
+
+    // ========================================================================
+    // InitParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_init_params_new() {
+        let params = InitParams::new("/path/to/workspace");
+        assert_eq!(params.root, "/path/to/workspace");
+        assert!(params.changeset_path.is_none());
+        assert!(params.environments.is_none());
+        assert!(params.default_env.is_none());
+        assert!(params.strategy.is_none());
+        assert!(params.registry.is_none());
+        assert!(params.config_format.is_none());
+        assert!(params.force.is_none());
+    }
+
+    #[test]
+    fn test_init_params_with_changeset_path() {
+        let params = InitParams::new("/workspace").with_changeset_path(".changesets");
+        assert_eq!(params.changeset_path, Some(".changesets".to_string()));
+    }
+
+    #[test]
+    fn test_init_params_with_environments() {
+        let params =
+            InitParams::new("/workspace").with_environments(vec!["dev", "staging", "prod"]);
+        assert_eq!(
+            params.environments,
+            Some(vec!["dev".to_string(), "staging".to_string(), "prod".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_init_params_with_default_env() {
+        let params = InitParams::new("/workspace").with_default_env(vec!["prod"]);
+        assert_eq!(params.default_env, Some(vec!["prod".to_string()]));
+    }
+
+    #[test]
+    fn test_init_params_with_strategy() {
+        let params = InitParams::new("/workspace").with_strategy("independent");
+        assert_eq!(params.strategy, Some("independent".to_string()));
+    }
+
+    #[test]
+    fn test_init_params_with_registry() {
+        let params = InitParams::new("/workspace").with_registry("https://npm.pkg.github.com");
+        assert_eq!(params.registry, Some("https://npm.pkg.github.com".to_string()));
+    }
+
+    #[test]
+    fn test_init_params_with_config_format() {
+        let params = InitParams::new("/workspace").with_config_format("toml");
+        assert_eq!(params.config_format, Some("toml".to_string()));
+    }
+
+    #[test]
+    fn test_init_params_with_force() {
+        let params = InitParams::new("/workspace").with_force(true);
+        assert_eq!(params.force, Some(true));
+    }
+
+    #[test]
+    fn test_init_params_builder_chain() {
+        let params = InitParams::new("/workspace")
+            .with_changeset_path(".changesets")
+            .with_environments(vec!["dev", "prod"])
+            .with_default_env(vec!["prod"])
+            .with_strategy("independent")
+            .with_registry("https://registry.npmjs.org")
+            .with_config_format("toml")
+            .with_force(false);
+
+        assert_eq!(params.root, "/workspace");
+        assert_eq!(params.changeset_path, Some(".changesets".to_string()));
+        assert_eq!(params.environments, Some(vec!["dev".to_string(), "prod".to_string()]));
+        assert_eq!(params.default_env, Some(vec!["prod".to_string()]));
+        assert_eq!(params.strategy, Some("independent".to_string()));
+        assert_eq!(params.registry, Some("https://registry.npmjs.org".to_string()));
+        assert_eq!(params.config_format, Some("toml".to_string()));
+        assert_eq!(params.force, Some(false));
+    }
+
+    #[test]
+    fn test_init_params_clone() {
+        let params = InitParams::new("/workspace").with_strategy("unified").with_force(true);
+        let cloned = params.clone();
+
+        assert_eq!(cloned.root, params.root);
+        assert_eq!(cloned.strategy, params.strategy);
+        assert_eq!(cloned.force, params.force);
+    }
+
+    #[test]
+    fn test_init_params_debug() {
+        let params = InitParams::new("/workspace");
+        let debug_str = format!("{params:?}");
+        assert!(debug_str.contains("InitParams"));
+        assert!(debug_str.contains("/workspace"));
+    }
+
+    #[test]
+    fn test_init_params_serialize() {
+        let params = InitParams::new("/workspace").with_strategy("independent").with_force(true);
+        let json = serde_json::to_string(&params).unwrap_or_default();
+        assert!(json.contains("\"root\":\"/workspace\""));
+        assert!(json.contains("\"strategy\":\"independent\""));
+        assert!(json.contains("\"force\":true"));
+    }
+
+    #[test]
+    fn test_init_params_serialize_skips_none_fields() {
+        let params = InitParams::new("/workspace");
+        let json = serde_json::to_string(&params).unwrap_or_default();
+        assert!(json.contains("\"root\":\"/workspace\""));
+        // None fields should be skipped
+        assert!(!json.contains("changeset_path"));
+        assert!(!json.contains("environments"));
+        assert!(!json.contains("strategy"));
+    }
+
+    // ========================================================================
+    // InitData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_init_data_new() {
+        let data = InitData::new(
+            "repo.config.toml",
+            "toml",
+            "independent",
+            ".changesets",
+            vec!["dev".to_string(), "prod".to_string()],
+            vec!["prod".to_string()],
+            "https://registry.npmjs.org",
+        );
+
+        assert_eq!(data.config_file, "repo.config.toml");
+        assert_eq!(data.config_format, "toml");
+        assert_eq!(data.strategy, "independent");
+        assert_eq!(data.changeset_path, ".changesets");
+        assert_eq!(data.environments, vec!["dev", "prod"]);
+        assert_eq!(data.default_environments, vec!["prod"]);
+        assert_eq!(data.registry, "https://registry.npmjs.org");
+    }
+
+    #[test]
+    fn test_init_data_with_defaults_json() {
+        let data = InitData::with_defaults("repo.config.json", "unified");
+
+        assert_eq!(data.config_file, "repo.config.json");
+        assert_eq!(data.config_format, "json");
+        assert_eq!(data.strategy, "unified");
+        assert_eq!(data.changeset_path, ".changesets");
+        assert!(data.environments.is_empty());
+        assert!(data.default_environments.is_empty());
+        assert_eq!(data.registry, "https://registry.npmjs.org");
+    }
+
+    #[test]
+    fn test_init_data_with_defaults_toml() {
+        let data = InitData::with_defaults("repo.config.toml", "independent");
+
+        assert_eq!(data.config_file, "repo.config.toml");
+        assert_eq!(data.config_format, "toml");
+        assert_eq!(data.strategy, "independent");
+    }
+
+    #[test]
+    fn test_init_data_with_defaults_yaml() {
+        let data = InitData::with_defaults("repo.config.yaml", "unified");
+
+        assert_eq!(data.config_file, "repo.config.yaml");
+        assert_eq!(data.config_format, "yaml");
+    }
+
+    #[test]
+    fn test_init_data_with_defaults_yml() {
+        let data = InitData::with_defaults("repo.config.yml", "unified");
+
+        assert_eq!(data.config_file, "repo.config.yml");
+        assert_eq!(data.config_format, "yaml");
+    }
+
+    #[test]
+    fn test_init_data_with_defaults_unknown_extension() {
+        let data = InitData::with_defaults("repo.config", "independent");
+
+        assert_eq!(data.config_file, "repo.config");
+        assert_eq!(data.config_format, "json"); // Defaults to json
+    }
+
+    #[test]
+    fn test_init_data_with_defaults_case_insensitive() {
+        let data1 = InitData::with_defaults("repo.config.TOML", "independent");
+        assert_eq!(data1.config_format, "toml");
+
+        let data2 = InitData::with_defaults("repo.config.YAML", "unified");
+        assert_eq!(data2.config_format, "yaml");
+
+        let data3 = InitData::with_defaults("repo.config.JSON", "independent");
+        assert_eq!(data3.config_format, "json");
+    }
+
+    #[test]
+    fn test_init_data_clone() {
+        let data = InitData::new(
+            "repo.config.toml",
+            "toml",
+            "independent",
+            ".changesets",
+            vec!["dev".to_string()],
+            vec!["dev".to_string()],
+            "https://registry.npmjs.org",
+        );
+        let cloned = data.clone();
+
+        assert_eq!(cloned.config_file, data.config_file);
+        assert_eq!(cloned.config_format, data.config_format);
+        assert_eq!(cloned.strategy, data.strategy);
+        assert_eq!(cloned.environments, data.environments);
+    }
+
+    #[test]
+    fn test_init_data_debug() {
+        let data = InitData::with_defaults("repo.config.json", "independent");
+        let debug_str = format!("{data:?}");
+        assert!(debug_str.contains("InitData"));
+        assert!(debug_str.contains("repo.config.json"));
+    }
+
+    #[test]
+    fn test_init_data_serialize() {
+        let data = InitData::new(
+            "repo.config.toml",
+            "toml",
+            "independent",
+            ".changesets",
+            vec!["dev".to_string(), "prod".to_string()],
+            vec!["prod".to_string()],
+            "https://registry.npmjs.org",
+        );
+        let json = serde_json::to_string(&data).unwrap_or_default();
+        assert!(json.contains("\"config_file\":\"repo.config.toml\""));
+        assert!(json.contains("\"config_format\":\"toml\""));
+        assert!(json.contains("\"strategy\":\"independent\""));
+        assert!(json.contains("\"changeset_path\":\".changesets\""));
+        assert!(json.contains("\"environments\":[\"dev\",\"prod\"]"));
+        assert!(json.contains("\"default_environments\":[\"prod\"]"));
+        assert!(json.contains("\"registry\":\"https://registry.npmjs.org\""));
+    }
+
+    // ========================================================================
+    // Validation Constants Tests
+    // ========================================================================
+
+    #[test]
+    fn test_valid_strategies() {
+        assert!(VALID_STRATEGIES.contains(&"independent"));
+        assert!(VALID_STRATEGIES.contains(&"unified"));
+        assert_eq!(VALID_STRATEGIES.len(), 2);
+    }
+
+    #[test]
+    fn test_valid_config_formats() {
+        assert!(VALID_CONFIG_FORMATS.contains(&"json"));
+        assert!(VALID_CONFIG_FORMATS.contains(&"yaml"));
+        assert!(VALID_CONFIG_FORMATS.contains(&"toml"));
+        assert_eq!(VALID_CONFIG_FORMATS.len(), 3);
+    }
+
+    #[test]
+    fn test_invalid_strategy_not_in_list() {
+        assert!(!VALID_STRATEGIES.contains(&"fixed"));
+        assert!(!VALID_STRATEGIES.contains(&""));
+        assert!(!VALID_STRATEGIES.contains(&"INDEPENDENT")); // Case sensitive
+    }
+
+    #[test]
+    fn test_invalid_config_format_not_in_list() {
+        assert!(!VALID_CONFIG_FORMATS.contains(&"xml"));
+        assert!(!VALID_CONFIG_FORMATS.contains(&""));
+        assert!(!VALID_CONFIG_FORMATS.contains(&"JSON")); // Case sensitive
+    }
+
+    // ========================================================================
+    // Complete Initialization Scenario Tests
+    // ========================================================================
+
+    #[test]
+    fn test_complete_init_scenario_monorepo() {
+        // Simulate a complete init for a monorepo with all options
+        let params = InitParams::new("/projects/my-monorepo")
+            .with_changeset_path(".changesets")
+            .with_environments(vec!["dev", "staging", "prod"])
+            .with_default_env(vec!["prod"])
+            .with_strategy("independent")
+            .with_registry("https://registry.npmjs.org")
+            .with_config_format("toml")
+            .with_force(false);
+
+        // Verify all params are correctly set
+        assert_eq!(params.root, "/projects/my-monorepo");
+        assert_eq!(params.changeset_path, Some(".changesets".to_string()));
+        assert_eq!(params.environments.as_ref().map(Vec::len), Some(3));
+        assert_eq!(params.strategy, Some("independent".to_string()));
+        assert_eq!(params.config_format, Some("toml".to_string()));
+        assert_eq!(params.force, Some(false));
+    }
+
+    #[test]
+    fn test_complete_init_scenario_simple_project() {
+        // Simulate a minimal init for a simple project
+        let params = InitParams::new(".").with_strategy("unified");
+
+        assert_eq!(params.root, ".");
+        assert!(params.changeset_path.is_none()); // Use default
+        assert!(params.environments.is_none()); // No custom environments
+        assert_eq!(params.strategy, Some("unified".to_string()));
+    }
+
+    #[test]
+    fn test_complete_init_response_scenario() {
+        // Simulate a complete init response
+        let data = InitData::new(
+            "repo.config.toml",
+            "toml",
+            "independent",
+            ".changesets",
+            vec!["dev".to_string(), "staging".to_string(), "prod".to_string()],
+            vec!["prod".to_string()],
+            "https://registry.npmjs.org",
+        );
+
+        assert_eq!(data.config_file, "repo.config.toml");
+        assert_eq!(data.config_format, "toml");
+        assert_eq!(data.strategy, "independent");
+        assert_eq!(data.changeset_path, ".changesets");
+        assert_eq!(data.environments.len(), 3);
+        assert_eq!(data.default_environments.len(), 1);
+        assert_eq!(data.registry, "https://registry.npmjs.org");
+    }
+
+    #[test]
+    fn test_init_data_empty_environments() {
+        // Test that empty environments are valid
+        let data = InitData::new(
+            "repo.config.json",
+            "json",
+            "unified",
+            ".changesets",
+            vec![],
+            vec![],
+            "https://registry.npmjs.org",
+        );
+
+        assert!(data.environments.is_empty());
+        assert!(data.default_environments.is_empty());
+    }
+
+    #[test]
+    fn test_init_params_github_packages_registry() {
+        // Test with GitHub Packages registry
+        let params =
+            InitParams::new("/workspace").with_registry("https://npm.pkg.github.com/@myorg");
+
+        assert_eq!(params.registry, Some("https://npm.pkg.github.com/@myorg".to_string()));
+    }
+}

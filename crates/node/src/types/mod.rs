@@ -65,8 +65,15 @@ pub(crate) use status::{
     StatusData, StatusParams,
 };
 
-// TODO: will be implemented on story 3.3 (init types)
+// Init types (Story 3.3 - Implemented)
 pub(crate) mod init;
+
+// Re-export init types for easier access
+// Allow unused imports - these will be used by the init command (Story 3.4)
+#[allow(unused_imports)]
+pub(crate) use init::{
+    InitApiResponse, InitData, InitParams, VALID_CONFIG_FORMATS, VALID_STRATEGIES,
+};
 
 // TODO: will be implemented on story 7.1 (config types)
 pub(crate) mod config;
