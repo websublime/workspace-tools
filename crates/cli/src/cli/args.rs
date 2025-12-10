@@ -51,7 +51,7 @@ use crate::output::OutputFormat;
 /// let tracing_level = level.to_tracing_level();
 /// assert_eq!(tracing_level, tracing::Level::INFO);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Default)]
 #[clap(rename_all = "lowercase")]
 pub enum LogLevel {
     /// No logs at all.
@@ -74,6 +74,7 @@ pub enum LogLevel {
     ///
     /// Shows high-level progress and completion messages.
     /// This is the default level.
+    #[default]
     Info,
 
     /// Detailed operation logs.
@@ -207,12 +208,6 @@ impl LogLevel {
     #[must_use]
     pub const fn includes_trace(&self) -> bool {
         matches!(self, Self::Trace)
-    }
-}
-
-impl Default for LogLevel {
-    fn default() -> Self {
-        Self::Info
     }
 }
 

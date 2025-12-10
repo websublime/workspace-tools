@@ -108,11 +108,12 @@ pub use style::{Style, StyledText};
 /// let json_format = OutputFormat::Json;
 /// assert!(json_format.is_json());
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OutputFormat {
     /// Human-readable output with colors, tables, and formatting.
     ///
     /// This is the default format for interactive use.
+    #[default]
     Human,
 
     /// Pretty-printed JSON output.
@@ -174,12 +175,6 @@ impl OutputFormat {
     /// ```
     pub fn is_quiet(&self) -> bool {
         matches!(self, Self::Quiet)
-    }
-}
-
-impl Default for OutputFormat {
-    fn default() -> Self {
-        Self::Human
     }
 }
 
