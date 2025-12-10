@@ -31,11 +31,12 @@
 /// assert!(urgent_priority > normal_priority);
 /// assert!(normal_priority > background_priority);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum CommandPriority {
     /// Low priority commands, executed after all others
     Low = 0,
     /// Normal priority commands, default level
+    #[default]
     Normal = 1,
     /// High priority commands, executed before normal and low
     High = 2,
@@ -75,12 +76,6 @@ pub enum CommandStatus {
     Failed,
     /// Command was cancelled before execution
     Cancelled,
-}
-
-impl Default for CommandPriority {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 impl CommandStatus {
