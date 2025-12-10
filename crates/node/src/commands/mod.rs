@@ -68,7 +68,8 @@ pub(crate) mod changeset;
 // Re-export changeset functions for lib.rs
 // Story 4.2: changesetAdd
 pub use changeset::changeset_add;
-// TODO: will be implemented on story 4.3 (changesetUpdate)
+// Story 4.3: changesetUpdate
+pub use changeset::changeset_update;
 // TODO: will be implemented on story 4.4 (changesetList)
 // TODO: will be implemented on story 4.5 (changesetShow)
 // TODO: will be implemented on story 4.6 (changesetRemove)

@@ -1236,48 +1236,109 @@ impl ChangesetDetailInfo {
 
 /// Summary of a changeset update operation.
 ///
-/// Contains counts and lists of what was added or modified during
-/// a changeset update.
+/// Contains counts of what was added or modified during a changeset update.
+/// This structure mirrors the CLI's `UpdateSummary` response.
 ///
 /// # TypeScript Definition
 ///
 /// ```typescript
 /// interface UpdateSummaryInfo {
+///   packagesAdded: number;
 ///   commitsAdded: number;
-///   newPackages: string[];
-///   existingPackages: string[];
+///   bumpUpdated: boolean;
+///   environmentsAdded: number;
+/// }
+/// ```
+///
+/// # Examples
+///
+/// ```typescript
+/// // Successful update response
+/// if (result.success) {
+///   const summary = result.data.summary;
+///   console.log(`Packages added: ${summary.packagesAdded}`);
+///   console.log(`Commits added: ${summary.commitsAdded}`);
+///   console.log(`Bump updated: ${summary.bumpUpdated}`);
+///   console.log(`Environments added: ${summary.environmentsAdded}`);
 /// }
 /// ```
 #[allow(dead_code)]
 #[napi(object)]
 #[derive(Debug, Clone, Serialize)]
 pub struct UpdateSummaryInfo {
+    /// Number of packages added to the changeset.
+    ///
+    /// Counts only newly added packages; packages that already existed
+    /// in the changeset are not included in this count.
+    pub packages_added: u32,
+
     /// Number of commits added to the changeset.
+    ///
+    /// Typically 0 or 1, as only one commit can be added per update call.
     pub commits_added: u32,
 
-    /// Packages that were newly added to the changeset.
-    pub new_packages: Vec<String>,
+    /// Whether the bump type was changed.
+    ///
+    /// `true` if the bump type was modified (e.g., from `patch` to `minor`),
+    /// `false` if the bump type remained the same or was not specified.
+    pub bump_updated: bool,
 
-    /// Packages that already existed in the changeset.
-    pub existing_packages: Vec<String>,
+    /// Number of environments added to the changeset.
+    ///
+    /// Counts only newly added environments; environments that already
+    /// existed in the changeset are not included in this count.
+    pub environments_added: u32,
 }
 
 #[allow(dead_code)]
 impl UpdateSummaryInfo {
-    /// Creates a new `UpdateSummaryInfo`.
+    /// Creates a new `UpdateSummaryInfo` with specified values.
+    ///
+    /// # Arguments
+    ///
+    /// * `packages_added` - Number of packages added
+    /// * `commits_added` - Number of commits added
+    /// * `bump_updated` - Whether the bump type was changed
+    /// * `environments_added` - Number of environments added
+    ///
+    /// # Returns
+    ///
+    /// A new `UpdateSummaryInfo` instance.
     #[must_use]
     pub fn new(
+        packages_added: u32,
         commits_added: u32,
-        new_packages: Vec<String>,
-        existing_packages: Vec<String>,
+        bump_updated: bool,
+        environments_added: u32,
     ) -> Self {
-        Self { commits_added, new_packages, existing_packages }
+        Self { packages_added, commits_added, bump_updated, environments_added }
     }
 
     /// Creates an empty update summary (no changes).
+    ///
+    /// Used when an update operation results in no actual changes
+    /// (e.g., all specified values already existed in the changeset).
+    ///
+    /// # Returns
+    ///
+    /// An `UpdateSummaryInfo` with all counts at zero and `bump_updated` as `false`.
     #[must_use]
     pub fn empty() -> Self {
-        Self { commits_added: 0, new_packages: Vec::new(), existing_packages: Vec::new() }
+        Self { packages_added: 0, commits_added: 0, bump_updated: false, environments_added: 0 }
+    }
+
+    /// Returns `true` if any changes were made.
+    ///
+    /// # Returns
+    ///
+    /// `true` if at least one package, commit, or environment was added,
+    /// or if the bump type was updated.
+    #[must_use]
+    pub fn has_changes(&self) -> bool {
+        self.packages_added > 0
+            || self.commits_added > 0
+            || self.bump_updated
+            || self.environments_added > 0
     }
 }
 
@@ -1484,7 +1545,8 @@ impl ChangesetAddData {
 
 /// Response data for the changeset update command.
 ///
-/// Contains the result of the update operation.
+/// Contains the result of the update operation, including a summary of what
+/// was changed and the current state of the changeset after the update.
 ///
 /// # TypeScript Definition
 ///
@@ -1492,6 +1554,24 @@ impl ChangesetAddData {
 /// interface ChangesetUpdateData {
 ///   updated: boolean;
 ///   summary: UpdateSummaryInfo;
+///   changeset: ChangesetDetailInfo;
+/// }
+/// ```
+///
+/// # Examples
+///
+/// ```typescript
+/// const result = await changesetUpdate({
+///   root: '.',
+///   id: 'feature/new-api',
+///   packages: ['@scope/new-package'],
+///   bump: 'minor'
+/// });
+///
+/// if (result.success) {
+///   console.log(`Updated: ${result.data.updated}`);
+///   console.log(`Packages added: ${result.data.summary.packagesAdded}`);
+///   console.log(`Current packages: ${result.data.changeset.packages.join(', ')}`);
 /// }
 /// ```
 #[allow(dead_code)]
@@ -1499,30 +1579,55 @@ impl ChangesetAddData {
 #[derive(Debug, Clone, Serialize)]
 pub struct ChangesetUpdateData {
     /// Whether the update was performed.
+    ///
+    /// `true` if at least one change was applied to the changeset,
+    /// `false` if all specified values already existed.
     pub updated: bool,
 
     /// Summary of what was updated.
+    ///
+    /// Contains counts of packages, commits, and environments added,
+    /// as well as whether the bump type was changed.
     pub summary: UpdateSummaryInfo,
+
+    /// The updated changeset details.
+    ///
+    /// Contains the complete state of the changeset after the update,
+    /// including all packages, commits, environments, and timestamps.
+    pub changeset: ChangesetDetailInfo,
 }
 
 #[allow(dead_code)]
 impl ChangesetUpdateData {
-    /// Creates a new `ChangesetUpdateData`.
+    /// Creates a new `ChangesetUpdateData` with all fields.
+    ///
+    /// # Arguments
+    ///
+    /// * `updated` - Whether any changes were applied
+    /// * `summary` - Summary of what was updated
+    /// * `changeset` - The updated changeset details
+    ///
+    /// # Returns
+    ///
+    /// A new `ChangesetUpdateData` instance.
     #[must_use]
-    pub fn new(updated: bool, summary: UpdateSummaryInfo) -> Self {
-        Self { updated, summary }
+    pub fn new(updated: bool, summary: UpdateSummaryInfo, changeset: ChangesetDetailInfo) -> Self {
+        Self { updated, summary, changeset }
     }
 
     /// Creates a successful update response.
+    ///
+    /// # Arguments
+    ///
+    /// * `summary` - Summary of what was updated
+    /// * `changeset` - The updated changeset details
+    ///
+    /// # Returns
+    ///
+    /// A `ChangesetUpdateData` with `updated` set to `true`.
     #[must_use]
-    pub fn success(summary: UpdateSummaryInfo) -> Self {
-        Self { updated: true, summary }
-    }
-
-    /// Creates a no-op response (no changes made).
-    #[must_use]
-    pub fn no_changes() -> Self {
-        Self { updated: false, summary: UpdateSummaryInfo::empty() }
+    pub fn success(summary: UpdateSummaryInfo, changeset: ChangesetDetailInfo) -> Self {
+        Self { updated: true, summary, changeset }
     }
 }
 

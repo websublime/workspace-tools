@@ -1446,3 +1446,456 @@ mod changeset_add_tests {
         }
     }
 }
+
+// =============================================================================
+// Changeset Update Tests (Story 4.3)
+// =============================================================================
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod changeset_update_tests {
+    use std::io::Write;
+
+    use crate::commands::changeset::{
+        CliUpdateSummary, CliUpdatedChangesetInfo, SharedBuffer, convert_to_napi_changeset_detail,
+        convert_to_napi_update_summary, convert_update_params_to_args,
+        parse_changeset_update_response, validate_update_params,
+    };
+    use crate::types::changeset::ChangesetUpdateParams;
+
+    // -------------------------------------------------------------------------
+    // SharedBuffer Tests (Reused from changeset_add, but included for completeness)
+    // -------------------------------------------------------------------------
+
+    mod shared_buffer_tests {
+        use super::*;
+
+        #[test]
+        fn test_shared_buffer_new() {
+            let buffer = SharedBuffer::new();
+            assert!(buffer.take_bytes().is_empty());
+        }
+
+        #[test]
+        fn test_shared_buffer_write() {
+            let mut buffer = SharedBuffer::new();
+            let written = buffer.write(b"hello").unwrap();
+            assert_eq!(written, 5);
+            assert_eq!(buffer.take_bytes(), b"hello");
+        }
+
+        #[test]
+        fn test_shared_buffer_multiple_writes() {
+            let mut buffer = SharedBuffer::new();
+            let _ = buffer.write(b"hello ");
+            let _ = buffer.write(b"world");
+            assert_eq!(buffer.take_bytes(), b"hello world");
+        }
+
+        #[test]
+        fn test_shared_buffer_clone_shares_data() {
+            let mut buffer = SharedBuffer::new();
+            let buffer_clone = buffer.clone();
+
+            let _ = buffer.write(b"test data");
+
+            // Both should see the same data
+            assert_eq!(buffer.take_bytes(), b"test data");
+            assert_eq!(buffer_clone.take_bytes(), b"test data");
+        }
+
+        #[test]
+        fn test_shared_buffer_flush() {
+            let mut buffer = SharedBuffer::new();
+            // Flush should always succeed (no-op for Vec)
+            assert!(buffer.flush().is_ok());
+        }
+
+        #[test]
+        fn test_shared_buffer_take_bytes_preserves_data() {
+            let mut buffer = SharedBuffer::new();
+            let _ = buffer.write(b"preserved");
+
+            // take_bytes clones, so data is preserved
+            let first_take = buffer.take_bytes();
+            let second_take = buffer.take_bytes();
+            assert_eq!(first_take, second_take);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Parse Response Tests
+    // -------------------------------------------------------------------------
+
+    mod parse_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_changeset_update_response_success() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "success": true,
+                    "updated": {
+                        "packages_added": 2,
+                        "commits_added": 1,
+                        "bump_updated": true,
+                        "environments_added": 1
+                    },
+                    "changeset": {
+                        "branch": "feature/new-api",
+                        "bump": "major",
+                        "packages": ["@scope/core", "@scope/utils", "@scope/new-pkg"],
+                        "environments": ["staging", "production"],
+                        "commits": ["abc123", "def456", "ghi789"],
+                        "createdAt": "2025-01-20T10:00:00Z",
+                        "updatedAt": "2025-01-20T12:00:00Z"
+                    }
+                }
+            }"#;
+
+            let result = parse_changeset_update_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert!(data.updated);
+            assert_eq!(data.summary.packages_added, 2);
+            assert_eq!(data.summary.commits_added, 1);
+            assert!(data.summary.bump_updated);
+            assert_eq!(data.summary.environments_added, 1);
+            assert_eq!(data.changeset.branch, "feature/new-api");
+            assert_eq!(data.changeset.bump, "major");
+            assert_eq!(data.changeset.packages.len(), 3);
+        }
+
+        #[test]
+        fn test_parse_changeset_update_response_no_changes() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "success": true,
+                    "updated": {
+                        "packages_added": 0,
+                        "commits_added": 0,
+                        "bump_updated": false,
+                        "environments_added": 0
+                    },
+                    "changeset": {
+                        "branch": "main",
+                        "bump": "patch",
+                        "packages": ["my-package"],
+                        "environments": [],
+                        "commits": [],
+                        "createdAt": "2025-01-20T10:00:00Z",
+                        "updatedAt": "2025-01-20T10:00:00Z"
+                    }
+                }
+            }"#;
+
+            let result = parse_changeset_update_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            // When no changes were made, updated should be false
+            assert!(!data.updated);
+            assert_eq!(data.summary.packages_added, 0);
+            assert!(!data.summary.bump_updated);
+        }
+
+        #[test]
+        fn test_parse_changeset_update_response_cli_error() {
+            let json = r#"{
+                "success": false,
+                "error": "No changeset found for branch 'nonexistent'"
+            }"#;
+
+            let result = parse_changeset_update_response(json.as_bytes());
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert!(error.message.contains("No changeset found"));
+        }
+
+        #[test]
+        fn test_parse_changeset_update_response_empty() {
+            let result = parse_changeset_update_response(b"");
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert!(error.message.contains("empty response"));
+        }
+
+        #[test]
+        fn test_parse_changeset_update_response_whitespace_only() {
+            let result = parse_changeset_update_response(b"   \n\t  ");
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert!(error.message.contains("empty response"));
+        }
+
+        #[test]
+        fn test_parse_changeset_update_response_invalid_json() {
+            let result = parse_changeset_update_response(b"not valid json");
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Failed to parse"));
+        }
+
+        #[test]
+        fn test_parse_changeset_update_response_invalid_utf8() {
+            let invalid_utf8 = vec![0xff, 0xfe, 0x00, 0x01];
+            let result = parse_changeset_update_response(&invalid_utf8);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Invalid UTF-8"));
+        }
+
+        #[test]
+        fn test_parse_changeset_update_response_success_no_data() {
+            let json = r#"{"success": true}"#;
+            let result = parse_changeset_update_response(json.as_bytes());
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert!(error.message.contains("success but no data"));
+        }
+
+        #[test]
+        fn test_parse_changeset_update_response_cli_error_no_message() {
+            let json = r#"{"success": false}"#;
+            let result = parse_changeset_update_response(json.as_bytes());
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Unknown CLI error"));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Conversion Tests
+    // -------------------------------------------------------------------------
+
+    mod conversion_tests {
+        use super::*;
+
+        #[test]
+        fn test_convert_to_napi_update_summary() {
+            let cli_summary = CliUpdateSummary {
+                packages_added: 3,
+                commits_added: 1,
+                bump_updated: true,
+                environments_added: 2,
+            };
+
+            let summary = convert_to_napi_update_summary(&cli_summary);
+
+            assert_eq!(summary.packages_added, 3);
+            assert_eq!(summary.commits_added, 1);
+            assert!(summary.bump_updated);
+            assert_eq!(summary.environments_added, 2);
+            assert!(summary.has_changes());
+        }
+
+        #[test]
+        fn test_convert_to_napi_update_summary_no_changes() {
+            let cli_summary = CliUpdateSummary {
+                packages_added: 0,
+                commits_added: 0,
+                bump_updated: false,
+                environments_added: 0,
+            };
+
+            let summary = convert_to_napi_update_summary(&cli_summary);
+
+            assert_eq!(summary.packages_added, 0);
+            assert_eq!(summary.commits_added, 0);
+            assert!(!summary.bump_updated);
+            assert_eq!(summary.environments_added, 0);
+            assert!(!summary.has_changes());
+        }
+
+        #[test]
+        fn test_convert_to_napi_changeset_detail() {
+            let cli_info = CliUpdatedChangesetInfo {
+                branch: "feature/test".to_string(),
+                bump: "minor".to_string(),
+                packages: vec!["pkg-a".to_string(), "pkg-b".to_string()],
+                environments: vec!["production".to_string()],
+                commits: vec!["commit1".to_string(), "commit2".to_string()],
+                created_at: "2025-01-20T10:00:00Z".to_string(),
+                updated_at: "2025-01-20T12:00:00Z".to_string(),
+            };
+
+            let detail = convert_to_napi_changeset_detail(&cli_info);
+
+            assert_eq!(detail.id, "feature/test");
+            assert_eq!(detail.branch, "feature/test");
+            assert_eq!(detail.bump, "minor");
+            assert_eq!(detail.packages, vec!["pkg-a", "pkg-b"]);
+            assert_eq!(detail.environments, vec!["production"]);
+            assert_eq!(detail.commits, vec!["commit1", "commit2"]);
+            assert!(detail.message.is_none());
+            assert_eq!(detail.created_at, "2025-01-20T10:00:00Z");
+            assert_eq!(detail.updated_at, "2025-01-20T12:00:00Z");
+        }
+
+        #[test]
+        fn test_convert_update_params_to_args_defaults() {
+            let params = ChangesetUpdateParams::new(".").with_id("feature/test");
+
+            let args = convert_update_params_to_args(&params);
+
+            assert_eq!(args.id, Some("feature/test".to_string()));
+            assert!(args.commit.is_none());
+            assert!(args.packages.is_none());
+            assert!(args.bump.is_none());
+            assert!(args.env.is_none());
+        }
+
+        #[test]
+        fn test_convert_update_params_to_args_full() {
+            let params = ChangesetUpdateParams::new(".")
+                .with_id("feature/test")
+                .with_commit("abc123")
+                .with_packages(vec!["pkg-a".to_string(), "pkg-b".to_string()])
+                .with_bump("major")
+                .with_environments(vec!["staging".to_string()]);
+
+            let args = convert_update_params_to_args(&params);
+
+            assert_eq!(args.id, Some("feature/test".to_string()));
+            assert_eq!(args.commit, Some("abc123".to_string()));
+            assert_eq!(args.packages, Some(vec!["pkg-a".to_string(), "pkg-b".to_string()]));
+            assert_eq!(args.bump, Some("major".to_string()));
+            assert_eq!(args.env, Some(vec!["staging".to_string()]));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Validation Tests
+    // -------------------------------------------------------------------------
+
+    mod validation_tests {
+        use super::*;
+        use std::fs;
+        use tempfile::TempDir;
+
+        #[test]
+        fn test_validate_update_params_valid() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetUpdateParams::new(temp_dir.path().to_str().unwrap())
+                .with_id("feature/test");
+
+            let result = validate_update_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_update_params_missing_id() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetUpdateParams::new(temp_dir.path().to_str().unwrap());
+
+            let result = validate_update_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("id is required"));
+        }
+
+        #[test]
+        fn test_validate_update_params_nonexistent_path() {
+            let params = ChangesetUpdateParams::new("/nonexistent/path/that/does/not/exist")
+                .with_id("feature/test");
+
+            let result = validate_update_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "ENOENT");
+        }
+
+        #[test]
+        fn test_validate_update_params_empty_root() {
+            let params = ChangesetUpdateParams::new("").with_id("feature/test");
+
+            let result = validate_update_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+        }
+
+        #[test]
+        fn test_validate_update_params_file_not_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let file_path = temp_dir.path().join("test.txt");
+            fs::write(&file_path, "test").unwrap();
+
+            let params =
+                ChangesetUpdateParams::new(file_path.to_str().unwrap()).with_id("feature/test");
+
+            let result = validate_update_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+        }
+
+        #[test]
+        fn test_validate_update_params_valid_bump_type() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetUpdateParams::new(temp_dir.path().to_str().unwrap())
+                .with_id("feature/test")
+                .with_bump("minor");
+
+            let result = validate_update_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_update_params_invalid_bump_type() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetUpdateParams::new(temp_dir.path().to_str().unwrap())
+                .with_id("feature/test")
+                .with_bump("invalid");
+
+            let result = validate_update_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("invalid bump type"));
+        }
+
+        #[test]
+        fn test_validate_update_params_all_bump_types() {
+            let temp_dir = TempDir::new().unwrap();
+            let root = temp_dir.path().to_str().unwrap();
+
+            for bump in &["major", "minor", "patch", "none"] {
+                let params =
+                    ChangesetUpdateParams::new(root).with_id("feature/test").with_bump(*bump);
+                let result = validate_update_params(&params);
+                assert!(result.is_ok(), "Bump type '{bump}' should be valid");
+            }
+        }
+
+        #[test]
+        fn test_validate_update_params_with_all_options() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetUpdateParams::new(temp_dir.path().to_str().unwrap())
+                .with_id("feature/test")
+                .with_commit("abc123")
+                .with_packages(vec!["pkg-a".to_string()])
+                .with_bump("major")
+                .with_environments(vec!["staging".to_string()]);
+
+            let result = validate_update_params(&params);
+            assert!(result.is_ok());
+        }
+    }
+}

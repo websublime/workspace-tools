@@ -69,10 +69,10 @@ napi = { version = "3.6.0", features = ["async", "tokio_rt", "napi9", "serde-jso
 napi-derive = "3.4.0"
 
 # Workspace crates - using path dependencies
-sublime_cli_tools = { version = "0.0.27", path = "../cli" }
+sublime_cli_tools = { version = "0.0.28", path = "../cli" }
 sublime_git_tools = { version = "0.0.15", path = "../git" }
-sublime_pkg_tools = { version = "0.0.19", path = "../pkg" }
-sublime_standard_tools = { version = "0.0.14", path = "../standard" }
+sublime_pkg_tools = { version = "0.0.20", path = "../pkg" }
+sublime_standard_tools = { version = "0.0.15", path = "../standard" }
 
 # Serialization
 serde = { version = "1.0.203", features = ["derive"] }

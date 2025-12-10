@@ -1005,6 +1005,94 @@ export interface ChangesetShowParams {
 }
 
 /**
+ * Update an existing changeset in the workspace.
+ *
+ * Modifies an existing changeset by adding packages, commits, environments,
+ * or changing the bump type. The changeset is identified by the `id` parameter,
+ * which corresponds to the branch name.
+ *
+ * This function always operates in non-interactive mode. The `id` parameter
+ * is required since auto-detection of the current git branch is not reliable
+ * in programmatic contexts.
+ *
+ * @param params - Changeset update parameters containing:
+ *   - `root`: Workspace root directory path (required)
+ *   - `configPath`: Optional custom config file path
+ *   - `id`: Branch name or changeset ID (required)
+ *   - `commit`: Optional commit hash to add
+ *   - `packages`: Optional list of packages to add
+ *   - `bump`: Optional new bump type (major, minor, patch)
+ *   - `environments`: Optional list of environments to add
+ *
+ * @returns `Promise<ChangesetUpdateApiResponse>` containing:
+ *   - On success: `{ success: true, data: ChangesetUpdateData }`
+ *   - On failure: `{ success: false, error: ErrorInfo }`
+ *
+ * @example Add packages to an existing changeset
+ * ```typescript
+ * const result = await changesetUpdate({
+ *   root: '/path/to/workspace',
+ *   id: 'feature/new-api',
+ *   packages: ['@scope/new-package']
+ * });
+ *
+ * if (result.success) {
+ *   console.log(`Updated: ${result.data.updated}`);
+ *   console.log(`Packages added: ${result.data.summary.packagesAdded}`);
+ * }
+ * ```
+ *
+ * @example Add a commit and change bump type
+ * ```typescript
+ * const result = await changesetUpdate({
+ *   root: '/path/to/workspace',
+ *   id: 'feature/breaking-change',
+ *   commit: 'abc123def456',
+ *   bump: 'major'
+ * });
+ *
+ * if (result.success) {
+ *   console.log(`Bump updated: ${result.data.summary.bumpUpdated}`);
+ *   console.log(`Current bump: ${result.data.changeset.bump}`);
+ * }
+ * ```
+ *
+ * @example Add environments
+ * ```typescript
+ * const result = await changesetUpdate({
+ *   root: '/path/to/workspace',
+ *   id: 'feature/deploy',
+ *   environments: ['staging', 'production']
+ * });
+ * ```
+ *
+ * @example Error handling
+ * ```typescript
+ * const result = await changesetUpdate({
+ *   root: '/path/to/workspace',
+ *   id: 'nonexistent-branch'
+ * });
+ *
+ * if (!result.success) {
+ *   switch (result.error.code) {
+ *     case 'ENOENT':
+ *       console.error('Path or changeset not found');
+ *       break;
+ *     case 'EVALIDATION':
+ *       console.error('Invalid parameters:', result.error.message);
+ *       break;
+ *     case 'EEXECUTION':
+ *       console.error('Update failed:', result.error.message);
+ *       break;
+ *     default:
+ *       console.error(`Error: ${result.error.message}`);
+ *   }
+ * }
+ * ```
+ */
+export declare function changesetUpdate(params: ChangesetUpdateParams): Promise<ChangesetUpdateApiResponse>
+
+/**
  * API response for the changeset update command.
  *
  * Wraps `ChangesetUpdateData` with success/error handling.
@@ -1031,7 +1119,8 @@ export interface ChangesetUpdateApiResponse {
 /**
  * Response data for the changeset update command.
  *
- * Contains the result of the update operation.
+ * Contains the result of the update operation, including a summary of what
+ * was changed and the current state of the changeset after the update.
  *
  * # TypeScript Definition
  *
@@ -1039,14 +1128,49 @@ export interface ChangesetUpdateApiResponse {
  * interface ChangesetUpdateData {
  *   updated: boolean;
  *   summary: UpdateSummaryInfo;
+ *   changeset: ChangesetDetailInfo;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const result = await changesetUpdate({
+ *   root: '.',
+ *   id: 'feature/new-api',
+ *   packages: ['@scope/new-package'],
+ *   bump: 'minor'
+ * });
+ *
+ * if (result.success) {
+ *   console.log(`Updated: ${result.data.updated}`);
+ *   console.log(`Packages added: ${result.data.summary.packagesAdded}`);
+ *   console.log(`Current packages: ${result.data.changeset.packages.join(', ')}`);
  * }
  * ```
  */
 export interface ChangesetUpdateData {
-  /** Whether the update was performed. */
+  /**
+   * Whether the update was performed.
+   *
+   * `true` if at least one change was applied to the changeset,
+   * `false` if all specified values already existed.
+   */
   updated: boolean
-  /** Summary of what was updated. */
+  /**
+   * Summary of what was updated.
+   *
+   * Contains counts of packages, commits, and environments added,
+   * as well as whether the bump type was changed.
+   */
   summary: UpdateSummaryInfo
+  /**
+   * The updated changeset details.
+   *
+   * Contains the complete state of the changeset after the update,
+   * including all packages, commits, environments, and timestamps.
+   */
+  changeset: ChangesetDetailInfo
 }
 
 /**
@@ -2184,24 +2308,59 @@ export interface StatusParams {
 /**
  * Summary of a changeset update operation.
  *
- * Contains counts and lists of what was added or modified during
- * a changeset update.
+ * Contains counts of what was added or modified during a changeset update.
+ * This structure mirrors the CLI's `UpdateSummary` response.
  *
  * # TypeScript Definition
  *
  * ```typescript
  * interface UpdateSummaryInfo {
+ *   packagesAdded: number;
  *   commitsAdded: number;
- *   newPackages: string[];
- *   existingPackages: string[];
+ *   bumpUpdated: boolean;
+ *   environmentsAdded: number;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * // Successful update response
+ * if (result.success) {
+ *   const summary = result.data.summary;
+ *   console.log(`Packages added: ${summary.packagesAdded}`);
+ *   console.log(`Commits added: ${summary.commitsAdded}`);
+ *   console.log(`Bump updated: ${summary.bumpUpdated}`);
+ *   console.log(`Environments added: ${summary.environmentsAdded}`);
  * }
  * ```
  */
 export interface UpdateSummaryInfo {
-  /** Number of commits added to the changeset. */
+  /**
+   * Number of packages added to the changeset.
+   *
+   * Counts only newly added packages; packages that already existed
+   * in the changeset are not included in this count.
+   */
+  packagesAdded: number
+  /**
+   * Number of commits added to the changeset.
+   *
+   * Typically 0 or 1, as only one commit can be added per update call.
+   */
   commitsAdded: number
-  /** Packages that were newly added to the changeset. */
-  newPackages: Array<string>
-  /** Packages that already existed in the changeset. */
-  existingPackages: Array<string>
+  /**
+   * Whether the bump type was changed.
+   *
+   * `true` if the bump type was modified (e.g., from `patch` to `minor`),
+   * `false` if the bump type remained the same or was not specified.
+   */
+  bumpUpdated: boolean
+  /**
+   * Number of environments added to the changeset.
+   *
+   * Counts only newly added environments; environments that already
+   * existed in the changeset are not included in this count.
+   */
+  environmentsAdded: number
 }
