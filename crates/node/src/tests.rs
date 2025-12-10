@@ -2451,9 +2451,9 @@ mod changeset_api_response_tests {
     use crate::types::changeset::{
         ChangesetAddApiResponse, ChangesetAddData, ChangesetCheckApiResponse, ChangesetCheckData,
         ChangesetDetailInfo, ChangesetHistoryApiResponse, ChangesetHistoryData,
-        ChangesetListApiResponse, ChangesetListData, ChangesetRemoveApiResponse,
-        ChangesetRemoveData, ChangesetShowApiResponse, ChangesetShowData,
-        ChangesetUpdateApiResponse, ChangesetUpdateData, UpdateSummaryInfo,
+        ChangesetListApiResponse, ChangesetListData, ChangesetListItemInfo,
+        ChangesetRemoveApiResponse, ChangesetRemoveData, ChangesetShowApiResponse,
+        ChangesetShowData, ChangesetUpdateApiResponse, ChangesetUpdateData, UpdateSummaryInfo,
     };
 
     // ========================================================================
@@ -2563,10 +2563,11 @@ mod changeset_api_response_tests {
 
     #[test]
     fn test_changeset_list_api_response_success_with_items() {
-        let changeset = ChangesetDetailInfo::new(
+        let changeset = ChangesetListItemInfo::new(
             "cs-1",
             "feature/one",
             "minor",
+            3, // commit_count
             "2024-01-15T10:00:00Z",
             "2024-01-15T10:00:00Z",
         );
@@ -2576,6 +2577,7 @@ mod changeset_api_response_tests {
         assert!(response.success);
         assert!(response.data.is_some());
         assert_eq!(response.data.as_ref().unwrap().count, 1);
+        assert_eq!(response.data.as_ref().unwrap().changesets[0].commit_count, 3);
     }
 
     #[test]
@@ -2966,8 +2968,9 @@ mod changeset_params_tests {
 mod changeset_data_tests {
     use crate::types::changeset::{
         ArchivedChangesetInfo, ChangesetAddData, ChangesetCheckData, ChangesetDetailInfo,
-        ChangesetHistoryData, ChangesetListData, ChangesetRemoveData, ChangesetShowData,
-        ChangesetUpdateData, ReleaseInfoData, ReleasedVersionEntry, UpdateSummaryInfo,
+        ChangesetHistoryData, ChangesetListData, ChangesetListItemInfo, ChangesetRemoveData,
+        ChangesetShowData, ChangesetUpdateData, ReleaseInfoData, ReleasedVersionEntry,
+        UpdateSummaryInfo,
     };
 
     // ========================================================================
@@ -3226,17 +3229,19 @@ mod changeset_data_tests {
     #[test]
     fn test_changeset_list_data_new() {
         let changesets = vec![
-            ChangesetDetailInfo::new(
+            ChangesetListItemInfo::new(
                 "cs-1",
                 "branch-1",
                 "minor",
+                3, // commit_count
                 "2024-01-15T10:00:00Z",
                 "2024-01-15T10:00:00Z",
             ),
-            ChangesetDetailInfo::new(
+            ChangesetListItemInfo::new(
                 "cs-2",
                 "branch-2",
                 "patch",
+                1, // commit_count
                 "2024-01-14T10:00:00Z",
                 "2024-01-14T10:00:00Z",
             ),
@@ -3245,6 +3250,8 @@ mod changeset_data_tests {
 
         assert_eq!(data.count, 2);
         assert_eq!(data.changesets.len(), 2);
+        assert_eq!(data.changesets[0].commit_count, 3);
+        assert_eq!(data.changesets[1].commit_count, 1);
     }
 
     #[test]

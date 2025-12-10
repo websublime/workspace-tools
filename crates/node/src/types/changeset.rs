@@ -1631,16 +1631,169 @@ impl ChangesetUpdateData {
     }
 }
 
+/// Changeset information for list responses.
+///
+/// This type is specifically designed for the changeset list command output,
+/// which returns `commit_count` rather than individual commit hashes. For
+/// full commit details, use `ChangesetDetailInfo` via the `changesetShow` command.
+///
+/// # Fields
+///
+/// - `id`: Unique changeset identifier (derived from branch)
+/// - `branch`: Git branch name
+/// - `bump`: Version bump type (major, minor, patch, none)
+/// - `packages`: List of affected packages
+/// - `environments`: Target environments
+/// - `commit_count`: Number of commits in the changeset
+/// - `created_at`: Creation timestamp (ISO 8601)
+/// - `updated_at`: Last update timestamp (ISO 8601)
+///
+/// # TypeScript Definition
+///
+/// ```typescript
+/// interface ChangesetListItemInfo {
+///   id: string;
+///   branch: string;
+///   bump: string;
+///   packages: string[];
+///   environments: string[];
+///   commitCount: number;
+///   createdAt: string;
+///   updatedAt: string;
+/// }
+/// ```
+///
+/// # Examples
+///
+/// ```typescript
+/// const result = await changesetList({ root: '.' });
+/// if (result.success) {
+///   for (const item of result.data.changesets) {
+///     console.log(`${item.branch}: ${item.bump} (${item.commitCount} commits)`);
+///   }
+/// }
+/// ```
+#[allow(dead_code)]
+#[napi(object)]
+#[derive(Debug, Clone, Serialize)]
+pub struct ChangesetListItemInfo {
+    /// Unique changeset identifier.
+    ///
+    /// This ID is derived from the branch name and uniquely identifies
+    /// the changeset within the workspace.
+    pub id: String,
+
+    /// Git branch name.
+    ///
+    /// The full branch name associated with this changeset.
+    pub branch: String,
+
+    /// Version bump type.
+    ///
+    /// One of: `"major"`, `"minor"`, `"patch"`, `"none"`.
+    pub bump: String,
+
+    /// List of affected packages.
+    ///
+    /// Package names exactly as defined in each package's `package.json`.
+    pub packages: Vec<String>,
+
+    /// Target environments.
+    ///
+    /// List of environments this changeset applies to.
+    pub environments: Vec<String>,
+
+    /// Number of commits in the changeset.
+    ///
+    /// The count of git commits associated with this changeset.
+    /// For full commit details, use `changesetShow`.
+    pub commit_count: u32,
+
+    /// Creation timestamp (ISO 8601 format).
+    ///
+    /// When the changeset was first created.
+    /// Example: `"2024-01-15T10:30:00Z"`
+    pub created_at: String,
+
+    /// Last update timestamp (ISO 8601 format).
+    ///
+    /// When the changeset was last modified.
+    /// Example: `"2024-01-15T14:45:00Z"`
+    pub updated_at: String,
+}
+
+#[allow(dead_code)]
+impl ChangesetListItemInfo {
+    /// Creates a new `ChangesetListItemInfo` with all required fields.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - Unique changeset identifier
+    /// * `branch` - Git branch name
+    /// * `bump` - Version bump type
+    /// * `commit_count` - Number of commits
+    /// * `created_at` - Creation timestamp
+    /// * `updated_at` - Last update timestamp
+    #[must_use]
+    pub fn new(
+        id: impl Into<String>,
+        branch: impl Into<String>,
+        bump: impl Into<String>,
+        commit_count: u32,
+        created_at: impl Into<String>,
+        updated_at: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            branch: branch.into(),
+            bump: bump.into(),
+            packages: Vec::new(),
+            environments: Vec::new(),
+            commit_count,
+            created_at: created_at.into(),
+            updated_at: updated_at.into(),
+        }
+    }
+
+    /// Sets the packages list.
+    #[must_use]
+    pub fn with_packages(mut self, packages: Vec<String>) -> Self {
+        self.packages = packages;
+        self
+    }
+
+    /// Sets the environments list.
+    #[must_use]
+    pub fn with_environments(mut self, environments: Vec<String>) -> Self {
+        self.environments = environments;
+        self
+    }
+}
+
 /// Response data for the changeset list command.
 ///
-/// Contains the list of pending changesets.
+/// Contains the list of pending changesets with summary information.
+/// Each changeset item includes `commit_count` rather than full commit
+/// details - use `changesetShow` for complete commit information.
 ///
 /// # TypeScript Definition
 ///
 /// ```typescript
 /// interface ChangesetListData {
-///   changesets: ChangesetDetailInfo[];
+///   changesets: ChangesetListItemInfo[];
 ///   count: number;
+/// }
+/// ```
+///
+/// # Examples
+///
+/// ```typescript
+/// const result = await changesetList({ root: '.' });
+/// if (result.success) {
+///   console.log(`Found ${result.data.count} changesets`);
+///   for (const cs of result.data.changesets) {
+///     console.log(`- ${cs.branch}: ${cs.bump} (${cs.commitCount} commits)`);
+///   }
 /// }
 /// ```
 #[allow(dead_code)]
@@ -1648,7 +1801,9 @@ impl ChangesetUpdateData {
 #[derive(Debug, Clone, Serialize)]
 pub struct ChangesetListData {
     /// List of pending changesets.
-    pub changesets: Vec<ChangesetDetailInfo>,
+    ///
+    /// Each item contains summary information including commit count.
+    pub changesets: Vec<ChangesetListItemInfo>,
 
     /// Total count of changesets.
     pub count: u32,
@@ -1658,7 +1813,7 @@ pub struct ChangesetListData {
 impl ChangesetListData {
     /// Creates a new `ChangesetListData`.
     #[must_use]
-    pub fn new(changesets: Vec<ChangesetDetailInfo>) -> Self {
+    pub fn new(changesets: Vec<ChangesetListItemInfo>) -> Self {
         // Saturating conversion is safe here - we won't have more than u32::MAX changesets
         #[allow(clippy::cast_possible_truncation)]
         let count = changesets.len() as u32;

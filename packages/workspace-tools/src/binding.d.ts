@@ -699,6 +699,107 @@ export interface ChangesetInfo {
 }
 
 /**
+ * List all pending changesets in the workspace.
+ *
+ * Retrieves all pending (not yet released) changesets with optional filtering
+ * by package, bump type, or environment. Results can be sorted by date, branch
+ * name, or bump type.
+ *
+ * @param params - Changeset list parameters containing:
+ *   - `root`: Workspace root directory path (required)
+ *   - `configPath`: Optional custom config file path
+ *   - `filterPackage`: Optional filter by package name
+ *   - `filterBump`: Optional filter by bump type (major, minor, patch)
+ *   - `filterEnv`: Optional filter by environment
+ *   - `sort`: Sort order (date, branch, bump). Defaults to "date"
+ *
+ * @returns `Promise<ChangesetListApiResponse>` containing:
+ *   - On success: `{ success: true, data: ChangesetListData }`
+ *   - On failure: `{ success: false, error: ErrorInfo }`
+ *
+ * @example List all changesets
+ * ```typescript
+ * const result = await changesetList({
+ *   root: '/path/to/workspace'
+ * });
+ *
+ * if (result.success) {
+ *   console.log(`Found ${result.data.count} changeset(s)`);
+ *   for (const cs of result.data.changesets) {
+ *     console.log(`- ${cs.branch}: ${cs.bump}`);
+ *   }
+ * }
+ * ```
+ *
+ * @example Filter by bump type
+ * ```typescript
+ * const result = await changesetList({
+ *   root: '/path/to/workspace',
+ *   filterBump: 'major'
+ * });
+ *
+ * if (result.success) {
+ *   console.log('Major version changesets:');
+ *   result.data.changesets.forEach(cs => {
+ *     console.log(`  ${cs.branch}: ${cs.packages.join(', ')}`);
+ *   });
+ * }
+ * ```
+ *
+ * @example Filter by package
+ * ```typescript
+ * const result = await changesetList({
+ *   root: '/path/to/workspace',
+ *   filterPackage: '@scope/core'
+ * });
+ *
+ * if (result.success) {
+ *   console.log(`Changesets affecting @scope/core: ${result.data.count}`);
+ * }
+ * ```
+ *
+ * @example Sort by branch name
+ * ```typescript
+ * const result = await changesetList({
+ *   root: '/path/to/workspace',
+ *   sort: 'branch'
+ * });
+ * ```
+ *
+ * @example Filter by environment
+ * ```typescript
+ * const result = await changesetList({
+ *   root: '/path/to/workspace',
+ *   filterEnv: 'production'
+ * });
+ * ```
+ *
+ * @example Error handling
+ * ```typescript
+ * const result = await changesetList({
+ *   root: '/nonexistent/path'
+ * });
+ *
+ * if (!result.success) {
+ *   switch (result.error.code) {
+ *     case 'ENOENT':
+ *       console.error('Path not found');
+ *       break;
+ *     case 'EVALIDATION':
+ *       console.error('Invalid parameters:', result.error.message);
+ *       break;
+ *     case 'ECONFIG':
+ *       console.error('Workspace not initialized');
+ *       break;
+ *     default:
+ *       console.error(`Error: ${result.error.message}`);
+ *   }
+ * }
+ * ```
+ */
+export declare function changesetList(params: ChangesetListParams): Promise<ChangesetListApiResponse>
+
+/**
  * API response for the changeset list command.
  *
  * Wraps `ChangesetListData` with success/error handling.
@@ -725,22 +826,139 @@ export interface ChangesetListApiResponse {
 /**
  * Response data for the changeset list command.
  *
- * Contains the list of pending changesets.
+ * Contains the list of pending changesets with summary information.
+ * Each changeset item includes `commit_count` rather than full commit
+ * details - use `changesetShow` for complete commit information.
  *
  * # TypeScript Definition
  *
  * ```typescript
  * interface ChangesetListData {
- *   changesets: ChangesetDetailInfo[];
+ *   changesets: ChangesetListItemInfo[];
  *   count: number;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const result = await changesetList({ root: '.' });
+ * if (result.success) {
+ *   console.log(`Found ${result.data.count} changesets`);
+ *   for (const cs of result.data.changesets) {
+ *     console.log(`- ${cs.branch}: ${cs.bump} (${cs.commitCount} commits)`);
+ *   }
  * }
  * ```
  */
 export interface ChangesetListData {
-  /** List of pending changesets. */
-  changesets: Array<ChangesetDetailInfo>
+  /**
+   * List of pending changesets.
+   *
+   * Each item contains summary information including commit count.
+   */
+  changesets: Array<ChangesetListItemInfo>
   /** Total count of changesets. */
   count: number
+}
+
+/**
+ * Changeset information for list responses.
+ *
+ * This type is specifically designed for the changeset list command output,
+ * which returns `commit_count` rather than individual commit hashes. For
+ * full commit details, use `ChangesetDetailInfo` via the `changesetShow` command.
+ *
+ * # Fields
+ *
+ * - `id`: Unique changeset identifier (derived from branch)
+ * - `branch`: Git branch name
+ * - `bump`: Version bump type (major, minor, patch, none)
+ * - `packages`: List of affected packages
+ * - `environments`: Target environments
+ * - `commit_count`: Number of commits in the changeset
+ * - `created_at`: Creation timestamp (ISO 8601)
+ * - `updated_at`: Last update timestamp (ISO 8601)
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ChangesetListItemInfo {
+ *   id: string;
+ *   branch: string;
+ *   bump: string;
+ *   packages: string[];
+ *   environments: string[];
+ *   commitCount: number;
+ *   createdAt: string;
+ *   updatedAt: string;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const result = await changesetList({ root: '.' });
+ * if (result.success) {
+ *   for (const item of result.data.changesets) {
+ *     console.log(`${item.branch}: ${item.bump} (${item.commitCount} commits)`);
+ *   }
+ * }
+ * ```
+ */
+export interface ChangesetListItemInfo {
+  /**
+   * Unique changeset identifier.
+   *
+   * This ID is derived from the branch name and uniquely identifies
+   * the changeset within the workspace.
+   */
+  id: string
+  /**
+   * Git branch name.
+   *
+   * The full branch name associated with this changeset.
+   */
+  branch: string
+  /**
+   * Version bump type.
+   *
+   * One of: `"major"`, `"minor"`, `"patch"`, `"none"`.
+   */
+  bump: string
+  /**
+   * List of affected packages.
+   *
+   * Package names exactly as defined in each package's `package.json`.
+   */
+  packages: Array<string>
+  /**
+   * Target environments.
+   *
+   * List of environments this changeset applies to.
+   */
+  environments: Array<string>
+  /**
+   * Number of commits in the changeset.
+   *
+   * The count of git commits associated with this changeset.
+   * For full commit details, use `changesetShow`.
+   */
+  commitCount: number
+  /**
+   * Creation timestamp (ISO 8601 format).
+   *
+   * When the changeset was first created.
+   * Example: `"2024-01-15T10:30:00Z"`
+   */
+  createdAt: string
+  /**
+   * Last update timestamp (ISO 8601 format).
+   *
+   * When the changeset was last modified.
+   * Example: `"2024-01-15T14:45:00Z"`
+   */
+  updatedAt: string
 }
 
 /**

@@ -12,7 +12,8 @@
  * - `init()` - Initialize workspace with changeset-based version management
  * - `changesetAdd()` - Add a new changeset to the workspace (Story 4.2)
  * - `changesetUpdate()` - Update an existing changeset (Story 4.3)
- * - Changeset types for upcoming changeset commands (Stories 4.4-4.8)
+ * - `changesetList()` - List pending changesets with filtering (Story 4.4)
+ * - Changeset types for upcoming changeset commands (Stories 4.5-4.8)
  *
  * ## How
  *
@@ -32,9 +33,9 @@
  */
 
 // Re-export all functions from bindings
-import { changesetAdd, changesetUpdate, getVersion, init, status } from './binding'
+import { changesetAdd, changesetList, changesetUpdate, getVersion, init, status } from './binding'
 
-export { changesetAdd, changesetUpdate, getVersion, init, status }
+export { changesetAdd, changesetList, changesetUpdate, getVersion, init, status }
 
 // Re-export all types from bindings
 export type {
@@ -88,6 +89,7 @@ export type {
 
   // Supporting types
   ChangesetDetailInfo,
+  ChangesetListItemInfo,
   UpdateSummaryInfo,
   ArchivedChangesetInfo,
   ReleaseInfoData,

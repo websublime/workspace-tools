@@ -12,6 +12,7 @@
 //!
 //! - `changeset_add`: Creates a new changeset for the current branch
 //! - `changeset_update`: Updates an existing changeset with new packages, commits, bump type, or environments
+//! - `changeset_list`: Lists all pending changesets with optional filtering and sorting
 //!
 //! Each function follows this pattern:
 //! 1. Validates the input parameters
@@ -72,6 +73,22 @@
 //! } else {
 //!   console.error(`Error [${updateResult.error.code}]: ${updateResult.error.message}`);
 //! }
+//!
+//! // List all pending changesets
+//! const listResult = await changesetList({
+//!   root: '.',
+//!   filterBump: 'minor',
+//!   sort: 'date'
+//! });
+//!
+//! if (listResult.success) {
+//!   console.log(`Found ${listResult.data.count} changeset(s)`);
+//!   for (const cs of listResult.data.changesets) {
+//!     console.log(`- ${cs.branch}: ${cs.bump} (${cs.packages.length} packages)`);
+//!   }
+//! } else {
+//!   console.error(`Error [${listResult.error.code}]: ${listResult.error.message}`);
+//! }
 //! ```
 
 use std::io::Write;
@@ -84,12 +101,16 @@ use serde::Deserialize;
 use crate::error::ErrorInfo;
 use crate::types::changeset::{
     ChangesetAddApiResponse, ChangesetAddData, ChangesetAddParams, ChangesetDetailInfo,
+    ChangesetListApiResponse, ChangesetListData, ChangesetListItemInfo, ChangesetListParams,
     ChangesetUpdateApiResponse, ChangesetUpdateData, ChangesetUpdateParams, UpdateSummaryInfo,
+    VALID_SORT_OPTIONS,
 };
 use crate::validation::validators;
 
-use sublime_cli_tools::cli::commands::{ChangesetCreateArgs, ChangesetUpdateArgs};
-use sublime_cli_tools::commands::changeset::{execute_add, execute_update};
+use sublime_cli_tools::cli::commands::{
+    ChangesetCreateArgs, ChangesetListArgs, ChangesetUpdateArgs,
+};
+use sublime_cli_tools::commands::changeset::{execute_add, execute_list, execute_update};
 use sublime_cli_tools::output::{Output, OutputFormat};
 
 // ============================================================================
@@ -880,6 +901,385 @@ pub async fn changeset_update(params: ChangesetUpdateParams) -> ChangesetUpdateA
         Ok(Ok(data)) => ChangesetUpdateApiResponse::success(data),
         Ok(Err(error)) => ChangesetUpdateApiResponse::failure(error),
         Err(join_error) => ChangesetUpdateApiResponse::failure(ErrorInfo::execution(format!(
+            "Task execution failed: {join_error}"
+        ))),
+    }
+}
+
+// ============================================================================
+// Changeset List - CLI Response Types
+// ============================================================================
+
+/// CLI JSON response data for changeset list command.
+///
+/// This type mirrors the `ChangesetListResponse` structure from the CLI's
+/// list command, used for deserializing the captured JSON output.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CliChangesetListResponseData {
+    /// Whether the operation succeeded.
+    #[allow(dead_code)]
+    pub(crate) success: bool,
+    /// List of changesets.
+    pub(crate) changesets: Vec<CliChangesetListItem>,
+    /// Total count of changesets.
+    #[allow(dead_code)]
+    pub(crate) total: usize,
+}
+
+/// CLI changeset list item structure.
+///
+/// Mirrors the `ChangesetListItem` structure from the CLI's list command.
+/// Field names use snake_case to match the JSON output format.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CliChangesetListItem {
+    /// Branch name (also serves as unique identifier).
+    pub(crate) branch: String,
+    /// Version bump type (major, minor, patch, none).
+    pub(crate) bump: String,
+    /// List of affected packages.
+    pub(crate) packages: Vec<String>,
+    /// Target environments.
+    pub(crate) environments: Vec<String>,
+    /// Number of commits in the changeset.
+    #[allow(dead_code)]
+    pub(crate) commit_count: usize,
+    /// Creation timestamp (RFC3339 format).
+    pub(crate) created_at: String,
+    /// Last update timestamp (RFC3339 format).
+    pub(crate) updated_at: String,
+}
+
+// ============================================================================
+// Changeset List - Conversion Functions
+// ============================================================================
+
+/// Converts a CLI changeset list item to NAPI-compatible `ChangesetListItemInfo`.
+///
+/// This function converts the CLI's list item format to the NAPI type,
+/// preserving the `commit_count` field. For full commit details,
+/// use the `changesetShow` command.
+///
+/// # Arguments
+///
+/// * `cli_item` - The parsed CLI changeset list item
+///
+/// # Returns
+///
+/// A `ChangesetListItemInfo` instance suitable for returning to JavaScript.
+pub(crate) fn convert_list_item_to_napi(cli_item: CliChangesetListItem) -> ChangesetListItemInfo {
+    // Safe truncation: commit counts will never exceed u32::MAX in practice
+    #[allow(clippy::cast_possible_truncation)]
+    let commit_count = cli_item.commit_count as u32;
+
+    ChangesetListItemInfo {
+        // The id is derived from the branch name
+        id: cli_item.branch.clone(),
+        branch: cli_item.branch,
+        bump: cli_item.bump,
+        packages: cli_item.packages,
+        environments: cli_item.environments,
+        commit_count,
+        created_at: cli_item.created_at,
+        updated_at: cli_item.updated_at,
+    }
+}
+
+/// Converts CLI list response to NAPI-compatible `ChangesetListData`.
+///
+/// # Arguments
+///
+/// * `cli_data` - The parsed CLI list response data
+///
+/// # Returns
+///
+/// A `ChangesetListData` instance suitable for returning to JavaScript.
+pub(crate) fn convert_to_napi_list_data(
+    cli_data: CliChangesetListResponseData,
+) -> ChangesetListData {
+    let changesets: Vec<ChangesetListItemInfo> =
+        cli_data.changesets.into_iter().map(convert_list_item_to_napi).collect();
+
+    ChangesetListData::new(changesets)
+}
+
+/// Parses the JSON response from the CLI list command and converts it to NAPI types.
+///
+/// # Arguments
+///
+/// * `json_bytes` - The raw JSON bytes captured from CLI output
+///
+/// # Returns
+///
+/// * `Ok(ChangesetListData)` - Successfully parsed and converted list data
+/// * `Err(ErrorInfo)` - Parsing failed or CLI returned an error
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The JSON is malformed or cannot be parsed
+/// - The CLI returned `success: false` with an error message
+/// - The CLI returned `success: true` but `data` is missing
+pub(crate) fn parse_changeset_list_response(
+    json_bytes: &[u8],
+) -> Result<ChangesetListData, ErrorInfo> {
+    // Convert bytes to string first for better error messages
+    let json_str = std::str::from_utf8(json_bytes)
+        .map_err(|e| ErrorInfo::execution(format!("Invalid UTF-8 in CLI response: {e}")))?;
+
+    // Handle empty response
+    if json_str.trim().is_empty() {
+        return Err(ErrorInfo::execution("CLI returned empty response"));
+    }
+
+    // Parse the JSON response
+    let response: CliJsonResponse<CliChangesetListResponseData> = serde_json::from_str(json_str)
+        .map_err(|e| {
+            ErrorInfo::execution(format!(
+                "Failed to parse CLI JSON response: {e} (length={})",
+                json_str.len()
+            ))
+        })?;
+
+    // Check for CLI-level errors
+    if !response.success {
+        let error_message = response.error.unwrap_or_else(|| "Unknown CLI error".to_string());
+        return Err(ErrorInfo::execution(error_message));
+    }
+
+    // Extract and convert data
+    let cli_data =
+        response.data.ok_or_else(|| ErrorInfo::execution("CLI returned success but no data"))?;
+
+    Ok(convert_to_napi_list_data(cli_data))
+}
+
+// ============================================================================
+// Changeset List - Parameter Validation
+// ============================================================================
+
+/// Validates changeset list command parameters.
+///
+/// Ensures the root path is valid and that optional filter/sort parameters
+/// have valid values before executing the CLI command.
+///
+/// # Arguments
+///
+/// * `params` - The changeset list parameters to validate
+///
+/// # Returns
+///
+/// * `Ok(PathBuf)` - The validated root path
+/// * `Err(ErrorInfo)` - Validation failed
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The root path is empty, doesn't exist, or is not a directory
+/// - The `filter_bump` parameter (if provided) is not a valid bump type
+/// - The `sort` parameter (if provided) is not a valid sort option
+pub(crate) fn validate_list_params(params: &ChangesetListParams) -> Result<PathBuf, ErrorInfo> {
+    // Validate root path exists and is a directory
+    validators::root(&params.root)?;
+
+    // Validate bump type filter if provided
+    if let Some(ref bump) = params.filter_bump {
+        validators::bump_type_info(bump)?;
+    }
+
+    // Validate sort option if provided
+    if let Some(ref sort) = params.sort
+        && !VALID_SORT_OPTIONS.contains(&sort.as_str())
+    {
+        return Err(ErrorInfo::validation(
+            format!(
+                "invalid sort option '{}'. Valid options are: {}",
+                sort,
+                VALID_SORT_OPTIONS.join(", ")
+            ),
+            Some("sort"),
+        ));
+    }
+
+    Ok(PathBuf::from(&params.root))
+}
+
+/// Converts NAPI parameters to CLI arguments.
+///
+/// This function transforms the NAPI-friendly `ChangesetListParams` into the
+/// CLI's `ChangesetListArgs` structure.
+///
+/// # Arguments
+///
+/// * `params` - The NAPI changeset list parameters
+///
+/// # Returns
+///
+/// A `ChangesetListArgs` instance ready for CLI execution.
+pub(crate) fn convert_list_params_to_args(params: &ChangesetListParams) -> ChangesetListArgs {
+    ChangesetListArgs {
+        filter_package: params.filter_package.clone(),
+        filter_bump: params.filter_bump.clone(),
+        filter_env: params.filter_env.clone(),
+        // Default to "date" if not provided (matches CLI default)
+        sort: params.sort.clone().unwrap_or_else(|| "date".to_string()),
+    }
+}
+
+// ============================================================================
+// Changeset List - NAPI Function
+// ============================================================================
+
+/// List all pending changesets in the workspace.
+///
+/// Retrieves all pending (not yet released) changesets with optional filtering
+/// by package, bump type, or environment. Results can be sorted by date, branch
+/// name, or bump type.
+///
+/// @param params - Changeset list parameters containing:
+///   - `root`: Workspace root directory path (required)
+///   - `configPath`: Optional custom config file path
+///   - `filterPackage`: Optional filter by package name
+///   - `filterBump`: Optional filter by bump type (major, minor, patch)
+///   - `filterEnv`: Optional filter by environment
+///   - `sort`: Sort order (date, branch, bump). Defaults to "date"
+///
+/// @returns `Promise<ChangesetListApiResponse>` containing:
+///   - On success: `{ success: true, data: ChangesetListData }`
+///   - On failure: `{ success: false, error: ErrorInfo }`
+///
+/// @example List all changesets
+/// ```typescript
+/// const result = await changesetList({
+///   root: '/path/to/workspace'
+/// });
+///
+/// if (result.success) {
+///   console.log(`Found ${result.data.count} changeset(s)`);
+///   for (const cs of result.data.changesets) {
+///     console.log(`- ${cs.branch}: ${cs.bump}`);
+///   }
+/// }
+/// ```
+///
+/// @example Filter by bump type
+/// ```typescript
+/// const result = await changesetList({
+///   root: '/path/to/workspace',
+///   filterBump: 'major'
+/// });
+///
+/// if (result.success) {
+///   console.log('Major version changesets:');
+///   result.data.changesets.forEach(cs => {
+///     console.log(`  ${cs.branch}: ${cs.packages.join(', ')}`);
+///   });
+/// }
+/// ```
+///
+/// @example Filter by package
+/// ```typescript
+/// const result = await changesetList({
+///   root: '/path/to/workspace',
+///   filterPackage: '@scope/core'
+/// });
+///
+/// if (result.success) {
+///   console.log(`Changesets affecting @scope/core: ${result.data.count}`);
+/// }
+/// ```
+///
+/// @example Sort by branch name
+/// ```typescript
+/// const result = await changesetList({
+///   root: '/path/to/workspace',
+///   sort: 'branch'
+/// });
+/// ```
+///
+/// @example Filter by environment
+/// ```typescript
+/// const result = await changesetList({
+///   root: '/path/to/workspace',
+///   filterEnv: 'production'
+/// });
+/// ```
+///
+/// @example Error handling
+/// ```typescript
+/// const result = await changesetList({
+///   root: '/nonexistent/path'
+/// });
+///
+/// if (!result.success) {
+///   switch (result.error.code) {
+///     case 'ENOENT':
+///       console.error('Path not found');
+///       break;
+///     case 'EVALIDATION':
+///       console.error('Invalid parameters:', result.error.message);
+///       break;
+///     case 'ECONFIG':
+///       console.error('Workspace not initialized');
+///       break;
+///     default:
+///       console.error(`Error: ${result.error.message}`);
+///   }
+/// }
+/// ```
+#[napi(js_name = "changesetList")]
+pub async fn changeset_list(params: ChangesetListParams) -> ChangesetListApiResponse {
+    // 1. Validate parameters (synchronous validation before spawning)
+    let root_path = match validate_list_params(&params) {
+        Ok(path) => path,
+        Err(error) => return ChangesetListApiResponse::failure(error),
+    };
+
+    // 2. Prepare config path
+    let config_path: Option<PathBuf> = params.config_path.as_ref().map(PathBuf::from);
+
+    // 3. Convert NAPI params to CLI args
+    let args = convert_list_params_to_args(&params);
+
+    // 4. Execute CLI command in a blocking task
+    // The CLI's execute_list uses types that are not Send/Sync (RefCell, git2::Repository),
+    // so we must run it on a blocking thread via spawn_blocking.
+    let result = tokio::task::spawn_blocking(move || {
+        // Create a new tokio runtime for the blocking context
+        // This is necessary because execute_list is async but we're in a blocking context
+        let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+            Ok(rt) => rt,
+            Err(e) => {
+                return Err(ErrorInfo::execution(format!("Failed to create runtime: {e}")));
+            }
+        };
+
+        rt.block_on(async {
+            // Create shared buffer for output capture
+            let buffer = SharedBuffer::new();
+
+            // Create Output with JSON format
+            let output = Output::new(OutputFormat::Json, buffer.clone(), true);
+
+            // Execute the CLI command
+            if let Err(cli_error) =
+                execute_list(&args, &output, Some(root_path.as_path()), config_path.as_deref())
+                    .await
+            {
+                return Err(ErrorInfo::from(cli_error));
+            }
+
+            // Extract and parse JSON
+            let json_bytes = buffer.take_bytes();
+            parse_changeset_list_response(&json_bytes)
+        })
+    })
+    .await;
+
+    // 5. Handle spawn_blocking result
+    match result {
+        Ok(Ok(data)) => ChangesetListApiResponse::success(data),
+        Ok(Err(error)) => ChangesetListApiResponse::failure(error),
+        Err(join_error) => ChangesetListApiResponse::failure(ErrorInfo::execution(format!(
             "Task execution failed: {join_error}"
         ))),
     }
