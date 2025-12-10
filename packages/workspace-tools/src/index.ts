@@ -10,7 +10,8 @@
  * - `getVersion()` - Get the version of the native bindings
  * - `status()` - Get workspace status information
  * - `init()` - Initialize workspace with changeset-based version management
- * - Changeset types for upcoming changeset commands (Stories 4.2-4.8)
+ * - `changesetAdd()` - Add a new changeset to the workspace (Story 4.2)
+ * - Changeset types for upcoming changeset commands (Stories 4.3-4.8)
  *
  * ## How
  *
@@ -30,9 +31,9 @@
  */
 
 // Re-export all functions from bindings
-import { getVersion, init, status } from './binding'
+import { changesetAdd, getVersion, init, status } from './binding'
 
-export { getVersion, init, status }
+export { changesetAdd, getVersion, init, status }
 
 // Re-export all types from bindings
 export type {

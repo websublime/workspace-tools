@@ -135,7 +135,16 @@ pub use commands::status;
 
 // Init command (Story 3.4)
 pub use commands::init;
-// TODO: will be implemented on story 4.2-4.8 (changeset commands)
+
+// Changeset commands (Story 4.2-4.8)
+// Story 4.2: changesetAdd
+pub use commands::changeset_add;
+// TODO: will be implemented on story 4.3 (changesetUpdate)
+// TODO: will be implemented on story 4.4 (changesetList)
+// TODO: will be implemented on story 4.5 (changesetShow)
+// TODO: will be implemented on story 4.6 (changesetRemove)
+// TODO: will be implemented on story 4.7 (changesetHistory)
+// TODO: will be implemented on story 4.8 (changesetCheck)
 // TODO: will be implemented on story 5.2-5.4 (bump commands)
 // TODO: will be implemented on story 6.3 (execute command)
 // TODO: will be implemented on story 7.2-7.3 (config commands)

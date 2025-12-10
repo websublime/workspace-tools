@@ -44,7 +44,7 @@
 //! const changesetResult = await changesetAdd({
 //!   root: '.',
 //!   packages: ['@scope/pkg'],
-//!   bumpType: 'minor',
+//!   bump: 'minor',
 //!   message: 'Add feature'
 //! });
 //! const previewResult = await bumpPreview({ root: '.', showDiff: true });
@@ -62,15 +62,25 @@ pub(crate) mod init;
 // Re-export the init function for lib.rs
 pub use init::init;
 
+// Changeset commands - Story 4.2-4.8
+pub(crate) mod changeset;
+
+// Re-export changeset functions for lib.rs
+// Story 4.2: changesetAdd
+pub use changeset::changeset_add;
+// TODO: will be implemented on story 4.3 (changesetUpdate)
+// TODO: will be implemented on story 4.4 (changesetList)
+// TODO: will be implemented on story 4.5 (changesetShow)
+// TODO: will be implemented on story 4.6 (changesetRemove)
+// TODO: will be implemented on story 4.7 (changesetHistory)
+// TODO: will be implemented on story 4.8 (changesetCheck)
+
 // Tests module for all command implementations
 #[cfg(test)]
 mod tests;
 
 // TODO: will be implemented on story 7.2-7.3 (config commands)
 pub(crate) mod config;
-
-// TODO: will be implemented on story 4.2-4.8 (changeset commands)
-pub(crate) mod changeset;
 
 // TODO: will be implemented on story 5.2-5.4 (bump commands)
 pub(crate) mod bump;
