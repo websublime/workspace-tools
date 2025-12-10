@@ -1899,3 +1899,489 @@ mod changeset_update_tests {
         }
     }
 }
+
+// =============================================================================
+// Changeset List Tests (Story 4.4)
+// =============================================================================
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod changeset_list_tests {
+    use std::io::Write;
+
+    use crate::commands::changeset::{
+        CliChangesetListItem, CliChangesetListResponseData, SharedBuffer,
+        convert_list_item_to_napi, convert_list_params_to_args, convert_to_napi_list_data,
+        parse_changeset_list_response, validate_list_params,
+    };
+    use crate::types::changeset::{ChangesetListParams, VALID_SORT_OPTIONS};
+
+    // -------------------------------------------------------------------------
+    // SharedBuffer Tests (Reused from changeset_add, but included for completeness)
+    // -------------------------------------------------------------------------
+
+    mod shared_buffer_tests {
+        use super::*;
+
+        #[test]
+        fn test_shared_buffer_new() {
+            let buffer = SharedBuffer::new();
+            assert!(buffer.take_bytes().is_empty());
+        }
+
+        #[test]
+        fn test_shared_buffer_write() {
+            let mut buffer = SharedBuffer::new();
+            let written = buffer.write(b"hello").unwrap();
+            assert_eq!(written, 5);
+            assert_eq!(buffer.take_bytes(), b"hello");
+        }
+
+        #[test]
+        fn test_shared_buffer_multiple_writes() {
+            let mut buffer = SharedBuffer::new();
+            let _ = buffer.write(b"hello ");
+            let _ = buffer.write(b"world");
+            assert_eq!(buffer.take_bytes(), b"hello world");
+        }
+
+        #[test]
+        fn test_shared_buffer_clone_shares_data() {
+            let mut buffer = SharedBuffer::new();
+            let buffer_clone = buffer.clone();
+
+            let _ = buffer.write(b"test data");
+
+            // Both should see the same data
+            assert_eq!(buffer.take_bytes(), b"test data");
+            assert_eq!(buffer_clone.take_bytes(), b"test data");
+        }
+
+        #[test]
+        fn test_shared_buffer_flush() {
+            let mut buffer = SharedBuffer::new();
+            // Flush should always succeed (no-op for Vec)
+            assert!(buffer.flush().is_ok());
+        }
+
+        #[test]
+        fn test_shared_buffer_take_bytes_preserves_data() {
+            let mut buffer = SharedBuffer::new();
+            let _ = buffer.write(b"preserved");
+
+            // take_bytes clones, so data is preserved
+            let first_take = buffer.take_bytes();
+            let second_take = buffer.take_bytes();
+            assert_eq!(first_take, second_take);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Parse Response Tests
+    // -------------------------------------------------------------------------
+
+    mod parse_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_changeset_list_response_success() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "success": true,
+                    "changesets": [
+                        {
+                            "branch": "feature/new-api",
+                            "bump": "minor",
+                            "packages": ["@scope/core", "@scope/utils"],
+                            "environments": ["staging"],
+                            "commit_count": 3,
+                            "created_at": "2024-01-15T10:30:00Z",
+                            "updated_at": "2024-01-15T14:45:00Z"
+                        },
+                        {
+                            "branch": "feature/breaking-change",
+                            "bump": "major",
+                            "packages": ["@scope/api"],
+                            "environments": ["production"],
+                            "commit_count": 1,
+                            "created_at": "2024-01-14T09:00:00Z",
+                            "updated_at": "2024-01-14T09:00:00Z"
+                        }
+                    ],
+                    "total": 2
+                }
+            }"#;
+
+            let result = parse_changeset_list_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert_eq!(data.count, 2);
+            assert_eq!(data.changesets.len(), 2);
+
+            // Check first changeset
+            let first = &data.changesets[0];
+            assert_eq!(first.branch, "feature/new-api");
+            assert_eq!(first.bump, "minor");
+            assert_eq!(first.packages, vec!["@scope/core", "@scope/utils"]);
+            assert_eq!(first.environments, vec!["staging"]);
+            assert_eq!(first.commit_count, 3);
+            assert_eq!(first.created_at, "2024-01-15T10:30:00Z");
+            assert_eq!(first.updated_at, "2024-01-15T14:45:00Z");
+
+            // Check second changeset
+            let second = &data.changesets[1];
+            assert_eq!(second.branch, "feature/breaking-change");
+            assert_eq!(second.bump, "major");
+        }
+
+        #[test]
+        fn test_parse_changeset_list_response_empty_list() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "success": true,
+                    "changesets": [],
+                    "total": 0
+                }
+            }"#;
+
+            let result = parse_changeset_list_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert_eq!(data.count, 0);
+            assert!(data.changesets.is_empty());
+        }
+
+        #[test]
+        fn test_parse_changeset_list_response_cli_error() {
+            let json = r#"{
+                "success": false,
+                "error": "Workspace not initialized"
+            }"#;
+
+            let result = parse_changeset_list_response(json.as_bytes());
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EEXEC");
+            assert!(error.message.contains("Workspace not initialized"));
+        }
+
+        #[test]
+        fn test_parse_changeset_list_response_empty() {
+            let result = parse_changeset_list_response(b"");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("empty response"));
+        }
+
+        #[test]
+        fn test_parse_changeset_list_response_whitespace_only() {
+            let result = parse_changeset_list_response(b"   \n\t  ");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("empty response"));
+        }
+
+        #[test]
+        fn test_parse_changeset_list_response_invalid_json() {
+            let result = parse_changeset_list_response(b"not valid json");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Failed to parse CLI JSON response"));
+        }
+
+        #[test]
+        fn test_parse_changeset_list_response_invalid_utf8() {
+            let invalid_utf8 = vec![0xff, 0xfe, 0x00, 0x01];
+            let result = parse_changeset_list_response(&invalid_utf8);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Invalid UTF-8"));
+        }
+
+        #[test]
+        fn test_parse_changeset_list_response_success_no_data() {
+            let json = r#"{"success": true}"#;
+            let result = parse_changeset_list_response(json.as_bytes());
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("success but no data"));
+        }
+
+        #[test]
+        fn test_parse_changeset_list_response_cli_error_no_message() {
+            let json = r#"{"success": false}"#;
+            let result = parse_changeset_list_response(json.as_bytes());
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Unknown CLI error"));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Conversion Tests
+    // -------------------------------------------------------------------------
+
+    mod conversion_tests {
+        use super::*;
+
+        #[test]
+        fn test_convert_list_item_to_napi() {
+            let cli_item = CliChangesetListItem {
+                branch: "feature/test".to_string(),
+                bump: "minor".to_string(),
+                packages: vec!["@scope/pkg1".to_string(), "@scope/pkg2".to_string()],
+                environments: vec!["staging".to_string()],
+                commit_count: 5,
+                created_at: "2024-01-15T10:00:00Z".to_string(),
+                updated_at: "2024-01-15T12:00:00Z".to_string(),
+            };
+
+            let result = convert_list_item_to_napi(cli_item);
+
+            assert_eq!(result.id, "feature/test");
+            assert_eq!(result.branch, "feature/test");
+            assert_eq!(result.bump, "minor");
+            assert_eq!(result.packages, vec!["@scope/pkg1", "@scope/pkg2"]);
+            assert_eq!(result.environments, vec!["staging"]);
+            assert_eq!(result.commit_count, 5);
+            assert_eq!(result.created_at, "2024-01-15T10:00:00Z");
+            assert_eq!(result.updated_at, "2024-01-15T12:00:00Z");
+        }
+
+        #[test]
+        fn test_convert_to_napi_list_data() {
+            let cli_data = CliChangesetListResponseData {
+                success: true,
+                changesets: vec![
+                    CliChangesetListItem {
+                        branch: "feature/a".to_string(),
+                        bump: "patch".to_string(),
+                        packages: vec!["pkg-a".to_string()],
+                        environments: vec![],
+                        commit_count: 1,
+                        created_at: "2024-01-15T10:00:00Z".to_string(),
+                        updated_at: "2024-01-15T10:00:00Z".to_string(),
+                    },
+                    CliChangesetListItem {
+                        branch: "feature/b".to_string(),
+                        bump: "minor".to_string(),
+                        packages: vec!["pkg-b".to_string()],
+                        environments: vec!["prod".to_string()],
+                        commit_count: 2,
+                        created_at: "2024-01-14T09:00:00Z".to_string(),
+                        updated_at: "2024-01-14T09:00:00Z".to_string(),
+                    },
+                ],
+                total: 2,
+            };
+
+            let result = convert_to_napi_list_data(cli_data);
+
+            assert_eq!(result.count, 2);
+            assert_eq!(result.changesets.len(), 2);
+            assert_eq!(result.changesets[0].branch, "feature/a");
+            assert_eq!(result.changesets[1].branch, "feature/b");
+        }
+
+        #[test]
+        fn test_convert_to_napi_list_data_empty() {
+            let cli_data =
+                CliChangesetListResponseData { success: true, changesets: vec![], total: 0 };
+
+            let result = convert_to_napi_list_data(cli_data);
+
+            assert_eq!(result.count, 0);
+            assert!(result.changesets.is_empty());
+        }
+
+        #[test]
+        fn test_convert_list_params_to_args_defaults() {
+            let params = ChangesetListParams::new(".");
+
+            let args = convert_list_params_to_args(&params);
+
+            assert!(args.filter_package.is_none());
+            assert!(args.filter_bump.is_none());
+            assert!(args.filter_env.is_none());
+            assert_eq!(args.sort, "date"); // Default value
+        }
+
+        #[test]
+        fn test_convert_list_params_to_args_with_filters() {
+            let params = ChangesetListParams::new(".")
+                .with_filter_package("@scope/core")
+                .with_filter_bump("major")
+                .with_filter_env("production")
+                .with_sort("branch");
+
+            let args = convert_list_params_to_args(&params);
+
+            assert_eq!(args.filter_package, Some("@scope/core".to_string()));
+            assert_eq!(args.filter_bump, Some("major".to_string()));
+            assert_eq!(args.filter_env, Some("production".to_string()));
+            assert_eq!(args.sort, "branch");
+        }
+
+        #[test]
+        fn test_convert_list_params_to_args_custom_sort() {
+            let params = ChangesetListParams::new(".").with_sort("bump");
+
+            let args = convert_list_params_to_args(&params);
+
+            assert_eq!(args.sort, "bump");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Validation Tests
+    // -------------------------------------------------------------------------
+
+    mod validation_tests {
+        use super::*;
+        use tempfile::TempDir;
+
+        #[test]
+        fn test_validate_list_params_valid_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetListParams::new(temp_dir.path().to_str().unwrap());
+
+            let result = validate_list_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_list_params_nonexistent_path() {
+            let params = ChangesetListParams::new("/nonexistent/path/that/does/not/exist");
+
+            let result = validate_list_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "ENOENT");
+        }
+
+        #[test]
+        fn test_validate_list_params_empty_root() {
+            let params = ChangesetListParams::new("");
+
+            let result = validate_list_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("empty"));
+        }
+
+        #[test]
+        fn test_validate_list_params_file_not_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let file_path = temp_dir.path().join("test.txt");
+            std::fs::write(&file_path, "test").unwrap();
+
+            let params = ChangesetListParams::new(file_path.to_str().unwrap());
+
+            let result = validate_list_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("directory"));
+        }
+
+        #[test]
+        fn test_validate_list_params_valid_bump_filter() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetListParams::new(temp_dir.path().to_str().unwrap())
+                .with_filter_bump("minor");
+
+            let result = validate_list_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_list_params_invalid_bump_filter() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetListParams::new(temp_dir.path().to_str().unwrap())
+                .with_filter_bump("invalid");
+
+            let result = validate_list_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("invalid bump type"));
+        }
+
+        #[test]
+        fn test_validate_list_params_all_bump_types() {
+            let temp_dir = TempDir::new().unwrap();
+            let root = temp_dir.path().to_str().unwrap();
+
+            for bump in &["major", "minor", "patch", "none"] {
+                let params = ChangesetListParams::new(root).with_filter_bump(*bump);
+                let result = validate_list_params(&params);
+                assert!(result.is_ok(), "Bump type '{bump}' should be valid");
+            }
+        }
+
+        #[test]
+        fn test_validate_list_params_valid_sort_options() {
+            let temp_dir = TempDir::new().unwrap();
+            let root = temp_dir.path().to_str().unwrap();
+
+            for sort in VALID_SORT_OPTIONS {
+                let params = ChangesetListParams::new(root).with_sort(*sort);
+                let result = validate_list_params(&params);
+                assert!(result.is_ok(), "Sort option '{sort}' should be valid");
+            }
+        }
+
+        #[test]
+        fn test_validate_list_params_invalid_sort_option() {
+            let temp_dir = TempDir::new().unwrap();
+            let params =
+                ChangesetListParams::new(temp_dir.path().to_str().unwrap()).with_sort("invalid");
+
+            let result = validate_list_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("invalid sort option"));
+            assert!(error.message.contains("date"));
+            assert!(error.message.contains("branch"));
+            assert!(error.message.contains("bump"));
+        }
+
+        #[test]
+        fn test_validate_list_params_with_all_filters() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetListParams::new(temp_dir.path().to_str().unwrap())
+                .with_filter_package("@scope/core")
+                .with_filter_bump("minor")
+                .with_filter_env("staging")
+                .with_sort("date");
+
+            let result = validate_list_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_list_params_no_sort_uses_default() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetListParams::new(temp_dir.path().to_str().unwrap());
+
+            let result = validate_list_params(&params);
+            assert!(result.is_ok());
+
+            // Verify args conversion uses default
+            let args = convert_list_params_to_args(&params);
+            assert_eq!(args.sort, "date");
+        }
+    }
+}

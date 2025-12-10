@@ -70,7 +70,8 @@ pub(crate) mod changeset;
 pub use changeset::changeset_add;
 // Story 4.3: changesetUpdate
 pub use changeset::changeset_update;
-// TODO: will be implemented on story 4.4 (changesetList)
+// Story 4.4: changesetList
+pub use changeset::changeset_list;
 // TODO: will be implemented on story 4.5 (changesetShow)
 // TODO: will be implemented on story 4.6 (changesetRemove)
 // TODO: will be implemented on story 4.7 (changesetHistory)
