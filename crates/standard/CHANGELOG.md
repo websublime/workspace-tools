@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.15 - 2025-12-10
+
+### Bug Fixes
+
+#### WOR-TSK-183
+
+- Use derive Default instead of manual impl for clippy 1.91
+- Fix clippy cmp_owned warnings in error tests
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.14 - 2025-11-27
 
 ### Bug Fixes

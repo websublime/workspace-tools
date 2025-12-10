@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.28 - 2025-12-10
+
+### Bug Fixes
+
+#### WOR-TSK-183
+
+- Fix derivable_impls warnings in cli crate for clippy 1.91
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.27 - 2025-12-05
 
 ### Miscellaneous Tasks
