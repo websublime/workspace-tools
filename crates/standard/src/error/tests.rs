@@ -6,7 +6,10 @@ mod tests {
         Error, FileSystemError, FileSystemResult, MonorepoError, MonorepoResult, Result,
         WorkspaceError, WorkspaceResult,
     };
-    use std::{io, path::PathBuf};
+    use std::{
+        io,
+        path::{Path, PathBuf},
+    };
 
     #[test]
     fn test_filesystem_error_display() {
@@ -32,19 +35,19 @@ mod tests {
         let not_found_error = io::Error::new(io::ErrorKind::NotFound, "file not found");
         let fs_error = FileSystemError::from_io(not_found_error, "/missing/file.txt");
         assert!(
-            matches!(fs_error, FileSystemError::NotFound { path } if path == PathBuf::from("/missing/file.txt"))
+            matches!(fs_error, FileSystemError::NotFound { ref path } if path == Path::new("/missing/file.txt"))
         );
 
         let permission_error = io::Error::new(io::ErrorKind::PermissionDenied, "permission denied");
         let fs_error = FileSystemError::from_io(permission_error, "/protected/file.txt");
         assert!(
-            matches!(fs_error, FileSystemError::PermissionDenied { path } if path == PathBuf::from("/protected/file.txt"))
+            matches!(fs_error, FileSystemError::PermissionDenied { ref path } if path == Path::new("/protected/file.txt"))
         );
 
         let other_error = io::Error::other("unknown error");
         let fs_error = FileSystemError::from_io(other_error, "/some/file.txt");
         assert!(
-            matches!(fs_error, FileSystemError::Io { path, .. } if path == PathBuf::from("/some/file.txt"))
+            matches!(fs_error, FileSystemError::Io { ref path, .. } if path == Path::new("/some/file.txt"))
         );
     }
 
@@ -54,19 +57,19 @@ mod tests {
         let not_found_error = io::Error::new(io::ErrorKind::NotFound, "file not found");
         let fs_error: FileSystemError = not_found_error.into();
         assert!(
-            matches!(fs_error, FileSystemError::NotFound { path } if path == PathBuf::from("<unknown>"))
+            matches!(fs_error, FileSystemError::NotFound { ref path } if path == Path::new("<unknown>"))
         );
 
         let permission_error = io::Error::new(io::ErrorKind::PermissionDenied, "permission denied");
         let fs_error: FileSystemError = permission_error.into();
         assert!(
-            matches!(fs_error, FileSystemError::PermissionDenied { path } if path == PathBuf::from("<unknown>"))
+            matches!(fs_error, FileSystemError::PermissionDenied { ref path } if path == Path::new("<unknown>"))
         );
 
         let other_error = io::Error::other("unknown error");
         let fs_error: FileSystemError = other_error.into();
         assert!(
-            matches!(fs_error, FileSystemError::Io { path, .. } if path == PathBuf::from("<unknown>"))
+            matches!(fs_error, FileSystemError::Io { ref path, .. } if path == Path::new("<unknown>"))
         );
     }
 
