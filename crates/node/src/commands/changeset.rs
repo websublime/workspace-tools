@@ -1495,7 +1495,7 @@ pub(crate) fn convert_show_params_to_args(params: &ChangesetShowParams) -> Chang
 ///   - `configPath`: Optional custom config file path
 ///   - `branch`: Branch name or changeset ID (required)
 ///
-/// @returns Promise<ChangesetShowApiResponse> - Response containing:
+/// @returns `Promise<ChangesetShowApiResponse>` - Response containing:
 ///   - `success`: Whether the operation succeeded
 ///   - `data`: Changeset details if successful
 ///   - `error`: Error information if failed
