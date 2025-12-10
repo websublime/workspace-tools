@@ -13,7 +13,8 @@
  * - `changesetAdd()` - Add a new changeset to the workspace (Story 4.2)
  * - `changesetUpdate()` - Update an existing changeset (Story 4.3)
  * - `changesetList()` - List pending changesets with filtering (Story 4.4)
- * - Changeset types for upcoming changeset commands (Stories 4.5-4.8)
+ * - `changesetShow()` - Show details of a specific changeset (Story 4.5)
+ * - Changeset types for upcoming changeset commands (Stories 4.6-4.8)
  *
  * ## How
  *
@@ -33,9 +34,9 @@
  */
 
 // Re-export all functions from bindings
-import { changesetAdd, changesetList, changesetUpdate, getVersion, init, status } from './binding'
+import { changesetAdd, changesetList, changesetShow, changesetUpdate, getVersion, init, status } from './binding'
 
-export { changesetAdd, changesetList, changesetUpdate, getVersion, init, status }
+export { changesetAdd, changesetList, changesetShow, changesetUpdate, getVersion, init, status }
 
 // Re-export all types from bindings
 export type {
