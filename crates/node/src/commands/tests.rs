@@ -35,9 +35,9 @@ mod status_tests {
     use std::io::Write;
 
     use crate::commands::status::{
-        convert_to_napi_status, parse_status_response, validate_params, CliBranchInfo,
-        CliChangesetInfo, CliPackageInfo, CliPackageManagerInfo, CliRepositoryInfo, CliStatusData,
-        SharedBuffer,
+        CliBranchInfo, CliChangesetInfo, CliPackageInfo, CliPackageManagerInfo, CliRepositoryInfo,
+        CliStatusData, SharedBuffer, convert_to_napi_status, parse_status_response,
+        validate_params,
     };
     use crate::types::status::StatusParams;
 
@@ -419,8 +419,8 @@ mod init_tests {
     use std::io::Write;
 
     use crate::commands::init::{
-        convert_params_to_args, convert_to_napi_init, parse_init_response, validate_params,
-        CliInitData, SharedBuffer,
+        CliInitData, SharedBuffer, convert_params_to_args, convert_to_napi_init,
+        parse_init_response, validate_params,
     };
     use crate::types::init::InitParams;
 
@@ -1062,8 +1062,8 @@ mod changeset_add_tests {
     use std::io::Write;
 
     use crate::commands::changeset::{
-        convert_params_to_args, convert_to_napi_add_data, parse_changeset_add_response,
-        validate_params, CliChangesetInfo, SharedBuffer,
+        CliChangesetInfo, SharedBuffer, convert_params_to_args, convert_to_napi_add_data,
+        parse_changeset_add_response, validate_params,
     };
     use crate::types::changeset::ChangesetAddParams;
 
