@@ -102,15 +102,17 @@ use crate::error::ErrorInfo;
 use crate::types::changeset::{
     ChangesetAddApiResponse, ChangesetAddData, ChangesetAddParams, ChangesetDetailInfo,
     ChangesetListApiResponse, ChangesetListData, ChangesetListItemInfo, ChangesetListParams,
-    ChangesetUpdateApiResponse, ChangesetUpdateData, ChangesetUpdateParams, UpdateSummaryInfo,
-    VALID_SORT_OPTIONS,
+    ChangesetShowApiResponse, ChangesetShowData, ChangesetShowParams, ChangesetUpdateApiResponse,
+    ChangesetUpdateData, ChangesetUpdateParams, UpdateSummaryInfo, VALID_SORT_OPTIONS,
 };
 use crate::validation::validators;
 
 use sublime_cli_tools::cli::commands::{
-    ChangesetCreateArgs, ChangesetListArgs, ChangesetUpdateArgs,
+    ChangesetCreateArgs, ChangesetListArgs, ChangesetShowArgs, ChangesetUpdateArgs,
 };
-use sublime_cli_tools::commands::changeset::{execute_add, execute_list, execute_update};
+use sublime_cli_tools::commands::changeset::{
+    execute_add, execute_list, execute_show, execute_update,
+};
 use sublime_cli_tools::output::{Output, OutputFormat};
 
 // ============================================================================
@@ -1280,6 +1282,345 @@ pub async fn changeset_list(params: ChangesetListParams) -> ChangesetListApiResp
         Ok(Ok(data)) => ChangesetListApiResponse::success(data),
         Ok(Err(error)) => ChangesetListApiResponse::failure(error),
         Err(join_error) => ChangesetListApiResponse::failure(ErrorInfo::execution(format!(
+            "Task execution failed: {join_error}"
+        ))),
+    }
+}
+
+// ============================================================================
+// Changeset Show - CLI Response Types
+// ============================================================================
+
+/// CLI JSON response data structure for changeset show command.
+///
+/// This structure mirrors the `ChangesetShowResponse` from the CLI's show command,
+/// used for deserializing the captured JSON output.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CliChangesetShowResponseData {
+    /// Whether the operation succeeded.
+    #[allow(dead_code)]
+    pub(crate) success: bool,
+
+    /// The changeset details.
+    pub(crate) changeset: CliChangesetShowItem,
+}
+
+/// Detailed changeset information from CLI show output.
+///
+/// Contains all fields returned by the changeset show command.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CliChangesetShowItem {
+    /// Branch name (also serves as unique identifier).
+    pub(crate) branch: String,
+
+    /// Version bump type (lowercase string).
+    pub(crate) bump: String,
+
+    /// List of affected packages.
+    pub(crate) packages: Vec<String>,
+
+    /// Target environments.
+    pub(crate) environments: Vec<String>,
+
+    /// List of commit IDs.
+    pub(crate) commits: Vec<String>,
+
+    /// Creation timestamp (RFC3339 format).
+    pub(crate) created_at: String,
+
+    /// Last update timestamp (RFC3339 format).
+    pub(crate) updated_at: String,
+}
+
+// ============================================================================
+// Changeset Show - Conversion Functions
+// ============================================================================
+
+/// Converts CLI changeset show item to NAPI changeset detail info.
+///
+/// Transforms the internal CLI response structure into the NAPI-compatible
+/// `ChangesetDetailInfo` type for JavaScript consumption.
+///
+/// # Arguments
+///
+/// * `item` - The CLI changeset show item to convert
+///
+/// # Returns
+///
+/// A `ChangesetDetailInfo` with all fields populated from the CLI item.
+pub(crate) fn convert_show_item_to_napi(item: CliChangesetShowItem) -> ChangesetDetailInfo {
+    ChangesetDetailInfo::new(
+        item.branch.clone(), // id is derived from branch
+        item.branch,
+        item.bump,
+        item.created_at,
+        item.updated_at,
+    )
+    .with_packages(item.packages)
+    .with_environments(item.environments)
+    .with_commits(item.commits)
+}
+
+/// Converts CLI response data to NAPI show data.
+///
+/// Transforms the parsed CLI JSON response into the `ChangesetShowData`
+/// structure expected by JavaScript consumers.
+///
+/// # Arguments
+///
+/// * `data` - The CLI response data
+///
+/// # Returns
+///
+/// A `ChangesetShowData` containing the changeset details.
+pub(crate) fn convert_to_napi_show_data(data: CliChangesetShowResponseData) -> ChangesetShowData {
+    ChangesetShowData::new(convert_show_item_to_napi(data.changeset))
+}
+
+/// Parses the JSON output from the CLI changeset show command.
+///
+/// This function deserializes the raw bytes from the CLI's JSON output
+/// into the appropriate NAPI response type.
+///
+/// # Arguments
+///
+/// * `json_bytes` - Raw bytes from the captured CLI output
+///
+/// # Returns
+///
+/// * `Ok(ChangesetShowData)` - Successfully parsed changeset details
+/// * `Err(ErrorInfo)` - Parsing failed or CLI returned an error
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The output is empty
+/// - The output is not valid UTF-8
+/// - The output is not valid JSON
+/// - The CLI returned an error response
+pub(crate) fn parse_changeset_show_response(
+    json_bytes: &[u8],
+) -> Result<ChangesetShowData, ErrorInfo> {
+    // Handle empty output
+    if json_bytes.is_empty() || json_bytes.iter().all(u8::is_ascii_whitespace) {
+        return Err(ErrorInfo::execution("Empty response from CLI"));
+    }
+
+    // Convert bytes to string
+    let json_str = std::str::from_utf8(json_bytes)
+        .map_err(|e| ErrorInfo::execution(format!("Invalid UTF-8 in CLI output: {e}")))?;
+
+    // Parse the outer JSON response structure
+    let response: CliJsonResponse<CliChangesetShowResponseData> = serde_json::from_str(json_str)
+        .map_err(|e| ErrorInfo::execution(format!("Failed to parse CLI JSON: {e}")))?;
+
+    // Check if the CLI returned an error
+    if !response.success {
+        let error_msg = response.error.unwrap_or_else(|| "Unknown CLI error".to_string());
+        return Err(ErrorInfo::execution(error_msg));
+    }
+
+    // Extract the data
+    let data =
+        response.data.ok_or_else(|| ErrorInfo::execution("CLI returned success but no data"))?;
+
+    Ok(convert_to_napi_show_data(data))
+}
+
+// ============================================================================
+// Changeset Show - Validation
+// ============================================================================
+
+/// Validates changeset show command parameters.
+///
+/// Ensures the root path is valid and the branch parameter is provided.
+///
+/// # Arguments
+///
+/// * `params` - The changeset show parameters to validate
+///
+/// # Returns
+///
+/// * `Ok(PathBuf)` - The validated root path
+/// * `Err(ErrorInfo)` - Validation failed
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The root path is empty, doesn't exist, or is not a directory
+/// - The branch parameter is empty
+pub(crate) fn validate_show_params(params: &ChangesetShowParams) -> Result<PathBuf, ErrorInfo> {
+    // Validate root path exists and is a directory
+    validators::root(&params.root)?;
+
+    // Validate branch is not empty
+    if params.branch.trim().is_empty() {
+        return Err(ErrorInfo::validation(
+            "branch parameter is required and cannot be empty",
+            Some("branch"),
+        ));
+    }
+
+    Ok(PathBuf::from(&params.root))
+}
+
+/// Converts NAPI parameters to CLI arguments.
+///
+/// This function transforms the NAPI-friendly `ChangesetShowParams` into the
+/// CLI's `ChangesetShowArgs` structure.
+///
+/// # Arguments
+///
+/// * `params` - The NAPI changeset show parameters
+///
+/// # Returns
+///
+/// A `ChangesetShowArgs` instance ready for CLI execution.
+pub(crate) fn convert_show_params_to_args(params: &ChangesetShowParams) -> ChangesetShowArgs {
+    ChangesetShowArgs { branch: params.branch.clone() }
+}
+
+// ============================================================================
+// Changeset Show - NAPI Function
+// ============================================================================
+
+/// Show details of a specific changeset.
+///
+/// Retrieves detailed information about a specific changeset identified by
+/// its branch name or changeset ID. Returns all metadata including packages,
+/// environments, commits, and timestamps.
+///
+/// @param params - Changeset show parameters containing:
+///   - `root`: Workspace root directory path (required)
+///   - `configPath`: Optional custom config file path
+///   - `branch`: Branch name or changeset ID (required)
+///
+/// @returns Promise<ChangesetShowApiResponse> - Response containing:
+///   - `success`: Whether the operation succeeded
+///   - `data`: Changeset details if successful
+///   - `error`: Error information if failed
+///
+/// ## Success Response
+///
+/// When successful, `data` contains:
+/// - `changeset.id`: Unique changeset identifier
+/// - `changeset.branch`: Git branch name
+/// - `changeset.bump`: Version bump type
+/// - `changeset.packages`: List of affected packages
+/// - `changeset.environments`: Target environments
+/// - `changeset.commits`: Associated commit hashes
+/// - `changeset.createdAt`: Creation timestamp (ISO 8601)
+/// - `changeset.updatedAt`: Last update timestamp (ISO 8601)
+///
+/// ## Error Codes
+///
+/// - `EVALIDATION`: Invalid parameters (empty root or branch)
+/// - `ENOENT`: Path or changeset not found
+/// - `ECONFIG`: Workspace not initialized
+/// - `EEXECUTION`: CLI command failed
+///
+/// @example Basic usage
+/// ```typescript
+/// const result = await changesetShow({
+///   root: '/path/to/workspace',
+///   branch: 'feature/new-api'
+/// });
+///
+/// if (result.success) {
+///   const { changeset } = result.data;
+///   console.log(`Changeset: ${changeset.branch}`);
+///   console.log(`Bump: ${changeset.bump}`);
+///   console.log(`Packages: ${changeset.packages.join(', ')}`);
+///   console.log(`Created: ${changeset.createdAt}`);
+/// }
+/// ```
+///
+/// @example With custom config
+/// ```typescript
+/// const result = await changesetShow({
+///   root: '/path/to/workspace',
+///   configPath: '/path/to/custom.config.json',
+///   branch: 'feature/auth-system'
+/// });
+/// ```
+///
+/// @example Error handling
+/// ```typescript
+/// const result = await changesetShow({
+///   root: '/path/to/workspace',
+///   branch: 'nonexistent-branch'
+/// });
+///
+/// if (!result.success) {
+///   switch (result.error.code) {
+///     case 'ENOENT':
+///       console.error('Changeset not found');
+///       break;
+///     case 'EVALIDATION':
+///       console.error('Invalid parameters:', result.error.message);
+///       break;
+///     case 'ECONFIG':
+///       console.error('Workspace not initialized');
+///       break;
+///     default:
+///       console.error(`Error: ${result.error.message}`);
+///   }
+/// }
+/// ```
+#[napi(js_name = "changesetShow")]
+pub async fn changeset_show(params: ChangesetShowParams) -> ChangesetShowApiResponse {
+    // 1. Validate parameters (synchronous validation before spawning)
+    let root_path = match validate_show_params(&params) {
+        Ok(path) => path,
+        Err(error) => return ChangesetShowApiResponse::failure(error),
+    };
+
+    // 2. Prepare config path
+    let config_path: Option<PathBuf> = params.config_path.as_ref().map(PathBuf::from);
+
+    // 3. Convert NAPI params to CLI args
+    let args = convert_show_params_to_args(&params);
+
+    // 4. Execute CLI command in a blocking task
+    // The CLI's execute_show uses types that are not Send/Sync (RefCell, git2::Repository),
+    // so we must run it on a blocking thread via spawn_blocking.
+    let result = tokio::task::spawn_blocking(move || {
+        // Create a new tokio runtime for the blocking context
+        // This is necessary because execute_show is async but we're in a blocking context
+        let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+            Ok(rt) => rt,
+            Err(e) => {
+                return Err(ErrorInfo::execution(format!("Failed to create runtime: {e}")));
+            }
+        };
+
+        rt.block_on(async {
+            // Create shared buffer for output capture
+            let buffer = SharedBuffer::new();
+
+            // Create Output with JSON format
+            let output = Output::new(OutputFormat::Json, buffer.clone(), true);
+
+            // Execute the CLI command
+            if let Err(cli_error) =
+                execute_show(&args, &output, Some(root_path.as_path()), config_path.as_deref())
+                    .await
+            {
+                return Err(ErrorInfo::from(cli_error));
+            }
+
+            // Extract and parse JSON
+            let json_bytes = buffer.take_bytes();
+            parse_changeset_show_response(&json_bytes)
+        })
+    })
+    .await;
+
+    // 5. Handle spawn_blocking result
+    match result {
+        Ok(Ok(data)) => ChangesetShowApiResponse::success(data),
+        Ok(Err(error)) => ChangesetShowApiResponse::failure(error),
+        Err(join_error) => ChangesetShowApiResponse::failure(ErrorInfo::execution(format!(
             "Task execution failed: {join_error}"
         ))),
     }

@@ -72,7 +72,8 @@ pub use changeset::changeset_add;
 pub use changeset::changeset_update;
 // Story 4.4: changesetList
 pub use changeset::changeset_list;
-// TODO: will be implemented on story 4.5 (changesetShow)
+// Story 4.5: changesetShow
+pub use changeset::changeset_show;
 // TODO: will be implemented on story 4.6 (changesetRemove)
 // TODO: will be implemented on story 4.7 (changesetHistory)
 // TODO: will be implemented on story 4.8 (changesetCheck)

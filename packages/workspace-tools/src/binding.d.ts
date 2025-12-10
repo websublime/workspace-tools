@@ -1136,6 +1136,93 @@ export interface ChangesetRemoveParams {
 }
 
 /**
+ * Show details of a specific changeset.
+ *
+ * Retrieves detailed information about a specific changeset identified by
+ * its branch name or changeset ID. Returns all metadata including packages,
+ * environments, commits, and timestamps.
+ *
+ * @param params - Changeset show parameters containing:
+ *   - `root`: Workspace root directory path (required)
+ *   - `configPath`: Optional custom config file path
+ *   - `branch`: Branch name or changeset ID (required)
+ *
+ * @returns Promise<ChangesetShowApiResponse> - Response containing:
+ *   - `success`: Whether the operation succeeded
+ *   - `data`: Changeset details if successful
+ *   - `error`: Error information if failed
+ *
+ * ## Success Response
+ *
+ * When successful, `data` contains:
+ * - `changeset.id`: Unique changeset identifier
+ * - `changeset.branch`: Git branch name
+ * - `changeset.bump`: Version bump type
+ * - `changeset.packages`: List of affected packages
+ * - `changeset.environments`: Target environments
+ * - `changeset.commits`: Associated commit hashes
+ * - `changeset.createdAt`: Creation timestamp (ISO 8601)
+ * - `changeset.updatedAt`: Last update timestamp (ISO 8601)
+ *
+ * ## Error Codes
+ *
+ * - `EVALIDATION`: Invalid parameters (empty root or branch)
+ * - `ENOENT`: Path or changeset not found
+ * - `ECONFIG`: Workspace not initialized
+ * - `EEXECUTION`: CLI command failed
+ *
+ * @example Basic usage
+ * ```typescript
+ * const result = await changesetShow({
+ *   root: '/path/to/workspace',
+ *   branch: 'feature/new-api'
+ * });
+ *
+ * if (result.success) {
+ *   const { changeset } = result.data;
+ *   console.log(`Changeset: ${changeset.branch}`);
+ *   console.log(`Bump: ${changeset.bump}`);
+ *   console.log(`Packages: ${changeset.packages.join(', ')}`);
+ *   console.log(`Created: ${changeset.createdAt}`);
+ * }
+ * ```
+ *
+ * @example With custom config
+ * ```typescript
+ * const result = await changesetShow({
+ *   root: '/path/to/workspace',
+ *   configPath: '/path/to/custom.config.json',
+ *   branch: 'feature/auth-system'
+ * });
+ * ```
+ *
+ * @example Error handling
+ * ```typescript
+ * const result = await changesetShow({
+ *   root: '/path/to/workspace',
+ *   branch: 'nonexistent-branch'
+ * });
+ *
+ * if (!result.success) {
+ *   switch (result.error.code) {
+ *     case 'ENOENT':
+ *       console.error('Changeset not found');
+ *       break;
+ *     case 'EVALIDATION':
+ *       console.error('Invalid parameters:', result.error.message);
+ *       break;
+ *     case 'ECONFIG':
+ *       console.error('Workspace not initialized');
+ *       break;
+ *     default:
+ *       console.error(`Error: ${result.error.message}`);
+ *   }
+ * }
+ * ```
+ */
+export declare function changesetShow(params: ChangesetShowParams): Promise<ChangesetShowApiResponse>
+
+/**
  * API response for the changeset show command.
  *
  * Wraps `ChangesetShowData` with success/error handling.
