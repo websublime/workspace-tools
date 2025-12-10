@@ -116,6 +116,7 @@
     ],
     "timeout": "2m",
     "workerThreads": false,
+    "cache": false,
     "environmentVariables": {
       "TS_NODE_PROJECT": "./tsconfig.json"
     }
