@@ -59,6 +59,92 @@ export interface BranchInfo {
 }
 
 /**
+ * Add a new changeset to the workspace.
+ *
+ * Creates a new changeset for the current or specified branch. The changeset
+ * records which packages are affected, the version bump type, and optionally
+ * a message describing the changes.
+ *
+ * This function always operates in non-interactive mode. If packages are not
+ * specified, they will be auto-detected from git changes. If bump type is not
+ * specified, an error will be returned (unlike the CLI which would prompt).
+ *
+ * @param params - Changeset add parameters containing:
+ *   - `root`: Workspace root directory path (required)
+ *   - `configPath`: Optional custom config file path
+ *   - `bump`: Version bump type (major, minor, patch)
+ *   - `environments`: Optional list of target environments
+ *   - `branch`: Optional branch name (defaults to current git branch)
+ *   - `message`: Optional message describing the changes
+ *   - `packages`: Optional list of packages (auto-detected if not provided)
+ *   - `force`: Optional flag to overwrite existing changeset
+ *
+ * @returns `Promise<ChangesetAddApiResponse>` containing:
+ *   - On success: `{ success: true, data: ChangesetAddData }`
+ *   - On failure: `{ success: false, error: ErrorInfo }`
+ *
+ * @example Basic usage with auto-detected packages
+ * ```typescript
+ * const result = await changesetAdd({
+ *   root: '/path/to/workspace',
+ *   bump: 'minor',
+ *   message: 'Add new API endpoints'
+ * });
+ *
+ * if (result.success) {
+ *   console.log(`Created changeset: ${result.data.id}`);
+ *   console.log(`Packages: ${result.data.packages.join(', ')}`);
+ * }
+ * ```
+ *
+ * @example With explicit packages
+ * ```typescript
+ * const result = await changesetAdd({
+ *   root: '/path/to/workspace',
+ *   packages: ['@scope/core', '@scope/utils'],
+ *   bump: 'major',
+ *   message: 'Breaking API changes',
+ *   environments: ['staging', 'production']
+ * });
+ * ```
+ *
+ * @example Force overwrite existing changeset
+ * ```typescript
+ * const result = await changesetAdd({
+ *   root: '/path/to/workspace',
+ *   packages: ['my-package'],
+ *   bump: 'patch',
+ *   force: true
+ * });
+ * ```
+ *
+ * @example Error handling
+ * ```typescript
+ * const result = await changesetAdd({
+ *   root: '/nonexistent/path',
+ *   bump: 'minor'
+ * });
+ *
+ * if (!result.success) {
+ *   switch (result.error.code) {
+ *     case 'ENOENT':
+ *       console.error('Path not found');
+ *       break;
+ *     case 'EVALIDATION':
+ *       console.error('Invalid parameters:', result.error.message);
+ *       break;
+ *     case 'EGIT':
+ *       console.error('Git error:', result.error.message);
+ *       break;
+ *     default:
+ *       console.error(`Error: ${result.error.message}`);
+ *   }
+ * }
+ * ```
+ */
+export declare function changesetAdd(params: ChangesetAddParams): Promise<ChangesetAddApiResponse>
+
+/**
  * API response for the changeset add command.
  *
  * Wraps `ChangesetAddData` with success/error handling.
