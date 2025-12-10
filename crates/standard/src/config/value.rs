@@ -30,7 +30,7 @@ use crate::error::{ConfigError, ConfigResult};
 /// map.insert("count".to_string(), ConfigValue::Integer(10));
 /// let map_val = ConfigValue::Map(map);
 /// ```
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(untagged)]
 pub enum ConfigValue {
     /// String value
@@ -46,6 +46,7 @@ pub enum ConfigValue {
     /// Map of values
     Map(HashMap<String, ConfigValue>),
     /// Null value
+    #[default]
     Null,
 }
 
@@ -485,12 +486,6 @@ impl ConfigValue {
             }
             (base, other) => *base = other,
         }
-    }
-}
-
-impl Default for ConfigValue {
-    fn default() -> Self {
-        Self::Null
     }
 }
 
