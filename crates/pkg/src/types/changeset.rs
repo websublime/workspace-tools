@@ -199,10 +199,10 @@ pub struct Changeset {
     /// Target deployment environments.
     ///
     /// List of environments where the packages should be deployed, such as
-    /// ["staging", "production"]. These must match configured available environments.
+    /// `["staging", "production"]`. These must match configured available environments.
     pub environments: Vec<String>,
 
-    /// Package names affected (e.g., ["@myorg/auth", "@myorg/core"]).
+    /// Package names affected (e.g., `["@myorg/auth", "@myorg/core"]`).
     ///
     /// List of package names that have changes and will receive version bumps
     /// when this changeset is applied.
