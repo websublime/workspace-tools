@@ -139,7 +139,8 @@ pub use commands::init;
 // Changeset commands (Story 4.2-4.8)
 // Story 4.2: changesetAdd
 pub use commands::changeset_add;
-// TODO: will be implemented on story 4.3 (changesetUpdate)
+// Story 4.3: changesetUpdate
+pub use commands::changeset_update;
 // TODO: will be implemented on story 4.4 (changesetList)
 // TODO: will be implemented on story 4.5 (changesetShow)
 // TODO: will be implemented on story 4.6 (changesetRemove)

@@ -11,6 +11,7 @@
 //! The module provides the following functions:
 //!
 //! - `changeset_add`: Creates a new changeset for the current branch
+//! - `changeset_update`: Updates an existing changeset with new packages, commits, bump type, or environments
 //!
 //! Each function follows this pattern:
 //! 1. Validates the input parameters
@@ -38,7 +39,7 @@
 //! # Examples
 //!
 //! ```typescript
-//! import { changesetAdd } from '@websublime/workspace-tools';
+//! import { changesetAdd, changesetUpdate } from '@websublime/workspace-tools';
 //!
 //! // Add a new changeset
 //! const addResult = await changesetAdd({
@@ -55,6 +56,22 @@
 //! } else {
 //!   console.error(`Error [${addResult.error.code}]: ${addResult.error.message}`);
 //! }
+//!
+//! // Update an existing changeset
+//! const updateResult = await changesetUpdate({
+//!   root: '.',
+//!   id: 'feature/new-api',
+//!   packages: ['@scope/new-package'],
+//!   bump: 'major'
+//! });
+//!
+//! if (updateResult.success) {
+//!   console.log(`Updated: ${updateResult.data.updated}`);
+//!   console.log(`Packages added: ${updateResult.data.summary.packagesAdded}`);
+//!   console.log(`Current packages: ${updateResult.data.changeset.packages.join(', ')}`);
+//! } else {
+//!   console.error(`Error [${updateResult.error.code}]: ${updateResult.error.message}`);
+//! }
 //! ```
 
 use std::io::Write;
@@ -65,11 +82,14 @@ use napi_derive::napi;
 use serde::Deserialize;
 
 use crate::error::ErrorInfo;
-use crate::types::changeset::{ChangesetAddApiResponse, ChangesetAddData, ChangesetAddParams};
+use crate::types::changeset::{
+    ChangesetAddApiResponse, ChangesetAddData, ChangesetAddParams, ChangesetDetailInfo,
+    ChangesetUpdateApiResponse, ChangesetUpdateData, ChangesetUpdateParams, UpdateSummaryInfo,
+};
 use crate::validation::validators;
 
-use sublime_cli_tools::cli::commands::ChangesetCreateArgs;
-use sublime_cli_tools::commands::changeset::execute_add;
+use sublime_cli_tools::cli::commands::{ChangesetCreateArgs, ChangesetUpdateArgs};
+use sublime_cli_tools::commands::changeset::{execute_add, execute_update};
 use sublime_cli_tools::output::{Output, OutputFormat};
 
 // ============================================================================
@@ -462,6 +482,404 @@ pub async fn changeset_add(params: ChangesetAddParams) -> ChangesetAddApiRespons
         Ok(Ok(data)) => ChangesetAddApiResponse::success(data),
         Ok(Err(error)) => ChangesetAddApiResponse::failure(error),
         Err(join_error) => ChangesetAddApiResponse::failure(ErrorInfo::execution(format!(
+            "Task execution failed: {join_error}"
+        ))),
+    }
+}
+
+// ============================================================================
+// Changeset Update - CLI Response Types
+// ============================================================================
+
+/// CLI JSON response data for changeset update command.
+///
+/// This type mirrors the `ChangesetUpdateResponse` structure from the CLI's
+/// update command, used for deserializing the captured JSON output.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CliChangesetUpdateResponseData {
+    /// Whether the operation succeeded.
+    #[allow(dead_code)]
+    pub(crate) success: bool,
+    /// Summary of what was updated.
+    pub(crate) updated: CliUpdateSummary,
+    /// The updated changeset details.
+    pub(crate) changeset: CliUpdatedChangesetInfo,
+}
+
+/// CLI update summary structure.
+///
+/// Mirrors the `UpdateSummary` structure from the CLI's changeset update command.
+/// Field names use snake_case to match the JSON output format.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CliUpdateSummary {
+    /// Number of packages added.
+    pub(crate) packages_added: usize,
+    /// Number of commits added.
+    pub(crate) commits_added: usize,
+    /// Whether bump type was changed.
+    pub(crate) bump_updated: bool,
+    /// Number of environments added.
+    pub(crate) environments_added: usize,
+}
+
+/// CLI changeset information structure for update response.
+///
+/// Mirrors the `ChangesetInfo` structure from the CLI's update command.
+/// Field names use camelCase to match the JSON output format.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CliUpdatedChangesetInfo {
+    /// Branch name (also serves as unique identifier).
+    pub(crate) branch: String,
+    /// Version bump type (major, minor, patch, none).
+    pub(crate) bump: String,
+    /// List of affected packages.
+    pub(crate) packages: Vec<String>,
+    /// Target environments.
+    pub(crate) environments: Vec<String>,
+    /// List of commit IDs.
+    pub(crate) commits: Vec<String>,
+    /// Creation timestamp (RFC3339 format).
+    pub(crate) created_at: String,
+    /// Last update timestamp (RFC3339 format).
+    pub(crate) updated_at: String,
+}
+
+// ============================================================================
+// Changeset Update - Conversion Functions
+// ============================================================================
+
+/// Converts CLI update summary to NAPI-compatible `UpdateSummaryInfo`.
+///
+/// This function performs a field-by-field conversion from the CLI's
+/// internal types to the NAPI types exposed to JavaScript.
+///
+/// # Arguments
+///
+/// * `cli_summary` - The parsed CLI update summary
+///
+/// # Returns
+///
+/// An `UpdateSummaryInfo` instance suitable for returning to JavaScript.
+pub(crate) fn convert_to_napi_update_summary(cli_summary: &CliUpdateSummary) -> UpdateSummaryInfo {
+    // Safe truncation: these counts will never exceed u32::MAX in practice
+    #[allow(clippy::cast_possible_truncation)]
+    UpdateSummaryInfo {
+        packages_added: cli_summary.packages_added as u32,
+        commits_added: cli_summary.commits_added as u32,
+        bump_updated: cli_summary.bump_updated,
+        environments_added: cli_summary.environments_added as u32,
+    }
+}
+
+/// Converts CLI changeset info to NAPI-compatible `ChangesetDetailInfo`.
+///
+/// This function performs a field-by-field conversion from the CLI's
+/// internal types to the NAPI types exposed to JavaScript.
+///
+/// # Arguments
+///
+/// * `cli_info` - The parsed CLI changeset information
+///
+/// # Returns
+///
+/// A `ChangesetDetailInfo` instance suitable for returning to JavaScript.
+pub(crate) fn convert_to_napi_changeset_detail(
+    cli_info: &CliUpdatedChangesetInfo,
+) -> ChangesetDetailInfo {
+    ChangesetDetailInfo {
+        id: cli_info.branch.clone(),
+        branch: cli_info.branch.clone(),
+        bump: cli_info.bump.clone(),
+        packages: cli_info.packages.clone(),
+        environments: cli_info.environments.clone(),
+        commits: cli_info.commits.clone(),
+        message: None, // CLI update response doesn't include message
+        created_at: cli_info.created_at.clone(),
+        updated_at: cli_info.updated_at.clone(),
+    }
+}
+
+/// Converts CLI update response to NAPI-compatible `ChangesetUpdateData`.
+///
+/// # Arguments
+///
+/// * `cli_data` - The parsed CLI update response data
+///
+/// # Returns
+///
+/// A `ChangesetUpdateData` instance suitable for returning to JavaScript.
+pub(crate) fn convert_to_napi_update_data(
+    cli_data: &CliChangesetUpdateResponseData,
+) -> ChangesetUpdateData {
+    let summary = convert_to_napi_update_summary(&cli_data.updated);
+    let changeset = convert_to_napi_changeset_detail(&cli_data.changeset);
+    let updated = summary.has_changes();
+
+    ChangesetUpdateData { updated, summary, changeset }
+}
+
+/// Parses the JSON response from the CLI update command and converts it to NAPI types.
+///
+/// # Arguments
+///
+/// * `json_bytes` - The raw JSON bytes captured from CLI output
+///
+/// # Returns
+///
+/// * `Ok(ChangesetUpdateData)` - Successfully parsed and converted update data
+/// * `Err(ErrorInfo)` - Parsing failed or CLI returned an error
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The JSON is malformed or cannot be parsed
+/// - The CLI returned `success: false` with an error message
+/// - The CLI returned `success: true` but `data` is missing
+pub(crate) fn parse_changeset_update_response(
+    json_bytes: &[u8],
+) -> Result<ChangesetUpdateData, ErrorInfo> {
+    // Convert bytes to string first for better error messages
+    let json_str = std::str::from_utf8(json_bytes)
+        .map_err(|e| ErrorInfo::execution(format!("Invalid UTF-8 in CLI response: {e}")))?;
+
+    // Handle empty response
+    if json_str.trim().is_empty() {
+        return Err(ErrorInfo::execution("CLI returned empty response"));
+    }
+
+    // Parse the JSON response
+    let response: CliJsonResponse<CliChangesetUpdateResponseData> = serde_json::from_str(json_str)
+        .map_err(|e| {
+            ErrorInfo::execution(format!(
+                "Failed to parse CLI JSON response: {e} (length={})",
+                json_str.len()
+            ))
+        })?;
+
+    // Check for CLI-level errors
+    if !response.success {
+        let error_message = response.error.unwrap_or_else(|| "Unknown CLI error".to_string());
+        return Err(ErrorInfo::execution(error_message));
+    }
+
+    // Extract and convert data
+    let cli_data =
+        response.data.ok_or_else(|| ErrorInfo::execution("CLI returned success but no data"))?;
+
+    Ok(convert_to_napi_update_data(&cli_data))
+}
+
+// ============================================================================
+// Changeset Update - Parameter Validation
+// ============================================================================
+
+/// Validates changeset update command parameters.
+///
+/// Ensures the root path is valid and that required parameters are provided
+/// before executing the CLI command. For NAPI bindings, the `id` parameter
+/// is required since auto-detection from git branch is not reliable in
+/// programmatic contexts.
+///
+/// # Arguments
+///
+/// * `params` - The changeset update parameters to validate
+///
+/// # Returns
+///
+/// * `Ok(PathBuf)` - The validated root path
+/// * `Err(ErrorInfo)` - Validation failed
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The root path is empty, doesn't exist, or is not a directory
+/// - The `id` parameter is not provided
+/// - The bump type (if provided) is invalid
+pub(crate) fn validate_update_params(params: &ChangesetUpdateParams) -> Result<PathBuf, ErrorInfo> {
+    // Validate root path exists and is a directory
+    validators::root(&params.root)?;
+
+    // Validate id is required for NAPI (cannot auto-detect git branch reliably)
+    if params.id.is_none() {
+        return Err(ErrorInfo::validation(
+            "id is required for changesetUpdate. Provide the branch name or changeset ID.",
+            Some("id"),
+        ));
+    }
+
+    // Validate bump type if provided
+    if let Some(ref bump) = params.bump {
+        validators::bump_type_info(bump)?;
+    }
+
+    Ok(PathBuf::from(&params.root))
+}
+
+/// Converts NAPI parameters to CLI arguments.
+///
+/// This function transforms the NAPI-friendly `ChangesetUpdateParams` into the
+/// CLI's `ChangesetUpdateArgs` structure.
+///
+/// # Arguments
+///
+/// * `params` - The NAPI changeset update parameters
+///
+/// # Returns
+///
+/// A `ChangesetUpdateArgs` instance ready for CLI execution.
+pub(crate) fn convert_update_params_to_args(params: &ChangesetUpdateParams) -> ChangesetUpdateArgs {
+    ChangesetUpdateArgs {
+        id: params.id.clone(),
+        commit: params.commit.clone(),
+        packages: params.packages.clone(),
+        bump: params.bump.clone(),
+        env: params.environments.clone(),
+    }
+}
+
+// ============================================================================
+// Changeset Update - NAPI Function
+// ============================================================================
+
+/// Update an existing changeset in the workspace.
+///
+/// Modifies an existing changeset by adding packages, commits, environments,
+/// or changing the bump type. The changeset is identified by the `id` parameter,
+/// which corresponds to the branch name.
+///
+/// This function always operates in non-interactive mode. The `id` parameter
+/// is required since auto-detection of the current git branch is not reliable
+/// in programmatic contexts.
+///
+/// @param params - Changeset update parameters containing:
+///   - `root`: Workspace root directory path (required)
+///   - `configPath`: Optional custom config file path
+///   - `id`: Branch name or changeset ID (required)
+///   - `commit`: Optional commit hash to add
+///   - `packages`: Optional list of packages to add
+///   - `bump`: Optional new bump type (major, minor, patch)
+///   - `environments`: Optional list of environments to add
+///
+/// @returns `Promise<ChangesetUpdateApiResponse>` containing:
+///   - On success: `{ success: true, data: ChangesetUpdateData }`
+///   - On failure: `{ success: false, error: ErrorInfo }`
+///
+/// @example Add packages to an existing changeset
+/// ```typescript
+/// const result = await changesetUpdate({
+///   root: '/path/to/workspace',
+///   id: 'feature/new-api',
+///   packages: ['@scope/new-package']
+/// });
+///
+/// if (result.success) {
+///   console.log(`Updated: ${result.data.updated}`);
+///   console.log(`Packages added: ${result.data.summary.packagesAdded}`);
+/// }
+/// ```
+///
+/// @example Add a commit and change bump type
+/// ```typescript
+/// const result = await changesetUpdate({
+///   root: '/path/to/workspace',
+///   id: 'feature/breaking-change',
+///   commit: 'abc123def456',
+///   bump: 'major'
+/// });
+///
+/// if (result.success) {
+///   console.log(`Bump updated: ${result.data.summary.bumpUpdated}`);
+///   console.log(`Current bump: ${result.data.changeset.bump}`);
+/// }
+/// ```
+///
+/// @example Add environments
+/// ```typescript
+/// const result = await changesetUpdate({
+///   root: '/path/to/workspace',
+///   id: 'feature/deploy',
+///   environments: ['staging', 'production']
+/// });
+/// ```
+///
+/// @example Error handling
+/// ```typescript
+/// const result = await changesetUpdate({
+///   root: '/path/to/workspace',
+///   id: 'nonexistent-branch'
+/// });
+///
+/// if (!result.success) {
+///   switch (result.error.code) {
+///     case 'ENOENT':
+///       console.error('Path or changeset not found');
+///       break;
+///     case 'EVALIDATION':
+///       console.error('Invalid parameters:', result.error.message);
+///       break;
+///     case 'EEXECUTION':
+///       console.error('Update failed:', result.error.message);
+///       break;
+///     default:
+///       console.error(`Error: ${result.error.message}`);
+///   }
+/// }
+/// ```
+#[napi(js_name = "changesetUpdate")]
+pub async fn changeset_update(params: ChangesetUpdateParams) -> ChangesetUpdateApiResponse {
+    // 1. Validate parameters (synchronous validation before spawning)
+    let root_path = match validate_update_params(&params) {
+        Ok(path) => path,
+        Err(error) => return ChangesetUpdateApiResponse::failure(error),
+    };
+
+    // 2. Prepare config path
+    let config_path: Option<PathBuf> = params.config_path.as_ref().map(PathBuf::from);
+
+    // 3. Convert NAPI params to CLI args
+    let args = convert_update_params_to_args(&params);
+
+    // 4. Execute CLI command in a blocking task
+    // The CLI's execute_update uses types that are not Send/Sync (RefCell, git2::Repository),
+    // so we must run it on a blocking thread via spawn_blocking.
+    let result = tokio::task::spawn_blocking(move || {
+        // Create a new tokio runtime for the blocking context
+        // This is necessary because execute_update is async but we're in a blocking context
+        let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+            Ok(rt) => rt,
+            Err(e) => {
+                return Err(ErrorInfo::execution(format!("Failed to create runtime: {e}")));
+            }
+        };
+
+        rt.block_on(async {
+            // Create shared buffer for output capture
+            let buffer = SharedBuffer::new();
+
+            // Create Output with JSON format
+            let output = Output::new(OutputFormat::Json, buffer.clone(), true);
+
+            // Execute the CLI command
+            if let Err(cli_error) =
+                execute_update(&args, &output, Some(root_path.as_path()), config_path.as_deref())
+                    .await
+            {
+                return Err(ErrorInfo::from(cli_error));
+            }
+
+            // Extract and parse JSON
+            let json_bytes = buffer.take_bytes();
+            parse_changeset_update_response(&json_bytes)
+        })
+    })
+    .await;
+
+    // 5. Handle spawn_blocking result
+    match result {
+        Ok(Ok(data)) => ChangesetUpdateApiResponse::success(data),
+        Ok(Err(error)) => ChangesetUpdateApiResponse::failure(error),
+        Err(join_error) => ChangesetUpdateApiResponse::failure(ErrorInfo::execution(format!(
             "Task execution failed: {join_error}"
         ))),
     }

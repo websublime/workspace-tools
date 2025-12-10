@@ -2512,12 +2512,15 @@ mod changeset_api_response_tests {
 
     #[test]
     fn test_changeset_update_api_response_success() {
-        let summary = UpdateSummaryInfo::new(
-            2,
-            vec!["@scope/new".to_string()],
-            vec!["@scope/existing".to_string()],
+        let summary = UpdateSummaryInfo::new(2, 1, true, 1);
+        let changeset = ChangesetDetailInfo::new(
+            "feature-api",
+            "feature/api",
+            "major",
+            "2024-01-15T10:00:00Z",
+            "2024-01-15T12:00:00Z",
         );
-        let data = ChangesetUpdateData::success(summary);
+        let data = ChangesetUpdateData::success(summary, changeset);
         let response = ChangesetUpdateApiResponse::success(data);
 
         assert!(response.success);
@@ -2527,7 +2530,15 @@ mod changeset_api_response_tests {
 
     #[test]
     fn test_changeset_update_api_response_no_changes() {
-        let data = ChangesetUpdateData::no_changes();
+        let summary = UpdateSummaryInfo::empty();
+        let changeset = ChangesetDetailInfo::new(
+            "feature-api",
+            "feature/api",
+            "minor",
+            "2024-01-15T10:00:00Z",
+            "2024-01-15T10:00:00Z",
+        );
+        let data = ChangesetUpdateData::new(false, summary, changeset);
         let response = ChangesetUpdateApiResponse::success(data);
 
         assert!(response.success);
@@ -3042,24 +3053,24 @@ mod changeset_data_tests {
 
     #[test]
     fn test_update_summary_info_new() {
-        let summary = UpdateSummaryInfo::new(
-            3,
-            vec!["@scope/new1".to_string(), "@scope/new2".to_string()],
-            vec!["@scope/existing".to_string()],
-        );
+        let summary = UpdateSummaryInfo::new(3, 2, true, 1);
 
-        assert_eq!(summary.commits_added, 3);
-        assert_eq!(summary.new_packages.len(), 2);
-        assert_eq!(summary.existing_packages.len(), 1);
+        assert_eq!(summary.packages_added, 3);
+        assert_eq!(summary.commits_added, 2);
+        assert!(summary.bump_updated);
+        assert_eq!(summary.environments_added, 1);
+        assert!(summary.has_changes());
     }
 
     #[test]
     fn test_update_summary_info_empty() {
         let summary = UpdateSummaryInfo::empty();
 
+        assert_eq!(summary.packages_added, 0);
         assert_eq!(summary.commits_added, 0);
-        assert!(summary.new_packages.is_empty());
-        assert!(summary.existing_packages.is_empty());
+        assert!(!summary.bump_updated);
+        assert_eq!(summary.environments_added, 0);
+        assert!(!summary.has_changes());
     }
 
     // ========================================================================
@@ -3159,27 +3170,53 @@ mod changeset_data_tests {
 
     #[test]
     fn test_changeset_update_data_success() {
-        let summary = UpdateSummaryInfo::new(1, vec!["@scope/new".to_string()], vec![]);
-        let data = ChangesetUpdateData::success(summary);
+        let summary = UpdateSummaryInfo::new(1, 1, false, 0);
+        let changeset = ChangesetDetailInfo::new(
+            "feature-api",
+            "feature/api",
+            "minor",
+            "2024-01-15T10:00:00Z",
+            "2024-01-15T12:00:00Z",
+        );
+        let data = ChangesetUpdateData::success(summary, changeset);
 
         assert!(data.updated);
+        assert_eq!(data.summary.packages_added, 1);
         assert_eq!(data.summary.commits_added, 1);
+        assert_eq!(data.changeset.branch, "feature/api");
     }
 
     #[test]
     fn test_changeset_update_data_no_changes() {
-        let data = ChangesetUpdateData::no_changes();
+        let summary = UpdateSummaryInfo::empty();
+        let changeset = ChangesetDetailInfo::new(
+            "feature-api",
+            "feature/api",
+            "minor",
+            "2024-01-15T10:00:00Z",
+            "2024-01-15T10:00:00Z",
+        );
+        let data = ChangesetUpdateData::new(false, summary, changeset);
 
         assert!(!data.updated);
         assert_eq!(data.summary.commits_added, 0);
+        assert!(!data.summary.has_changes());
     }
 
     #[test]
     fn test_changeset_update_data_new() {
-        let summary = UpdateSummaryInfo::empty();
-        let data = ChangesetUpdateData::new(true, summary);
+        let summary = UpdateSummaryInfo::new(0, 0, true, 0);
+        let changeset = ChangesetDetailInfo::new(
+            "feature-api",
+            "feature/api",
+            "major",
+            "2024-01-15T10:00:00Z",
+            "2024-01-15T12:00:00Z",
+        );
+        let data = ChangesetUpdateData::new(true, summary, changeset);
 
         assert!(data.updated);
+        assert!(data.summary.bump_updated);
     }
 
     // ========================================================================
