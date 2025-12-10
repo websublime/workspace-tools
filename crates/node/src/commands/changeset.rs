@@ -235,7 +235,9 @@ pub(crate) fn convert_to_napi_add_data(cli_info: CliChangesetInfo) -> ChangesetA
 /// - The JSON is malformed or cannot be parsed
 /// - The CLI returned `success: false` with an error message
 /// - The CLI returned `success: true` but `data` is missing
-pub(crate) fn parse_changeset_add_response(json_bytes: &[u8]) -> Result<ChangesetAddData, ErrorInfo> {
+pub(crate) fn parse_changeset_add_response(
+    json_bytes: &[u8],
+) -> Result<ChangesetAddData, ErrorInfo> {
     // Convert bytes to string first for better error messages
     let json_str = std::str::from_utf8(json_bytes)
         .map_err(|e| ErrorInfo::execution(format!("Invalid UTF-8 in CLI response: {e}")))?;
@@ -246,8 +248,8 @@ pub(crate) fn parse_changeset_add_response(json_bytes: &[u8]) -> Result<Changese
     }
 
     // Parse the JSON response
-    let response: CliJsonResponse<CliChangesetAddResponseData> =
-        serde_json::from_str(json_str).map_err(|e| {
+    let response: CliJsonResponse<CliChangesetAddResponseData> = serde_json::from_str(json_str)
+        .map_err(|e| {
             ErrorInfo::execution(format!(
                 "Failed to parse CLI JSON response: {e} (length={})",
                 json_str.len()
@@ -443,8 +445,7 @@ pub async fn changeset_add(params: ChangesetAddParams) -> ChangesetAddApiRespons
             let output = Output::new(OutputFormat::Json, buffer.clone(), true);
 
             // Execute the CLI command
-            if let Err(cli_error) =
-                execute_add(&args, &output, Some(root_path), config_path).await
+            if let Err(cli_error) = execute_add(&args, &output, Some(root_path), config_path).await
             {
                 return Err(ErrorInfo::from(cli_error));
             }
