@@ -221,9 +221,8 @@ pub(crate) struct CliChangesetAddResponseData {
 /// CLI changeset information structure.
 ///
 /// Mirrors the `ChangesetInfo` structure from the CLI's types module.
-/// Field names use camelCase to match the JSON output format.
+/// Field names use snake_case to match the JSON output format.
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub(crate) struct CliChangesetInfo {
     /// Branch name (also serves as unique identifier).
     pub(crate) branch: String,
@@ -558,9 +557,8 @@ pub(crate) struct CliUpdateSummary {
 /// CLI changeset information structure for update response.
 ///
 /// Mirrors the `ChangesetInfo` structure from the CLI's update command.
-/// Field names use camelCase to match the JSON output format.
+/// Field names use snake_case to match the JSON output format.
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub(crate) struct CliUpdatedChangesetInfo {
     /// Branch name (also serves as unique identifier).
     pub(crate) branch: String,
