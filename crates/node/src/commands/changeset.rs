@@ -100,20 +100,22 @@ use serde::Deserialize;
 
 use crate::error::ErrorInfo;
 use crate::types::changeset::{
-    ChangesetAddApiResponse, ChangesetAddData, ChangesetAddParams, ChangesetDetailInfo,
+    ArchivedChangesetInfo, ChangesetAddApiResponse, ChangesetAddData, ChangesetAddParams,
+    ChangesetDetailInfo, ChangesetHistoryApiResponse, ChangesetHistoryData, ChangesetHistoryParams,
     ChangesetListApiResponse, ChangesetListData, ChangesetListItemInfo, ChangesetListParams,
     ChangesetRemoveApiResponse, ChangesetRemoveData, ChangesetRemoveParams,
     ChangesetShowApiResponse, ChangesetShowData, ChangesetShowParams, ChangesetUpdateApiResponse,
-    ChangesetUpdateData, ChangesetUpdateParams, UpdateSummaryInfo, VALID_SORT_OPTIONS,
+    ChangesetUpdateData, ChangesetUpdateParams, ReleaseInfoData, ReleasedVersionEntry,
+    UpdateSummaryInfo, VALID_SORT_OPTIONS,
 };
 use crate::validation::validators;
 
 use sublime_cli_tools::cli::commands::{
-    ChangesetCreateArgs, ChangesetDeleteArgs, ChangesetListArgs, ChangesetShowArgs,
-    ChangesetUpdateArgs,
+    ChangesetCreateArgs, ChangesetDeleteArgs, ChangesetHistoryArgs, ChangesetListArgs,
+    ChangesetShowArgs, ChangesetUpdateArgs,
 };
 use sublime_cli_tools::commands::changeset::{
-    execute_add, execute_list, execute_remove, execute_show, execute_update,
+    execute_add, execute_history, execute_list, execute_remove, execute_show, execute_update,
 };
 use sublime_cli_tools::output::{Output, OutputFormat};
 
@@ -1979,6 +1981,466 @@ pub async fn changeset_remove(params: ChangesetRemoveParams) -> ChangesetRemoveA
         Ok(Ok(data)) => ChangesetRemoveApiResponse::success(data),
         Ok(Err(error)) => ChangesetRemoveApiResponse::failure(error),
         Err(join_error) => ChangesetRemoveApiResponse::failure(ErrorInfo::execution(format!(
+            "Task execution failed: {join_error}"
+        ))),
+    }
+}
+
+// ============================================================================
+// Changeset History - CLI Response Types
+// ============================================================================
+
+/// CLI JSON response data structure for changeset history command.
+///
+/// This structure mirrors the `ChangesetHistoryResponse` from the CLI's history command,
+/// used for deserializing the captured JSON output.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CliChangesetHistoryResponseData {
+    /// Whether the operation succeeded.
+    #[allow(dead_code)]
+    pub(crate) success: bool,
+
+    /// List of archived changesets.
+    pub(crate) changesets: Vec<CliArchivedChangesetInfo>,
+
+    /// Total count of results.
+    #[allow(dead_code)]
+    pub(crate) total: usize,
+}
+
+/// Archived changeset information from CLI history output.
+///
+/// Contains both changeset details and release information.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CliArchivedChangesetInfo {
+    /// Branch name (also serves as unique identifier).
+    pub(crate) branch: String,
+
+    /// Version bump type (major, minor, patch, none).
+    pub(crate) bump: String,
+
+    /// List of affected packages.
+    pub(crate) packages: Vec<String>,
+
+    /// Target environments.
+    pub(crate) environments: Vec<String>,
+
+    /// List of commit IDs.
+    pub(crate) commits: Vec<String>,
+
+    /// Changeset creation timestamp (RFC3339 format).
+    pub(crate) created_at: String,
+
+    /// Changeset last update timestamp (RFC3339 format).
+    pub(crate) updated_at: String,
+
+    /// Package versions map (package name -> version).
+    pub(crate) versions: std::collections::HashMap<String, String>,
+
+    /// Git commit hash of the release.
+    pub(crate) git_commit: String,
+
+    /// Release timestamp (RFC3339 format).
+    pub(crate) applied_at: String,
+
+    /// User/system that performed the release.
+    pub(crate) applied_by: String,
+}
+
+// ============================================================================
+// Changeset History - Conversion Functions
+// ============================================================================
+
+/// Converts a CLI archived changeset info to NAPI `ArchivedChangesetInfo`.
+///
+/// Maps the flat CLI structure to the nested NAPI structure with separate
+/// changeset details and release information sections.
+///
+/// # Arguments
+///
+/// * `cli` - The CLI archived changeset info to convert
+///
+/// # Returns
+///
+/// A NAPI-compatible `ArchivedChangesetInfo` instance.
+pub(crate) fn convert_archived_changeset_to_napi(
+    cli: CliArchivedChangesetInfo,
+) -> ArchivedChangesetInfo {
+    // Convert versions HashMap to Vec<ReleasedVersionEntry>
+    let released_versions: Vec<ReleasedVersionEntry> = cli
+        .versions
+        .into_iter()
+        .map(|(package_name, version)| ReleasedVersionEntry::new(package_name, version))
+        .collect();
+
+    // Build the changeset detail info
+    let changeset = ChangesetDetailInfo::new(
+        cli.branch.clone(),
+        cli.branch.clone(),
+        cli.bump,
+        cli.created_at,
+        cli.updated_at,
+    )
+    .with_packages(cli.packages)
+    .with_environments(cli.environments)
+    .with_commits(cli.commits);
+
+    // Build the release info
+    let release_info =
+        ReleaseInfoData::new(cli.applied_at, cli.applied_by, cli.git_commit, released_versions);
+
+    ArchivedChangesetInfo::new(changeset, release_info)
+}
+
+/// Converts CLI history response to NAPI `ChangesetHistoryData`.
+///
+/// # Arguments
+///
+/// * `cli_data` - The CLI response data to convert
+///
+/// # Returns
+///
+/// A NAPI-compatible `ChangesetHistoryData` instance.
+pub(crate) fn convert_to_napi_history_data(
+    cli_data: CliChangesetHistoryResponseData,
+) -> ChangesetHistoryData {
+    let archived: Vec<ArchivedChangesetInfo> =
+        cli_data.changesets.into_iter().map(convert_archived_changeset_to_napi).collect();
+
+    ChangesetHistoryData::new(archived)
+}
+
+// ============================================================================
+// Changeset History - Response Parsing
+// ============================================================================
+
+/// Parses the JSON output from the CLI history command.
+///
+/// Handles both success and error responses from the CLI, converting them
+/// to the appropriate NAPI types.
+///
+/// # Arguments
+///
+/// * `json_bytes` - Raw bytes from the CLI output buffer
+///
+/// # Returns
+///
+/// A `ChangesetHistoryData` on success, or an `ErrorInfo` on failure.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The output buffer is empty
+/// - The bytes cannot be converted to UTF-8
+/// - The JSON cannot be parsed
+/// - The CLI returned an error response
+pub(crate) fn parse_changeset_history_response(
+    json_bytes: &[u8],
+) -> Result<ChangesetHistoryData, ErrorInfo> {
+    // Check for empty output
+    if json_bytes.is_empty() {
+        return Err(ErrorInfo::execution("CLI returned empty output"));
+    }
+
+    // Convert bytes to string
+    let json_str = std::str::from_utf8(json_bytes)
+        .map_err(|e| ErrorInfo::execution(format!("Invalid UTF-8 in CLI output: {e}")))?;
+
+    // Trim whitespace
+    let json_str = json_str.trim();
+    if json_str.is_empty() {
+        return Err(ErrorInfo::execution("CLI returned empty output"));
+    }
+
+    // Parse the JSON response
+    let cli_response: CliJsonResponse<CliChangesetHistoryResponseData> =
+        serde_json::from_str(json_str)
+            .map_err(|e| ErrorInfo::execution(format!("Failed to parse CLI JSON output: {e}")))?;
+
+    // Check for CLI-level error
+    if !cli_response.success {
+        let error_msg = cli_response.error.unwrap_or_else(|| String::from("Unknown CLI error"));
+        return Err(ErrorInfo::execution(error_msg));
+    }
+
+    // Extract data or return error
+    let cli_data = cli_response
+        .data
+        .ok_or_else(|| ErrorInfo::execution("CLI returned success but no data"))?;
+
+    // Convert to NAPI types
+    Ok(convert_to_napi_history_data(cli_data))
+}
+
+// ============================================================================
+// Changeset History - Validation
+// ============================================================================
+
+/// Validates the history command parameters.
+///
+/// Checks that:
+/// - The root path is not empty
+/// - The root path exists and is a directory
+/// - If filter_bump is provided, it's a valid bump type
+///
+/// # Arguments
+///
+/// * `params` - The history parameters to validate
+///
+/// # Returns
+///
+/// The validated root path as a `PathBuf` on success, or an `ErrorInfo` on failure.
+pub(crate) fn validate_history_params(
+    params: &ChangesetHistoryParams,
+) -> Result<PathBuf, ErrorInfo> {
+    // Validate root path exists and is a directory
+    validators::root(&params.root)?;
+
+    // Validate bump type if provided
+    if let Some(ref bump) = params.filter_bump {
+        validators::bump_type_info(bump)?;
+    }
+
+    Ok(PathBuf::from(&params.root))
+}
+
+// ============================================================================
+// Changeset History - Parameter Conversion
+// ============================================================================
+
+/// Converts NAPI history params to CLI args.
+///
+/// Maps the JavaScript-friendly parameter names to the CLI argument structure.
+///
+/// # Arguments
+///
+/// * `params` - The NAPI parameters to convert
+///
+/// # Returns
+///
+/// A `ChangesetHistoryArgs` instance ready for CLI execution.
+pub(crate) fn convert_history_params_to_args(
+    params: &ChangesetHistoryParams,
+) -> ChangesetHistoryArgs {
+    ChangesetHistoryArgs {
+        filter_package: params.filter_package.clone(),
+        filter_env: params.filter_env.clone(),
+        filter_bump: params.filter_bump.clone(),
+        since: params.since.clone(),
+        until: params.until.clone(),
+        limit: params.limit.map(|l| l as usize),
+    }
+}
+
+// ============================================================================
+// Changeset History - NAPI Function
+// ============================================================================
+
+/// Queries the changeset history with optional filtering.
+///
+/// This function queries archived changesets from the workspace history,
+/// supporting various filter options for package, environment, bump type,
+/// date range, and result limit.
+///
+/// # Parameters
+///
+/// - `root`: Workspace root directory path (required)
+/// - `configPath`: Optional path to custom configuration file
+/// - `filterPackage`: Filter by package name
+/// - `filterEnv`: Filter by environment
+/// - `filterBump`: Filter by bump type (major, minor, patch)
+/// - `since`: Start date filter (ISO 8601 format)
+/// - `until`: End date filter (ISO 8601 format)
+/// - `limit`: Maximum number of results
+///
+/// # Returns
+///
+/// An `ApiResponse` containing `ChangesetHistoryData` with the list of archived
+/// changesets matching the query, or an error if the operation fails.
+///
+/// ## Success Response
+///
+/// ```typescript
+/// {
+///   success: true,
+///   data: {
+///     archived: [
+///       {
+///         changeset: {
+///           id: "feature/add-api",
+///           branch: "feature/add-api",
+///           bump: "minor",
+///           packages: ["@scope/core"],
+///           environments: ["production"],
+///           commits: ["abc123"],
+///           createdAt: "2024-01-15T10:30:00Z",
+///           updatedAt: "2024-01-15T14:45:00Z"
+///         },
+///         releaseInfo: {
+///           releasedAt: "2024-01-16T10:00:00Z",
+///           releasedBy: "CI",
+///           releaseCommit: "def456",
+///           releasedVersions: [
+///             { packageName: "@scope/core", version: "2.0.0" }
+///           ]
+///         }
+///       }
+///     ],
+///     count: 1
+///   }
+/// }
+/// ```
+///
+/// ## Error Codes
+///
+/// - `EVALIDATION`: Invalid parameters (empty root or invalid bump type)
+/// - `ENOENT`: Path not found
+/// - `ECONFIG`: Workspace not initialized
+/// - `EEXECUTION`: CLI command failed
+///
+/// @example Basic usage - get all history
+/// ```typescript
+/// const result = await changesetHistory({
+///   root: '/path/to/workspace'
+/// });
+///
+/// if (result.success) {
+///   console.log(`Found ${result.data.count} archived changesets`);
+///   for (const item of result.data.archived) {
+///     console.log(`- ${item.changeset.branch}: ${item.changeset.bump}`);
+///     console.log(`  Released: ${item.releaseInfo.releasedAt}`);
+///   }
+/// }
+/// ```
+///
+/// @example Filter by package
+/// ```typescript
+/// const result = await changesetHistory({
+///   root: '/path/to/workspace',
+///   filterPackage: '@scope/core'
+/// });
+///
+/// if (result.success) {
+///   console.log(`Releases for @scope/core: ${result.data.count}`);
+/// }
+/// ```
+///
+/// @example Filter by date range
+/// ```typescript
+/// const result = await changesetHistory({
+///   root: '/path/to/workspace',
+///   since: '2024-01-01',
+///   until: '2024-12-31',
+///   limit: 10
+/// });
+/// ```
+///
+/// @example Filter by bump type
+/// ```typescript
+/// const result = await changesetHistory({
+///   root: '/path/to/workspace',
+///   filterBump: 'major'
+/// });
+///
+/// if (result.success) {
+///   console.log('Major releases:');
+///   result.data.archived.forEach(item => {
+///     const versions = item.releaseInfo.releasedVersions
+///       .map(v => `${v.packageName}@${v.version}`)
+///       .join(', ');
+///     console.log(`  ${item.changeset.branch}: ${versions}`);
+///   });
+/// }
+/// ```
+///
+/// @example Multiple filters
+/// ```typescript
+/// const result = await changesetHistory({
+///   root: '/path/to/workspace',
+///   filterPackage: '@scope/core',
+///   filterEnv: 'production',
+///   filterBump: 'minor',
+///   since: '2024-06-01',
+///   limit: 5
+/// });
+/// ```
+///
+/// @example Error handling
+/// ```typescript
+/// const result = await changesetHistory({
+///   root: '/nonexistent/path'
+/// });
+///
+/// if (!result.success) {
+///   switch (result.error.code) {
+///     case 'ENOENT':
+///       console.error('Path not found');
+///       break;
+///     case 'EVALIDATION':
+///       console.error('Invalid parameters:', result.error.message);
+///       break;
+///     case 'ECONFIG':
+///       console.error('Workspace not initialized');
+///       break;
+///     default:
+///       console.error(`Error: ${result.error.message}`);
+///   }
+/// }
+/// ```
+#[napi(js_name = "changesetHistory")]
+pub async fn changeset_history(params: ChangesetHistoryParams) -> ChangesetHistoryApiResponse {
+    // 1. Validate parameters (synchronous validation before spawning)
+    let root_path = match validate_history_params(&params) {
+        Ok(path) => path,
+        Err(error) => return ChangesetHistoryApiResponse::failure(error),
+    };
+
+    // 2. Prepare config path
+    let config_path: Option<PathBuf> = params.config_path.as_ref().map(PathBuf::from);
+
+    // 3. Convert NAPI params to CLI args
+    let args = convert_history_params_to_args(&params);
+
+    // 4. Execute CLI command in a blocking task
+    // The CLI's execute_history uses types that are not Send/Sync (RefCell, git2::Repository),
+    // so we must run it on a blocking thread via spawn_blocking.
+    let result = tokio::task::spawn_blocking(move || {
+        // Create a new tokio runtime for the blocking context
+        // This is necessary because execute_history is async but we're in a blocking context
+        let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+            Ok(rt) => rt,
+            Err(e) => {
+                return Err(ErrorInfo::execution(format!("Failed to create runtime: {e}")));
+            }
+        };
+
+        rt.block_on(async {
+            // Create shared buffer for output capture
+            let buffer = SharedBuffer::new();
+
+            // Create Output with JSON format
+            let output = Output::new(OutputFormat::Json, buffer.clone(), true);
+
+            // Execute the CLI command
+            if let Err(cli_error) =
+                execute_history(&args, &output, Some(root_path.as_path()), config_path.as_deref())
+                    .await
+            {
+                return Err(ErrorInfo::from(cli_error));
+            }
+
+            // Extract and parse JSON
+            let json_bytes = buffer.take_bytes();
+            parse_changeset_history_response(&json_bytes)
+        })
+    })
+    .await;
+
+    // 5. Handle spawn_blocking result
+    match result {
+        Ok(Ok(data)) => ChangesetHistoryApiResponse::success(data),
+        Ok(Err(error)) => ChangesetHistoryApiResponse::failure(error),
+        Err(join_error) => ChangesetHistoryApiResponse::failure(ErrorInfo::execution(format!(
             "Task execution failed: {join_error}"
         ))),
     }

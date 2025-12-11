@@ -76,7 +76,8 @@ pub use changeset::changeset_list;
 pub use changeset::changeset_show;
 // Story 4.6: changesetRemove
 pub use changeset::changeset_remove;
-// TODO: will be implemented on story 4.7 (changesetHistory)
+// Story 4.7: changesetHistory
+pub use changeset::changeset_history;
 // TODO: will be implemented on story 4.8 (changesetCheck)
 
 // Tests module for all command implementations
