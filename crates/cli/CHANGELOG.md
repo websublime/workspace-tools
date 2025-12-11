@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.29 - 2025-12-11
+
+### Features
+
+#### WOR-TSK-197
+
+- Add ARM64 Linux support for CLI binaries
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.28 - 2025-12-10
 
 ### Bug Fixes
