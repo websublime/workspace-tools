@@ -102,16 +102,18 @@ use crate::error::ErrorInfo;
 use crate::types::changeset::{
     ChangesetAddApiResponse, ChangesetAddData, ChangesetAddParams, ChangesetDetailInfo,
     ChangesetListApiResponse, ChangesetListData, ChangesetListItemInfo, ChangesetListParams,
+    ChangesetRemoveApiResponse, ChangesetRemoveData, ChangesetRemoveParams,
     ChangesetShowApiResponse, ChangesetShowData, ChangesetShowParams, ChangesetUpdateApiResponse,
     ChangesetUpdateData, ChangesetUpdateParams, UpdateSummaryInfo, VALID_SORT_OPTIONS,
 };
 use crate::validation::validators;
 
 use sublime_cli_tools::cli::commands::{
-    ChangesetCreateArgs, ChangesetListArgs, ChangesetShowArgs, ChangesetUpdateArgs,
+    ChangesetCreateArgs, ChangesetDeleteArgs, ChangesetListArgs, ChangesetShowArgs,
+    ChangesetUpdateArgs,
 };
 use sublime_cli_tools::commands::changeset::{
-    execute_add, execute_list, execute_show, execute_update,
+    execute_add, execute_list, execute_remove, execute_show, execute_update,
 };
 use sublime_cli_tools::output::{Output, OutputFormat};
 
@@ -1621,6 +1623,362 @@ pub async fn changeset_show(params: ChangesetShowParams) -> ChangesetShowApiResp
         Ok(Ok(data)) => ChangesetShowApiResponse::success(data),
         Ok(Err(error)) => ChangesetShowApiResponse::failure(error),
         Err(join_error) => ChangesetShowApiResponse::failure(ErrorInfo::execution(format!(
+            "Task execution failed: {join_error}"
+        ))),
+    }
+}
+
+// ============================================================================
+// Changeset Remove - CLI Response Types
+// ============================================================================
+
+/// CLI changeset remove response data structure.
+///
+/// Mirrors the `ChangesetRemoveResponse` structure from the CLI's changeset remove command.
+/// Used for deserializing the JSON output captured from the CLI.
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+pub(crate) struct CliChangesetRemoveResponseData {
+    /// Whether the operation succeeded.
+    #[serde(default)]
+    pub(crate) success: bool,
+    /// The branch name that was removed.
+    pub(crate) branch: String,
+    /// Whether the changeset was archived before removal.
+    #[serde(default)]
+    pub(crate) archived: bool,
+    /// Details of the removed changeset.
+    pub(crate) changeset: CliRemovedChangesetInfo,
+}
+
+/// CLI removed changeset info structure.
+///
+/// Contains details about the changeset that was removed.
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+pub(crate) struct CliRemovedChangesetInfo {
+    /// Branch name (also serves as unique identifier).
+    pub(crate) branch: String,
+    /// Version bump type.
+    pub(crate) bump: String,
+    /// List of affected packages.
+    #[serde(default)]
+    pub(crate) packages: Vec<String>,
+    /// Target environments.
+    #[serde(default)]
+    pub(crate) environments: Vec<String>,
+    /// Number of commits.
+    #[serde(default)]
+    pub(crate) commit_count: usize,
+}
+
+// ============================================================================
+// Changeset Remove - Conversion Functions
+// ============================================================================
+
+/// Converts CLI remove response data to NAPI `ChangesetRemoveData`.
+///
+/// This function transforms the deserialized CLI response into the
+/// NAPI-compatible `ChangesetRemoveData` structure.
+///
+/// # Arguments
+///
+/// * `cli_data` - The CLI response data from the changeset remove command
+///
+/// # Returns
+///
+/// A `ChangesetRemoveData` instance with the converted data.
+pub(crate) fn convert_to_napi_remove_data(
+    cli_data: &CliChangesetRemoveResponseData,
+) -> ChangesetRemoveData {
+    ChangesetRemoveData::new(true, &cli_data.branch)
+}
+
+/// Parses the JSON bytes from CLI output into `ChangesetRemoveData`.
+///
+/// This function handles:
+/// - Empty or whitespace-only output
+/// - Invalid UTF-8 encoding
+/// - Invalid JSON format
+/// - CLI error responses
+/// - Successful responses with data
+///
+/// # Arguments
+///
+/// * `json_bytes` - Raw bytes captured from CLI output
+///
+/// # Returns
+///
+/// * `Ok(ChangesetRemoveData)` - Successfully parsed response
+/// * `Err(ErrorInfo)` - Error details if parsing failed
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The output is empty
+/// - The output is not valid UTF-8
+/// - The output is not valid JSON
+/// - The CLI returned an error response
+/// - The success response has no data
+pub(crate) fn parse_changeset_remove_response(
+    json_bytes: &[u8],
+) -> Result<ChangesetRemoveData, ErrorInfo> {
+    // Check for empty output
+    let json_str = match String::from_utf8(json_bytes.to_vec()) {
+        Ok(s) if s.trim().is_empty() => {
+            return Err(ErrorInfo::execution("CLI returned empty output"));
+        }
+        Ok(s) => s,
+        Err(e) => {
+            return Err(ErrorInfo::execution(format!("Invalid UTF-8 in CLI output: {e}")));
+        }
+    };
+
+    // Parse JSON
+    let response: CliJsonResponse<CliChangesetRemoveResponseData> = serde_json::from_str(&json_str)
+        .map_err(|e| ErrorInfo::execution(format!("Failed to parse CLI JSON response: {e}")))?;
+
+    // Check for CLI error
+    if !response.success {
+        let error_message = response.error.unwrap_or_else(|| "Unknown CLI error".to_string());
+        return Err(ErrorInfo::execution(error_message));
+    }
+
+    // Extract data
+    match response.data {
+        Some(data) => Ok(convert_to_napi_remove_data(&data)),
+        None => Err(ErrorInfo::execution("CLI returned success but no data")),
+    }
+}
+
+// ============================================================================
+// Changeset Remove - Validation
+// ============================================================================
+
+/// Validates the parameters for the changeset remove command.
+///
+/// Performs the following validations:
+/// - Root path exists and is a directory
+/// - Branch parameter is not empty
+///
+/// # Arguments
+///
+/// * `params` - The changeset remove parameters to validate
+///
+/// # Returns
+///
+/// * `Ok(PathBuf)` - The validated root path as a `PathBuf`
+/// * `Err(ErrorInfo)` - Validation error with details
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The root path is empty, doesn't exist, or is not a directory
+/// - The branch parameter is empty
+pub(crate) fn validate_remove_params(params: &ChangesetRemoveParams) -> Result<PathBuf, ErrorInfo> {
+    // Validate root path exists and is a directory
+    validators::root(&params.root)?;
+
+    // Validate branch is not empty
+    if params.branch.trim().is_empty() {
+        return Err(ErrorInfo::validation(
+            "branch parameter is required and cannot be empty",
+            Some("branch"),
+        ));
+    }
+
+    Ok(PathBuf::from(&params.root))
+}
+
+/// Converts NAPI parameters to CLI arguments.
+///
+/// This function transforms the NAPI-friendly `ChangesetRemoveParams` into the
+/// CLI's `ChangesetDeleteArgs` structure.
+///
+/// **Note**: The `force` flag is always set to `true` in the API layer because
+/// there is no interactive confirmation prompt available in programmatic usage.
+/// The caller is expected to handle confirmation in their own application if needed.
+///
+/// # Arguments
+///
+/// * `params` - The NAPI changeset remove parameters
+///
+/// # Returns
+///
+/// A `ChangesetDeleteArgs` instance ready for CLI execution.
+pub(crate) fn convert_remove_params_to_args(params: &ChangesetRemoveParams) -> ChangesetDeleteArgs {
+    ChangesetDeleteArgs {
+        branch: params.branch.clone(),
+        // Always force in API mode - no interactive prompts available
+        force: true,
+    }
+}
+
+// ============================================================================
+// Changeset Remove - NAPI Function
+// ============================================================================
+
+/// Remove a changeset from the workspace.
+///
+/// Deletes a changeset identified by its branch name. The changeset is archived
+/// before deletion for recovery purposes. In API mode, the operation always
+/// proceeds without confirmation (equivalent to `--force` flag in CLI).
+///
+/// @param params - Changeset remove parameters containing:
+///   - `root`: Workspace root directory path (required)
+///   - `configPath`: Optional custom config file path
+///   - `branch`: Branch name or changeset ID to remove (required)
+///   - `force`: Ignored in API mode (always treated as true)
+///
+/// @returns `Promise<ChangesetRemoveApiResponse>` - Response containing:
+///   - `success`: Whether the operation succeeded
+///   - `data`: Removal confirmation if successful
+///   - `error`: Error information if failed
+///
+/// ## Success Response
+///
+/// When successful, `data` contains:
+/// - `removed`: Boolean indicating the changeset was removed (always true on success)
+/// - `branch`: The branch name that was removed
+///
+/// ## Behavior Notes
+///
+/// - The changeset is archived before deletion for potential recovery
+/// - The archive includes a marker indicating manual deletion (not a release)
+/// - In API mode, no confirmation prompt is shown (force mode is implicit)
+///
+/// ## Error Codes
+///
+/// - `EVALIDATION`: Invalid parameters (empty root or branch)
+/// - `ENOENT`: Path or changeset not found
+/// - `ECONFIG`: Workspace not initialized
+/// - `EEXECUTION`: CLI command failed
+///
+/// @example Basic usage
+/// ```typescript
+/// const result = await changesetRemove({
+///   root: '/path/to/workspace',
+///   branch: 'feature/abandoned-work'
+/// });
+///
+/// if (result.success) {
+///   console.log(`Removed changeset: ${result.data.branch}`);
+/// } else {
+///   console.error(`Error: ${result.error.message}`);
+/// }
+/// ```
+///
+/// @example With custom config
+/// ```typescript
+/// const result = await changesetRemove({
+///   root: '/path/to/workspace',
+///   configPath: '/path/to/custom.config.json',
+///   branch: 'feature/obsolete'
+/// });
+/// ```
+///
+/// @example Error handling
+/// ```typescript
+/// const result = await changesetRemove({
+///   root: '/path/to/workspace',
+///   branch: 'nonexistent-branch'
+/// });
+///
+/// if (!result.success) {
+///   switch (result.error.code) {
+///     case 'ENOENT':
+///       console.error('Changeset not found');
+///       break;
+///     case 'EVALIDATION':
+///       console.error('Invalid parameters:', result.error.message);
+///       break;
+///     case 'ECONFIG':
+///       console.error('Workspace not initialized');
+///       break;
+///     default:
+///       console.error(`Error: ${result.error.message}`);
+///   }
+/// }
+/// ```
+///
+/// @example Cleanup workflow
+/// ```typescript
+/// // List all changesets, then remove stale ones
+/// const listResult = await changesetList({ root: '.' });
+///
+/// if (listResult.success) {
+///   for (const changeset of listResult.data.changesets) {
+///     // Check if changeset is older than 30 days
+///     const createdAt = new Date(changeset.createdAt);
+///     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+///
+///     if (createdAt < thirtyDaysAgo) {
+///       const removeResult = await changesetRemove({
+///         root: '.',
+///         branch: changeset.branch
+///       });
+///
+///       if (removeResult.success) {
+///         console.log(`Removed stale changeset: ${changeset.branch}`);
+///       }
+///     }
+///   }
+/// }
+/// ```
+#[napi(js_name = "changesetRemove")]
+pub async fn changeset_remove(params: ChangesetRemoveParams) -> ChangesetRemoveApiResponse {
+    // 1. Validate parameters (synchronous validation before spawning)
+    let root_path = match validate_remove_params(&params) {
+        Ok(path) => path,
+        Err(error) => return ChangesetRemoveApiResponse::failure(error),
+    };
+
+    // 2. Prepare config path
+    let config_path: Option<PathBuf> = params.config_path.as_ref().map(PathBuf::from);
+
+    // 3. Convert NAPI params to CLI args
+    let args = convert_remove_params_to_args(&params);
+
+    // 4. Execute CLI command in a blocking task
+    // The CLI's execute_remove uses types that are not Send/Sync (RefCell, git2::Repository),
+    // so we must run it on a blocking thread via spawn_blocking.
+    let result = tokio::task::spawn_blocking(move || {
+        // Create a new tokio runtime for the blocking context
+        // This is necessary because execute_remove is async but we're in a blocking context
+        let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+            Ok(rt) => rt,
+            Err(e) => {
+                return Err(ErrorInfo::execution(format!("Failed to create runtime: {e}")));
+            }
+        };
+
+        rt.block_on(async {
+            // Create shared buffer for output capture
+            let buffer = SharedBuffer::new();
+
+            // Create Output with JSON format
+            let output = Output::new(OutputFormat::Json, buffer.clone(), true);
+
+            // Execute the CLI command
+            if let Err(cli_error) =
+                execute_remove(&args, &output, Some(root_path.as_path()), config_path.as_deref())
+                    .await
+            {
+                return Err(ErrorInfo::from(cli_error));
+            }
+
+            // Extract and parse JSON
+            let json_bytes = buffer.take_bytes();
+            parse_changeset_remove_response(&json_bytes)
+        })
+    })
+    .await;
+
+    // 5. Handle spawn_blocking result
+    match result {
+        Ok(Ok(data)) => ChangesetRemoveApiResponse::success(data),
+        Ok(Err(error)) => ChangesetRemoveApiResponse::failure(error),
+        Err(join_error) => ChangesetRemoveApiResponse::failure(ErrorInfo::execution(format!(
             "Task execution failed: {join_error}"
         ))),
     }

@@ -574,6 +574,7 @@ if (!nativeBinding) {
 module.exports = nativeBinding
 module.exports.changesetAdd = nativeBinding.changesetAdd
 module.exports.changesetList = nativeBinding.changesetList
+module.exports.changesetRemove = nativeBinding.changesetRemove
 module.exports.changesetShow = nativeBinding.changesetShow
 module.exports.changesetUpdate = nativeBinding.changesetUpdate
 module.exports.getVersion = nativeBinding.getVersion

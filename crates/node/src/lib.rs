@@ -145,7 +145,8 @@ pub use commands::changeset_update;
 pub use commands::changeset_list;
 // Story 4.5: changesetShow
 pub use commands::changeset_show;
-// TODO: will be implemented on story 4.6 (changesetRemove)
+// Story 4.6: changesetRemove
+pub use commands::changeset_remove;
 // TODO: will be implemented on story 4.7 (changesetHistory)
 // TODO: will be implemented on story 4.8 (changesetCheck)
 // TODO: will be implemented on story 5.2-5.4 (bump commands)
