@@ -119,8 +119,35 @@ pub(crate) use changeset::{
     VALID_SORT_OPTIONS,
 };
 
-// TODO: will be implemented on story 5.1 (bump types)
+// Bump types (Story 5.1 - Implemented)
 pub(crate) mod bump;
+
+// Re-export bump types for easier access
+// Allow unused imports - these will be used by bump commands (Stories 5.2-5.4)
+#[allow(unused_imports)]
+pub(crate) use bump::{
+    BumpApplyApiResponse,
+    BumpApplyData,
+    BumpApplyParams,
+    // API Responses
+    BumpPreviewApiResponse,
+    // Response Data
+    BumpPreviewData,
+    // Input Parameters
+    BumpPreviewParams,
+    BumpSnapshotApiResponse,
+    BumpSnapshotData,
+    BumpSnapshotParams,
+    BumpSummaryInfo,
+    DependencyUpdateInfo,
+    // Supporting Types
+    PackageVersionInfo,
+    SnapshotVersionInfo,
+    // Constants
+    COMMON_PRERELEASE_TAGS,
+    DEFAULT_SNAPSHOT_FORMAT,
+    VALID_DEPENDENCY_TYPES,
+};
 
 // TODO: will be implemented on story 8.1 (upgrade types)
 pub(crate) mod upgrade;

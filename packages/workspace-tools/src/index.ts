@@ -18,6 +18,12 @@
  * - `changesetHistory()` - Query archived changeset history (Story 4.7)
  * - `changesetCheck()` - Check if a changeset exists for a branch (Story 4.8)
  *
+ * Bump types (Story 5.1 - types only, commands in Stories 5.2-5.4):
+ * - `BumpPreviewParams`, `BumpPreviewData`, `BumpPreviewApiResponse`
+ * - `BumpApplyParams`, `BumpApplyData`, `BumpApplyApiResponse`
+ * - `BumpSnapshotParams`, `BumpSnapshotData`, `BumpSnapshotApiResponse`
+ * - `PackageVersionInfo`, `SnapshotVersionInfo`, `DependencyUpdateInfo`, `BumpSummaryInfo`
+ *
  * ## How
  *
  * The native bindings are compiled from Rust using napi-rs and exposed through
@@ -97,4 +103,26 @@ export type {
   ArchivedChangesetInfo,
   ReleaseInfoData,
   ReleasedVersionEntry,
+
+  // Bump command types (Story 5.1 - types only, commands in Stories 5.2-5.4)
+  // Input parameters
+  BumpPreviewParams,
+  BumpApplyParams,
+  BumpSnapshotParams,
+
+  // Response data
+  BumpPreviewData,
+  BumpApplyData,
+  BumpSnapshotData,
+
+  // API responses
+  BumpPreviewApiResponse,
+  BumpApplyApiResponse,
+  BumpSnapshotApiResponse,
+
+  // Supporting types
+  PackageVersionInfo,
+  SnapshotVersionInfo,
+  DependencyUpdateInfo,
+  BumpSummaryInfo,
 } from './binding'

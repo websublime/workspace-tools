@@ -59,6 +59,760 @@ export interface BranchInfo {
 }
 
 /**
+ * API response for the bump apply command.
+ *
+ * This structure wraps `BumpApplyData` in the standard `ApiResponse`
+ * format, providing a consistent interface for success and error cases.
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface BumpApplyApiResponse {
+ *   success: boolean;
+ *   data?: BumpApplyData;
+ *   error?: ErrorInfo;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const result = await bumpApply({
+ *   root: '.',
+ *   gitCommit: true,
+ *   gitTag: true
+ * });
+ *
+ * if (result.success) {
+ *   console.log(`Updated ${result.data.packagesUpdated} packages`);
+ *   if (result.data.commitSha) {
+ *     console.log(`Commit: ${result.data.commitSha}`);
+ *   }
+ * } else {
+ *   console.error(`Error: ${result.error.message}`);
+ * }
+ * ```
+ */
+export interface BumpApplyApiResponse {
+  /** Whether the operation was successful. */
+  success: boolean
+  /**
+   * The apply result data if successful.
+   *
+   * Contains information about what was updated, including
+   * packages, files, and Git integration results.
+   */
+  data?: BumpApplyData | undefined
+  /**
+   * Error information if the operation failed.
+   *
+   * Contains the error code, message, and context when the
+   * operation fails.
+   */
+  error?: ErrorInfo | undefined
+}
+
+/**
+ * Response data for the bump apply command.
+ *
+ * This structure contains the results of applying version bumps,
+ * including the number of packages updated, changesets archived,
+ * files modified, and Git integration results.
+ *
+ * # Fields
+ *
+ * - `strategy`: Version strategy used (independent or unified)
+ * - `packages_updated`: Number of packages that were bumped
+ * - `changesets_archived`: Number of changesets that were archived
+ * - `files_modified`: List of files that were modified
+ * - `tags_created`: List of Git tags that were created
+ * - `commit_sha`: Git commit SHA (if gitCommit was true)
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface BumpApplyData {
+ *   strategy: 'independent' | 'unified';
+ *   packagesUpdated: number;
+ *   changesetsArchived: number;
+ *   filesModified: string[];
+ *   tagsCreated: string[];
+ *   commitSha?: string;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const apply: BumpApplyData = {
+ *   strategy: 'independent',
+ *   packagesUpdated: 3,
+ *   changesetsArchived: 2,
+ *   filesModified: [
+ *     'packages/core/package.json',
+ *     'packages/core/CHANGELOG.md',
+ *     'packages/utils/package.json'
+ *   ],
+ *   tagsCreated: ['@scope/core@1.1.0', '@scope/utils@2.0.0'],
+ *   commitSha: 'abc123def456789'
+ * };
+ * ```
+ */
+export interface BumpApplyData {
+  /**
+   * Version strategy used.
+   *
+   * Either `"independent"` or `"unified"`.
+   */
+  strategy: string
+  /** Number of packages that were bumped. */
+  packagesUpdated: number
+  /** Number of changesets that were archived. */
+  changesetsArchived: number
+  /**
+   * List of files that were modified.
+   *
+   * Paths are relative to the workspace root.
+   */
+  filesModified: Array<string>
+  /**
+   * List of Git tags that were created.
+   *
+   * Format: `{package}@{version}` (e.g., `@scope/core@1.1.0`)
+   */
+  tagsCreated: Array<string>
+  /**
+   * Git commit SHA (if gitCommit was true).
+   *
+   * The full 40-character SHA of the commit containing
+   * all version bump changes.
+   */
+  commitSha?: string | undefined
+}
+
+/**
+ * Input parameters for the bump apply command.
+ *
+ * This structure defines the parameters for applying version bumps to packages.
+ * Unlike preview, this command actually modifies files and can optionally
+ * integrate with Git for committing and tagging releases.
+ *
+ * # Fields
+ *
+ * - `root`: The workspace root directory path (required)
+ * - `config_path`: Optional path to a custom configuration file
+ * - `packages`: Optional filter to specific packages
+ * - `git_commit`: Whether to create a Git commit with version changes
+ * - `git_tag`: Whether to create Git tags for releases
+ * - `git_push`: Whether to push Git tags to remote
+ * - `prerelease`: Prerelease tag for pre-release versions (alpha, beta, rc, or custom)
+ * - `no_changelog`: Whether to skip changelog generation
+ * - `no_archive`: Whether to keep changesets active after bump
+ * - `always_archive`: Whether to force archiving even for prerelease versions
+ * - `force`: Whether to skip confirmation prompts
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface BumpApplyParams {
+ *   root: string;
+ *   configPath?: string;
+ *   packages?: string[];
+ *   gitCommit?: boolean;
+ *   gitTag?: boolean;
+ *   gitPush?: boolean;
+ *   prerelease?: string;
+ *   noChangelog?: boolean;
+ *   noArchive?: boolean;
+ *   alwaysArchive?: boolean;
+ *   force?: boolean;
+ * }
+ * ```
+ *
+ * # Prerelease Support
+ *
+ * The `prerelease` parameter creates semver-compliant pre-release versions:
+ * - `"alpha"` → `1.2.3 → 1.3.0-alpha.0`
+ * - `"beta"` → `1.2.3 → 1.3.0-beta.0`
+ * - `"rc"` → `1.2.3 → 1.3.0-rc.0`
+ * - Any custom tag → `1.2.3 → 1.3.0-{tag}.0`
+ *
+ * # Examples
+ *
+ * ```typescript
+ * // Minimal apply - just bump versions
+ * const minimal: BumpApplyParams = { root: '.' };
+ *
+ * // Full release with Git integration
+ * const release: BumpApplyParams = {
+ *   root: '.',
+ *   gitCommit: true,
+ *   gitTag: true,
+ *   gitPush: true,
+ *   force: true
+ * };
+ *
+ * // Beta prerelease
+ * const beta: BumpApplyParams = {
+ *   root: '.',
+ *   prerelease: 'beta',
+ *   gitCommit: true,
+ *   gitTag: true
+ * };
+ * ```
+ */
+export interface BumpApplyParams {
+  /**
+   * Workspace root directory path.
+   *
+   * This is the absolute or relative path to the root of the workspace.
+   */
+  root: string
+  /**
+   * Optional custom configuration file path.
+   *
+   * If not provided, the command will search for configuration files
+   * in standard locations within the workspace root.
+   */
+  configPath?: string | undefined
+  /**
+   * Filter to specific packages.
+   *
+   * When provided, only these packages will be bumped.
+   * Package names should include scope if applicable.
+   */
+  packages?: string[] | undefined
+  /**
+   * Whether to create a Git commit with version changes.
+   *
+   * When `true`, creates a commit containing all modified files
+   * (package.json, CHANGELOG.md, etc.) with a conventional commit message.
+   */
+  gitCommit?: boolean | undefined
+  /**
+   * Whether to create Git tags for releases.
+   *
+   * When `true`, creates tags in the format `{package}@{version}` for
+   * each bumped package. Requires `git_commit` to be effective.
+   */
+  gitTag?: boolean | undefined
+  /**
+   * Whether to push Git tags to remote.
+   *
+   * When `true`, pushes the created tags to the remote repository.
+   * Requires `git_tag` to be `true` to have any effect.
+   */
+  gitPush?: boolean | undefined
+  /**
+   * Prerelease tag for pre-release versions.
+   *
+   * Creates semver-compliant pre-release versions. Common values:
+   * - `"alpha"`: Early development (`1.3.0-alpha.0`)
+   * - `"beta"`: Feature complete (`1.3.0-beta.0`)
+   * - `"rc"`: Release candidate (`1.3.0-rc.0`)
+   *
+   * Custom tags are also supported. Must contain only ASCII
+   * alphanumerics and hyphens `[0-9A-Za-z-]`.
+   */
+  prerelease?: string | undefined
+  /**
+   * Whether to skip changelog generation.
+   *
+   * When `true`, CHANGELOG.md files will not be updated during the bump.
+   * Useful for quick internal releases or when changelogs are managed
+   * separately.
+   */
+  noChangelog?: boolean | undefined
+  /**
+   * Whether to keep changesets active after bump.
+   *
+   * When `true`, changesets are not archived after version bump.
+   * Useful for partial releases or when you want to accumulate
+   * more changes before archiving.
+   */
+  noArchive?: boolean | undefined
+  /**
+   * Whether to force archiving even for prerelease versions.
+   *
+   * By default, prerelease versions don't archive changesets (since
+   * the final release will archive them). Set this to `true` to
+   * archive changesets even for prerelease versions.
+   */
+  alwaysArchive?: boolean | undefined
+  /**
+   * Whether to skip confirmation prompts.
+   *
+   * When `true`, applies changes without asking for confirmation.
+   * Recommended for CI/CD environments. The NAPI API defaults to
+   * `true` since it's typically used programmatically.
+   */
+  force?: boolean | undefined
+}
+
+/**
+ * API response for the bump preview command.
+ *
+ * This structure wraps `BumpPreviewData` in the standard `ApiResponse`
+ * format, providing a consistent interface for success and error cases.
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface BumpPreviewApiResponse {
+ *   success: boolean;
+ *   data?: BumpPreviewData;
+ *   error?: ErrorInfo;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const result = await bumpPreview({ root: '.' });
+ *
+ * if (result.success) {
+ *   console.log(`Will bump ${result.data.packages.length} packages`);
+ * } else {
+ *   console.error(`Error: ${result.error.message}`);
+ * }
+ * ```
+ */
+export interface BumpPreviewApiResponse {
+  /** Whether the operation was successful. */
+  success: boolean
+  /**
+   * The preview data if successful.
+   *
+   * Contains the complete preview of version bumps including all
+   * packages, dependency updates, and summary.
+   */
+  data?: BumpPreviewData | undefined
+  /**
+   * Error information if the operation failed.
+   *
+   * Contains the error code, message, and context when the
+   * operation fails.
+   */
+  error?: ErrorInfo | undefined
+}
+
+/**
+ * Response data for the bump preview command.
+ *
+ * This structure contains the complete preview of version bumps that
+ * would be applied, including all package versions, dependency updates,
+ * and a summary of the changes.
+ *
+ * # Fields
+ *
+ * - `strategy`: Version strategy used (independent or unified)
+ * - `packages`: List of packages that will be bumped
+ * - `summary`: Summary statistics of the bump
+ * - `changesets`: IDs of changesets that will be consumed
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface BumpPreviewData {
+ *   strategy: 'independent' | 'unified';
+ *   packages: PackageVersionInfo[];
+ *   summary: BumpSummaryInfo;
+ *   changesets: string[];
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const preview: BumpPreviewData = {
+ *   strategy: 'independent',
+ *   packages: [
+ *     {
+ *       name: '@scope/core',
+ *       path: 'packages/core',
+ *       currentVersion: '1.0.0',
+ *       nextVersion: '1.1.0',
+ *       bump: 'minor',
+ *       dependencyUpdates: []
+ *     }
+ *   ],
+ *   summary: {
+ *     totalPackages: 1,
+ *     majorBumps: 0,
+ *     minorBumps: 1,
+ *     patchBumps: 0
+ *   },
+ *   changesets: ['feature-new-api']
+ * };
+ * ```
+ */
+export interface BumpPreviewData {
+  /**
+   * Version strategy used.
+   *
+   * Either `"independent"` (each package has its own version) or
+   * `"unified"` (all packages share the same version).
+   */
+  strategy: string
+  /**
+   * List of packages that will be bumped.
+   *
+   * Contains detailed version transition information for each
+   * package, including dependency updates.
+   */
+  packages: Array<PackageVersionInfo>
+  /**
+   * Summary statistics of the bump.
+   *
+   * Aggregated counts of total packages and bump types.
+   */
+  summary: BumpSummaryInfo
+  /**
+   * IDs of changesets that will be consumed.
+   *
+   * These changesets will be archived after the bump is applied.
+   */
+  changesets: Array<string>
+}
+
+/**
+ * Input parameters for the bump preview command.
+ *
+ * This structure defines the parameters for previewing version bumps based on
+ * pending changesets. The preview is a dry-run operation that shows what would
+ * change without actually modifying any files.
+ *
+ * # Fields
+ *
+ * - `root`: The workspace root directory path (required)
+ * - `config_path`: Optional path to a custom configuration file
+ * - `packages`: Optional filter to specific packages
+ * - `show_diff`: Whether to show detailed version diffs
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface BumpPreviewParams {
+ *   root: string;
+ *   configPath?: string;
+ *   packages?: string[];
+ *   showDiff?: boolean;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * // Minimal params - preview all packages
+ * const minimal: BumpPreviewParams = { root: '.' };
+ *
+ * // Preview specific packages with diff
+ * const filtered: BumpPreviewParams = {
+ *   root: '/path/to/workspace',
+ *   packages: ['@scope/pkg1', '@scope/pkg2'],
+ *   showDiff: true
+ * };
+ * ```
+ */
+export interface BumpPreviewParams {
+  /**
+   * Workspace root directory path.
+   *
+   * This is the absolute or relative path to the root of the workspace.
+   * For monorepos, this should point to the root where the package manager
+   * configuration is located.
+   */
+  root: string
+  /**
+   * Optional custom configuration file path.
+   *
+   * If not provided, the command will search for configuration files
+   * in standard locations (`repo.config.json`, `repo.config.yaml`, etc.)
+   * within the workspace root.
+   */
+  configPath?: string | undefined
+  /**
+   * Filter to specific packages.
+   *
+   * When provided, only these packages will be included in the preview.
+   * Package names should include scope if applicable (e.g., `@scope/pkg`).
+   */
+  packages?: string[] | undefined
+  /**
+   * Whether to show detailed version diffs.
+   *
+   * When `true`, includes detailed information about what changes would
+   * be made to each package, including dependency updates.
+   */
+  showDiff?: boolean | undefined
+}
+
+/**
+ * API response for the bump snapshot command.
+ *
+ * This structure wraps `BumpSnapshotData` in the standard `ApiResponse`
+ * format, providing a consistent interface for success and error cases.
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface BumpSnapshotApiResponse {
+ *   success: boolean;
+ *   data?: BumpSnapshotData;
+ *   error?: ErrorInfo;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const result = await bumpSnapshot({
+ *   root: '.',
+ *   format: '{version}-{branch}.{short_commit}'
+ * });
+ *
+ * if (result.success) {
+ *   for (const pkg of result.data.packages) {
+ *     console.log(`${pkg.name}: ${pkg.snapshotVersion}`);
+ *   }
+ * } else {
+ *   console.error(`Error: ${result.error.message}`);
+ * }
+ * ```
+ */
+export interface BumpSnapshotApiResponse {
+  /** Whether the operation was successful. */
+  success: boolean
+  /**
+   * The snapshot result data if successful.
+   *
+   * Contains the list of packages with their generated
+   * snapshot versions.
+   */
+  data?: BumpSnapshotData | undefined
+  /**
+   * Error information if the operation failed.
+   *
+   * Contains the error code, message, and context when the
+   * operation fails.
+   */
+  error?: ErrorInfo | undefined
+}
+
+/**
+ * Response data for the bump snapshot command.
+ *
+ * This structure contains the results of generating snapshot versions,
+ * including the list of packages with their snapshot versions and the
+ * format template that was used.
+ *
+ * # Fields
+ *
+ * - `strategy`: Version strategy used (independent or unified)
+ * - `packages`: List of packages with snapshot versions
+ * - `format`: The format template that was used
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface BumpSnapshotData {
+ *   strategy: 'independent' | 'unified';
+ *   packages: SnapshotVersionInfo[];
+ *   format: string;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const snapshot: BumpSnapshotData = {
+ *   strategy: 'independent',
+ *   packages: [
+ *     {
+ *       name: '@scope/core',
+ *       path: 'packages/core',
+ *       originalVersion: '1.0.0',
+ *       snapshotVersion: '1.0.0-snapshot.abc123f'
+ *     }
+ *   ],
+ *   format: '{version}-snapshot.{short_commit}'
+ * };
+ * ```
+ */
+export interface BumpSnapshotData {
+  /**
+   * Version strategy used.
+   *
+   * Either `"independent"` or `"unified"`.
+   */
+  strategy: string
+  /**
+   * List of packages with snapshot versions.
+   *
+   * Contains the original and generated snapshot version for each package.
+   */
+  packages: Array<SnapshotVersionInfo>
+  /**
+   * The format template that was used.
+   *
+   * This is either the user-provided format or the default format
+   * `{version}-snapshot.{short_commit}`.
+   */
+  format: string
+}
+
+/**
+ * Input parameters for the bump snapshot command.
+ *
+ * This structure defines the parameters for generating snapshot versions.
+ * Snapshots are temporary, non-persisted versions used for testing and
+ * CI/CD preview deployments. Unlike regular bumps, snapshots don't archive
+ * changesets or create changelogs.
+ *
+ * # Fields
+ *
+ * - `root`: The workspace root directory path (required)
+ * - `config_path`: Optional path to a custom configuration file
+ * - `packages`: Optional filter to specific packages
+ * - `format`: Snapshot version format template
+ *
+ * # Format Template Variables
+ *
+ * The `format` parameter supports these variables:
+ * - `{version}`: Current package version (e.g., `1.2.3`)
+ * - `{branch}`: Current Git branch name (sanitized, e.g., `feature-x`)
+ * - `{short_commit}`: Short Git commit hash (7 chars, e.g., `abc123f`)
+ * - `{commit}`: Full Git commit hash
+ * - `{timestamp}`: Unix timestamp
+ *
+ * Default format: `{version}-snapshot.{short_commit}`
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface BumpSnapshotParams {
+ *   root: string;
+ *   configPath?: string;
+ *   packages?: string[];
+ *   format?: string;
+ * }
+ * ```
+ *
+ * # Snapshot vs Prerelease
+ *
+ * | Aspect | Snapshot | Prerelease |
+ * |--------|----------|------------|
+ * | SemVer Compliant | No | Yes |
+ * | Persisted | No | Yes |
+ * | Changesets Archived | No | Optional |
+ * | Use Case | Testing/CI | Staging/Beta |
+ * | Example | `1.2.3-snapshot.abc123f` | `1.3.0-beta.0` |
+ *
+ * # Examples
+ *
+ * ```typescript
+ * // Default format
+ * const basic: BumpSnapshotParams = { root: '.' };
+ *
+ * // Custom format with branch
+ * const withBranch: BumpSnapshotParams = {
+ *   root: '.',
+ *   format: '{version}-{branch}.{short_commit}'
+ * };
+ *
+ * // Timestamp-based
+ * const timestamped: BumpSnapshotParams = {
+ *   root: '.',
+ *   format: '{version}-dev.{timestamp}'
+ * };
+ * ```
+ */
+export interface BumpSnapshotParams {
+  /**
+   * Workspace root directory path.
+   *
+   * This is the absolute or relative path to the root of the workspace.
+   */
+  root: string
+  /**
+   * Optional custom configuration file path.
+   *
+   * If not provided, the command will search for configuration files
+   * in standard locations within the workspace root.
+   */
+  configPath?: string | undefined
+  /**
+   * Filter to specific packages.
+   *
+   * When provided, only these packages will get snapshot versions.
+   * Package names should include scope if applicable.
+   */
+  packages?: string[] | undefined
+  /**
+   * Snapshot version format template.
+   *
+   * Supports the following variables:
+   * - `{version}`: Current package version
+   * - `{branch}`: Current Git branch (sanitized)
+   * - `{short_commit}`: Short Git commit hash (7 chars)
+   * - `{commit}`: Full Git commit hash
+   * - `{timestamp}`: Unix timestamp
+   *
+   * Default: `{version}-snapshot.{short_commit}`
+   *
+   * Example: `{version}-{branch}.{short_commit}` →
+   * `1.2.3-feature-x.abc123f`
+   */
+  format?: string | undefined
+}
+
+/**
+ * Summary information for a bump operation.
+ *
+ * This structure provides aggregated statistics about the version
+ * bumps that were previewed or applied.
+ *
+ * # Fields
+ *
+ * - `total_packages`: Total number of packages affected
+ * - `major_bumps`: Number of major version bumps
+ * - `minor_bumps`: Number of minor version bumps
+ * - `patch_bumps`: Number of patch version bumps
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface BumpSummaryInfo {
+ *   totalPackages: number;
+ *   majorBumps: number;
+ *   minorBumps: number;
+ *   patchBumps: number;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const summary: BumpSummaryInfo = {
+ *   totalPackages: 5,
+ *   majorBumps: 1,
+ *   minorBumps: 3,
+ *   patchBumps: 1
+ * };
+ * ```
+ */
+export interface BumpSummaryInfo {
+  /** Total number of packages affected by the bump. */
+  totalPackages: number
+  /** Number of major version bumps. */
+  majorBumps: number
+  /** Number of minor version bumps. */
+  minorBumps: number
+  /** Number of patch version bumps. */
+  patchBumps: number
+}
+
+/**
  * Add a new changeset to the workspace.
  *
  * Creates a new changeset for the current or specified branch. The changeset
@@ -1955,6 +2709,71 @@ export interface ChangesetUpdateParams {
 }
 
 /**
+ * Dependency update information for a package version bump.
+ *
+ * This structure captures information about how a dependency version
+ * was updated as part of the version bump process. Dependencies are
+ * updated when the package they depend on is bumped.
+ *
+ * # Fields
+ *
+ * - `name`: The dependency package name
+ * - `dependency_type`: The type of dependency (regular, dev, peer, optional)
+ * - `old_version`: The previous version specification
+ * - `new_version`: The new version specification
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface DependencyUpdateInfo {
+ *   name: string;
+ *   dependencyType: 'regular' | 'dev' | 'peer' | 'optional';
+ *   oldVersion: string;
+ *   newVersion: string;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const update: DependencyUpdateInfo = {
+ *   name: '@scope/core',
+ *   dependencyType: 'regular',
+ *   oldVersion: '^1.0.0',
+ *   newVersion: '^1.1.0'
+ * };
+ * ```
+ */
+export interface DependencyUpdateInfo {
+  /**
+   * The dependency package name.
+   *
+   * This is the name of the package that was updated as a dependency.
+   * May include scope (e.g., `@scope/package`).
+   */
+  name: string
+  /**
+   * The type of dependency.
+   *
+   * One of: `regular`, `dev`, `peer`, `optional`
+   */
+  dependencyType: string
+  /**
+   * The previous version specification.
+   *
+   * This is the version range or exact version that was previously
+   * specified in package.json (e.g., `^1.0.0`, `~1.0.0`, `1.0.0`).
+   */
+  oldVersion: string
+  /**
+   * The new version specification.
+   *
+   * This is the updated version range or exact version after the bump.
+   */
+  newVersion: string
+}
+
+/**
  * Error information structure for Node.js bindings.
  *
  * This structure is exposed to JavaScript/TypeScript via napi-rs and provides
@@ -2613,6 +3432,92 @@ export interface PackageManagerInfo {
 }
 
 /**
+ * Version information for a package being bumped.
+ *
+ * This structure captures the full version transition for a package,
+ * including the bump type and any dependency updates that resulted
+ * from this package being bumped.
+ *
+ * # Fields
+ *
+ * - `name`: Package name (may include scope)
+ * - `path`: Package path relative to workspace root
+ * - `current_version`: Current version before bump
+ * - `next_version`: Next version after bump
+ * - `bump`: Bump type applied (major, minor, patch, none)
+ * - `dependency_updates`: List of dependency updates for this package
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface PackageVersionInfo {
+ *   name: string;
+ *   path: string;
+ *   currentVersion: string;
+ *   nextVersion: string;
+ *   bump: 'major' | 'minor' | 'patch' | 'none';
+ *   dependencyUpdates: DependencyUpdateInfo[];
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const pkg: PackageVersionInfo = {
+ *   name: '@scope/core',
+ *   path: 'packages/core',
+ *   currentVersion: '1.0.0',
+ *   nextVersion: '1.1.0',
+ *   bump: 'minor',
+ *   dependencyUpdates: []
+ * };
+ * ```
+ */
+export interface PackageVersionInfo {
+  /**
+   * Package name.
+   *
+   * The full package name, including scope if applicable
+   * (e.g., `@scope/package` or `package`).
+   */
+  name: string
+  /**
+   * Package path relative to workspace root.
+   *
+   * The file system path to the package directory, relative to
+   * the workspace root (e.g., `packages/core`).
+   */
+  path: string
+  /**
+   * Current version before bump.
+   *
+   * The version string currently in package.json before any
+   * changes are applied (e.g., `1.0.0`).
+   */
+  currentVersion: string
+  /**
+   * Next version after bump.
+   *
+   * The version string that will be (or was) written to
+   * package.json after the bump (e.g., `1.1.0`).
+   */
+  nextVersion: string
+  /**
+   * Bump type applied.
+   *
+   * One of: `major`, `minor`, `patch`, `none`
+   */
+  bump: string
+  /**
+   * List of dependency updates for this package.
+   *
+   * When this package depends on other packages that were bumped,
+   * those dependency version specifications are also updated.
+   */
+  dependencyUpdates: Array<DependencyUpdateInfo>
+}
+
+/**
  * Entry in the released versions map.
  *
  * Represents a package name and its released version. This structure is used
@@ -2735,6 +3640,69 @@ export interface RepositoryInfo {
    * - `"custom"`: Custom workspace configuration
    */
   monorepoType?: string | undefined
+}
+
+/**
+ * Snapshot version information for a package.
+ *
+ * This structure captures the snapshot version generated for a package,
+ * including both the original version and the generated snapshot version.
+ *
+ * # Fields
+ *
+ * - `name`: Package name (may include scope)
+ * - `path`: Package path relative to workspace root
+ * - `original_version`: Original version from package.json
+ * - `snapshot_version`: Generated snapshot version
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface SnapshotVersionInfo {
+ *   name: string;
+ *   path: string;
+ *   originalVersion: string;
+ *   snapshotVersion: string;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const snapshot: SnapshotVersionInfo = {
+ *   name: '@scope/core',
+ *   path: 'packages/core',
+ *   originalVersion: '1.0.0',
+ *   snapshotVersion: '1.0.0-snapshot.abc123f'
+ * };
+ * ```
+ */
+export interface SnapshotVersionInfo {
+  /**
+   * Package name.
+   *
+   * The full package name, including scope if applicable.
+   */
+  name: string
+  /**
+   * Package path relative to workspace root.
+   *
+   * The file system path to the package directory.
+   */
+  path: string
+  /**
+   * Original version from package.json.
+   *
+   * The version before snapshot generation (e.g., `1.0.0`).
+   */
+  originalVersion: string
+  /**
+   * Generated snapshot version.
+   *
+   * The snapshot version generated using the format template
+   * (e.g., `1.0.0-snapshot.abc123f`).
+   */
+  snapshotVersion: string
 }
 
 /**

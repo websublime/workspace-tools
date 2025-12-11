@@ -31,7 +31,7 @@
 /// Tests for lib.rs version functions and constants.
 #[cfg(test)]
 mod version_tests {
-    use crate::{VERSION, get_version};
+    use crate::{get_version, VERSION};
 
     #[test]
     #[allow(clippy::const_is_empty)]
@@ -820,7 +820,7 @@ mod validation_tests {
 #[cfg(test)]
 mod response_tests {
     use crate::error::ErrorInfo;
-    use crate::response::{ApiResponse, ApiResponseExt, JsonResponse, result_to_response};
+    use crate::response::{result_to_response, ApiResponse, ApiResponseExt, JsonResponse};
     use serde::Serialize;
     use std::io::{Error as IoError, ErrorKind};
     use sublime_cli_tools::error::CliError;
@@ -3346,5 +3346,739 @@ mod changeset_data_tests {
 
         assert!(!data.has_changeset);
         assert!(data.branch.is_none());
+    }
+}
+
+// ============================================================================
+// Bump Types Tests (Story 5.1)
+// ============================================================================
+
+/// Tests for bump command type definitions.
+#[cfg(test)]
+mod bump_types_tests {
+    use crate::error::ErrorInfo;
+    use crate::types::bump::{
+        BumpApplyApiResponse, BumpApplyData, BumpApplyParams, BumpPreviewApiResponse,
+        BumpPreviewData, BumpPreviewParams, BumpSnapshotApiResponse, BumpSnapshotData,
+        BumpSnapshotParams, BumpSummaryInfo, DependencyUpdateInfo, PackageVersionInfo,
+        SnapshotVersionInfo, COMMON_PRERELEASE_TAGS, DEFAULT_SNAPSHOT_FORMAT,
+        VALID_DEPENDENCY_TYPES,
+    };
+
+    // ========================================================================
+    // Constants Tests
+    // ========================================================================
+
+    #[test]
+    fn test_common_prerelease_tags() {
+        assert!(COMMON_PRERELEASE_TAGS.contains(&"alpha"));
+        assert!(COMMON_PRERELEASE_TAGS.contains(&"beta"));
+        assert!(COMMON_PRERELEASE_TAGS.contains(&"rc"));
+        assert_eq!(COMMON_PRERELEASE_TAGS.len(), 3);
+    }
+
+    #[test]
+    fn test_valid_dependency_types() {
+        assert!(VALID_DEPENDENCY_TYPES.contains(&"regular"));
+        assert!(VALID_DEPENDENCY_TYPES.contains(&"dev"));
+        assert!(VALID_DEPENDENCY_TYPES.contains(&"peer"));
+        assert!(VALID_DEPENDENCY_TYPES.contains(&"optional"));
+        assert_eq!(VALID_DEPENDENCY_TYPES.len(), 4);
+    }
+
+    #[test]
+    fn test_default_snapshot_format() {
+        assert!(DEFAULT_SNAPSHOT_FORMAT.contains("{version}"));
+        assert!(DEFAULT_SNAPSHOT_FORMAT.contains("{short_commit}"));
+        assert_eq!(DEFAULT_SNAPSHOT_FORMAT, "{version}-snapshot.{short_commit}");
+    }
+
+    // ========================================================================
+    // BumpPreviewParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_bump_preview_params_new() {
+        let params = BumpPreviewParams::new("/workspace");
+
+        assert_eq!(params.root, "/workspace");
+        assert!(params.config_path.is_none());
+        assert!(params.packages.is_none());
+        assert!(params.show_diff.is_none());
+    }
+
+    #[test]
+    fn test_bump_preview_params_builder_chain() {
+        let params = BumpPreviewParams::new("/workspace")
+            .with_config_path("/workspace/repo.config.json")
+            .with_packages(vec!["@scope/core".to_string(), "@scope/utils".to_string()])
+            .with_show_diff(true);
+
+        assert_eq!(params.root, "/workspace");
+        assert_eq!(params.config_path, Some("/workspace/repo.config.json".to_string()));
+        assert_eq!(
+            params.packages,
+            Some(vec!["@scope/core".to_string(), "@scope/utils".to_string()])
+        );
+        assert_eq!(params.show_diff, Some(true));
+    }
+
+    #[test]
+    fn test_bump_preview_params_clone() {
+        let params = BumpPreviewParams::new("/workspace")
+            .with_show_diff(true)
+            .with_packages(vec!["@scope/core".to_string()]);
+        let cloned = params.clone();
+
+        assert_eq!(cloned.root, params.root);
+        assert_eq!(cloned.show_diff, params.show_diff);
+        assert_eq!(cloned.packages, params.packages);
+    }
+
+    #[test]
+    fn test_bump_preview_params_serialize() {
+        let params = BumpPreviewParams::new("/workspace").with_show_diff(true);
+        let json = serde_json::to_string(&params).unwrap_or_default();
+
+        assert!(json.contains("\"root\":\"/workspace\""));
+        assert!(json.contains("\"show_diff\":true"));
+        // Optional fields that are None should not be present
+        assert!(!json.contains("\"config_path\""));
+        assert!(!json.contains("\"packages\""));
+    }
+
+    // ========================================================================
+    // BumpApplyParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_bump_apply_params_new() {
+        let params = BumpApplyParams::new("/workspace");
+
+        assert_eq!(params.root, "/workspace");
+        assert!(params.config_path.is_none());
+        assert!(params.packages.is_none());
+        assert!(params.git_commit.is_none());
+        assert!(params.git_tag.is_none());
+        assert!(params.git_push.is_none());
+        assert!(params.prerelease.is_none());
+        assert!(params.no_changelog.is_none());
+        assert!(params.no_archive.is_none());
+        assert!(params.always_archive.is_none());
+        assert!(params.force.is_none());
+    }
+
+    #[test]
+    fn test_bump_apply_params_builder_chain() {
+        let params = BumpApplyParams::new("/workspace")
+            .with_config_path("/workspace/repo.config.json")
+            .with_packages(vec!["@scope/core".to_string()])
+            .with_git_commit(true)
+            .with_git_tag(true)
+            .with_git_push(false)
+            .with_prerelease("beta")
+            .with_no_changelog(false)
+            .with_no_archive(false)
+            .with_always_archive(true)
+            .with_force(true);
+
+        assert_eq!(params.root, "/workspace");
+        assert_eq!(params.config_path, Some("/workspace/repo.config.json".to_string()));
+        assert_eq!(params.packages, Some(vec!["@scope/core".to_string()]));
+        assert_eq!(params.git_commit, Some(true));
+        assert_eq!(params.git_tag, Some(true));
+        assert_eq!(params.git_push, Some(false));
+        assert_eq!(params.prerelease, Some("beta".to_string()));
+        assert_eq!(params.no_changelog, Some(false));
+        assert_eq!(params.no_archive, Some(false));
+        assert_eq!(params.always_archive, Some(true));
+        assert_eq!(params.force, Some(true));
+    }
+
+    #[test]
+    fn test_bump_apply_params_with_git_options() {
+        let params = BumpApplyParams::new("/workspace").with_git_options(true, true, false);
+
+        assert_eq!(params.git_commit, Some(true));
+        assert_eq!(params.git_tag, Some(true));
+        assert_eq!(params.git_push, Some(false));
+    }
+
+    #[test]
+    fn test_bump_apply_params_clone() {
+        let params =
+            BumpApplyParams::new("/workspace").with_prerelease("alpha").with_git_commit(true);
+        let cloned = params.clone();
+
+        assert_eq!(cloned.root, params.root);
+        assert_eq!(cloned.prerelease, params.prerelease);
+        assert_eq!(cloned.git_commit, params.git_commit);
+    }
+
+    #[test]
+    fn test_bump_apply_params_serialize() {
+        let params = BumpApplyParams::new("/workspace").with_git_commit(true).with_prerelease("rc");
+        let json = serde_json::to_string(&params).unwrap_or_default();
+
+        assert!(json.contains("\"root\":\"/workspace\""));
+        assert!(json.contains("\"git_commit\":true"));
+        assert!(json.contains("\"prerelease\":\"rc\""));
+        // Optional fields that are None should not be present
+        assert!(!json.contains("\"git_tag\""));
+    }
+
+    // ========================================================================
+    // BumpSnapshotParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_bump_snapshot_params_new() {
+        let params = BumpSnapshotParams::new("/workspace");
+
+        assert_eq!(params.root, "/workspace");
+        assert!(params.config_path.is_none());
+        assert!(params.packages.is_none());
+        assert!(params.format.is_none());
+    }
+
+    #[test]
+    fn test_bump_snapshot_params_builder_chain() {
+        let params = BumpSnapshotParams::new("/workspace")
+            .with_config_path("/workspace/repo.config.json")
+            .with_packages(vec!["@scope/core".to_string()])
+            .with_format("{version}-{branch}.{short_commit}");
+
+        assert_eq!(params.root, "/workspace");
+        assert_eq!(params.config_path, Some("/workspace/repo.config.json".to_string()));
+        assert_eq!(params.packages, Some(vec!["@scope/core".to_string()]));
+        assert_eq!(params.format, Some("{version}-{branch}.{short_commit}".to_string()));
+    }
+
+    #[test]
+    fn test_bump_snapshot_params_clone() {
+        let params =
+            BumpSnapshotParams::new("/workspace").with_format("{version}-snapshot.{timestamp}");
+        let cloned = params.clone();
+
+        assert_eq!(cloned.root, params.root);
+        assert_eq!(cloned.format, params.format);
+    }
+
+    #[test]
+    fn test_bump_snapshot_params_serialize() {
+        let params =
+            BumpSnapshotParams::new("/workspace").with_format("{version}-dev.{short_commit}");
+        let json = serde_json::to_string(&params).unwrap_or_default();
+
+        assert!(json.contains("\"root\":\"/workspace\""));
+        assert!(json.contains("\"format\":\"{version}-dev.{short_commit}\""));
+    }
+
+    // ========================================================================
+    // DependencyUpdateInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_dependency_update_info_new() {
+        let update = DependencyUpdateInfo::new("@scope/core", "regular", "^1.0.0", "^1.1.0");
+
+        assert_eq!(update.name, "@scope/core");
+        assert_eq!(update.dependency_type, "regular");
+        assert_eq!(update.old_version, "^1.0.0");
+        assert_eq!(update.new_version, "^1.1.0");
+    }
+
+    #[test]
+    fn test_dependency_update_info_regular() {
+        let update = DependencyUpdateInfo::regular("@scope/utils", "^2.0.0", "^2.1.0");
+
+        assert_eq!(update.name, "@scope/utils");
+        assert_eq!(update.dependency_type, "regular");
+        assert_eq!(update.old_version, "^2.0.0");
+        assert_eq!(update.new_version, "^2.1.0");
+    }
+
+    #[test]
+    fn test_dependency_update_info_dev() {
+        let update = DependencyUpdateInfo::dev("typescript", "^4.0.0", "^5.0.0");
+
+        assert_eq!(update.name, "typescript");
+        assert_eq!(update.dependency_type, "dev");
+    }
+
+    #[test]
+    fn test_dependency_update_info_peer() {
+        let update = DependencyUpdateInfo::peer("react", "^17.0.0", "^18.0.0");
+
+        assert_eq!(update.name, "react");
+        assert_eq!(update.dependency_type, "peer");
+    }
+
+    #[test]
+    fn test_dependency_update_info_optional() {
+        let update = DependencyUpdateInfo::optional("lodash", "^4.0.0", "^4.1.0");
+
+        assert_eq!(update.name, "lodash");
+        assert_eq!(update.dependency_type, "optional");
+    }
+
+    #[test]
+    fn test_dependency_update_info_clone() {
+        let update = DependencyUpdateInfo::regular("@scope/core", "^1.0.0", "^1.1.0");
+        let cloned = update.clone();
+
+        assert_eq!(cloned.name, update.name);
+        assert_eq!(cloned.dependency_type, update.dependency_type);
+        assert_eq!(cloned.old_version, update.old_version);
+        assert_eq!(cloned.new_version, update.new_version);
+    }
+
+    // ========================================================================
+    // PackageVersionInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_package_version_info_new() {
+        let info =
+            PackageVersionInfo::new("@scope/core", "packages/core", "1.0.0", "1.1.0", "minor");
+
+        assert_eq!(info.name, "@scope/core");
+        assert_eq!(info.path, "packages/core");
+        assert_eq!(info.current_version, "1.0.0");
+        assert_eq!(info.next_version, "1.1.0");
+        assert_eq!(info.bump, "minor");
+        assert!(info.dependency_updates.is_empty());
+    }
+
+    #[test]
+    fn test_package_version_info_with_dependency_updates() {
+        let updates = vec![
+            DependencyUpdateInfo::regular("@scope/utils", "^1.0.0", "^1.1.0"),
+            DependencyUpdateInfo::dev("typescript", "^4.0.0", "^5.0.0"),
+        ];
+
+        let info =
+            PackageVersionInfo::new("@scope/core", "packages/core", "1.0.0", "2.0.0", "major")
+                .with_dependency_updates(updates);
+
+        assert_eq!(info.dependency_updates.len(), 2);
+        assert_eq!(info.dependency_updates[0].name, "@scope/utils");
+        assert_eq!(info.dependency_updates[1].name, "typescript");
+    }
+
+    #[test]
+    fn test_package_version_info_add_dependency_update() {
+        let info =
+            PackageVersionInfo::new("@scope/core", "packages/core", "1.0.0", "1.1.0", "minor")
+                .add_dependency_update(DependencyUpdateInfo::regular("dep1", "^1.0.0", "^1.1.0"))
+                .add_dependency_update(DependencyUpdateInfo::dev("dep2", "^2.0.0", "^2.1.0"));
+
+        assert_eq!(info.dependency_updates.len(), 2);
+    }
+
+    #[test]
+    fn test_package_version_info_bump_type_checks() {
+        let major = PackageVersionInfo::new("pkg", "path", "1.0.0", "2.0.0", "major");
+        assert!(major.is_major());
+        assert!(!major.is_minor());
+        assert!(!major.is_patch());
+        assert!(!major.is_none());
+
+        let minor = PackageVersionInfo::new("pkg", "path", "1.0.0", "1.1.0", "minor");
+        assert!(!minor.is_major());
+        assert!(minor.is_minor());
+        assert!(!minor.is_patch());
+        assert!(!minor.is_none());
+
+        let patch = PackageVersionInfo::new("pkg", "path", "1.0.0", "1.0.1", "patch");
+        assert!(!patch.is_major());
+        assert!(!patch.is_minor());
+        assert!(patch.is_patch());
+        assert!(!patch.is_none());
+
+        let none = PackageVersionInfo::new("pkg", "path", "1.0.0", "1.0.0", "none");
+        assert!(!none.is_major());
+        assert!(!none.is_minor());
+        assert!(!none.is_patch());
+        assert!(none.is_none());
+    }
+
+    #[test]
+    fn test_package_version_info_clone() {
+        let info =
+            PackageVersionInfo::new("@scope/core", "packages/core", "1.0.0", "1.1.0", "minor");
+        let cloned = info.clone();
+
+        assert_eq!(cloned.name, info.name);
+        assert_eq!(cloned.path, info.path);
+        assert_eq!(cloned.current_version, info.current_version);
+        assert_eq!(cloned.next_version, info.next_version);
+        assert_eq!(cloned.bump, info.bump);
+    }
+
+    // ========================================================================
+    // SnapshotVersionInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_snapshot_version_info_new() {
+        let info = SnapshotVersionInfo::new(
+            "@scope/core",
+            "packages/core",
+            "1.0.0",
+            "1.0.0-snapshot.abc123f",
+        );
+
+        assert_eq!(info.name, "@scope/core");
+        assert_eq!(info.path, "packages/core");
+        assert_eq!(info.original_version, "1.0.0");
+        assert_eq!(info.snapshot_version, "1.0.0-snapshot.abc123f");
+    }
+
+    #[test]
+    fn test_snapshot_version_info_clone() {
+        let info = SnapshotVersionInfo::new(
+            "@scope/core",
+            "packages/core",
+            "1.0.0",
+            "1.0.0-feature-x.abc123f",
+        );
+        let cloned = info.clone();
+
+        assert_eq!(cloned.name, info.name);
+        assert_eq!(cloned.snapshot_version, info.snapshot_version);
+    }
+
+    // ========================================================================
+    // BumpSummaryInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_bump_summary_info_new() {
+        let summary = BumpSummaryInfo::new(10, 2, 5, 3);
+
+        assert_eq!(summary.total_packages, 10);
+        assert_eq!(summary.major_bumps, 2);
+        assert_eq!(summary.minor_bumps, 5);
+        assert_eq!(summary.patch_bumps, 3);
+    }
+
+    #[test]
+    fn test_bump_summary_info_empty() {
+        let summary = BumpSummaryInfo::empty();
+
+        assert_eq!(summary.total_packages, 0);
+        assert_eq!(summary.major_bumps, 0);
+        assert_eq!(summary.minor_bumps, 0);
+        assert_eq!(summary.patch_bumps, 0);
+    }
+
+    #[test]
+    fn test_bump_summary_info_from_packages() {
+        let packages = vec![
+            PackageVersionInfo::new("pkg1", "path1", "1.0.0", "2.0.0", "major"),
+            PackageVersionInfo::new("pkg2", "path2", "1.0.0", "1.1.0", "minor"),
+            PackageVersionInfo::new("pkg3", "path3", "1.0.0", "1.1.0", "minor"),
+            PackageVersionInfo::new("pkg4", "path4", "1.0.0", "1.0.1", "patch"),
+        ];
+
+        let summary = BumpSummaryInfo::from_packages(&packages);
+
+        assert_eq!(summary.total_packages, 4);
+        assert_eq!(summary.major_bumps, 1);
+        assert_eq!(summary.minor_bumps, 2);
+        assert_eq!(summary.patch_bumps, 1);
+    }
+
+    #[test]
+    fn test_bump_summary_info_has_breaking_changes() {
+        let with_major = BumpSummaryInfo::new(5, 1, 2, 2);
+        assert!(with_major.has_breaking_changes());
+
+        let without_major = BumpSummaryInfo::new(5, 0, 3, 2);
+        assert!(!without_major.has_breaking_changes());
+    }
+
+    // ========================================================================
+    // BumpPreviewData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_bump_preview_data_new() {
+        let packages = vec![PackageVersionInfo::new(
+            "@scope/core",
+            "packages/core",
+            "1.0.0",
+            "1.1.0",
+            "minor",
+        )];
+        let changesets = vec!["feature-api".to_string()];
+
+        let data = BumpPreviewData::new("independent", packages, changesets);
+
+        assert_eq!(data.strategy, "independent");
+        assert_eq!(data.packages.len(), 1);
+        assert_eq!(data.changesets.len(), 1);
+        assert_eq!(data.summary.total_packages, 1);
+        assert_eq!(data.summary.minor_bumps, 1);
+    }
+
+    #[test]
+    fn test_bump_preview_data_empty() {
+        let data = BumpPreviewData::empty("unified");
+
+        assert_eq!(data.strategy, "unified");
+        assert!(data.packages.is_empty());
+        assert!(data.changesets.is_empty());
+        assert_eq!(data.summary.total_packages, 0);
+    }
+
+    #[test]
+    fn test_bump_preview_data_has_packages() {
+        let empty = BumpPreviewData::empty("independent");
+        assert!(!empty.has_packages());
+
+        let with_packages = BumpPreviewData::new(
+            "independent",
+            vec![PackageVersionInfo::new("pkg", "path", "1.0.0", "1.1.0", "minor")],
+            vec![],
+        );
+        assert!(with_packages.has_packages());
+    }
+
+    #[test]
+    fn test_bump_preview_data_has_breaking_changes() {
+        let with_major = BumpPreviewData::new(
+            "independent",
+            vec![PackageVersionInfo::new("pkg", "path", "1.0.0", "2.0.0", "major")],
+            vec![],
+        );
+        assert!(with_major.has_breaking_changes());
+
+        let without_major = BumpPreviewData::new(
+            "independent",
+            vec![PackageVersionInfo::new("pkg", "path", "1.0.0", "1.1.0", "minor")],
+            vec![],
+        );
+        assert!(!without_major.has_breaking_changes());
+    }
+
+    // ========================================================================
+    // BumpApplyData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_bump_apply_data_new() {
+        let data = BumpApplyData::new("independent", 5, 2);
+
+        assert_eq!(data.strategy, "independent");
+        assert_eq!(data.packages_updated, 5);
+        assert_eq!(data.changesets_archived, 2);
+        assert!(data.files_modified.is_empty());
+        assert!(data.tags_created.is_empty());
+        assert!(data.commit_sha.is_none());
+    }
+
+    #[test]
+    fn test_bump_apply_data_builder_chain() {
+        let data = BumpApplyData::new("independent", 3, 1)
+            .with_files_modified(vec![
+                "packages/core/package.json".to_string(),
+                "packages/core/CHANGELOG.md".to_string(),
+            ])
+            .with_tags_created(vec!["@scope/core@1.1.0".to_string()])
+            .with_commit_sha("abc123def456789");
+
+        assert_eq!(data.files_modified.len(), 2);
+        assert_eq!(data.tags_created.len(), 1);
+        assert_eq!(data.commit_sha, Some("abc123def456789".to_string()));
+    }
+
+    #[test]
+    fn test_bump_apply_data_has_commit() {
+        let without_commit = BumpApplyData::new("independent", 1, 1);
+        assert!(!without_commit.has_commit());
+
+        let with_commit = BumpApplyData::new("independent", 1, 1).with_commit_sha("abc123");
+        assert!(with_commit.has_commit());
+    }
+
+    #[test]
+    fn test_bump_apply_data_has_tags() {
+        let without_tags = BumpApplyData::new("independent", 1, 1);
+        assert!(!without_tags.has_tags());
+
+        let with_tags = BumpApplyData::new("independent", 1, 1)
+            .with_tags_created(vec!["@scope/core@1.0.0".to_string()]);
+        assert!(with_tags.has_tags());
+    }
+
+    // ========================================================================
+    // BumpSnapshotData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_bump_snapshot_data_new() {
+        let packages = vec![SnapshotVersionInfo::new(
+            "@scope/core",
+            "packages/core",
+            "1.0.0",
+            "1.0.0-snapshot.abc123f",
+        )];
+
+        let data =
+            BumpSnapshotData::new("independent", packages, "{version}-snapshot.{short_commit}");
+
+        assert_eq!(data.strategy, "independent");
+        assert_eq!(data.packages.len(), 1);
+        assert_eq!(data.format, "{version}-snapshot.{short_commit}");
+    }
+
+    #[test]
+    fn test_bump_snapshot_data_empty() {
+        let data = BumpSnapshotData::empty("unified", "{version}-dev.{timestamp}");
+
+        assert_eq!(data.strategy, "unified");
+        assert!(data.packages.is_empty());
+        assert_eq!(data.format, "{version}-dev.{timestamp}");
+    }
+
+    #[test]
+    fn test_bump_snapshot_data_package_count() {
+        let empty = BumpSnapshotData::empty("independent", "format");
+        assert_eq!(empty.package_count(), 0);
+
+        let with_packages = BumpSnapshotData::new(
+            "independent",
+            vec![
+                SnapshotVersionInfo::new("pkg1", "path1", "1.0.0", "1.0.0-snapshot"),
+                SnapshotVersionInfo::new("pkg2", "path2", "2.0.0", "2.0.0-snapshot"),
+            ],
+            "format",
+        );
+        assert_eq!(with_packages.package_count(), 2);
+    }
+
+    // ========================================================================
+    // API Response Tests
+    // ========================================================================
+
+    #[test]
+    fn test_bump_preview_api_response_success() {
+        let data = BumpPreviewData::empty("independent");
+        let response = BumpPreviewApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.is_success());
+        assert!(!response.is_failure());
+        assert!(response.data.is_some());
+        assert!(response.error.is_none());
+    }
+
+    #[test]
+    fn test_bump_preview_api_response_failure() {
+        let error = ErrorInfo::validation("Invalid root path", Some("root"));
+        let response = BumpPreviewApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(!response.is_success());
+        assert!(response.is_failure());
+        assert!(response.data.is_none());
+        assert!(response.error.is_some());
+        assert_eq!(response.error.as_ref().unwrap().code, "EVALIDATION");
+    }
+
+    #[test]
+    fn test_bump_apply_api_response_success() {
+        let data = BumpApplyData::new("independent", 3, 1);
+        let response = BumpApplyApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.is_success());
+        assert!(response.data.is_some());
+        assert_eq!(response.data.as_ref().unwrap().packages_updated, 3);
+    }
+
+    #[test]
+    fn test_bump_apply_api_response_failure() {
+        let error = ErrorInfo::git("Failed to create commit");
+        let response = BumpApplyApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(response.is_failure());
+        assert!(response.error.is_some());
+        assert_eq!(response.error.as_ref().unwrap().code, "EGIT");
+    }
+
+    #[test]
+    fn test_bump_snapshot_api_response_success() {
+        let data = BumpSnapshotData::empty("independent", "format");
+        let response = BumpSnapshotApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.is_success());
+        assert!(response.data.is_some());
+    }
+
+    #[test]
+    fn test_bump_snapshot_api_response_failure() {
+        let error = ErrorInfo::validation("Invalid format template", Some("format"));
+        let response = BumpSnapshotApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(response.is_failure());
+        assert!(response.error.is_some());
+    }
+
+    // ========================================================================
+    // Serialization Tests
+    // ========================================================================
+
+    #[test]
+    fn test_package_version_info_serialize() {
+        let info =
+            PackageVersionInfo::new("@scope/core", "packages/core", "1.0.0", "1.1.0", "minor");
+        let json = serde_json::to_string(&info).unwrap_or_default();
+
+        assert!(json.contains("\"name\":\"@scope/core\""));
+        assert!(json.contains("\"path\":\"packages/core\""));
+        assert!(json.contains("\"current_version\":\"1.0.0\""));
+        assert!(json.contains("\"next_version\":\"1.1.0\""));
+        assert!(json.contains("\"bump\":\"minor\""));
+    }
+
+    #[test]
+    fn test_bump_preview_data_serialize() {
+        let packages = vec![PackageVersionInfo::new("pkg", "path", "1.0.0", "1.1.0", "minor")];
+        let data = BumpPreviewData::new("independent", packages, vec!["cs1".to_string()]);
+        let json = serde_json::to_string(&data).unwrap_or_default();
+
+        assert!(json.contains("\"strategy\":\"independent\""));
+        assert!(json.contains("\"packages\""));
+        assert!(json.contains("\"summary\""));
+        assert!(json.contains("\"changesets\""));
+    }
+
+    #[test]
+    fn test_bump_apply_data_serialize() {
+        let data = BumpApplyData::new("unified", 5, 2).with_commit_sha("abc123");
+        let json = serde_json::to_string(&data).unwrap_or_default();
+
+        assert!(json.contains("\"strategy\":\"unified\""));
+        assert!(json.contains("\"packages_updated\":5"));
+        assert!(json.contains("\"changesets_archived\":2"));
+        assert!(json.contains("\"commit_sha\":\"abc123\""));
+    }
+
+    #[test]
+    fn test_bump_snapshot_data_serialize() {
+        let packages = vec![SnapshotVersionInfo::new("pkg", "path", "1.0.0", "1.0.0-snapshot.abc")];
+        let data =
+            BumpSnapshotData::new("independent", packages, "{version}-snapshot.{short_commit}");
+        let json = serde_json::to_string(&data).unwrap_or_default();
+
+        assert!(json.contains("\"strategy\":\"independent\""));
+        assert!(json.contains("\"format\":\"{version}-snapshot.{short_commit}\""));
+        assert!(json.contains("\"snapshot_version\":\"1.0.0-snapshot.abc\""));
     }
 }
