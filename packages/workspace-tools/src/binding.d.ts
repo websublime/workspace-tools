@@ -1041,6 +1041,117 @@ export interface ChangesetListParams {
 }
 
 /**
+ * Remove a changeset from the workspace.
+ *
+ * Deletes a changeset identified by its branch name. The changeset is archived
+ * before deletion for recovery purposes. In API mode, the operation always
+ * proceeds without confirmation (equivalent to `--force` flag in CLI).
+ *
+ * @param params - Changeset remove parameters containing:
+ *   - `root`: Workspace root directory path (required)
+ *   - `configPath`: Optional custom config file path
+ *   - `branch`: Branch name or changeset ID to remove (required)
+ *   - `force`: Ignored in API mode (always treated as true)
+ *
+ * @returns `Promise<ChangesetRemoveApiResponse>` - Response containing:
+ *   - `success`: Whether the operation succeeded
+ *   - `data`: Removal confirmation if successful
+ *   - `error`: Error information if failed
+ *
+ * ## Success Response
+ *
+ * When successful, `data` contains:
+ * - `removed`: Boolean indicating the changeset was removed (always true on success)
+ * - `branch`: The branch name that was removed
+ *
+ * ## Behavior Notes
+ *
+ * - The changeset is archived before deletion for potential recovery
+ * - The archive includes a marker indicating manual deletion (not a release)
+ * - In API mode, no confirmation prompt is shown (force mode is implicit)
+ *
+ * ## Error Codes
+ *
+ * - `EVALIDATION`: Invalid parameters (empty root or branch)
+ * - `ENOENT`: Path or changeset not found
+ * - `ECONFIG`: Workspace not initialized
+ * - `EEXECUTION`: CLI command failed
+ *
+ * @example Basic usage
+ * ```typescript
+ * const result = await changesetRemove({
+ *   root: '/path/to/workspace',
+ *   branch: 'feature/abandoned-work'
+ * });
+ *
+ * if (result.success) {
+ *   console.log(`Removed changeset: ${result.data.branch}`);
+ * } else {
+ *   console.error(`Error: ${result.error.message}`);
+ * }
+ * ```
+ *
+ * @example With custom config
+ * ```typescript
+ * const result = await changesetRemove({
+ *   root: '/path/to/workspace',
+ *   configPath: '/path/to/custom.config.json',
+ *   branch: 'feature/obsolete'
+ * });
+ * ```
+ *
+ * @example Error handling
+ * ```typescript
+ * const result = await changesetRemove({
+ *   root: '/path/to/workspace',
+ *   branch: 'nonexistent-branch'
+ * });
+ *
+ * if (!result.success) {
+ *   switch (result.error.code) {
+ *     case 'ENOENT':
+ *       console.error('Changeset not found');
+ *       break;
+ *     case 'EVALIDATION':
+ *       console.error('Invalid parameters:', result.error.message);
+ *       break;
+ *     case 'ECONFIG':
+ *       console.error('Workspace not initialized');
+ *       break;
+ *     default:
+ *       console.error(`Error: ${result.error.message}`);
+ *   }
+ * }
+ * ```
+ *
+ * @example Cleanup workflow
+ * ```typescript
+ * // List all changesets, then remove stale ones
+ * const listResult = await changesetList({ root: '.' });
+ *
+ * if (listResult.success) {
+ *   for (const changeset of listResult.data.changesets) {
+ *     // Check if changeset is older than 30 days
+ *     const createdAt = new Date(changeset.createdAt);
+ *     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+ *
+ *     if (createdAt < thirtyDaysAgo) {
+ *       const removeResult = await changesetRemove({
+ *         root: '.',
+ *         branch: changeset.branch
+ *       });
+ *
+ *       if (removeResult.success) {
+ *         console.log(`Removed stale changeset: ${changeset.branch}`);
+ *       }
+ *     }
+ *   }
+ * }
+ * ```
+ */
+export declare function changesetRemove(params: ChangesetRemoveParams): Promise<ChangesetRemoveApiResponse>
+
+/**
  * API response for the changeset remove command.
  *
  * Wraps `ChangesetRemoveData` with success/error handling.
@@ -1147,7 +1258,7 @@ export interface ChangesetRemoveParams {
  *   - `configPath`: Optional custom config file path
  *   - `branch`: Branch name or changeset ID (required)
  *
- * @returns Promise<ChangesetShowApiResponse> - Response containing:
+ * @returns `Promise<ChangesetShowApiResponse>` - Response containing:
  *   - `success`: Whether the operation succeeded
  *   - `data`: Changeset details if successful
  *   - `error`: Error information if failed

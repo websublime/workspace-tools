@@ -2792,3 +2792,424 @@ mod changeset_show_tests {
         }
     }
 }
+
+// ============================================================================
+// Changeset Remove Command Tests (Story 4.6)
+// ============================================================================
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod changeset_remove_tests {
+    use std::io::Write;
+
+    use tempfile::TempDir;
+
+    use crate::commands::changeset::{
+        CliChangesetRemoveResponseData, CliRemovedChangesetInfo, SharedBuffer,
+        convert_remove_params_to_args, convert_to_napi_remove_data,
+        parse_changeset_remove_response, validate_remove_params,
+    };
+    use crate::types::changeset::ChangesetRemoveParams;
+
+    // -------------------------------------------------------------------------
+    // SharedBuffer Tests
+    // -------------------------------------------------------------------------
+
+    mod shared_buffer_tests {
+        use super::*;
+
+        #[test]
+        fn test_shared_buffer_new() {
+            let buffer = SharedBuffer::new();
+            assert!(buffer.take_bytes().is_empty());
+        }
+
+        #[test]
+        fn test_shared_buffer_write() {
+            let mut buffer = SharedBuffer::new();
+            let bytes_written = buffer.write(b"hello").unwrap();
+            assert_eq!(bytes_written, 5);
+            assert_eq!(buffer.take_bytes(), b"hello");
+        }
+
+        #[test]
+        fn test_shared_buffer_multiple_writes() {
+            let mut buffer = SharedBuffer::new();
+            buffer.write_all(b"hello ").unwrap();
+            buffer.write_all(b"world").unwrap();
+            assert_eq!(buffer.take_bytes(), b"hello world");
+        }
+
+        #[test]
+        fn test_shared_buffer_clone_shares_data() {
+            let mut buffer = SharedBuffer::new();
+            let buffer_clone = buffer.clone();
+            buffer.write_all(b"test data").unwrap();
+
+            // Both should see the same data
+            assert_eq!(buffer.take_bytes(), b"test data");
+            assert_eq!(buffer_clone.take_bytes(), b"test data");
+        }
+
+        #[test]
+        fn test_shared_buffer_flush() {
+            let mut buffer = SharedBuffer::new();
+            assert!(buffer.flush().is_ok());
+        }
+
+        #[test]
+        fn test_shared_buffer_take_bytes_preserves_data() {
+            let mut buffer = SharedBuffer::new();
+            buffer.write_all(b"preserved").unwrap();
+
+            let first = buffer.take_bytes();
+            let second = buffer.take_bytes();
+
+            assert_eq!(first, second);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Parse Response Tests
+    // -------------------------------------------------------------------------
+
+    mod parse_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_changeset_remove_response_success() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "success": true,
+                    "branch": "feature/test",
+                    "archived": true,
+                    "changeset": {
+                        "branch": "feature/test",
+                        "bump": "minor",
+                        "packages": ["@scope/pkg1", "@scope/pkg2"],
+                        "environments": ["development", "production"],
+                        "commit_count": 5
+                    }
+                }
+            }"#;
+
+            let result = parse_changeset_remove_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert!(data.removed);
+            assert_eq!(data.branch, "feature/test");
+        }
+
+        #[test]
+        fn test_parse_changeset_remove_response_minimal() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "success": true,
+                    "branch": "fix/bug",
+                    "archived": false,
+                    "changeset": {
+                        "branch": "fix/bug",
+                        "bump": "patch",
+                        "packages": [],
+                        "environments": [],
+                        "commit_count": 0
+                    }
+                }
+            }"#;
+
+            let result = parse_changeset_remove_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert!(data.removed);
+            assert_eq!(data.branch, "fix/bug");
+        }
+
+        #[test]
+        fn test_parse_changeset_remove_response_cli_error() {
+            let json = r#"{
+                "success": false,
+                "error": "Changeset not found: nonexistent"
+            }"#;
+
+            let result = parse_changeset_remove_response(json.as_bytes());
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Changeset not found"));
+        }
+
+        #[test]
+        fn test_parse_changeset_remove_response_empty() {
+            let result = parse_changeset_remove_response(b"");
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("empty"));
+        }
+
+        #[test]
+        fn test_parse_changeset_remove_response_whitespace_only() {
+            let result = parse_changeset_remove_response(b"   \n\t  ");
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("empty"));
+        }
+
+        #[test]
+        fn test_parse_changeset_remove_response_invalid_json() {
+            let result = parse_changeset_remove_response(b"not valid json");
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("parse"));
+        }
+
+        #[test]
+        fn test_parse_changeset_remove_response_invalid_utf8() {
+            let invalid_utf8 = vec![0xff, 0xfe, 0x00, 0x01];
+            let result = parse_changeset_remove_response(&invalid_utf8);
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("UTF-8"));
+        }
+
+        #[test]
+        fn test_parse_changeset_remove_response_success_no_data() {
+            let json = r#"{"success": true}"#;
+            let result = parse_changeset_remove_response(json.as_bytes());
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("no data"));
+        }
+
+        #[test]
+        fn test_parse_changeset_remove_response_cli_error_no_message() {
+            let json = r#"{"success": false}"#;
+            let result = parse_changeset_remove_response(json.as_bytes());
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("Unknown CLI error"));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Conversion Tests
+    // -------------------------------------------------------------------------
+
+    mod conversion_tests {
+        use super::*;
+
+        #[test]
+        fn test_convert_to_napi_remove_data() {
+            let cli_data = CliChangesetRemoveResponseData {
+                success: true,
+                branch: "feature/test".to_string(),
+                archived: true,
+                changeset: CliRemovedChangesetInfo {
+                    branch: "feature/test".to_string(),
+                    bump: "minor".to_string(),
+                    packages: vec!["@scope/pkg1".to_string()],
+                    environments: vec!["production".to_string()],
+                    commit_count: 3,
+                },
+            };
+
+            let result = convert_to_napi_remove_data(&cli_data);
+
+            assert!(result.removed);
+            assert_eq!(result.branch, "feature/test");
+        }
+
+        #[test]
+        fn test_convert_remove_params_to_args_basic() {
+            let params = ChangesetRemoveParams::new(".", "feature/test");
+
+            let args = convert_remove_params_to_args(&params);
+
+            assert_eq!(args.branch, "feature/test");
+            // Force is always true in API mode
+            assert!(args.force);
+        }
+
+        #[test]
+        fn test_convert_remove_params_to_args_force_ignored() {
+            // Even if force is explicitly set to false, it should be true in API mode
+            let params = ChangesetRemoveParams {
+                root: ".".to_string(),
+                config_path: None,
+                branch: "feature/test".to_string(),
+                force: Some(false),
+            };
+
+            let args = convert_remove_params_to_args(&params);
+
+            // Force is always true in API mode - no interactive prompts
+            assert!(args.force);
+        }
+
+        #[test]
+        fn test_convert_remove_params_to_args_various_branches() {
+            // Simple branch
+            let params = ChangesetRemoveParams::new(".", "main");
+            assert_eq!(convert_remove_params_to_args(&params).branch, "main");
+
+            // Feature branch
+            let params = ChangesetRemoveParams::new(".", "feature/new-api");
+            assert_eq!(convert_remove_params_to_args(&params).branch, "feature/new-api");
+
+            // Hotfix branch
+            let params = ChangesetRemoveParams::new(".", "hotfix/critical-fix");
+            assert_eq!(convert_remove_params_to_args(&params).branch, "hotfix/critical-fix");
+
+            // Branch with multiple slashes
+            let params = ChangesetRemoveParams::new(".", "feature/auth/oauth");
+            assert_eq!(convert_remove_params_to_args(&params).branch, "feature/auth/oauth");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Validation Tests
+    // -------------------------------------------------------------------------
+
+    mod validation_tests {
+        use super::*;
+        use std::fs::File;
+
+        #[test]
+        fn test_validate_remove_params_valid_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let params =
+                ChangesetRemoveParams::new(temp_dir.path().to_str().unwrap(), "feature/test");
+
+            let result = validate_remove_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_remove_params_nonexistent_path() {
+            let params = ChangesetRemoveParams::new("/nonexistent/path/12345", "feature/test");
+
+            let result = validate_remove_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "ENOENT");
+        }
+
+        #[test]
+        fn test_validate_remove_params_empty_root() {
+            let params = ChangesetRemoveParams::new("", "feature/test");
+
+            let result = validate_remove_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("root"));
+        }
+
+        #[test]
+        fn test_validate_remove_params_file_not_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let file_path = temp_dir.path().join("test_file.txt");
+            let _ = File::create(&file_path).unwrap();
+
+            let params = ChangesetRemoveParams::new(file_path.to_str().unwrap(), "feature/test");
+
+            let result = validate_remove_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("directory"));
+        }
+
+        #[test]
+        fn test_validate_remove_params_empty_branch() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetRemoveParams::new(temp_dir.path().to_str().unwrap(), "");
+
+            let result = validate_remove_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("branch"));
+        }
+
+        #[test]
+        fn test_validate_remove_params_whitespace_branch() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetRemoveParams::new(temp_dir.path().to_str().unwrap(), "   ");
+
+            let result = validate_remove_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("branch"));
+        }
+
+        #[test]
+        fn test_validate_remove_params_with_config_path() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetRemoveParams {
+                root: temp_dir.path().to_str().unwrap().to_string(),
+                config_path: Some("/path/to/config.json".to_string()),
+                branch: "feature/test".to_string(),
+                force: None,
+            };
+
+            let result = validate_remove_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_remove_params_various_branch_names() {
+            let temp_dir = TempDir::new().unwrap();
+
+            // Feature branch
+            let params =
+                ChangesetRemoveParams::new(temp_dir.path().to_str().unwrap(), "feature/new-api");
+            assert!(validate_remove_params(&params).is_ok());
+
+            // Hotfix branch
+            let params = ChangesetRemoveParams::new(
+                temp_dir.path().to_str().unwrap(),
+                "hotfix/security-patch",
+            );
+            assert!(validate_remove_params(&params).is_ok());
+
+            // Simple branch
+            let params = ChangesetRemoveParams::new(temp_dir.path().to_str().unwrap(), "main");
+            assert!(validate_remove_params(&params).is_ok());
+
+            // Branch with multiple slashes
+            let params = ChangesetRemoveParams::new(
+                temp_dir.path().to_str().unwrap(),
+                "feature/auth/oauth-integration",
+            );
+            assert!(validate_remove_params(&params).is_ok());
+
+            // Branch with numbers
+            let params =
+                ChangesetRemoveParams::new(temp_dir.path().to_str().unwrap(), "release/v2.0.0");
+            assert!(validate_remove_params(&params).is_ok());
+
+            // Branch with underscores and dashes
+            let params = ChangesetRemoveParams::new(
+                temp_dir.path().to_str().unwrap(),
+                "feature/my_feature-branch",
+            );
+            assert!(validate_remove_params(&params).is_ok());
+        }
+
+        #[test]
+        fn test_validate_remove_params_with_force_flag() {
+            let temp_dir = TempDir::new().unwrap();
+
+            // With force = true
+            let params =
+                ChangesetRemoveParams::new(temp_dir.path().to_str().unwrap(), "feature/test")
+                    .with_force(true);
+            assert!(validate_remove_params(&params).is_ok());
+
+            // With force = false (should still validate, force is only used at execution)
+            let params =
+                ChangesetRemoveParams::new(temp_dir.path().to_str().unwrap(), "feature/test")
+                    .with_force(false);
+            assert!(validate_remove_params(&params).is_ok());
+        }
+    }
+}
