@@ -139,13 +139,13 @@ pub(crate) use bump::{
     BumpSnapshotData,
     BumpSnapshotParams,
     BumpSummaryInfo,
+    // Constants
+    COMMON_PRERELEASE_TAGS,
+    DEFAULT_SNAPSHOT_FORMAT,
     DependencyUpdateInfo,
     // Supporting Types
     PackageVersionInfo,
     SnapshotVersionInfo,
-    // Constants
-    COMMON_PRERELEASE_TAGS,
-    DEFAULT_SNAPSHOT_FORMAT,
     VALID_DEPENDENCY_TYPES,
 };
 
