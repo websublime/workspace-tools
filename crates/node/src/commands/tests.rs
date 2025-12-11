@@ -3745,3 +3745,399 @@ mod changeset_history_tests {
         }
     }
 }
+
+// ============================================================================
+// Changeset Check Command Tests (Story 4.8)
+// ============================================================================
+
+/// Tests for the changeset check command implementation.
+///
+/// This module covers:
+/// - SharedBuffer functionality for output capture
+/// - Response parsing from CLI JSON output
+/// - Conversion of CLI types to NAPI types
+/// - Parameter validation
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod changeset_check_tests {
+    use std::io::Write;
+
+    use tempfile::TempDir;
+
+    use crate::commands::changeset::{
+        CliChangesetCheckResponseData, SharedBuffer, convert_check_params_to_args,
+        convert_to_napi_check_data, parse_changeset_check_response, validate_check_params,
+    };
+    use crate::types::changeset::ChangesetCheckParams;
+
+    // ========================================================================
+    // SharedBuffer Tests
+    // ========================================================================
+
+    mod shared_buffer_tests {
+        use super::*;
+
+        #[test]
+        fn test_shared_buffer_new() {
+            let buffer = SharedBuffer::new();
+            assert!(buffer.take_bytes().is_empty());
+        }
+
+        #[test]
+        fn test_shared_buffer_write() {
+            let mut buffer = SharedBuffer::new();
+            let _ = buffer.write(b"test data");
+            assert_eq!(buffer.take_bytes(), b"test data");
+        }
+
+        #[test]
+        fn test_shared_buffer_multiple_writes() {
+            let mut buffer = SharedBuffer::new();
+            let _ = buffer.write(b"first ");
+            let _ = buffer.write(b"second");
+            assert_eq!(buffer.take_bytes(), b"first second");
+        }
+
+        #[test]
+        fn test_shared_buffer_clone_shares_data() {
+            let mut buffer = SharedBuffer::new();
+            let buffer_clone = buffer.clone();
+            let _ = buffer.write(b"shared data");
+            assert_eq!(buffer_clone.take_bytes(), b"shared data");
+        }
+
+        #[test]
+        fn test_shared_buffer_flush() {
+            let mut buffer = SharedBuffer::new();
+            assert!(buffer.flush().is_ok());
+        }
+
+        #[test]
+        fn test_shared_buffer_take_bytes_preserves_data() {
+            let mut buffer = SharedBuffer::new();
+            let _ = buffer.write(b"preserved");
+            let first = buffer.take_bytes();
+            let second = buffer.take_bytes();
+            assert_eq!(first, second);
+        }
+    }
+
+    // ========================================================================
+    // Parse Response Tests
+    // ========================================================================
+
+    mod parse_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_changeset_check_response_exists() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "exists": true,
+                    "branch": "feature/new-api",
+                    "message": "Changeset exists for branch 'feature/new-api'"
+                }
+            }"#;
+
+            let result = parse_changeset_check_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert!(data.has_changeset);
+            assert_eq!(data.branch, Some("feature/new-api".to_string()));
+        }
+
+        #[test]
+        fn test_parse_changeset_check_response_not_exists() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "exists": false,
+                    "branch": "feature/no-changeset",
+                    "message": "No changeset found for branch 'feature/no-changeset'"
+                }
+            }"#;
+
+            let result = parse_changeset_check_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert!(!data.has_changeset);
+            assert!(data.branch.is_none());
+        }
+
+        #[test]
+        fn test_parse_changeset_check_response_minimal() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "exists": true,
+                    "branch": "main"
+                }
+            }"#;
+
+            let result = parse_changeset_check_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert!(data.has_changeset);
+            assert_eq!(data.branch, Some("main".to_string()));
+        }
+
+        #[test]
+        fn test_parse_changeset_check_response_cli_error() {
+            let json = r#"{
+                "success": false,
+                "error": "Workspace not initialized"
+            }"#;
+
+            let result = parse_changeset_check_response(json.as_bytes());
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Workspace not initialized"));
+        }
+
+        #[test]
+        fn test_parse_changeset_check_response_empty() {
+            let result = parse_changeset_check_response(b"");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Empty"));
+        }
+
+        #[test]
+        fn test_parse_changeset_check_response_whitespace_only() {
+            let result = parse_changeset_check_response(b"   \n\t  ");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Empty"));
+        }
+
+        #[test]
+        fn test_parse_changeset_check_response_invalid_json() {
+            let result = parse_changeset_check_response(b"not valid json");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Failed to parse"));
+        }
+
+        #[test]
+        fn test_parse_changeset_check_response_invalid_utf8() {
+            let invalid_utf8 = vec![0xFF, 0xFE, 0x00, 0x01];
+            let result = parse_changeset_check_response(&invalid_utf8);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Invalid UTF-8"));
+        }
+
+        #[test]
+        fn test_parse_changeset_check_response_success_no_data() {
+            let json = r#"{"success": true}"#;
+            let result = parse_changeset_check_response(json.as_bytes());
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("no data"));
+        }
+
+        #[test]
+        fn test_parse_changeset_check_response_cli_error_no_message() {
+            let json = r#"{"success": false}"#;
+            let result = parse_changeset_check_response(json.as_bytes());
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Unknown CLI error"));
+        }
+    }
+
+    // ========================================================================
+    // Conversion Tests
+    // ========================================================================
+
+    mod conversion_tests {
+        use super::*;
+
+        #[test]
+        fn test_convert_to_napi_check_data_exists() {
+            let cli_data = CliChangesetCheckResponseData {
+                exists: true,
+                branch: "feature/api".to_string(),
+                message: Some("Changeset exists".to_string()),
+            };
+
+            let napi_data = convert_to_napi_check_data(cli_data);
+            assert!(napi_data.has_changeset);
+            assert_eq!(napi_data.branch, Some("feature/api".to_string()));
+        }
+
+        #[test]
+        fn test_convert_to_napi_check_data_not_exists() {
+            let cli_data = CliChangesetCheckResponseData {
+                exists: false,
+                branch: "feature/no-changeset".to_string(),
+                message: Some("No changeset found".to_string()),
+            };
+
+            let napi_data = convert_to_napi_check_data(cli_data);
+            assert!(!napi_data.has_changeset);
+            assert!(napi_data.branch.is_none());
+        }
+
+        #[test]
+        fn test_convert_to_napi_check_data_without_message() {
+            let cli_data = CliChangesetCheckResponseData {
+                exists: true,
+                branch: "main".to_string(),
+                message: None,
+            };
+
+            let napi_data = convert_to_napi_check_data(cli_data);
+            assert!(napi_data.has_changeset);
+            assert_eq!(napi_data.branch, Some("main".to_string()));
+        }
+
+        #[test]
+        fn test_convert_check_params_to_args_no_branch() {
+            let params = ChangesetCheckParams::new("/path/to/workspace");
+            let args = convert_check_params_to_args(&params);
+            assert!(args.branch.is_none());
+        }
+
+        #[test]
+        fn test_convert_check_params_to_args_with_branch() {
+            let params =
+                ChangesetCheckParams::new("/path/to/workspace").with_branch("feature/new-api");
+            let args = convert_check_params_to_args(&params);
+            assert_eq!(args.branch, Some("feature/new-api".to_string()));
+        }
+
+        #[test]
+        fn test_convert_check_params_to_args_various_branches() {
+            let test_cases = [
+                "main",
+                "develop",
+                "feature/auth",
+                "release/v1.0.0",
+                "hotfix/critical-bug",
+                "user/john/experiment",
+            ];
+
+            for branch in test_cases {
+                let params = ChangesetCheckParams::new("/root").with_branch(branch);
+                let args = convert_check_params_to_args(&params);
+                assert_eq!(args.branch, Some(branch.to_string()));
+            }
+        }
+    }
+
+    // ========================================================================
+    // Validation Tests
+    // ========================================================================
+
+    mod validation_tests {
+        use super::*;
+
+        #[test]
+        fn test_validate_check_params_valid_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetCheckParams::new(temp_dir.path().to_str().unwrap());
+            let result = validate_check_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_check_params_nonexistent_path() {
+            let params = ChangesetCheckParams::new("/nonexistent/path/xyz");
+            let result = validate_check_params(&params);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_check_params_empty_root() {
+            let params = ChangesetCheckParams::new("");
+            let result = validate_check_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("empty"));
+        }
+
+        #[test]
+        fn test_validate_check_params_file_not_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let file_path = temp_dir.path().join("test.txt");
+            std::fs::write(&file_path, "test").unwrap();
+
+            let params = ChangesetCheckParams::new(file_path.to_str().unwrap());
+            let result = validate_check_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("directory"));
+        }
+
+        #[test]
+        fn test_validate_check_params_with_branch() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetCheckParams::new(temp_dir.path().to_str().unwrap())
+                .with_branch("feature/new-api");
+            let result = validate_check_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_check_params_with_config_path() {
+            let temp_dir = TempDir::new().unwrap();
+            let mut params = ChangesetCheckParams::new(temp_dir.path().to_str().unwrap());
+            params.config_path = Some("/path/to/config.json".to_string());
+            // Config path validation happens at execution time, not validation time
+            let result = validate_check_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_check_params_various_branch_names() {
+            let temp_dir = TempDir::new().unwrap();
+            let root = temp_dir.path().to_str().unwrap();
+
+            let valid_branches = [
+                "main",
+                "develop",
+                "feature/new-api",
+                "release/v1.0.0",
+                "hotfix/critical-fix",
+                "user/john/experiment",
+                "UPPERCASE",
+                "with-dashes",
+                "with_underscores",
+                "with.dots",
+            ];
+
+            for branch in valid_branches {
+                let params = ChangesetCheckParams::new(root).with_branch(branch);
+                assert!(
+                    validate_check_params(&params).is_ok(),
+                    "Expected branch '{branch}' to be valid"
+                );
+            }
+        }
+
+        #[test]
+        fn test_validate_check_params_no_branch_uses_current() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetCheckParams::new(temp_dir.path().to_str().unwrap());
+            // Branch is optional - when not provided, CLI will use current Git branch
+            let result = validate_check_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_check_params_returns_correct_path() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = ChangesetCheckParams::new(path_str);
+            let result = validate_check_params(&params);
+            assert!(result.is_ok());
+            let path = result.unwrap();
+            assert_eq!(path.to_str().unwrap(), path_str);
+        }
+    }
+}

@@ -1936,7 +1936,9 @@ impl ChangesetHistoryData {
 
 /// Response data for the changeset check command.
 ///
-/// Contains the result of the changeset existence check.
+/// Contains the result of the changeset existence check. This matches
+/// the CLI's `ChangesetCheckResponse` which returns `exists`, `branch`,
+/// and an optional `message`.
 ///
 /// # TypeScript Definition
 ///
@@ -1944,7 +1946,6 @@ impl ChangesetHistoryData {
 /// interface ChangesetCheckData {
 ///   hasChangeset: boolean;
 ///   branch?: string;
-///   packages?: string[];
 /// }
 /// ```
 #[allow(dead_code)]
@@ -1960,27 +1961,20 @@ pub struct ChangesetCheckData {
     #[napi(ts_type = "string | undefined")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
-
-    /// Packages in the existing changeset.
-    ///
-    /// Present when a changeset exists.
-    #[napi(ts_type = "string[] | undefined")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub packages: Option<Vec<String>>,
 }
 
 #[allow(dead_code)]
 impl ChangesetCheckData {
     /// Creates a response indicating a changeset exists.
     #[must_use]
-    pub fn exists(branch: impl Into<String>, packages: Vec<String>) -> Self {
-        Self { has_changeset: true, branch: Some(branch.into()), packages: Some(packages) }
+    pub fn exists(branch: impl Into<String>) -> Self {
+        Self { has_changeset: true, branch: Some(branch.into()) }
     }
 
     /// Creates a response indicating no changeset exists.
     #[must_use]
     pub fn not_found() -> Self {
-        Self { has_changeset: false, branch: None, packages: None }
+        Self { has_changeset: false, branch: None }
     }
 }
 

@@ -13,6 +13,10 @@
 //! - `changeset_add`: Creates a new changeset for the current branch
 //! - `changeset_update`: Updates an existing changeset with new packages, commits, bump type, or environments
 //! - `changeset_list`: Lists all pending changesets with optional filtering and sorting
+//! - `changeset_show`: Shows details of a specific changeset
+//! - `changeset_remove`: Removes a changeset from the workspace
+//! - `changeset_history`: Lists archived/applied changesets with filtering
+//! - `changeset_check`: Checks if a changeset exists for a branch (useful for Git hooks)
 //!
 //! Each function follows this pattern:
 //! 1. Validates the input parameters
@@ -101,7 +105,8 @@ use serde::Deserialize;
 use crate::error::ErrorInfo;
 use crate::types::changeset::{
     ArchivedChangesetInfo, ChangesetAddApiResponse, ChangesetAddData, ChangesetAddParams,
-    ChangesetDetailInfo, ChangesetHistoryApiResponse, ChangesetHistoryData, ChangesetHistoryParams,
+    ChangesetCheckApiResponse, ChangesetCheckData, ChangesetCheckParams, ChangesetDetailInfo,
+    ChangesetHistoryApiResponse, ChangesetHistoryData, ChangesetHistoryParams,
     ChangesetListApiResponse, ChangesetListData, ChangesetListItemInfo, ChangesetListParams,
     ChangesetRemoveApiResponse, ChangesetRemoveData, ChangesetRemoveParams,
     ChangesetShowApiResponse, ChangesetShowData, ChangesetShowParams, ChangesetUpdateApiResponse,
@@ -111,11 +116,12 @@ use crate::types::changeset::{
 use crate::validation::validators;
 
 use sublime_cli_tools::cli::commands::{
-    ChangesetCreateArgs, ChangesetDeleteArgs, ChangesetHistoryArgs, ChangesetListArgs,
-    ChangesetShowArgs, ChangesetUpdateArgs,
+    ChangesetCheckArgs, ChangesetCreateArgs, ChangesetDeleteArgs, ChangesetHistoryArgs,
+    ChangesetListArgs, ChangesetShowArgs, ChangesetUpdateArgs,
 };
 use sublime_cli_tools::commands::changeset::{
-    execute_add, execute_history, execute_list, execute_remove, execute_show, execute_update,
+    execute_add, execute_check, execute_history, execute_list, execute_remove, execute_show,
+    execute_update,
 };
 use sublime_cli_tools::output::{Output, OutputFormat};
 
@@ -2441,6 +2447,345 @@ pub async fn changeset_history(params: ChangesetHistoryParams) -> ChangesetHisto
         Ok(Ok(data)) => ChangesetHistoryApiResponse::success(data),
         Ok(Err(error)) => ChangesetHistoryApiResponse::failure(error),
         Err(join_error) => ChangesetHistoryApiResponse::failure(ErrorInfo::execution(format!(
+            "Task execution failed: {join_error}"
+        ))),
+    }
+}
+
+// ============================================================================
+// Changeset Check - CLI Response Types
+// ============================================================================
+
+/// CLI changeset check response data structure.
+///
+/// Mirrors the `ChangesetCheckResponse` structure from the CLI's changeset check command.
+/// Used for deserializing the JSON output captured from the CLI.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CliChangesetCheckResponseData {
+    /// Whether the changeset exists.
+    pub(crate) exists: bool,
+
+    /// The branch that was checked.
+    pub(crate) branch: String,
+
+    /// Optional message describing the result.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub(crate) message: Option<String>,
+}
+
+// ============================================================================
+// Changeset Check - Conversion Functions
+// ============================================================================
+
+/// Converts CLI response data to NAPI check data.
+///
+/// Transforms the parsed CLI JSON response into the `ChangesetCheckData`
+/// structure expected by JavaScript consumers.
+///
+/// # Arguments
+///
+/// * `data` - The CLI response data
+///
+/// # Returns
+///
+/// A `ChangesetCheckData` containing the check result.
+///
+pub(crate) fn convert_to_napi_check_data(
+    data: CliChangesetCheckResponseData,
+) -> ChangesetCheckData {
+    if data.exists {
+        ChangesetCheckData::exists(data.branch)
+    } else {
+        ChangesetCheckData::not_found()
+    }
+}
+
+/// Parses the JSON output from the CLI changeset check command.
+///
+/// This function deserializes the raw bytes from the CLI's JSON output
+/// into the appropriate NAPI response type.
+///
+/// # Arguments
+///
+/// * `json_bytes` - Raw bytes from the captured CLI output
+///
+/// # Returns
+///
+/// * `Ok(ChangesetCheckData)` - Successfully parsed check result
+/// * `Err(ErrorInfo)` - Parsing failed or CLI returned an error
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The output is empty
+/// - The output is not valid UTF-8
+/// - The output is not valid JSON
+/// - The CLI returned an error response
+pub(crate) fn parse_changeset_check_response(
+    json_bytes: &[u8],
+) -> Result<ChangesetCheckData, ErrorInfo> {
+    // Handle empty output
+    if json_bytes.is_empty() || json_bytes.iter().all(u8::is_ascii_whitespace) {
+        return Err(ErrorInfo::execution("Empty response from CLI"));
+    }
+
+    // Convert bytes to string
+    let json_str = std::str::from_utf8(json_bytes)
+        .map_err(|e| ErrorInfo::execution(format!("Invalid UTF-8 in CLI output: {e}")))?;
+
+    // Parse the outer JSON response structure
+    let response: CliJsonResponse<CliChangesetCheckResponseData> =
+        serde_json::from_str(json_str)
+            .map_err(|e| ErrorInfo::execution(format!("Failed to parse CLI JSON: {e}")))?;
+
+    // Check if the CLI returned an error
+    if !response.success {
+        let error_msg = response.error.unwrap_or_else(|| "Unknown CLI error".to_string());
+        return Err(ErrorInfo::execution(error_msg));
+    }
+
+    // Extract the data
+    let data =
+        response.data.ok_or_else(|| ErrorInfo::execution("CLI returned success but no data"))?;
+
+    Ok(convert_to_napi_check_data(data))
+}
+
+// ============================================================================
+// Changeset Check - Validation
+// ============================================================================
+
+/// Validates changeset check command parameters.
+///
+/// Ensures the root path is valid. The branch parameter is optional and
+/// will default to the current Git branch if not provided.
+///
+/// # Arguments
+///
+/// * `params` - The changeset check parameters to validate
+///
+/// # Returns
+///
+/// * `Ok(PathBuf)` - The validated root path
+/// * `Err(ErrorInfo)` - Validation failed
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The root path is empty, doesn't exist, or is not a directory
+pub(crate) fn validate_check_params(params: &ChangesetCheckParams) -> Result<PathBuf, ErrorInfo> {
+    // Validate root path exists and is a directory
+    validators::root(&params.root)?;
+
+    Ok(PathBuf::from(&params.root))
+}
+
+/// Converts NAPI parameters to CLI arguments.
+///
+/// This function transforms the NAPI-friendly `ChangesetCheckParams` into the
+/// CLI's `ChangesetCheckArgs` structure.
+///
+/// # Arguments
+///
+/// * `params` - The NAPI changeset check parameters
+///
+/// # Returns
+///
+/// A `ChangesetCheckArgs` instance ready for CLI execution.
+pub(crate) fn convert_check_params_to_args(params: &ChangesetCheckParams) -> ChangesetCheckArgs {
+    ChangesetCheckArgs { branch: params.branch.clone() }
+}
+
+// ============================================================================
+// Changeset Check - NAPI Function
+// ============================================================================
+
+/// Check if a changeset exists for a branch.
+///
+/// Verifies whether a changeset exists for the current or specified branch.
+/// This command is designed for use in Git hooks and CI/CD pipelines to
+/// enforce changeset creation policies.
+///
+/// @param params - Changeset check parameters containing:
+///   - `root`: Workspace root directory path (required)
+///   - `configPath`: Optional custom config file path
+///   - `branch`: Branch name to check (optional, defaults to current Git branch)
+///
+/// @returns `Promise<ChangesetCheckApiResponse>` - Response containing:
+///   - `success`: Whether the operation succeeded
+///   - `data`: Check result if successful
+///   - `error`: Error information if failed
+///
+/// ## Success Response
+///
+/// When successful, `data` contains:
+/// - `hasChangeset`: Boolean indicating if a changeset exists
+/// - `branch`: The branch name that was checked (when changeset exists)
+/// - `packages`: List of packages in the changeset (when available)
+///
+/// ## Error Codes
+///
+/// - `EVALIDATION`: Invalid parameters (empty root)
+/// - `ENOENT`: Path not found
+/// - `ECONFIG`: Workspace not initialized
+/// - `EEXECUTION`: CLI command failed
+///
+/// ## Git Hook Integration
+///
+/// This command is particularly useful in Git hooks:
+/// - Pre-push hooks to ensure changesets are created
+/// - Pre-merge hooks to validate release requirements
+/// - CI/CD pipelines for pull request validation
+///
+/// The response indicates whether a changeset exists, making it easy to
+/// implement branch protection rules that require changesets.
+///
+/// @example Basic usage - check current branch
+/// ```typescript
+/// const result = await changesetCheck({
+///   root: '/path/to/workspace'
+/// });
+///
+/// if (result.success) {
+///   if (result.data.hasChangeset) {
+///     console.log(`Changeset exists for branch: ${result.data.branch}`);
+///   } else {
+///     console.log('No changeset found for current branch');
+///   }
+/// }
+/// ```
+///
+/// @example Check specific branch
+/// ```typescript
+/// const result = await changesetCheck({
+///   root: '/path/to/workspace',
+///   branch: 'feature/new-api'
+/// });
+///
+/// if (result.success && result.data.hasChangeset) {
+///   console.log('✓ Changeset exists, ready to merge');
+/// } else if (result.success && !result.data.hasChangeset) {
+///   console.log('✗ No changeset found, please create one');
+///   process.exit(1);
+/// }
+/// ```
+///
+/// @example Git pre-push hook
+/// ```typescript
+/// const result = await changesetCheck({ root: '.' });
+///
+/// if (!result.success) {
+///   console.error(`Error: ${result.error.message}`);
+///   process.exit(1);
+/// }
+///
+/// if (!result.data.hasChangeset) {
+///   console.error('Push rejected: No changeset found for this branch.');
+///   console.error('Run "workspace changeset add" to create a changeset.');
+///   process.exit(1);
+/// }
+///
+/// console.log('Changeset verified, proceeding with push.');
+/// ```
+///
+/// @example With custom config
+/// ```typescript
+/// const result = await changesetCheck({
+///   root: '/path/to/workspace',
+///   configPath: '/path/to/custom.config.json',
+///   branch: 'feature/auth-system'
+/// });
+/// ```
+///
+/// @example Error handling
+/// ```typescript
+/// const result = await changesetCheck({
+///   root: '/path/to/workspace',
+///   branch: 'feature/my-branch'
+/// });
+///
+/// if (!result.success) {
+///   switch (result.error.code) {
+///     case 'ENOENT':
+///       console.error('Workspace path not found');
+///       break;
+///     case 'ECONFIG':
+///       console.error('Workspace not initialized. Run "workspace init" first.');
+///       break;
+///     case 'EVALIDATION':
+///       console.error('Invalid parameters:', result.error.message);
+///       break;
+///     default:
+///       console.error(`Error: ${result.error.message}`);
+///   }
+/// }
+/// ```
+#[napi(js_name = "changesetCheck")]
+pub async fn changeset_check(params: ChangesetCheckParams) -> ChangesetCheckApiResponse {
+    // 1. Validate parameters (synchronous validation before spawning)
+    let root_path = match validate_check_params(&params) {
+        Ok(path) => path,
+        Err(error) => return ChangesetCheckApiResponse::failure(error),
+    };
+
+    // 2. Prepare config path
+    let config_path: Option<PathBuf> = params.config_path.as_ref().map(PathBuf::from);
+
+    // 3. Convert NAPI params to CLI args
+    let args = convert_check_params_to_args(&params);
+
+    // 4. Execute CLI command in a blocking task
+    // The CLI's execute_check uses types that are not Send/Sync (RefCell, git2::Repository),
+    // so we must run it on a blocking thread via spawn_blocking.
+    let result = tokio::task::spawn_blocking(move || {
+        // Create a new tokio runtime for the blocking context
+        // This is necessary because execute_check is async but we're in a blocking context
+        let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+            Ok(rt) => rt,
+            Err(e) => {
+                return Err(ErrorInfo::execution(format!("Failed to create runtime: {e}")));
+            }
+        };
+
+        rt.block_on(async {
+            // Create shared buffer for output capture
+            let buffer = SharedBuffer::new();
+
+            // Create Output with JSON format
+            let output = Output::new(OutputFormat::Json, buffer.clone(), true);
+
+            // Execute the CLI command
+            // Note: execute_check returns Err for "not found" case (exit code 1)
+            // but we still capture the JSON output for parsing
+            let cli_result =
+                execute_check(&args, &output, Some(root_path.as_path()), config_path.as_deref())
+                    .await;
+
+            // Extract JSON bytes
+            let json_bytes = buffer.take_bytes();
+
+            // If we have JSON output, try to parse it first
+            if !json_bytes.is_empty() {
+                return parse_changeset_check_response(&json_bytes);
+            }
+
+            // If no JSON output, convert CLI error to ErrorInfo
+            if let Err(cli_error) = cli_result {
+                return Err(ErrorInfo::from(cli_error));
+            }
+
+            // Unexpected: no JSON and no error
+            Err(ErrorInfo::execution("No response from CLI"))
+        })
+    })
+    .await;
+
+    // 5. Handle spawn_blocking result
+    match result {
+        Ok(Ok(data)) => ChangesetCheckApiResponse::success(data),
+        Ok(Err(error)) => ChangesetCheckApiResponse::failure(error),
+        Err(join_error) => ChangesetCheckApiResponse::failure(ErrorInfo::execution(format!(
             "Task execution failed: {join_error}"
         ))),
     }

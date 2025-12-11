@@ -323,6 +323,130 @@ export interface ChangesetAddParams {
 }
 
 /**
+ * Check if a changeset exists for a branch.
+ *
+ * Verifies whether a changeset exists for the current or specified branch.
+ * This command is designed for use in Git hooks and CI/CD pipelines to
+ * enforce changeset creation policies.
+ *
+ * @param params - Changeset check parameters containing:
+ *   - `root`: Workspace root directory path (required)
+ *   - `configPath`: Optional custom config file path
+ *   - `branch`: Branch name to check (optional, defaults to current Git branch)
+ *
+ * @returns `Promise<ChangesetCheckApiResponse>` - Response containing:
+ *   - `success`: Whether the operation succeeded
+ *   - `data`: Check result if successful
+ *   - `error`: Error information if failed
+ *
+ * ## Success Response
+ *
+ * When successful, `data` contains:
+ * - `hasChangeset`: Boolean indicating if a changeset exists
+ * - `branch`: The branch name that was checked (when changeset exists)
+ * - `packages`: List of packages in the changeset (when available)
+ *
+ * ## Error Codes
+ *
+ * - `EVALIDATION`: Invalid parameters (empty root)
+ * - `ENOENT`: Path not found
+ * - `ECONFIG`: Workspace not initialized
+ * - `EEXECUTION`: CLI command failed
+ *
+ * ## Git Hook Integration
+ *
+ * This command is particularly useful in Git hooks:
+ * - Pre-push hooks to ensure changesets are created
+ * - Pre-merge hooks to validate release requirements
+ * - CI/CD pipelines for pull request validation
+ *
+ * The response indicates whether a changeset exists, making it easy to
+ * implement branch protection rules that require changesets.
+ *
+ * @example Basic usage - check current branch
+ * ```typescript
+ * const result = await changesetCheck({
+ *   root: '/path/to/workspace'
+ * });
+ *
+ * if (result.success) {
+ *   if (result.data.hasChangeset) {
+ *     console.log(`Changeset exists for branch: ${result.data.branch}`);
+ *   } else {
+ *     console.log('No changeset found for current branch');
+ *   }
+ * }
+ * ```
+ *
+ * @example Check specific branch
+ * ```typescript
+ * const result = await changesetCheck({
+ *   root: '/path/to/workspace',
+ *   branch: 'feature/new-api'
+ * });
+ *
+ * if (result.success && result.data.hasChangeset) {
+ *   console.log('✓ Changeset exists, ready to merge');
+ * } else if (result.success && !result.data.hasChangeset) {
+ *   console.log('✗ No changeset found, please create one');
+ *   process.exit(1);
+ * }
+ * ```
+ *
+ * @example Git pre-push hook
+ * ```typescript
+ * const result = await changesetCheck({ root: '.' });
+ *
+ * if (!result.success) {
+ *   console.error(`Error: ${result.error.message}`);
+ *   process.exit(1);
+ * }
+ *
+ * if (!result.data.hasChangeset) {
+ *   console.error('Push rejected: No changeset found for this branch.');
+ *   console.error('Run "workspace changeset add" to create a changeset.');
+ *   process.exit(1);
+ * }
+ *
+ * console.log('Changeset verified, proceeding with push.');
+ * ```
+ *
+ * @example With custom config
+ * ```typescript
+ * const result = await changesetCheck({
+ *   root: '/path/to/workspace',
+ *   configPath: '/path/to/custom.config.json',
+ *   branch: 'feature/auth-system'
+ * });
+ * ```
+ *
+ * @example Error handling
+ * ```typescript
+ * const result = await changesetCheck({
+ *   root: '/path/to/workspace',
+ *   branch: 'feature/my-branch'
+ * });
+ *
+ * if (!result.success) {
+ *   switch (result.error.code) {
+ *     case 'ENOENT':
+ *       console.error('Workspace path not found');
+ *       break;
+ *     case 'ECONFIG':
+ *       console.error('Workspace not initialized. Run "workspace init" first.');
+ *       break;
+ *     case 'EVALIDATION':
+ *       console.error('Invalid parameters:', result.error.message);
+ *       break;
+ *     default:
+ *       console.error(`Error: ${result.error.message}`);
+ *   }
+ * }
+ * ```
+ */
+export declare function changesetCheck(params: ChangesetCheckParams): Promise<ChangesetCheckApiResponse>
+
+/**
  * API response for the changeset check command.
  *
  * Wraps `ChangesetCheckData` with success/error handling.
@@ -349,7 +473,9 @@ export interface ChangesetCheckApiResponse {
 /**
  * Response data for the changeset check command.
  *
- * Contains the result of the changeset existence check.
+ * Contains the result of the changeset existence check. This matches
+ * the CLI's `ChangesetCheckResponse` which returns `exists`, `branch`,
+ * and an optional `message`.
  *
  * # TypeScript Definition
  *
@@ -357,7 +483,6 @@ export interface ChangesetCheckApiResponse {
  * interface ChangesetCheckData {
  *   hasChangeset: boolean;
  *   branch?: string;
- *   packages?: string[];
  * }
  * ```
  */
@@ -370,12 +495,6 @@ export interface ChangesetCheckData {
    * Present when a changeset exists.
    */
   branch?: string | undefined
-  /**
-   * Packages in the existing changeset.
-   *
-   * Present when a changeset exists.
-   */
-  packages?: string[] | undefined
 }
 
 /**
