@@ -3,6 +3,12 @@
 //! A comprehensive command-line interface for managing Node.js workspaces and monorepos
 //! with changeset-based version management.
 //!
+//! ## Supported Platforms
+//!
+//! - macOS (Apple Silicon and Intel)
+//! - Linux (x64 glibc, x64 musl, ARM64 glibc)
+//! - Windows (x64)
+//!
 //! ## What
 //!
 //! This crate provides the `workspace` CLI tool that offers:

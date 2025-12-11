@@ -49,6 +49,7 @@ jobs:
               - 'Cargo.lock'
               - 'rust-toolchain.toml'
               - 'deny.toml'
+              - 'dist-workspace.toml'
               - '.gitattributes'
             node-changes:
               - *rust-changes
