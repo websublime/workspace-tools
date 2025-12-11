@@ -522,6 +522,161 @@ export interface ChangesetDetailInfo {
 }
 
 /**
+ * Queries the changeset history with optional filtering.
+ *
+ * This function queries archived changesets from the workspace history,
+ * supporting various filter options for package, environment, bump type,
+ * date range, and result limit.
+ *
+ * # Parameters
+ *
+ * - `root`: Workspace root directory path (required)
+ * - `configPath`: Optional path to custom configuration file
+ * - `filterPackage`: Filter by package name
+ * - `filterEnv`: Filter by environment
+ * - `filterBump`: Filter by bump type (major, minor, patch)
+ * - `since`: Start date filter (ISO 8601 format)
+ * - `until`: End date filter (ISO 8601 format)
+ * - `limit`: Maximum number of results
+ *
+ * # Returns
+ *
+ * An `ApiResponse` containing `ChangesetHistoryData` with the list of archived
+ * changesets matching the query, or an error if the operation fails.
+ *
+ * ## Success Response
+ *
+ * ```typescript
+ * {
+ *   success: true,
+ *   data: {
+ *     archived: [
+ *       {
+ *         changeset: {
+ *           id: "feature/add-api",
+ *           branch: "feature/add-api",
+ *           bump: "minor",
+ *           packages: ["@scope/core"],
+ *           environments: ["production"],
+ *           commits: ["abc123"],
+ *           createdAt: "2024-01-15T10:30:00Z",
+ *           updatedAt: "2024-01-15T14:45:00Z"
+ *         },
+ *         releaseInfo: {
+ *           releasedAt: "2024-01-16T10:00:00Z",
+ *           releasedBy: "CI",
+ *           releaseCommit: "def456",
+ *           releasedVersions: [
+ *             { packageName: "@scope/core", version: "2.0.0" }
+ *           ]
+ *         }
+ *       }
+ *     ],
+ *     count: 1
+ *   }
+ * }
+ * ```
+ *
+ * ## Error Codes
+ *
+ * - `EVALIDATION`: Invalid parameters (empty root or invalid bump type)
+ * - `ENOENT`: Path not found
+ * - `ECONFIG`: Workspace not initialized
+ * - `EEXECUTION`: CLI command failed
+ *
+ * @example Basic usage - get all history
+ * ```typescript
+ * const result = await changesetHistory({
+ *   root: '/path/to/workspace'
+ * });
+ *
+ * if (result.success) {
+ *   console.log(`Found ${result.data.count} archived changesets`);
+ *   for (const item of result.data.archived) {
+ *     console.log(`- ${item.changeset.branch}: ${item.changeset.bump}`);
+ *     console.log(`  Released: ${item.releaseInfo.releasedAt}`);
+ *   }
+ * }
+ * ```
+ *
+ * @example Filter by package
+ * ```typescript
+ * const result = await changesetHistory({
+ *   root: '/path/to/workspace',
+ *   filterPackage: '@scope/core'
+ * });
+ *
+ * if (result.success) {
+ *   console.log(`Releases for @scope/core: ${result.data.count}`);
+ * }
+ * ```
+ *
+ * @example Filter by date range
+ * ```typescript
+ * const result = await changesetHistory({
+ *   root: '/path/to/workspace',
+ *   since: '2024-01-01',
+ *   until: '2024-12-31',
+ *   limit: 10
+ * });
+ * ```
+ *
+ * @example Filter by bump type
+ * ```typescript
+ * const result = await changesetHistory({
+ *   root: '/path/to/workspace',
+ *   filterBump: 'major'
+ * });
+ *
+ * if (result.success) {
+ *   console.log('Major releases:');
+ *   result.data.archived.forEach(item => {
+ *     const versions = item.releaseInfo.releasedVersions
+ *       .map(v => `${v.packageName}@${v.version}`)
+ *       .join(', ');
+ *     console.log(`  ${item.changeset.branch}: ${versions}`);
+ *   });
+ * }
+ * ```
+ *
+ * @example Multiple filters
+ * ```typescript
+ * const result = await changesetHistory({
+ *   root: '/path/to/workspace',
+ *   filterPackage: '@scope/core',
+ *   filterEnv: 'production',
+ *   filterBump: 'minor',
+ *   since: '2024-06-01',
+ *   limit: 5
+ * });
+ * ```
+ *
+ * @example Error handling
+ * ```typescript
+ * const result = await changesetHistory({
+ *   root: '/nonexistent/path'
+ * });
+ *
+ * if (!result.success) {
+ *   switch (result.error.code) {
+ *     case 'ENOENT':
+ *       console.error('Path not found');
+ *       break;
+ *     case 'EVALIDATION':
+ *       console.error('Invalid parameters:', result.error.message);
+ *       break;
+ *     case 'ECONFIG':
+ *       console.error('Workspace not initialized');
+ *       break;
+ *     default:
+ *       console.error(`Error: ${result.error.message}`);
+ *   }
+ * }
+ * ```
+ */
+export declare function changesetHistory(params: ChangesetHistoryParams): Promise<ChangesetHistoryApiResponse>
+
+/**
  * API response for the changeset history command.
  *
  * Wraps `ChangesetHistoryData` with success/error handling.

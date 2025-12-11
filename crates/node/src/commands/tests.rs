@@ -3213,3 +3213,535 @@ mod changeset_remove_tests {
         }
     }
 }
+
+// ============================================================================
+// Changeset History Tests
+// ============================================================================
+
+/// Tests for the changeset history command implementation.
+///
+/// This module covers:
+/// - SharedBuffer functionality for output capture
+/// - Response parsing from CLI JSON output
+/// - Conversion of CLI types to NAPI types
+/// - Parameter validation
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod changeset_history_tests {
+    use std::collections::HashMap;
+
+    use tempfile::TempDir;
+
+    use crate::commands::changeset::{
+        CliArchivedChangesetInfo, CliChangesetHistoryResponseData, SharedBuffer,
+        convert_archived_changeset_to_napi, convert_history_params_to_args,
+        convert_to_napi_history_data, parse_changeset_history_response, validate_history_params,
+    };
+    use crate::types::changeset::ChangesetHistoryParams;
+
+    // ========================================================================
+    // SharedBuffer Tests
+    // ========================================================================
+
+    mod shared_buffer_tests {
+        use super::*;
+        use std::io::Write;
+
+        #[test]
+        fn test_shared_buffer_new() {
+            let buffer = SharedBuffer::new();
+            assert!(buffer.take_bytes().is_empty());
+        }
+
+        #[test]
+        fn test_shared_buffer_write() {
+            let mut buffer = SharedBuffer::new();
+            let _ = buffer.write(b"test data");
+            assert_eq!(buffer.take_bytes(), b"test data");
+        }
+
+        #[test]
+        fn test_shared_buffer_multiple_writes() {
+            let mut buffer = SharedBuffer::new();
+            let _ = buffer.write(b"first ");
+            let _ = buffer.write(b"second");
+            assert_eq!(buffer.take_bytes(), b"first second");
+        }
+
+        #[test]
+        fn test_shared_buffer_clone_shares_data() {
+            let mut buffer = SharedBuffer::new();
+            let clone = buffer.clone();
+            let _ = buffer.write(b"shared data");
+            // Clone should see the same data
+            assert_eq!(clone.take_bytes(), b"shared data");
+        }
+
+        #[test]
+        fn test_shared_buffer_flush() {
+            let mut buffer = SharedBuffer::new();
+            assert!(buffer.flush().is_ok());
+        }
+
+        #[test]
+        fn test_shared_buffer_take_bytes_preserves_data() {
+            let mut buffer = SharedBuffer::new();
+            let _ = buffer.write(b"preserved");
+            let first = buffer.take_bytes();
+            let second = buffer.take_bytes();
+            assert_eq!(first, second);
+        }
+    }
+
+    // ========================================================================
+    // Parse Response Tests
+    // ========================================================================
+
+    mod parse_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_changeset_history_response_success() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "success": true,
+                    "changesets": [
+                        {
+                            "branch": "feature/add-api",
+                            "bump": "minor",
+                            "packages": ["@scope/core"],
+                            "environments": ["production"],
+                            "commits": ["abc123", "def456"],
+                            "created_at": "2024-01-15T10:30:00Z",
+                            "updated_at": "2024-01-15T14:45:00Z",
+                            "versions": {"@scope/core": "2.0.0"},
+                            "git_commit": "release123",
+                            "applied_at": "2024-01-16T10:00:00Z",
+                            "applied_by": "CI"
+                        }
+                    ],
+                    "total": 1
+                }
+            }"#;
+
+            let result = parse_changeset_history_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert_eq!(data.count, 1);
+            assert_eq!(data.archived.len(), 1);
+
+            let archived = &data.archived[0];
+            assert_eq!(archived.changeset.branch, "feature/add-api");
+            assert_eq!(archived.changeset.bump, "minor");
+            assert_eq!(archived.changeset.packages, vec!["@scope/core"]);
+            assert_eq!(archived.changeset.environments, vec!["production"]);
+            assert_eq!(archived.changeset.commits, vec!["abc123", "def456"]);
+            assert_eq!(archived.release_info.released_by, "CI");
+            assert_eq!(archived.release_info.release_commit, "release123");
+            assert_eq!(archived.release_info.released_versions.len(), 1);
+            assert_eq!(archived.release_info.released_versions[0].package_name, "@scope/core");
+            assert_eq!(archived.release_info.released_versions[0].version, "2.0.0");
+        }
+
+        #[test]
+        fn test_parse_changeset_history_response_empty_list() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "success": true,
+                    "changesets": [],
+                    "total": 0
+                }
+            }"#;
+
+            let result = parse_changeset_history_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert_eq!(data.count, 0);
+            assert!(data.archived.is_empty());
+        }
+
+        #[test]
+        fn test_parse_changeset_history_response_multiple_items() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "success": true,
+                    "changesets": [
+                        {
+                            "branch": "feature/first",
+                            "bump": "major",
+                            "packages": ["@scope/pkg1"],
+                            "environments": [],
+                            "commits": ["abc"],
+                            "created_at": "2024-01-01T00:00:00Z",
+                            "updated_at": "2024-01-01T00:00:00Z",
+                            "versions": {"@scope/pkg1": "1.0.0"},
+                            "git_commit": "commit1",
+                            "applied_at": "2024-01-02T00:00:00Z",
+                            "applied_by": "user1"
+                        },
+                        {
+                            "branch": "feature/second",
+                            "bump": "patch",
+                            "packages": ["@scope/pkg2"],
+                            "environments": ["staging"],
+                            "commits": ["def"],
+                            "created_at": "2024-02-01T00:00:00Z",
+                            "updated_at": "2024-02-01T00:00:00Z",
+                            "versions": {"@scope/pkg2": "1.0.1"},
+                            "git_commit": "commit2",
+                            "applied_at": "2024-02-02T00:00:00Z",
+                            "applied_by": "user2"
+                        }
+                    ],
+                    "total": 2
+                }
+            }"#;
+
+            let result = parse_changeset_history_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert_eq!(data.count, 2);
+            assert_eq!(data.archived.len(), 2);
+
+            assert_eq!(data.archived[0].changeset.branch, "feature/first");
+            assert_eq!(data.archived[1].changeset.branch, "feature/second");
+        }
+
+        #[test]
+        fn test_parse_changeset_history_response_cli_error() {
+            let json = r#"{"success": false, "error": "Workspace not initialized"}"#;
+            let result = parse_changeset_history_response(json.as_bytes());
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Workspace not initialized"));
+        }
+
+        #[test]
+        fn test_parse_changeset_history_response_empty() {
+            let result = parse_changeset_history_response(b"");
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("empty output"));
+        }
+
+        #[test]
+        fn test_parse_changeset_history_response_whitespace_only() {
+            let result = parse_changeset_history_response(b"   \n\t  ");
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("empty output"));
+        }
+
+        #[test]
+        fn test_parse_changeset_history_response_invalid_json() {
+            let result = parse_changeset_history_response(b"not json");
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("Failed to parse"));
+        }
+
+        #[test]
+        fn test_parse_changeset_history_response_invalid_utf8() {
+            let invalid_utf8 = vec![0xFF, 0xFE, 0x00, 0x01];
+            let result = parse_changeset_history_response(&invalid_utf8);
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("Invalid UTF-8"));
+        }
+
+        #[test]
+        fn test_parse_changeset_history_response_success_no_data() {
+            let json = r#"{"success": true}"#;
+            let result = parse_changeset_history_response(json.as_bytes());
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("success but no data"));
+        }
+
+        #[test]
+        fn test_parse_changeset_history_response_cli_error_no_message() {
+            let json = r#"{"success": false}"#;
+            let result = parse_changeset_history_response(json.as_bytes());
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("Unknown CLI error"));
+        }
+    }
+
+    // ========================================================================
+    // Conversion Tests
+    // ========================================================================
+
+    mod conversion_tests {
+        use super::*;
+
+        #[test]
+        fn test_convert_archived_changeset_to_napi() {
+            let mut versions = HashMap::new();
+            versions.insert("@scope/core".to_string(), "2.0.0".to_string());
+            versions.insert("@scope/utils".to_string(), "1.5.0".to_string());
+
+            let cli = CliArchivedChangesetInfo {
+                branch: "feature/add-api".to_string(),
+                bump: "minor".to_string(),
+                packages: vec!["@scope/core".to_string(), "@scope/utils".to_string()],
+                environments: vec!["production".to_string()],
+                commits: vec!["abc123".to_string()],
+                created_at: "2024-01-15T10:30:00Z".to_string(),
+                updated_at: "2024-01-15T14:45:00Z".to_string(),
+                versions,
+                git_commit: "release123".to_string(),
+                applied_at: "2024-01-16T10:00:00Z".to_string(),
+                applied_by: "CI".to_string(),
+            };
+
+            let result = convert_archived_changeset_to_napi(cli);
+
+            // Verify changeset details
+            assert_eq!(result.changeset.id, "feature/add-api");
+            assert_eq!(result.changeset.branch, "feature/add-api");
+            assert_eq!(result.changeset.bump, "minor");
+            assert_eq!(result.changeset.packages, vec!["@scope/core", "@scope/utils"]);
+            assert_eq!(result.changeset.environments, vec!["production"]);
+            assert_eq!(result.changeset.commits, vec!["abc123"]);
+            assert_eq!(result.changeset.created_at, "2024-01-15T10:30:00Z");
+            assert_eq!(result.changeset.updated_at, "2024-01-15T14:45:00Z");
+
+            // Verify release info
+            assert_eq!(result.release_info.released_at, "2024-01-16T10:00:00Z");
+            assert_eq!(result.release_info.released_by, "CI");
+            assert_eq!(result.release_info.release_commit, "release123");
+            assert_eq!(result.release_info.released_versions.len(), 2);
+        }
+
+        #[test]
+        fn test_convert_archived_changeset_empty_fields() {
+            let cli = CliArchivedChangesetInfo {
+                branch: "empty-branch".to_string(),
+                bump: "patch".to_string(),
+                packages: vec![],
+                environments: vec![],
+                commits: vec![],
+                created_at: "2024-01-01T00:00:00Z".to_string(),
+                updated_at: "2024-01-01T00:00:00Z".to_string(),
+                versions: HashMap::new(),
+                git_commit: "commit".to_string(),
+                applied_at: "2024-01-02T00:00:00Z".to_string(),
+                applied_by: "system".to_string(),
+            };
+
+            let result = convert_archived_changeset_to_napi(cli);
+
+            assert!(result.changeset.packages.is_empty());
+            assert!(result.changeset.environments.is_empty());
+            assert!(result.changeset.commits.is_empty());
+            assert!(result.release_info.released_versions.is_empty());
+        }
+
+        #[test]
+        fn test_convert_to_napi_history_data() {
+            let cli_data = CliChangesetHistoryResponseData {
+                success: true,
+                changesets: vec![CliArchivedChangesetInfo {
+                    branch: "test-branch".to_string(),
+                    bump: "major".to_string(),
+                    packages: vec!["pkg1".to_string()],
+                    environments: vec![],
+                    commits: vec![],
+                    created_at: "2024-01-01T00:00:00Z".to_string(),
+                    updated_at: "2024-01-01T00:00:00Z".to_string(),
+                    versions: HashMap::new(),
+                    git_commit: "abc".to_string(),
+                    applied_at: "2024-01-02T00:00:00Z".to_string(),
+                    applied_by: "user".to_string(),
+                }],
+                total: 1,
+            };
+
+            let result = convert_to_napi_history_data(cli_data);
+
+            assert_eq!(result.count, 1);
+            assert_eq!(result.archived.len(), 1);
+            assert_eq!(result.archived[0].changeset.branch, "test-branch");
+        }
+
+        #[test]
+        fn test_convert_to_napi_history_data_empty() {
+            let cli_data =
+                CliChangesetHistoryResponseData { success: true, changesets: vec![], total: 0 };
+
+            let result = convert_to_napi_history_data(cli_data);
+
+            assert_eq!(result.count, 0);
+            assert!(result.archived.is_empty());
+        }
+
+        #[test]
+        fn test_convert_history_params_to_args_defaults() {
+            let params = ChangesetHistoryParams::new(".");
+            let args = convert_history_params_to_args(&params);
+
+            assert!(args.filter_package.is_none());
+            assert!(args.filter_env.is_none());
+            assert!(args.filter_bump.is_none());
+            assert!(args.since.is_none());
+            assert!(args.until.is_none());
+            assert!(args.limit.is_none());
+        }
+
+        #[test]
+        fn test_convert_history_params_to_args_all_filters() {
+            let params = ChangesetHistoryParams::new(".")
+                .with_filter_package("@scope/core")
+                .with_filter_env("production")
+                .with_filter_bump("major")
+                .with_since("2024-01-01")
+                .with_until("2024-12-31")
+                .with_limit(10);
+            let args = convert_history_params_to_args(&params);
+
+            assert_eq!(args.filter_package, Some("@scope/core".to_string()));
+            assert_eq!(args.filter_env, Some("production".to_string()));
+            assert_eq!(args.filter_bump, Some("major".to_string()));
+            assert_eq!(args.since, Some("2024-01-01".to_string()));
+            assert_eq!(args.until, Some("2024-12-31".to_string()));
+            assert_eq!(args.limit, Some(10));
+        }
+
+        #[test]
+        fn test_convert_history_params_limit_conversion() {
+            // Test u32 to usize conversion
+            let params = ChangesetHistoryParams::new(".").with_limit(100);
+            let args = convert_history_params_to_args(&params);
+            assert_eq!(args.limit, Some(100));
+        }
+    }
+
+    // ========================================================================
+    // Validation Tests
+    // ========================================================================
+
+    mod validation_tests {
+        use super::*;
+
+        #[test]
+        fn test_validate_history_params_valid_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetHistoryParams::new(temp_dir.path().to_str().unwrap());
+            let result = validate_history_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_history_params_nonexistent_path() {
+            let params = ChangesetHistoryParams::new("/nonexistent/path/xyz");
+            let result = validate_history_params(&params);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_history_params_empty_root() {
+            let params = ChangesetHistoryParams::new("");
+            let result = validate_history_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("empty"));
+        }
+
+        #[test]
+        fn test_validate_history_params_file_not_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let file_path = temp_dir.path().join("test.txt");
+            std::fs::write(&file_path, "test").unwrap();
+
+            let params = ChangesetHistoryParams::new(file_path.to_str().unwrap());
+            let result = validate_history_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("directory"));
+        }
+
+        #[test]
+        fn test_validate_history_params_valid_bump_types() {
+            let temp_dir = TempDir::new().unwrap();
+
+            for bump_type in ["major", "minor", "patch", "none"] {
+                let params = ChangesetHistoryParams::new(temp_dir.path().to_str().unwrap())
+                    .with_filter_bump(bump_type);
+                assert!(
+                    validate_history_params(&params).is_ok(),
+                    "Expected {bump_type} to be valid"
+                );
+            }
+        }
+
+        #[test]
+        fn test_validate_history_params_invalid_bump_type() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetHistoryParams::new(temp_dir.path().to_str().unwrap())
+                .with_filter_bump("invalid");
+            let result = validate_history_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("invalid"));
+        }
+
+        #[test]
+        fn test_validate_history_params_with_all_filters() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ChangesetHistoryParams::new(temp_dir.path().to_str().unwrap())
+                .with_filter_package("@scope/core")
+                .with_filter_env("production")
+                .with_filter_bump("major")
+                .with_since("2024-01-01")
+                .with_until("2024-12-31")
+                .with_limit(50);
+            assert!(validate_history_params(&params).is_ok());
+        }
+
+        #[test]
+        fn test_validate_history_params_with_config_path() {
+            let temp_dir = TempDir::new().unwrap();
+            let mut params = ChangesetHistoryParams::new(temp_dir.path().to_str().unwrap());
+            params.config_path = Some("/path/to/config.json".to_string());
+            // Config path validation happens at execution time, not validation time
+            assert!(validate_history_params(&params).is_ok());
+        }
+
+        #[test]
+        fn test_validate_history_params_date_filters() {
+            let temp_dir = TempDir::new().unwrap();
+
+            // Only since date
+            let params = ChangesetHistoryParams::new(temp_dir.path().to_str().unwrap())
+                .with_since("2024-01-01");
+            assert!(validate_history_params(&params).is_ok());
+
+            // Only until date
+            let params = ChangesetHistoryParams::new(temp_dir.path().to_str().unwrap())
+                .with_until("2024-12-31");
+            assert!(validate_history_params(&params).is_ok());
+
+            // Both dates
+            let params = ChangesetHistoryParams::new(temp_dir.path().to_str().unwrap())
+                .with_since("2024-01-01")
+                .with_until("2024-12-31");
+            assert!(validate_history_params(&params).is_ok());
+        }
+
+        #[test]
+        fn test_validate_history_params_limit_values() {
+            let temp_dir = TempDir::new().unwrap();
+
+            // Zero limit is valid (means no results, which is valid)
+            let params =
+                ChangesetHistoryParams::new(temp_dir.path().to_str().unwrap()).with_limit(0);
+            assert!(validate_history_params(&params).is_ok());
+
+            // Large limit is valid
+            let params =
+                ChangesetHistoryParams::new(temp_dir.path().to_str().unwrap()).with_limit(1000);
+            assert!(validate_history_params(&params).is_ok());
+        }
+    }
+}
