@@ -16,7 +16,7 @@
  * - `changesetShow()` - Show details of a specific changeset (Story 4.5)
  * - `changesetRemove()` - Remove a changeset from the workspace (Story 4.6)
  * - `changesetHistory()` - Query archived changeset history (Story 4.7)
- * - Changeset types for upcoming changeset commands (Story 4.8)
+ * - `changesetCheck()` - Check if a changeset exists for a branch (Story 4.8)
  *
  * ## How
  *
@@ -36,9 +36,9 @@
  */
 
 // Re-export all functions from bindings
-import { changesetAdd, changesetHistory, changesetList, changesetRemove, changesetShow, changesetUpdate, getVersion, init, status } from './binding'
+import { changesetAdd, changesetCheck, changesetHistory, changesetList, changesetRemove, changesetShow, changesetUpdate, getVersion, init, status } from './binding'
 
-export { changesetAdd, changesetHistory, changesetList, changesetRemove, changesetShow, changesetUpdate, getVersion, init, status }
+export { changesetAdd, changesetCheck, changesetHistory, changesetList, changesetRemove, changesetShow, changesetUpdate, getVersion, init, status }
 
 // Re-export all types from bindings
 export type {

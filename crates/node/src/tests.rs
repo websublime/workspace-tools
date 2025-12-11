@@ -2691,7 +2691,7 @@ mod changeset_api_response_tests {
 
     #[test]
     fn test_changeset_check_api_response_exists() {
-        let data = ChangesetCheckData::exists("feature/api", vec!["@scope/core".to_string()]);
+        let data = ChangesetCheckData::exists("feature/api");
         let response = ChangesetCheckApiResponse::success(data);
 
         assert!(response.success);
@@ -2699,7 +2699,6 @@ mod changeset_api_response_tests {
         let check_data = response.data.as_ref().unwrap();
         assert!(check_data.has_changeset);
         assert_eq!(check_data.branch, Some("feature/api".to_string()));
-        assert!(check_data.packages.is_some());
     }
 
     #[test]
@@ -2712,7 +2711,6 @@ mod changeset_api_response_tests {
         let check_data = response.data.as_ref().unwrap();
         assert!(!check_data.has_changeset);
         assert!(check_data.branch.is_none());
-        assert!(check_data.packages.is_none());
     }
 
     #[test]
@@ -3336,12 +3334,10 @@ mod changeset_data_tests {
 
     #[test]
     fn test_changeset_check_data_exists() {
-        let data = ChangesetCheckData::exists("feature/api", vec!["@scope/core".to_string()]);
+        let data = ChangesetCheckData::exists("feature/api");
 
         assert!(data.has_changeset);
         assert_eq!(data.branch, Some("feature/api".to_string()));
-        assert!(data.packages.is_some());
-        assert_eq!(data.packages.as_ref().unwrap().len(), 1);
     }
 
     #[test]
@@ -3350,6 +3346,5 @@ mod changeset_data_tests {
 
         assert!(!data.has_changeset);
         assert!(data.branch.is_none());
-        assert!(data.packages.is_none());
     }
 }
