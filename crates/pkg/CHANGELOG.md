@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.21 - 2025-12-12
+
+### Features
+
+#### WOR-TSK-196
+
+- Implement bump integration tests and fix unified prerelease resolution
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.20 - 2025-12-10
 
 ### Documentation
