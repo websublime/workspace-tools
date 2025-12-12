@@ -260,3 +260,13 @@ check_changelog = true
 # Enforce version consistency across the monorepo
 fail_on_inconsistency = true
 warn_on_inconsistency = true
+
+[package_tools.execute]
+# Longer timeout for monorepo builds (10 minutes)
+timeout_secs = 600
+
+# Per-package timeout (3 minutes per package)
+per_package_timeout_secs = 180
+
+# Higher parallelism for monorepo with many packages
+max_parallel = 16

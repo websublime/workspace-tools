@@ -257,3 +257,16 @@ fail_on_inconsistency = false
 
 # Warn about version inconsistencies
 warn_on_inconsistency = true
+
+[package_tools.execute]
+# Default timeout for execute commands in seconds
+# A value of 0 disables the global timeout (not recommended for CI)
+timeout_secs = 300
+
+# Timeout per individual package in seconds
+# A value of 0 disables per-package timeout
+per_package_timeout_secs = 60
+
+# Maximum number of parallel executions
+# Must be at least 1
+max_parallel = 8

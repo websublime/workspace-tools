@@ -99,6 +99,7 @@ The library provides comprehensive configuration for all aspects of package mana
 - **Changelog**: Format selection, commit parsing, link generation
 - **Git**: Commit message templates, breaking change warnings
 - **Audit**: Health checks, dependency analysis, version consistency
+- **Execute**: Command execution timeouts and parallelism settings
 
 See the [Configuration Guide](docs/guides/configuration.md) for detailed documentation.
 

@@ -128,6 +128,7 @@ pub struct PackageToolsConfig {
     pub changelog: ChangelogConfig,
     pub audit: AuditConfig,
     pub git: GitConfig,
+    pub execute: ExecuteConfig,
 }
 ```
 
@@ -139,6 +140,7 @@ pub struct PackageToolsConfig {
 - `changelog`: Changelog generation configuration
 - `audit`: Audit and health check configuration
 - `git`: Git integration configuration
+- `execute`: Command execution timeout and parallelism configuration
 
 **Implements:**
 - `Default`: Provides sensible defaults
@@ -346,6 +348,35 @@ pub struct GitConfig {
 **Fields:**
 - `branch_base`: Base branch for comparisons
 - `detect_affected_packages`: Auto-detect affected packages from Git
+
+### ExecuteConfig
+
+Configuration for command execution operations.
+
+```rust
+pub struct ExecuteConfig {
+    pub timeout_secs: u64,
+    pub per_package_timeout_secs: u64,
+    pub max_parallel: usize,
+}
+```
+
+**Fields:**
+- `timeout_secs`: Default timeout for execute commands in seconds. A value of `0` means no global timeout. (default: `300`)
+- `per_package_timeout_secs`: Timeout per individual package in seconds. A value of `0` means no per-package timeout. (default: `60`)
+- `max_parallel`: Maximum number of parallel executions. Must be at least `1`. (default: `8`)
+
+**TOML Representation:**
+```toml
+[package_tools.execute]
+timeout_secs = 300
+per_package_timeout_secs = 60
+max_parallel = 8
+```
+
+**Validation Rules:**
+- `max_parallel` must be at least 1
+- `timeout_secs` and `per_package_timeout_secs` can be 0 (meaning no timeout)
 
 ### Configuration Parsing
 
