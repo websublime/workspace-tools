@@ -65,6 +65,7 @@ pub fn validate_config(config: &PackageToolsConfig) -> ConfigResult<()> {
     validate_changelog_config(config)?;
     validate_git_config(config)?;
     validate_audit_config(config)?;
+    validate_execute_config(config)?;
 
     Ok(())
 }
@@ -452,6 +453,33 @@ pub fn validate_url_format(url: &str, field_name: &str) -> ConfigResult<()> {
             field_name
         )));
     }
+
+    Ok(())
+}
+
+/// Validates execute configuration.
+///
+/// This function validates the execute configuration settings, ensuring that
+/// timeout and parallelism values are within acceptable ranges.
+///
+/// # Note
+///
+/// - `timeout_secs` of 0 means "no timeout" and is valid
+/// - `per_package_timeout_secs` of 0 means "no per-package timeout" and is valid
+/// - `max_parallel` must be at least 1
+fn validate_execute_config(config: &PackageToolsConfig) -> ConfigResult<()> {
+    let execute = &config.execute;
+
+    // max_parallel must be at least 1 - basic validation already checks this,
+    // but we include it here for completeness and to provide a more detailed message
+    if execute.max_parallel == 0 {
+        return Err(ConfigError::validation(
+            "execute.max_parallel: Must be at least 1. Cannot execute commands with zero parallelism.",
+        ));
+    }
+
+    // Note: timeout_secs and per_package_timeout_secs can be 0 (meaning no timeout)
+    // This is a valid configuration choice, especially for long-running build tasks
 
     Ok(())
 }
