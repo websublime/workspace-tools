@@ -2120,7 +2120,7 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "sublime_cli_tools"
-version = "0.0.30"
+version = "0.0.31"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2168,7 +2168,7 @@ dependencies = [
 
 [[package]]
 name = "sublime_pkg_tools"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "async-trait",
  "base64 0.21.7",
