@@ -27,6 +27,10 @@
  * - `BumpSnapshotParams`, `BumpSnapshotData`, `BumpSnapshotApiResponse`
  * - `PackageVersionInfo`, `SnapshotVersionInfo`, `DependencyUpdateInfo`, `BumpSummaryInfo`
  *
+ * Execute types (Story 6.2):
+ * - `ExecuteParams`, `ExecuteData`, `ExecuteApiResponse`
+ * - `PackageExecutionResult`, `ExecuteSummary`
+ *
  * ## How
  *
  * The native bindings are compiled from Rust using napi-rs and exposed through
@@ -45,9 +49,37 @@
  */
 
 // Re-export all functions from bindings
-import { bumpApply, bumpPreview, bumpSnapshot, changesetAdd, changesetCheck, changesetHistory, changesetList, changesetRemove, changesetShow, changesetUpdate, getVersion, init, status } from './binding'
+import {
+  bumpApply,
+  bumpPreview,
+  bumpSnapshot,
+  changesetAdd,
+  changesetCheck,
+  changesetHistory,
+  changesetList,
+  changesetRemove,
+  changesetShow,
+  changesetUpdate,
+  getVersion,
+  init,
+  status,
+} from './binding'
 
-export { bumpApply, bumpPreview, bumpSnapshot, changesetAdd, changesetCheck, changesetHistory, changesetList, changesetRemove, changesetShow, changesetUpdate, getVersion, init, status }
+export {
+  bumpApply,
+  bumpPreview,
+  bumpSnapshot,
+  changesetAdd,
+  changesetCheck,
+  changesetHistory,
+  changesetList,
+  changesetRemove,
+  changesetShow,
+  changesetUpdate,
+  getVersion,
+  init,
+  status,
+}
 
 // Re-export all types from bindings
 export type {
@@ -128,4 +160,18 @@ export type {
   SnapshotVersionInfo,
   DependencyUpdateInfo,
   BumpSummaryInfo,
+
+  // Execute command types (Story 6.2)
+  // Input parameters
+  ExecuteParams,
+
+  // Response data
+  ExecuteData,
+
+  // API response
+  ExecuteApiResponse,
+
+  // Supporting types
+  PackageExecutionResult,
+  ExecuteSummary,
 } from './binding'

@@ -3102,6 +3102,407 @@ export interface ErrorInfo {
 }
 
 /**
+ * API response for the execute command.
+ *
+ * This is a concrete (non-generic) response type specifically for the execute
+ * command. It uses `#[napi(object)]` to enable automatic conversion to
+ * JavaScript objects.
+ *
+ * napi-rs cannot use generic types with `#[napi(object)]`, so each command
+ * that returns structured data needs its own concrete response type.
+ *
+ * # Fields
+ *
+ * - `success`: Whether the operation succeeded
+ * - `data`: The execute data (present when success is true)
+ * - `error`: Error information (present when success is false)
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ExecuteApiResponse {
+ *   success: boolean;
+ *   data?: ExecuteData;
+ *   error?: ErrorInfo;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const result = await execute({ root: '.', cmd: 'npm:test' });
+ *
+ * if (result.success) {
+ *   // result.data is ExecuteData
+ *   console.log(`${result.data.summary.succeeded}/${result.data.summary.total} succeeded`);
+ *   for (const pkg of result.data.results) {
+ *     const icon = pkg.success ? '✓' : '✗';
+ *     console.log(`${icon} ${pkg.package}`);
+ *   }
+ * } else {
+ *   // result.error is ErrorInfo
+ *   console.error(`[${result.error.code}] ${result.error.message}`);
+ * }
+ * ```
+ */
+export interface ExecuteApiResponse {
+  /**
+   * Whether the operation succeeded.
+   *
+   * - `true`: Command execution completed, `data` field will be present
+   * - `false`: Operation failed, `error` field will be present
+   *
+   * Note: This indicates whether the execute operation itself succeeded,
+   * not whether all package commands succeeded. Check `data.summary.failed`
+   * to determine if any package commands failed.
+   */
+  success: boolean
+  /**
+   * The execute data (only present when `success` is `true`).
+   *
+   * Contains execution results for each package and aggregate summary.
+   */
+  data?: ExecuteData | undefined
+  /**
+   * Error information (only present when `success` is `false`).
+   *
+   * Contains structured error information with a Node.js-style error code,
+   * message, optional context, and error kind.
+   */
+  error?: ErrorInfo | undefined
+}
+
+/**
+ * Execute command response data.
+ *
+ * This is the main response structure returned by the execute command,
+ * containing the executed command, results for each package, and
+ * aggregate summary statistics.
+ *
+ * # Fields
+ *
+ * - `command`: The command that was executed
+ * - `results`: Results for each package
+ * - `summary`: Aggregate execution summary
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ExecuteData {
+ *   command: string;
+ *   results: PackageExecutionResult[];
+ *   summary: ExecuteSummary;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const data: ExecuteData = {
+ *   command: 'npm:test',
+ *   results: [
+ *     { package: '@scope/core', success: true, exitCode: 0, durationMs: 1500 },
+ *     { package: '@scope/utils', success: true, exitCode: 0, durationMs: 800 }
+ *   ],
+ *   summary: {
+ *     total: 2,
+ *     succeeded: 2,
+ *     failed: 0,
+ *     totalDurationMs: 2300
+ *   }
+ * };
+ *
+ * // Process results
+ * for (const result of data.results) {
+ *   console.log(`${result.package}: ${result.success ? 'PASS' : 'FAIL'}`);
+ * }
+ * ```
+ */
+export interface ExecuteData {
+  /**
+   * Command that was executed.
+   *
+   * The original command string that was passed to execute.
+   * For npm scripts, this is the `npm:<script>` format.
+   */
+  command: string
+  /**
+   * Results for each package.
+   *
+   * Contains execution results for each package that was targeted.
+   * The order may vary for parallel execution.
+   */
+  results: Array<PackageExecutionResult>
+  /**
+   * Execution summary.
+   *
+   * Aggregate statistics about the execution across all packages.
+   */
+  summary: ExecuteSummary
+}
+
+/**
+ * Input parameters for the execute command.
+ *
+ * This structure defines the parameters for running commands across workspace
+ * packages. It supports filtering by package names or affected packages,
+ * parallel execution, and configurable timeouts.
+ *
+ * # Fields
+ *
+ * - `root`: The workspace root directory path (required)
+ * - `cmd`: The command to execute (required)
+ * - `filter_package`: Filter by specific package names
+ * - `affected`: Execute only on affected packages
+ * - `since`: Git reference for affected detection start
+ * - `until`: Git reference for affected detection end
+ * - `branch`: Base branch for affected comparison
+ * - `parallel`: Run commands in parallel
+ * - `args`: Additional arguments to pass to the command
+ * - `timeout_secs`: Global timeout in seconds
+ * - `per_package_timeout_secs`: Per-package timeout in seconds
+ *
+ * # Mutual Exclusion
+ *
+ * `filter_package` and `affected` are mutually exclusive. Only one can be
+ * specified at a time. Validation should ensure this constraint is enforced.
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ExecuteParams {
+ *   root: string;
+ *   cmd: string;
+ *   filterPackage?: string[];
+ *   affected?: boolean;
+ *   since?: string;
+ *   until?: string;
+ *   branch?: string;
+ *   parallel?: boolean;
+ *   args?: string[];
+ *   timeoutSecs?: number;
+ *   perPackageTimeoutSecs?: number;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * // Run tests on affected packages
+ * const params: ExecuteParams = {
+ *   root: '.',
+ *   cmd: 'npm:test',
+ *   affected: true,
+ *   branch: 'main',
+ *   parallel: true
+ * };
+ *
+ * // Run build on specific packages with timeout
+ * const buildParams: ExecuteParams = {
+ *   root: '/path/to/workspace',
+ *   cmd: 'npm:build',
+ *   filterPackage: ['@scope/core', '@scope/utils'],
+ *   timeoutSecs: 600,
+ *   perPackageTimeoutSecs: 120
+ * };
+ *
+ * // Run system command with extra arguments
+ * const systemParams: ExecuteParams = {
+ *   root: '.',
+ *   cmd: 'echo',
+ *   args: ['Hello', 'World']
+ * };
+ * ```
+ */
+export interface ExecuteParams {
+  /**
+   * Workspace root directory path.
+   *
+   * This is the absolute or relative path to the root of the workspace.
+   * For monorepos, this should point to the root where the package manager
+   * configuration is located.
+   */
+  root: string
+  /**
+   * Command to execute.
+   *
+   * Supports two formats:
+   * - `npm:<script>`: Runs an npm script (e.g., `npm:lint`, `npm:build`)
+   * - Plain command: Runs a system command (e.g., `ls -la`, `node index.js`)
+   *
+   * For npm scripts, the appropriate package manager (npm, yarn, pnpm, bun)
+   * is automatically detected and used.
+   */
+  cmd: string
+  /**
+   * Filter packages to run command on.
+   *
+   * When provided, only executes the command in the specified packages.
+   * Package names should match exactly (e.g., `@scope/package`).
+   *
+   * Mutually exclusive with `affected`.
+   */
+  filterPackage?: string[] | undefined
+  /**
+   * Execute only on packages affected by changes.
+   *
+   * When `true`, automatically detects packages with changes and runs
+   * commands only on them. By default, analyzes working directory changes
+   * (staged + unstaged).
+   *
+   * Use `since`/`until` for commit range analysis, or `branch` for
+   * branch comparison.
+   *
+   * Mutually exclusive with `filter_package`.
+   */
+  affected?: boolean | undefined
+  /**
+   * Since commit/branch/tag for affected detection.
+   *
+   * Used with `affected: true` to analyze changes since this Git reference.
+   * If not specified with `affected`, analyzes working directory changes.
+   *
+   * Example: `"HEAD~5"`, `"v1.0.0"`, `"main"`
+   */
+  since?: string | undefined
+  /**
+   * Until commit/branch/tag for affected detection.
+   *
+   * Used with `affected: true` to analyze changes until this Git reference.
+   * Defaults to `HEAD` when `since` is specified.
+   *
+   * Example: `"HEAD"`, `"v2.0.0"`
+   */
+  until?: string | undefined
+  /**
+   * Compare against branch for affected detection.
+   *
+   * Used with `affected: true` to compare current branch against the
+   * target branch. Detects packages changed between current branch and
+   * the specified branch.
+   *
+   * Example: `"main"`, `"develop"`
+   */
+  branch?: string | undefined
+  /**
+   * Run commands in parallel across packages.
+   *
+   * When `true`, all package commands run concurrently. By default,
+   * commands run sequentially.
+   *
+   * Note: Parallel execution may interleave output from different packages.
+   */
+  parallel?: boolean | undefined
+  /**
+   * Additional arguments passed to the command.
+   *
+   * These arguments are appended to the command after the base command
+   * and any npm script arguments.
+   *
+   * Example: `["--coverage", "--verbose"]`
+   */
+  args?: string[] | undefined
+  /**
+   * Timeout for the entire execute operation in seconds.
+   *
+   * This is the global timeout for executing commands across all packages.
+   * A value of `0` is invalid; use `None` to indicate no timeout.
+   *
+   * If not provided, the default from the configuration is used (typically
+   * 300 seconds / 5 minutes).
+   *
+   * Note: This parameter overrides the configuration value when provided.
+   */
+  timeoutSecs?: number | undefined
+  /**
+   * Timeout per package execution in seconds.
+   *
+   * This is the timeout for executing the command in a single package.
+   * A value of `0` is invalid; use `None` to indicate no per-package timeout.
+   *
+   * If not provided, the default from the configuration is used (typically
+   * 60 seconds / 1 minute).
+   *
+   * Note: This parameter overrides the configuration value when provided.
+   */
+  perPackageTimeoutSecs?: number | undefined
+}
+
+/**
+ * Execution summary for all packages.
+ *
+ * Provides aggregate statistics about command execution across all
+ * targeted packages, including counts and total duration.
+ *
+ * # Fields
+ *
+ * - `total`: Total number of packages
+ * - `succeeded`: Number of successful executions
+ * - `failed`: Number of failed executions
+ * - `total_duration_ms`: Total execution duration in milliseconds
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ExecuteSummary {
+ *   total: number;
+ *   succeeded: number;
+ *   failed: number;
+ *   totalDurationMs: number;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const summary: ExecuteSummary = {
+ *   total: 5,
+ *   succeeded: 4,
+ *   failed: 1,
+ *   totalDurationMs: 15000
+ * };
+ *
+ * // Check if all succeeded
+ * if (summary.succeeded === summary.total) {
+ *   console.log('All packages passed!');
+ * }
+ * ```
+ */
+export interface ExecuteSummary {
+  /**
+   * Total number of packages processed.
+   *
+   * This is the count of all packages that were targeted for execution,
+   * regardless of success or failure.
+   */
+  total: number
+  /**
+   * Number of successful executions.
+   *
+   * Count of packages where the command exited with code 0.
+   */
+  succeeded: number
+  /**
+   * Number of failed executions.
+   *
+   * Count of packages where the command exited with non-zero code
+   * or encountered an error.
+   */
+  failed: number
+  /**
+   * Total execution duration in milliseconds.
+   *
+   * For sequential execution, this is the sum of all package durations.
+   * For parallel execution, this is the wall-clock time from start to finish.
+   *
+   * Note: Uses `f64` for JavaScript compatibility. JavaScript numbers are
+   * internally f64, which can represent integers up to 2^53 without precision
+   * loss, more than sufficient for duration values.
+   */
+  totalDurationMs: number
+}
+
+/**
  * Returns the version of the crate.
  *
  * This function is exposed to Node.js and returns the current version
@@ -3539,6 +3940,96 @@ export interface InitParams {
    * ```
    */
   force?: boolean | undefined
+}
+
+/**
+ * Result for a single package execution.
+ *
+ * Contains the outcome of executing a command in one package, including
+ * success status, exit code, duration, and any error message.
+ *
+ * # Fields
+ *
+ * - `package`: The package name
+ * - `success`: Whether execution succeeded
+ * - `exit_code`: Exit code from the command
+ * - `duration_ms`: Execution duration in milliseconds
+ * - `error`: Error message if execution failed
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface PackageExecutionResult {
+ *   package: string;
+ *   success: boolean;
+ *   exitCode: number;
+ *   durationMs: number;
+ *   error?: string;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * // Successful execution
+ * const success: PackageExecutionResult = {
+ *   package: '@scope/core',
+ *   success: true,
+ *   exitCode: 0,
+ *   durationMs: 1500
+ * };
+ *
+ * // Failed execution
+ * const failed: PackageExecutionResult = {
+ *   package: '@scope/utils',
+ *   success: false,
+ *   exitCode: 1,
+ *   durationMs: 500,
+ *   error: 'Test suite failed with 3 failing tests'
+ * };
+ * ```
+ */
+export interface PackageExecutionResult {
+  /**
+   * Package name.
+   *
+   * The name of the package where the command was executed.
+   * This matches the name in the package's `package.json`.
+   */
+  package: string
+  /**
+   * Whether execution succeeded.
+   *
+   * - `true`: Command exited with code 0
+   * - `false`: Command exited with non-zero code or errored
+   */
+  success: boolean
+  /**
+   * Exit code from the command.
+   *
+   * The process exit code returned by the command.
+   * Typically `0` for success, non-zero for failure.
+   * May be `-1` if the process was terminated or couldn't be started.
+   */
+  exitCode: number
+  /**
+   * Execution duration in milliseconds.
+   *
+   * The time taken to execute the command in this package,
+   * measured from start to completion.
+   *
+   * Note: Uses `f64` for JavaScript compatibility. JavaScript numbers are
+   * internally f64, which can represent integers up to 2^53 without precision
+   * loss, more than sufficient for duration values.
+   */
+  durationMs: number
+  /**
+   * Error message if execution failed.
+   *
+   * Contains error details when `success` is `false`.
+   * May include stderr output or error descriptions.
+   */
+  error?: string | undefined
 }
 
 /**
