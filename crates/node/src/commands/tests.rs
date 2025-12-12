@@ -5501,3 +5501,670 @@ mod bump_apply_tests {
         }
     }
 }
+
+// =============================================================================
+// Bump Snapshot Tests (Story 5.4)
+// =============================================================================
+
+/// Tests for the `bumpSnapshot` command.
+///
+/// These tests verify:
+/// - `SharedBuffer` functionality for capturing CLI output
+/// - JSON response parsing from CLI to NAPI types
+/// - Type conversion from CLI structures to NAPI structures
+/// - Parameter validation for snapshot format and root path
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod bump_snapshot_tests {
+    use std::io::Write;
+
+    use tempfile::TempDir;
+
+    use crate::commands::bump::{
+        CliBumpSnapshot, CliBumpSummary, CliChangesetInfo, CliPackageBumpInfo, SharedBuffer,
+        convert_snapshot_params_to_args, convert_to_napi_snapshot, parse_snapshot_response,
+        validate_snapshot_params,
+    };
+    use crate::types::bump::BumpSnapshotParams;
+
+    // -------------------------------------------------------------------------
+    // SharedBuffer Tests (reused pattern, validated for snapshot context)
+    // -------------------------------------------------------------------------
+
+    mod shared_buffer_tests {
+        use super::*;
+
+        #[test]
+        fn test_shared_buffer_new() {
+            let buffer = SharedBuffer::new();
+            assert!(buffer.take_bytes().is_empty());
+        }
+
+        #[test]
+        fn test_shared_buffer_write() {
+            let mut buffer = SharedBuffer::new();
+            let bytes_written = buffer.write(b"snapshot result").unwrap();
+            assert_eq!(bytes_written, 15);
+            assert_eq!(buffer.take_bytes(), b"snapshot result");
+        }
+
+        #[test]
+        fn test_shared_buffer_multiple_writes() {
+            let mut buffer = SharedBuffer::new();
+            buffer.write_all(b"snapshot ").unwrap();
+            buffer.write_all(b"versions").unwrap();
+            assert_eq!(buffer.take_bytes(), b"snapshot versions");
+        }
+
+        #[test]
+        fn test_shared_buffer_clone_shares_data() {
+            let mut buffer = SharedBuffer::new();
+            let buffer_clone = buffer.clone();
+            buffer.write_all(b"shared snapshot data").unwrap();
+
+            // Both buffers should see the same data
+            assert_eq!(buffer.take_bytes(), b"shared snapshot data");
+            assert_eq!(buffer_clone.take_bytes(), b"shared snapshot data");
+        }
+
+        #[test]
+        fn test_shared_buffer_flush() {
+            let mut buffer = SharedBuffer::new();
+            assert!(buffer.flush().is_ok());
+        }
+
+        #[test]
+        fn test_shared_buffer_take_bytes_preserves_data() {
+            let mut buffer = SharedBuffer::new();
+            buffer.write_all(b"snapshot test data").unwrap();
+
+            // Multiple takes should return same data
+            let first_take = buffer.take_bytes();
+            let second_take = buffer.take_bytes();
+            assert_eq!(first_take, second_take);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Parse Response Tests
+    // -------------------------------------------------------------------------
+
+    mod parse_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_snapshot_response_success() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "strategy": "Independent",
+                    "packages": [
+                        {
+                            "name": "@scope/core",
+                            "path": "packages/core",
+                            "currentVersion": "1.0.0",
+                            "nextVersion": "1.0.0-snapshot.abc123f",
+                            "bumpType": "Minor",
+                            "willBump": true,
+                            "reason": "Has pending changesets"
+                        },
+                        {
+                            "name": "@scope/utils",
+                            "path": "packages/utils",
+                            "currentVersion": "2.0.0",
+                            "nextVersion": "2.0.0-snapshot.abc123f",
+                            "bumpType": "Patch",
+                            "willBump": true,
+                            "reason": "Has pending changesets"
+                        }
+                    ],
+                    "changesets": [
+                        {
+                            "id": "changeset-1",
+                            "branch": "feature/test",
+                            "bumpType": "Minor",
+                            "packages": ["@scope/core"],
+                            "commitCount": 3
+                        }
+                    ],
+                    "summary": {
+                        "totalPackages": 2,
+                        "packagesToBump": 2,
+                        "packagesUnchanged": 0,
+                        "totalChangesets": 1,
+                        "hasCircularDependencies": false
+                    }
+                }
+            }"#;
+
+            let format = "{version}-snapshot.{short_commit}".to_string();
+            let result = parse_snapshot_response(json.as_bytes(), format.clone());
+            assert!(result.is_ok());
+            let data = result.unwrap();
+            assert_eq!(data.strategy, "independent");
+            assert_eq!(data.format, format);
+            assert_eq!(data.packages.len(), 2);
+
+            // Verify first package
+            let pkg1 = &data.packages[0];
+            assert_eq!(pkg1.name, "@scope/core");
+            assert_eq!(pkg1.path, "packages/core");
+            assert_eq!(pkg1.original_version, "1.0.0");
+            assert_eq!(pkg1.snapshot_version, "1.0.0-snapshot.abc123f");
+
+            // Verify second package
+            let pkg2 = &data.packages[1];
+            assert_eq!(pkg2.name, "@scope/utils");
+            assert_eq!(pkg2.original_version, "2.0.0");
+            assert_eq!(pkg2.snapshot_version, "2.0.0-snapshot.abc123f");
+        }
+
+        #[test]
+        fn test_parse_snapshot_response_filters_non_bumping_packages() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "strategy": "Independent",
+                    "packages": [
+                        {
+                            "name": "@scope/core",
+                            "path": "packages/core",
+                            "currentVersion": "1.0.0",
+                            "nextVersion": "1.0.0-snapshot.abc123f",
+                            "bumpType": "Minor",
+                            "willBump": true,
+                            "reason": "Has pending changesets"
+                        },
+                        {
+                            "name": "@scope/unchanged",
+                            "path": "packages/unchanged",
+                            "currentVersion": "1.0.0",
+                            "nextVersion": "1.0.0",
+                            "bumpType": "None",
+                            "willBump": false,
+                            "reason": "No pending changesets"
+                        }
+                    ],
+                    "changesets": [],
+                    "summary": {
+                        "totalPackages": 2,
+                        "packagesToBump": 1,
+                        "packagesUnchanged": 1,
+                        "totalChangesets": 0,
+                        "hasCircularDependencies": false
+                    }
+                }
+            }"#;
+
+            let format = "{version}-snapshot.{short_commit}".to_string();
+            let result = parse_snapshot_response(json.as_bytes(), format);
+            assert!(result.is_ok());
+            let data = result.unwrap();
+            // Only the package with willBump = true should be included
+            assert_eq!(data.packages.len(), 1);
+            assert_eq!(data.packages[0].name, "@scope/core");
+        }
+
+        #[test]
+        fn test_parse_snapshot_response_empty_packages() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "strategy": "Unified",
+                    "packages": [],
+                    "changesets": [],
+                    "summary": {
+                        "totalPackages": 0,
+                        "packagesToBump": 0,
+                        "packagesUnchanged": 0,
+                        "totalChangesets": 0,
+                        "hasCircularDependencies": false
+                    }
+                }
+            }"#;
+
+            let format = "{version}-dev.{timestamp}".to_string();
+            let result = parse_snapshot_response(json.as_bytes(), format.clone());
+            assert!(result.is_ok());
+            let data = result.unwrap();
+            assert_eq!(data.strategy, "unified");
+            assert_eq!(data.format, format);
+            assert!(data.packages.is_empty());
+        }
+
+        #[test]
+        fn test_parse_snapshot_response_cli_error() {
+            let json = r#"{
+                "success": false,
+                "error": "No Git repository found"
+            }"#;
+
+            let result = parse_snapshot_response(json.as_bytes(), "{version}-snapshot".to_string());
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(err.message.contains("No Git repository found"));
+        }
+
+        #[test]
+        fn test_parse_snapshot_response_empty() {
+            let result = parse_snapshot_response(b"", "{version}".to_string());
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_parse_snapshot_response_whitespace_only() {
+            let result = parse_snapshot_response(b"   \n\t  ", "{version}".to_string());
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_parse_snapshot_response_invalid_json() {
+            let result = parse_snapshot_response(b"not valid json", "{version}".to_string());
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_parse_snapshot_response_invalid_utf8() {
+            let invalid_utf8 = vec![0xff, 0xfe, 0x00, 0x01];
+            let result = parse_snapshot_response(&invalid_utf8, "{version}".to_string());
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_parse_snapshot_response_success_no_data() {
+            let json = r#"{"success": true}"#;
+            let result = parse_snapshot_response(json.as_bytes(), "{version}".to_string());
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_parse_snapshot_response_cli_error_no_message() {
+            let json = r#"{"success": false}"#;
+            let result = parse_snapshot_response(json.as_bytes(), "{version}".to_string());
+            assert!(result.is_err());
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Conversion Tests
+    // -------------------------------------------------------------------------
+
+    mod conversion_tests {
+        use super::*;
+
+        fn create_test_cli_snapshot() -> CliBumpSnapshot {
+            CliBumpSnapshot {
+                strategy: "Independent".to_string(),
+                packages: vec![
+                    CliPackageBumpInfo {
+                        name: "@scope/core".to_string(),
+                        path: "packages/core".to_string(),
+                        current_version: "1.0.0".to_string(),
+                        next_version: "1.0.0-snapshot.abc123f".to_string(),
+                        bump_type: "Minor".to_string(),
+                        will_bump: true,
+                        reason: "Has pending changesets".to_string(),
+                    },
+                    CliPackageBumpInfo {
+                        name: "@scope/utils".to_string(),
+                        path: "packages/utils".to_string(),
+                        current_version: "2.0.0".to_string(),
+                        next_version: "2.0.0-snapshot.abc123f".to_string(),
+                        bump_type: "Patch".to_string(),
+                        will_bump: true,
+                        reason: "Has pending changesets".to_string(),
+                    },
+                ],
+                changesets: vec![CliChangesetInfo {
+                    id: "changeset-1".to_string(),
+                    branch: "feature/test".to_string(),
+                    bump_type: "Minor".to_string(),
+                    packages: vec!["@scope/core".to_string()],
+                    commit_count: 3,
+                }],
+                summary: CliBumpSummary {
+                    total_packages: 2,
+                    packages_to_bump: 2,
+                    packages_unchanged: 0,
+                    total_changesets: 1,
+                    has_circular_dependencies: false,
+                },
+            }
+        }
+
+        #[test]
+        fn test_convert_to_napi_snapshot_full() {
+            let cli_data = create_test_cli_snapshot();
+            let format = "{version}-snapshot.{short_commit}".to_string();
+            let napi_data = convert_to_napi_snapshot(cli_data, format.clone());
+
+            assert_eq!(napi_data.strategy, "independent");
+            assert_eq!(napi_data.format, format);
+            assert_eq!(napi_data.packages.len(), 2);
+
+            // Verify conversion mapping
+            let pkg1 = &napi_data.packages[0];
+            assert_eq!(pkg1.name, "@scope/core");
+            assert_eq!(pkg1.path, "packages/core");
+            assert_eq!(pkg1.original_version, "1.0.0");
+            assert_eq!(pkg1.snapshot_version, "1.0.0-snapshot.abc123f");
+
+            let pkg2 = &napi_data.packages[1];
+            assert_eq!(pkg2.name, "@scope/utils");
+            assert_eq!(pkg2.path, "packages/utils");
+            assert_eq!(pkg2.original_version, "2.0.0");
+            assert_eq!(pkg2.snapshot_version, "2.0.0-snapshot.abc123f");
+        }
+
+        #[test]
+        fn test_convert_to_napi_snapshot_filters_non_bumping() {
+            let cli_data = CliBumpSnapshot {
+                strategy: "Unified".to_string(),
+                packages: vec![
+                    CliPackageBumpInfo {
+                        name: "@scope/bumped".to_string(),
+                        path: "packages/bumped".to_string(),
+                        current_version: "1.0.0".to_string(),
+                        next_version: "1.0.0-dev.123".to_string(),
+                        bump_type: "Minor".to_string(),
+                        will_bump: true,
+                        reason: "Has changesets".to_string(),
+                    },
+                    CliPackageBumpInfo {
+                        name: "@scope/unchanged".to_string(),
+                        path: "packages/unchanged".to_string(),
+                        current_version: "1.0.0".to_string(),
+                        next_version: "1.0.0".to_string(),
+                        bump_type: "None".to_string(),
+                        will_bump: false,
+                        reason: "No changesets".to_string(),
+                    },
+                ],
+                changesets: vec![],
+                summary: CliBumpSummary {
+                    total_packages: 2,
+                    packages_to_bump: 1,
+                    packages_unchanged: 1,
+                    total_changesets: 0,
+                    has_circular_dependencies: false,
+                },
+            };
+
+            let format = "{version}-dev.{timestamp}".to_string();
+            let napi_data = convert_to_napi_snapshot(cli_data, format);
+
+            assert_eq!(napi_data.packages.len(), 1);
+            assert_eq!(napi_data.packages[0].name, "@scope/bumped");
+        }
+
+        #[test]
+        fn test_convert_to_napi_snapshot_empty() {
+            let cli_data = CliBumpSnapshot {
+                strategy: "Independent".to_string(),
+                packages: vec![],
+                changesets: vec![],
+                summary: CliBumpSummary {
+                    total_packages: 0,
+                    packages_to_bump: 0,
+                    packages_unchanged: 0,
+                    total_changesets: 0,
+                    has_circular_dependencies: false,
+                },
+            };
+
+            let format = "{version}-snapshot".to_string();
+            let napi_data = convert_to_napi_snapshot(cli_data, format.clone());
+
+            assert_eq!(napi_data.strategy, "independent");
+            assert_eq!(napi_data.format, format);
+            assert!(napi_data.packages.is_empty());
+        }
+
+        #[test]
+        fn test_convert_snapshot_params_to_args_defaults() {
+            let params = BumpSnapshotParams::new(".");
+            let args = convert_snapshot_params_to_args(&params);
+
+            // Snapshot mode flags
+            assert!(!args.dry_run);
+            assert!(!args.execute);
+            assert!(args.snapshot);
+            assert!(args.snapshot_format.is_none());
+
+            // No prerelease in snapshot mode
+            assert!(args.prerelease.is_none());
+
+            // No packages filter by default
+            assert!(args.packages.is_none());
+
+            // No git operations
+            assert!(!args.git_tag);
+            assert!(!args.git_push);
+            assert!(!args.git_commit);
+
+            // No changelog or archive
+            assert!(args.no_changelog);
+            assert!(args.no_archive);
+            assert!(!args.always_archive);
+
+            // Non-interactive
+            assert!(args.force);
+            assert!(!args.show_diff);
+        }
+
+        #[test]
+        fn test_convert_snapshot_params_to_args_with_format() {
+            let params =
+                BumpSnapshotParams::new(".").with_format("{version}-{branch}.{short_commit}");
+            let args = convert_snapshot_params_to_args(&params);
+
+            assert!(args.snapshot);
+            assert_eq!(args.snapshot_format, Some("{version}-{branch}.{short_commit}".to_string()));
+        }
+
+        #[test]
+        fn test_convert_snapshot_params_to_args_with_packages() {
+            let params = BumpSnapshotParams::new(".")
+                .with_packages(vec!["@scope/core".to_string(), "@scope/utils".to_string()]);
+            let args = convert_snapshot_params_to_args(&params);
+
+            assert!(args.snapshot);
+            let packages = args.packages.unwrap();
+            assert_eq!(packages.len(), 2);
+            assert!(packages.contains(&"@scope/core".to_string()));
+            assert!(packages.contains(&"@scope/utils".to_string()));
+        }
+
+        #[test]
+        fn test_convert_snapshot_params_to_args_full() {
+            let params = BumpSnapshotParams::new("/path/to/project")
+                .with_config_path("/path/to/config.json")
+                .with_packages(vec!["pkg-a".to_string()])
+                .with_format("{version}-dev.{timestamp}");
+            let args = convert_snapshot_params_to_args(&params);
+
+            assert!(args.snapshot);
+            assert_eq!(args.snapshot_format, Some("{version}-dev.{timestamp}".to_string()));
+            assert_eq!(args.packages, Some(vec!["pkg-a".to_string()]));
+
+            // Verify snapshot-specific settings
+            assert!(!args.dry_run);
+            assert!(!args.execute);
+            assert!(args.no_changelog);
+            assert!(args.no_archive);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Validation Tests
+    // -------------------------------------------------------------------------
+
+    mod validation_tests {
+        use super::*;
+
+        #[test]
+        fn test_validate_snapshot_params_valid_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpSnapshotParams::new(path_str);
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_nonexistent_path() {
+            let params = BumpSnapshotParams::new("/nonexistent/path/12345");
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_empty_root() {
+            let params = BumpSnapshotParams::new("");
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_file_not_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let file_path = temp_dir.path().join("test.txt");
+            std::fs::write(&file_path, "test").unwrap();
+            let params = BumpSnapshotParams::new(file_path.to_str().unwrap());
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_valid_format_default() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params =
+                BumpSnapshotParams::new(path_str).with_format("{version}-snapshot.{short_commit}");
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_valid_format_branch() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params =
+                BumpSnapshotParams::new(path_str).with_format("{version}-{branch}.{short_commit}");
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_valid_format_timestamp() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpSnapshotParams::new(path_str).with_format("{version}-dev.{timestamp}");
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_valid_format_commit() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpSnapshotParams::new(path_str).with_format("{version}-{commit}");
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_valid_format_version_only() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpSnapshotParams::new(path_str).with_format("{version}-snapshot");
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_valid_format_all_variables() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpSnapshotParams::new(path_str)
+                .with_format("{version}-{branch}-{short_commit}-{commit}-{timestamp}");
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_invalid_format_empty() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpSnapshotParams::new(path_str).with_format("");
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(err.message.contains("empty"));
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_invalid_format_no_variables() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpSnapshotParams::new(path_str).with_format("no-variables-here");
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(err.message.contains("must contain at least one valid variable"));
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_invalid_format_invalid_variable() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpSnapshotParams::new(path_str).with_format("{invalid}");
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_with_config_path() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpSnapshotParams::new(path_str).with_config_path("/path/to/config.json");
+            let result = validate_snapshot_params(&params);
+            // Config path is not validated for existence
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_with_packages() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpSnapshotParams::new(path_str)
+                .with_packages(vec!["@scope/core".to_string(), "@scope/utils".to_string()]);
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_returns_correct_path() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpSnapshotParams::new(path_str);
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_ok());
+            let path = result.unwrap();
+            assert_eq!(path.to_str().unwrap(), path_str);
+        }
+
+        #[test]
+        fn test_validate_snapshot_params_full_workflow() {
+            // Complete snapshot params with all options
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpSnapshotParams::new(path_str)
+                .with_config_path("repo.config.json")
+                .with_packages(vec!["@scope/core".to_string()])
+                .with_format("{version}-{branch}.{short_commit}");
+            let result = validate_snapshot_params(&params);
+            assert!(result.is_ok());
+        }
+    }
+}

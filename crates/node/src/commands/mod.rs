@@ -96,7 +96,8 @@ pub(crate) mod bump;
 pub use bump::bump_preview;
 // Story 5.3: bumpApply
 pub use bump::bump_apply;
-// TODO: will be implemented on story 5.4 (bumpSnapshot)
+// Story 5.4: bumpSnapshot
+pub use bump::bump_snapshot;
 
 // TODO: will be implemented on story 8.2-8.4 (upgrade commands)
 pub(crate) mod upgrade;

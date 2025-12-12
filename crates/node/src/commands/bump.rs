@@ -127,12 +127,15 @@ use serde::Deserialize;
 use crate::error::ErrorInfo;
 use crate::types::bump::{
     BumpApplyApiResponse, BumpApplyData, BumpApplyParams, BumpPreviewApiResponse, BumpPreviewData,
-    BumpPreviewParams, BumpSummaryInfo, PackageVersionInfo,
+    BumpPreviewParams, BumpSnapshotApiResponse, BumpSnapshotData, BumpSnapshotParams,
+    BumpSummaryInfo, PackageVersionInfo, SnapshotVersionInfo,
 };
 use crate::validation::validators;
 
 use sublime_cli_tools::cli::commands::BumpArgs;
-use sublime_cli_tools::commands::bump::{execute_bump_apply, execute_bump_preview};
+use sublime_cli_tools::commands::bump::{
+    execute_bump_apply, execute_bump_preview, execute_bump_snapshot,
+};
 use sublime_cli_tools::output::{Output, OutputFormat};
 
 // ============================================================================
@@ -538,6 +541,46 @@ pub(crate) fn convert_to_napi_apply(cli_data: CliExecuteResult) -> BumpApplyData
     }
 }
 
+/// Converts CLI bump snapshot data to NAPI-compatible `BumpSnapshotData`.
+///
+/// This function performs a conversion from the CLI's internal types to the
+/// NAPI types exposed to JavaScript. For snapshot mode, the `next_version`
+/// field contains the generated snapshot version.
+///
+/// # Arguments
+///
+/// * `cli_data` - The parsed CLI response data
+/// * `format` - The snapshot format template that was used
+///
+/// # Returns
+///
+/// A `BumpSnapshotData` instance suitable for returning to JavaScript.
+///
+/// # Conversion Details
+///
+/// - `SnapshotVersionInfo.original_version` = `PackageBumpInfo.current_version`
+/// - `SnapshotVersionInfo.snapshot_version` = `PackageBumpInfo.next_version`
+/// - Only packages where `will_bump` is true are included
+pub(crate) fn convert_to_napi_snapshot(
+    cli_data: CliBumpSnapshot,
+    format: String,
+) -> BumpSnapshotData {
+    // Convert packages that will be bumped to snapshot version info
+    let packages: Vec<SnapshotVersionInfo> = cli_data
+        .packages
+        .into_iter()
+        .filter(|p| p.will_bump)
+        .map(|p| SnapshotVersionInfo {
+            name: p.name,
+            path: p.path,
+            original_version: p.current_version,
+            snapshot_version: p.next_version,
+        })
+        .collect();
+
+    BumpSnapshotData { strategy: cli_data.strategy.to_lowercase(), packages, format }
+}
+
 /// Parses the JSON response from the CLI apply command and converts it to NAPI types.
 ///
 /// # Arguments
@@ -586,6 +629,63 @@ pub(crate) fn parse_apply_response(json_bytes: &[u8]) -> Result<BumpApplyData, E
     Ok(convert_to_napi_apply(cli_data))
 }
 
+/// Parses the JSON response from the CLI snapshot command and converts it to NAPI types.
+///
+/// The snapshot command uses the same `BumpSnapshot` response structure as preview,
+/// but the `next_version` field contains the generated snapshot version instead
+/// of the bumped version.
+///
+/// # Arguments
+///
+/// * `json_bytes` - The raw JSON bytes captured from CLI output
+/// * `format` - The snapshot format template that was used
+///
+/// # Returns
+///
+/// * `Ok(BumpSnapshotData)` - Successfully parsed and converted snapshot data
+/// * `Err(ErrorInfo)` - Parsing failed or CLI returned an error
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The JSON is malformed or cannot be parsed
+/// - The CLI returned `success: false` with an error message
+/// - The CLI returned `success: true` but `data` is missing
+pub(crate) fn parse_snapshot_response(
+    json_bytes: &[u8],
+    format: String,
+) -> Result<BumpSnapshotData, ErrorInfo> {
+    // Convert bytes to string first for better error messages
+    let json_str = std::str::from_utf8(json_bytes)
+        .map_err(|e| ErrorInfo::execution(format!("Invalid UTF-8 in CLI response: {e}")))?;
+
+    // Handle empty response
+    if json_str.trim().is_empty() {
+        return Err(ErrorInfo::execution("CLI returned empty response"));
+    }
+
+    // Parse the JSON response (same structure as preview)
+    let response: CliJsonResponse<CliBumpSnapshot> =
+        serde_json::from_str(json_str).map_err(|e| {
+            ErrorInfo::execution(format!(
+                "Failed to parse CLI JSON response: {e} (length={})",
+                json_str.len()
+            ))
+        })?;
+
+    // Check for CLI-level errors
+    if !response.success {
+        let error_message = response.error.unwrap_or_else(|| "Unknown CLI error".to_string());
+        return Err(ErrorInfo::execution(error_message));
+    }
+
+    // Extract and convert data
+    let cli_data =
+        response.data.ok_or_else(|| ErrorInfo::execution("CLI returned success but no data"))?;
+
+    Ok(convert_to_napi_snapshot(cli_data, format))
+}
+
 // ============================================================================
 // Parameter Validation
 // ============================================================================
@@ -628,6 +728,50 @@ pub(crate) fn validate_apply_params(params: &BumpApplyParams) -> Result<PathBuf,
     // Validate prerelease tag if provided
     if let Some(ref tag) = params.prerelease {
         validators::prerelease_tag(tag)?;
+    }
+
+    Ok(PathBuf::from(&params.root))
+}
+
+/// Validates bump snapshot command parameters.
+///
+/// Ensures the root path is valid and validates the snapshot format if provided.
+/// The snapshot format must contain at least one valid template variable.
+///
+/// # Arguments
+///
+/// * `params` - The snapshot parameters to validate
+///
+/// # Returns
+///
+/// * `Ok(PathBuf)` - The validated root path
+/// * `Err(ErrorInfo)` - Validation failed
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The root path does not exist or is not a directory
+/// - The snapshot format is provided but contains no valid template variables
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sublime_node_tools::commands::bump::validate_snapshot_params;
+/// use sublime_node_tools::types::bump::BumpSnapshotParams;
+///
+/// let params = BumpSnapshotParams::new("/path/to/workspace")
+///     .with_format("{version}-snapshot.{short_commit}");
+///
+/// let result = validate_snapshot_params(&params);
+/// assert!(result.is_ok());
+/// ```
+pub(crate) fn validate_snapshot_params(params: &BumpSnapshotParams) -> Result<PathBuf, ErrorInfo> {
+    // Validate root path exists and is a directory
+    validators::root(&params.root)?;
+
+    // Validate snapshot format if provided
+    if let Some(ref format) = params.format {
+        validators::snapshot_format(format)?;
     }
 
     Ok(PathBuf::from(&params.root))
@@ -716,6 +860,72 @@ pub(crate) fn convert_apply_params_to_args(params: &BumpApplyParams) -> BumpArgs
         force: params.force.unwrap_or(true),
 
         // No diff display in execute mode
+        show_diff: false,
+    }
+}
+
+/// Default snapshot format template.
+///
+/// This is used when no custom format is provided by the user or configuration.
+const DEFAULT_SNAPSHOT_FORMAT: &str = "{version}-snapshot.{short_commit}";
+
+/// Converts `BumpSnapshotParams` to CLI `BumpArgs`.
+///
+/// This function sets the appropriate flags for snapshot mode (snapshot = true)
+/// and maps the NAPI parameters to CLI arguments. Snapshot mode generates
+/// temporary pre-release versions for testing without consuming changesets.
+///
+/// # Arguments
+///
+/// * `params` - The NAPI snapshot parameters
+///
+/// # Returns
+///
+/// A `BumpArgs` struct configured for snapshot mode.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sublime_node_tools::commands::bump::convert_snapshot_params_to_args;
+/// use sublime_node_tools::types::bump::BumpSnapshotParams;
+///
+/// let params = BumpSnapshotParams::new(".")
+///     .with_format("{version}-{branch}.{short_commit}");
+///
+/// let args = convert_snapshot_params_to_args(&params);
+/// assert!(args.snapshot);
+/// assert_eq!(args.snapshot_format, Some("{version}-{branch}.{short_commit}".to_string()));
+/// ```
+pub(crate) fn convert_snapshot_params_to_args(params: &BumpSnapshotParams) -> BumpArgs {
+    BumpArgs {
+        // Snapshot mode: snapshot = true, no dry run, no execute
+        dry_run: false,
+        execute: false,
+        snapshot: true,
+        snapshot_format: params.format.clone(),
+
+        // No prerelease in snapshot mode (they are mutually exclusive)
+        prerelease: None,
+
+        // Package filter from params
+        packages: params.packages.clone(),
+
+        // No git operations in snapshot mode
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+
+        // No changelog generation in snapshot mode
+        no_changelog: true,
+
+        // Changesets are NOT archived in snapshot mode
+        no_archive: true,
+        always_archive: false,
+
+        // Skip confirmations (API is non-interactive)
+        force: true,
+
+        // No diff display in snapshot mode
         show_diff: false,
     }
 }
@@ -993,14 +1203,145 @@ pub async fn bump_apply(params: BumpApplyParams) -> BumpApplyApiResponse {
     }
 }
 
-// TODO: will be implemented on story 5.4 - bumpSnapshot
-//
-// #[napi(js_name = "bumpSnapshot")]
-// pub async fn bump_snapshot(params: BumpSnapshotParams) -> BumpSnapshotApiResponse {
-//     // Implementation will include:
-//     // 1. Validate parameters including snapshot format if provided
-//     // 2. Create BumpArgs with snapshot = true
-//     // 3. Execute CLI command and parse response
-//     // 4. Return snapshot version information
-//     todo!()
-// }
+/// Generate snapshot versions for testing.
+///
+/// Creates temporary, non-persisted versions for branch builds and preview
+/// deployments. Snapshot versions are NOT SemVer compliant and are intended
+/// for testing purposes only.
+///
+/// **Key characteristics:**
+/// - Does NOT consume or archive changesets
+/// - Does NOT create Git commits or tags
+/// - Does NOT generate changelogs
+/// - Uses format templates with variables like `{version}`, `{branch}`, `{short_commit}`
+///
+/// This function is the main entry point for Node.js applications to generate
+/// snapshot versions. It handles all the complexity of CLI invocation and response
+/// parsing internally.
+///
+/// @param params - Snapshot parameters containing:
+///   - `root`: Workspace root directory path (required)
+///   - `configPath`: Optional custom config file path
+///   - `packages`: Optional filter to specific packages
+///   - `format`: Snapshot format template (default: `{version}-snapshot.{short_commit}`)
+///
+/// @returns `Promise<ApiResponse<BumpSnapshotData>>` containing:
+///   - On success: `{ success: true, data: BumpSnapshotData }`
+///   - On failure: `{ success: false, error: ErrorInfo }`
+///
+/// @example Basic usage with default format
+/// ```typescript
+/// const result = await bumpSnapshot({ root: '/path/to/project' });
+/// if (result.success) {
+///   console.log(`Format used: ${result.data.format}`);
+///   for (const pkg of result.data.packages) {
+///     console.log(`${pkg.name}: ${pkg.originalVersion} -> ${pkg.snapshotVersion}`);
+///   }
+/// } else {
+///   console.error(`Error: ${result.error.code} - ${result.error.message}`);
+/// }
+/// ```
+///
+/// @example Custom format with branch and commit
+/// ```typescript
+/// const result = await bumpSnapshot({
+///   root: '/path/to/project',
+///   format: '{version}-{branch}.{short_commit}'
+/// });
+/// // Generates versions like: 1.2.3-feature-x.abc123f
+/// ```
+///
+/// @example Timestamp-based format
+/// ```typescript
+/// const result = await bumpSnapshot({
+///   root: '/path/to/project',
+///   format: '{version}-dev.{timestamp}'
+/// });
+/// // Generates versions like: 1.2.3-dev.1699876543
+/// ```
+///
+/// @example Filter to specific packages
+/// ```typescript
+/// const result = await bumpSnapshot({
+///   root: '/path/to/project',
+///   packages: ['@scope/core', '@scope/utils'],
+///   format: '{version}-snapshot.{short_commit}'
+/// });
+/// ```
+///
+/// @example Error handling
+/// ```typescript
+/// const result = await bumpSnapshot({
+///   root: '/path/to/project',
+///   format: 'invalid-no-variables'
+/// });
+/// if (!result.success) {
+///   if (result.error.code === 'EVALIDATION') {
+///     console.error('Invalid format:', result.error.message);
+///   }
+/// }
+/// ```
+#[napi(js_name = "bumpSnapshot")]
+pub async fn bump_snapshot(params: BumpSnapshotParams) -> BumpSnapshotApiResponse {
+    // 1. Validate parameters (synchronous validation before spawning)
+    let root_path = match validate_snapshot_params(&params) {
+        Ok(path) => path,
+        Err(error) => return BumpSnapshotApiResponse::failure(error),
+    };
+
+    // 2. Prepare config path
+    let config_path: Option<PathBuf> = params.config_path.as_ref().map(PathBuf::from);
+
+    // 3. Determine the format to use (user-provided or default)
+    let format_used = params.format.clone().unwrap_or_else(|| DEFAULT_SNAPSHOT_FORMAT.to_string());
+
+    // 4. Convert params to CLI args
+    let args = convert_snapshot_params_to_args(&params);
+
+    // Clone format for use inside the blocking task
+    let format_for_parse = format_used.clone();
+
+    // 5. Execute CLI command in a blocking task
+    // The CLI's execute_bump_snapshot uses types that are not Send/Sync (RefCell, git2::Repository),
+    // so we must run it on a blocking thread via spawn_blocking.
+    let result = tokio::task::spawn_blocking(move || {
+        // Create a new tokio runtime for the blocking context
+        // This is necessary because execute_bump_snapshot is async but we're in a blocking context
+        let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+            Ok(rt) => rt,
+            Err(e) => {
+                return Err(ErrorInfo::execution(format!("Failed to create runtime: {e}")));
+            }
+        };
+
+        rt.block_on(async {
+            // Create shared buffer for output capture
+            let buffer = SharedBuffer::new();
+
+            // Create Output with JSON format
+            let output = Output::new(OutputFormat::Json, buffer.clone(), true);
+
+            // Execute the CLI command
+            let config_path_ref: Option<&Path> = config_path.as_deref();
+            if let Err(cli_error) =
+                execute_bump_snapshot(&args, &output, &root_path, config_path_ref).await
+            {
+                return Err(ErrorInfo::from(cli_error));
+            }
+
+            // Extract and parse JSON
+            let json_bytes = buffer.take_bytes();
+            parse_snapshot_response(&json_bytes, format_for_parse)
+        })
+    })
+    .await;
+
+    // 6. Handle spawn_blocking result
+    match result {
+        Ok(Ok(data)) => BumpSnapshotApiResponse::success(data),
+        Ok(Err(error)) => BumpSnapshotApiResponse::failure(error),
+        Err(join_error) => BumpSnapshotApiResponse::failure(ErrorInfo::execution(format!(
+            "Task execution failed: {join_error}"
+        ))),
+    }
+}
