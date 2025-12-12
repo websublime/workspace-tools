@@ -53,7 +53,7 @@
 use crate::error::{VersionError, VersionResult};
 use crate::types::{
     Changeset, CircularDependency, DependencyUpdate, PackageInfo, UpdateReason, Version,
-    VersioningStrategy,
+    VersionBump, VersioningStrategy,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -549,7 +549,7 @@ async fn resolve_independent(
 ///
 /// # Returns
 ///
-/// Returns a `VersionResolution` with updates for all packages in the workspace.
+/// Returns a `VersionResolution` with updates for affected packages.
 ///
 /// # Errors
 ///
@@ -568,14 +568,9 @@ async fn resolve_unified_with_prerelease(
         let current_version = package_info.version();
 
         highest_version = match highest_version {
-            Some(ref existing) => {
-                if &current_version > existing {
-                    Some(current_version)
-                } else {
-                    highest_version
-                }
-            }
             None => Some(current_version),
+            Some(ref h) if current_version > *h => Some(current_version),
+            Some(h) => Some(h),
         };
     }
 
@@ -612,6 +607,52 @@ async fn resolve_unified_with_prerelease(
     }
 
     Ok(resolution)
+}
+
+/// Resolves version updates with automatic prerelease mode inference.
+///
+/// Similar to `resolve_versions_with_prerelease`, but automatically determines
+/// the appropriate prerelease mode (create, increment) based on each package's
+/// current version state:
+///
+/// - If current version is stable → **Create** new prerelease
+/// - If current version has same prerelease tag → **Increment**
+/// - If current version has different prerelease tag → **Create** new
+///
+/// This provides a simpler API where only the tag is needed.
+///
+/// # Arguments
+///
+/// * `changeset` - The changeset containing packages and bump type
+/// * `packages` - Map of package info
+/// * `strategy` - Versioning strategy (Independent or Unified)
+/// * `prerelease_tag` - Optional prerelease tag (e.g., "alpha", "beta", "rc")
+///
+/// # Returns
+///
+/// Returns a `VersionResolution` with updates for affected packages.
+///
+/// # Errors
+///
+/// Returns error if version parsing or bumping fails.
+pub async fn resolve_versions_with_prerelease_auto(
+    changeset: &Changeset,
+    packages: &HashMap<String, PackageInfo>,
+    strategy: VersioningStrategy,
+    prerelease_tag: Option<&str>,
+) -> VersionResult<VersionResolution> {
+    // Validate all packages exist
+    validate_packages_exist(changeset, packages)?;
+
+    // Resolve based on strategy
+    match strategy {
+        VersioningStrategy::Independent => {
+            resolve_independent_with_prerelease_auto(changeset, packages, prerelease_tag).await
+        }
+        VersioningStrategy::Unified => {
+            resolve_unified_with_prerelease_auto(changeset, packages, prerelease_tag).await
+        }
+    }
 }
 
 /// Resolves versions using independent strategy with prerelease support.
@@ -659,6 +700,137 @@ async fn resolve_independent_with_prerelease(
             current_version,
             next_version,
             UpdateReason::DirectChange,
+        );
+
+        resolution.add_update(update);
+    }
+
+    Ok(resolution)
+}
+
+/// Resolves versions using independent strategy with automatic prerelease mode.
+///
+/// Each package is bumped individually based on its own version, with
+/// automatic prerelease mode inference.
+///
+/// # Arguments
+///
+/// * `changeset` - The changeset containing packages and bump type
+/// * `packages` - Map of package info
+/// * `prerelease_tag` - Optional prerelease tag (e.g., "alpha", "beta", "rc")
+///
+/// # Returns
+///
+/// Returns a `VersionResolution` with updates for all packages in the changeset.
+///
+/// # Errors
+///
+/// Returns error if version parsing or bumping fails.
+async fn resolve_independent_with_prerelease_auto(
+    changeset: &Changeset,
+    packages: &HashMap<String, PackageInfo>,
+    prerelease_tag: Option<&str>,
+) -> VersionResult<VersionResolution> {
+    let mut resolution = VersionResolution::new();
+
+    for package_name in &changeset.packages {
+        let package_info =
+            packages.get(package_name).ok_or_else(|| VersionError::PackageNotFound {
+                name: package_name.clone(),
+                workspace_root: PathBuf::from("."),
+            })?;
+
+        let current_version = package_info.version();
+
+        // Use bump_with_prerelease_auto for automatic mode inference
+        let next_version =
+            current_version.bump_with_prerelease_auto(changeset.bump, prerelease_tag)?;
+
+        let update = PackageUpdate::new(
+            package_name.clone(),
+            package_info.path().to_path_buf(),
+            current_version,
+            next_version,
+            UpdateReason::DirectChange,
+        );
+
+        resolution.add_update(update);
+    }
+
+    Ok(resolution)
+}
+
+/// Resolves versions using unified strategy with automatic prerelease mode.
+///
+/// All packages are bumped to the same version, with automatic prerelease
+/// mode inference based on the highest version.
+///
+/// # Arguments
+///
+/// * `changeset` - The changeset containing packages and bump type
+/// * `packages` - Map of package info
+/// * `prerelease_tag` - Optional prerelease tag (e.g., "alpha", "beta", "rc")
+///
+/// # Returns
+///
+/// Returns a `VersionResolution` with updates for all packages in the changeset,
+/// all using the same next version.
+///
+/// # Errors
+///
+/// Returns error if version parsing or bumping fails.
+async fn resolve_unified_with_prerelease_auto(
+    changeset: &Changeset,
+    packages: &HashMap<String, PackageInfo>,
+    prerelease_tag: Option<&str>,
+) -> VersionResult<VersionResolution> {
+    let mut resolution = VersionResolution::new();
+
+    // Find the highest current version across ALL workspace packages
+    let mut highest_version: Option<Version> = None;
+
+    for package_info in packages.values() {
+        let current_version = package_info.version();
+
+        highest_version = match highest_version {
+            None => Some(current_version),
+            Some(ref h) if current_version > *h => Some(current_version),
+            Some(h) => Some(h),
+        };
+    }
+
+    // Calculate the unified next version using automatic prerelease mode
+    let unified_next_version = if let Some(version) = highest_version {
+        version.bump_with_prerelease_auto(changeset.bump, prerelease_tag)?
+    } else {
+        // No packages, start at 1.0.0 or 1.0.0-{tag}.0
+        let base = Version::new(1, 0, 0);
+        if let Some(tag) = prerelease_tag {
+            base.bump_with_prerelease_auto(VersionBump::None, Some(tag))?
+        } else {
+            base
+        }
+    };
+
+    // Apply unified version to ALL workspace packages (not just those in changeset)
+    // This is the core principle of unified strategy: all packages move together
+    for (package_name, package_info) in packages {
+        let current_version = package_info.version();
+
+        // Determine update reason: packages in changeset are direct changes,
+        // others are unified strategy propagation
+        let reason = if changeset.packages.contains(package_name) {
+            UpdateReason::DirectChange
+        } else {
+            UpdateReason::UnifiedStrategy
+        };
+
+        let update = PackageUpdate::new(
+            package_name.clone(),
+            package_info.path().to_path_buf(),
+            current_version,
+            unified_next_version.clone(),
+            reason,
         );
 
         resolution.add_update(update);

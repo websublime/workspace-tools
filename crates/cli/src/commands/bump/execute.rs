@@ -314,11 +314,11 @@ pub async fn execute_bump_apply(
         loaded_changesets.clone()
     };
 
-    // Step 6: Parse prerelease configuration
-    let prerelease_config = parse_prerelease_args(args)?;
+    // Step 6: Parse prerelease tag (mode is automatically inferred)
+    let prerelease_tag = parse_prerelease_args(args)?;
 
-    if let Some(ref config) = prerelease_config {
-        info!("Using prerelease tag: {} (mode: {})", config.tag, config.mode);
+    if let Some(ref tag) = prerelease_tag {
+        info!("Using prerelease tag: {} (mode will be auto-detected)", tag);
     }
 
     // Step 7: Create VersionResolver and resolve versions
@@ -329,9 +329,9 @@ pub async fn execute_bump_apply(
     // Merge all changesets for resolution (using changesets to process)
     let merged_changeset = merge_changesets(&changesets_to_process)?;
 
-    // Resolve versions with prerelease support
+    // Resolve versions with automatic prerelease mode inference
     let resolution = resolver
-        .resolve_versions_with_prerelease(&merged_changeset, prerelease_config.as_ref())
+        .resolve_versions_with_prerelease_auto(&merged_changeset, prerelease_tag.as_deref())
         .await
         .map_err(|e| CliError::execution(format!("Failed to resolve versions: {e}")))?;
 
@@ -393,8 +393,10 @@ pub async fn execute_bump_apply(
 
     info!("Applying version updates");
 
-    // Step 9: Apply version updates
-    let apply_result = resolver.apply_versions(&merged_changeset, false).await.map_err(|e| {
+    // Step 9: Apply version updates using the pre-calculated resolution
+    // This ensures prerelease versions are applied correctly since the resolution
+    // was already calculated with prerelease support in Step 7.
+    let apply_result = resolver.apply_from_resolution(resolution, false).await.map_err(|e| {
         error!("Failed to apply version updates: {}", e);
         CliError::execution(format!("Failed to apply version updates: {e}"))
     })?;
@@ -587,62 +589,54 @@ pub async fn execute_bump_apply(
     Ok(())
 }
 
-/// Parses prerelease arguments and determines mode.
+/// Parses prerelease arguments and returns the tag.
 ///
 /// # What
 ///
-/// Validates the --prerelease flag value and creates a PrereleaseConfig
-/// with the appropriate mode.
+/// Validates the --prerelease flag value and returns the prerelease tag.
+/// The mode (create, increment, promote) is automatically inferred at
+/// resolution time based on the current version of each package.
 ///
 /// # Arguments
 ///
 /// * `args` - Bump command arguments
 ///
+/// # Returns
+///
+/// Returns `Some(tag)` if prerelease is specified, `None` otherwise.
+///
 /// # Errors
 ///
-/// Returns error if prerelease tag is invalid.
+/// Returns error if prerelease tag contains invalid characters.
 ///
 /// # Examples
 ///
 /// ```rust,ignore
-/// let config = parse_prerelease_args(&args)?;
-/// if let Some(cfg) = config {
-///     println!("Using prerelease tag: {}", cfg.tag);
+/// let tag = parse_prerelease_args(&args)?;
+/// if let Some(t) = tag {
+///     println!("Using prerelease tag: {}", t);
 /// }
 /// ```
-pub(crate) fn parse_prerelease_args(
-    args: &BumpArgs,
-) -> Result<Option<sublime_pkg_tools::types::prerelease::PrereleaseConfig>> {
-    use sublime_pkg_tools::types::prerelease::{PrereleaseConfig, PrereleaseMode};
-
+pub(crate) fn parse_prerelease_args(args: &BumpArgs) -> Result<Option<String>> {
     let Some(prerelease_arg) = &args.prerelease else {
         return Ok(None);
     };
 
-    // Parse format: <tag>.<mode> (e.g., "beta.create", "alpha.increment", "rc.promote")
-    let parts: Vec<&str> = prerelease_arg.split('.').collect();
-    if parts.len() != 2 {
+    let tag = prerelease_arg.trim();
+
+    // Validate tag is not empty
+    if tag.is_empty() {
+        return Err(CliError::validation("Prerelease tag cannot be empty".to_string()));
+    }
+
+    // Validate tag contains only valid characters (SemVer 2.0.0: [0-9A-Za-z-])
+    if !tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
         return Err(CliError::validation(format!(
-            "Invalid prerelease format: '{prerelease_arg}'. Expected format: <tag>.<mode> (e.g., beta.create)"
+            "Invalid prerelease tag: '{tag}'. Must contain only ASCII alphanumerics and hyphens [0-9A-Za-z-]"
         )));
     }
 
-    let tag = parts[0];
-    let mode_str = parts[1];
-
-    // Parse mode
-    let mode = match mode_str {
-        "create" => PrereleaseMode::Create,
-        "increment" => PrereleaseMode::Increment,
-        "promote" => PrereleaseMode::Promote,
-        _ => {
-            return Err(CliError::validation(format!(
-                "Invalid prerelease mode: '{mode_str}'. Valid values: create, increment, promote"
-            )));
-        }
-    };
-
-    Ok(Some(PrereleaseConfig { tag: tag.to_string(), mode }))
+    Ok(Some(tag.to_string()))
 }
 
 /// Determines changeset archive policy based on arguments.

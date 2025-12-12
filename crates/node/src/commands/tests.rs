@@ -4666,6 +4666,11 @@ mod bump_validator_tests {
     // Prerelease Tag Validator Tests
     // -------------------------------------------------------------------------
 
+    /// Tests for prerelease tag validation.
+    ///
+    /// The prerelease tag is a simple string (e.g., "alpha", "beta", "rc").
+    /// The mode (create, increment, promote) is automatically inferred based
+    /// on each package's current version state.
     mod prerelease_tag_tests {
         use super::*;
 
@@ -4688,14 +4693,20 @@ mod bump_validator_tests {
         }
 
         #[test]
-        fn test_prerelease_tag_valid_with_numbers() {
-            let result = validators::prerelease_tag("beta1");
+        fn test_prerelease_tag_valid_canary() {
+            let result = validators::prerelease_tag("canary");
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_prerelease_tag_valid_with_hyphen() {
             let result = validators::prerelease_tag("beta-1");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_prerelease_tag_valid_with_numbers() {
+            let result = validators::prerelease_tag("beta1");
             assert!(result.is_ok());
         }
 
@@ -4721,17 +4732,17 @@ mod bump_validator_tests {
         }
 
         #[test]
-        fn test_prerelease_tag_invalid_period() {
-            let result = validators::prerelease_tag("alpha.1");
+        fn test_prerelease_tag_invalid_underscore() {
+            let result = validators::prerelease_tag("beta_1");
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.code, "EVALIDATION");
             assert!(error.message.contains("invalid characters"));
         }
 
         #[test]
-        fn test_prerelease_tag_invalid_underscore() {
-            let result = validators::prerelease_tag("beta_1");
+        fn test_prerelease_tag_invalid_period() {
+            // Period is not allowed in simple tag format
+            let result = validators::prerelease_tag("beta.1");
             assert!(result.is_err());
             let error = result.unwrap_err();
             assert!(error.message.contains("invalid characters"));
@@ -4749,6 +4760,8 @@ mod bump_validator_tests {
         fn test_prerelease_tag_invalid_special_chars() {
             let result = validators::prerelease_tag("alpha@1");
             assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("invalid characters"));
         }
     }
 

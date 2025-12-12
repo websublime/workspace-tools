@@ -692,10 +692,11 @@ fn test_show_diff_with_preview_mode() {
 // Prerelease and Archive Policy Tests
 // ============================================================================
 
-/// Tests parse_prerelease_args with valid beta.create format.
+/// Tests parse_prerelease_args with valid beta tag.
+/// Mode is now automatically inferred based on current version state.
 #[test]
 #[allow(clippy::expect_used)]
-fn test_parse_prerelease_args_beta_create() {
+fn test_parse_prerelease_args_beta() {
     use super::execute::parse_prerelease_args;
 
     let args = BumpArgs {
@@ -703,7 +704,7 @@ fn test_parse_prerelease_args_beta_create() {
         execute: true,
         snapshot: false,
         snapshot_format: None,
-        prerelease: Some("beta.create".to_string()),
+        prerelease: Some("beta".to_string()),
         packages: None,
         git_tag: false,
         git_push: false,
@@ -718,18 +719,17 @@ fn test_parse_prerelease_args_beta_create() {
     let result = parse_prerelease_args(&args);
     assert!(result.is_ok());
 
-    let config = result.ok().flatten();
-    assert!(config.is_some());
+    let tag = result.ok().flatten();
+    assert!(tag.is_some());
 
-    let config = config.expect("config should be Some");
-    assert_eq!(config.tag, "beta");
-    assert_eq!(config.mode, sublime_pkg_tools::types::PrereleaseMode::Create);
+    let tag = tag.expect("tag should be Some");
+    assert_eq!(tag, "beta");
 }
 
-/// Tests parse_prerelease_args with valid alpha.increment format.
+/// Tests parse_prerelease_args with valid alpha tag.
 #[test]
 #[allow(clippy::expect_used)]
-fn test_parse_prerelease_args_alpha_increment() {
+fn test_parse_prerelease_args_alpha() {
     use super::execute::parse_prerelease_args;
 
     let args = BumpArgs {
@@ -737,7 +737,7 @@ fn test_parse_prerelease_args_alpha_increment() {
         execute: true,
         snapshot: false,
         snapshot_format: None,
-        prerelease: Some("alpha.increment".to_string()),
+        prerelease: Some("alpha".to_string()),
         packages: None,
         git_tag: false,
         git_push: false,
@@ -752,18 +752,17 @@ fn test_parse_prerelease_args_alpha_increment() {
     let result = parse_prerelease_args(&args);
     assert!(result.is_ok());
 
-    let config = result.ok().flatten();
-    assert!(config.is_some());
+    let tag = result.ok().flatten();
+    assert!(tag.is_some());
 
-    let config = config.expect("config should be Some");
-    assert_eq!(config.tag, "alpha");
-    assert_eq!(config.mode, sublime_pkg_tools::types::PrereleaseMode::Increment);
+    let tag = tag.expect("tag should be Some");
+    assert_eq!(tag, "alpha");
 }
 
-/// Tests parse_prerelease_args with valid rc.promote format.
+/// Tests parse_prerelease_args with valid rc tag.
 #[test]
 #[allow(clippy::expect_used)]
-fn test_parse_prerelease_args_rc_promote() {
+fn test_parse_prerelease_args_rc() {
     use super::execute::parse_prerelease_args;
 
     let args = BumpArgs {
@@ -771,7 +770,7 @@ fn test_parse_prerelease_args_rc_promote() {
         execute: true,
         snapshot: false,
         snapshot_format: None,
-        prerelease: Some("rc.promote".to_string()),
+        prerelease: Some("rc".to_string()),
         packages: None,
         git_tag: false,
         git_push: false,
@@ -786,12 +785,11 @@ fn test_parse_prerelease_args_rc_promote() {
     let result = parse_prerelease_args(&args);
     assert!(result.is_ok());
 
-    let config = result.ok().flatten();
-    assert!(config.is_some());
+    let tag = result.ok().flatten();
+    assert!(tag.is_some());
 
-    let config = config.expect("config should be Some");
-    assert_eq!(config.tag, "rc");
-    assert_eq!(config.mode, sublime_pkg_tools::types::PrereleaseMode::Promote);
+    let tag = tag.expect("tag should be Some");
+    assert_eq!(tag, "rc");
 }
 
 /// Tests parse_prerelease_args with None returns None.
@@ -823,9 +821,9 @@ fn test_parse_prerelease_args_none() {
     assert!(config.is_none());
 }
 
-/// Tests parse_prerelease_args with invalid format returns error.
+/// Tests parse_prerelease_args with invalid characters returns error.
 #[test]
-fn test_parse_prerelease_args_invalid_format() {
+fn test_parse_prerelease_args_invalid_chars() {
     use super::execute::parse_prerelease_args;
 
     let args = BumpArgs {
@@ -833,7 +831,7 @@ fn test_parse_prerelease_args_invalid_format() {
         execute: true,
         snapshot: false,
         snapshot_format: None,
-        prerelease: Some("invalid-format".to_string()),
+        prerelease: Some("beta@1".to_string()),
         packages: None,
         git_tag: false,
         git_push: false,
@@ -849,9 +847,9 @@ fn test_parse_prerelease_args_invalid_format() {
     assert!(result.is_err());
 }
 
-/// Tests parse_prerelease_args with invalid mode returns error.
+/// Tests parse_prerelease_args with underscore returns error.
 #[test]
-fn test_parse_prerelease_args_invalid_mode() {
+fn test_parse_prerelease_args_invalid_underscore() {
     use super::execute::parse_prerelease_args;
 
     let args = BumpArgs {
@@ -859,7 +857,7 @@ fn test_parse_prerelease_args_invalid_mode() {
         execute: true,
         snapshot: false,
         snapshot_format: None,
-        prerelease: Some("beta.invalid".to_string()),
+        prerelease: Some("beta_1".to_string()),
         packages: None,
         git_tag: false,
         git_push: false,
@@ -875,7 +873,7 @@ fn test_parse_prerelease_args_invalid_mode() {
     assert!(result.is_err());
 }
 
-/// Tests parse_prerelease_args with custom tag name.
+/// Tests parse_prerelease_args with custom tag.
 #[test]
 #[allow(clippy::expect_used)]
 fn test_parse_prerelease_args_custom_tag() {
@@ -886,7 +884,7 @@ fn test_parse_prerelease_args_custom_tag() {
         execute: true,
         snapshot: false,
         snapshot_format: None,
-        prerelease: Some("snapshot.create".to_string()),
+        prerelease: Some("canary".to_string()),
         packages: None,
         git_tag: false,
         git_push: false,
@@ -901,12 +899,11 @@ fn test_parse_prerelease_args_custom_tag() {
     let result = parse_prerelease_args(&args);
     assert!(result.is_ok());
 
-    let config = result.ok().flatten();
-    assert!(config.is_some());
+    let tag = result.ok().flatten();
+    assert!(tag.is_some());
 
-    let config = config.expect("config should be Some");
-    assert_eq!(config.tag, "snapshot");
-    assert_eq!(config.mode, sublime_pkg_tools::types::PrereleaseMode::Create);
+    let tag = tag.expect("tag should be Some");
+    assert_eq!(tag, "canary");
 }
 
 /// Tests determine_archive_policy with no_archive flag returns Never.
@@ -1061,7 +1058,7 @@ fn test_bump_args_prerelease_argument() {
         execute: true,
         snapshot: false,
         snapshot_format: None,
-        prerelease: Some("beta.create".to_string()),
+        prerelease: Some("beta".to_string()),
         packages: None,
         git_tag: false,
         git_push: false,
@@ -1074,7 +1071,7 @@ fn test_bump_args_prerelease_argument() {
     };
 
     assert!(args.prerelease.is_some());
-    assert_eq!(args.prerelease.as_deref(), Some("beta.create"));
+    assert_eq!(args.prerelease.as_deref(), Some("beta"));
 }
 
 /// Tests that prerelease and always_archive can be used together.
@@ -1085,7 +1082,7 @@ fn test_bump_args_prerelease_with_always_archive() {
         execute: true,
         snapshot: false,
         snapshot_format: None,
-        prerelease: Some("alpha.create".to_string()),
+        prerelease: Some("alpha".to_string()),
         packages: None,
         git_tag: false,
         git_push: false,
@@ -1109,7 +1106,7 @@ fn test_bump_args_prerelease_with_no_archive() {
         execute: true,
         snapshot: false,
         snapshot_format: None,
-        prerelease: Some("beta.increment".to_string()),
+        prerelease: Some("beta".to_string()),
         packages: None,
         git_tag: false,
         git_push: false,

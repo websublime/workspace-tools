@@ -552,6 +552,95 @@ impl Version {
         }
     }
 
+    /// Bumps version with automatic prerelease mode inference.
+    ///
+    /// This method automatically determines the appropriate prerelease mode based on
+    /// the current version state and the desired prerelease tag:
+    ///
+    /// - If current version is stable → **Create** new prerelease (e.g., `1.2.3` → `1.3.0-beta.0`)
+    /// - If current version has same prerelease tag → **Increment** (e.g., `1.3.0-beta.0` → `1.3.0-beta.1`)
+    /// - If current version has different prerelease tag → **Create** new (e.g., `1.3.0-alpha.2` → `1.3.0-beta.0`)
+    ///
+    /// This provides a simpler API where users only need to specify the tag (e.g., "beta")
+    /// without worrying about the mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `bump_type` - Type of version bump (Major, Minor, Patch, None)
+    /// * `prerelease_tag` - Optional prerelease tag (e.g., "alpha", "beta", "rc")
+    ///
+    /// # Returns
+    ///
+    /// New version with appropriate prerelease handling.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if version bump fails or prerelease tag is invalid.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::types::{Version, VersionBump};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Stable → Create prerelease
+    /// let stable = Version::parse("1.2.3")?;
+    /// let beta = stable.bump_with_prerelease_auto(VersionBump::Minor, Some("beta"))?;
+    /// assert_eq!(beta.to_string(), "1.3.0-beta.0");
+    ///
+    /// // Same tag → Increment
+    /// let beta1 = beta.bump_with_prerelease_auto(VersionBump::None, Some("beta"))?;
+    /// assert_eq!(beta1.to_string(), "1.3.0-beta.1");
+    ///
+    /// // Different tag → Create new
+    /// let rc = beta1.bump_with_prerelease_auto(VersionBump::None, Some("rc"))?;
+    /// assert_eq!(rc.to_string(), "1.3.0-rc.0");
+    ///
+    /// // No tag on prerelease → Promote to stable
+    /// let final_ver = rc.bump_with_prerelease_auto(VersionBump::None, None)?;
+    /// assert_eq!(final_ver.to_string(), "1.3.0");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn bump_with_prerelease_auto(
+        &self,
+        bump_type: VersionBump,
+        prerelease_tag: Option<&str>,
+    ) -> VersionResult<Self> {
+        match prerelease_tag {
+            None => {
+                // No prerelease tag requested
+                if self.is_prerelease() {
+                    // Current is prerelease → Promote to stable
+                    self.remove_prerelease()
+                } else {
+                    // Standard bump
+                    self.bump(bump_type)
+                }
+            }
+            Some(tag) => {
+                let current_pre = self.prerelease();
+
+                if current_pre.is_empty() {
+                    // Current is stable → Create new prerelease
+                    let bumped = self.bump(bump_type)?;
+                    bumped.with_prerelease(&format!("{tag}.0"))
+                } else {
+                    // Current is prerelease - check if same tag
+                    let current_tag = current_pre.split('.').next().unwrap_or("");
+
+                    if current_tag == tag {
+                        // Same tag → Increment
+                        self.increment_prerelease(tag)
+                    } else {
+                        // Different tag → Create new prerelease (keep same base version)
+                        self.with_prerelease(&format!("{tag}.0"))
+                    }
+                }
+            }
+        }
+    }
+
     /// Sets or replaces prerelease tag.
     ///
     /// # Arguments
