@@ -19,8 +19,9 @@
  * - `changesetCheck()` - Check if a changeset exists for a branch (Story 4.8)
  * - `bumpPreview()` - Preview version bumps without applying changes (Story 5.2)
  * - `bumpApply()` - Apply version bumps with Git integration and prerelease support (Story 5.3)
+ * - `bumpSnapshot()` - Generate snapshot versions for testing and CI (Story 5.4)
  *
- * Bump types (Story 5.1 - types only, command bumpSnapshot in Story 5.4):
+ * Bump types (Story 5.1):
  * - `BumpPreviewParams`, `BumpPreviewData`, `BumpPreviewApiResponse`
  * - `BumpApplyParams`, `BumpApplyData`, `BumpApplyApiResponse`
  * - `BumpSnapshotParams`, `BumpSnapshotData`, `BumpSnapshotApiResponse`
@@ -44,9 +45,9 @@
  */
 
 // Re-export all functions from bindings
-import { bumpApply, bumpPreview, changesetAdd, changesetCheck, changesetHistory, changesetList, changesetRemove, changesetShow, changesetUpdate, getVersion, init, status } from './binding'
+import { bumpApply, bumpPreview, bumpSnapshot, changesetAdd, changesetCheck, changesetHistory, changesetList, changesetRemove, changesetShow, changesetUpdate, getVersion, init, status } from './binding'
 
-export { bumpApply, bumpPreview, changesetAdd, changesetCheck, changesetHistory, changesetList, changesetRemove, changesetShow, changesetUpdate, getVersion, init, status }
+export { bumpApply, bumpPreview, bumpSnapshot, changesetAdd, changesetCheck, changesetHistory, changesetList, changesetRemove, changesetShow, changesetUpdate, getVersion, init, status }
 
 // Re-export all types from bindings
 export type {
@@ -106,7 +107,7 @@ export type {
   ReleaseInfoData,
   ReleasedVersionEntry,
 
-  // Bump command types (Story 5.1 - types only, commands in Stories 5.2-5.4)
+  // Bump command types (Stories 5.1-5.4)
   // Input parameters
   BumpPreviewParams,
   BumpApplyParams,

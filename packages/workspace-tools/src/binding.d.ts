@@ -707,6 +707,88 @@ export interface BumpPreviewParams {
 }
 
 /**
+ * Generate snapshot versions for testing.
+ *
+ * Creates temporary, non-persisted versions for branch builds and preview
+ * deployments. Snapshot versions are NOT SemVer compliant and are intended
+ * for testing purposes only.
+ *
+ * **Key characteristics:**
+ * - Does NOT consume or archive changesets
+ * - Does NOT create Git commits or tags
+ * - Does NOT generate changelogs
+ * - Uses format templates with variables like `{version}`, `{branch}`, `{short_commit}`
+ *
+ * This function is the main entry point for Node.js applications to generate
+ * snapshot versions. It handles all the complexity of CLI invocation and response
+ * parsing internally.
+ *
+ * @param params - Snapshot parameters containing:
+ *   - `root`: Workspace root directory path (required)
+ *   - `configPath`: Optional custom config file path
+ *   - `packages`: Optional filter to specific packages
+ *   - `format`: Snapshot format template (default: `{version}-snapshot.{short_commit}`)
+ *
+ * @returns `Promise<ApiResponse<BumpSnapshotData>>` containing:
+ *   - On success: `{ success: true, data: BumpSnapshotData }`
+ *   - On failure: `{ success: false, error: ErrorInfo }`
+ *
+ * @example Basic usage with default format
+ * ```typescript
+ * const result = await bumpSnapshot({ root: '/path/to/project' });
+ * if (result.success) {
+ *   console.log(`Format used: ${result.data.format}`);
+ *   for (const pkg of result.data.packages) {
+ *     console.log(`${pkg.name}: ${pkg.originalVersion} -> ${pkg.snapshotVersion}`);
+ *   }
+ * } else {
+ *   console.error(`Error: ${result.error.code} - ${result.error.message}`);
+ * }
+ * ```
+ *
+ * @example Custom format with branch and commit
+ * ```typescript
+ * const result = await bumpSnapshot({
+ *   root: '/path/to/project',
+ *   format: '{version}-{branch}.{short_commit}'
+ * });
+ * // Generates versions like: 1.2.3-feature-x.abc123f
+ * ```
+ *
+ * @example Timestamp-based format
+ * ```typescript
+ * const result = await bumpSnapshot({
+ *   root: '/path/to/project',
+ *   format: '{version}-dev.{timestamp}'
+ * });
+ * // Generates versions like: 1.2.3-dev.1699876543
+ * ```
+ *
+ * @example Filter to specific packages
+ * ```typescript
+ * const result = await bumpSnapshot({
+ *   root: '/path/to/project',
+ *   packages: ['@scope/core', '@scope/utils'],
+ *   format: '{version}-snapshot.{short_commit}'
+ * });
+ * ```
+ *
+ * @example Error handling
+ * ```typescript
+ * const result = await bumpSnapshot({
+ *   root: '/path/to/project',
+ *   format: 'invalid-no-variables'
+ * });
+ * if (!result.success) {
+ *   if (result.error.code === 'EVALIDATION') {
+ *     console.error('Invalid format:', result.error.message);
+ *   }
+ * }
+ * ```
+ */
+export declare function bumpSnapshot(params: BumpSnapshotParams): Promise<BumpSnapshotApiResponse>
+
+/**
  * API response for the bump snapshot command.
  *
  * This structure wraps `BumpSnapshotData` in the standard `ApiResponse`
