@@ -350,6 +350,63 @@ export interface BumpApplyParams {
 }
 
 /**
+ * Preview version bumps without applying changes.
+ *
+ * Returns comprehensive information about what versions would change based on
+ * pending changesets. This is a dry-run operation that does not modify any files.
+ *
+ * This function is the main entry point for Node.js applications to preview
+ * version bumps. It handles all the complexity of CLI invocation and response
+ * parsing internally.
+ *
+ * @param params - Preview parameters containing:
+ *   - `root`: Workspace root directory path (required)
+ *   - `configPath`: Optional custom config file path
+ *   - `packages`: Optional filter to specific packages
+ *   - `showDiff`: Whether to show detailed version diffs
+ *
+ * @returns `Promise<ApiResponse<BumpPreviewData>>` containing:
+ *   - On success: `{ success: true, data: BumpPreviewData }`
+ *   - On failure: `{ success: false, error: ErrorInfo }`
+ *
+ * @example Basic usage
+ * ```typescript
+ * const result = await bumpPreview({ root: '/path/to/project' });
+ * if (result.success) {
+ *   console.log(`Strategy: ${result.data.strategy}`);
+ *   console.log(`Packages to bump: ${result.data.packages.length}`);
+ *   for (const pkg of result.data.packages) {
+ *     console.log(`  ${pkg.name}: ${pkg.currentVersion} -> ${pkg.nextVersion}`);
+ *   }
+ * } else {
+ *   console.error(`Error: ${result.error.code} - ${result.error.message}`);
+ * }
+ * ```
+ *
+ * @example With package filter and diff
+ * ```typescript
+ * const result = await bumpPreview({
+ *   root: '/path/to/project',
+ *   packages: ['@scope/core', '@scope/utils'],
+ *   showDiff: true
+ * });
+ * ```
+ *
+ * @example Error handling
+ * ```typescript
+ * const result = await bumpPreview({ root: '/nonexistent' });
+ * if (!result.success) {
+ *   if (result.error.code === 'ENOENT') {
+ *     console.error('Path not found');
+ *   } else if (result.error.code === 'EVALIDATION') {
+ *     console.error('Invalid parameters');
+ *   }
+ * }
+ * ```
+ */
+export declare function bumpPreview(params: BumpPreviewParams): Promise<BumpPreviewApiResponse>
+
+/**
  * API response for the bump preview command.
  *
  * This structure wraps `BumpPreviewData` in the standard `ApiResponse`
