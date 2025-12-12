@@ -167,4 +167,9 @@ fn print_config(config: &PackageToolsConfig) {
     println!("    Breaking Changes: {}", config.audit.sections.breaking_changes);
     println!("    Categorization: {}", config.audit.sections.categorization);
     println!("    Version Consistency: {}", config.audit.sections.version_consistency);
+
+    println!("\nExecute Configuration:");
+    println!("  Timeout: {}s", config.execute.timeout_secs);
+    println!("  Per-Package Timeout: {}s", config.execute.per_package_timeout_secs);
+    println!("  Max Parallel: {}", config.execute.max_parallel);
 }

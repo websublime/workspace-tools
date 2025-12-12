@@ -13,6 +13,7 @@
   - [Changelog Configuration](#changelog-configuration)
   - [Git Configuration](#git-configuration)
   - [Audit Configuration](#audit-configuration)
+  - [Execute Configuration](#execute-configuration)
 - [Environment Variables](#environment-variables)
 - [Loading Configuration](#loading-configuration)
 - [Configuration Validation](#configuration-validation)
@@ -595,6 +596,67 @@ warn_on_inconsistency = true
 
 - `fail_on_inconsistency` (Boolean): Fail on version inconsistencies
 - `warn_on_inconsistency` (Boolean): Warn about version inconsistencies
+
+### Execute Configuration
+
+Settings for command execution timeouts and parallelism when running commands across workspace packages.
+
+```toml
+[package_tools.execute]
+# Default timeout for execute commands in seconds
+# A value of 0 disables the global timeout (not recommended for CI)
+timeout_secs = 300
+
+# Timeout per individual package in seconds
+# A value of 0 disables per-package timeout
+per_package_timeout_secs = 60
+
+# Maximum number of parallel executions
+# Must be at least 1
+max_parallel = 8
+```
+
+**Fields:**
+
+- `timeout_secs` (Integer): Global timeout for execute commands in seconds
+  - A value of `0` disables the global timeout
+  - Default: `300` (5 minutes)
+
+- `per_package_timeout_secs` (Integer): Timeout per individual package in seconds
+  - A value of `0` disables per-package timeout
+  - Default: `60` (1 minute)
+
+- `max_parallel` (Integer): Maximum number of parallel executions
+  - Must be at least `1`
+  - Default: `8`
+
+**Example for Monorepo:**
+
+```toml
+[package_tools.execute]
+# Longer timeout for large monorepos (10 minutes)
+timeout_secs = 600
+
+# More time per package for complex builds (3 minutes)
+per_package_timeout_secs = 180
+
+# Higher parallelism for build servers with many cores
+max_parallel = 16
+```
+
+**Example for CI/CD:**
+
+```toml
+[package_tools.execute]
+# Strict timeout to prevent hanging builds
+timeout_secs = 300
+
+# Shorter per-package timeout to fail fast
+per_package_timeout_secs = 60
+
+# Limited parallelism for CI runners
+max_parallel = 4
+```
 
 ## Environment Variables
 
