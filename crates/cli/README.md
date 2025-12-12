@@ -382,7 +382,7 @@ workspace bump [OPTIONS]
 - `--execute` - Apply version changes (required for actual changes)
 - `--snapshot` - Generate snapshot versions (mutually exclusive with `--prerelease`)
 - `--snapshot-format <FORMAT>` - Snapshot format template (variables: `{version}`, `{branch}`, `{short_commit}`, `{commit}`)
-- `--prerelease <TAG>` - Pre-release tag (`alpha`, `beta`, or `rc`) (mutually exclusive with `--snapshot`)
+- `--prerelease <TAG>` - Pre-release tag (e.g., `alpha`, `beta`, `rc`, `canary`). Mode is automatically inferred based on current version. (mutually exclusive with `--snapshot`)
 - `--packages <LIST>` - Comma-separated list of packages to bump (overrides changeset packages)
 - `--git-tag` - Create Git tags for releases (format: `package@version`)
 - `--git-push` - Push Git tags to remote (requires `--git-tag`)
@@ -435,7 +435,7 @@ When bumping versions, the CLI can automatically archive processed changesets ba
    # Stable version: 1.2.3 → 1.3.0
    # Result: Changesets are ARCHIVED ✅
    
-   workspace bump --execute --prerelease beta.create
+   workspace bump --execute --prerelease beta
    # Prerelease version: 1.2.3 → 1.3.0-beta.0
    # Result: Changesets are NOT archived ❌ (kept for next bump)
    ```
@@ -453,34 +453,39 @@ When bumping versions, the CLI can automatically archive processed changesets ba
    # Stable version: 1.2.3 → 1.3.0
    # Result: Changesets are ARCHIVED ✅
    
-   workspace bump --execute --prerelease beta.create --always-archive
+   workspace bump --execute --prerelease beta --always-archive
    # Prerelease version: 1.2.3 → 1.3.0-beta.0
    # Result: Changesets are ARCHIVED ✅ (even for prereleases)
    ```
 
 **Prerelease Workflow Example:**
 
-The Auto policy enables clean prerelease workflows:
+The Auto policy enables clean prerelease workflows. The mode (create, increment, promote) is **automatically inferred** based on each package's current version:
+
+- **Stable → Prerelease (Create)**: `1.2.3` + `--prerelease beta` → `1.3.0-beta.0`
+- **Same tag (Increment)**: `1.3.0-beta.0` + `--prerelease beta` → `1.3.0-beta.1`
+- **Different tag (Create new)**: `1.3.0-alpha.2` + `--prerelease beta` → `1.3.0-beta.0`
+- **Promote to stable**: Omit `--prerelease` when on prerelease → `1.3.0`
 
 ```bash
 # Phase 1: Create initial beta (changesets NOT archived)
-workspace bump --execute --prerelease beta.create
-# 1.2.3 → 1.3.0-beta.0
+workspace bump --execute --prerelease beta
+# 1.2.3 → 1.3.0-beta.0 (auto-detected: create mode)
 # Changesets remain active ✓
 
 # Phase 2: Increment beta (changesets NOT archived)
-workspace bump --execute --prerelease beta.increment
-# 1.3.0-beta.0 → 1.3.0-beta.1
+workspace bump --execute --prerelease beta
+# 1.3.0-beta.0 → 1.3.0-beta.1 (auto-detected: increment mode)
 # Changesets remain active ✓
 
 # Phase 3: Create release candidate (changesets NOT archived)
-workspace bump --execute --prerelease rc.create
-# 1.3.0-beta.1 → 1.3.0-rc.0
+workspace bump --execute --prerelease rc
+# 1.3.0-beta.1 → 1.3.0-rc.0 (auto-detected: create mode - different tag)
 # Changesets remain active ✓
 
 # Phase 4: Promote to stable (changesets ARCHIVED)
-workspace bump --execute --prerelease rc.promote
-# 1.3.0-rc.0 → 1.3.0
+workspace bump --execute
+# 1.3.0-rc.0 → 1.3.0 (auto-detected: promote mode - no prerelease flag)
 # Changesets archived automatically ✓
 ```
 

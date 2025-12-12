@@ -697,6 +697,100 @@ impl<F: AsyncFileSystem + Clone + Send + Sync + 'static> VersionResolver<F> {
         Ok(resolution)
     }
 
+    /// Resolves versions with automatic prerelease mode inference.
+    ///
+    /// Similar to `resolve_versions_with_prerelease`, but automatically determines
+    /// the appropriate prerelease mode (create, increment) based on each package's
+    /// current version state:
+    ///
+    /// - If current version is stable → **Create** new prerelease
+    /// - If current version has same prerelease tag → **Increment**
+    /// - If current version has different prerelease tag → **Create** new
+    ///
+    /// This provides a simpler API where only the tag is needed.
+    ///
+    /// # Arguments
+    ///
+    /// * `changeset` - The changeset containing packages and version bump
+    /// * `prerelease_tag` - Optional prerelease tag (e.g., "alpha", "beta", "rc")
+    ///
+    /// # Returns
+    ///
+    /// Returns a `VersionResolution` with all calculated updates.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if version parsing or bumping fails.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::version::VersionResolver;
+    /// use sublime_pkg_tools::types::{Changeset, VersionBump};
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let workspace_root = PathBuf::from(".");
+    /// let config = PackageToolsConfig::default();
+    /// let resolver = VersionResolver::new(workspace_root, config).await?;
+    ///
+    /// let mut changeset = Changeset::new("feature/new-api", VersionBump::Minor, vec![]);
+    /// changeset.add_package("my-package");
+    ///
+    /// // Just pass the tag - mode is automatically inferred
+    /// let resolution = resolver.resolve_versions_with_prerelease_auto(&changeset, Some("beta")).await?;
+    /// // If current version is 1.0.0 → next is 1.1.0-beta.0
+    /// // If current version is 1.1.0-beta.0 → next is 1.1.0-beta.1
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn resolve_versions_with_prerelease_auto(
+        &self,
+        changeset: &Changeset,
+        prerelease_tag: Option<&str>,
+    ) -> VersionResult<VersionResolution> {
+        // Discover all packages in the workspace
+        let package_list = self.discover_packages().await?;
+
+        // Build dependency graph for propagation (before consuming package_list)
+        let (graph, circular_deps) = if self.config.dependency.propagation_bump != "none" {
+            let g = DependencyGraph::from_packages(&package_list)?;
+            let cycles = g.detect_cycles();
+            (Some(g), cycles)
+        } else {
+            (None, Vec::new())
+        };
+
+        // Build a map of package name to package info (consuming package_list)
+        let mut packages = HashMap::new();
+        for package_info in package_list {
+            let name = package_info.name().to_string();
+            packages.insert(name, package_info);
+        }
+
+        // Step 1: Resolve direct version changes with automatic prerelease mode
+        let mut resolution = crate::version::resolution::resolve_versions_with_prerelease_auto(
+            changeset,
+            &packages,
+            self.strategy,
+            prerelease_tag,
+        )
+        .await?;
+
+        // Step 2: Add circular dependencies to resolution
+        resolution.circular_dependencies = circular_deps;
+
+        // Step 3: Apply dependency propagation if configured
+        if let Some(graph) = graph {
+            // Create propagator and apply propagation
+            let propagator = DependencyPropagator::new(&graph, &packages, &self.config.dependency);
+            propagator.propagate(&mut resolution)?;
+        }
+
+        Ok(resolution)
+    }
+
     /// Applies version changes from a changeset to package.json files.
     ///
     /// This method resolves versions for all packages in the changeset and optionally
@@ -807,6 +901,96 @@ impl<F: AsyncFileSystem + Clone + Send + Sync + 'static> VersionResolver<F> {
         }
 
         // Discover all packages again to have full package info with paths
+        let package_list = self.discover_packages().await?;
+        let mut packages = HashMap::new();
+        for package_info in package_list {
+            let name = package_info.name().to_string();
+            packages.insert(name, package_info);
+        }
+
+        // Track modified files and backups for rollback
+        let mut modified_files = Vec::new();
+        let mut backups: Vec<(PathBuf, Vec<u8>)> = Vec::new();
+
+        // Apply updates to each package
+        let apply_result = self
+            .apply_updates_to_packages(&resolution, &packages, &mut modified_files, &mut backups)
+            .await;
+
+        // If there was an error, restore backups
+        if let Err(e) = apply_result {
+            self.restore_backups(&backups).await?;
+            return Err(e);
+        }
+
+        Ok(ApplyResult::new(false, resolution, modified_files))
+    }
+
+    /// Applies a pre-calculated version resolution to packages.
+    ///
+    /// Unlike `apply_versions` which resolves versions internally, this method
+    /// takes an already-calculated `VersionResolution` and applies it directly.
+    /// This is useful when you need to apply resolutions that were computed
+    /// with special options like prerelease support.
+    ///
+    /// # Arguments
+    ///
+    /// * `resolution` - The pre-calculated version resolution to apply
+    /// * `dry_run` - If true, returns the resolution without modifying files
+    ///
+    /// # Returns
+    ///
+    /// Returns an `ApplyResult` containing the resolution and list of modified files.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Package discovery fails
+    /// - File operations fail (reading, writing package.json)
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::version::VersionResolver;
+    /// use sublime_pkg_tools::types::{Changeset, VersionBump};
+    /// use sublime_pkg_tools::types::prerelease::{PrereleaseConfig, PrereleaseMode};
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let workspace_root = PathBuf::from(".");
+    /// let config = PackageToolsConfig::default();
+    /// let resolver = VersionResolver::new(workspace_root, config).await?;
+    ///
+    /// let mut changeset = Changeset::new("feature/new-api", VersionBump::Minor, vec![]);
+    /// changeset.add_package("my-package");
+    ///
+    /// // Resolve with prerelease support
+    /// let prerelease_config = PrereleaseConfig {
+    ///     tag: "beta".to_string(),
+    ///     mode: PrereleaseMode::Create,
+    /// };
+    /// let resolution = resolver
+    ///     .resolve_versions_with_prerelease(&changeset, Some(&prerelease_config))
+    ///     .await?;
+    ///
+    /// // Apply the pre-calculated resolution
+    /// let result = resolver.apply_from_resolution(resolution, false).await?;
+    /// println!("Updated {} packages", result.summary.packages_updated);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn apply_from_resolution(
+        &self,
+        resolution: VersionResolution,
+        dry_run: bool,
+    ) -> VersionResult<ApplyResult> {
+        // If dry-run, return early without modifying files
+        if dry_run {
+            return Ok(ApplyResult::new(true, resolution, vec![]));
+        }
+
+        // Discover all packages to have full package info with paths
         let package_list = self.discover_packages().await?;
         let mut packages = HashMap::new();
         for package_info in package_list {

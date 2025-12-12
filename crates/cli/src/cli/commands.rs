@@ -526,10 +526,18 @@ pub struct BumpArgs {
 
     /// Pre-release tag for official pre-release versions.
     ///
-    /// Creates semver-compliant pre-release versions (alpha, beta, rc).
+    /// Creates semver-compliant pre-release versions (e.g., 1.2.0-alpha.0).
     /// These are persisted versions for staging/development releases.
     ///
-    /// Options: alpha, beta, rc (or custom tag)
+    /// The mode (create, increment, promote) is **automatically inferred**
+    /// based on each package's current version:
+    ///
+    /// - **Stable → Prerelease (Create)**: `1.2.3` + `--prerelease beta` → `1.3.0-beta.0`
+    /// - **Same tag (Increment)**: `1.3.0-beta.0` + `--prerelease beta` → `1.3.0-beta.1`
+    /// - **Different tag (Create new)**: `1.3.0-alpha.2` + `--prerelease beta` → `1.3.0-beta.0`
+    /// - **Promote to stable**: Omit `--prerelease` when on prerelease → `1.3.0`
+    ///
+    /// Valid tags: alphanumeric and hyphens only (e.g., alpha, beta, rc, canary, dev-1)
     ///
     /// Cannot be combined with --snapshot (they are mutually exclusive).
     #[arg(long, value_name = "TAG", conflicts_with = "snapshot")]

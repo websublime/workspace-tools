@@ -859,17 +859,19 @@ pub(crate) mod validators {
     /// ```rust,ignore
     /// use sublime_node_tools::validation::validators;
     ///
-    /// // Valid prerelease tags
+    /// // Valid prerelease tags (simple format - mode is auto-detected)
     /// assert!(validators::prerelease_tag("alpha").is_ok());
     /// assert!(validators::prerelease_tag("beta").is_ok());
     /// assert!(validators::prerelease_tag("rc").is_ok());
+    /// assert!(validators::prerelease_tag("canary").is_ok());
     /// assert!(validators::prerelease_tag("beta-1").is_ok());
     /// assert!(validators::prerelease_tag("RC1").is_ok());
     ///
     /// // Invalid prerelease tags
     /// assert!(validators::prerelease_tag("").is_err());
-    /// assert!(validators::prerelease_tag("alpha.1").is_err());  // Contains period
     /// assert!(validators::prerelease_tag("beta_1").is_err());   // Contains underscore
+    /// assert!(validators::prerelease_tag("beta.1").is_err());   // Contains period
+    /// assert!(validators::prerelease_tag("alpha@1").is_err());  // Contains special char
     /// ```
     pub fn prerelease_tag(tag: &str) -> ValidationResult<()> {
         if tag.is_empty() {
@@ -879,7 +881,9 @@ pub(crate) mod validators {
             ));
         }
 
-        // Check for valid characters (SemVer 2.0.0 spec: [0-9A-Za-z-])
+        // Validate tag contains only valid characters (SemVer 2.0.0 spec: [0-9A-Za-z-])
+        // The mode (create, increment, promote) is automatically inferred based on
+        // the current version state of each package.
         if !tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
             return Err(ErrorInfo::validation(
                 format!(
