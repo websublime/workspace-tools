@@ -155,7 +155,8 @@ pub use commands::changeset_check;
 // Bump commands (Story 5.2-5.4)
 // Story 5.2: bumpPreview
 pub use commands::bump_preview;
-// TODO: will be implemented on story 5.3 (bumpApply)
+// Story 5.3: bumpApply
+pub use commands::bump_apply;
 // TODO: will be implemented on story 5.4 (bumpSnapshot)
 
 // TODO: will be implemented on story 6.3 (execute command)

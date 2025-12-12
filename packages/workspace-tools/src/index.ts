@@ -18,8 +18,9 @@
  * - `changesetHistory()` - Query archived changeset history (Story 4.7)
  * - `changesetCheck()` - Check if a changeset exists for a branch (Story 4.8)
  * - `bumpPreview()` - Preview version bumps without applying changes (Story 5.2)
+ * - `bumpApply()` - Apply version bumps with Git integration and prerelease support (Story 5.3)
  *
- * Bump types (Story 5.1 - types only, commands bumpApply/bumpSnapshot in Stories 5.3-5.4):
+ * Bump types (Story 5.1 - types only, command bumpSnapshot in Story 5.4):
  * - `BumpPreviewParams`, `BumpPreviewData`, `BumpPreviewApiResponse`
  * - `BumpApplyParams`, `BumpApplyData`, `BumpApplyApiResponse`
  * - `BumpSnapshotParams`, `BumpSnapshotData`, `BumpSnapshotApiResponse`
@@ -43,9 +44,9 @@
  */
 
 // Re-export all functions from bindings
-import { bumpPreview, changesetAdd, changesetCheck, changesetHistory, changesetList, changesetRemove, changesetShow, changesetUpdate, getVersion, init, status } from './binding'
+import { bumpApply, bumpPreview, changesetAdd, changesetCheck, changesetHistory, changesetList, changesetRemove, changesetShow, changesetUpdate, getVersion, init, status } from './binding'
 
-export { bumpPreview, changesetAdd, changesetCheck, changesetHistory, changesetList, changesetRemove, changesetShow, changesetUpdate, getVersion, init, status }
+export { bumpApply, bumpPreview, changesetAdd, changesetCheck, changesetHistory, changesetList, changesetRemove, changesetShow, changesetUpdate, getVersion, init, status }
 
 // Re-export all types from bindings
 export type {

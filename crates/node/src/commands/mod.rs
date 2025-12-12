@@ -94,7 +94,8 @@ pub(crate) mod bump;
 // Re-export bump functions for lib.rs
 // Story 5.2: bumpPreview
 pub use bump::bump_preview;
-// TODO: will be implemented on story 5.3 (bumpApply)
+// Story 5.3: bumpApply
+pub use bump::bump_apply;
 // TODO: will be implemented on story 5.4 (bumpSnapshot)
 
 // TODO: will be implemented on story 8.2-8.4 (upgrade commands)

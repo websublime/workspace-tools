@@ -4830,3 +4830,674 @@ mod bump_validator_tests {
         }
     }
 }
+
+// ============================================================================
+// Bump Apply Tests (Story 5.3)
+// ============================================================================
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod bump_apply_tests {
+    use std::io::Write;
+
+    use tempfile::TempDir;
+
+    use crate::commands::bump::{
+        CliBumpSnapshot, CliBumpSummary, CliExecuteResult, SharedBuffer,
+        convert_apply_params_to_args, convert_to_napi_apply, parse_apply_response,
+        validate_apply_params,
+    };
+    use crate::types::bump::BumpApplyParams;
+
+    // -------------------------------------------------------------------------
+    // SharedBuffer Tests (reused pattern, but validated for apply context)
+    // -------------------------------------------------------------------------
+
+    mod shared_buffer_tests {
+        use super::*;
+
+        #[test]
+        fn test_shared_buffer_new() {
+            let buffer = SharedBuffer::new();
+            assert!(buffer.take_bytes().is_empty());
+        }
+
+        #[test]
+        fn test_shared_buffer_write() {
+            let mut buffer = SharedBuffer::new();
+            let bytes_written = buffer.write(b"apply result").unwrap();
+            assert_eq!(bytes_written, 12);
+            assert_eq!(buffer.take_bytes(), b"apply result");
+        }
+
+        #[test]
+        fn test_shared_buffer_multiple_writes() {
+            let mut buffer = SharedBuffer::new();
+            buffer.write_all(b"packages ").unwrap();
+            buffer.write_all(b"updated").unwrap();
+            assert_eq!(buffer.take_bytes(), b"packages updated");
+        }
+
+        #[test]
+        fn test_shared_buffer_clone_shares_data() {
+            let mut buffer = SharedBuffer::new();
+            let buffer_clone = buffer.clone();
+            buffer.write_all(b"shared apply data").unwrap();
+
+            // Both buffers should see the same data
+            assert_eq!(buffer.take_bytes(), b"shared apply data");
+            assert_eq!(buffer_clone.take_bytes(), b"shared apply data");
+        }
+
+        #[test]
+        fn test_shared_buffer_flush() {
+            let mut buffer = SharedBuffer::new();
+            assert!(buffer.flush().is_ok());
+        }
+
+        #[test]
+        fn test_shared_buffer_take_bytes_preserves_data() {
+            let mut buffer = SharedBuffer::new();
+            buffer.write_all(b"apply test data").unwrap();
+
+            // Multiple takes should return same data
+            let first_take = buffer.take_bytes();
+            let second_take = buffer.take_bytes();
+            assert_eq!(first_take, second_take);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Parse Response Tests
+    // -------------------------------------------------------------------------
+
+    mod parse_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_apply_response_success() {
+            // Note: CLI uses snake_case (no rename_all attribute)
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "strategy": "Independent",
+                    "packages_updated": 2,
+                    "changesets_archived": 1,
+                    "files_modified": [
+                        "packages/core/package.json",
+                        "packages/core/CHANGELOG.md",
+                        "packages/utils/package.json"
+                    ],
+                    "tags_created": ["@scope/core@1.1.0", "@scope/utils@2.0.0"],
+                    "commit_sha": "abc123def456789",
+                    "snapshot": {
+                        "strategy": "Independent",
+                        "packages": [],
+                        "changesets": [],
+                        "summary": {
+                            "totalPackages": 0,
+                            "packagesToBump": 0,
+                            "packagesUnchanged": 0,
+                            "totalChangesets": 0,
+                            "hasCircularDependencies": false
+                        }
+                    }
+                }
+            }"#;
+
+            let result = parse_apply_response(json.as_bytes());
+            assert!(result.is_ok());
+            let data = result.unwrap();
+            assert_eq!(data.strategy, "independent");
+            assert_eq!(data.packages_updated, 2);
+            assert_eq!(data.changesets_archived, 1);
+            assert_eq!(data.files_modified.len(), 3);
+            assert!(data.files_modified.contains(&"packages/core/package.json".to_string()));
+            assert!(data.files_modified.contains(&"packages/core/CHANGELOG.md".to_string()));
+            assert_eq!(data.tags_created.len(), 2);
+            assert!(data.tags_created.contains(&"@scope/core@1.1.0".to_string()));
+            assert_eq!(data.commit_sha, Some("abc123def456789".to_string()));
+        }
+
+        #[test]
+        fn test_parse_apply_response_no_git_operations() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "strategy": "Unified",
+                    "packages_updated": 3,
+                    "changesets_archived": 2,
+                    "files_modified": ["packages/core/package.json"],
+                    "tags_created": [],
+                    "commit_sha": null,
+                    "snapshot": {
+                        "strategy": "Unified",
+                        "packages": [],
+                        "changesets": [],
+                        "summary": {
+                            "totalPackages": 0,
+                            "packagesToBump": 0,
+                            "packagesUnchanged": 0,
+                            "totalChangesets": 0,
+                            "hasCircularDependencies": false
+                        }
+                    }
+                }
+            }"#;
+
+            let result = parse_apply_response(json.as_bytes());
+            assert!(result.is_ok());
+            let data = result.unwrap();
+            assert_eq!(data.strategy, "unified");
+            assert_eq!(data.packages_updated, 3);
+            assert_eq!(data.changesets_archived, 2);
+            assert!(data.tags_created.is_empty());
+            assert!(data.commit_sha.is_none());
+        }
+
+        #[test]
+        fn test_parse_apply_response_nothing_to_bump() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "strategy": "Independent",
+                    "packages_updated": 0,
+                    "changesets_archived": 0,
+                    "files_modified": [],
+                    "tags_created": [],
+                    "commit_sha": null,
+                    "snapshot": {
+                        "strategy": "Independent",
+                        "packages": [],
+                        "changesets": [],
+                        "summary": {
+                            "totalPackages": 0,
+                            "packagesToBump": 0,
+                            "packagesUnchanged": 0,
+                            "totalChangesets": 0,
+                            "hasCircularDependencies": false
+                        }
+                    }
+                }
+            }"#;
+
+            let result = parse_apply_response(json.as_bytes());
+            assert!(result.is_ok());
+            let data = result.unwrap();
+            assert_eq!(data.packages_updated, 0);
+            assert_eq!(data.changesets_archived, 0);
+            assert!(data.files_modified.is_empty());
+        }
+
+        #[test]
+        fn test_parse_apply_response_cli_error() {
+            let json = r#"{
+                "success": false,
+                "error": "Git repository has uncommitted changes"
+            }"#;
+
+            let result = parse_apply_response(json.as_bytes());
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EEXEC");
+            assert!(error.message.contains("uncommitted changes"));
+        }
+
+        #[test]
+        fn test_parse_apply_response_empty() {
+            let result = parse_apply_response(b"");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("empty response"));
+        }
+
+        #[test]
+        fn test_parse_apply_response_whitespace_only() {
+            let result = parse_apply_response(b"   \n  \t  ");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("empty response"));
+        }
+
+        #[test]
+        fn test_parse_apply_response_invalid_json() {
+            let result = parse_apply_response(b"not valid json");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Failed to parse"));
+        }
+
+        #[test]
+        fn test_parse_apply_response_invalid_utf8() {
+            let invalid_utf8 = vec![0xFF, 0xFE, 0x00, 0x01];
+            let result = parse_apply_response(&invalid_utf8);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Invalid UTF-8"));
+        }
+
+        #[test]
+        fn test_parse_apply_response_success_no_data() {
+            let json = r#"{"success": true}"#;
+            let result = parse_apply_response(json.as_bytes());
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("no data"));
+        }
+
+        #[test]
+        fn test_parse_apply_response_cli_error_no_message() {
+            let json = r#"{"success": false}"#;
+            let result = parse_apply_response(json.as_bytes());
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Unknown CLI error"));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Conversion Tests
+    // -------------------------------------------------------------------------
+
+    mod conversion_tests {
+        use super::*;
+
+        #[test]
+        fn test_convert_to_napi_apply_full() {
+            let cli_data = CliExecuteResult {
+                strategy: "Independent".to_string(),
+                packages_updated: 3,
+                changesets_archived: 2,
+                files_modified: vec![
+                    "packages/core/package.json".to_string(),
+                    "packages/core/CHANGELOG.md".to_string(),
+                    "packages/utils/package.json".to_string(),
+                ],
+                tags_created: vec![
+                    "@scope/core@1.1.0".to_string(),
+                    "@scope/utils@2.0.0".to_string(),
+                ],
+                commit_sha: Some("abc123def456789".to_string()),
+                snapshot: CliBumpSnapshot {
+                    strategy: "Independent".to_string(),
+                    packages: vec![],
+                    changesets: vec![],
+                    summary: CliBumpSummary {
+                        total_packages: 0,
+                        packages_to_bump: 0,
+                        packages_unchanged: 0,
+                        total_changesets: 0,
+                        has_circular_dependencies: false,
+                    },
+                },
+            };
+
+            let result = convert_to_napi_apply(cli_data);
+
+            assert_eq!(result.strategy, "independent");
+            assert_eq!(result.packages_updated, 3);
+            assert_eq!(result.changesets_archived, 2);
+            assert_eq!(result.files_modified.len(), 3);
+            assert_eq!(result.tags_created.len(), 2);
+            assert_eq!(result.commit_sha, Some("abc123def456789".to_string()));
+        }
+
+        #[test]
+        fn test_convert_to_napi_apply_no_git() {
+            let cli_data = CliExecuteResult {
+                strategy: "Unified".to_string(),
+                packages_updated: 1,
+                changesets_archived: 1,
+                files_modified: vec!["packages/pkg/package.json".to_string()],
+                tags_created: vec![],
+                commit_sha: None,
+                snapshot: CliBumpSnapshot {
+                    strategy: "Unified".to_string(),
+                    packages: vec![],
+                    changesets: vec![],
+                    summary: CliBumpSummary {
+                        total_packages: 0,
+                        packages_to_bump: 0,
+                        packages_unchanged: 0,
+                        total_changesets: 0,
+                        has_circular_dependencies: false,
+                    },
+                },
+            };
+
+            let result = convert_to_napi_apply(cli_data);
+
+            assert_eq!(result.strategy, "unified");
+            assert_eq!(result.packages_updated, 1);
+            assert!(result.tags_created.is_empty());
+            assert!(result.commit_sha.is_none());
+        }
+
+        #[test]
+        fn test_convert_to_napi_apply_empty() {
+            let cli_data = CliExecuteResult {
+                strategy: "Independent".to_string(),
+                packages_updated: 0,
+                changesets_archived: 0,
+                files_modified: vec![],
+                tags_created: vec![],
+                commit_sha: None,
+                snapshot: CliBumpSnapshot {
+                    strategy: "Independent".to_string(),
+                    packages: vec![],
+                    changesets: vec![],
+                    summary: CliBumpSummary {
+                        total_packages: 0,
+                        packages_to_bump: 0,
+                        packages_unchanged: 0,
+                        total_changesets: 0,
+                        has_circular_dependencies: false,
+                    },
+                },
+            };
+
+            let result = convert_to_napi_apply(cli_data);
+
+            assert_eq!(result.packages_updated, 0);
+            assert_eq!(result.changesets_archived, 0);
+            assert!(result.files_modified.is_empty());
+            assert!(result.tags_created.is_empty());
+        }
+
+        #[test]
+        fn test_convert_apply_params_to_args_defaults() {
+            let params = BumpApplyParams::new("/path/to/project");
+            let args = convert_apply_params_to_args(&params);
+
+            // Execute mode settings
+            assert!(!args.dry_run);
+            assert!(args.execute);
+            assert!(!args.snapshot);
+
+            // Default git operations (all false)
+            assert!(!args.git_commit);
+            assert!(!args.git_tag);
+            assert!(!args.git_push);
+
+            // No prerelease by default
+            assert!(args.prerelease.is_none());
+
+            // Default changelog/archive settings
+            assert!(!args.no_changelog);
+            assert!(!args.no_archive);
+            assert!(!args.always_archive);
+
+            // Force is true for API (non-interactive)
+            assert!(args.force);
+
+            // No diff in execute mode
+            assert!(!args.show_diff);
+
+            // No package filter by default
+            assert!(args.packages.is_none());
+        }
+
+        #[test]
+        fn test_convert_apply_params_to_args_with_git_operations() {
+            let params = BumpApplyParams::new("/path/to/project")
+                .with_git_commit(true)
+                .with_git_tag(true)
+                .with_git_push(true);
+            let args = convert_apply_params_to_args(&params);
+
+            assert!(args.git_commit);
+            assert!(args.git_tag);
+            assert!(args.git_push);
+        }
+
+        #[test]
+        fn test_convert_apply_params_to_args_with_prerelease() {
+            let params = BumpApplyParams::new("/path/to/project").with_prerelease("beta");
+            let args = convert_apply_params_to_args(&params);
+
+            assert_eq!(args.prerelease, Some("beta".to_string()));
+        }
+
+        #[test]
+        fn test_convert_apply_params_to_args_with_changelog_control() {
+            let params = BumpApplyParams::new("/path/to/project").with_no_changelog(true);
+            let args = convert_apply_params_to_args(&params);
+
+            assert!(args.no_changelog);
+        }
+
+        #[test]
+        fn test_convert_apply_params_to_args_with_archive_control() {
+            let params = BumpApplyParams::new("/path/to/project")
+                .with_no_archive(true)
+                .with_always_archive(false);
+            let args = convert_apply_params_to_args(&params);
+
+            assert!(args.no_archive);
+            assert!(!args.always_archive);
+        }
+
+        #[test]
+        fn test_convert_apply_params_to_args_always_archive_for_prerelease() {
+            let params = BumpApplyParams::new("/path/to/project")
+                .with_prerelease("rc")
+                .with_always_archive(true);
+            let args = convert_apply_params_to_args(&params);
+
+            assert_eq!(args.prerelease, Some("rc".to_string()));
+            assert!(args.always_archive);
+        }
+
+        #[test]
+        fn test_convert_apply_params_to_args_with_packages() {
+            let params = BumpApplyParams::new("/path/to/project")
+                .with_packages(vec!["@scope/core".to_string(), "@scope/utils".to_string()]);
+            let args = convert_apply_params_to_args(&params);
+
+            assert_eq!(
+                args.packages,
+                Some(vec!["@scope/core".to_string(), "@scope/utils".to_string()])
+            );
+        }
+
+        #[test]
+        fn test_convert_apply_params_to_args_force_false() {
+            let params = BumpApplyParams::new("/path/to/project").with_force(false);
+            let args = convert_apply_params_to_args(&params);
+
+            assert!(!args.force);
+        }
+
+        #[test]
+        fn test_convert_apply_params_to_args_full_release() {
+            // Simulates a full release with git operations and archiving
+            let params = BumpApplyParams::new("/path/to/project")
+                .with_git_commit(true)
+                .with_git_tag(true)
+                .with_git_push(true)
+                .with_force(true);
+            let args = convert_apply_params_to_args(&params);
+
+            assert!(!args.dry_run);
+            assert!(args.execute);
+            assert!(args.git_commit);
+            assert!(args.git_tag);
+            assert!(args.git_push);
+            assert!(!args.no_changelog);
+            assert!(!args.no_archive);
+            assert!(args.force);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Validation Tests
+    // -------------------------------------------------------------------------
+
+    mod validation_tests {
+        use super::*;
+
+        #[test]
+        fn test_validate_apply_params_valid_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpApplyParams::new(path_str);
+            let result = validate_apply_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_apply_params_nonexistent_path() {
+            let params = BumpApplyParams::new("/nonexistent/path/to/project");
+            let result = validate_apply_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "ENOENT");
+        }
+
+        #[test]
+        fn test_validate_apply_params_empty_root() {
+            let params = BumpApplyParams::new("");
+            let result = validate_apply_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+        }
+
+        #[test]
+        fn test_validate_apply_params_file_not_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let file_path = temp_dir.path().join("test.txt");
+            std::fs::write(&file_path, "test content").unwrap();
+
+            let params = BumpApplyParams::new(file_path.to_str().unwrap());
+            let result = validate_apply_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+        }
+
+        #[test]
+        fn test_validate_apply_params_valid_prerelease_alpha() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpApplyParams::new(path_str).with_prerelease("alpha");
+            let result = validate_apply_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_apply_params_valid_prerelease_beta() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpApplyParams::new(path_str).with_prerelease("beta");
+            let result = validate_apply_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_apply_params_valid_prerelease_rc() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpApplyParams::new(path_str).with_prerelease("rc");
+            let result = validate_apply_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_apply_params_valid_prerelease_custom() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpApplyParams::new(path_str).with_prerelease("next-1");
+            let result = validate_apply_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_apply_params_invalid_prerelease_period() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpApplyParams::new(path_str).with_prerelease("alpha.1");
+            let result = validate_apply_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("invalid characters"));
+        }
+
+        #[test]
+        fn test_validate_apply_params_invalid_prerelease_empty() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpApplyParams::new(path_str).with_prerelease("");
+            let result = validate_apply_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("cannot be empty"));
+        }
+
+        #[test]
+        fn test_validate_apply_params_invalid_prerelease_underscore() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpApplyParams::new(path_str).with_prerelease("beta_1");
+            let result = validate_apply_params(&params);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_apply_params_with_git_options() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpApplyParams::new(path_str)
+                .with_git_commit(true)
+                .with_git_tag(true)
+                .with_git_push(true);
+            let result = validate_apply_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_apply_params_with_packages() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params =
+                BumpApplyParams::new(path_str).with_packages(vec!["@scope/core".to_string()]);
+            let result = validate_apply_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_apply_params_with_config_path() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpApplyParams::new(path_str).with_config_path("/path/to/config.json");
+            let result = validate_apply_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_apply_params_returns_correct_path() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpApplyParams::new(path_str);
+            let result = validate_apply_params(&params);
+            assert!(result.is_ok());
+            let path = result.unwrap();
+            assert_eq!(path.to_str().unwrap(), path_str);
+        }
+
+        #[test]
+        fn test_validate_apply_params_full_prerelease_workflow() {
+            // Beta prerelease with git and archiving
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpApplyParams::new(path_str)
+                .with_prerelease("beta")
+                .with_git_commit(true)
+                .with_git_tag(true)
+                .with_always_archive(true);
+            let result = validate_apply_params(&params);
+            assert!(result.is_ok());
+        }
+    }
+}

@@ -59,6 +59,108 @@ export interface BranchInfo {
 }
 
 /**
+ * Apply version bumps to packages.
+ *
+ * Applies version changes based on pending changesets. This is the main
+ * release command that modifies package.json files, generates changelogs,
+ * archives changesets, and optionally creates Git commits and tags.
+ *
+ * This function is the main entry point for Node.js applications to apply
+ * version bumps. It handles all the complexity of CLI invocation and response
+ * parsing internally.
+ *
+ * @param params - Apply parameters containing:
+ *   - `root`: Workspace root directory path (required)
+ *   - `configPath`: Optional custom config file path
+ *   - `packages`: Optional filter to specific packages
+ *   - `gitCommit`: Whether to create a Git commit with version changes
+ *   - `gitTag`: Whether to create Git tags for releases
+ *   - `gitPush`: Whether to push Git tags to remote
+ *   - `prerelease`: Prerelease tag (alpha, beta, rc, or custom)
+ *   - `noChangelog`: Whether to skip changelog generation
+ *   - `noArchive`: Whether to keep changesets active after bump
+ *   - `alwaysArchive`: Whether to force archiving for prereleases
+ *   - `force`: Whether to skip confirmation prompts (default: true)
+ *
+ * @returns `Promise<ApiResponse<BumpApplyData>>` containing:
+ *   - On success: `{ success: true, data: BumpApplyData }`
+ *   - On failure: `{ success: false, error: ErrorInfo }`
+ *
+ * @example Basic usage - apply bumps without Git operations
+ * ```typescript
+ * const result = await bumpApply({ root: '/path/to/project' });
+ * if (result.success) {
+ *   console.log(`Updated ${result.data.packagesUpdated} packages`);
+ *   console.log(`Archived ${result.data.changesetsArchived} changesets`);
+ *   console.log(`Modified files: ${result.data.filesModified.join(', ')}`);
+ * } else {
+ *   console.error(`Error: ${result.error.code} - ${result.error.message}`);
+ * }
+ * ```
+ *
+ * @example With Git operations
+ * ```typescript
+ * const result = await bumpApply({
+ *   root: '/path/to/project',
+ *   gitCommit: true,
+ *   gitTag: true,
+ *   gitPush: true
+ * });
+ * if (result.success) {
+ *   console.log(`Commit SHA: ${result.data.commitSha}`);
+ *   console.log(`Tags created: ${result.data.tagsCreated.join(', ')}`);
+ * }
+ * ```
+ *
+ * @example Prerelease version (beta)
+ * ```typescript
+ * const result = await bumpApply({
+ *   root: '/path/to/project',
+ *   prerelease: 'beta',
+ *   gitCommit: true,
+ *   gitTag: true
+ * });
+ * // Creates versions like 1.3.0-beta.0
+ * ```
+ *
+ * @example Skip changelog and archive
+ * ```typescript
+ * const result = await bumpApply({
+ *   root: '/path/to/project',
+ *   noChangelog: true,
+ *   noArchive: true
+ * });
+ * // Updates versions but keeps changesets and skips changelog
+ * ```
+ *
+ * @example Force archive for prerelease
+ * ```typescript
+ * const result = await bumpApply({
+ *   root: '/path/to/project',
+ *   prerelease: 'rc',
+ *   alwaysArchive: true,  // Archive changesets even for prerelease
+ *   gitCommit: true,
+ *   gitTag: true
+ * });
+ * ```
+ *
+ * @example Error handling
+ * ```typescript
+ * const result = await bumpApply({ root: '/nonexistent' });
+ * if (!result.success) {
+ *   if (result.error.code === 'ENOENT') {
+ *     console.error('Path not found');
+ *   } else if (result.error.code === 'EVALIDATION') {
+ *     console.error('Invalid parameters:', result.error.message);
+ *   } else if (result.error.code === 'EGIT') {
+ *     console.error('Git operation failed:', result.error.message);
+ *   }
+ * }
+ * ```
+ */
+export declare function bumpApply(params: BumpApplyParams): Promise<BumpApplyApiResponse>
+
+/**
  * API response for the bump apply command.
  *
  * This structure wraps `BumpApplyData` in the standard `ApiResponse`
