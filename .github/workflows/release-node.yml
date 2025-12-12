@@ -243,7 +243,7 @@ jobs:
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
 
-      # Prepare for publishing - this updates versions in npm/**/package.json
+      # Publishing - this publish binding packages to npm
       # Skip GitHub release creation as we handle releases separately
       - name: Prepare for publish
         run: pnpm napi prepublish -t npm --no-gh-release
@@ -261,26 +261,6 @@ jobs:
           done
         working-directory: packages/workspace-tools
         shell: bash
-
-      # Publish platform-specific packages first (npm/*/)
-      - name: Publish platform packages (dry run)
-        if: ${{ github.event.inputs.dry_run == 'true' }}
-        run: |
-          echo "Dry run - would publish platform packages:"
-          for dir in npm/*/; do
-            echo "--- $dir ---"
-            npm publish "$dir" --access public --dry-run
-          done
-        working-directory: packages/workspace-tools
-
-      - name: Publish platform packages
-        if: ${{ github.event.inputs.dry_run != 'true' }}
-        run: |
-          for dir in npm/*/; do
-            echo "Publishing $dir..."
-            npm publish "$dir" --access public || echo "Failed to publish $dir (may already exist)"
-          done
-        working-directory: packages/workspace-tools
 
       # Publish main package from dist/ (which has its own package.json with correct paths)
       - name: Publish main package (dry run)
