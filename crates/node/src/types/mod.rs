@@ -161,8 +161,23 @@ pub(crate) mod changes;
 // TODO: will be implemented on story 9.3 (clone types)
 pub(crate) mod clone;
 
-// TODO: will be implemented on story 6.2 (execute types)
+// Execute types (Story 6.2 - Implemented)
 pub(crate) mod execute;
+
+// Re-export execute types for easier access
+// Allow unused imports - these will be used by the execute command (Story 6.3)
+#[allow(unused_imports)]
+pub(crate) use execute::{
+    // API Response
+    ExecuteApiResponse,
+    // Response Data
+    ExecuteData,
+    // Input Parameters
+    ExecuteParams,
+    // Supporting Types
+    ExecuteSummary,
+    PackageExecutionResult,
+};
 
 // Common types used across multiple commands
 pub(crate) mod common;

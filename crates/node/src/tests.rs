@@ -4081,3 +4081,608 @@ mod bump_types_tests {
         assert!(json.contains("\"snapshot_version\":\"1.0.0-snapshot.abc\""));
     }
 }
+
+// =============================================================================
+// Execute Types Tests (Story 6.2)
+// =============================================================================
+
+/// Tests for execute command type definitions.
+#[cfg(test)]
+mod execute_types_tests {
+    use crate::error::ErrorInfo;
+    use crate::types::execute::{
+        ExecuteApiResponse, ExecuteData, ExecuteParams, ExecuteSummary, PackageExecutionResult,
+    };
+
+    // ========================================================================
+    // ExecuteParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_execute_params_new() {
+        let params = ExecuteParams::new("/workspace", "npm:test");
+
+        assert_eq!(params.root, "/workspace");
+        assert_eq!(params.cmd, "npm:test");
+        assert!(params.filter_package.is_none());
+        assert!(params.affected.is_none());
+        assert!(params.since.is_none());
+        assert!(params.until.is_none());
+        assert!(params.branch.is_none());
+        assert!(params.parallel.is_none());
+        assert!(params.args.is_none());
+        assert!(params.timeout_secs.is_none());
+        assert!(params.per_package_timeout_secs.is_none());
+    }
+
+    #[test]
+    fn test_execute_params_builder_chain() {
+        let params = ExecuteParams::new("/workspace", "npm:test")
+            .with_filter_package(vec!["@scope/core".to_string()])
+            .with_parallel(true)
+            .with_timeout_secs(300)
+            .with_per_package_timeout_secs(60)
+            .with_args(vec!["--coverage".to_string()]);
+
+        assert_eq!(params.root, "/workspace");
+        assert_eq!(params.cmd, "npm:test");
+        assert_eq!(params.filter_package, Some(vec!["@scope/core".to_string()]));
+        assert_eq!(params.parallel, Some(true));
+        assert_eq!(params.timeout_secs, Some(300));
+        assert_eq!(params.per_package_timeout_secs, Some(60));
+        assert_eq!(params.args, Some(vec!["--coverage".to_string()]));
+    }
+
+    #[test]
+    fn test_execute_params_affected_options() {
+        let params = ExecuteParams::new("/workspace", "npm:test")
+            .with_affected(true)
+            .with_branch("main")
+            .with_since("HEAD~5")
+            .with_until("HEAD");
+
+        assert_eq!(params.affected, Some(true));
+        assert_eq!(params.branch, Some("main".to_string()));
+        assert_eq!(params.since, Some("HEAD~5".to_string()));
+        assert_eq!(params.until, Some("HEAD".to_string()));
+    }
+
+    #[test]
+    fn test_execute_params_has_filter_package() {
+        let params_none = ExecuteParams::new(".", "npm:test");
+        assert!(!params_none.has_filter_package());
+
+        let params_empty = ExecuteParams::new(".", "npm:test").with_filter_package(vec![]);
+        assert!(!params_empty.has_filter_package());
+
+        let params_with_packages =
+            ExecuteParams::new(".", "npm:test").with_filter_package(vec!["pkg".to_string()]);
+        assert!(params_with_packages.has_filter_package());
+    }
+
+    #[test]
+    fn test_execute_params_is_affected() {
+        let params_none = ExecuteParams::new(".", "npm:test");
+        assert!(!params_none.is_affected());
+
+        let params_false = ExecuteParams::new(".", "npm:test").with_affected(false);
+        assert!(!params_false.is_affected());
+
+        let params_true = ExecuteParams::new(".", "npm:test").with_affected(true);
+        assert!(params_true.is_affected());
+    }
+
+    #[test]
+    fn test_execute_params_is_parallel() {
+        let params_none = ExecuteParams::new(".", "npm:test");
+        assert!(!params_none.is_parallel());
+
+        let params_false = ExecuteParams::new(".", "npm:test").with_parallel(false);
+        assert!(!params_false.is_parallel());
+
+        let params_true = ExecuteParams::new(".", "npm:test").with_parallel(true);
+        assert!(params_true.is_parallel());
+    }
+
+    #[test]
+    fn test_execute_params_clone() {
+        let params =
+            ExecuteParams::new("/workspace", "npm:test").with_parallel(true).with_timeout_secs(300);
+        let cloned = params.clone();
+
+        assert_eq!(cloned.root, params.root);
+        assert_eq!(cloned.cmd, params.cmd);
+        assert_eq!(cloned.parallel, params.parallel);
+        assert_eq!(cloned.timeout_secs, params.timeout_secs);
+    }
+
+    #[test]
+    fn test_execute_params_serialize() {
+        let params =
+            ExecuteParams::new("/workspace", "npm:test").with_parallel(true).with_timeout_secs(300);
+        let json = serde_json::to_string(&params).unwrap_or_default();
+
+        assert!(json.contains("\"root\":\"/workspace\""));
+        assert!(json.contains("\"cmd\":\"npm:test\""));
+        assert!(json.contains("\"parallel\":true"));
+        assert!(json.contains("\"timeout_secs\":300"));
+        // Optional fields that are None should not be present
+        assert!(!json.contains("\"filter_package\""));
+        assert!(!json.contains("\"affected\""));
+    }
+
+    // ========================================================================
+    // PackageExecutionResult Tests
+    // ========================================================================
+
+    #[test]
+    fn test_package_execution_result_new() {
+        let result = PackageExecutionResult::new("@scope/core", true, 0, 1500.0);
+
+        assert_eq!(result.package, "@scope/core");
+        assert!(result.success);
+        assert_eq!(result.exit_code, 0);
+        assert!((result.duration_ms - 1500.0).abs() < f64::EPSILON);
+        assert!(result.error.is_none());
+    }
+
+    #[test]
+    fn test_package_execution_result_success() {
+        let result = PackageExecutionResult::success("@scope/core", 2000.0);
+
+        assert_eq!(result.package, "@scope/core");
+        assert!(result.success);
+        assert_eq!(result.exit_code, 0);
+        assert!((result.duration_ms - 2000.0).abs() < f64::EPSILON);
+        assert!(result.error.is_none());
+    }
+
+    #[test]
+    fn test_package_execution_result_failure() {
+        let result = PackageExecutionResult::failure("@scope/core", 1, 500.0, "Test failed");
+
+        assert_eq!(result.package, "@scope/core");
+        assert!(!result.success);
+        assert_eq!(result.exit_code, 1);
+        assert!((result.duration_ms - 500.0).abs() < f64::EPSILON);
+        assert_eq!(result.error, Some("Test failed".to_string()));
+    }
+
+    #[test]
+    fn test_package_execution_result_with_error() {
+        let result = PackageExecutionResult::new("@scope/core", false, 1, 500.0)
+            .with_error("Command not found");
+
+        assert!(!result.success);
+        assert_eq!(result.error, Some("Command not found".to_string()));
+    }
+
+    #[test]
+    fn test_package_execution_result_clone() {
+        let result = PackageExecutionResult::failure("@scope/core", 1, 500.0, "Error");
+        let cloned = result.clone();
+
+        assert_eq!(cloned.package, result.package);
+        assert_eq!(cloned.success, result.success);
+        assert_eq!(cloned.exit_code, result.exit_code);
+        assert!((cloned.duration_ms - result.duration_ms).abs() < f64::EPSILON);
+        assert_eq!(cloned.error, result.error);
+    }
+
+    #[test]
+    fn test_package_execution_result_serialize() {
+        let result = PackageExecutionResult::failure("@scope/core", 1, 500.0, "Error");
+        let json = serde_json::to_string(&result).unwrap_or_default();
+
+        assert!(json.contains("\"package\":\"@scope/core\""));
+        assert!(json.contains("\"success\":false"));
+        assert!(json.contains("\"exit_code\":1"));
+        assert!(json.contains("\"duration_ms\":500"));
+        assert!(json.contains("\"error\":\"Error\""));
+    }
+
+    #[test]
+    fn test_package_execution_result_serialize_without_error() {
+        let result = PackageExecutionResult::success("@scope/core", 1500.0);
+        let json = serde_json::to_string(&result).unwrap_or_default();
+
+        assert!(json.contains("\"package\":\"@scope/core\""));
+        assert!(json.contains("\"success\":true"));
+        // error field should not be present when None
+        assert!(!json.contains("\"error\""));
+    }
+
+    // ========================================================================
+    // ExecuteSummary Tests
+    // ========================================================================
+
+    #[test]
+    fn test_execute_summary_new() {
+        let summary = ExecuteSummary::new(5, 4, 1, 15000.0);
+
+        assert_eq!(summary.total, 5);
+        assert_eq!(summary.succeeded, 4);
+        assert_eq!(summary.failed, 1);
+        assert!((summary.total_duration_ms - 15000.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_execute_summary_empty() {
+        let summary = ExecuteSummary::empty();
+
+        assert_eq!(summary.total, 0);
+        assert_eq!(summary.succeeded, 0);
+        assert_eq!(summary.failed, 0);
+        assert!((summary.total_duration_ms - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_execute_summary_from_results() {
+        let results = vec![
+            PackageExecutionResult::success("pkg1", 1000.0),
+            PackageExecutionResult::success("pkg2", 500.0),
+            PackageExecutionResult::failure("pkg3", 1, 300.0, "Error"),
+        ];
+        let summary = ExecuteSummary::from_results(&results);
+
+        assert_eq!(summary.total, 3);
+        assert_eq!(summary.succeeded, 2);
+        assert_eq!(summary.failed, 1);
+        assert!((summary.total_duration_ms - 1800.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_execute_summary_from_results_empty() {
+        let results: Vec<PackageExecutionResult> = vec![];
+        let summary = ExecuteSummary::from_results(&results);
+
+        assert_eq!(summary.total, 0);
+        assert_eq!(summary.succeeded, 0);
+        assert_eq!(summary.failed, 0);
+        assert!((summary.total_duration_ms - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_execute_summary_all_succeeded() {
+        let all_pass = ExecuteSummary::new(3, 3, 0, 1000.0);
+        assert!(all_pass.all_succeeded());
+
+        let some_fail = ExecuteSummary::new(3, 2, 1, 1000.0);
+        assert!(!some_fail.all_succeeded());
+
+        let empty = ExecuteSummary::empty();
+        assert!(!empty.all_succeeded());
+    }
+
+    #[test]
+    fn test_execute_summary_has_failures() {
+        let all_pass = ExecuteSummary::new(3, 3, 0, 1000.0);
+        assert!(!all_pass.has_failures());
+
+        let some_fail = ExecuteSummary::new(3, 2, 1, 1000.0);
+        assert!(some_fail.has_failures());
+
+        let all_fail = ExecuteSummary::new(3, 0, 3, 1000.0);
+        assert!(all_fail.has_failures());
+    }
+
+    #[test]
+    fn test_execute_summary_clone() {
+        let summary = ExecuteSummary::new(5, 4, 1, 15000.0);
+        let cloned = summary.clone();
+
+        assert_eq!(cloned.total, summary.total);
+        assert_eq!(cloned.succeeded, summary.succeeded);
+        assert_eq!(cloned.failed, summary.failed);
+        assert!((cloned.total_duration_ms - summary.total_duration_ms).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_execute_summary_serialize() {
+        let summary = ExecuteSummary::new(5, 4, 1, 15000.0);
+        let json = serde_json::to_string(&summary).unwrap_or_default();
+
+        assert!(json.contains("\"total\":5"));
+        assert!(json.contains("\"succeeded\":4"));
+        assert!(json.contains("\"failed\":1"));
+        assert!(json.contains("\"total_duration_ms\":15000"));
+    }
+
+    // ========================================================================
+    // ExecuteData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_execute_data_new() {
+        let results = vec![PackageExecutionResult::success("pkg1", 1000.0)];
+        let summary = ExecuteSummary::new(1, 1, 0, 1000.0);
+        let data = ExecuteData::new("npm:test", results, summary);
+
+        assert_eq!(data.command, "npm:test");
+        assert_eq!(data.results.len(), 1);
+        assert_eq!(data.summary.total, 1);
+    }
+
+    #[test]
+    fn test_execute_data_from_results() {
+        let results = vec![
+            PackageExecutionResult::success("pkg1", 1000.0),
+            PackageExecutionResult::failure("pkg2", 1, 500.0, "Error"),
+        ];
+        let data = ExecuteData::from_results("npm:build", results);
+
+        assert_eq!(data.command, "npm:build");
+        assert_eq!(data.results.len(), 2);
+        assert_eq!(data.summary.total, 2);
+        assert_eq!(data.summary.succeeded, 1);
+        assert_eq!(data.summary.failed, 1);
+        assert!((data.summary.total_duration_ms - 1500.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_execute_data_empty() {
+        let data = ExecuteData::empty("npm:lint");
+
+        assert_eq!(data.command, "npm:lint");
+        assert!(data.results.is_empty());
+        assert_eq!(data.summary.total, 0);
+    }
+
+    #[test]
+    fn test_execute_data_package_count() {
+        let data = ExecuteData::from_results(
+            "npm:test",
+            vec![
+                PackageExecutionResult::success("pkg1", 1000.0),
+                PackageExecutionResult::success("pkg2", 500.0),
+            ],
+        );
+
+        assert_eq!(data.package_count(), 2);
+    }
+
+    #[test]
+    fn test_execute_data_all_succeeded() {
+        let all_pass = ExecuteData::from_results(
+            "npm:test",
+            vec![
+                PackageExecutionResult::success("pkg1", 1000.0),
+                PackageExecutionResult::success("pkg2", 500.0),
+            ],
+        );
+        assert!(all_pass.all_succeeded());
+
+        let some_fail = ExecuteData::from_results(
+            "npm:test",
+            vec![
+                PackageExecutionResult::success("pkg1", 1000.0),
+                PackageExecutionResult::failure("pkg2", 1, 500.0, "Error"),
+            ],
+        );
+        assert!(!some_fail.all_succeeded());
+    }
+
+    #[test]
+    fn test_execute_data_has_failures() {
+        let all_pass = ExecuteData::from_results(
+            "npm:test",
+            vec![PackageExecutionResult::success("pkg1", 1000.0)],
+        );
+        assert!(!all_pass.has_failures());
+
+        let some_fail = ExecuteData::from_results(
+            "npm:test",
+            vec![PackageExecutionResult::failure("pkg1", 1, 500.0, "Error")],
+        );
+        assert!(some_fail.has_failures());
+    }
+
+    #[test]
+    fn test_execute_data_clone() {
+        let data = ExecuteData::from_results(
+            "npm:test",
+            vec![PackageExecutionResult::success("pkg1", 1000.0)],
+        );
+        let cloned = data.clone();
+
+        assert_eq!(cloned.command, data.command);
+        assert_eq!(cloned.results.len(), data.results.len());
+        assert_eq!(cloned.summary.total, data.summary.total);
+    }
+
+    #[test]
+    fn test_execute_data_serialize() {
+        let data = ExecuteData::from_results(
+            "npm:test",
+            vec![PackageExecutionResult::success("@scope/core", 1000.0)],
+        );
+        let json = serde_json::to_string(&data).unwrap_or_default();
+
+        assert!(json.contains("\"command\":\"npm:test\""));
+        assert!(json.contains("\"package\":\"@scope/core\""));
+        assert!(json.contains("\"total\":1"));
+        assert!(json.contains("\"succeeded\":1"));
+    }
+
+    // ========================================================================
+    // ExecuteApiResponse Tests
+    // ========================================================================
+
+    #[test]
+    fn test_execute_api_response_success() {
+        let data = ExecuteData::empty("npm:test");
+        let response = ExecuteApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.data.is_some());
+        assert!(response.error.is_none());
+        assert!(response.is_success());
+        assert!(!response.is_failure());
+    }
+
+    #[test]
+    fn test_execute_api_response_failure() {
+        let error = ErrorInfo::validation("Invalid command", Some("cmd"));
+        let response = ExecuteApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(response.data.is_none());
+        assert!(response.error.is_some());
+        assert!(!response.is_success());
+        assert!(response.is_failure());
+    }
+
+    #[test]
+    fn test_execute_api_response_failure_with_different_error_codes() {
+        // EVALIDATION
+        let validation_error = ErrorInfo::validation("Invalid root", Some("root"));
+        let validation_response = ExecuteApiResponse::failure(validation_error);
+        assert_eq!(
+            validation_response.error.as_ref().map(|e| e.code.as_str()),
+            Some("EVALIDATION")
+        );
+
+        // ENOENT (Entity Not Found - Unix/Node.js standard)
+        let not_found_error = ErrorInfo::not_found("Path not found", Some("root"));
+        let not_found_response = ExecuteApiResponse::failure(not_found_error);
+        assert_eq!(not_found_response.error.as_ref().map(|e| e.code.as_str()), Some("ENOENT"));
+
+        // ETIMEOUT
+        let timeout_error = ErrorInfo::timeout("Operation timed out");
+        let timeout_response = ExecuteApiResponse::failure(timeout_error);
+        assert_eq!(timeout_response.error.as_ref().map(|e| e.code.as_str()), Some("ETIMEOUT"));
+    }
+
+    #[test]
+    fn test_execute_api_response_clone() {
+        let data = ExecuteData::empty("npm:test");
+        let response = ExecuteApiResponse::success(data);
+        let cloned = response.clone();
+
+        assert_eq!(cloned.success, response.success);
+        assert!(cloned.data.is_some());
+    }
+
+    #[test]
+    fn test_execute_api_response_serialize_success() {
+        let data = ExecuteData::empty("npm:test");
+        let response = ExecuteApiResponse::success(data);
+        let json = serde_json::to_string(&response).unwrap_or_default();
+
+        assert!(json.contains("\"success\":true"));
+        assert!(json.contains("\"command\":\"npm:test\""));
+        assert!(!json.contains("\"error\""));
+    }
+
+    #[test]
+    fn test_execute_api_response_serialize_failure() {
+        let error = ErrorInfo::validation("Invalid command", Some("cmd"));
+        let response = ExecuteApiResponse::failure(error);
+        let json = serde_json::to_string(&response).unwrap_or_default();
+
+        assert!(json.contains("\"success\":false"));
+        assert!(json.contains("\"code\":\"EVALIDATION\""));
+        assert!(!json.contains("\"data\""));
+    }
+
+    #[test]
+    fn test_execute_api_response_with_full_data() {
+        let results = vec![
+            PackageExecutionResult::success("@scope/core", 1500.0),
+            PackageExecutionResult::failure("@scope/utils", 1, 800.0, "Test failed"),
+        ];
+        let data = ExecuteData::from_results("npm:test", results);
+        let response = ExecuteApiResponse::success(data);
+
+        assert!(response.success);
+        let data = response.data.as_ref().unwrap();
+        assert_eq!(data.command, "npm:test");
+        assert_eq!(data.results.len(), 2);
+        assert_eq!(data.summary.total, 2);
+        assert_eq!(data.summary.succeeded, 1);
+        assert_eq!(data.summary.failed, 1);
+    }
+
+    // ========================================================================
+    // Integration Tests
+    // ========================================================================
+
+    #[test]
+    fn test_execute_complete_scenario_parallel() {
+        // Simulate parallel execution on affected packages
+        let params = ExecuteParams::new("/workspace", "npm:test")
+            .with_affected(true)
+            .with_branch("main")
+            .with_parallel(true)
+            .with_timeout_secs(300)
+            .with_per_package_timeout_secs(60);
+
+        assert!(params.is_affected());
+        assert!(params.is_parallel());
+        assert!(!params.has_filter_package());
+
+        // Simulate results
+        let results = vec![
+            PackageExecutionResult::success("@scope/core", 2000.0),
+            PackageExecutionResult::success("@scope/utils", 1500.0),
+            PackageExecutionResult::success("@scope/cli", 3000.0),
+        ];
+        let data = ExecuteData::from_results(&params.cmd, results);
+        let response = ExecuteApiResponse::success(data);
+
+        assert!(response.is_success());
+        let data = response.data.as_ref().unwrap();
+        assert!(data.all_succeeded());
+        assert!(!data.has_failures());
+        assert_eq!(data.summary.total, 3);
+        assert_eq!(data.summary.succeeded, 3);
+    }
+
+    #[test]
+    fn test_execute_complete_scenario_filtered() {
+        // Simulate execution on specific packages
+        let params = ExecuteParams::new("/workspace", "npm:build")
+            .with_filter_package(vec!["@scope/core".to_string(), "@scope/utils".to_string()])
+            .with_parallel(false);
+
+        assert!(!params.is_affected());
+        assert!(!params.is_parallel());
+        assert!(params.has_filter_package());
+
+        // Simulate results with one failure
+        let results = vec![
+            PackageExecutionResult::success("@scope/core", 5000.0),
+            PackageExecutionResult::failure(
+                "@scope/utils",
+                1,
+                2000.0,
+                "Build failed: missing dependency",
+            ),
+        ];
+        let data = ExecuteData::from_results(&params.cmd, results);
+        let response = ExecuteApiResponse::success(data);
+
+        assert!(response.is_success());
+        let data = response.data.as_ref().unwrap();
+        assert!(!data.all_succeeded());
+        assert!(data.has_failures());
+        assert_eq!(data.summary.succeeded, 1);
+        assert_eq!(data.summary.failed, 1);
+    }
+
+    #[test]
+    fn test_execute_system_command() {
+        // Test with a system command (not npm script)
+        let params =
+            ExecuteParams::new("/workspace", "echo hello").with_args(vec!["world".to_string()]);
+
+        assert_eq!(params.cmd, "echo hello");
+        assert_eq!(params.args, Some(vec!["world".to_string()]));
+
+        let results = vec![PackageExecutionResult::success("root", 50.0)];
+        let data = ExecuteData::from_results(&params.cmd, results);
+
+        assert_eq!(data.command, "echo hello");
+        assert!((data.summary.total_duration_ms - 50.0).abs() < f64::EPSILON);
+    }
+}
