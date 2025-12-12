@@ -14,7 +14,8 @@ use sublime_standard_tools::config::{ConfigFormat, ConfigResult, Configurable, S
 
 use super::{
     audit::AuditConfig, changelog::ChangelogConfig, changeset::ChangesetConfig,
-    dependency::DependencyConfig, git::GitConfig, upgrade::UpgradeConfig, version::VersionConfig,
+    dependency::DependencyConfig, execute::ExecuteConfig, git::GitConfig, upgrade::UpgradeConfig,
+    version::VersionConfig,
 };
 
 /// Main configuration structure for package tools.
@@ -33,6 +34,7 @@ use super::{
 /// - [`changelog`](ChangelogConfig): Changelog generation settings
 /// - [`git`](GitConfig): Git integration and commit message templates
 /// - [`audit`](AuditConfig): Audit and health check configuration
+/// - [`execute`](ExecuteConfig): Command execution timeout and parallelism settings
 ///
 /// # Example
 ///
@@ -78,6 +80,11 @@ use super::{
 ///
 /// [package_tools.audit]
 /// enabled = true
+///
+/// [package_tools.execute]
+/// timeout_secs = 300
+/// per_package_timeout_secs = 60
+/// max_parallel = 8
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename = "package_tools")]
@@ -116,6 +123,11 @@ pub struct PackageToolsConfig {
     ///
     /// Settings for dependency audits and health score calculation.
     pub audit: AuditConfig,
+
+    /// Command execution configuration.
+    ///
+    /// Settings for command execution timeouts and parallelism.
+    pub execute: ExecuteConfig,
 
     /// Workspace configuration for monorepo projects.
     ///
@@ -159,6 +171,7 @@ impl Default for PackageToolsConfig {
             changelog: ChangelogConfig::default(),
             git: GitConfig::default(),
             audit: AuditConfig::default(),
+            execute: ExecuteConfig::default(),
             workspace: None,
             standard_config: StandardConfig::default(),
         }
@@ -194,6 +207,7 @@ impl Configurable for PackageToolsConfig {
         self.changelog.validate()?;
         self.git.validate()?;
         self.audit.validate()?;
+        self.execute.validate()?;
 
         Ok(())
     }
@@ -232,6 +246,7 @@ impl Configurable for PackageToolsConfig {
         self.changelog.merge_with(other.changelog)?;
         self.git.merge_with(other.git)?;
         self.audit.merge_with(other.audit)?;
+        self.execute.merge_with(other.execute)?;
 
         // Merge workspace configuration
         if let Some(other_workspace) = other.workspace {

@@ -129,12 +129,14 @@
 //! - `changelog`: Changelog generation configuration
 //! - `audit`: Audit and health check settings
 //! - `git`: Git integration settings
+//! - `execute`: Command execution timeout and parallelism settings
 
 // Configuration modules
 mod audit;
 mod changelog;
 mod changeset;
 mod dependency;
+mod execute;
 mod git;
 mod types;
 mod upgrade;
@@ -157,6 +159,7 @@ pub use changelog::{
 };
 pub use changeset::ChangesetConfig;
 pub use dependency::DependencyConfig;
+pub use execute::ExecuteConfig;
 pub use git::GitConfig;
 pub use sublime_standard_tools::config::ConfigFormat;
 pub use types::PackageToolsConfig;
