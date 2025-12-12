@@ -15,8 +15,8 @@ use sublime_standard_tools::config::Configurable;
 use crate::config::{
     AuditConfig, AuditSectionsConfig, BackupConfig, BreakingChangesAuditConfig, ChangelogConfig,
     ChangelogFormat, ChangesetConfig, ConventionalConfig, DependencyAuditConfig, DependencyConfig,
-    GitConfig, MonorepoMode, PackageToolsConfig, RegistryConfig, UpgradeAuditConfig, UpgradeConfig,
-    VersionConfig, VersionConsistencyAuditConfig, VersioningStrategy,
+    ExecuteConfig, GitConfig, MonorepoMode, PackageToolsConfig, RegistryConfig, UpgradeAuditConfig,
+    UpgradeConfig, VersionConfig, VersionConsistencyAuditConfig, VersioningStrategy,
 };
 
 // =============================================================================
@@ -1281,6 +1281,40 @@ mod validation_tests {
         let result = validate_config(&config);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_validate_execute_zero_max_parallel() {
+        let mut config = PackageToolsConfig::default();
+        config.execute.max_parallel = 0;
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("max_parallel"));
+    }
+
+    #[test]
+    fn test_validate_execute_valid_config() {
+        let mut config = PackageToolsConfig::default();
+        config.execute.timeout_secs = 600;
+        config.execute.per_package_timeout_secs = 120;
+        config.execute.max_parallel = 4;
+
+        let result = validate_config(&config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_execute_zero_timeouts_valid() {
+        let mut config = PackageToolsConfig::default();
+        // Zero timeout means "no timeout" which is valid
+        config.execute.timeout_secs = 0;
+        config.execute.per_package_timeout_secs = 0;
+        config.execute.max_parallel = 8;
+
+        let result = validate_config(&config);
+        assert!(result.is_ok());
+    }
 }
 
 // =============================================================================
@@ -1414,5 +1448,190 @@ mod workspace_config {
 
         assert_eq!(config1, config2);
         assert_eq!(config1.patterns, config2.patterns);
+    }
+}
+
+// =============================================================================
+// ExecuteConfig Tests
+// =============================================================================
+
+mod execute_config {
+    use super::*;
+
+    #[test]
+    fn test_default_config_is_valid() {
+        let config = ExecuteConfig::default();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_default_values() {
+        let config = ExecuteConfig::default();
+        assert_eq!(config.timeout_secs, 300);
+        assert_eq!(config.per_package_timeout_secs, 60);
+        assert_eq!(config.max_parallel, 8);
+    }
+
+    #[test]
+    fn test_zero_timeout_is_valid() {
+        // 0 timeout means "no timeout" which is a valid configuration
+        let config = ExecuteConfig { timeout_secs: 0, ..Default::default() };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_zero_per_package_timeout_is_valid() {
+        // 0 per-package timeout means "no timeout" which is a valid configuration
+        let config = ExecuteConfig { per_package_timeout_secs: 0, ..Default::default() };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_zero_max_parallel_is_invalid() {
+        // max_parallel must be at least 1
+        let config = ExecuteConfig { max_parallel: 0, ..Default::default() };
+        let result = config.validate();
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("max_parallel"));
+    }
+
+    #[test]
+    fn test_max_parallel_one_is_valid() {
+        let config = ExecuteConfig { max_parallel: 1, ..Default::default() };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_high_max_parallel_is_valid() {
+        // High parallelism values should be allowed (user's choice)
+        let config = ExecuteConfig { max_parallel: 100, ..Default::default() };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_serialization() {
+        let config = ExecuteConfig::default();
+        let serialized = serde_json::to_string(&config);
+        assert!(serialized.is_ok());
+        let json = serialized.unwrap();
+        assert!(json.contains("timeout_secs"));
+        assert!(json.contains("per_package_timeout_secs"));
+        assert!(json.contains("max_parallel"));
+    }
+
+    #[test]
+    fn test_deserialization() {
+        let json = r#"{
+            "timeout_secs": 600,
+            "per_package_timeout_secs": 120,
+            "max_parallel": 4
+        }"#;
+
+        let result: Result<ExecuteConfig, _> = serde_json::from_str(json);
+        assert!(result.is_ok());
+
+        let config = result.unwrap();
+        assert_eq!(config.timeout_secs, 600);
+        assert_eq!(config.per_package_timeout_secs, 120);
+        assert_eq!(config.max_parallel, 4);
+    }
+
+    #[test]
+    fn test_deserialization_with_defaults() {
+        // Partial JSON should fill missing fields with defaults
+        let json = r#"{
+            "max_parallel": 16
+        }"#;
+
+        let result: Result<ExecuteConfig, _> = serde_json::from_str(json);
+        assert!(result.is_ok());
+
+        let config = result.unwrap();
+        assert_eq!(config.timeout_secs, 300); // default
+        assert_eq!(config.per_package_timeout_secs, 60); // default
+        assert_eq!(config.max_parallel, 16);
+    }
+
+    #[test]
+    fn test_deserialization_empty_object() {
+        // Empty JSON object should use all defaults
+        let json = "{}";
+
+        let result: Result<ExecuteConfig, _> = serde_json::from_str(json);
+        assert!(result.is_ok());
+
+        let config = result.unwrap();
+        assert_eq!(config.timeout_secs, 300);
+        assert_eq!(config.per_package_timeout_secs, 60);
+        assert_eq!(config.max_parallel, 8);
+    }
+
+    #[test]
+    fn test_merge() {
+        let mut base = ExecuteConfig::default();
+        let override_config =
+            ExecuteConfig { timeout_secs: 600, per_package_timeout_secs: 120, max_parallel: 4 };
+
+        assert!(base.merge_with(override_config).is_ok());
+        assert_eq!(base.timeout_secs, 600);
+        assert_eq!(base.per_package_timeout_secs, 120);
+        assert_eq!(base.max_parallel, 4);
+    }
+
+    #[test]
+    fn test_merge_with_zero_timeout() {
+        let mut base = ExecuteConfig::default();
+        let override_config = ExecuteConfig { timeout_secs: 0, ..Default::default() };
+
+        assert!(base.merge_with(override_config).is_ok());
+        assert_eq!(base.timeout_secs, 0);
+    }
+
+    #[test]
+    fn test_equality() {
+        let config1 = ExecuteConfig::default();
+        let config2 = ExecuteConfig::default();
+        let config3 = ExecuteConfig { max_parallel: 4, ..Default::default() };
+
+        assert_eq!(config1, config2);
+        assert_ne!(config1, config3);
+    }
+
+    #[test]
+    fn test_clone() {
+        let config1 =
+            ExecuteConfig { timeout_secs: 500, per_package_timeout_secs: 100, max_parallel: 16 };
+        let config2 = config1.clone();
+
+        assert_eq!(config1, config2);
+        assert_eq!(config1.timeout_secs, config2.timeout_secs);
+        assert_eq!(config1.per_package_timeout_secs, config2.per_package_timeout_secs);
+        assert_eq!(config1.max_parallel, config2.max_parallel);
+    }
+
+    #[test]
+    fn test_debug_formatting() {
+        let config = ExecuteConfig::default();
+        let debug_str = format!("{:?}", config);
+
+        assert!(debug_str.contains("ExecuteConfig"));
+        assert!(debug_str.contains("timeout_secs"));
+        assert!(debug_str.contains("per_package_timeout_secs"));
+        assert!(debug_str.contains("max_parallel"));
+    }
+
+    #[test]
+    fn test_custom_values() {
+        let config = ExecuteConfig {
+            timeout_secs: 3600,            // 1 hour
+            per_package_timeout_secs: 300, // 5 minutes
+            max_parallel: 32,
+        };
+
+        assert!(config.validate().is_ok());
+        assert_eq!(config.timeout_secs, 3600);
+        assert_eq!(config.per_package_timeout_secs, 300);
+        assert_eq!(config.max_parallel, 32);
     }
 }
