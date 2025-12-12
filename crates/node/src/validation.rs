@@ -839,4 +839,126 @@ pub(crate) mod validators {
         }
         Ok(())
     }
+
+    /// Validates a prerelease tag.
+    ///
+    /// Valid tags contain only ASCII alphanumerics and hyphens `[0-9A-Za-z-]`,
+    /// as per SemVer 2.0.0 specification.
+    ///
+    /// # Arguments
+    ///
+    /// * `tag` - The prerelease tag to validate
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the tag is valid
+    /// * `Err(ErrorInfo)` if the tag is empty or contains invalid characters
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::validation::validators;
+    ///
+    /// // Valid prerelease tags
+    /// assert!(validators::prerelease_tag("alpha").is_ok());
+    /// assert!(validators::prerelease_tag("beta").is_ok());
+    /// assert!(validators::prerelease_tag("rc").is_ok());
+    /// assert!(validators::prerelease_tag("beta-1").is_ok());
+    /// assert!(validators::prerelease_tag("RC1").is_ok());
+    ///
+    /// // Invalid prerelease tags
+    /// assert!(validators::prerelease_tag("").is_err());
+    /// assert!(validators::prerelease_tag("alpha.1").is_err());  // Contains period
+    /// assert!(validators::prerelease_tag("beta_1").is_err());   // Contains underscore
+    /// ```
+    pub fn prerelease_tag(tag: &str) -> ValidationResult<()> {
+        if tag.is_empty() {
+            return Err(ErrorInfo::validation(
+                "prerelease tag cannot be empty",
+                Some("prerelease"),
+            ));
+        }
+
+        // Check for valid characters (SemVer 2.0.0 spec: [0-9A-Za-z-])
+        if !tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return Err(ErrorInfo::validation(
+                format!(
+                    "prerelease tag '{tag}' contains invalid characters. \
+                     Must contain only ASCII alphanumerics and hyphens [0-9A-Za-z-]"
+                ),
+                Some("prerelease"),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Valid snapshot format template variables.
+    ///
+    /// These are the variables that can be used in snapshot format templates:
+    /// - `{version}`: Current package version
+    /// - `{branch}`: Current Git branch name (sanitized)
+    /// - `{short_commit}`: Short Git commit hash (7 characters)
+    /// - `{commit}`: Full Git commit hash
+    /// - `{timestamp}`: Unix timestamp
+    pub const VALID_SNAPSHOT_VARIABLES: &[&str] =
+        &["{version}", "{branch}", "{short_commit}", "{commit}", "{timestamp}"];
+
+    /// Validates a snapshot format template.
+    ///
+    /// A valid snapshot format must contain at least one valid template variable.
+    ///
+    /// # Valid Variables
+    ///
+    /// - `{version}`: Current package version
+    /// - `{branch}`: Current Git branch name (sanitized)
+    /// - `{short_commit}`: Short Git commit hash (7 characters)
+    /// - `{commit}`: Full Git commit hash
+    /// - `{timestamp}`: Unix timestamp
+    ///
+    /// # Arguments
+    ///
+    /// * `format` - The snapshot format template to validate
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the format is valid
+    /// * `Err(ErrorInfo)` if the format is empty or contains no valid variables
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_node_tools::validation::validators;
+    ///
+    /// // Valid snapshot formats
+    /// assert!(validators::snapshot_format("{version}-snapshot.{short_commit}").is_ok());
+    /// assert!(validators::snapshot_format("{version}-{branch}.{commit}").is_ok());
+    /// assert!(validators::snapshot_format("{version}-dev.{timestamp}").is_ok());
+    ///
+    /// // Invalid snapshot formats
+    /// assert!(validators::snapshot_format("").is_err());
+    /// assert!(validators::snapshot_format("no-variables-here").is_err());
+    /// assert!(validators::snapshot_format("{invalid}").is_err());
+    /// ```
+    pub fn snapshot_format(format: &str) -> ValidationResult<()> {
+        if format.is_empty() {
+            return Err(ErrorInfo::validation("snapshot format cannot be empty", Some("format")));
+        }
+
+        // Check for at least one valid variable
+        let has_valid_var = VALID_SNAPSHOT_VARIABLES.iter().any(|v| format.contains(v));
+
+        if !has_valid_var {
+            return Err(ErrorInfo::validation(
+                format!(
+                    "snapshot format '{}' must contain at least one valid variable: {}",
+                    format,
+                    VALID_SNAPSHOT_VARIABLES.join(", ")
+                ),
+                Some("format"),
+            ));
+        }
+
+        Ok(())
+    }
 }

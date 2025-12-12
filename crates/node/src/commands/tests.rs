@@ -4141,3 +4141,692 @@ mod changeset_check_tests {
         }
     }
 }
+
+// ============================================================================
+// Bump Preview Command Tests (Story 5.2)
+// ============================================================================
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod bump_preview_tests {
+    use std::io::Write;
+
+    use tempfile::TempDir;
+
+    use crate::commands::bump::{
+        CliBumpSnapshot, CliBumpSummary, CliChangesetInfo, CliPackageBumpInfo, SharedBuffer,
+        convert_params_to_args, convert_to_napi_preview, parse_preview_response,
+        validate_preview_params,
+    };
+    use crate::types::bump::BumpPreviewParams;
+
+    // -------------------------------------------------------------------------
+    // SharedBuffer Tests
+    // -------------------------------------------------------------------------
+
+    mod shared_buffer_tests {
+        use super::*;
+
+        #[test]
+        fn test_shared_buffer_new() {
+            let buffer = SharedBuffer::new();
+            assert!(buffer.take_bytes().is_empty());
+        }
+
+        #[test]
+        fn test_shared_buffer_write() {
+            let mut buffer = SharedBuffer::new();
+            let bytes_written = buffer.write(b"hello").unwrap();
+            assert_eq!(bytes_written, 5);
+            assert_eq!(buffer.take_bytes(), b"hello");
+        }
+
+        #[test]
+        fn test_shared_buffer_multiple_writes() {
+            let mut buffer = SharedBuffer::new();
+            buffer.write_all(b"hello ").unwrap();
+            buffer.write_all(b"world").unwrap();
+            assert_eq!(buffer.take_bytes(), b"hello world");
+        }
+
+        #[test]
+        fn test_shared_buffer_clone_shares_data() {
+            let mut buffer = SharedBuffer::new();
+            let buffer_clone = buffer.clone();
+            buffer.write_all(b"shared data").unwrap();
+
+            // Both buffers should see the same data
+            assert_eq!(buffer.take_bytes(), b"shared data");
+            assert_eq!(buffer_clone.take_bytes(), b"shared data");
+        }
+
+        #[test]
+        fn test_shared_buffer_flush() {
+            let mut buffer = SharedBuffer::new();
+            assert!(buffer.flush().is_ok());
+        }
+
+        #[test]
+        fn test_shared_buffer_take_bytes_preserves_data() {
+            let mut buffer = SharedBuffer::new();
+            buffer.write_all(b"test data").unwrap();
+
+            // Multiple takes should return same data
+            let first_take = buffer.take_bytes();
+            let second_take = buffer.take_bytes();
+            assert_eq!(first_take, second_take);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Parse Response Tests
+    // -------------------------------------------------------------------------
+
+    mod parse_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_preview_response_success() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "strategy": "Independent",
+                    "packages": [
+                        {
+                            "name": "@scope/core",
+                            "path": "packages/core",
+                            "currentVersion": "1.0.0",
+                            "nextVersion": "1.1.0",
+                            "bumpType": "Minor",
+                            "willBump": true,
+                            "reason": "direct change from changeset"
+                        }
+                    ],
+                    "changesets": [
+                        {
+                            "id": "feature-new-api",
+                            "branch": "feature/new-api",
+                            "bumpType": "Minor",
+                            "packages": ["@scope/core"],
+                            "commitCount": 5
+                        }
+                    ],
+                    "summary": {
+                        "totalPackages": 1,
+                        "packagesToBump": 1,
+                        "packagesUnchanged": 0,
+                        "totalChangesets": 1,
+                        "hasCircularDependencies": false
+                    }
+                }
+            }"#;
+
+            let result = parse_preview_response(json.as_bytes());
+            assert!(result.is_ok());
+            let data = result.unwrap();
+            assert_eq!(data.strategy, "independent");
+            assert_eq!(data.packages.len(), 1);
+            assert_eq!(data.packages[0].name, "@scope/core");
+            assert_eq!(data.packages[0].current_version, "1.0.0");
+            assert_eq!(data.packages[0].next_version, "1.1.0");
+            assert_eq!(data.packages[0].bump, "minor");
+            assert_eq!(data.changesets.len(), 1);
+            assert_eq!(data.changesets[0], "feature-new-api");
+            assert_eq!(data.summary.total_packages, 1);
+            assert_eq!(data.summary.minor_bumps, 1);
+        }
+
+        #[test]
+        fn test_parse_preview_response_no_packages_to_bump() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "strategy": "Unified",
+                    "packages": [
+                        {
+                            "name": "@scope/utils",
+                            "path": "packages/utils",
+                            "currentVersion": "2.0.0",
+                            "nextVersion": "2.0.0",
+                            "bumpType": "None",
+                            "willBump": false,
+                            "reason": "not in any changeset"
+                        }
+                    ],
+                    "changesets": [],
+                    "summary": {
+                        "totalPackages": 1,
+                        "packagesToBump": 0,
+                        "packagesUnchanged": 1,
+                        "totalChangesets": 0,
+                        "hasCircularDependencies": false
+                    }
+                }
+            }"#;
+
+            let result = parse_preview_response(json.as_bytes());
+            assert!(result.is_ok());
+            let data = result.unwrap();
+            assert_eq!(data.strategy, "unified");
+            // Packages with willBump=false are filtered out
+            assert_eq!(data.packages.len(), 0);
+            assert_eq!(data.changesets.len(), 0);
+            assert_eq!(data.summary.total_packages, 0);
+        }
+
+        #[test]
+        fn test_parse_preview_response_multiple_bump_types() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "strategy": "Independent",
+                    "packages": [
+                        {
+                            "name": "@scope/core",
+                            "path": "packages/core",
+                            "currentVersion": "1.0.0",
+                            "nextVersion": "2.0.0",
+                            "bumpType": "Major",
+                            "willBump": true,
+                            "reason": "breaking change"
+                        },
+                        {
+                            "name": "@scope/utils",
+                            "path": "packages/utils",
+                            "currentVersion": "1.0.0",
+                            "nextVersion": "1.1.0",
+                            "bumpType": "Minor",
+                            "willBump": true,
+                            "reason": "new feature"
+                        },
+                        {
+                            "name": "@scope/config",
+                            "path": "packages/config",
+                            "currentVersion": "1.0.0",
+                            "nextVersion": "1.0.1",
+                            "bumpType": "Patch",
+                            "willBump": true,
+                            "reason": "bug fix"
+                        }
+                    ],
+                    "changesets": [],
+                    "summary": {
+                        "totalPackages": 3,
+                        "packagesToBump": 3,
+                        "packagesUnchanged": 0,
+                        "totalChangesets": 1,
+                        "hasCircularDependencies": false
+                    }
+                }
+            }"#;
+
+            let result = parse_preview_response(json.as_bytes());
+            assert!(result.is_ok());
+            let data = result.unwrap();
+            assert_eq!(data.packages.len(), 3);
+            assert_eq!(data.summary.total_packages, 3);
+            assert_eq!(data.summary.major_bumps, 1);
+            assert_eq!(data.summary.minor_bumps, 1);
+            assert_eq!(data.summary.patch_bumps, 1);
+        }
+
+        #[test]
+        fn test_parse_preview_response_cli_error() {
+            let json = r#"{
+                "success": false,
+                "error": "No changesets found"
+            }"#;
+
+            let result = parse_preview_response(json.as_bytes());
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EEXEC");
+            assert!(error.message.contains("No changesets found"));
+        }
+
+        #[test]
+        fn test_parse_preview_response_empty() {
+            let result = parse_preview_response(b"");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("empty response"));
+        }
+
+        #[test]
+        fn test_parse_preview_response_whitespace_only() {
+            let result = parse_preview_response(b"   \n  \t  ");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("empty response"));
+        }
+
+        #[test]
+        fn test_parse_preview_response_invalid_json() {
+            let result = parse_preview_response(b"not valid json");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Failed to parse"));
+        }
+
+        #[test]
+        fn test_parse_preview_response_invalid_utf8() {
+            let invalid_utf8 = vec![0xFF, 0xFE, 0x00, 0x01];
+            let result = parse_preview_response(&invalid_utf8);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Invalid UTF-8"));
+        }
+
+        #[test]
+        fn test_parse_preview_response_success_no_data() {
+            let json = r#"{"success": true}"#;
+            let result = parse_preview_response(json.as_bytes());
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("no data"));
+        }
+
+        #[test]
+        fn test_parse_preview_response_cli_error_no_message() {
+            let json = r#"{"success": false}"#;
+            let result = parse_preview_response(json.as_bytes());
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Unknown CLI error"));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Conversion Tests
+    // -------------------------------------------------------------------------
+
+    mod conversion_tests {
+        use super::*;
+
+        #[test]
+        fn test_convert_to_napi_preview_full() {
+            let cli_data = CliBumpSnapshot {
+                strategy: "Independent".to_string(),
+                packages: vec![
+                    CliPackageBumpInfo {
+                        name: "@scope/core".to_string(),
+                        path: "packages/core".to_string(),
+                        current_version: "1.0.0".to_string(),
+                        next_version: "2.0.0".to_string(),
+                        bump_type: "Major".to_string(),
+                        will_bump: true,
+                        reason: "breaking change".to_string(),
+                    },
+                    CliPackageBumpInfo {
+                        name: "@scope/utils".to_string(),
+                        path: "packages/utils".to_string(),
+                        current_version: "1.0.0".to_string(),
+                        next_version: "1.0.0".to_string(),
+                        bump_type: "None".to_string(),
+                        will_bump: false,
+                        reason: "not in changeset".to_string(),
+                    },
+                ],
+                changesets: vec![CliChangesetInfo {
+                    id: "feature-breaking".to_string(),
+                    branch: "feature/breaking".to_string(),
+                    bump_type: "Major".to_string(),
+                    packages: vec!["@scope/core".to_string()],
+                    commit_count: 3,
+                }],
+                summary: CliBumpSummary {
+                    total_packages: 2,
+                    packages_to_bump: 1,
+                    packages_unchanged: 1,
+                    total_changesets: 1,
+                    has_circular_dependencies: false,
+                },
+            };
+
+            let result = convert_to_napi_preview(cli_data);
+
+            // Strategy should be lowercase
+            assert_eq!(result.strategy, "independent");
+
+            // Only packages with will_bump=true should be included
+            assert_eq!(result.packages.len(), 1);
+            assert_eq!(result.packages[0].name, "@scope/core");
+            assert_eq!(result.packages[0].bump, "major");
+
+            // Changesets should only have IDs
+            assert_eq!(result.changesets.len(), 1);
+            assert_eq!(result.changesets[0], "feature-breaking");
+
+            // Summary should be calculated from filtered packages
+            assert_eq!(result.summary.total_packages, 1);
+            assert_eq!(result.summary.major_bumps, 1);
+            assert_eq!(result.summary.minor_bumps, 0);
+            assert_eq!(result.summary.patch_bumps, 0);
+        }
+
+        #[test]
+        fn test_convert_to_napi_preview_empty() {
+            let cli_data = CliBumpSnapshot {
+                strategy: "Unified".to_string(),
+                packages: vec![],
+                changesets: vec![],
+                summary: CliBumpSummary {
+                    total_packages: 0,
+                    packages_to_bump: 0,
+                    packages_unchanged: 0,
+                    total_changesets: 0,
+                    has_circular_dependencies: false,
+                },
+            };
+
+            let result = convert_to_napi_preview(cli_data);
+            assert_eq!(result.strategy, "unified");
+            assert!(result.packages.is_empty());
+            assert!(result.changesets.is_empty());
+            assert_eq!(result.summary.total_packages, 0);
+        }
+
+        #[test]
+        fn test_convert_params_to_args_defaults() {
+            let params = BumpPreviewParams::new("/path/to/project");
+            let args = convert_params_to_args(&params);
+
+            // Preview mode settings
+            assert!(args.dry_run);
+            assert!(!args.execute);
+            assert!(!args.snapshot);
+
+            // Default values
+            assert!(args.packages.is_none());
+            assert!(!args.show_diff);
+            assert!(args.force);
+
+            // No git operations
+            assert!(!args.git_commit);
+            assert!(!args.git_tag);
+            assert!(!args.git_push);
+
+            // No changelog/archive in preview
+            assert!(args.no_changelog);
+            assert!(args.no_archive);
+        }
+
+        #[test]
+        fn test_convert_params_to_args_with_options() {
+            let params = BumpPreviewParams::new("/path/to/project")
+                .with_packages(vec!["@scope/core".to_string(), "@scope/utils".to_string()])
+                .with_show_diff(true);
+            let args = convert_params_to_args(&params);
+
+            assert!(args.dry_run);
+            assert_eq!(
+                args.packages,
+                Some(vec!["@scope/core".to_string(), "@scope/utils".to_string()])
+            );
+            assert!(args.show_diff);
+        }
+
+        #[test]
+        fn test_convert_params_to_args_show_diff_false() {
+            let params = BumpPreviewParams::new("/path/to/project").with_show_diff(false);
+            let args = convert_params_to_args(&params);
+            assert!(!args.show_diff);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Validation Tests
+    // -------------------------------------------------------------------------
+
+    mod validation_tests {
+        use super::*;
+
+        #[test]
+        fn test_validate_preview_params_valid_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpPreviewParams::new(path_str);
+            let result = validate_preview_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_preview_params_nonexistent_path() {
+            let params = BumpPreviewParams::new("/nonexistent/path/to/project");
+            let result = validate_preview_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "ENOENT");
+        }
+
+        #[test]
+        fn test_validate_preview_params_empty_root() {
+            let params = BumpPreviewParams::new("");
+            let result = validate_preview_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+        }
+
+        #[test]
+        fn test_validate_preview_params_file_not_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let file_path = temp_dir.path().join("test.txt");
+            std::fs::write(&file_path, "test content").unwrap();
+
+            let params = BumpPreviewParams::new(file_path.to_str().unwrap());
+            let result = validate_preview_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+        }
+
+        #[test]
+        fn test_validate_preview_params_with_packages() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params =
+                BumpPreviewParams::new(path_str).with_packages(vec!["@scope/core".to_string()]);
+            let result = validate_preview_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_preview_params_with_config_path() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpPreviewParams::new(path_str).with_config_path("/path/to/config.json");
+            let result = validate_preview_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_preview_params_returns_correct_path() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = BumpPreviewParams::new(path_str);
+            let result = validate_preview_params(&params);
+            assert!(result.is_ok());
+            let path = result.unwrap();
+            assert_eq!(path.to_str().unwrap(), path_str);
+        }
+    }
+}
+
+// ============================================================================
+// Validator Tests for Bump Commands (Story 5.2-5.4)
+// ============================================================================
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod bump_validator_tests {
+    use crate::validation::validators;
+
+    // -------------------------------------------------------------------------
+    // Prerelease Tag Validator Tests
+    // -------------------------------------------------------------------------
+
+    mod prerelease_tag_tests {
+        use super::*;
+
+        #[test]
+        fn test_prerelease_tag_valid_alpha() {
+            let result = validators::prerelease_tag("alpha");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_prerelease_tag_valid_beta() {
+            let result = validators::prerelease_tag("beta");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_prerelease_tag_valid_rc() {
+            let result = validators::prerelease_tag("rc");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_prerelease_tag_valid_with_numbers() {
+            let result = validators::prerelease_tag("beta1");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_prerelease_tag_valid_with_hyphen() {
+            let result = validators::prerelease_tag("beta-1");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_prerelease_tag_valid_uppercase() {
+            let result = validators::prerelease_tag("RC1");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_prerelease_tag_valid_mixed_case() {
+            let result = validators::prerelease_tag("Alpha-2");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_prerelease_tag_empty() {
+            let result = validators::prerelease_tag("");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("cannot be empty"));
+        }
+
+        #[test]
+        fn test_prerelease_tag_invalid_period() {
+            let result = validators::prerelease_tag("alpha.1");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("invalid characters"));
+        }
+
+        #[test]
+        fn test_prerelease_tag_invalid_underscore() {
+            let result = validators::prerelease_tag("beta_1");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("invalid characters"));
+        }
+
+        #[test]
+        fn test_prerelease_tag_invalid_space() {
+            let result = validators::prerelease_tag("beta 1");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("invalid characters"));
+        }
+
+        #[test]
+        fn test_prerelease_tag_invalid_special_chars() {
+            let result = validators::prerelease_tag("alpha@1");
+            assert!(result.is_err());
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Snapshot Format Validator Tests
+    // -------------------------------------------------------------------------
+
+    mod snapshot_format_tests {
+        use super::*;
+
+        #[test]
+        fn test_snapshot_format_valid_default() {
+            let result = validators::snapshot_format("{version}-snapshot.{short_commit}");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_snapshot_format_valid_with_branch() {
+            let result = validators::snapshot_format("{version}-{branch}.{short_commit}");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_snapshot_format_valid_with_timestamp() {
+            let result = validators::snapshot_format("{version}-dev.{timestamp}");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_snapshot_format_valid_with_commit() {
+            let result = validators::snapshot_format("{version}-{commit}");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_snapshot_format_valid_version_only() {
+            let result = validators::snapshot_format("{version}");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_snapshot_format_valid_all_variables() {
+            let result = validators::snapshot_format(
+                "{version}-{branch}-{short_commit}-{commit}-{timestamp}",
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_snapshot_format_empty() {
+            let result = validators::snapshot_format("");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("cannot be empty"));
+        }
+
+        #[test]
+        fn test_snapshot_format_no_variables() {
+            let result = validators::snapshot_format("no-variables-here");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("must contain at least one"));
+        }
+
+        #[test]
+        fn test_snapshot_format_invalid_variable() {
+            let result = validators::snapshot_format("{invalid}");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.message.contains("must contain at least one"));
+        }
+
+        #[test]
+        fn test_snapshot_format_partial_variable_name() {
+            let result = validators::snapshot_format("{ver}-{bran}");
+            assert!(result.is_err());
+        }
+    }
+}

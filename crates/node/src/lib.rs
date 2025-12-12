@@ -151,7 +151,13 @@ pub use commands::changeset_remove;
 pub use commands::changeset_history;
 // Story 4.8: changesetCheck
 pub use commands::changeset_check;
-// TODO: will be implemented on story 5.2-5.4 (bump commands)
+
+// Bump commands (Story 5.2-5.4)
+// Story 5.2: bumpPreview
+pub use commands::bump_preview;
+// TODO: will be implemented on story 5.3 (bumpApply)
+// TODO: will be implemented on story 5.4 (bumpSnapshot)
+
 // TODO: will be implemented on story 6.3 (execute command)
 // TODO: will be implemented on story 7.2-7.3 (config commands)
 // TODO: will be implemented on story 8.2-8.4 (upgrade commands)
