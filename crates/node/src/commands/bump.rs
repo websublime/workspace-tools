@@ -126,12 +126,13 @@ use serde::Deserialize;
 
 use crate::error::ErrorInfo;
 use crate::types::bump::{
-    BumpPreviewApiResponse, BumpPreviewData, BumpPreviewParams, BumpSummaryInfo, PackageVersionInfo,
+    BumpApplyApiResponse, BumpApplyData, BumpApplyParams, BumpPreviewApiResponse, BumpPreviewData,
+    BumpPreviewParams, BumpSummaryInfo, PackageVersionInfo,
 };
 use crate::validation::validators;
 
 use sublime_cli_tools::cli::commands::BumpArgs;
-use sublime_cli_tools::commands::bump::execute_bump_preview;
+use sublime_cli_tools::commands::bump::{execute_bump_apply, execute_bump_preview};
 use sublime_cli_tools::output::{Output, OutputFormat};
 
 // ============================================================================
@@ -335,6 +336,50 @@ pub(crate) struct CliBumpSummary {
 }
 
 // ============================================================================
+// CLI Response Types for bump apply (execute result)
+// ============================================================================
+
+/// CLI JSON response wrapper for bump apply (execute) command.
+///
+/// This type mirrors the `JsonResponse<ExecuteResult>` structure from the CLI crate,
+/// used for deserializing the captured JSON output from `execute_bump_apply`.
+///
+/// Note: The CLI's `ExecuteResult` uses snake_case for field names (no `rename_all`
+/// attribute), so we must use snake_case here to match the JSON output.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CliApplyJsonResponse {
+    /// Whether the operation succeeded.
+    pub(crate) success: bool,
+    /// The response data (present when success is true).
+    pub(crate) data: Option<CliExecuteResult>,
+    /// Error message (present when success is false).
+    pub(crate) error: Option<String>,
+}
+
+/// CLI execute result data structure.
+///
+/// Mirrors the `ExecuteResult` structure from the CLI's bump execute command.
+/// Note: The CLI uses snake_case for JSON serialization (no `rename_all` attribute).
+#[derive(Debug, Deserialize)]
+pub(crate) struct CliExecuteResult {
+    /// Versioning strategy used (Independent or Unified).
+    pub(crate) strategy: String,
+    /// Number of packages that were updated.
+    pub(crate) packages_updated: usize,
+    /// Number of changesets that were archived.
+    pub(crate) changesets_archived: usize,
+    /// List of files that were modified (as PathBuf serialized strings).
+    pub(crate) files_modified: Vec<String>,
+    /// List of Git tags that were created.
+    pub(crate) tags_created: Vec<String>,
+    /// Git commit SHA (if commit was created).
+    pub(crate) commit_sha: Option<String>,
+    /// Full snapshot of the bump operation (not used in NAPI response, but required for parsing).
+    #[allow(dead_code)]
+    pub(crate) snapshot: CliBumpSnapshot,
+}
+
+// ============================================================================
 // Conversion Functions
 // ============================================================================
 
@@ -464,6 +509,84 @@ pub(crate) fn parse_preview_response(json_bytes: &[u8]) -> Result<BumpPreviewDat
 }
 
 // ============================================================================
+// Conversion Functions for bump apply
+// ============================================================================
+
+/// Converts CLI execute result to NAPI-compatible `BumpApplyData`.
+///
+/// This function performs a conversion from the CLI's internal types to the
+/// NAPI types exposed to JavaScript.
+///
+/// # Arguments
+///
+/// * `cli_data` - The parsed CLI execute result
+///
+/// # Returns
+///
+/// A `BumpApplyData` instance suitable for returning to JavaScript.
+#[allow(clippy::cast_possible_truncation)]
+// Justification: It's practically impossible to have more than 4 billion packages
+// or changesets in a workspace. The u32 limit is sufficient for any real-world scenario.
+pub(crate) fn convert_to_napi_apply(cli_data: CliExecuteResult) -> BumpApplyData {
+    BumpApplyData {
+        strategy: cli_data.strategy.to_lowercase(),
+        packages_updated: cli_data.packages_updated as u32,
+        changesets_archived: cli_data.changesets_archived as u32,
+        files_modified: cli_data.files_modified,
+        tags_created: cli_data.tags_created,
+        commit_sha: cli_data.commit_sha,
+    }
+}
+
+/// Parses the JSON response from the CLI apply command and converts it to NAPI types.
+///
+/// # Arguments
+///
+/// * `json_bytes` - The raw JSON bytes captured from CLI output
+///
+/// # Returns
+///
+/// * `Ok(BumpApplyData)` - Successfully parsed and converted apply data
+/// * `Err(ErrorInfo)` - Parsing failed or CLI returned an error
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The JSON is malformed or cannot be parsed
+/// - The CLI returned `success: false` with an error message
+/// - The CLI returned `success: true` but `data` is missing
+pub(crate) fn parse_apply_response(json_bytes: &[u8]) -> Result<BumpApplyData, ErrorInfo> {
+    // Convert bytes to string first for better error messages
+    let json_str = std::str::from_utf8(json_bytes)
+        .map_err(|e| ErrorInfo::execution(format!("Invalid UTF-8 in CLI response: {e}")))?;
+
+    // Handle empty response
+    if json_str.trim().is_empty() {
+        return Err(ErrorInfo::execution("CLI returned empty response"));
+    }
+
+    // Parse the JSON response
+    let response: CliApplyJsonResponse = serde_json::from_str(json_str).map_err(|e| {
+        ErrorInfo::execution(format!(
+            "Failed to parse CLI JSON response: {e} (length={})",
+            json_str.len()
+        ))
+    })?;
+
+    // Check for CLI-level errors
+    if !response.success {
+        let error_message = response.error.unwrap_or_else(|| "Unknown CLI error".to_string());
+        return Err(ErrorInfo::execution(error_message));
+    }
+
+    // Extract and convert data
+    let cli_data =
+        response.data.ok_or_else(|| ErrorInfo::execution("CLI returned success but no data"))?;
+
+    Ok(convert_to_napi_apply(cli_data))
+}
+
+// ============================================================================
 // Parameter Validation
 // ============================================================================
 
@@ -482,6 +605,30 @@ pub(crate) fn parse_preview_response(json_bytes: &[u8]) -> Result<BumpPreviewDat
 pub(crate) fn validate_preview_params(params: &BumpPreviewParams) -> Result<PathBuf, ErrorInfo> {
     // Validate root path exists and is a directory
     validators::root(&params.root)?;
+
+    Ok(PathBuf::from(&params.root))
+}
+
+/// Validates bump apply command parameters.
+///
+/// Ensures the root path is valid and validates the prerelease tag if provided.
+///
+/// # Arguments
+///
+/// * `params` - The apply parameters to validate
+///
+/// # Returns
+///
+/// * `Ok(PathBuf)` - The validated root path
+/// * `Err(ErrorInfo)` - Validation failed
+pub(crate) fn validate_apply_params(params: &BumpApplyParams) -> Result<PathBuf, ErrorInfo> {
+    // Validate root path exists and is a directory
+    validators::root(&params.root)?;
+
+    // Validate prerelease tag if provided
+    if let Some(ref tag) = params.prerelease {
+        validators::prerelease_tag(tag)?;
+    }
 
     Ok(PathBuf::from(&params.root))
 }
@@ -525,6 +672,51 @@ pub(crate) fn convert_params_to_args(params: &BumpPreviewParams) -> BumpArgs {
 
         // Show diff from params
         show_diff: params.show_diff.unwrap_or(false),
+    }
+}
+
+/// Converts `BumpApplyParams` to CLI `BumpArgs`.
+///
+/// This function sets the appropriate flags for execute mode (execute = true)
+/// and maps all NAPI parameters to CLI arguments including git operations,
+/// prerelease support, and changelog/archive control.
+///
+/// # Arguments
+///
+/// * `params` - The NAPI apply parameters
+///
+/// # Returns
+///
+/// A `BumpArgs` struct configured for execute mode.
+pub(crate) fn convert_apply_params_to_args(params: &BumpApplyParams) -> BumpArgs {
+    BumpArgs {
+        // Execute mode: execute = true, no dry run
+        dry_run: false,
+        execute: true,
+        snapshot: false,
+        snapshot_format: None,
+
+        // Prerelease support
+        prerelease: params.prerelease.clone(),
+
+        // Package filter from params
+        packages: params.packages.clone(),
+
+        // Git operations from params
+        git_tag: params.git_tag.unwrap_or(false),
+        git_push: params.git_push.unwrap_or(false),
+        git_commit: params.git_commit.unwrap_or(false),
+
+        // Changelog and archive control
+        no_changelog: params.no_changelog.unwrap_or(false),
+        no_archive: params.no_archive.unwrap_or(false),
+        always_archive: params.always_archive.unwrap_or(false),
+
+        // Skip confirmations (API is non-interactive by default)
+        force: params.force.unwrap_or(true),
+
+        // No diff display in execute mode
+        show_diff: false,
     }
 }
 
@@ -644,19 +836,162 @@ pub async fn bump_preview(params: BumpPreviewParams) -> BumpPreviewApiResponse {
     }
 }
 
-// TODO: will be implemented on story 5.3 - bumpApply
-//
-// #[napi(js_name = "bumpApply")]
-// pub async fn bump_apply(params: BumpApplyParams) -> BumpApplyApiResponse {
-//     // Implementation will include:
-//     // 1. Validate parameters including prerelease tag if provided
-//     // 2. Create BumpArgs with execute = true
-//     // 3. Support git operations (commit, tag, push)
-//     // 4. Support prerelease parameter for alpha/beta/rc versions
-//     // 5. Support changelog/archive control
-//     // 6. Execute CLI command and parse response
-//     todo!()
-// }
+/// Apply version bumps to packages.
+///
+/// Applies version changes based on pending changesets. This is the main
+/// release command that modifies package.json files, generates changelogs,
+/// archives changesets, and optionally creates Git commits and tags.
+///
+/// This function is the main entry point for Node.js applications to apply
+/// version bumps. It handles all the complexity of CLI invocation and response
+/// parsing internally.
+///
+/// @param params - Apply parameters containing:
+///   - `root`: Workspace root directory path (required)
+///   - `configPath`: Optional custom config file path
+///   - `packages`: Optional filter to specific packages
+///   - `gitCommit`: Whether to create a Git commit with version changes
+///   - `gitTag`: Whether to create Git tags for releases
+///   - `gitPush`: Whether to push Git tags to remote
+///   - `prerelease`: Prerelease tag (alpha, beta, rc, or custom)
+///   - `noChangelog`: Whether to skip changelog generation
+///   - `noArchive`: Whether to keep changesets active after bump
+///   - `alwaysArchive`: Whether to force archiving for prereleases
+///   - `force`: Whether to skip confirmation prompts (default: true)
+///
+/// @returns `Promise<ApiResponse<BumpApplyData>>` containing:
+///   - On success: `{ success: true, data: BumpApplyData }`
+///   - On failure: `{ success: false, error: ErrorInfo }`
+///
+/// @example Basic usage - apply bumps without Git operations
+/// ```typescript
+/// const result = await bumpApply({ root: '/path/to/project' });
+/// if (result.success) {
+///   console.log(`Updated ${result.data.packagesUpdated} packages`);
+///   console.log(`Archived ${result.data.changesetsArchived} changesets`);
+///   console.log(`Modified files: ${result.data.filesModified.join(', ')}`);
+/// } else {
+///   console.error(`Error: ${result.error.code} - ${result.error.message}`);
+/// }
+/// ```
+///
+/// @example With Git operations
+/// ```typescript
+/// const result = await bumpApply({
+///   root: '/path/to/project',
+///   gitCommit: true,
+///   gitTag: true,
+///   gitPush: true
+/// });
+/// if (result.success) {
+///   console.log(`Commit SHA: ${result.data.commitSha}`);
+///   console.log(`Tags created: ${result.data.tagsCreated.join(', ')}`);
+/// }
+/// ```
+///
+/// @example Prerelease version (beta)
+/// ```typescript
+/// const result = await bumpApply({
+///   root: '/path/to/project',
+///   prerelease: 'beta',
+///   gitCommit: true,
+///   gitTag: true
+/// });
+/// // Creates versions like 1.3.0-beta.0
+/// ```
+///
+/// @example Skip changelog and archive
+/// ```typescript
+/// const result = await bumpApply({
+///   root: '/path/to/project',
+///   noChangelog: true,
+///   noArchive: true
+/// });
+/// // Updates versions but keeps changesets and skips changelog
+/// ```
+///
+/// @example Force archive for prerelease
+/// ```typescript
+/// const result = await bumpApply({
+///   root: '/path/to/project',
+///   prerelease: 'rc',
+///   alwaysArchive: true,  // Archive changesets even for prerelease
+///   gitCommit: true,
+///   gitTag: true
+/// });
+/// ```
+///
+/// @example Error handling
+/// ```typescript
+/// const result = await bumpApply({ root: '/nonexistent' });
+/// if (!result.success) {
+///   if (result.error.code === 'ENOENT') {
+///     console.error('Path not found');
+///   } else if (result.error.code === 'EVALIDATION') {
+///     console.error('Invalid parameters:', result.error.message);
+///   } else if (result.error.code === 'EGIT') {
+///     console.error('Git operation failed:', result.error.message);
+///   }
+/// }
+/// ```
+#[napi(js_name = "bumpApply")]
+pub async fn bump_apply(params: BumpApplyParams) -> BumpApplyApiResponse {
+    // 1. Validate parameters (synchronous validation before spawning)
+    let root_path = match validate_apply_params(&params) {
+        Ok(path) => path,
+        Err(error) => return BumpApplyApiResponse::failure(error),
+    };
+
+    // 2. Prepare config path
+    let config_path: Option<PathBuf> = params.config_path.as_ref().map(PathBuf::from);
+
+    // 3. Convert params to CLI args
+    let args = convert_apply_params_to_args(&params);
+
+    // 4. Execute CLI command in a blocking task
+    // The CLI's execute_bump_apply uses types that are not Send/Sync (RefCell, git2::Repository),
+    // so we must run it on a blocking thread via spawn_blocking.
+    let result = tokio::task::spawn_blocking(move || {
+        // Create a new tokio runtime for the blocking context
+        // This is necessary because execute_bump_apply is async but we're in a blocking context
+        let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+            Ok(rt) => rt,
+            Err(e) => {
+                return Err(ErrorInfo::execution(format!("Failed to create runtime: {e}")));
+            }
+        };
+
+        rt.block_on(async {
+            // Create shared buffer for output capture
+            let buffer = SharedBuffer::new();
+
+            // Create Output with JSON format
+            let output = Output::new(OutputFormat::Json, buffer.clone(), true);
+
+            // Execute the CLI command
+            let config_path_ref: Option<&Path> = config_path.as_deref();
+            if let Err(cli_error) =
+                execute_bump_apply(&args, &output, &root_path, config_path_ref).await
+            {
+                return Err(ErrorInfo::from(cli_error));
+            }
+
+            // Extract and parse JSON
+            let json_bytes = buffer.take_bytes();
+            parse_apply_response(&json_bytes)
+        })
+    })
+    .await;
+
+    // 5. Handle spawn_blocking result
+    match result {
+        Ok(Ok(data)) => BumpApplyApiResponse::success(data),
+        Ok(Err(error)) => BumpApplyApiResponse::failure(error),
+        Err(join_error) => BumpApplyApiResponse::failure(ErrorInfo::execution(format!(
+            "Task execution failed: {join_error}"
+        ))),
+    }
+}
 
 // TODO: will be implemented on story 5.4 - bumpSnapshot
 //
