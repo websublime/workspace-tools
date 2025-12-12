@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.22 - 2025-12-12
+
+### Documentation
+
+#### WOR-TSK-198
+
+- Add ExecuteConfig documentation
+
+### Features
+
+#### WOR-TSK-198
+
+- Add ExecuteConfig struct for command execution settings
+- Integrate ExecuteConfig into PackageToolsConfig
+
+### Testing
+
+#### WOR-TSK-198
+
+- Add comprehensive tests for ExecuteConfig
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.21 - 2025-12-12
 
 ### Features
