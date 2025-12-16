@@ -6369,7 +6369,7 @@ mod execute_tests {
         fn test_validate_params_timeout_exceeds_max() {
             let temp_dir = TempDir::new().unwrap();
             let path_str = temp_dir.path().to_str().unwrap();
-            let params = ExecuteParams::new(path_str, "npm:test").with_timeout_secs(100000);
+            let params = ExecuteParams::new(path_str, "npm:test").with_timeout_secs(100_000);
             let result = validate_params(&params);
             assert!(result.is_err());
 
@@ -6789,7 +6789,7 @@ mod execute_tests {
             assert_eq!(napi_data.results[0].package, "@org/core");
             assert!(napi_data.results[0].success);
             assert_eq!(napi_data.results[0].exit_code, 0);
-            assert_eq!(napi_data.results[0].duration_ms, 2500);
+            assert!((napi_data.results[0].duration_ms - 2500.0).abs() < f64::EPSILON);
             assert!(napi_data.results[0].error.is_none());
 
             assert_eq!(napi_data.results[1].package, "@org/utils");
@@ -6800,7 +6800,7 @@ mod execute_tests {
             assert_eq!(napi_data.summary.total, 2);
             assert_eq!(napi_data.summary.succeeded, 1);
             assert_eq!(napi_data.summary.failed, 1);
-            assert_eq!(napi_data.summary.total_duration_ms, 3000);
+            assert!((napi_data.summary.total_duration_ms - 3000.0).abs() < f64::EPSILON);
         }
 
         #[test]

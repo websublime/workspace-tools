@@ -353,9 +353,12 @@ pub(crate) struct CliExecuteSummary {
 /// # Returns
 ///
 /// An `ExecuteData` instance suitable for returning to JavaScript.
-#[allow(clippy::cast_possible_truncation)]
-// Justification: It's practically impossible to have more than 4 billion packages
-// in a workspace. The u32 limit is sufficient for any real-world scenario.
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+// Justification for cast_possible_truncation: It's practically impossible to have
+// more than 4 billion packages in a workspace. The u32 limit is sufficient.
+// Justification for cast_precision_loss: Duration values in milliseconds will never
+// exceed 2^53 (the safe integer limit for f64), so no precision is lost in practice.
+// JavaScript numbers are f64 internally, making this conversion necessary for NAPI.
 pub(crate) fn convert_to_napi_execute(cli_data: CliExecuteData) -> ExecuteData {
     let results: Vec<PackageExecutionResult> = cli_data
         .results
@@ -457,27 +460,27 @@ pub(crate) fn validate_params(params: &ExecuteParams) -> Result<PathBuf, ErrorIn
     validators::not_empty("cmd", &params.cmd)?;
 
     // Validate mutual exclusion: filterPackage vs affected
-    let has_filter = params.filter_package.as_ref().map_or(false, |v| !v.is_empty());
+    let has_filter = params.filter_package.as_ref().is_some_and(|v| !v.is_empty());
     let has_affected = params.affected.unwrap_or(false);
     validators::mutual_exclusion(&[("filterPackage", has_filter), ("affected", has_affected)])?;
 
     // Validate timeout ranges if provided
-    if let Some(timeout) = params.timeout_secs {
-        if timeout > 0 {
-            validators::timeout("timeoutSecs", u64::from(timeout), 1, MAX_TIMEOUT_SECS)?;
-        }
-        // 0 is technically invalid per NAPI types doc, but we allow it as "use default"
+    // Note: 0 is allowed as it means "use default from config"
+    if let Some(timeout) = params.timeout_secs
+        && timeout > 0
+    {
+        validators::timeout("timeoutSecs", u64::from(timeout), 1, MAX_TIMEOUT_SECS)?;
     }
 
-    if let Some(per_pkg_timeout) = params.per_package_timeout_secs {
-        if per_pkg_timeout > 0 {
-            validators::timeout(
-                "perPackageTimeoutSecs",
-                u64::from(per_pkg_timeout),
-                1,
-                MAX_PER_PACKAGE_TIMEOUT_SECS,
-            )?;
-        }
+    if let Some(per_pkg_timeout) = params.per_package_timeout_secs
+        && per_pkg_timeout > 0
+    {
+        validators::timeout(
+            "perPackageTimeoutSecs",
+            u64::from(per_pkg_timeout),
+            1,
+            MAX_PER_PACKAGE_TIMEOUT_SECS,
+        )?;
     }
 
     Ok(PathBuf::from(&params.root))
