@@ -106,13 +106,13 @@ pub(crate) use config::{
     RegistryConfigInfo,
     ScopedRegistryEntry,
     UpgradeConfigInfo,
-    VersionConfigInfo,
     // Constants
     VALID_BUMP_TYPES,
     VALID_CHANGELOG_FORMATS,
     VALID_MONOREPO_MODES,
     VALID_SEVERITY_LEVELS,
     VALID_STRATEGIES as CONFIG_VALID_STRATEGIES,
+    VersionConfigInfo,
 };
 
 // Changeset types (Story 4.1 - Implemented)
@@ -176,13 +176,13 @@ pub(crate) use bump::{
     BumpSnapshotData,
     BumpSnapshotParams,
     BumpSummaryInfo,
+    // Constants
+    COMMON_PRERELEASE_TAGS,
+    DEFAULT_SNAPSHOT_FORMAT,
     DependencyUpdateInfo,
     // Supporting Types
     PackageVersionInfo,
     SnapshotVersionInfo,
-    // Constants
-    COMMON_PRERELEASE_TAGS,
-    DEFAULT_SNAPSHOT_FORMAT,
     VALID_DEPENDENCY_TYPES,
 };
 
