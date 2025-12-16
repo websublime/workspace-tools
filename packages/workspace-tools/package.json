@@ -1,6 +1,6 @@
 {
   "name": "@websublime/workspace-tools",
-  "version": "2.0.16",
+  "version": "2.0.17",
   "description": "Bindings for node from crate workspace-tools",
   "main": "./dist/cjs/index.cjs",
   "types": "./dist/types/index.d.cts",
@@ -27,7 +27,8 @@
     "node-addon-api"
   ],
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "napi": {
     "binaryName": "workspace-tools",
