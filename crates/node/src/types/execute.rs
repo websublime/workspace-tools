@@ -1179,8 +1179,6 @@ impl ExecuteData {
 ///   console.error(`[${result.error.code}] ${result.error.message}`);
 /// }
 /// ```
-// TODO: will be used on story 6.3 (execute command)
-#[allow(dead_code)]
 #[napi(object)]
 #[derive(Debug, Clone, Serialize)]
 pub struct ExecuteApiResponse {
