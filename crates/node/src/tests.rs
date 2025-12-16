@@ -31,7 +31,7 @@
 /// Tests for lib.rs version functions and constants.
 #[cfg(test)]
 mod version_tests {
-    use crate::{VERSION, get_version};
+    use crate::{get_version, VERSION};
 
     #[test]
     #[allow(clippy::const_is_empty)]
@@ -820,7 +820,7 @@ mod validation_tests {
 #[cfg(test)]
 mod response_tests {
     use crate::error::ErrorInfo;
-    use crate::response::{ApiResponse, ApiResponseExt, JsonResponse, result_to_response};
+    use crate::response::{result_to_response, ApiResponse, ApiResponseExt, JsonResponse};
     use serde::Serialize;
     use std::io::{Error as IoError, ErrorKind};
     use sublime_cli_tools::error::CliError;
@@ -3360,8 +3360,9 @@ mod bump_types_tests {
     use crate::types::bump::{
         BumpApplyApiResponse, BumpApplyData, BumpApplyParams, BumpPreviewApiResponse,
         BumpPreviewData, BumpPreviewParams, BumpSnapshotApiResponse, BumpSnapshotData,
-        BumpSnapshotParams, BumpSummaryInfo, COMMON_PRERELEASE_TAGS, DEFAULT_SNAPSHOT_FORMAT,
-        DependencyUpdateInfo, PackageVersionInfo, SnapshotVersionInfo, VALID_DEPENDENCY_TYPES,
+        BumpSnapshotParams, BumpSummaryInfo, DependencyUpdateInfo, PackageVersionInfo,
+        SnapshotVersionInfo, COMMON_PRERELEASE_TAGS, DEFAULT_SNAPSHOT_FORMAT,
+        VALID_DEPENDENCY_TYPES,
     };
 
     // ========================================================================
@@ -4684,5 +4685,1035 @@ mod execute_types_tests {
 
         assert_eq!(data.command, "echo hello");
         assert!((data.summary.total_duration_ms - 50.0).abs() < f64::EPSILON);
+    }
+}
+
+/// Tests for config types (Story 7.1).
+/// Tests for ConfigShowParams, ConfigValidateParams, and related structures.
+#[cfg(test)]
+mod config_params_tests {
+    use crate::types::config::{ConfigShowParams, ConfigValidateParams};
+
+    #[test]
+    fn test_config_show_params_new() {
+        let params = ConfigShowParams::new(".".to_string());
+
+        assert_eq!(params.root, ".");
+        assert!(params.config_path.is_none());
+    }
+
+    #[test]
+    fn test_config_show_params_with_config() {
+        let params =
+            ConfigShowParams::with_config("/workspace".to_string(), "repo.config.json".to_string());
+
+        assert_eq!(params.root, "/workspace");
+        assert_eq!(params.config_path, Some("repo.config.json".to_string()));
+    }
+
+    #[test]
+    fn test_config_show_params_clone() {
+        let params = ConfigShowParams::with_config(".".to_string(), "custom.json".to_string());
+        let cloned = params.clone();
+
+        assert_eq!(cloned.root, params.root);
+        assert_eq!(cloned.config_path, params.config_path);
+    }
+
+    #[test]
+    fn test_config_show_params_debug() {
+        let params = ConfigShowParams::new(".".to_string());
+        let debug_str = format!("{params:?}");
+
+        assert!(debug_str.contains("ConfigShowParams"));
+        assert!(debug_str.contains("root"));
+    }
+
+    #[test]
+    fn test_config_show_params_serialize() {
+        let params = ConfigShowParams::new("/path/to/workspace".to_string());
+        let json = serde_json::to_string(&params).unwrap();
+
+        assert!(json.contains("root"));
+        assert!(json.contains("/path/to/workspace"));
+    }
+
+    #[test]
+    fn test_config_validate_params_new() {
+        let params = ConfigValidateParams::new(".".to_string());
+
+        assert_eq!(params.root, ".");
+        assert!(params.config_path.is_none());
+    }
+
+    #[test]
+    fn test_config_validate_params_with_config() {
+        let params = ConfigValidateParams::with_config(
+            "/workspace".to_string(),
+            "repo.config.toml".to_string(),
+        );
+
+        assert_eq!(params.root, "/workspace");
+        assert_eq!(params.config_path, Some("repo.config.toml".to_string()));
+    }
+
+    #[test]
+    fn test_config_validate_params_clone() {
+        let params = ConfigValidateParams::new("/project".to_string());
+        let cloned = params.clone();
+
+        assert_eq!(cloned.root, params.root);
+    }
+}
+
+/// Tests for config info structures (Story 7.1).
+#[cfg(test)]
+mod config_info_tests {
+    use crate::types::config::{
+        AuditConfigInfo, AuditSectionsConfigInfo, BackupConfigInfo, ChangelogConfigInfo,
+        ChangesetConfigInfo, DependencyConfigInfo, ExecuteConfigInfo, GitConfigInfo,
+        HealthScoreWeightsInfo, RegistryConfigInfo, ScopedRegistryEntry, UpgradeConfigInfo,
+        VersionConfigInfo,
+    };
+
+    #[test]
+    fn test_changeset_config_info_new() {
+        let config = ChangesetConfigInfo::new(
+            ".changesets".to_string(),
+            ".changesets/history".to_string(),
+            vec!["production".to_string(), "staging".to_string()],
+            vec!["production".to_string()],
+        );
+
+        assert_eq!(config.path, ".changesets");
+        assert_eq!(config.history_path, ".changesets/history");
+        assert_eq!(config.available_environments.len(), 2);
+        assert_eq!(config.default_environments.len(), 1);
+    }
+
+    #[test]
+    fn test_changeset_config_info_default() {
+        let config = ChangesetConfigInfo::default();
+
+        assert_eq!(config.path, ".changesets");
+        assert_eq!(config.history_path, ".changesets/history");
+        assert!(config.available_environments.is_empty());
+        assert!(config.default_environments.is_empty());
+    }
+
+    #[test]
+    fn test_version_config_info_new() {
+        let config = VersionConfigInfo::new(
+            "independent".to_string(),
+            "minor".to_string(),
+            "{version}-snapshot".to_string(),
+        );
+
+        assert_eq!(config.strategy, "independent");
+        assert_eq!(config.default_bump, "minor");
+        assert_eq!(config.snapshot_format, "{version}-snapshot");
+    }
+
+    #[test]
+    fn test_version_config_info_default() {
+        let config = VersionConfigInfo::default();
+
+        assert_eq!(config.strategy, "independent");
+        assert_eq!(config.default_bump, "patch");
+        assert!(config.snapshot_format.contains("{version}"));
+    }
+
+    #[test]
+    fn test_dependency_config_info_new() {
+        let config = DependencyConfigInfo::new(
+            "patch".to_string(),
+            true,
+            false,
+            false,
+            10,
+            false,
+            true,
+            true,
+            true,
+            true,
+        );
+
+        assert_eq!(config.propagation_bump, "patch");
+        assert!(config.propagate_dependencies);
+        assert!(!config.propagate_dev_dependencies);
+        assert_eq!(config.max_depth, 10);
+        assert!(config.skip_workspace_protocol);
+    }
+
+    #[test]
+    fn test_dependency_config_info_default() {
+        let config = DependencyConfigInfo::default();
+
+        assert_eq!(config.propagation_bump, "patch");
+        assert!(config.propagate_dependencies);
+        assert!(!config.propagate_dev_dependencies);
+        assert!(!config.propagate_peer_dependencies);
+        assert_eq!(config.max_depth, 10);
+        assert!(!config.fail_on_circular);
+    }
+
+    #[test]
+    fn test_registry_config_info_new() {
+        let scoped = vec![ScopedRegistryEntry::new(
+            "@myorg".to_string(),
+            "https://npm.myorg.com".to_string(),
+        )];
+        let config =
+            RegistryConfigInfo::new("https://registry.npmjs.org".to_string(), scoped, 30, 3, true);
+
+        assert_eq!(config.default_registry, "https://registry.npmjs.org");
+        assert_eq!(config.scoped_registries.len(), 1);
+        assert_eq!(config.timeout_secs, 30);
+        assert_eq!(config.retry_attempts, 3);
+        assert!(config.read_npmrc);
+    }
+
+    #[test]
+    fn test_registry_config_info_default() {
+        let config = RegistryConfigInfo::default();
+
+        assert_eq!(config.default_registry, "https://registry.npmjs.org");
+        assert!(config.scoped_registries.is_empty());
+        assert_eq!(config.timeout_secs, 30);
+        assert_eq!(config.retry_attempts, 3);
+        assert!(config.read_npmrc);
+    }
+
+    #[test]
+    fn test_scoped_registry_entry_new() {
+        let entry = ScopedRegistryEntry::new(
+            "@websublime".to_string(),
+            "https://npm.websublime.dev".to_string(),
+        );
+
+        assert_eq!(entry.scope, "@websublime");
+        assert_eq!(entry.registry, "https://npm.websublime.dev");
+    }
+
+    #[test]
+    fn test_backup_config_info_new() {
+        let config = BackupConfigInfo::new(true, ".backups".to_string(), 5);
+
+        assert!(config.enabled);
+        assert_eq!(config.path, ".backups");
+        assert_eq!(config.keep_count, 5);
+    }
+
+    #[test]
+    fn test_backup_config_info_default() {
+        let config = BackupConfigInfo::default();
+
+        assert!(config.enabled);
+        assert_eq!(config.path, ".backups");
+        assert_eq!(config.keep_count, 5);
+    }
+
+    #[test]
+    fn test_upgrade_config_info_new() {
+        let registry = RegistryConfigInfo::default();
+        let backup = BackupConfigInfo::default();
+        let config =
+            UpgradeConfigInfo::new(true, "patch".to_string(), registry.clone(), backup.clone());
+
+        assert!(config.auto_changeset);
+        assert_eq!(config.changeset_bump, "patch");
+        assert_eq!(config.registry.default_registry, registry.default_registry);
+    }
+
+    #[test]
+    fn test_upgrade_config_info_default() {
+        let config = UpgradeConfigInfo::default();
+
+        assert!(config.auto_changeset);
+        assert_eq!(config.changeset_bump, "patch");
+        assert_eq!(config.registry.timeout_secs, 30);
+        assert!(config.backup.enabled);
+    }
+
+    #[test]
+    fn test_changelog_config_info_new() {
+        let config = ChangelogConfigInfo::new(
+            true,
+            "keep-a-changelog".to_string(),
+            true,
+            Some("https://github.com/org/repo".to_string()),
+            true,
+            None,
+            vec![],
+            "per-package".to_string(),
+        );
+
+        assert!(config.enabled);
+        assert_eq!(config.format, "keep-a-changelog");
+        assert!(config.include_commit_links);
+        assert!(config.repository_url.is_some());
+        assert!(config.conventional);
+        assert!(config.template.is_none());
+    }
+
+    #[test]
+    fn test_changelog_config_info_default() {
+        let config = ChangelogConfigInfo::default();
+
+        assert!(config.enabled);
+        assert_eq!(config.format, "keep-a-changelog");
+        assert!(config.include_commit_links);
+        assert!(config.conventional);
+        assert_eq!(config.monorepo_mode, "per-package");
+    }
+
+    #[test]
+    fn test_audit_sections_config_info_new() {
+        let config = AuditSectionsConfigInfo::new(true, true, false, false);
+
+        assert!(config.upgrades);
+        assert!(config.dependencies);
+        assert!(!config.version_consistency);
+        assert!(!config.breaking_changes);
+    }
+
+    #[test]
+    fn test_audit_sections_config_info_default() {
+        let config = AuditSectionsConfigInfo::default();
+
+        assert!(config.upgrades);
+        assert!(config.dependencies);
+        assert!(config.version_consistency);
+        assert!(config.breaking_changes);
+    }
+
+    #[test]
+    fn test_health_score_weights_info_new() {
+        let config = HealthScoreWeightsInfo::new(0.4, 0.3, 0.2, 0.1);
+
+        assert!((config.upgrades_weight - 0.4).abs() < f64::EPSILON);
+        assert!((config.dependencies_weight - 0.3).abs() < f64::EPSILON);
+        assert!((config.version_consistency_weight - 0.2).abs() < f64::EPSILON);
+        assert!((config.breaking_changes_weight - 0.1).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_health_score_weights_info_default() {
+        let config = HealthScoreWeightsInfo::default();
+
+        // All weights should be 0.25 by default
+        assert!((config.upgrades_weight - 0.25).abs() < f64::EPSILON);
+        assert!((config.dependencies_weight - 0.25).abs() < f64::EPSILON);
+        assert!((config.version_consistency_weight - 0.25).abs() < f64::EPSILON);
+        assert!((config.breaking_changes_weight - 0.25).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_audit_config_info_new() {
+        let sections = AuditSectionsConfigInfo::default();
+        let weights = HealthScoreWeightsInfo::default();
+        let config = AuditConfigInfo::new(true, "medium".to_string(), sections, weights);
+
+        assert!(config.enabled);
+        assert_eq!(config.min_severity, "medium");
+    }
+
+    #[test]
+    fn test_audit_config_info_default() {
+        let config = AuditConfigInfo::default();
+
+        assert!(config.enabled);
+        assert_eq!(config.min_severity, "low");
+        assert!(config.sections.upgrades);
+    }
+
+    #[test]
+    fn test_git_config_info_new() {
+        let config = GitConfigInfo::new("develop".to_string(), true);
+
+        assert_eq!(config.branch_base, "develop");
+        assert!(config.detect_affected_packages);
+    }
+
+    #[test]
+    fn test_git_config_info_default() {
+        let config = GitConfigInfo::default();
+
+        assert_eq!(config.branch_base, "main");
+        assert!(config.detect_affected_packages);
+    }
+
+    #[test]
+    fn test_execute_config_info_new() {
+        let config = ExecuteConfigInfo::new(600, 120, 8);
+
+        assert_eq!(config.timeout_secs, 600);
+        assert_eq!(config.per_package_timeout_secs, 120);
+        assert_eq!(config.max_parallel, 8);
+    }
+
+    #[test]
+    fn test_execute_config_info_default() {
+        let config = ExecuteConfigInfo::default();
+
+        assert_eq!(config.timeout_secs, 300);
+        assert_eq!(config.per_package_timeout_secs, 60);
+        assert_eq!(config.max_parallel, 4);
+    }
+}
+
+/// Tests for ConfigData and ConfigShowData (Story 7.1).
+#[cfg(test)]
+mod config_data_tests {
+    use crate::types::config::{
+        AuditConfigInfo, ChangelogConfigInfo, ChangesetConfigInfo, ConfigData, ConfigShowData,
+        DependencyConfigInfo, ExecuteConfigInfo, GitConfigInfo, UpgradeConfigInfo,
+        VersionConfigInfo,
+    };
+
+    #[test]
+    fn test_config_data_new() {
+        let config = ConfigData::new(
+            ChangesetConfigInfo::default(),
+            VersionConfigInfo::default(),
+            DependencyConfigInfo::default(),
+            UpgradeConfigInfo::default(),
+            ChangelogConfigInfo::default(),
+            AuditConfigInfo::default(),
+            GitConfigInfo::default(),
+            ExecuteConfigInfo::default(),
+        );
+
+        assert_eq!(config.changeset.path, ".changesets");
+        assert_eq!(config.version.strategy, "independent");
+        assert!(config.dependency.propagate_dependencies);
+    }
+
+    #[test]
+    fn test_config_data_default() {
+        let config = ConfigData::default();
+
+        assert_eq!(config.changeset.path, ".changesets");
+        assert_eq!(config.version.strategy, "independent");
+        assert_eq!(config.version.default_bump, "patch");
+        assert!(config.dependency.propagate_dependencies);
+        assert!(config.upgrade.auto_changeset);
+        assert!(config.changelog.enabled);
+        assert!(config.audit.enabled);
+        assert_eq!(config.git.branch_base, "main");
+        assert_eq!(config.execute.max_parallel, 4);
+    }
+
+    #[test]
+    fn test_config_data_clone() {
+        let config = ConfigData::default();
+        let cloned = config.clone();
+
+        assert_eq!(cloned.changeset.path, config.changeset.path);
+        assert_eq!(cloned.version.strategy, config.version.strategy);
+    }
+
+    #[test]
+    fn test_config_data_serialize() {
+        let config = ConfigData::default();
+        let json = serde_json::to_string(&config).unwrap();
+
+        assert!(json.contains("changeset"));
+        assert!(json.contains("version"));
+        assert!(json.contains("dependency"));
+        assert!(json.contains("upgrade"));
+        assert!(json.contains("changelog"));
+        assert!(json.contains("audit"));
+        assert!(json.contains("git"));
+        assert!(json.contains("execute"));
+    }
+
+    #[test]
+    fn test_config_show_data_new() {
+        let config = ConfigData::default();
+        let show_data =
+            ConfigShowData::new("repo.config.json".to_string(), "json".to_string(), config);
+
+        assert_eq!(show_data.config_path, "repo.config.json");
+        assert_eq!(show_data.config_format, "json");
+        assert_eq!(show_data.config.version.strategy, "independent");
+    }
+
+    #[test]
+    fn test_config_show_data_with_toml_format() {
+        let config = ConfigData::default();
+        let show_data =
+            ConfigShowData::new("repo.config.toml".to_string(), "toml".to_string(), config);
+
+        assert_eq!(show_data.config_format, "toml");
+    }
+
+    #[test]
+    fn test_config_show_data_with_yaml_format() {
+        let config = ConfigData::default();
+        let show_data =
+            ConfigShowData::new("repo.config.yaml".to_string(), "yaml".to_string(), config);
+
+        assert_eq!(show_data.config_format, "yaml");
+    }
+
+    #[test]
+    fn test_config_show_data_clone() {
+        let config = ConfigData::default();
+        let show_data =
+            ConfigShowData::new("repo.config.json".to_string(), "json".to_string(), config);
+        let cloned = show_data.clone();
+
+        assert_eq!(cloned.config_path, show_data.config_path);
+        assert_eq!(cloned.config_format, show_data.config_format);
+    }
+
+    #[test]
+    fn test_config_show_data_serialize() {
+        let config = ConfigData::default();
+        let show_data =
+            ConfigShowData::new("repo.config.json".to_string(), "json".to_string(), config);
+        let json = serde_json::to_string(&show_data).unwrap();
+
+        assert!(json.contains("config_path"));
+        assert!(json.contains("config_format"));
+        assert!(json.contains("repo.config.json"));
+    }
+}
+
+/// Tests for ConfigValidationIssue and ConfigValidateData (Story 7.1).
+#[cfg(test)]
+mod config_validation_tests {
+    use crate::types::config::{ConfigValidateData, ConfigValidationIssue};
+
+    #[test]
+    fn test_config_validation_issue_error() {
+        let issue = ConfigValidationIssue::error(
+            "version.strategy".to_string(),
+            "Invalid strategy value".to_string(),
+        );
+
+        assert_eq!(issue.severity, "error");
+        assert_eq!(issue.field, "version.strategy");
+        assert_eq!(issue.message, "Invalid strategy value");
+        assert!(issue.suggestion.is_none());
+    }
+
+    #[test]
+    fn test_config_validation_issue_error_with_suggestion() {
+        let issue = ConfigValidationIssue::error_with_suggestion(
+            "version.strategy".to_string(),
+            "Invalid strategy value".to_string(),
+            "Use 'independent' or 'unified'".to_string(),
+        );
+
+        assert_eq!(issue.severity, "error");
+        assert!(issue.is_error());
+        assert!(!issue.is_warning());
+        assert!(issue.suggestion.is_some());
+        assert_eq!(issue.suggestion.unwrap(), "Use 'independent' or 'unified'");
+    }
+
+    #[test]
+    fn test_config_validation_issue_warning() {
+        let issue = ConfigValidationIssue::warning(
+            "changelog.repositoryUrl".to_string(),
+            "Repository URL not set".to_string(),
+        );
+
+        assert_eq!(issue.severity, "warning");
+        assert!(issue.is_warning());
+        assert!(!issue.is_error());
+        assert!(!issue.is_info());
+    }
+
+    #[test]
+    fn test_config_validation_issue_warning_with_suggestion() {
+        let issue = ConfigValidationIssue::warning_with_suggestion(
+            "changelog.repositoryUrl".to_string(),
+            "Repository URL not set".to_string(),
+            "Add repository URL for commit links".to_string(),
+        );
+
+        assert!(issue.is_warning());
+        assert!(issue.suggestion.is_some());
+    }
+
+    #[test]
+    fn test_config_validation_issue_info() {
+        let issue = ConfigValidationIssue::info(
+            "execute.maxParallel".to_string(),
+            "Consider increasing for faster builds".to_string(),
+        );
+
+        assert_eq!(issue.severity, "info");
+        assert!(issue.is_info());
+        assert!(!issue.is_error());
+        assert!(!issue.is_warning());
+    }
+
+    #[test]
+    fn test_config_validation_issue_new() {
+        let issue = ConfigValidationIssue::new(
+            "warning".to_string(),
+            "test.field".to_string(),
+            "Test message".to_string(),
+            Some("Fix suggestion".to_string()),
+        );
+
+        assert_eq!(issue.severity, "warning");
+        assert_eq!(issue.field, "test.field");
+        assert_eq!(issue.message, "Test message");
+        assert_eq!(issue.suggestion, Some("Fix suggestion".to_string()));
+    }
+
+    #[test]
+    fn test_config_validation_issue_clone() {
+        let issue = ConfigValidationIssue::error("field".to_string(), "message".to_string());
+        let cloned = issue.clone();
+
+        assert_eq!(cloned.severity, issue.severity);
+        assert_eq!(cloned.field, issue.field);
+    }
+
+    #[test]
+    fn test_config_validate_data_new() {
+        let errors = vec![ConfigValidationIssue::error(
+            "version.strategy".to_string(),
+            "Invalid".to_string(),
+        )];
+        let warnings = vec![ConfigValidationIssue::warning(
+            "changelog.repositoryUrl".to_string(),
+            "Missing".to_string(),
+        )];
+
+        let data = ConfigValidateData::new(false, "repo.config.json".to_string(), errors, warnings);
+
+        assert!(!data.valid);
+        assert_eq!(data.config_path, "repo.config.json");
+        assert_eq!(data.errors.len(), 1);
+        assert_eq!(data.warnings.len(), 1);
+    }
+
+    #[test]
+    fn test_config_validate_data_valid() {
+        let data = ConfigValidateData::valid("repo.config.json".to_string());
+
+        assert!(data.valid);
+        assert!(data.errors.is_empty());
+        assert!(data.warnings.is_empty());
+        assert!(!data.has_errors());
+        assert!(!data.has_warnings());
+        assert_eq!(data.total_issues(), 0);
+    }
+
+    #[test]
+    fn test_config_validate_data_valid_with_warnings() {
+        let warnings =
+            vec![ConfigValidationIssue::warning("field".to_string(), "warning".to_string())];
+        let data =
+            ConfigValidateData::valid_with_warnings("repo.config.json".to_string(), warnings);
+
+        assert!(data.valid);
+        assert!(data.errors.is_empty());
+        assert!(!data.warnings.is_empty());
+        assert!(!data.has_errors());
+        assert!(data.has_warnings());
+        assert_eq!(data.total_issues(), 1);
+    }
+
+    #[test]
+    fn test_config_validate_data_invalid() {
+        let errors = vec![
+            ConfigValidationIssue::error("field1".to_string(), "error1".to_string()),
+            ConfigValidationIssue::error("field2".to_string(), "error2".to_string()),
+        ];
+        let data = ConfigValidateData::invalid("repo.config.json".to_string(), errors);
+
+        assert!(!data.valid);
+        assert_eq!(data.errors.len(), 2);
+        assert!(data.warnings.is_empty());
+        assert!(data.has_errors());
+        assert!(!data.has_warnings());
+        assert_eq!(data.total_issues(), 2);
+    }
+
+    #[test]
+    fn test_config_validate_data_invalid_with_warnings() {
+        let errors = vec![ConfigValidationIssue::error("field".to_string(), "error".to_string())];
+        let warnings =
+            vec![ConfigValidationIssue::warning("field".to_string(), "warning".to_string())];
+        let data = ConfigValidateData::invalid_with_warnings(
+            "repo.config.json".to_string(),
+            errors,
+            warnings,
+        );
+
+        assert!(!data.valid);
+        assert!(data.has_errors());
+        assert!(data.has_warnings());
+        assert_eq!(data.total_issues(), 2);
+    }
+
+    #[test]
+    fn test_config_validate_data_serialize() {
+        let data = ConfigValidateData::valid("repo.config.json".to_string());
+        let json = serde_json::to_string(&data).unwrap();
+
+        assert!(json.contains("valid"));
+        assert!(json.contains("config_path"));
+        assert!(json.contains("errors"));
+        assert!(json.contains("warnings"));
+    }
+}
+
+/// Tests for ConfigShowApiResponse and ConfigValidateApiResponse (Story 7.1).
+#[cfg(test)]
+mod config_api_response_tests {
+    use crate::error::ErrorInfo;
+    use crate::types::config::{
+        ConfigData, ConfigShowApiResponse, ConfigShowData, ConfigValidateApiResponse,
+        ConfigValidateData,
+    };
+
+    #[test]
+    fn test_config_show_api_response_success() {
+        let config = ConfigData::default();
+        let show_data =
+            ConfigShowData::new("repo.config.json".to_string(), "json".to_string(), config);
+        let response = ConfigShowApiResponse::success(show_data);
+
+        assert!(response.success);
+        assert!(response.is_success());
+        assert!(!response.is_failure());
+        assert!(response.data.is_some());
+        assert!(response.error.is_none());
+    }
+
+    #[test]
+    fn test_config_show_api_response_failure() {
+        let error = ErrorInfo::not_found("Config file not found", Some("repo.config.json"));
+        let response = ConfigShowApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(!response.is_success());
+        assert!(response.is_failure());
+        assert!(response.data.is_none());
+        assert!(response.error.is_some());
+        assert_eq!(response.error.as_ref().unwrap().code, "ENOENT");
+    }
+
+    #[test]
+    fn test_config_show_api_response_failure_with_different_error_codes() {
+        // Test ECONFIG
+        let error = ErrorInfo::configuration("Invalid configuration format");
+        let response = ConfigShowApiResponse::failure(error);
+        assert_eq!(response.error.as_ref().unwrap().code, "ECONFIG");
+
+        // Test EVALIDATION
+        let error = ErrorInfo::validation("Invalid root path", Some("root"));
+        let response = ConfigShowApiResponse::failure(error);
+        assert_eq!(response.error.as_ref().unwrap().code, "EVALIDATION");
+    }
+
+    #[test]
+    fn test_config_show_api_response_clone() {
+        let config = ConfigData::default();
+        let show_data =
+            ConfigShowData::new("repo.config.json".to_string(), "json".to_string(), config);
+        let response = ConfigShowApiResponse::success(show_data);
+        let cloned = response.clone();
+
+        assert_eq!(cloned.success, response.success);
+    }
+
+    #[test]
+    fn test_config_show_api_response_serialize_success() {
+        let config = ConfigData::default();
+        let show_data =
+            ConfigShowData::new("repo.config.json".to_string(), "json".to_string(), config);
+        let response = ConfigShowApiResponse::success(show_data);
+        let json = serde_json::to_string(&response).unwrap();
+
+        assert!(json.contains("\"success\":true"));
+        assert!(json.contains("data"));
+    }
+
+    #[test]
+    fn test_config_show_api_response_serialize_failure() {
+        let error = ErrorInfo::not_found("Not found", None::<String>);
+        let response = ConfigShowApiResponse::failure(error);
+        let json = serde_json::to_string(&response).unwrap();
+
+        assert!(json.contains("\"success\":false"));
+        assert!(json.contains("error"));
+    }
+
+    #[test]
+    fn test_config_validate_api_response_success() {
+        let data = ConfigValidateData::valid("repo.config.json".to_string());
+        let response = ConfigValidateApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.is_success());
+        assert!(!response.is_failure());
+        assert!(response.data.is_some());
+        assert!(response.data.as_ref().unwrap().valid);
+    }
+
+    #[test]
+    fn test_config_validate_api_response_success_with_validation_errors() {
+        // The API response is still "success" because the command executed
+        // The validation data shows whether the config is valid
+        let data = ConfigValidateData::invalid(
+            "repo.config.json".to_string(),
+            vec![crate::types::config::ConfigValidationIssue::error(
+                "field".to_string(),
+                "error".to_string(),
+            )],
+        );
+        let response = ConfigValidateApiResponse::success(data);
+
+        assert!(response.success); // API call succeeded
+        assert!(!response.data.as_ref().unwrap().valid); // But config is invalid
+    }
+
+    #[test]
+    fn test_config_validate_api_response_failure() {
+        let error = ErrorInfo::not_found("Config file not found", Some("repo.config.json"));
+        let response = ConfigValidateApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(response.is_failure());
+        assert!(response.data.is_none());
+        assert!(response.error.is_some());
+    }
+
+    #[test]
+    fn test_config_validate_api_response_clone() {
+        let data = ConfigValidateData::valid("repo.config.json".to_string());
+        let response = ConfigValidateApiResponse::success(data);
+        let cloned = response.clone();
+
+        assert_eq!(cloned.success, response.success);
+    }
+
+    #[test]
+    fn test_config_validate_api_response_serialize_success() {
+        let data = ConfigValidateData::valid("repo.config.json".to_string());
+        let response = ConfigValidateApiResponse::success(data);
+        let json = serde_json::to_string(&response).unwrap();
+
+        assert!(json.contains("\"success\":true"));
+        assert!(json.contains("\"valid\":true"));
+    }
+
+    #[test]
+    fn test_config_validate_api_response_serialize_failure() {
+        let error = ErrorInfo::configuration("Parse error");
+        let response = ConfigValidateApiResponse::failure(error);
+        let json = serde_json::to_string(&response).unwrap();
+
+        assert!(json.contains("\"success\":false"));
+        assert!(json.contains("ECONFIG"));
+    }
+}
+
+/// Tests for config constants (Story 7.1).
+#[cfg(test)]
+mod config_constants_tests {
+    use crate::types::config::{
+        VALID_BUMP_TYPES, VALID_CHANGELOG_FORMATS, VALID_MONOREPO_MODES, VALID_SEVERITY_LEVELS,
+        VALID_STRATEGIES,
+    };
+
+    #[test]
+    fn test_valid_strategies() {
+        assert_eq!(VALID_STRATEGIES.len(), 2);
+        assert!(VALID_STRATEGIES.contains(&"independent"));
+        assert!(VALID_STRATEGIES.contains(&"unified"));
+    }
+
+    #[test]
+    fn test_valid_bump_types() {
+        assert_eq!(VALID_BUMP_TYPES.len(), 4);
+        assert!(VALID_BUMP_TYPES.contains(&"major"));
+        assert!(VALID_BUMP_TYPES.contains(&"minor"));
+        assert!(VALID_BUMP_TYPES.contains(&"patch"));
+        assert!(VALID_BUMP_TYPES.contains(&"none"));
+    }
+
+    #[test]
+    fn test_valid_changelog_formats() {
+        assert_eq!(VALID_CHANGELOG_FORMATS.len(), 3);
+        assert!(VALID_CHANGELOG_FORMATS.contains(&"keep-a-changelog"));
+        assert!(VALID_CHANGELOG_FORMATS.contains(&"conventional-commits"));
+        assert!(VALID_CHANGELOG_FORMATS.contains(&"custom"));
+    }
+
+    #[test]
+    fn test_valid_monorepo_modes() {
+        assert_eq!(VALID_MONOREPO_MODES.len(), 3);
+        assert!(VALID_MONOREPO_MODES.contains(&"per-package"));
+        assert!(VALID_MONOREPO_MODES.contains(&"root"));
+        assert!(VALID_MONOREPO_MODES.contains(&"both"));
+    }
+
+    #[test]
+    fn test_valid_severity_levels() {
+        assert_eq!(VALID_SEVERITY_LEVELS.len(), 3);
+        assert!(VALID_SEVERITY_LEVELS.contains(&"error"));
+        assert!(VALID_SEVERITY_LEVELS.contains(&"warning"));
+        assert!(VALID_SEVERITY_LEVELS.contains(&"info"));
+    }
+}
+
+/// Complete scenario tests for config commands (Story 7.1).
+#[cfg(test)]
+mod config_scenario_tests {
+    use crate::error::ErrorInfo;
+    use crate::types::config::{
+        ConfigData, ConfigShowApiResponse, ConfigShowData, ConfigShowParams,
+        ConfigValidateApiResponse, ConfigValidateData, ConfigValidateParams, ConfigValidationIssue,
+        VersionConfigInfo,
+    };
+
+    #[test]
+    fn test_complete_config_show_scenario() {
+        // Simulate a complete configShow workflow
+        let params = ConfigShowParams::new("/path/to/workspace".to_string());
+        assert_eq!(params.root, "/path/to/workspace");
+
+        // Simulate loaded config with custom version strategy
+        let mut config = ConfigData::default();
+        config.version = VersionConfigInfo::new(
+            "unified".to_string(),
+            "minor".to_string(),
+            "{version}-dev".to_string(),
+        );
+
+        let show_data = ConfigShowData::new(
+            "/path/to/workspace/repo.config.json".to_string(),
+            "json".to_string(),
+            config,
+        );
+
+        let response = ConfigShowApiResponse::success(show_data);
+
+        assert!(response.is_success());
+        let data = response.data.unwrap();
+        assert_eq!(data.config_format, "json");
+        assert_eq!(data.config.version.strategy, "unified");
+        assert_eq!(data.config.version.default_bump, "minor");
+    }
+
+    #[test]
+    fn test_complete_config_validate_scenario_valid() {
+        // Simulate a complete configValidate workflow for valid config
+        let params = ConfigValidateParams::new(".".to_string());
+        assert_eq!(params.root, ".");
+
+        let data = ConfigValidateData::valid("repo.config.json".to_string());
+        let response = ConfigValidateApiResponse::success(data);
+
+        assert!(response.is_success());
+        let data = response.data.unwrap();
+        assert!(data.valid);
+        assert!(data.errors.is_empty());
+    }
+
+    #[test]
+    fn test_complete_config_validate_scenario_with_warnings() {
+        // Simulate validation with warnings but no errors
+        let warnings = vec![
+            ConfigValidationIssue::warning(
+                "changelog.repositoryUrl".to_string(),
+                "Repository URL not set, commit links will not work".to_string(),
+            ),
+            ConfigValidationIssue::warning_with_suggestion(
+                "execute.maxParallel".to_string(),
+                "Low parallelism may slow down builds".to_string(),
+                "Consider increasing to match CPU cores".to_string(),
+            ),
+        ];
+
+        let data =
+            ConfigValidateData::valid_with_warnings("repo.config.json".to_string(), warnings);
+
+        assert!(data.valid);
+        assert!(!data.has_errors());
+        assert!(data.has_warnings());
+        assert_eq!(data.warnings.len(), 2);
+        assert!(data.warnings[1].suggestion.is_some());
+    }
+
+    #[test]
+    fn test_complete_config_validate_scenario_invalid() {
+        // Simulate validation with errors
+        let errors = vec![
+            ConfigValidationIssue::error(
+                "version.strategy".to_string(),
+                "Invalid strategy 'wrong'".to_string(),
+            ),
+            ConfigValidationIssue::error_with_suggestion(
+                "changeset.path".to_string(),
+                "Path does not exist".to_string(),
+                "Create the directory or update the path".to_string(),
+            ),
+        ];
+        let warnings = vec![ConfigValidationIssue::warning(
+            "git.branchBase".to_string(),
+            "Branch 'master' is deprecated, consider using 'main'".to_string(),
+        )];
+
+        let data = ConfigValidateData::invalid_with_warnings(
+            "repo.config.json".to_string(),
+            errors,
+            warnings,
+        );
+
+        assert!(!data.valid);
+        assert!(data.has_errors());
+        assert!(data.has_warnings());
+        assert_eq!(data.total_issues(), 3);
+
+        // Verify error details
+        assert!(data.errors[0].is_error());
+        assert_eq!(data.errors[0].field, "version.strategy");
+        assert!(data.errors[1].suggestion.is_some());
+    }
+
+    #[test]
+    fn test_config_show_error_scenario() {
+        // Simulate configShow failing because config file not found
+        let params = ConfigShowParams::new("/invalid/path".to_string());
+        assert_eq!(params.root, "/invalid/path");
+
+        let error = ErrorInfo::not_found(
+            "Configuration file not found in /invalid/path",
+            Some("repo.config.json"),
+        );
+        let response = ConfigShowApiResponse::failure(error);
+
+        assert!(response.is_failure());
+        let error = response.error.unwrap();
+        assert_eq!(error.code, "ENOENT");
+        assert!(error.message.contains("not found"));
+    }
+
+    #[test]
+    fn test_config_validate_error_scenario() {
+        // Simulate configValidate failing because of parse error
+        let params =
+            ConfigValidateParams::with_config(".".to_string(), "broken.config.json".to_string());
+        assert!(params.config_path.is_some());
+
+        let error =
+            ErrorInfo::configuration("Failed to parse configuration: unexpected token at line 5");
+        let response = ConfigValidateApiResponse::failure(error);
+
+        assert!(response.is_failure());
+        let error = response.error.unwrap();
+        assert_eq!(error.code, "ECONFIG");
     }
 }
