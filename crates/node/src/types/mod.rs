@@ -75,8 +75,45 @@ pub(crate) use init::{
     InitApiResponse, InitData, InitParams, VALID_CONFIG_FORMATS, VALID_STRATEGIES,
 };
 
-// TODO: will be implemented on story 7.1 (config types)
+// Config types (Story 7.1 - Implemented)
 pub(crate) mod config;
+
+// Re-export config types for easier access
+// Allow unused imports - these will be used by config commands (Stories 7.2-7.3)
+#[allow(unused_imports)]
+pub(crate) use config::{
+    // Configuration Structures
+    AuditConfigInfo,
+    AuditSectionsConfigInfo,
+    BackupConfigInfo,
+    ChangelogConfigInfo,
+    ChangesetConfigInfo,
+    ConfigData,
+    // API Responses
+    ConfigShowApiResponse,
+    // Response Data
+    ConfigShowData,
+    // Input Parameters
+    ConfigShowParams,
+    ConfigValidateApiResponse,
+    ConfigValidateData,
+    ConfigValidateParams,
+    ConfigValidationIssue,
+    DependencyConfigInfo,
+    ExecuteConfigInfo,
+    GitConfigInfo,
+    HealthScoreWeightsInfo,
+    RegistryConfigInfo,
+    ScopedRegistryEntry,
+    UpgradeConfigInfo,
+    VersionConfigInfo,
+    // Constants
+    VALID_BUMP_TYPES,
+    VALID_CHANGELOG_FORMATS,
+    VALID_MONOREPO_MODES,
+    VALID_SEVERITY_LEVELS,
+    VALID_STRATEGIES as CONFIG_VALID_STRATEGIES,
+};
 
 // Changeset types (Story 4.1 - Implemented)
 pub(crate) mod changeset;
@@ -139,13 +176,13 @@ pub(crate) use bump::{
     BumpSnapshotData,
     BumpSnapshotParams,
     BumpSummaryInfo,
-    // Constants
-    COMMON_PRERELEASE_TAGS,
-    DEFAULT_SNAPSHOT_FORMAT,
     DependencyUpdateInfo,
     // Supporting Types
     PackageVersionInfo,
     SnapshotVersionInfo,
+    // Constants
+    COMMON_PRERELEASE_TAGS,
+    DEFAULT_SNAPSHOT_FORMAT,
     VALID_DEPENDENCY_TYPES,
 };
 
