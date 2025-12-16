@@ -35,9 +35,9 @@ mod status_tests {
     use std::io::Write;
 
     use crate::commands::status::{
-        CliBranchInfo, CliChangesetInfo, CliPackageInfo, CliPackageManagerInfo, CliRepositoryInfo,
-        CliStatusData, SharedBuffer, convert_to_napi_status, parse_status_response,
-        validate_params,
+        convert_to_napi_status, parse_status_response, validate_params, CliBranchInfo,
+        CliChangesetInfo, CliPackageInfo, CliPackageManagerInfo, CliRepositoryInfo, CliStatusData,
+        SharedBuffer,
     };
     use crate::types::status::StatusParams;
 
@@ -419,8 +419,8 @@ mod init_tests {
     use std::io::Write;
 
     use crate::commands::init::{
-        CliInitData, SharedBuffer, convert_params_to_args, convert_to_napi_init,
-        parse_init_response, validate_params,
+        convert_params_to_args, convert_to_napi_init, parse_init_response, validate_params,
+        CliInitData, SharedBuffer,
     };
     use crate::types::init::InitParams;
 
@@ -1062,8 +1062,8 @@ mod changeset_add_tests {
     use std::io::Write;
 
     use crate::commands::changeset::{
-        CliChangesetInfo, SharedBuffer, convert_params_to_args, convert_to_napi_add_data,
-        parse_changeset_add_response, validate_params,
+        convert_params_to_args, convert_to_napi_add_data, parse_changeset_add_response,
+        validate_params, CliChangesetInfo, SharedBuffer,
     };
     use crate::types::changeset::ChangesetAddParams;
 
@@ -1457,9 +1457,9 @@ mod changeset_update_tests {
     use std::io::Write;
 
     use crate::commands::changeset::{
-        CliUpdateSummary, CliUpdatedChangesetInfo, SharedBuffer, convert_to_napi_changeset_detail,
-        convert_to_napi_update_summary, convert_update_params_to_args,
-        parse_changeset_update_response, validate_update_params,
+        convert_to_napi_changeset_detail, convert_to_napi_update_summary,
+        convert_update_params_to_args, parse_changeset_update_response, validate_update_params,
+        CliUpdateSummary, CliUpdatedChangesetInfo, SharedBuffer,
     };
     use crate::types::changeset::ChangesetUpdateParams;
 
@@ -1910,9 +1910,9 @@ mod changeset_list_tests {
     use std::io::Write;
 
     use crate::commands::changeset::{
-        CliChangesetListItem, CliChangesetListResponseData, SharedBuffer,
         convert_list_item_to_napi, convert_list_params_to_args, convert_to_napi_list_data,
-        parse_changeset_list_response, validate_list_params,
+        parse_changeset_list_response, validate_list_params, CliChangesetListItem,
+        CliChangesetListResponseData, SharedBuffer,
     };
     use crate::types::changeset::{ChangesetListParams, VALID_SORT_OPTIONS};
 
@@ -2401,9 +2401,9 @@ mod changeset_list_tests {
 #[allow(clippy::unwrap_used)]
 mod changeset_show_tests {
     use crate::commands::changeset::{
-        CliChangesetShowItem, CliChangesetShowResponseData, SharedBuffer,
         convert_show_item_to_napi, convert_show_params_to_args, convert_to_napi_show_data,
-        parse_changeset_show_response, validate_show_params,
+        parse_changeset_show_response, validate_show_params, CliChangesetShowItem,
+        CliChangesetShowResponseData, SharedBuffer,
     };
     use crate::types::changeset::ChangesetShowParams;
     use std::io::Write;
@@ -2805,9 +2805,9 @@ mod changeset_remove_tests {
     use tempfile::TempDir;
 
     use crate::commands::changeset::{
-        CliChangesetRemoveResponseData, CliRemovedChangesetInfo, SharedBuffer,
         convert_remove_params_to_args, convert_to_napi_remove_data,
-        parse_changeset_remove_response, validate_remove_params,
+        parse_changeset_remove_response, validate_remove_params, CliChangesetRemoveResponseData,
+        CliRemovedChangesetInfo, SharedBuffer,
     };
     use crate::types::changeset::ChangesetRemoveParams;
 
@@ -3233,9 +3233,9 @@ mod changeset_history_tests {
     use tempfile::TempDir;
 
     use crate::commands::changeset::{
-        CliArchivedChangesetInfo, CliChangesetHistoryResponseData, SharedBuffer,
         convert_archived_changeset_to_napi, convert_history_params_to_args,
         convert_to_napi_history_data, parse_changeset_history_response, validate_history_params,
+        CliArchivedChangesetInfo, CliChangesetHistoryResponseData, SharedBuffer,
     };
     use crate::types::changeset::ChangesetHistoryParams;
 
@@ -3765,8 +3765,8 @@ mod changeset_check_tests {
     use tempfile::TempDir;
 
     use crate::commands::changeset::{
-        CliChangesetCheckResponseData, SharedBuffer, convert_check_params_to_args,
-        convert_to_napi_check_data, parse_changeset_check_response, validate_check_params,
+        convert_check_params_to_args, convert_to_napi_check_data, parse_changeset_check_response,
+        validate_check_params, CliChangesetCheckResponseData, SharedBuffer,
     };
     use crate::types::changeset::ChangesetCheckParams;
 
@@ -4154,9 +4154,9 @@ mod bump_preview_tests {
     use tempfile::TempDir;
 
     use crate::commands::bump::{
-        CliBumpSnapshot, CliBumpSummary, CliChangesetInfo, CliPackageBumpInfo, SharedBuffer,
         convert_params_to_args, convert_to_napi_preview, parse_preview_response,
-        validate_preview_params,
+        validate_preview_params, CliBumpSnapshot, CliBumpSummary, CliChangesetInfo,
+        CliPackageBumpInfo, SharedBuffer,
     };
     use crate::types::bump::BumpPreviewParams;
 
@@ -4856,9 +4856,8 @@ mod bump_apply_tests {
     use tempfile::TempDir;
 
     use crate::commands::bump::{
-        CliBumpSnapshot, CliBumpSummary, CliExecuteResult, SharedBuffer,
         convert_apply_params_to_args, convert_to_napi_apply, parse_apply_response,
-        validate_apply_params,
+        validate_apply_params, CliBumpSnapshot, CliBumpSummary, CliExecuteResult, SharedBuffer,
     };
     use crate::types::bump::BumpApplyParams;
 
@@ -5534,9 +5533,9 @@ mod bump_snapshot_tests {
     use tempfile::TempDir;
 
     use crate::commands::bump::{
-        CliBumpSnapshot, CliBumpSummary, CliChangesetInfo, CliPackageBumpInfo, SharedBuffer,
         convert_snapshot_params_to_args, convert_to_napi_snapshot, parse_snapshot_response,
-        validate_snapshot_params,
+        validate_snapshot_params, CliBumpSnapshot, CliBumpSummary, CliChangesetInfo,
+        CliPackageBumpInfo, SharedBuffer,
     };
     use crate::types::bump::BumpSnapshotParams;
 
@@ -6178,6 +6177,743 @@ mod bump_snapshot_tests {
                 .with_format("{version}-{branch}.{short_commit}");
             let result = validate_snapshot_params(&params);
             assert!(result.is_ok());
+        }
+    }
+}
+
+// ============================================================================
+// Execute Command Tests (Story 6.3)
+// ============================================================================
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod execute_tests {
+    use std::io::Write;
+
+    use crate::commands::execute::{
+        convert_params_to_args, convert_to_napi_execute, parse_execute_response, resolve_timeouts,
+        validate_params, CliExecuteData, CliExecuteSummary, CliPackageExecutionResult,
+        SharedBuffer,
+    };
+    use crate::types::execute::ExecuteParams;
+    use tempfile::TempDir;
+
+    // -------------------------------------------------------------------------
+    // SharedBuffer Tests
+    // -------------------------------------------------------------------------
+
+    mod shared_buffer_tests {
+        use super::*;
+
+        #[test]
+        fn test_shared_buffer_new() {
+            let buffer = SharedBuffer::new();
+            assert!(buffer.take_bytes().is_empty());
+        }
+
+        #[test]
+        fn test_shared_buffer_write() {
+            let mut buffer = SharedBuffer::new();
+            let bytes_written = buffer.write(b"hello").unwrap();
+            assert_eq!(bytes_written, 5);
+            assert_eq!(buffer.take_bytes(), b"hello");
+        }
+
+        #[test]
+        fn test_shared_buffer_multiple_writes() {
+            let mut buffer = SharedBuffer::new();
+            buffer.write_all(b"hello ").unwrap();
+            buffer.write_all(b"world").unwrap();
+            assert_eq!(buffer.take_bytes(), b"hello world");
+        }
+
+        #[test]
+        fn test_shared_buffer_clone_shares_data() {
+            let mut buffer1 = SharedBuffer::new();
+            let buffer2 = buffer1.clone();
+
+            buffer1.write_all(b"test").unwrap();
+
+            // Both should see the same data
+            assert_eq!(buffer1.take_bytes(), b"test");
+            assert_eq!(buffer2.take_bytes(), b"test");
+        }
+
+        #[test]
+        fn test_shared_buffer_flush() {
+            let mut buffer = SharedBuffer::new();
+            buffer.write_all(b"data").unwrap();
+            assert!(buffer.flush().is_ok());
+        }
+
+        #[test]
+        fn test_shared_buffer_take_bytes_preserves_data() {
+            let mut buffer = SharedBuffer::new();
+            buffer.write_all(b"persistent").unwrap();
+
+            // Multiple calls should return the same data
+            assert_eq!(buffer.take_bytes(), b"persistent");
+            assert_eq!(buffer.take_bytes(), b"persistent");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Validation Tests
+    // -------------------------------------------------------------------------
+
+    mod validation_tests {
+        use super::*;
+
+        #[test]
+        fn test_validate_params_valid() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = ExecuteParams::new(path_str, "npm:test");
+            let result = validate_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_params_empty_root() {
+            let params = ExecuteParams::new("", "npm:test");
+            let result = validate_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("root"));
+        }
+
+        #[test]
+        fn test_validate_params_nonexistent_root() {
+            let params = ExecuteParams::new("/nonexistent/path/12345", "npm:test");
+            let result = validate_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "ENOENT");
+        }
+
+        #[test]
+        fn test_validate_params_empty_cmd() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = ExecuteParams::new(path_str, "");
+            let result = validate_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("empty"));
+        }
+
+        #[test]
+        fn test_validate_params_whitespace_cmd() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = ExecuteParams::new(path_str, "   ");
+            let result = validate_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+        }
+
+        #[test]
+        fn test_validate_params_mutual_exclusion() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = ExecuteParams::new(path_str, "npm:test")
+                .with_filter_package(vec!["@scope/pkg".to_string()])
+                .with_affected(true);
+            let result = validate_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("mutually exclusive"));
+        }
+
+        #[test]
+        fn test_validate_params_filter_package_only() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = ExecuteParams::new(path_str, "npm:test")
+                .with_filter_package(vec!["@scope/pkg".to_string()]);
+            let result = validate_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_params_affected_only() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = ExecuteParams::new(path_str, "npm:test").with_affected(true);
+            let result = validate_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_params_timeout_valid() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = ExecuteParams::new(path_str, "npm:test")
+                .with_timeout_secs(300)
+                .with_per_package_timeout_secs(60);
+            let result = validate_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_params_timeout_exceeds_max() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = ExecuteParams::new(path_str, "npm:test").with_timeout_secs(100000);
+            let result = validate_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("exceed"));
+        }
+
+        #[test]
+        fn test_validate_params_per_package_timeout_exceeds_max() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params =
+                ExecuteParams::new(path_str, "npm:test").with_per_package_timeout_secs(10000);
+            let result = validate_params(&params);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+        }
+
+        #[test]
+        fn test_validate_params_with_all_options() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = ExecuteParams::new(path_str, "npm:build")
+                .with_parallel(true)
+                .with_args(vec!["--verbose".to_string()])
+                .with_timeout_secs(600);
+            let result = validate_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_params_with_affected_and_branch() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = ExecuteParams::new(path_str, "npm:test")
+                .with_affected(true)
+                .with_branch("main".to_string());
+            let result = validate_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_params_returns_correct_path() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = ExecuteParams::new(path_str, "npm:test");
+            let result = validate_params(&params);
+            assert!(result.is_ok());
+            let path = result.unwrap();
+            assert_eq!(path.to_str().unwrap(), path_str);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Timeout Resolution Tests
+    // -------------------------------------------------------------------------
+
+    mod timeout_resolution_tests {
+        use super::*;
+
+        #[test]
+        fn test_resolve_timeouts_defaults() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = ExecuteParams::new(path_str, "npm:test");
+            let (global, per_pkg) = resolve_timeouts(&params);
+
+            // Should use ExecuteConfig defaults: 300 and 60
+            assert_eq!(global, 300);
+            assert_eq!(per_pkg, 60);
+        }
+
+        #[test]
+        fn test_resolve_timeouts_with_overrides() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = ExecuteParams::new(path_str, "npm:test")
+                .with_timeout_secs(600)
+                .with_per_package_timeout_secs(120);
+            let (global, per_pkg) = resolve_timeouts(&params);
+
+            assert_eq!(global, 600);
+            assert_eq!(per_pkg, 120);
+        }
+
+        #[test]
+        fn test_resolve_timeouts_zero_means_no_timeout() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let mut params = ExecuteParams::new(path_str, "npm:test");
+            params.timeout_secs = Some(0);
+            params.per_package_timeout_secs = Some(0);
+            let (global, per_pkg) = resolve_timeouts(&params);
+
+            assert_eq!(global, 0);
+            assert_eq!(per_pkg, 0);
+        }
+
+        #[test]
+        fn test_resolve_timeouts_partial_override() {
+            let temp_dir = TempDir::new().unwrap();
+            let path_str = temp_dir.path().to_str().unwrap();
+            let params = ExecuteParams::new(path_str, "npm:test").with_timeout_secs(900);
+            let (global, per_pkg) = resolve_timeouts(&params);
+
+            assert_eq!(global, 900);
+            assert_eq!(per_pkg, 60); // Default
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Args Conversion Tests
+    // -------------------------------------------------------------------------
+
+    mod args_conversion_tests {
+        use super::*;
+
+        #[test]
+        fn test_convert_params_to_args_basic() {
+            let params = ExecuteParams::new(".", "npm:test");
+            let args = convert_params_to_args(&params);
+
+            assert_eq!(args.cmd, "npm:test");
+            assert!(args.filter_package.is_none());
+            assert!(!args.affected);
+            assert!(!args.parallel);
+            assert!(args.args.is_empty());
+        }
+
+        #[test]
+        fn test_convert_params_to_args_with_filter() {
+            let params = ExecuteParams::new(".", "npm:build")
+                .with_filter_package(vec!["@scope/core".to_string(), "@scope/utils".to_string()]);
+            let args = convert_params_to_args(&params);
+
+            assert_eq!(args.cmd, "npm:build");
+            assert_eq!(
+                args.filter_package,
+                Some(vec!["@scope/core".to_string(), "@scope/utils".to_string()])
+            );
+            assert!(!args.affected);
+        }
+
+        #[test]
+        fn test_convert_params_to_args_with_affected() {
+            let params = ExecuteParams::new(".", "npm:lint")
+                .with_affected(true)
+                .with_branch("main".to_string());
+            let args = convert_params_to_args(&params);
+
+            assert_eq!(args.cmd, "npm:lint");
+            assert!(args.affected);
+            assert_eq!(args.branch, Some("main".to_string()));
+        }
+
+        #[test]
+        fn test_convert_params_to_args_with_parallel() {
+            let params = ExecuteParams::new(".", "npm:test").with_parallel(true);
+            let args = convert_params_to_args(&params);
+
+            assert!(args.parallel);
+        }
+
+        #[test]
+        fn test_convert_params_to_args_with_extra_args() {
+            let params = ExecuteParams::new(".", "npm:test")
+                .with_args(vec!["--coverage".to_string(), "--verbose".to_string()]);
+            let args = convert_params_to_args(&params);
+
+            assert_eq!(args.args, vec!["--coverage".to_string(), "--verbose".to_string()]);
+        }
+
+        #[test]
+        fn test_convert_params_to_args_with_since_until() {
+            let params = ExecuteParams::new(".", "npm:test")
+                .with_affected(true)
+                .with_since("v1.0.0".to_string())
+                .with_until("HEAD".to_string());
+            let args = convert_params_to_args(&params);
+
+            assert!(args.affected);
+            assert_eq!(args.since, Some("v1.0.0".to_string()));
+            assert_eq!(args.until, Some("HEAD".to_string()));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Response Parsing Tests
+    // -------------------------------------------------------------------------
+
+    mod parsing_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_execute_response_success() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "command": "npm run test",
+                    "results": [
+                        {
+                            "package": "@scope/core",
+                            "success": true,
+                            "exitCode": 0,
+                            "durationMs": 1500
+                        },
+                        {
+                            "package": "@scope/utils",
+                            "success": true,
+                            "exitCode": 0,
+                            "durationMs": 1200
+                        }
+                    ],
+                    "summary": {
+                        "total": 2,
+                        "succeeded": 2,
+                        "failed": 0,
+                        "totalDurationMs": 2700
+                    }
+                }
+            }"#;
+
+            let result = parse_execute_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert_eq!(data.command, "npm run test");
+            assert_eq!(data.results.len(), 2);
+            assert_eq!(data.summary.total, 2);
+            assert_eq!(data.summary.succeeded, 2);
+            assert_eq!(data.summary.failed, 0);
+        }
+
+        #[test]
+        fn test_parse_execute_response_with_failures() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "command": "npm run build",
+                    "results": [
+                        {
+                            "package": "@scope/core",
+                            "success": true,
+                            "exitCode": 0,
+                            "durationMs": 3000
+                        },
+                        {
+                            "package": "@scope/broken",
+                            "success": false,
+                            "exitCode": 1,
+                            "durationMs": 500,
+                            "error": "Build failed: compilation error"
+                        }
+                    ],
+                    "summary": {
+                        "total": 2,
+                        "succeeded": 1,
+                        "failed": 1,
+                        "totalDurationMs": 3500
+                    }
+                }
+            }"#;
+
+            let result = parse_execute_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert_eq!(data.summary.failed, 1);
+            assert_eq!(data.results[1].error, Some("Build failed: compilation error".to_string()));
+        }
+
+        #[test]
+        fn test_parse_execute_response_cli_error() {
+            let json = r#"{
+                "success": false,
+                "error": "No packages found in workspace"
+            }"#;
+
+            let result = parse_execute_response(json.as_bytes());
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EEXEC");
+            assert!(error.message.contains("No packages found"));
+        }
+
+        #[test]
+        fn test_parse_execute_response_empty() {
+            let result = parse_execute_response(b"");
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert!(error.message.contains("empty response"));
+        }
+
+        #[test]
+        fn test_parse_execute_response_whitespace_only() {
+            let result = parse_execute_response(b"   \n\t  ");
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert!(error.message.contains("empty response"));
+        }
+
+        #[test]
+        fn test_parse_execute_response_invalid_json() {
+            let result = parse_execute_response(b"not valid json");
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Failed to parse"));
+        }
+
+        #[test]
+        fn test_parse_execute_response_invalid_utf8() {
+            let invalid_utf8 = vec![0xff, 0xfe, 0x00, 0x01];
+            let result = parse_execute_response(&invalid_utf8);
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Invalid UTF-8"));
+        }
+
+        #[test]
+        fn test_parse_execute_response_success_no_data() {
+            let json = r#"{
+                "success": true
+            }"#;
+
+            let result = parse_execute_response(json.as_bytes());
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert!(error.message.contains("no data"));
+        }
+
+        #[test]
+        fn test_parse_execute_response_cli_error_no_message() {
+            let json = r#"{
+                "success": false
+            }"#;
+
+            let result = parse_execute_response(json.as_bytes());
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Unknown CLI error"));
+        }
+
+        #[test]
+        fn test_parse_execute_response_empty_results() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "command": "npm run test",
+                    "results": [],
+                    "summary": {
+                        "total": 0,
+                        "succeeded": 0,
+                        "failed": 0,
+                        "totalDurationMs": 0
+                    }
+                }
+            }"#;
+
+            let result = parse_execute_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert!(data.results.is_empty());
+            assert_eq!(data.summary.total, 0);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Conversion Tests
+    // -------------------------------------------------------------------------
+
+    mod conversion_tests {
+        use super::*;
+
+        #[test]
+        fn test_convert_to_napi_execute_full() {
+            let cli_data = CliExecuteData {
+                command: "npm run build".to_string(),
+                results: vec![
+                    CliPackageExecutionResult {
+                        package: "@org/core".to_string(),
+                        success: true,
+                        exit_code: 0,
+                        duration_ms: 2500,
+                        error: None,
+                    },
+                    CliPackageExecutionResult {
+                        package: "@org/utils".to_string(),
+                        success: false,
+                        exit_code: 1,
+                        duration_ms: 500,
+                        error: Some("Build failed".to_string()),
+                    },
+                ],
+                summary: CliExecuteSummary {
+                    total: 2,
+                    succeeded: 1,
+                    failed: 1,
+                    total_duration_ms: 3000,
+                },
+            };
+
+            let napi_data = convert_to_napi_execute(cli_data);
+
+            assert_eq!(napi_data.command, "npm run build");
+            assert_eq!(napi_data.results.len(), 2);
+            assert_eq!(napi_data.results[0].package, "@org/core");
+            assert!(napi_data.results[0].success);
+            assert_eq!(napi_data.results[0].exit_code, 0);
+            assert_eq!(napi_data.results[0].duration_ms, 2500);
+            assert!(napi_data.results[0].error.is_none());
+
+            assert_eq!(napi_data.results[1].package, "@org/utils");
+            assert!(!napi_data.results[1].success);
+            assert_eq!(napi_data.results[1].exit_code, 1);
+            assert_eq!(napi_data.results[1].error, Some("Build failed".to_string()));
+
+            assert_eq!(napi_data.summary.total, 2);
+            assert_eq!(napi_data.summary.succeeded, 1);
+            assert_eq!(napi_data.summary.failed, 1);
+            assert_eq!(napi_data.summary.total_duration_ms, 3000);
+        }
+
+        #[test]
+        fn test_convert_to_napi_execute_empty() {
+            let cli_data = CliExecuteData {
+                command: "ls -la".to_string(),
+                results: vec![],
+                summary: CliExecuteSummary {
+                    total: 0,
+                    succeeded: 0,
+                    failed: 0,
+                    total_duration_ms: 0,
+                },
+            };
+
+            let napi_data = convert_to_napi_execute(cli_data);
+
+            assert_eq!(napi_data.command, "ls -la");
+            assert!(napi_data.results.is_empty());
+            assert_eq!(napi_data.summary.total, 0);
+        }
+
+        #[test]
+        fn test_convert_to_napi_execute_preserves_error_messages() {
+            let cli_data = CliExecuteData {
+                command: "npm run test".to_string(),
+                results: vec![CliPackageExecutionResult {
+                    package: "@org/failing".to_string(),
+                    success: false,
+                    exit_code: 127,
+                    duration_ms: 100,
+                    error: Some("Command not found: jest".to_string()),
+                }],
+                summary: CliExecuteSummary {
+                    total: 1,
+                    succeeded: 0,
+                    failed: 1,
+                    total_duration_ms: 100,
+                },
+            };
+
+            let napi_data = convert_to_napi_execute(cli_data);
+
+            assert_eq!(napi_data.results[0].exit_code, 127);
+            assert_eq!(napi_data.results[0].error, Some("Command not found: jest".to_string()));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // ExecuteParams Builder Tests
+    // -------------------------------------------------------------------------
+
+    mod params_builder_tests {
+        use super::*;
+
+        #[test]
+        fn test_execute_params_new() {
+            let params = ExecuteParams::new("/path/to/project", "npm:test");
+            assert_eq!(params.root, "/path/to/project");
+            assert_eq!(params.cmd, "npm:test");
+            assert!(params.filter_package.is_none());
+            assert!(params.affected.is_none());
+            assert!(params.parallel.is_none());
+        }
+
+        #[test]
+        fn test_execute_params_builder_chain() {
+            let params = ExecuteParams::new(".", "npm:build")
+                .with_filter_package(vec!["@scope/core".to_string()])
+                .with_parallel(true)
+                .with_timeout_secs(600)
+                .with_per_package_timeout_secs(120)
+                .with_args(vec!["--verbose".to_string()]);
+
+            assert_eq!(params.filter_package, Some(vec!["@scope/core".to_string()]));
+            assert_eq!(params.parallel, Some(true));
+            assert_eq!(params.timeout_secs, Some(600));
+            assert_eq!(params.per_package_timeout_secs, Some(120));
+            assert_eq!(params.args, Some(vec!["--verbose".to_string()]));
+        }
+
+        #[test]
+        fn test_execute_params_affected_chain() {
+            let params = ExecuteParams::new(".", "npm:test")
+                .with_affected(true)
+                .with_branch("main".to_string())
+                .with_since("v1.0.0".to_string())
+                .with_until("HEAD".to_string());
+
+            assert_eq!(params.affected, Some(true));
+            assert_eq!(params.branch, Some("main".to_string()));
+            assert_eq!(params.since, Some("v1.0.0".to_string()));
+            assert_eq!(params.until, Some("HEAD".to_string()));
+        }
+
+        #[test]
+        fn test_execute_params_helper_methods() {
+            let params = ExecuteParams::new(".", "npm:test")
+                .with_filter_package(vec!["@scope/core".to_string()])
+                .with_affected(false)
+                .with_parallel(true);
+
+            assert!(params.has_filter_package());
+            assert!(!params.is_affected());
+            assert!(params.is_parallel());
+        }
+
+        #[test]
+        fn test_execute_params_helper_methods_defaults() {
+            let params = ExecuteParams::new(".", "npm:test");
+
+            assert!(!params.has_filter_package());
+            assert!(!params.is_affected());
+            assert!(!params.is_parallel());
         }
     }
 }
