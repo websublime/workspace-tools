@@ -2,96 +2,579 @@
 
 ![https://github.com/websublime/workspace-tools/actions](https://github.com/websublime/workspace-tools/workflows/CI/badge.svg)
 
-> Tools to use on github actions for bumping version, changelogs on a monorepo.
+> Node.js bindings for workspace management tools - version bumping, changelogs, and monorepo automation.
 
-## Install this package
-
-```
-pnpm add @websublime/workspace-tools
-```
-
-## Usage
-
-This package offer a set of functions to retrieve information about the monorepo and the packages that contain. It support all package managers including Bun (WIP).
-
-## API
-
-| Function                                                                                                                                                            | Description                                                                                                      |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `getProjectRootPath(root?: string): string or undefined`                                                                                                            | Get the root path of the project.                                                                                |
-| `getDefinedPackageManager(root?: string): string or undefined`                                                                                                      | Get the package manager defined in the project.                                                                  |
-| `detectPackageManager(root: string): PackageManager or undefined`                                                                                                   | Detect the package manager defined in the project.                                                               |
-| `getPackages(cwd?: string): Array<PackageInfo>`                                                                                                                     | Get the list of packages in the monorepo.                                                                        |
-| `getPackageInfo(package_name: string, cwd?: string): PackageInfo`                                                                                                   | Get PackageInfo for a package.                                                                                   |
-| `getChangedPackages(sha?: string, cwd: string): Array<PackageInfo>`                                                                                                 | Get the list of packages that have changed since the given sha ('main').                                         |
-| `git_add(file: string, cwd?: string): boolean`                                                                                                                      | Stage a file.                                                                                                    |
-| `git_add_all(cwd?: string): boolean`                                                                                                                                | Stage all files.                                                                                                 |
-| `git_config(name: string, email: string, cwd?: string): boolean`                                                                                                    | Git config user name and email.                                                                                  |
-| `gitFetchAll(cwd?: string, fetch_tags?: boolean): boolean`                                                                                                          | Execute a `fetch` command to get the latest changes from the remote repository. You can also retrieve tags       |
-| `gitCommit(message: string, body?: string, footer?: string cwd?: string): boolean`                                                                                  | Commit the changes.                                                                                              |
-| `gitTag(tag: string, message?: string, cwd?: string): boolean`                                                                                                      | Tag the repository with the given tag.                                                                           |
-| `gitPush(cwd?: string, follow_tags?: boolean): boolean`                                                                                                             | Push the changes to the remote repository, including optional tags.                                              |
-| `gitCurrentBranch(cwd?: string): string or undefined`                                                                                                               | Get the current branch name.                                                                                     |
-| `gitCurrentSha(cwd?: string): string`                                                                                                                               | Get's the current commit id.                                                                                     |
-| `gitPreviousSha(cwd?: string): string or undefined`                                                                                                                 | Get's the previous commit id.                                                                                    |
-| `gitFirstSha(cwd?: string, branch?: string): string or undefined`                                                                                                   | Get's the first commit id in a branch. Compare is done between branch..Head, and it should be used as main..HEAD |
-| `isWorkdirUnclean(cwd?: string): boolean`                                                                                                                           | Check if the workdir is unclean (uncommited changes).                                                            |
-| `gitCommitBranchName(sha: string, cwd?: string): string or undefined`                                                                                               | Get the branch name for the commit id.                                                                           |
-| `gitAllFilesChangedSinceSha(sha: string, cwd?: string): Array<String>`                                                                                              | Get all files changed sinc branch, commit id etc.                                                                |
-| `getDivergedCommit(sha: string, cwd?: string): string or undefined`                                                                                                 | Get the diverged commit from the given sha (main).                                                               |
-| `getCommitsSince(cwd?: string, since?: string, relative?: string): Array<Commit>`                                                                                   | Get the commits since the given sha (main) for a particular package.                                             |
-| `getAllFilesChangedSinceBranch(package_info: Array<PackageInfo>, branch: string, cwd?: string): Array<String>`                                                      | Get all the files changed for a branch (main).                                                                   |
-| `getLastKnownPublishTagInfoForPackage(package_info: PackageInfo, cwd?: string): Array<PublishTagInfo>`                                                              | Get the last known publish tag info for a particular package.                                                    |
-| `getLastKnownPublishTagInfoForAllPackages(package_info: Array<PackageInfo>, cwd?: string): Array<PublishTagInfo>`                                                   | Get the last known publish tag info for all packages.                                                            |
-| `getRemoteOrLocalTags(cwd?: string, local?: boolean): Array<RemoteTags>`                                                                                            | Get all the tags in the remote or local repository.                                                              |
-| `getConventionalForPackage(package_info: PackageInfo, no_fetch_all?: boolean cwd?: string, conventional_options?: ConventionalPackageOptions): ConventionalPackage` | Get the conventional commits for a particular package, changelog output and package info.                        |
-| `getBumps(options: BumpOptions): Array<BumpPackage>`                                                                                                                | Output bumps version for packages and it's dependencies                                                          |
-| `initChanges(cwd?: string, change_options?: ChangesOptions): ChangesFileData`                                                                                       | Creat changes file or retrieve is data if already exist                                                          |
-| `addChange(change: Change, cwd?: string): boolean`                                                                                                                  | Adds a new change to the change file                                                                             |
-| `removeChange(branch_name: String, cwd?: string): boolean`                                                                                                          | Removes the change from the changes files.                                                                       |
-| `changeExist(branch_name: string, packages_name: Array<string>, cwd?: string): boolean`                                                                             | Check if change already exist.                                                                                   |
-| `getChange(branch_name: string, cwd?: string): Array<Change>`                                                                                                       | Get the list of changes for the branch.                                                                          |
-| `getChanges(cwd?: string): Changes`                                                                                                                                 | Get all changes.                                                                                                 |
-| `getPackageChange(package_name: string, branch: string, cwd?: string): Changes`                                                                                     | Get a change by package name.                                                                                    |
-| `changesFileExist(cwd?: string): boolean`                                                                                                                           | Check if `.changes.json` file exist                                                                              |
-
-## Develop requirements
-
-- Install the latest `Rust`
-- Install `Node.js@16+` which fully supported `Node-API`
-- Run `corepack enable`
-
-## Test in local
-
-- pnpm
-- pnpm build
-- pnpm test
-
-And you will see:
+## Install
 
 ```bash
-$ ava --verbose
-
-  ✔ get defined package manager
-  ─
-
-  2 tests passed
-✨  Done in 1.12s.
+pnpm add @websublime/workspace-tools
+# or
+npm install @websublime/workspace-tools
+# or
+yarn add @websublime/workspace-tools
 ```
 
-## Release package
+## Overview
 
-Ensure you have set your **NPM_TOKEN** in the `GitHub` project setting.
+This package provides native Node.js bindings (via napi-rs) for workspace management operations. It supports all major package managers (npm, yarn, pnpm, bun) and provides a comprehensive API for:
 
-In `Settings -> Secrets`, add **NPM_TOKEN** into it.
+- **Workspace Status** - Get information about your workspace, packages, and pending changesets
+- **Changesets** - Create, update, list, and manage changesets for version tracking
+- **Version Bumping** - Preview, apply, and snapshot version bumps with dependency propagation
+- **Command Execution** - Run commands across workspace packages with filtering and timeout support
+- **Initialization** - Set up changeset-based version management in your workspace
 
-When you want to release the package:
+## Quick Start
 
+```typescript
+import {
+  status,
+  changesetAdd,
+  bumpPreview,
+  bumpApply,
+  execute,
+} from '@websublime/workspace-tools'
+
+// Get workspace status
+const statusResult = await status({ root: '.' })
+if (statusResult.success) {
+  console.log(`Found ${statusResult.data.packages.length} packages`)
+  console.log(`Package manager: ${statusResult.data.packageManager.name}`)
+}
+
+// Add a changeset
+const changesetResult = await changesetAdd({
+  root: '.',
+  packages: ['@scope/my-package'],
+  bump: 'minor',
+  message: 'Add new feature',
+})
+
+// Preview version bumps
+const previewResult = await bumpPreview({ root: '.', showDiff: true })
+if (previewResult.success) {
+  for (const pkg of previewResult.data.packages) {
+    console.log(`${pkg.name}: ${pkg.currentVersion} → ${pkg.nextVersion}`)
+  }
+}
+
+// Apply version bumps with git integration
+const applyResult = await bumpApply({
+  root: '.',
+  gitCommit: true,
+  gitTag: true,
+})
+
+// Execute commands across packages
+const execResult = await execute({
+  root: '.',
+  cmd: 'npm:test',
+  parallel: true,
+  timeoutSecs: 300,
+})
 ```
-npm run build
-npm version [<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease [--preid=<prerelease-id>] | from-git]
 
-git push
+## API Reference
+
+All functions return a Promise with an `ApiResponse` structure:
+
+```typescript
+interface ApiResponse<T> {
+  success: boolean
+  data?: T // Present when success is true
+  error?: ErrorInfo // Present when success is false
+}
+
+interface ErrorInfo {
+  code: string // e.g., 'EVALIDATION', 'ENOENT', 'ETIMEOUT'
+  message: string
+  context?: string
+  kind: string
+}
 ```
 
-GitHub actions will do the rest job for you.
+### Core Functions
+
+| Function | Description |
+|----------|-------------|
+| `getVersion()` | Returns the version of the native bindings |
+| `status(params)` | Get comprehensive workspace status information |
+| `init(params)` | Initialize changeset-based version management |
+
+### Changeset Functions
+
+| Function | Description |
+|----------|-------------|
+| `changesetAdd(params)` | Create a new changeset |
+| `changesetUpdate(params)` | Update an existing changeset |
+| `changesetList(params)` | List pending changesets with filtering |
+| `changesetShow(params)` | Show details of a specific changeset |
+| `changesetRemove(params)` | Remove a changeset |
+| `changesetHistory(params)` | Query archived changeset history |
+| `changesetCheck(params)` | Check if a changeset exists for a branch |
+
+### Bump Functions
+
+| Function | Description |
+|----------|-------------|
+| `bumpPreview(params)` | Preview version bumps without applying changes |
+| `bumpApply(params)` | Apply version bumps with optional Git integration |
+| `bumpSnapshot(params)` | Generate snapshot versions for pre-release testing |
+
+### Execute Function
+
+| Function | Description |
+|----------|-------------|
+| `execute(params)` | Run commands across workspace packages with timeout support |
+
+---
+
+## Detailed API
+
+### `status(params: StatusParams): Promise<StatusApiResponse>`
+
+Get comprehensive workspace status information.
+
+```typescript
+interface StatusParams {
+  root: string // Workspace root directory
+  configPath?: string // Optional custom config path
+}
+
+interface StatusData {
+  repository: RepositoryInfo
+  packageManager: PackageManagerInfo
+  branch?: BranchInfo
+  changesets: ChangesetInfo[]
+  packages: PackageInfo[]
+}
+```
+
+**Example:**
+
+```typescript
+const result = await status({ root: '.' })
+if (result.success) {
+  console.log(`Repository type: ${result.data.repository.kind}`)
+  console.log(`Branch: ${result.data.branch?.name}`)
+  console.log(`Pending changesets: ${result.data.changesets.length}`)
+}
+```
+
+---
+
+### `init(params: InitParams): Promise<InitApiResponse>`
+
+Initialize changeset-based version management.
+
+```typescript
+interface InitParams {
+  root: string
+  changesetPath?: string // Default: '.changesets'
+  environments?: string[] // Available environments
+  defaultEnv?: string // Default environment
+  strategy?: 'independent' | 'unified'
+  configFormat?: 'toml' | 'json' | 'yaml'
+  force?: boolean // Overwrite existing config
+}
+```
+
+**Example:**
+
+```typescript
+const result = await init({
+  root: '.',
+  strategy: 'independent',
+  configFormat: 'toml',
+})
+```
+
+---
+
+### `changesetAdd(params: ChangesetAddParams): Promise<ChangesetAddApiResponse>`
+
+Create a new changeset.
+
+```typescript
+interface ChangesetAddParams {
+  root: string
+  packages: string[] // Package names to include
+  bump: 'major' | 'minor' | 'patch' | 'none'
+  message: string // Changeset message/description
+  env?: string // Environment (e.g., 'production')
+}
+```
+
+**Example:**
+
+```typescript
+const result = await changesetAdd({
+  root: '.',
+  packages: ['@scope/core', '@scope/utils'],
+  bump: 'minor',
+  message: 'Add new utility functions',
+})
+
+if (result.success) {
+  console.log(`Created changeset: ${result.data.id}`)
+}
+```
+
+---
+
+### `changesetList(params: ChangesetListParams): Promise<ChangesetListApiResponse>`
+
+List pending changesets with filtering and sorting.
+
+```typescript
+interface ChangesetListParams {
+  root: string
+  configPath?: string
+  env?: string // Filter by environment
+  bump?: string // Filter by bump type
+  sort?: 'date' | 'bump' | 'branch' // Sort order
+}
+```
+
+**Example:**
+
+```typescript
+const result = await changesetList({
+  root: '.',
+  bump: 'minor',
+  sort: 'date',
+})
+
+if (result.success) {
+  for (const changeset of result.data.changesets) {
+    console.log(`${changeset.id}: ${changeset.bump} - ${changeset.packages.join(', ')}`)
+  }
+}
+```
+
+---
+
+### `bumpPreview(params: BumpPreviewParams): Promise<BumpPreviewApiResponse>`
+
+Preview version bumps without applying changes.
+
+```typescript
+interface BumpPreviewParams {
+  root: string
+  configPath?: string
+  packages?: string[] // Filter to specific packages
+  showDiff?: boolean // Show detailed diffs
+}
+
+interface BumpPreviewData {
+  strategy: string
+  packages: PackageVersionInfo[]
+  summary: BumpSummaryInfo
+  changesets: string[]
+}
+
+interface PackageVersionInfo {
+  name: string
+  path: string
+  currentVersion: string
+  nextVersion: string
+  bump: string
+  dependencyUpdates: DependencyUpdateInfo[]
+}
+```
+
+**Example:**
+
+```typescript
+const result = await bumpPreview({ root: '.', showDiff: true })
+
+if (result.success) {
+  console.log(`Strategy: ${result.data.strategy}`)
+  console.log(`Summary: ${result.data.summary.totalPackages} packages`)
+  console.log(`  Major: ${result.data.summary.majorBumps}`)
+  console.log(`  Minor: ${result.data.summary.minorBumps}`)
+  console.log(`  Patch: ${result.data.summary.patchBumps}`)
+
+  for (const pkg of result.data.packages) {
+    console.log(`${pkg.name}: ${pkg.currentVersion} → ${pkg.nextVersion} (${pkg.bump})`)
+  }
+}
+```
+
+---
+
+### `bumpApply(params: BumpApplyParams): Promise<BumpApplyApiResponse>`
+
+Apply version bumps with optional Git integration and prerelease support.
+
+```typescript
+interface BumpApplyParams {
+  root: string
+  configPath?: string
+  packages?: string[]
+  gitCommit?: boolean // Create a commit
+  gitTag?: boolean // Create version tags
+  gitPush?: boolean // Push to remote
+  prerelease?: string // Prerelease tag (e.g., 'alpha', 'beta', 'rc')
+  noChangelog?: boolean // Skip changelog generation
+  noArchive?: boolean // Skip archiving changesets
+  alwaysArchive?: boolean // Archive even on failure
+  force?: boolean // Skip confirmations
+}
+
+interface BumpApplyData {
+  strategy: string
+  packagesUpdated: number
+  changesetsArchived: number
+  filesModified: string[]
+  tagsCreated: string[]
+  commitSha?: string
+}
+```
+
+**Example:**
+
+```typescript
+// Standard release
+const result = await bumpApply({
+  root: '.',
+  gitCommit: true,
+  gitTag: true,
+  gitPush: true,
+})
+
+// Prerelease (beta)
+const betaResult = await bumpApply({
+  root: '.',
+  prerelease: 'beta',
+  gitCommit: true,
+  gitTag: true,
+})
+
+if (result.success) {
+  console.log(`Updated ${result.data.packagesUpdated} packages`)
+  console.log(`Commit: ${result.data.commitSha}`)
+  console.log(`Tags: ${result.data.tagsCreated.join(', ')}`)
+}
+```
+
+---
+
+### `bumpSnapshot(params: BumpSnapshotParams): Promise<BumpSnapshotApiResponse>`
+
+Generate snapshot versions for pre-release testing and CI.
+
+```typescript
+interface BumpSnapshotParams {
+  root: string
+  configPath?: string
+  packages?: string[]
+  format?: string // Snapshot format template
+}
+
+interface BumpSnapshotData {
+  strategy: string
+  packages: SnapshotVersionInfo[]
+  format: string
+}
+```
+
+**Format Variables:**
+
+- `{version}` - Current package version
+- `{branch}` - Current Git branch (sanitized)
+- `{commit}` - Full Git commit hash
+- `{short_commit}` - Short Git commit hash (7 chars)
+- `{timestamp}` - Unix timestamp
+
+**Example:**
+
+```typescript
+const result = await bumpSnapshot({
+  root: '.',
+  format: '{version}-snapshot.{short_commit}',
+})
+
+if (result.success) {
+  for (const pkg of result.data.packages) {
+    console.log(`${pkg.name}: ${pkg.originalVersion} → ${pkg.snapshotVersion}`)
+  }
+}
+```
+
+---
+
+### `execute(params: ExecuteParams): Promise<ExecuteApiResponse>`
+
+Execute commands across workspace packages with filtering, parallelism, and timeout support.
+
+```typescript
+interface ExecuteParams {
+  root: string
+  cmd: string // Command to execute (e.g., 'npm:test' or 'ls -la')
+  filterPackage?: string[] // Run only on specific packages
+  affected?: boolean // Run only on affected packages
+  since?: string // Since commit/branch/tag (with affected)
+  until?: string // Until commit/branch/tag (with affected)
+  branch?: string // Compare against branch (with affected)
+  parallel?: boolean // Run commands in parallel
+  args?: string[] // Additional arguments
+  timeoutSecs?: number // Global timeout in seconds
+  perPackageTimeoutSecs?: number // Per-package timeout
+}
+
+interface ExecuteData {
+  command: string
+  results: PackageExecutionResult[]
+  summary: ExecuteSummary
+}
+
+interface PackageExecutionResult {
+  package: string
+  success: boolean
+  exitCode: number
+  durationMs: number
+  error?: string
+}
+
+interface ExecuteSummary {
+  total: number
+  succeeded: number
+  failed: number
+  totalDurationMs: number
+}
+```
+
+**Command Formats:**
+
+- `npm:<script>` - Run an npm script (e.g., `npm:test`, `npm:build`)
+- Plain command - Run a system command (e.g., `ls -la`, `node index.js`)
+
+**Example:**
+
+```typescript
+// Run tests on all packages in parallel
+const result = await execute({
+  root: '.',
+  cmd: 'npm:test',
+  parallel: true,
+  timeoutSecs: 300,
+})
+
+if (result.success) {
+  console.log(`${result.data.summary.succeeded}/${result.data.summary.total} passed`)
+
+  for (const pkg of result.data.results) {
+    const icon = pkg.success ? '✓' : '✗'
+    console.log(`${icon} ${pkg.package}: ${pkg.durationMs}ms`)
+  }
+}
+
+// Run on affected packages only
+const affectedResult = await execute({
+  root: '.',
+  cmd: 'npm:build',
+  affected: true,
+  branch: 'main',
+  parallel: true,
+})
+
+// Run on specific packages
+const filteredResult = await execute({
+  root: '.',
+  cmd: 'npm:lint',
+  filterPackage: ['@scope/core', '@scope/utils'],
+})
+```
+
+**Note:** `filterPackage` and `affected` are mutually exclusive.
+
+---
+
+## Error Handling
+
+All functions return an `ApiResponse` with consistent error handling:
+
+```typescript
+const result = await bumpPreview({ root: '/invalid/path' })
+
+if (!result.success) {
+  switch (result.error.code) {
+    case 'ENOENT':
+      console.error('Path not found:', result.error.message)
+      break
+    case 'EVALIDATION':
+      console.error('Invalid parameters:', result.error.message)
+      break
+    case 'ETIMEOUT':
+      console.error('Operation timed out:', result.error.message)
+      break
+    case 'EGIT':
+      console.error('Git error:', result.error.message)
+      break
+    default:
+      console.error(`Error [${result.error.code}]:`, result.error.message)
+  }
+}
+```
+
+### Error Codes
+
+| Code | Description |
+|------|-------------|
+| `EVALIDATION` | Invalid parameters |
+| `ENOENT` | Path or resource not found |
+| `ETIMEOUT` | Operation timed out |
+| `EGIT` | Git operation failed |
+| `EEXEC` | Execution error |
+| `ECONFIG` | Configuration error |
+| `EIO` | I/O error |
+
+---
+
+## TypeScript Support
+
+Full TypeScript definitions are included. Import types directly:
+
+```typescript
+import type {
+  StatusParams,
+  StatusData,
+  ChangesetAddParams,
+  BumpPreviewParams,
+  BumpPreviewData,
+  ExecuteParams,
+  ExecuteData,
+  ErrorInfo,
+} from '@websublime/workspace-tools'
+```
+
+---
+
+## Development
+
+### Requirements
+
+- Rust (latest stable)
+- Node.js 16+
+- pnpm
+
+### Build
+
+```bash
+pnpm install
+pnpm build-binding:release
+pnpm build-types
+```
+
+### Test
+
+```bash
+pnpm test
+```
+
+---
+
+## License
+
+MIT
