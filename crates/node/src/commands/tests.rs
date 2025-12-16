@@ -35,9 +35,9 @@ mod status_tests {
     use std::io::Write;
 
     use crate::commands::status::{
-        convert_to_napi_status, parse_status_response, validate_params, CliBranchInfo,
-        CliChangesetInfo, CliPackageInfo, CliPackageManagerInfo, CliRepositoryInfo, CliStatusData,
-        SharedBuffer,
+        CliBranchInfo, CliChangesetInfo, CliPackageInfo, CliPackageManagerInfo, CliRepositoryInfo,
+        CliStatusData, SharedBuffer, convert_to_napi_status, parse_status_response,
+        validate_params,
     };
     use crate::types::status::StatusParams;
 
@@ -419,8 +419,8 @@ mod init_tests {
     use std::io::Write;
 
     use crate::commands::init::{
-        convert_params_to_args, convert_to_napi_init, parse_init_response, validate_params,
-        CliInitData, SharedBuffer,
+        CliInitData, SharedBuffer, convert_params_to_args, convert_to_napi_init,
+        parse_init_response, validate_params,
     };
     use crate::types::init::InitParams;
 
@@ -1062,8 +1062,8 @@ mod changeset_add_tests {
     use std::io::Write;
 
     use crate::commands::changeset::{
-        convert_params_to_args, convert_to_napi_add_data, parse_changeset_add_response,
-        validate_params, CliChangesetInfo, SharedBuffer,
+        CliChangesetInfo, SharedBuffer, convert_params_to_args, convert_to_napi_add_data,
+        parse_changeset_add_response, validate_params,
     };
     use crate::types::changeset::ChangesetAddParams;
 
@@ -1457,9 +1457,9 @@ mod changeset_update_tests {
     use std::io::Write;
 
     use crate::commands::changeset::{
-        convert_to_napi_changeset_detail, convert_to_napi_update_summary,
-        convert_update_params_to_args, parse_changeset_update_response, validate_update_params,
-        CliUpdateSummary, CliUpdatedChangesetInfo, SharedBuffer,
+        CliUpdateSummary, CliUpdatedChangesetInfo, SharedBuffer, convert_to_napi_changeset_detail,
+        convert_to_napi_update_summary, convert_update_params_to_args,
+        parse_changeset_update_response, validate_update_params,
     };
     use crate::types::changeset::ChangesetUpdateParams;
 
@@ -1910,9 +1910,9 @@ mod changeset_list_tests {
     use std::io::Write;
 
     use crate::commands::changeset::{
+        CliChangesetListItem, CliChangesetListResponseData, SharedBuffer,
         convert_list_item_to_napi, convert_list_params_to_args, convert_to_napi_list_data,
-        parse_changeset_list_response, validate_list_params, CliChangesetListItem,
-        CliChangesetListResponseData, SharedBuffer,
+        parse_changeset_list_response, validate_list_params,
     };
     use crate::types::changeset::{ChangesetListParams, VALID_SORT_OPTIONS};
 
@@ -2401,9 +2401,9 @@ mod changeset_list_tests {
 #[allow(clippy::unwrap_used)]
 mod changeset_show_tests {
     use crate::commands::changeset::{
+        CliChangesetShowItem, CliChangesetShowResponseData, SharedBuffer,
         convert_show_item_to_napi, convert_show_params_to_args, convert_to_napi_show_data,
-        parse_changeset_show_response, validate_show_params, CliChangesetShowItem,
-        CliChangesetShowResponseData, SharedBuffer,
+        parse_changeset_show_response, validate_show_params,
     };
     use crate::types::changeset::ChangesetShowParams;
     use std::io::Write;
@@ -2805,9 +2805,9 @@ mod changeset_remove_tests {
     use tempfile::TempDir;
 
     use crate::commands::changeset::{
+        CliChangesetRemoveResponseData, CliRemovedChangesetInfo, SharedBuffer,
         convert_remove_params_to_args, convert_to_napi_remove_data,
-        parse_changeset_remove_response, validate_remove_params, CliChangesetRemoveResponseData,
-        CliRemovedChangesetInfo, SharedBuffer,
+        parse_changeset_remove_response, validate_remove_params,
     };
     use crate::types::changeset::ChangesetRemoveParams;
 
@@ -3233,9 +3233,9 @@ mod changeset_history_tests {
     use tempfile::TempDir;
 
     use crate::commands::changeset::{
+        CliArchivedChangesetInfo, CliChangesetHistoryResponseData, SharedBuffer,
         convert_archived_changeset_to_napi, convert_history_params_to_args,
         convert_to_napi_history_data, parse_changeset_history_response, validate_history_params,
-        CliArchivedChangesetInfo, CliChangesetHistoryResponseData, SharedBuffer,
     };
     use crate::types::changeset::ChangesetHistoryParams;
 
@@ -3765,8 +3765,8 @@ mod changeset_check_tests {
     use tempfile::TempDir;
 
     use crate::commands::changeset::{
-        convert_check_params_to_args, convert_to_napi_check_data, parse_changeset_check_response,
-        validate_check_params, CliChangesetCheckResponseData, SharedBuffer,
+        CliChangesetCheckResponseData, SharedBuffer, convert_check_params_to_args,
+        convert_to_napi_check_data, parse_changeset_check_response, validate_check_params,
     };
     use crate::types::changeset::ChangesetCheckParams;
 
@@ -4154,9 +4154,9 @@ mod bump_preview_tests {
     use tempfile::TempDir;
 
     use crate::commands::bump::{
+        CliBumpSnapshot, CliBumpSummary, CliChangesetInfo, CliPackageBumpInfo, SharedBuffer,
         convert_params_to_args, convert_to_napi_preview, parse_preview_response,
-        validate_preview_params, CliBumpSnapshot, CliBumpSummary, CliChangesetInfo,
-        CliPackageBumpInfo, SharedBuffer,
+        validate_preview_params,
     };
     use crate::types::bump::BumpPreviewParams;
 
@@ -4856,8 +4856,9 @@ mod bump_apply_tests {
     use tempfile::TempDir;
 
     use crate::commands::bump::{
+        CliBumpSnapshot, CliBumpSummary, CliExecuteResult, SharedBuffer,
         convert_apply_params_to_args, convert_to_napi_apply, parse_apply_response,
-        validate_apply_params, CliBumpSnapshot, CliBumpSummary, CliExecuteResult, SharedBuffer,
+        validate_apply_params,
     };
     use crate::types::bump::BumpApplyParams;
 
@@ -5533,9 +5534,9 @@ mod bump_snapshot_tests {
     use tempfile::TempDir;
 
     use crate::commands::bump::{
+        CliBumpSnapshot, CliBumpSummary, CliChangesetInfo, CliPackageBumpInfo, SharedBuffer,
         convert_snapshot_params_to_args, convert_to_napi_snapshot, parse_snapshot_response,
-        validate_snapshot_params, CliBumpSnapshot, CliBumpSummary, CliChangesetInfo,
-        CliPackageBumpInfo, SharedBuffer,
+        validate_snapshot_params,
     };
     use crate::types::bump::BumpSnapshotParams;
 
@@ -6191,9 +6192,9 @@ mod execute_tests {
     use std::io::Write;
 
     use crate::commands::execute::{
+        CliExecuteData, CliExecuteSummary, CliPackageExecutionResult, SharedBuffer,
         convert_params_to_args, convert_to_napi_execute, parse_execute_response, resolve_timeouts,
-        validate_params, CliExecuteData, CliExecuteSummary, CliPackageExecutionResult,
-        SharedBuffer,
+        validate_params,
     };
     use crate::types::execute::ExecuteParams;
     use tempfile::TempDir;
