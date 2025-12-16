@@ -22,6 +22,160 @@ export interface ArchivedChangesetInfo {
 }
 
 /**
+ * Audit configuration information.
+ *
+ * Contains settings for audit and health check functionality.
+ *
+ * # Fields
+ *
+ * - `enabled`: Whether audit is enabled
+ * - `min_severity`: Minimum severity level to report
+ * - `sections`: Which audit sections to run
+ * - `health_score_weights`: Weights for health score calculation
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface AuditConfigInfo {
+ *   // Whether audit is enabled
+ *   enabled: boolean;
+ *   // Minimum severity level to report: "critical", "high", "medium", "low", "info"
+ *   minSeverity: string;
+ *   // Which audit sections to run
+ *   sections: AuditSectionsConfigInfo;
+ *   // Weights for health score calculation
+ *   healthScoreWeights: HealthScoreWeightsInfo;
+ * }
+ * ```
+ */
+export interface AuditConfigInfo {
+  /**
+   * Whether audit is enabled.
+   *
+   * If `false`, audit commands are skipped.
+   */
+  enabled: boolean
+  /**
+   * Minimum severity level to report.
+   *
+   * Only issues at or above this severity are reported:
+   * - `"critical"`: Only critical issues
+   * - `"high"`: High and above
+   * - `"medium"`: Medium and above
+   * - `"low"`: Low and above
+   * - `"info"`: All issues including informational
+   */
+  minSeverity: string
+  /**
+   * Which audit sections to run.
+   *
+   * Allows selectively enabling or disabling specific audit checks.
+   */
+  sections: AuditSectionsConfigInfo
+  /**
+   * Weights for health score calculation.
+   *
+   * Determines how different factors contribute to the overall
+   * health score.
+   */
+  healthScoreWeights: HealthScoreWeightsInfo
+}
+
+/**
+ * Audit sections configuration.
+ *
+ * Contains flags for enabling/disabling specific audit sections.
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface AuditSectionsConfigInfo {
+ *   // Check for available upgrades
+ *   upgrades: boolean;
+ *   // Analyze dependencies
+ *   dependencies: boolean;
+ *   // Check version consistency
+ *   versionConsistency: boolean;
+ *   // Detect breaking changes
+ *   breakingChanges: boolean;
+ * }
+ * ```
+ */
+export interface AuditSectionsConfigInfo {
+  /**
+   * Check for available upgrades.
+   *
+   * Analyzes dependencies for available updates.
+   */
+  upgrades: boolean
+  /**
+   * Analyze dependencies.
+   *
+   * Checks for circular dependencies, missing dependencies, etc.
+   */
+  dependencies: boolean
+  /**
+   * Check version consistency.
+   *
+   * Verifies that dependency versions are consistent across packages.
+   */
+  versionConsistency: boolean
+  /**
+   * Detect breaking changes.
+   *
+   * Identifies potential breaking changes based on commits and changelogs.
+   */
+  breakingChanges: boolean
+}
+
+/**
+ * Backup configuration information.
+ *
+ * Contains settings for backup and rollback functionality.
+ *
+ * # Fields
+ *
+ * - `enabled`: Whether backup is enabled
+ * - `path`: Path to store backups
+ * - `keep_count`: Number of backups to keep
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface BackupConfigInfo {
+ *   // Whether backup is enabled
+ *   enabled: boolean;
+ *   // Path to store backups
+ *   path: string;
+ *   // Number of backups to keep
+ *   keepCount: number;
+ * }
+ * ```
+ */
+export interface BackupConfigInfo {
+  /**
+   * Whether backup is enabled.
+   *
+   * If `true`, backups are created before operations that modify
+   * package files, allowing rollback if needed.
+   */
+  enabled: boolean
+  /**
+   * Path to store backups.
+   *
+   * The directory where backup files are stored. This should be
+   * outside the workspace to avoid being affected by operations.
+   */
+  path: string
+  /**
+   * Number of backups to keep.
+   *
+   * Older backups beyond this count are automatically deleted.
+   */
+  keepCount: number
+}
+
+/**
  * Git branch information.
  *
  * Contains the name of the current Git branch, if available.
@@ -1054,6 +1208,106 @@ export interface BumpSummaryInfo {
 }
 
 /**
+ * Changelog configuration information.
+ *
+ * Contains settings for changelog generation.
+ *
+ * # Fields
+ *
+ * - `enabled`: Whether changelog generation is enabled
+ * - `format`: Changelog format ("keep-a-changelog", "conventional-commits", "custom")
+ * - `include_commit_links`: Whether to include commit links
+ * - `repository_url`: Repository URL for generating links
+ * - `conventional`: Whether to use conventional commits parsing
+ * - `template`: Custom template path
+ * - `exclude`: Patterns to exclude from changelog
+ * - `monorepo_mode`: How to handle changelogs in monorepos
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ChangelogConfigInfo {
+ *   // Whether changelog generation is enabled
+ *   enabled: boolean;
+ *   // Changelog format: "keep-a-changelog", "conventional-commits", or "custom"
+ *   format: string;
+ *   // Whether to include commit links
+ *   includeCommitLinks: boolean;
+ *   // Repository URL for generating links
+ *   repositoryUrl?: string;
+ *   // Whether to use conventional commits parsing
+ *   conventional: boolean;
+ *   // Custom template path
+ *   template?: string;
+ *   // Patterns to exclude from changelog
+ *   exclude: string[];
+ *   // How to handle changelogs in monorepos: "per-package", "root", or "both"
+ *   monorepoMode: string;
+ * }
+ * ```
+ */
+export interface ChangelogConfigInfo {
+  /**
+   * Whether changelog generation is enabled.
+   *
+   * If `false`, no changelog files are generated or updated.
+   */
+  enabled: boolean
+  /**
+   * Changelog format.
+   *
+   * The format to use for changelog entries:
+   * - `"keep-a-changelog"`: Keep a Changelog format
+   * - `"conventional-commits"`: Conventional Commits format
+   * - `"custom"`: Custom template-based format
+   */
+  format: string
+  /**
+   * Whether to include commit links.
+   *
+   * If `true`, changelog entries include links to the relevant commits.
+   */
+  includeCommitLinks: boolean
+  /**
+   * Repository URL for generating links.
+   *
+   * Used to generate links to commits, comparisons, and issues
+   * in the changelog. Example: "https://github.com/org/repo".
+   */
+  repositoryUrl?: string | undefined
+  /**
+   * Whether to use conventional commits parsing.
+   *
+   * If `true`, commit messages are parsed using conventional commits
+   * specification to categorize changes.
+   */
+  conventional: boolean
+  /**
+   * Custom template path.
+   *
+   * Path to a custom template file for changelog generation.
+   * Only used when `format` is `"custom"`.
+   */
+  template?: string | undefined
+  /**
+   * Patterns to exclude from changelog.
+   *
+   * Commit messages or files matching these patterns are excluded
+   * from changelog generation.
+   */
+  exclude: Array<string>
+  /**
+   * How to handle changelogs in monorepos.
+   *
+   * Determines where changelog files are created:
+   * - `"per-package"`: Each package has its own CHANGELOG.md
+   * - `"root"`: Single CHANGELOG.md at the repository root
+   * - `"both"`: Both per-package and root changelogs
+   */
+  monorepoMode: string
+}
+
+/**
  * Add a new changeset to the workspace.
  *
  * Creates a new changeset for the current or specified branch. The changeset
@@ -1538,6 +1792,65 @@ export interface ChangesetCheckParams {
    * If not provided, the current Git branch is used.
    */
   branch?: string | undefined
+}
+
+/**
+ * Changeset configuration information.
+ *
+ * Contains settings for changeset management, including paths and
+ * environment configuration.
+ *
+ * # Fields
+ *
+ * - `path`: Path to store active changesets
+ * - `history_path`: Path to store archived changesets
+ * - `available_environments`: List of valid environment names
+ * - `default_environments`: Default environments for new changesets
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ChangesetConfigInfo {
+ *   // Path to store active changesets (default: ".changesets")
+ *   path: string;
+ *   // Path to store archived changesets
+ *   historyPath: string;
+ *   // List of valid environment names
+ *   availableEnvironments: string[];
+ *   // Default environments for new changesets
+ *   defaultEnvironments: string[];
+ * }
+ * ```
+ */
+export interface ChangesetConfigInfo {
+  /**
+   * Path to store active changesets.
+   *
+   * This is the directory where pending changeset files are stored.
+   * Default value is `.changesets`.
+   */
+  path: string
+  /**
+   * Path to store archived changesets.
+   *
+   * This is the directory where consumed changeset files are moved
+   * after a version bump operation. Typically a subdirectory of `path`.
+   */
+  historyPath: string
+  /**
+   * List of valid environment names.
+   *
+   * These are the environments that changesets can target. Common
+   * examples include "production", "staging", "development".
+   */
+  availableEnvironments: Array<string>
+  /**
+   * Default environments for new changesets.
+   *
+   * These environments are automatically assigned to new changesets
+   * if not explicitly specified.
+   */
+  defaultEnvironments: Array<string>
 }
 
 /**
@@ -2950,6 +3263,641 @@ export interface ChangesetUpdateParams {
 }
 
 /**
+ * Main configuration data structure.
+ *
+ * Contains all configuration sections from the `repo.config` file.
+ * This is the root structure that holds all workspace tool settings.
+ *
+ * # Fields
+ *
+ * - `changeset`: Changeset management configuration
+ * - `version`: Version resolution configuration
+ * - `dependency`: Dependency propagation configuration
+ * - `upgrade`: Upgrade detection and application configuration
+ * - `changelog`: Changelog generation configuration
+ * - `audit`: Audit and health check configuration
+ * - `git`: Git integration configuration
+ * - `execute`: Command execution configuration
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ConfigData {
+ *   // Changeset management configuration
+ *   changeset: ChangesetConfigInfo;
+ *   // Version resolution configuration
+ *   version: VersionConfigInfo;
+ *   // Dependency propagation configuration
+ *   dependency: DependencyConfigInfo;
+ *   // Upgrade detection and application configuration
+ *   upgrade: UpgradeConfigInfo;
+ *   // Changelog generation configuration
+ *   changelog: ChangelogConfigInfo;
+ *   // Audit and health check configuration
+ *   audit: AuditConfigInfo;
+ *   // Git integration configuration
+ *   git: GitConfigInfo;
+ *   // Command execution configuration
+ *   execute: ExecuteConfigInfo;
+ * }
+ * ```
+ */
+export interface ConfigData {
+  /**
+   * Changeset management configuration.
+   *
+   * Settings for managing changesets including paths and environments.
+   */
+  changeset: ChangesetConfigInfo
+  /**
+   * Version resolution configuration.
+   *
+   * Settings for version management including strategy and defaults.
+   */
+  version: VersionConfigInfo
+  /**
+   * Dependency propagation configuration.
+   *
+   * Settings for how dependency updates propagate through the workspace.
+   */
+  dependency: DependencyConfigInfo
+  /**
+   * Upgrade detection and application configuration.
+   *
+   * Settings for checking and applying dependency upgrades.
+   */
+  upgrade: UpgradeConfigInfo
+  /**
+   * Changelog generation configuration.
+   *
+   * Settings for generating and formatting changelog files.
+   */
+  changelog: ChangelogConfigInfo
+  /**
+   * Audit and health check configuration.
+   *
+   * Settings for workspace health auditing.
+   */
+  audit: AuditConfigInfo
+  /**
+   * Git integration configuration.
+   *
+   * Settings for Git-related operations.
+   */
+  git: GitConfigInfo
+  /**
+   * Command execution configuration.
+   *
+   * Settings for running commands across packages.
+   */
+  execute: ExecuteConfigInfo
+}
+
+/**
+ * API response wrapper for the `configShow` command.
+ *
+ * This structure wraps the `configShow` response with success/failure status
+ * and consistent error handling, following the pattern used across all
+ * NAPI commands.
+ *
+ * # Fields
+ *
+ * - `success`: Whether the operation succeeded
+ * - `data`: The config show data (present when success is true)
+ * - `error`: Error information (present when success is false)
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ConfigShowApiResponse {
+ *   // Whether the operation succeeded
+ *   success: boolean;
+ *   // The config show data (present when success is true)
+ *   data?: ConfigShowData;
+ *   // Error information (present when success is false)
+ *   error?: ErrorInfo;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const result = await configShow({ root: '.' });
+ *
+ * if (result.success) {
+ *   // result.data is ConfigShowData
+ *   console.log(result.data.config.version.strategy);
+ * } else {
+ *   // result.error is ErrorInfo
+ *   console.error(`[${result.error.code}] ${result.error.message}`);
+ * }
+ * ```
+ */
+export interface ConfigShowApiResponse {
+  /**
+   * Whether the operation succeeded.
+   *
+   * - `true`: Operation completed successfully, `data` field will be present
+   * - `false`: Operation failed, `error` field will be present
+   */
+  success: boolean
+  /**
+   * The config show data (only present when `success` is `true`).
+   *
+   * Contains the loaded configuration and its path.
+   */
+  data?: ConfigShowData | undefined
+  /**
+   * Error information (only present when `success` is `false`).
+   *
+   * Contains structured error information with a Node.js-style error code,
+   * message, optional context, and error kind.
+   */
+  error?: ErrorInfo | undefined
+}
+
+/**
+ * Response data for the `configShow` command.
+ *
+ * Contains the loaded configuration and the path where it was found.
+ *
+ * # Fields
+ *
+ * - `config_path`: Path to the loaded configuration file
+ * - `config_format`: Format of the configuration file (json, toml, yaml)
+ * - `config`: The loaded configuration data
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ConfigShowData {
+ *   // Path to the loaded configuration file
+ *   configPath: string;
+ *   // Format of the configuration file
+ *   configFormat: string;
+ *   // The loaded configuration data
+ *   config: ConfigData;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const result = await configShow({ root: '.' });
+ * if (result.success) {
+ *   console.log(`Loaded from: ${result.data.configPath}`);
+ *   console.log(`Format: ${result.data.configFormat}`);
+ *   console.log(`Strategy: ${result.data.config.version.strategy}`);
+ * }
+ * ```
+ */
+export interface ConfigShowData {
+  /**
+   * Path to the loaded configuration file.
+   *
+   * The absolute or relative path where the configuration was found.
+   * Examples: "repo.config.json", "/path/to/repo.config.toml".
+   */
+  configPath: string
+  /**
+   * Format of the configuration file.
+   *
+   * The detected format based on file extension:
+   * - `"json"`: JSON format
+   * - `"toml"`: TOML format
+   * - `"yaml"`: YAML format
+   */
+  configFormat: string
+  /**
+   * The loaded configuration data.
+   *
+   * Contains all configuration sections parsed from the file.
+   */
+  config: ConfigData
+}
+
+/**
+ * Input parameters for the `configShow` command.
+ *
+ * This structure defines the parameters that can be passed to the `configShow`
+ * function from JavaScript/TypeScript. The root path is required, while
+ * the config path is optional.
+ *
+ * # Fields
+ *
+ * - `root`: The workspace root directory path (required)
+ * - `config_path`: Optional path to a custom configuration file
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ConfigShowParams {
+ *   // Workspace root directory path
+ *   root: string;
+ *   // Optional custom config file path
+ *   configPath?: string;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * // Minimal params with just root
+ * const params: ConfigShowParams = { root: '.' };
+ *
+ * // With custom config path
+ * const paramsWithConfig: ConfigShowParams = {
+ *   root: '/path/to/workspace',
+ *   configPath: '/path/to/custom/repo.config.json'
+ * };
+ * ```
+ */
+export interface ConfigShowParams {
+  /**
+   * Workspace root directory path.
+   *
+   * This is the absolute or relative path to the root of the workspace.
+   * The configuration file will be searched for in this directory unless
+   * a custom `configPath` is provided.
+   */
+  root: string
+  /**
+   * Optional custom configuration file path.
+   *
+   * If not provided, the command will search for configuration files
+   * in standard locations (`repo.config.json`, `repo.config.toml`,
+   * `repo.config.yaml`) within the workspace root.
+   */
+  configPath?: string | undefined
+}
+
+/**
+ * API response wrapper for the `configValidate` command.
+ *
+ * This structure wraps the `configValidate` response with success/failure status
+ * and consistent error handling, following the pattern used across all
+ * NAPI commands.
+ *
+ * # Fields
+ *
+ * - `success`: Whether the operation succeeded
+ * - `data`: The config validate data (present when success is true)
+ * - `error`: Error information (present when success is false)
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ConfigValidateApiResponse {
+ *   // Whether the operation succeeded
+ *   success: boolean;
+ *   // The config validate data (present when success is true)
+ *   data?: ConfigValidateData;
+ *   // Error information (present when success is false)
+ *   error?: ErrorInfo;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const result = await configValidate({ root: '.' });
+ *
+ * if (result.success) {
+ *   // result.data is ConfigValidateData
+ *   console.log(`Valid: ${result.data.valid}`);
+ *   console.log(`Errors: ${result.data.errors.length}`);
+ * } else {
+ *   // result.error is ErrorInfo
+ *   console.error(`[${result.error.code}] ${result.error.message}`);
+ * }
+ * ```
+ */
+export interface ConfigValidateApiResponse {
+  /**
+   * Whether the operation succeeded.
+   *
+   * - `true`: Operation completed successfully, `data` field will be present
+   * - `false`: Operation failed, `error` field will be present
+   */
+  success: boolean
+  /**
+   * The config validate data (only present when `success` is `true`).
+   *
+   * Contains validation results including whether the config is valid
+   * and any issues found.
+   */
+  data?: ConfigValidateData | undefined
+  /**
+   * Error information (only present when `success` is `false`).
+   *
+   * Contains structured error information with a Node.js-style error code,
+   * message, optional context, and error kind.
+   */
+  error?: ErrorInfo | undefined
+}
+
+/**
+ * Response data for the `configValidate` command.
+ *
+ * Contains validation results including whether the configuration is valid
+ * and any issues found.
+ *
+ * # Fields
+ *
+ * - `valid`: Whether the configuration is valid (no errors)
+ * - `config_path`: Path to the validated configuration file
+ * - `errors`: List of validation errors
+ * - `warnings`: List of validation warnings
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ConfigValidateData {
+ *   // Whether the configuration is valid (no errors)
+ *   valid: boolean;
+ *   // Path to the validated configuration file
+ *   configPath: string;
+ *   // List of validation errors
+ *   errors: ConfigValidationIssue[];
+ *   // List of validation warnings
+ *   warnings: ConfigValidationIssue[];
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * const result = await configValidate({ root: '.' });
+ * if (result.success) {
+ *   if (result.data.valid) {
+ *     console.log('Configuration is valid!');
+ *   } else {
+ *     console.error(`Found ${result.data.errors.length} errors`);
+ *     for (const error of result.data.errors) {
+ *       console.error(`  - [${error.field}]: ${error.message}`);
+ *     }
+ *   }
+ * }
+ * ```
+ */
+export interface ConfigValidateData {
+  /**
+   * Whether the configuration is valid.
+   *
+   * `true` if no errors were found (warnings are allowed),
+   * `false` if there are any validation errors.
+   */
+  valid: boolean
+  /**
+   * Path to the validated configuration file.
+   *
+   * The path where the configuration file was found and validated.
+   */
+  configPath: string
+  /**
+   * List of validation errors.
+   *
+   * Critical issues that must be fixed for the configuration to be valid.
+   */
+  errors: Array<ConfigValidationIssue>
+  /**
+   * List of validation warnings.
+   *
+   * Non-critical issues that should be addressed but don't prevent
+   * the configuration from being used.
+   */
+  warnings: Array<ConfigValidationIssue>
+}
+
+/**
+ * Input parameters for the `configValidate` command.
+ *
+ * This structure defines the parameters that can be passed to the `configValidate`
+ * function from JavaScript/TypeScript. The root path is required, while
+ * the config path is optional.
+ *
+ * # Fields
+ *
+ * - `root`: The workspace root directory path (required)
+ * - `config_path`: Optional path to a custom configuration file
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ConfigValidateParams {
+ *   // Workspace root directory path
+ *   root: string;
+ *   // Optional custom config file path
+ *   configPath?: string;
+ * }
+ * ```
+ *
+ * # Examples
+ *
+ * ```typescript
+ * // Minimal params with just root
+ * const params: ConfigValidateParams = { root: '.' };
+ *
+ * // With custom config path
+ * const paramsWithConfig: ConfigValidateParams = {
+ *   root: '/path/to/workspace',
+ *   configPath: '/path/to/custom/repo.config.json'
+ * };
+ * ```
+ */
+export interface ConfigValidateParams {
+  /**
+   * Workspace root directory path.
+   *
+   * This is the absolute or relative path to the root of the workspace.
+   * The configuration file will be searched for in this directory unless
+   * a custom `configPath` is provided.
+   */
+  root: string
+  /**
+   * Optional custom configuration file path.
+   *
+   * If not provided, the command will search for configuration files
+   * in standard locations (`repo.config.json`, `repo.config.toml`,
+   * `repo.config.yaml`) within the workspace root.
+   */
+  configPath?: string | undefined
+}
+
+/**
+ * Validation issue information.
+ *
+ * Represents a single validation issue found during configuration validation.
+ *
+ * # Fields
+ *
+ * - `severity`: Issue severity ("error", "warning", or "info")
+ * - `field`: The configuration field with the issue
+ * - `message`: Human-readable description of the issue
+ * - `suggestion`: Optional suggestion for fixing the issue
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ConfigValidationIssue {
+ *   // Issue severity: "error", "warning", or "info"
+ *   severity: string;
+ *   // The configuration field with the issue
+ *   field: string;
+ *   // Human-readable description of the issue
+ *   message: string;
+ *   // Optional suggestion for fixing the issue
+ *   suggestion?: string;
+ * }
+ * ```
+ */
+export interface ConfigValidationIssue {
+  /**
+   * Issue severity.
+   *
+   * Indicates the importance of the issue:
+   * - `"error"`: Critical issue that must be fixed
+   * - `"warning"`: Potential problem that should be addressed
+   * - `"info"`: Informational note for improvement
+   */
+  severity: string
+  /**
+   * The configuration field with the issue.
+   *
+   * Dot-notation path to the field, e.g., "version.strategy" or
+   * "changeset.path".
+   */
+  field: string
+  /**
+   * Human-readable description of the issue.
+   *
+   * Explains what is wrong with the configuration.
+   */
+  message: string
+  /**
+   * Optional suggestion for fixing the issue.
+   *
+   * Provides guidance on how to resolve the issue.
+   */
+  suggestion?: string | undefined
+}
+
+/**
+ * Dependency configuration information.
+ *
+ * Contains settings for dependency propagation during version bumps.
+ *
+ * # Fields
+ *
+ * - `propagation_bump`: Version bump type for dependency updates
+ * - `propagate_dependencies`: Whether to propagate regular dependencies
+ * - `propagate_dev_dependencies`: Whether to propagate dev dependencies
+ * - `propagate_peer_dependencies`: Whether to propagate peer dependencies
+ * - `max_depth`: Maximum propagation depth
+ * - `fail_on_circular`: Whether to fail on circular dependencies
+ * - `skip_workspace_protocol`: Skip workspace: protocol dependencies
+ * - `skip_file_protocol`: Skip file: protocol dependencies
+ * - `skip_link_protocol`: Skip link: protocol dependencies
+ * - `skip_portal_protocol`: Skip portal: protocol dependencies
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface DependencyConfigInfo {
+ *   // Version bump type for dependency updates
+ *   propagationBump: string;
+ *   // Whether to propagate regular dependencies
+ *   propagateDependencies: boolean;
+ *   // Whether to propagate dev dependencies
+ *   propagateDevDependencies: boolean;
+ *   // Whether to propagate peer dependencies
+ *   propagatePeerDependencies: boolean;
+ *   // Maximum propagation depth
+ *   maxDepth: number;
+ *   // Whether to fail on circular dependencies
+ *   failOnCircular: boolean;
+ *   // Skip workspace: protocol dependencies
+ *   skipWorkspaceProtocol: boolean;
+ *   // Skip file: protocol dependencies
+ *   skipFileProtocol: boolean;
+ *   // Skip link: protocol dependencies
+ *   skipLinkProtocol: boolean;
+ *   // Skip portal: protocol dependencies
+ *   skipPortalProtocol: boolean;
+ * }
+ * ```
+ */
+export interface DependencyConfigInfo {
+  /**
+   * Version bump type for dependency updates.
+   *
+   * When a package is updated, this determines how dependent packages
+   * have their versions bumped. Values: "major", "minor", "patch", "none".
+   */
+  propagationBump: string
+  /**
+   * Whether to propagate regular dependencies.
+   *
+   * If `true`, packages that depend on updated packages will also
+   * be considered for version updates.
+   */
+  propagateDependencies: boolean
+  /**
+   * Whether to propagate dev dependencies.
+   *
+   * If `true`, packages that have the updated package as a dev
+   * dependency will also be considered for version updates.
+   */
+  propagateDevDependencies: boolean
+  /**
+   * Whether to propagate peer dependencies.
+   *
+   * If `true`, packages that have the updated package as a peer
+   * dependency will also be considered for version updates.
+   */
+  propagatePeerDependencies: boolean
+  /**
+   * Maximum propagation depth.
+   *
+   * Limits how deep dependency propagation can traverse the
+   * dependency graph. Prevents excessive updates in large monorepos.
+   */
+  maxDepth: number
+  /**
+   * Whether to fail on circular dependencies.
+   *
+   * If `true`, the operation fails when circular dependencies are
+   * detected. If `false`, circular dependencies are handled gracefully.
+   */
+  failOnCircular: boolean
+  /**
+   * Skip workspace: protocol dependencies.
+   *
+   * If `true`, dependencies using `workspace:` protocol are not
+   * propagated. These are typically handled differently in monorepos.
+   */
+  skipWorkspaceProtocol: boolean
+  /**
+   * Skip file: protocol dependencies.
+   *
+   * If `true`, dependencies using `file:` protocol are not propagated.
+   */
+  skipFileProtocol: boolean
+  /**
+   * Skip link: protocol dependencies.
+   *
+   * If `true`, dependencies using `link:` protocol are not propagated.
+   */
+  skipLinkProtocol: boolean
+  /**
+   * Skip portal: protocol dependencies.
+   *
+   * If `true`, dependencies using `portal:` protocol are not propagated.
+   */
+  skipPortalProtocol: boolean
+}
+
+/**
  * Dependency update information for a package version bump.
  *
  * This structure captures information about how a dependency version
@@ -3240,6 +4188,54 @@ export interface ExecuteApiResponse {
    * message, optional context, and error kind.
    */
   error?: ErrorInfo | undefined
+}
+
+/**
+ * Execute configuration information.
+ *
+ * Contains settings for command execution with timeout and parallelism.
+ *
+ * # Fields
+ *
+ * - `timeout_secs`: Overall timeout in seconds
+ * - `per_package_timeout_secs`: Per-package timeout in seconds
+ * - `max_parallel`: Maximum number of parallel executions
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ExecuteConfigInfo {
+ *   // Overall timeout in seconds (0 = no timeout)
+ *   timeoutSecs: number;
+ *   // Per-package timeout in seconds (0 = no timeout)
+ *   perPackageTimeoutSecs: number;
+ *   // Maximum number of parallel executions
+ *   maxParallel: number;
+ * }
+ * ```
+ */
+export interface ExecuteConfigInfo {
+  /**
+   * Overall timeout in seconds.
+   *
+   * Maximum time allowed for the entire execute command.
+   * A value of 0 means no timeout.
+   */
+  timeoutSecs: number
+  /**
+   * Per-package timeout in seconds.
+   *
+   * Maximum time allowed for executing the command on each package.
+   * A value of 0 means no timeout.
+   */
+  perPackageTimeoutSecs: number
+  /**
+   * Maximum number of parallel executions.
+   *
+   * How many packages can have commands running simultaneously.
+   * Higher values can speed up execution but increase resource usage.
+   */
+  maxParallel: number
 }
 
 /**
@@ -3591,6 +4587,95 @@ export interface ExecuteSummary {
  * ```
  */
 export declare function getVersion(): string
+
+/**
+ * Git configuration information.
+ *
+ * Contains settings for Git integration.
+ *
+ * # Fields
+ *
+ * - `branch_base`: Base branch for comparisons
+ * - `detect_affected_packages`: Whether to auto-detect affected packages
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface GitConfigInfo {
+ *   // Base branch for comparisons (e.g., "main", "master")
+ *   branchBase: string;
+ *   // Whether to auto-detect affected packages from Git changes
+ *   detectAffectedPackages: boolean;
+ * }
+ * ```
+ */
+export interface GitConfigInfo {
+  /**
+   * Base branch for comparisons.
+   *
+   * The branch used as the base for determining changes.
+   * Common values: "main", "master", "develop".
+   */
+  branchBase: string
+  /**
+   * Whether to auto-detect affected packages.
+   *
+   * If `true`, packages affected by Git changes are automatically
+   * detected based on file changes.
+   */
+  detectAffectedPackages: boolean
+}
+
+/**
+ * Health score weights configuration.
+ *
+ * Contains weights for calculating the overall health score.
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface HealthScoreWeightsInfo {
+ *   // Weight for upgrade score (0.0-1.0)
+ *   upgradesWeight: number;
+ *   // Weight for dependencies score (0.0-1.0)
+ *   dependenciesWeight: number;
+ *   // Weight for version consistency score (0.0-1.0)
+ *   versionConsistencyWeight: number;
+ *   // Weight for breaking changes score (0.0-1.0)
+ *   breakingChangesWeight: number;
+ * }
+ * ```
+ */
+export interface HealthScoreWeightsInfo {
+  /**
+   * Weight for upgrade score.
+   *
+   * How much the upgrade status contributes to the health score.
+   * Value between 0.0 and 1.0.
+   */
+  upgradesWeight: number
+  /**
+   * Weight for dependencies score.
+   *
+   * How much the dependency health contributes to the health score.
+   * Value between 0.0 and 1.0.
+   */
+  dependenciesWeight: number
+  /**
+   * Weight for version consistency score.
+   *
+   * How much version consistency contributes to the health score.
+   * Value between 0.0 and 1.0.
+   */
+  versionConsistencyWeight: number
+  /**
+   * Weight for breaking changes score.
+   *
+   * How much breaking changes impact the health score.
+   * Value between 0.0 and 1.0.
+   */
+  breakingChangesWeight: number
+}
 
 /**
  * Initialize a workspace with changeset-based version management.
@@ -4320,6 +5405,72 @@ export interface PackageVersionInfo {
 }
 
 /**
+ * Registry configuration information.
+ *
+ * Contains settings for NPM registry access.
+ *
+ * # Fields
+ *
+ * - `default_registry`: Default npm registry URL
+ * - `scoped_registries`: Map of scopes to registry URLs
+ * - `timeout_secs`: Request timeout in seconds
+ * - `retry_attempts`: Number of retry attempts for failed requests
+ * - `read_npmrc`: Whether to read .npmrc for registry configuration
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface RegistryConfigInfo {
+ *   // Default npm registry URL
+ *   defaultRegistry: string;
+ *   // Map of scopes to registry URLs (e.g., {"@myorg": "https://npm.myorg.com"})
+ *   scopedRegistries: Record<string, string>;
+ *   // Request timeout in seconds
+ *   timeoutSecs: number;
+ *   // Number of retry attempts for failed requests
+ *   retryAttempts: number;
+ *   // Whether to read .npmrc for registry configuration
+ *   readNpmrc: boolean;
+ * }
+ * ```
+ */
+export interface RegistryConfigInfo {
+  /**
+   * Default npm registry URL.
+   *
+   * The registry URL to use for packages without a specific scope
+   * configuration. Default is "https://registry.npmjs.org".
+   */
+  defaultRegistry: string
+  /**
+   * Map of scopes to registry URLs.
+   *
+   * Allows configuring different registries for different npm scopes.
+   * Keys are scope names (e.g., "@myorg"), values are registry URLs.
+   */
+  scopedRegistries: Record<string, string>
+  /**
+   * Request timeout in seconds.
+   *
+   * How long to wait for registry requests before timing out.
+   */
+  timeoutSecs: number
+  /**
+   * Number of retry attempts for failed requests.
+   *
+   * How many times to retry a failed registry request before giving up.
+   */
+  retryAttempts: number
+  /**
+   * Whether to read .npmrc for registry configuration.
+   *
+   * If `true`, the tool will read `.npmrc` files for additional
+   * registry configuration and authentication tokens.
+   */
+  readNpmrc: boolean
+}
+
+/**
  * Entry in the released versions map.
  *
  * Represents a package name and its released version. This structure is used
@@ -4442,6 +5593,42 @@ export interface RepositoryInfo {
    * - `"custom"`: Custom workspace configuration
    */
   monorepoType?: string | undefined
+}
+
+/**
+ * Scoped registry entry.
+ *
+ * Represents a mapping from an npm scope to a registry URL.
+ *
+ * # Fields
+ *
+ * - `scope`: The npm scope (e.g., "@myorg")
+ * - `registry`: The registry URL for this scope
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface ScopedRegistryEntry {
+ *   // The npm scope (e.g., "@myorg")
+ *   scope: string;
+ *   // The registry URL for this scope
+ *   registry: string;
+ * }
+ * ```
+ */
+export interface ScopedRegistryEntry {
+  /**
+   * The npm scope.
+   *
+   * The scope name including the `@` prefix (e.g., "@myorg").
+   */
+  scope: string
+  /**
+   * The registry URL for this scope.
+   *
+   * The full URL of the npm registry to use for this scope.
+   */
+  registry: string
 }
 
 /**
@@ -4823,4 +6010,113 @@ export interface UpdateSummaryInfo {
    * existed in the changeset are not included in this count.
    */
   environmentsAdded: number
+}
+
+/**
+ * Upgrade configuration information.
+ *
+ * Contains settings for upgrade detection and application.
+ *
+ * # Fields
+ *
+ * - `auto_changeset`: Automatically create changesets for upgrades
+ * - `changeset_bump`: Version bump type for upgrade changesets
+ * - `registry`: Registry configuration
+ * - `backup`: Backup configuration
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface UpgradeConfigInfo {
+ *   // Automatically create changesets for upgrades
+ *   autoChangeset: boolean;
+ *   // Version bump type for upgrade changesets
+ *   changesetBump: string;
+ *   // Registry configuration
+ *   registry: RegistryConfigInfo;
+ *   // Backup configuration
+ *   backup: BackupConfigInfo;
+ * }
+ * ```
+ */
+export interface UpgradeConfigInfo {
+  /**
+   * Automatically create changesets for upgrades.
+   *
+   * If `true`, a changeset is automatically created when
+   * dependency upgrades are applied.
+   */
+  autoChangeset: boolean
+  /**
+   * Version bump type for upgrade changesets.
+   *
+   * The bump type to use when creating changesets for upgrades.
+   * Values: "major", "minor", "patch", "none".
+   */
+  changesetBump: string
+  /**
+   * Registry configuration.
+   *
+   * Settings for accessing npm registries to check for updates.
+   */
+  registry: RegistryConfigInfo
+  /**
+   * Backup configuration.
+   *
+   * Settings for backup and rollback functionality.
+   */
+  backup: BackupConfigInfo
+}
+
+/**
+ * Version configuration information.
+ *
+ * Contains settings for version resolution and management.
+ *
+ * # Fields
+ *
+ * - `strategy`: Versioning strategy ("independent" or "unified")
+ * - `default_bump`: Default version bump type
+ * - `snapshot_format`: Format template for snapshot versions
+ *
+ * # TypeScript Definition
+ *
+ * ```typescript
+ * interface VersionConfigInfo {
+ *   // Versioning strategy: "independent" or "unified"
+ *   strategy: string;
+ *   // Default version bump type: "major", "minor", "patch", or "none"
+ *   defaultBump: string;
+ *   // Format template for snapshot versions
+ *   snapshotFormat: string;
+ * }
+ * ```
+ */
+export interface VersionConfigInfo {
+  /**
+   * Versioning strategy.
+   *
+   * Determines how package versions are managed:
+   * - `"independent"`: Each package has its own version
+   * - `"unified"`: All packages share the same version
+   */
+  strategy: string
+  /**
+   * Default version bump type.
+   *
+   * Used when no explicit bump type is specified:
+   * - `"major"`: Breaking changes
+   * - `"minor"`: New features
+   * - `"patch"`: Bug fixes
+   * - `"none"`: No version change
+   */
+  defaultBump: string
+  /**
+   * Format template for snapshot versions.
+   *
+   * Template string for generating snapshot version identifiers.
+   * Supports placeholders like `{version}`, `{branch}`, `{commit}`,
+   * `{shortCommit}`, and `{timestamp}`.
+   */
+  snapshotFormat: string
 }
