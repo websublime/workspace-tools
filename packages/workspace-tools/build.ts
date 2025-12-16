@@ -73,6 +73,7 @@ function generateDistPackageJson() {
       'esm',
       'types',
       'shared',
+      'README.md'
     ],
     // napi configuration for runtime binary loading
     napi: pkgJson.napi,
@@ -81,6 +82,24 @@ function generateDistPackageJson() {
   const distPath = nodePath.resolve(outputDir, 'package.json')
   fsExtra.writeJsonSync(distPath, distPkgJson, { spaces: 2 })
   console.log('[build:done]', 'Generated dist/package.json with correct relative paths')
+}
+
+/**
+ * Copy README.md to dist folder for npm publishing.
+ *
+ * The README is included in the published package to provide documentation
+ * on npm and when users install the package.
+ */
+function copyReadme() {
+  const readmeSrc = nodePath.resolve('README.md')
+  const readmeDest = nodePath.resolve(outputDir, 'README.md')
+
+  if (fsExtra.existsSync(readmeSrc)) {
+    fsExtra.copyFileSync(readmeSrc, readmeDest)
+    console.log('[build:done]', 'Copied README.md to dist/')
+  } else {
+    console.warn('[build:warn]', 'README.md not found, skipping copy')
+  }
 }
 
 /**
@@ -188,6 +207,9 @@ const configs = defineConfig([
 
           // Generate dist/package.json with correct paths
           generateDistPackageJson()
+
+          // Copy README.md to dist/
+          copyReadme()
         },
       },
 
