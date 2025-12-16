@@ -160,7 +160,9 @@ pub use commands::bump_apply;
 // Story 5.4: bumpSnapshot
 pub use commands::bump_snapshot;
 
-// TODO: will be implemented on story 6.3 (execute command)
+// Execute command (Story 6.3)
+pub use commands::execute;
+
 // TODO: will be implemented on story 7.2-7.3 (config commands)
 // TODO: will be implemented on story 8.2-8.4 (upgrade commands)
 // TODO: will be implemented on story 9.1-9.3 (remaining commands)

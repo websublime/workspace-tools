@@ -111,5 +111,8 @@ pub(crate) mod changes;
 // TODO: will be implemented on story 9.3 (clone command)
 pub(crate) mod clone;
 
-// TODO: will be implemented on story 6.3 (execute command)
+// Execute command (Story 6.3)
 pub(crate) mod execute;
+
+// Re-export execute function for lib.rs
+pub use execute::execute;
