@@ -22,6 +22,12 @@
  * - `bumpSnapshot()` - Generate snapshot versions for testing and CI (Story 5.4)
  * - `execute()` - Execute commands across workspace packages with timeout support (Story 6.3)
  *
+ * Config types (Story 7.1):
+ * - `ConfigShowParams`, `ConfigShowData`, `ConfigShowApiResponse`
+ * - `ConfigValidateParams`, `ConfigValidateData`, `ConfigValidateApiResponse`
+ * - `ConfigData`, `ConfigValidationIssue`
+ * - Configuration section types: `ChangesetConfigInfo`, `VersionConfigInfo`, `DependencyConfigInfo`, etc.
+ *
  * Bump types (Story 5.1):
  * - `BumpPreviewParams`, `BumpPreviewData`, `BumpPreviewApiResponse`
  * - `BumpApplyParams`, `BumpApplyData`, `BumpApplyApiResponse`
@@ -177,4 +183,38 @@ export type {
   // Supporting types
   PackageExecutionResult,
   ExecuteSummary,
+
+  // Config command types (Story 7.1)
+  // Input parameters
+  ConfigShowParams,
+  ConfigValidateParams,
+
+  // Response data
+  ConfigShowData,
+  ConfigValidateData,
+
+  // API responses
+  ConfigShowApiResponse,
+  ConfigValidateApiResponse,
+
+  // Validation types
+  ConfigValidationIssue,
+
+  // Main configuration container
+  ConfigData,
+
+  // Configuration section types
+  ChangesetConfigInfo,
+  VersionConfigInfo,
+  DependencyConfigInfo,
+  UpgradeConfigInfo,
+  RegistryConfigInfo,
+  ScopedRegistryEntry,
+  BackupConfigInfo,
+  ChangelogConfigInfo,
+  AuditConfigInfo,
+  AuditSectionsConfigInfo,
+  HealthScoreWeightsInfo,
+  GitConfigInfo,
+  ExecuteConfigInfo,
 } from './binding'
