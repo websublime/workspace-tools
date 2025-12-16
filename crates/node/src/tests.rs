@@ -31,7 +31,7 @@
 /// Tests for lib.rs version functions and constants.
 #[cfg(test)]
 mod version_tests {
-    use crate::{get_version, VERSION};
+    use crate::{VERSION, get_version};
 
     #[test]
     #[allow(clippy::const_is_empty)]
@@ -820,7 +820,7 @@ mod validation_tests {
 #[cfg(test)]
 mod response_tests {
     use crate::error::ErrorInfo;
-    use crate::response::{result_to_response, ApiResponse, ApiResponseExt, JsonResponse};
+    use crate::response::{ApiResponse, ApiResponseExt, JsonResponse, result_to_response};
     use serde::Serialize;
     use std::io::{Error as IoError, ErrorKind};
     use sublime_cli_tools::error::CliError;
@@ -3360,9 +3360,8 @@ mod bump_types_tests {
     use crate::types::bump::{
         BumpApplyApiResponse, BumpApplyData, BumpApplyParams, BumpPreviewApiResponse,
         BumpPreviewData, BumpPreviewParams, BumpSnapshotApiResponse, BumpSnapshotData,
-        BumpSnapshotParams, BumpSummaryInfo, DependencyUpdateInfo, PackageVersionInfo,
-        SnapshotVersionInfo, COMMON_PRERELEASE_TAGS, DEFAULT_SNAPSHOT_FORMAT,
-        VALID_DEPENDENCY_TYPES,
+        BumpSnapshotParams, BumpSummaryInfo, COMMON_PRERELEASE_TAGS, DEFAULT_SNAPSHOT_FORMAT,
+        DependencyUpdateInfo, PackageVersionInfo, SnapshotVersionInfo, VALID_DEPENDENCY_TYPES,
     };
 
     // ========================================================================
@@ -5585,12 +5584,14 @@ mod config_scenario_tests {
         assert_eq!(params.root, "/path/to/workspace");
 
         // Simulate loaded config with custom version strategy
-        let mut config = ConfigData::default();
-        config.version = VersionConfigInfo::new(
-            "unified".to_string(),
-            "minor".to_string(),
-            "{version}-dev".to_string(),
-        );
+        let config = ConfigData {
+            version: VersionConfigInfo::new(
+                "unified".to_string(),
+                "minor".to_string(),
+                "{version}-dev".to_string(),
+            ),
+            ..Default::default()
+        };
 
         let show_data = ConfigShowData::new(
             "/path/to/workspace/repo.config.json".to_string(),
