@@ -139,13 +139,13 @@ pub(crate) use bump::{
     BumpSnapshotData,
     BumpSnapshotParams,
     BumpSummaryInfo,
-    // Constants
-    COMMON_PRERELEASE_TAGS,
-    DEFAULT_SNAPSHOT_FORMAT,
     DependencyUpdateInfo,
     // Supporting Types
     PackageVersionInfo,
     SnapshotVersionInfo,
+    // Constants
+    COMMON_PRERELEASE_TAGS,
+    DEFAULT_SNAPSHOT_FORMAT,
     VALID_DEPENDENCY_TYPES,
 };
 
@@ -161,11 +161,11 @@ pub(crate) mod changes;
 // TODO: will be implemented on story 9.3 (clone types)
 pub(crate) mod clone;
 
-// Execute types (Story 6.2 - Implemented)
+// Execute types (Story 6.2 - Implemented, Story 6.3 - Execute command implemented)
 pub(crate) mod execute;
 
 // Re-export execute types for easier access
-// Allow unused imports - these will be used by the execute command (Story 6.3)
+// Note: These types are primarily used via #[napi] macros, not internal Rust code
 #[allow(unused_imports)]
 pub(crate) use execute::{
     // API Response
