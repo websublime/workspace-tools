@@ -20,6 +20,7 @@
  * - `bumpPreview()` - Preview version bumps without applying changes (Story 5.2)
  * - `bumpApply()` - Apply version bumps with Git integration and prerelease support (Story 5.3)
  * - `bumpSnapshot()` - Generate snapshot versions for testing and CI (Story 5.4)
+ * - `execute()` - Execute commands across workspace packages with timeout support (Story 6.3)
  *
  * Bump types (Story 5.1):
  * - `BumpPreviewParams`, `BumpPreviewData`, `BumpPreviewApiResponse`
@@ -60,6 +61,7 @@ import {
   changesetRemove,
   changesetShow,
   changesetUpdate,
+  execute,
   getVersion,
   init,
   status,
@@ -76,6 +78,7 @@ export {
   changesetRemove,
   changesetShow,
   changesetUpdate,
+  execute,
   getVersion,
   init,
   status,
