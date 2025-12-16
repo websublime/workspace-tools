@@ -3102,6 +3102,76 @@ export interface ErrorInfo {
 }
 
 /**
+ * Execute commands across workspace packages.
+ *
+ * Runs the specified command on workspace packages with optional filtering,
+ * parallel execution, and timeout protection.
+ *
+ * This function is the main entry point for Node.js applications to execute
+ * commands across workspace packages. It handles all the complexity of CLI
+ * invocation, timeout management, and response parsing internally.
+ *
+ * @param params - Execute parameters containing:
+ *   - `root`: Workspace root directory path (required)
+ *   - `cmd`: Command to execute (required, e.g., `npm:test` or `ls -la`)
+ *   - `filterPackage`: Optional filter to specific packages
+ *   - `affected`: Execute only on affected packages
+ *   - `since`: Since commit/branch/tag for affected detection
+ *   - `until`: Until commit/branch/tag for affected detection
+ *   - `branch`: Compare against branch for affected detection
+ *   - `parallel`: Run commands in parallel
+ *   - `args`: Additional arguments to pass to command
+ *   - `timeoutSecs`: Global timeout override (0 = no timeout)
+ *   - `perPackageTimeoutSecs`: Per-package timeout override (0 = no timeout)
+ *
+ * @returns `Promise<ExecuteApiResponse>` containing:
+ *   - On success: `{ success: true, data: ExecuteData }`
+ *   - On failure: `{ success: false, error: ErrorInfo }`
+ *
+ * @example Basic usage
+ * ```typescript
+ * const result = await execute({
+ *   root: '/path/to/project',
+ *   cmd: 'npm:test'
+ * });
+ * if (result.success) {
+ *   console.log(`${result.data.summary.succeeded}/${result.data.summary.total} succeeded`);
+ * } else {
+ *   console.error(`Error: ${result.error.code} - ${result.error.message}`);
+ * }
+ * ```
+ *
+ * @example With timeout and parallel execution
+ * ```typescript
+ * const result = await execute({
+ *   root: '/path/to/project',
+ *   cmd: 'npm:build',
+ *   parallel: true,
+ *   timeoutSecs: 600,
+ *   perPackageTimeoutSecs: 120
+ * });
+ * ```
+ *
+ * @example Error handling
+ * ```typescript
+ * const result = await execute({
+ *   root: '/nonexistent',
+ *   cmd: 'npm:test'
+ * });
+ * if (!result.success) {
+ *   if (result.error.code === 'ENOENT') {
+ *     console.error('Path not found');
+ *   } else if (result.error.code === 'ETIMEOUT') {
+ *     console.error('Operation timed out');
+ *   } else if (result.error.code === 'EVALIDATION') {
+ *     console.error('Invalid parameters');
+ *   }
+ * }
+ * ```
+ */
+export declare function execute(params: ExecuteParams): Promise<ExecuteApiResponse>
+
+/**
  * API response for the execute command.
  *
  * This is a concrete (non-generic) response type specifically for the execute
