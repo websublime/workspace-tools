@@ -22,6 +22,7 @@ This package provides native Node.js bindings (via napi-rs) for workspace manage
 - **Changesets** - Create, update, list, and manage changesets for version tracking
 - **Version Bumping** - Preview, apply, and snapshot version bumps with dependency propagation
 - **Command Execution** - Run commands across workspace packages with filtering and timeout support
+- **Configuration** - View and inspect workspace configuration settings
 - **Initialization** - Set up changeset-based version management in your workspace
 
 ## Quick Start
@@ -100,6 +101,7 @@ interface ErrorInfo {
 | `getVersion()` | Returns the version of the native bindings |
 | `status(params)` | Get comprehensive workspace status information |
 | `init(params)` | Initialize changeset-based version management |
+| `configShow(params)` | Show current workspace configuration |
 
 ### Changeset Functions
 
@@ -126,6 +128,12 @@ interface ErrorInfo {
 | Function | Description |
 |----------|-------------|
 | `execute(params)` | Run commands across workspace packages with timeout support |
+
+### Config Functions
+
+| Function | Description |
+|----------|-------------|
+| `configShow(params)` | Show current workspace configuration settings |
 
 ---
 
@@ -186,6 +194,74 @@ const result = await init({
   root: '.',
   strategy: 'independent',
   configFormat: 'toml',
+})
+```
+
+---
+
+### `configShow(params: ConfigShowParams): Promise<ConfigShowApiResponse>`
+
+Show current workspace configuration from `repo.config.{json,toml,yaml}`.
+
+```typescript
+interface ConfigShowParams {
+  root: string // Workspace root directory
+  configPath?: string // Optional custom config file path
+}
+
+interface ConfigShowData {
+  configPath: string // Path to loaded config file
+  configFormat: string // Format: 'json', 'toml', or 'yaml'
+  config: ConfigData // Full configuration object
+}
+
+interface ConfigData {
+  changeset: ChangesetConfigInfo
+  version: VersionConfigInfo
+  dependency: DependencyConfigInfo
+  upgrade: UpgradeConfigInfo
+  changelog: ChangelogConfigInfo
+  audit: AuditConfigInfo
+  git: GitConfigInfo
+  execute: ExecuteConfigInfo
+}
+```
+
+**Example:**
+
+```typescript
+const result = await configShow({ root: '.' })
+
+if (result.success) {
+  console.log(`Config loaded from: ${result.data.configPath}`)
+  console.log(`Format: ${result.data.configFormat}`)
+
+  const { config } = result.data
+
+  // Version settings
+  console.log(`Strategy: ${config.version.strategy}`)
+  console.log(`Default bump: ${config.version.defaultBump}`)
+
+  // Changeset settings
+  console.log(`Changeset path: ${config.changeset.path}`)
+  console.log(`History path: ${config.changeset.historyPath}`)
+
+  // Dependency propagation
+  console.log(`Propagate deps: ${config.dependency.propagateDependencies}`)
+  console.log(`Max depth: ${config.dependency.maxDepth}`)
+
+  // Execute settings
+  console.log(`Timeout: ${config.execute.timeoutSecs}s`)
+  console.log(`Max parallel: ${config.execute.maxParallel}`)
+}
+```
+
+**With custom config path:**
+
+```typescript
+const result = await configShow({
+  root: '.',
+  configPath: 'custom/repo.config.json',
 })
 ```
 
@@ -545,6 +621,9 @@ import type {
   BumpPreviewData,
   ExecuteParams,
   ExecuteData,
+  ConfigShowParams,
+  ConfigShowData,
+  ConfigData,
   ErrorInfo,
 } from '@websublime/workspace-tools'
 ```
