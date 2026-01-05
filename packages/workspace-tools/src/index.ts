@@ -22,6 +22,7 @@
  * - `bumpSnapshot()` - Generate snapshot versions for testing and CI (Story 5.4)
  * - `execute()` - Execute commands across workspace packages with timeout support (Story 6.3)
  * - `configShow()` - Show current workspace configuration (Story 7.2)
+ * - `configValidate()` - Validate workspace configuration (Story 7.3)
  *
  * Config types (Story 7.1):
  * - `ConfigShowParams`, `ConfigShowData`, `ConfigShowApiResponse`
@@ -69,6 +70,7 @@ import {
   changesetShow,
   changesetUpdate,
   configShow,
+  configValidate,
   execute,
   getVersion,
   init,
@@ -87,6 +89,7 @@ export {
   changesetShow,
   changesetUpdate,
   configShow,
+  configValidate,
   execute,
   getVersion,
   init,

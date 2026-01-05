@@ -93,10 +93,13 @@ use crate::error::ErrorInfo;
 use crate::types::config::{
     AuditConfigInfo, AuditSectionsConfigInfo, BackupConfigInfo, ChangelogConfigInfo,
     ChangesetConfigInfo, ConfigData, ConfigShowApiResponse, ConfigShowData, ConfigShowParams,
+    ConfigValidateApiResponse, ConfigValidateData, ConfigValidateParams, ConfigValidationIssue,
     DependencyConfigInfo, ExecuteConfigInfo, GitConfigInfo, HealthScoreWeightsInfo,
     RegistryConfigInfo, ScopedRegistryEntry, UpgradeConfigInfo, VersionConfigInfo,
 };
 use crate::validation::validators;
+
+use sublime_standard_tools::config::Configurable;
 
 use sublime_pkg_tools::config::{ConfigFormat, PackageToolsConfig};
 use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
@@ -487,6 +490,27 @@ pub(crate) fn validate_params(params: &ConfigShowParams) -> Result<PathBuf, Erro
     Ok(PathBuf::from(&params.root))
 }
 
+/// Validates config validate command parameters.
+///
+/// Ensures the root path is valid before loading and validating the configuration.
+///
+/// # Arguments
+///
+/// * `params` - The config validate parameters to validate
+///
+/// # Returns
+///
+/// * `Ok(PathBuf)` - The validated root path
+/// * `Err(ErrorInfo)` - Validation failed
+pub(crate) fn validate_validate_params(
+    params: &ConfigValidateParams,
+) -> Result<PathBuf, ErrorInfo> {
+    // Validate root path exists and is a directory
+    validators::root(&params.root)?;
+
+    Ok(PathBuf::from(&params.root))
+}
+
 // ============================================================================
 // NAPI Function
 // ============================================================================
@@ -627,26 +651,364 @@ pub async fn config_show(params: ConfigShowParams) -> ConfigShowApiResponse {
 }
 
 // ============================================================================
-// configValidate - TODO: will be implemented on story 7.3
+// configValidate - Story 7.3
 // ============================================================================
 
-// TODO: will be implemented on story 7.3 - Config Validate Command
-//
-// Implementation outline for configValidate:
-//
-// #[napi]
-// pub async fn config_validate(params: ConfigValidateParams) -> ConfigValidateApiResponse {
-//     // 1. Validate parameters
-//     if let Err(e) = validate_root(&params.root) {
-//         return ConfigValidateApiResponse::failure(e);
-//     }
-//
-//     // 2. Load and parse configuration
-//     // 3. Perform validation checks:
-//     //    - Environment name validation (no duplicates)
-//     //    - Registry URL validation
-//     //    - Path format validation
-//     //    - Required fields presence
-//     //    - Cross-field consistency checks
-//     // 4. Return ConfigValidateApiResponse with valid/errors/warnings
-// }
+/// Parses a validation error message to extract field and message components.
+///
+/// The pkg crate's validation errors follow the format: "field.path: Error message"
+/// This function extracts both components for structured error reporting.
+///
+/// # Arguments
+///
+/// * `error_message` - The full error message from validation
+///
+/// # Returns
+///
+/// A tuple of (field, message) extracted from the error message.
+pub(crate) fn parse_validation_error(error_message: &str) -> (String, String) {
+    // Look for the pattern "field.path: message"
+    if let Some(colon_pos) = error_message.find(": ") {
+        let field = error_message[..colon_pos].trim().to_string();
+        let message = error_message[colon_pos + 2..].trim().to_string();
+        (field, message)
+    } else {
+        // If no colon found, use "config" as the field and the full message
+        ("config".to_string(), error_message.to_string())
+    }
+}
+
+/// Generates a suggestion for a validation error based on the field and message.
+///
+/// Provides helpful suggestions for common validation errors to guide users
+/// toward fixing their configuration.
+///
+/// # Arguments
+///
+/// * `field` - The configuration field with the issue
+/// * `message` - The error message
+///
+/// # Returns
+///
+/// An optional suggestion string for fixing the issue.
+pub(crate) fn generate_suggestion(field: &str, message: &str) -> Option<String> {
+    // Provide suggestions based on common error patterns
+    let message_lower = message.to_lowercase();
+
+    if message_lower.contains("cannot be empty") || message_lower.contains("is required") {
+        return Some(format!("Provide a valid value for '{field}'"));
+    }
+
+    if message_lower.contains("invalid") && message_lower.contains("must be one of") {
+        // Extract the valid options from the message if present
+        if let Some(start) = message.find("Must be one of:") {
+            let options = &message[start + 15..];
+            return Some(format!("Use one of the valid options: {options}"));
+        }
+    }
+
+    if field.contains("path") && message_lower.contains("empty") {
+        return Some("Specify a valid file system path".to_string());
+    }
+
+    if field.contains("timeout") || field.contains("max_parallel") {
+        return Some("Use a positive integer value".to_string());
+    }
+
+    if field.contains("weight") || field.contains("multiplier") {
+        return Some("Use a positive numeric value".to_string());
+    }
+
+    if field.contains("registry") && message_lower.contains("url") {
+        return Some("Use a valid URL starting with http:// or https://".to_string());
+    }
+
+    if field.contains("environment") && message_lower.contains("default") {
+        return Some(
+            "Ensure default environments are included in available_environments".to_string(),
+        );
+    }
+
+    None
+}
+
+/// Performs additional semantic validation checks on the configuration.
+///
+/// These checks go beyond the basic field validation performed by the pkg crate
+/// and identify potential issues that could cause problems at runtime.
+///
+/// # Arguments
+///
+/// * `config` - The parsed configuration to validate
+///
+/// # Returns
+///
+/// A vector of validation warnings found during semantic analysis.
+pub(crate) fn perform_semantic_checks(config: &PackageToolsConfig) -> Vec<ConfigValidationIssue> {
+    let mut warnings = Vec::new();
+
+    // Check for potential issues that might cause runtime problems
+
+    // Warning: Empty available_environments with default_environments set
+    if config.changeset.available_environments.is_empty()
+        && !config.changeset.default_environments.is_empty()
+    {
+        warnings.push(ConfigValidationIssue::warning(
+            "changeset.available_environments".to_string(),
+            "No available environments defined but default environments are set".to_string(),
+        ));
+    }
+
+    // Warning: Very high max_parallel could cause resource issues
+    if config.execute.max_parallel > 16 {
+        warnings.push(ConfigValidationIssue::warning_with_suggestion(
+            "execute.max_parallel".to_string(),
+            format!(
+                "High parallelism value ({}) may cause resource contention",
+                config.execute.max_parallel
+            ),
+            "Consider using a value between 4-16 for optimal performance".to_string(),
+        ));
+    }
+
+    // Warning: Changelog enabled but no repository URL
+    if config.changelog.enabled
+        && config.changelog.include_commit_links
+        && config.changelog.repository_url.is_none()
+    {
+        warnings.push(ConfigValidationIssue::warning_with_suggestion(
+            "changelog.repository_url".to_string(),
+            "Commit links enabled but no repository URL configured".to_string(),
+            "Set changelog.repository_url to enable commit links in changelogs".to_string(),
+        ));
+    }
+
+    // Warning: Backup disabled but upgrade operations may need rollback
+    if !config.upgrade.backup.enabled {
+        warnings.push(ConfigValidationIssue::info(
+            "upgrade.backup.enabled".to_string(),
+            "Backup is disabled; upgrade operations cannot be rolled back".to_string(),
+        ));
+    }
+
+    // Warning: Very short timeout values
+    if config.execute.timeout_secs > 0 && config.execute.timeout_secs < 10 {
+        warnings.push(ConfigValidationIssue::warning_with_suggestion(
+            "execute.timeout_secs".to_string(),
+            format!(
+                "Very short timeout ({} seconds) may cause premature command failures",
+                config.execute.timeout_secs
+            ),
+            "Consider using at least 30 seconds for most operations".to_string(),
+        ));
+    }
+
+    if config.execute.per_package_timeout_secs > 0 && config.execute.per_package_timeout_secs < 5 {
+        warnings.push(ConfigValidationIssue::warning_with_suggestion(
+            "execute.per_package_timeout_secs".to_string(),
+            format!(
+                "Very short per-package timeout ({} seconds) may cause premature failures",
+                config.execute.per_package_timeout_secs
+            ),
+            "Consider using at least 10 seconds for per-package operations".to_string(),
+        ));
+    }
+
+    // Warning: Dependency propagation depth is very high
+    if config.dependency.max_depth > 10 {
+        warnings.push(ConfigValidationIssue::info(
+            "dependency.max_depth".to_string(),
+            format!(
+                "High propagation depth ({}) may cause long processing times in large monorepos",
+                config.dependency.max_depth
+            ),
+        ));
+    }
+
+    warnings
+}
+
+/// Validate the workspace configuration.
+///
+/// Loads and validates the workspace configuration from the `repo.config` file
+/// (in JSON, TOML, or YAML format). This command performs both structural
+/// validation (required fields, valid values) and semantic validation
+/// (cross-field consistency, potential issues).
+///
+/// The validation returns:
+/// - `valid: true` if no errors were found (warnings are allowed)
+/// - `valid: false` if there are validation errors that must be fixed
+/// - A list of errors (issues that must be fixed)
+/// - A list of warnings (potential issues that should be reviewed)
+///
+/// @param params - Config validate parameters containing:
+///   - `root`: Workspace root directory path (required)
+///   - `configPath`: Optional custom config file path
+///
+/// @returns `Promise<ConfigValidateApiResponse>` containing:
+///   - On success: `{ success: true, data: ConfigValidateData }`
+///   - On failure: `{ success: false, error: ErrorInfo }`
+///
+/// @example Basic usage
+/// ```typescript
+/// const result = await configValidate({ root: '/path/to/project' });
+/// if (result.success) {
+///   if (result.data.valid) {
+///     console.log('Configuration is valid!');
+///   } else {
+///     console.error(`Found ${result.data.errors.length} errors`);
+///     for (const error of result.data.errors) {
+///       console.error(`  [${error.field}]: ${error.message}`);
+///       if (error.suggestion) {
+///         console.log(`    Suggestion: ${error.suggestion}`);
+///       }
+///     }
+///   }
+///
+///   if (result.data.warnings.length > 0) {
+///     console.warn(`Found ${result.data.warnings.length} warnings`);
+///     for (const warning of result.data.warnings) {
+///       console.warn(`  [${warning.field}]: ${warning.message}`);
+///     }
+///   }
+/// } else {
+///   console.error(`Error: ${result.error.code} - ${result.error.message}`);
+/// }
+/// ```
+///
+/// @example With custom config path
+/// ```typescript
+/// const result = await configValidate({
+///   root: '/path/to/project',
+///   configPath: 'custom/repo.config.json'
+/// });
+/// ```
+///
+/// @example CI/CD pipeline validation
+/// ```typescript
+/// const result = await configValidate({ root: '.' });
+/// if (!result.success) {
+///   console.error('Failed to load configuration');
+///   process.exit(1);
+/// }
+///
+/// if (!result.data.valid) {
+///   console.error('Configuration validation failed:');
+///   for (const error of result.data.errors) {
+///     console.error(`  - ${error.field}: ${error.message}`);
+///   }
+///   process.exit(1);
+/// }
+///
+/// // Optionally fail on warnings in strict mode
+/// if (process.env.STRICT_CONFIG && result.data.warnings.length > 0) {
+///   console.error('Configuration has warnings (strict mode):');
+///   for (const warning of result.data.warnings) {
+///     console.error(`  - ${warning.field}: ${warning.message}`);
+///   }
+///   process.exit(1);
+/// }
+///
+/// console.log('Configuration is valid');
+/// ```
+///
+/// @example Error handling
+/// ```typescript
+/// const result = await configValidate({ root: '/nonexistent' });
+/// if (!result.success) {
+///   if (result.error.code === 'ENOENT') {
+///     console.error('Path not found');
+///   } else if (result.error.code === 'ECONFIG') {
+///     console.error('Configuration error:', result.error.message);
+///   }
+/// }
+/// ```
+#[napi]
+pub async fn config_validate(params: ConfigValidateParams) -> ConfigValidateApiResponse {
+    // 1. Validate parameters (synchronous validation before async operations)
+    let root_path = match validate_validate_params(&params) {
+        Ok(path) => path,
+        Err(error) => return ConfigValidateApiResponse::failure(error),
+    };
+
+    // 2. Prepare config path - clone the Option<String> to own the data for the blocking task
+    let config_path_owned = params.config_path.clone();
+
+    // 3. Execute the config loading and validation operation
+    // We use spawn_blocking because FileSystemManager operations may block
+    let result = tokio::task::spawn_blocking(move || {
+        // Create a new tokio runtime for the blocking context
+        let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+            Ok(rt) => rt,
+            Err(e) => {
+                return Err(ErrorInfo::execution(format!("Failed to create runtime: {e}")));
+            }
+        };
+
+        rt.block_on(async {
+            // Create filesystem manager
+            let fs = FileSystemManager::new();
+
+            // Discover and read the config file
+            let config_info =
+                discover_config_file(&root_path, config_path_owned.as_deref(), &fs).await?;
+
+            let config_path_str = config_info.path.to_string_lossy().to_string();
+
+            // Parse the configuration
+            let config =
+                match PackageToolsConfig::from_str(&config_info.content, config_info.format) {
+                    Ok(cfg) => cfg,
+                    Err(e) => {
+                        // Parse error is different from validation error
+                        return Err(ErrorInfo::configuration(format!(
+                            "Failed to parse configuration file '{}': {e}",
+                            config_info.path.display()
+                        )));
+                    }
+                };
+
+            // Perform structural validation using the pkg crate's validate method
+            let mut errors: Vec<ConfigValidationIssue> = Vec::new();
+
+            if let Err(validation_error) = config.validate() {
+                // Convert the validation error to our structured format
+                let error_message = validation_error.to_string();
+
+                // The pkg crate returns errors one at a time (fails fast on first error)
+                // Parse the error message to extract field and message
+                let (field, message) = parse_validation_error(&error_message);
+                let suggestion = generate_suggestion(&field, &message);
+
+                if let Some(suggestion_text) = suggestion {
+                    errors.push(ConfigValidationIssue::error_with_suggestion(
+                        field,
+                        message,
+                        suggestion_text,
+                    ));
+                } else {
+                    errors.push(ConfigValidationIssue::error(field, message));
+                }
+            }
+
+            // Perform semantic validation checks (warnings and info)
+            let warnings = perform_semantic_checks(&config);
+
+            // Build the response
+            let valid = errors.is_empty();
+            let validate_data = ConfigValidateData::new(valid, config_path_str, errors, warnings);
+
+            Ok(validate_data)
+        })
+    })
+    .await;
+
+    // 4. Handle spawn_blocking result
+    match result {
+        Ok(Ok(data)) => ConfigValidateApiResponse::success(data),
+        Ok(Err(error)) => ConfigValidateApiResponse::failure(error),
+        Err(join_error) => ConfigValidateApiResponse::failure(ErrorInfo::execution(format!(
+            "Task execution failed: {join_error}"
+        ))),
+    }
+}
