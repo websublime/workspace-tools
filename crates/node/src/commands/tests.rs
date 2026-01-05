@@ -6930,6 +6930,8 @@ mod execute_tests {
 /// - Configuration file discovery
 /// - Configuration parsing and conversion
 /// - Type conversions from pkg crate to NAPI types
+#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used)]
 mod config_show_tests {
     use std::fs;
     use std::path::PathBuf;
@@ -6984,7 +6986,7 @@ mod config_show_tests {
 
         #[test]
         fn test_validate_params_empty_root() {
-            let params = ConfigShowParams { root: "".to_string(), config_path: None };
+            let params = ConfigShowParams { root: String::new(), config_path: None };
 
             let result = validate_params(&params);
             assert!(result.is_err());
