@@ -166,6 +166,8 @@ pub use commands::execute;
 // Config commands (Story 7.2-7.3)
 // Story 7.2: configShow
 pub use commands::config_show;
+// Story 7.3: configValidate
+pub use commands::config_validate;
 // TODO: will be implemented on story 8.2-8.4 (upgrade commands)
 // TODO: will be implemented on story 9.1-9.3 (remaining commands)
 

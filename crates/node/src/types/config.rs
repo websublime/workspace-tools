@@ -128,21 +128,21 @@ use crate::error::ErrorInfo;
 /// Valid versioning strategy values.
 ///
 /// These are the allowed values for the `strategy` field in `VersionConfigInfo`.
-// Allow dead_code - will be used in story 7.3 for validation
+// Allow dead_code - used for semantic validation documentation, not directly in code
 #[allow(dead_code)]
 pub const VALID_STRATEGIES: [&str; 2] = ["independent", "unified"];
 
 /// Valid bump type values.
 ///
 /// These are the allowed values for default bump type fields.
-// Allow dead_code - will be used in story 7.3 for validation
+// Allow dead_code - used for semantic validation documentation, not directly in code
 #[allow(dead_code)]
 pub const VALID_BUMP_TYPES: [&str; 4] = ["major", "minor", "patch", "none"];
 
 /// Valid changelog format values.
 ///
 /// These are the allowed values for the `format` field in `ChangelogConfigInfo`.
-// Allow dead_code - will be used in story 7.3 for validation
+// Allow dead_code - used for semantic validation documentation, not directly in code
 #[allow(dead_code)]
 pub const VALID_CHANGELOG_FORMATS: [&str; 3] =
     ["keep-a-changelog", "conventional-commits", "custom"];
@@ -150,14 +150,14 @@ pub const VALID_CHANGELOG_FORMATS: [&str; 3] =
 /// Valid monorepo mode values.
 ///
 /// These are the allowed values for the `monorepoMode` field in `ChangelogConfigInfo`.
-// Allow dead_code - will be used in story 7.3 for validation
+// Allow dead_code - used for semantic validation documentation, not directly in code
 #[allow(dead_code)]
 pub const VALID_MONOREPO_MODES: [&str; 3] = ["per-package", "root", "both"];
 
 /// Valid severity levels for validation issues.
 ///
 /// These are the allowed values for the `severity` field in `ConfigValidationIssue`.
-// Allow dead_code - will be used in story 7.3 for validation
+// Allow dead_code - used for semantic validation documentation, not directly in code
 #[allow(dead_code)]
 pub const VALID_SEVERITY_LEVELS: [&str; 3] = ["error", "warning", "info"];
 
@@ -255,8 +255,7 @@ pub struct ConfigShowParams {
 ///   configPath: '/path/to/custom/repo.config.json'
 /// };
 /// ```
-// Allow dead_code - will be used in story 7.3 (configValidate command)
-#[allow(dead_code)]
+// ConfigValidateParams is used by story 7.3 (configValidate command)
 #[napi(object)]
 #[derive(Debug, Clone, Serialize)]
 pub struct ConfigValidateParams {
@@ -1193,8 +1192,7 @@ pub struct ConfigShowData {
 ///   suggestion?: string;
 /// }
 /// ```
-// Allow dead_code - will be used in story 7.3 (configValidate command)
-#[allow(dead_code)]
+// ConfigValidationIssue is used by story 7.3 (configValidate command)
 #[napi(object)]
 #[derive(Debug, Clone, Serialize)]
 pub struct ConfigValidationIssue {
@@ -1267,8 +1265,7 @@ pub struct ConfigValidationIssue {
 ///   }
 /// }
 /// ```
-// Allow dead_code - will be used in story 7.3 (configValidate command)
-#[allow(dead_code)]
+// ConfigValidateData is used by story 7.3 (configValidate command)
 #[napi(object)]
 #[derive(Debug, Clone, Serialize)]
 pub struct ConfigValidateData {
@@ -1403,8 +1400,7 @@ pub struct ConfigShowApiResponse {
 ///   console.error(`[${result.error.code}] ${result.error.message}`);
 /// }
 /// ```
-// Allow dead_code - will be used in story 7.3 (configValidate command)
-#[allow(dead_code)]
+// ConfigValidateApiResponse is used by story 7.3 (configValidate command)
 #[napi(object)]
 #[derive(Debug, Clone, Serialize)]
 pub struct ConfigValidateApiResponse {

@@ -7438,3 +7438,587 @@ mod config_show_tests {
         }
     }
 }
+
+// ============================================================================
+// Config Validate Tests - Story 7.3
+// ============================================================================
+
+/// Tests for the `config_validate` command implementation.
+///
+/// These tests cover:
+/// - Parameter validation (root path validation)
+/// - Validation error parsing and conversion
+/// - Suggestion generation for common errors
+/// - Semantic validation checks (warnings)
+/// - Response construction for valid and invalid configs
+#[allow(clippy::unwrap_used)]
+mod config_validate_tests {
+    use std::path::PathBuf;
+
+    use crate::commands::config::{
+        generate_suggestion, parse_validation_error, perform_semantic_checks,
+        validate_validate_params,
+    };
+    use crate::types::config::{ConfigValidateData, ConfigValidateParams, ConfigValidationIssue};
+
+    use sublime_pkg_tools::config::PackageToolsConfig;
+
+    // ========================================================================
+    // Validation Tests
+    // ========================================================================
+
+    mod validation_tests {
+        use super::*;
+        use tempfile::TempDir;
+
+        #[test]
+        fn test_validate_params_valid_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ConfigValidateParams {
+                root: temp_dir.path().to_string_lossy().to_string(),
+                config_path: None,
+            };
+
+            let result = validate_validate_params(&params);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), PathBuf::from(temp_dir.path()));
+        }
+
+        #[test]
+        fn test_validate_params_nonexistent_path() {
+            let params = ConfigValidateParams {
+                root: "/nonexistent/path/to/project".to_string(),
+                config_path: None,
+            };
+
+            let result = validate_validate_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "ENOENT");
+        }
+
+        #[test]
+        fn test_validate_params_empty_root() {
+            let params = ConfigValidateParams { root: String::new(), config_path: None };
+
+            let result = validate_validate_params(&params);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_params_file_not_directory() {
+            let temp_dir = TempDir::new().unwrap();
+            let file_path = temp_dir.path().join("test_file.txt");
+            std::fs::write(&file_path, "test content").unwrap();
+
+            let params = ConfigValidateParams {
+                root: file_path.to_string_lossy().to_string(),
+                config_path: None,
+            };
+
+            let result = validate_validate_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+        }
+
+        #[test]
+        fn test_validate_params_with_config_path() {
+            let temp_dir = TempDir::new().unwrap();
+            let params = ConfigValidateParams {
+                root: temp_dir.path().to_string_lossy().to_string(),
+                config_path: Some("custom/repo.config.json".to_string()),
+            };
+
+            let result = validate_validate_params(&params);
+            assert!(result.is_ok());
+        }
+    }
+
+    // ========================================================================
+    // Parse Validation Error Tests
+    // ========================================================================
+
+    mod parse_error_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_validation_error_with_field() {
+            let error_msg = "changeset.path: Path cannot be empty";
+            let (field, message) = parse_validation_error(error_msg);
+
+            assert_eq!(field, "changeset.path");
+            assert_eq!(message, "Path cannot be empty");
+        }
+
+        #[test]
+        fn test_parse_validation_error_nested_field() {
+            let error_msg = "upgrade.registry.timeout_secs: Timeout must be a positive integer";
+            let (field, message) = parse_validation_error(error_msg);
+
+            assert_eq!(field, "upgrade.registry.timeout_secs");
+            assert_eq!(message, "Timeout must be a positive integer");
+        }
+
+        #[test]
+        fn test_parse_validation_error_with_options() {
+            let error_msg = "version.strategy: Invalid strategy 'invalid'. Must be one of: independent, unified";
+            let (field, message) = parse_validation_error(error_msg);
+
+            assert_eq!(field, "version.strategy");
+            assert!(message.contains("Must be one of"));
+        }
+
+        #[test]
+        fn test_parse_validation_error_no_colon() {
+            let error_msg = "Some generic error without field prefix";
+            let (field, message) = parse_validation_error(error_msg);
+
+            assert_eq!(field, "config");
+            assert_eq!(message, "Some generic error without field prefix");
+        }
+
+        #[test]
+        fn test_parse_validation_error_empty_message() {
+            let error_msg = "field.name: ";
+            let (field, message) = parse_validation_error(error_msg);
+
+            assert_eq!(field, "field.name");
+            assert_eq!(message, "");
+        }
+
+        #[test]
+        fn test_parse_validation_error_multiple_colons() {
+            let error_msg = "changelog.repository_url: URL must start with http:// or https://";
+            let (field, message) = parse_validation_error(error_msg);
+
+            assert_eq!(field, "changelog.repository_url");
+            assert!(message.contains("http://"));
+        }
+    }
+
+    // ========================================================================
+    // Suggestion Generation Tests
+    // ========================================================================
+
+    mod suggestion_tests {
+        use super::*;
+
+        #[test]
+        fn test_generate_suggestion_empty_field() {
+            let suggestion = generate_suggestion("changeset.path", "Path cannot be empty");
+            assert!(suggestion.is_some());
+            assert!(suggestion.unwrap().contains("Provide a valid value"));
+        }
+
+        #[test]
+        fn test_generate_suggestion_required_field() {
+            let suggestion = generate_suggestion("version.strategy", "strategy is required");
+            assert!(suggestion.is_some());
+            assert!(suggestion.unwrap().contains("Provide a valid value"));
+        }
+
+        #[test]
+        fn test_generate_suggestion_invalid_with_options() {
+            let suggestion = generate_suggestion(
+                "version.strategy",
+                "Invalid strategy. Must be one of: independent, unified",
+            );
+            assert!(suggestion.is_some());
+            assert!(suggestion.unwrap().contains("valid options"));
+        }
+
+        #[test]
+        fn test_generate_suggestion_path_empty() {
+            let suggestion = generate_suggestion("changeset.history_path", "Path is empty");
+            assert!(suggestion.is_some());
+            assert!(suggestion.unwrap().contains("file system path"));
+        }
+
+        #[test]
+        fn test_generate_suggestion_timeout() {
+            let suggestion = generate_suggestion("execute.timeout_secs", "Invalid timeout value");
+            assert!(suggestion.is_some());
+            assert!(suggestion.unwrap().contains("positive integer"));
+        }
+
+        #[test]
+        fn test_generate_suggestion_max_parallel() {
+            let suggestion =
+                generate_suggestion("execute.max_parallel", "max_parallel must be at least 1");
+            assert!(suggestion.is_some());
+            assert!(suggestion.unwrap().contains("positive integer"));
+        }
+
+        #[test]
+        fn test_generate_suggestion_weight() {
+            let suggestion =
+                generate_suggestion("audit.health_score_weights.critical_weight", "Invalid weight");
+            assert!(suggestion.is_some());
+            assert!(suggestion.unwrap().contains("positive numeric"));
+        }
+
+        #[test]
+        fn test_generate_suggestion_registry_url() {
+            let suggestion =
+                generate_suggestion("upgrade.registry.default_registry", "Invalid registry URL");
+            assert!(suggestion.is_some());
+            assert!(suggestion.unwrap().contains("http://"));
+        }
+
+        #[test]
+        fn test_generate_suggestion_environment() {
+            let suggestion = generate_suggestion(
+                "changeset.default_environments",
+                "Default environment 'prod' not in available environments",
+            );
+            assert!(suggestion.is_some());
+            assert!(suggestion.unwrap().contains("available_environments"));
+        }
+
+        #[test]
+        fn test_generate_suggestion_no_match() {
+            let suggestion = generate_suggestion("some.random.field", "Some random error message");
+            assert!(suggestion.is_none());
+        }
+    }
+
+    // ========================================================================
+    // Semantic Checks Tests
+    // ========================================================================
+
+    mod semantic_checks_tests {
+        use super::*;
+
+        #[test]
+        fn test_semantic_checks_default_config() {
+            let config = PackageToolsConfig::default();
+            let warnings = perform_semantic_checks(&config);
+
+            // Default config has backup enabled, so no backup warning
+            // But it may have other info-level warnings
+            // Just verify the function runs without errors and returns a vec
+            assert!(warnings.iter().all(|w| !w.field.is_empty()));
+        }
+
+        #[test]
+        fn test_semantic_checks_high_parallelism() {
+            let mut config = PackageToolsConfig::default();
+            config.execute.max_parallel = 32;
+
+            let warnings = perform_semantic_checks(&config);
+
+            let parallel_warning = warnings.iter().find(|w| w.field == "execute.max_parallel");
+            assert!(parallel_warning.is_some());
+            assert!(parallel_warning.unwrap().is_warning());
+            assert!(parallel_warning.unwrap().suggestion.is_some());
+        }
+
+        #[test]
+        fn test_semantic_checks_commit_links_no_url() {
+            let mut config = PackageToolsConfig::default();
+            config.changelog.enabled = true;
+            config.changelog.include_commit_links = true;
+            config.changelog.repository_url = None;
+
+            let warnings = perform_semantic_checks(&config);
+
+            let url_warning = warnings.iter().find(|w| w.field == "changelog.repository_url");
+            assert!(url_warning.is_some());
+            assert!(url_warning.unwrap().is_warning());
+        }
+
+        #[test]
+        fn test_semantic_checks_short_timeout() {
+            let mut config = PackageToolsConfig::default();
+            config.execute.timeout_secs = 5;
+
+            let warnings = perform_semantic_checks(&config);
+
+            let timeout_warning = warnings.iter().find(|w| w.field == "execute.timeout_secs");
+            assert!(timeout_warning.is_some());
+            assert!(timeout_warning.unwrap().is_warning());
+            assert!(timeout_warning.unwrap().message.contains("Very short"));
+        }
+
+        #[test]
+        fn test_semantic_checks_short_per_package_timeout() {
+            let mut config = PackageToolsConfig::default();
+            config.execute.per_package_timeout_secs = 3;
+
+            let warnings = perform_semantic_checks(&config);
+
+            let timeout_warning =
+                warnings.iter().find(|w| w.field == "execute.per_package_timeout_secs");
+            assert!(timeout_warning.is_some());
+            assert!(timeout_warning.unwrap().is_warning());
+        }
+
+        #[test]
+        fn test_semantic_checks_high_propagation_depth() {
+            let mut config = PackageToolsConfig::default();
+            config.dependency.max_depth = 15;
+
+            let warnings = perform_semantic_checks(&config);
+
+            let depth_warning = warnings.iter().find(|w| w.field == "dependency.max_depth");
+            assert!(depth_warning.is_some());
+            assert!(depth_warning.unwrap().is_info());
+        }
+
+        #[test]
+        fn test_semantic_checks_normal_config() {
+            let mut config = PackageToolsConfig::default();
+            config.upgrade.backup.enabled = true;
+            config.changelog.include_commit_links = false;
+            config.execute.max_parallel = 8;
+            config.execute.timeout_secs = 300;
+            config.dependency.max_depth = 5;
+
+            let warnings = perform_semantic_checks(&config);
+
+            // Normal config should have minimal warnings
+            let error_level_warnings: Vec<_> = warnings.iter().filter(|w| w.is_warning()).collect();
+            assert!(error_level_warnings.is_empty());
+        }
+    }
+
+    // ========================================================================
+    // ConfigValidationIssue Tests
+    // ========================================================================
+
+    mod issue_tests {
+        use super::*;
+
+        #[test]
+        fn test_validation_issue_error() {
+            let issue = ConfigValidationIssue::error(
+                "changeset.path".to_string(),
+                "Path cannot be empty".to_string(),
+            );
+
+            assert_eq!(issue.severity, "error");
+            assert_eq!(issue.field, "changeset.path");
+            assert_eq!(issue.message, "Path cannot be empty");
+            assert!(issue.suggestion.is_none());
+            assert!(issue.is_error());
+            assert!(!issue.is_warning());
+            assert!(!issue.is_info());
+        }
+
+        #[test]
+        fn test_validation_issue_error_with_suggestion() {
+            let issue = ConfigValidationIssue::error_with_suggestion(
+                "version.strategy".to_string(),
+                "Invalid strategy".to_string(),
+                "Use 'independent' or 'unified'".to_string(),
+            );
+
+            assert_eq!(issue.severity, "error");
+            assert!(issue.suggestion.is_some());
+            assert_eq!(issue.suggestion.as_ref().unwrap(), "Use 'independent' or 'unified'");
+        }
+
+        #[test]
+        fn test_validation_issue_warning() {
+            let issue = ConfigValidationIssue::warning(
+                "execute.max_parallel".to_string(),
+                "High parallelism may cause issues".to_string(),
+            );
+
+            assert_eq!(issue.severity, "warning");
+            assert!(!issue.is_error());
+            assert!(issue.is_warning());
+        }
+
+        #[test]
+        fn test_validation_issue_warning_with_suggestion() {
+            let issue = ConfigValidationIssue::warning_with_suggestion(
+                "changelog.repository_url".to_string(),
+                "No repository URL configured".to_string(),
+                "Set repository_url for commit links".to_string(),
+            );
+
+            assert!(issue.is_warning());
+            assert!(issue.suggestion.is_some());
+        }
+
+        #[test]
+        fn test_validation_issue_info() {
+            let issue = ConfigValidationIssue::info(
+                "upgrade.backup.enabled".to_string(),
+                "Backup is disabled".to_string(),
+            );
+
+            assert_eq!(issue.severity, "info");
+            assert!(!issue.is_error());
+            assert!(!issue.is_warning());
+            assert!(issue.is_info());
+        }
+
+        #[test]
+        fn test_validation_issue_new() {
+            let issue = ConfigValidationIssue::new(
+                "custom".to_string(),
+                "field.name".to_string(),
+                "Custom message".to_string(),
+                Some("Custom suggestion".to_string()),
+            );
+
+            assert_eq!(issue.severity, "custom");
+            assert_eq!(issue.field, "field.name");
+            assert_eq!(issue.message, "Custom message");
+            assert_eq!(issue.suggestion, Some("Custom suggestion".to_string()));
+        }
+    }
+
+    // ========================================================================
+    // ConfigValidateData Tests
+    // ========================================================================
+
+    mod validate_data_tests {
+        use super::*;
+
+        #[test]
+        fn test_validate_data_valid() {
+            let data = ConfigValidateData::valid("repo.config.json".to_string());
+
+            assert!(data.valid);
+            assert_eq!(data.config_path, "repo.config.json");
+            assert!(data.errors.is_empty());
+            assert!(data.warnings.is_empty());
+            assert!(!data.has_errors());
+            assert!(!data.has_warnings());
+            assert_eq!(data.total_issues(), 0);
+        }
+
+        #[test]
+        fn test_validate_data_valid_with_warnings() {
+            let warnings = vec![ConfigValidationIssue::warning(
+                "field".to_string(),
+                "warning message".to_string(),
+            )];
+
+            let data =
+                ConfigValidateData::valid_with_warnings("repo.config.toml".to_string(), warnings);
+
+            assert!(data.valid);
+            assert!(data.errors.is_empty());
+            assert!(!data.warnings.is_empty());
+            assert!(!data.has_errors());
+            assert!(data.has_warnings());
+            assert_eq!(data.total_issues(), 1);
+        }
+
+        #[test]
+        fn test_validate_data_invalid() {
+            let errors = vec![ConfigValidationIssue::error(
+                "changeset.path".to_string(),
+                "Path cannot be empty".to_string(),
+            )];
+
+            let data = ConfigValidateData::invalid("repo.config.json".to_string(), errors);
+
+            assert!(!data.valid);
+            assert!(!data.errors.is_empty());
+            assert!(data.warnings.is_empty());
+            assert!(data.has_errors());
+            assert!(!data.has_warnings());
+            assert_eq!(data.total_issues(), 1);
+        }
+
+        #[test]
+        fn test_validate_data_invalid_with_warnings() {
+            let errors = vec![ConfigValidationIssue::error(
+                "changeset.path".to_string(),
+                "Error message".to_string(),
+            )];
+            let warnings = vec![
+                ConfigValidationIssue::warning(
+                    "execute.max_parallel".to_string(),
+                    "Warning 1".to_string(),
+                ),
+                ConfigValidationIssue::warning(
+                    "changelog.repository_url".to_string(),
+                    "Warning 2".to_string(),
+                ),
+            ];
+
+            let data = ConfigValidateData::invalid_with_warnings(
+                "repo.config.yaml".to_string(),
+                errors,
+                warnings,
+            );
+
+            assert!(!data.valid);
+            assert_eq!(data.errors.len(), 1);
+            assert_eq!(data.warnings.len(), 2);
+            assert!(data.has_errors());
+            assert!(data.has_warnings());
+            assert_eq!(data.total_issues(), 3);
+        }
+
+        #[test]
+        fn test_validate_data_new() {
+            let errors =
+                vec![ConfigValidationIssue::error("field1".to_string(), "error1".to_string())];
+            let warnings =
+                vec![ConfigValidationIssue::warning("field2".to_string(), "warning1".to_string())];
+
+            let data = ConfigValidateData::new(
+                false,
+                "/path/to/config.json".to_string(),
+                errors,
+                warnings,
+            );
+
+            assert!(!data.valid);
+            assert_eq!(data.config_path, "/path/to/config.json");
+            assert_eq!(data.errors.len(), 1);
+            assert_eq!(data.warnings.len(), 1);
+        }
+    }
+
+    // ========================================================================
+    // Params Builder Tests
+    // ========================================================================
+
+    mod params_builder_tests {
+        use crate::types::config::ConfigValidateParams;
+
+        #[test]
+        fn test_config_validate_params_new() {
+            let params = ConfigValidateParams { root: ".".to_string(), config_path: None };
+
+            assert_eq!(params.root, ".");
+            assert!(params.config_path.is_none());
+        }
+
+        #[test]
+        fn test_config_validate_params_with_config() {
+            let params = ConfigValidateParams {
+                root: "/path/to/project".to_string(),
+                config_path: Some("custom/repo.config.json".to_string()),
+            };
+
+            assert_eq!(params.root, "/path/to/project");
+            assert_eq!(params.config_path, Some("custom/repo.config.json".to_string()));
+        }
+
+        #[test]
+        fn test_config_validate_params_various_roots() {
+            let test_cases = vec![
+                (".", "."),
+                ("/absolute/path", "/absolute/path"),
+                ("relative/path", "relative/path"),
+                ("../parent", "../parent"),
+            ];
+
+            for (input, expected) in test_cases {
+                let params = ConfigValidateParams { root: input.to_string(), config_path: None };
+
+                assert_eq!(params.root, expected);
+            }
+        }
+    }
+}

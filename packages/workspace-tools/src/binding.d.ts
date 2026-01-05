@@ -3607,6 +3607,105 @@ export interface ConfigShowParams {
 }
 
 /**
+ * Validate the workspace configuration.
+ *
+ * Loads and validates the workspace configuration from the `repo.config` file
+ * (in JSON, TOML, or YAML format). This command performs both structural
+ * validation (required fields, valid values) and semantic validation
+ * (cross-field consistency, potential issues).
+ *
+ * The validation returns:
+ * - `valid: true` if no errors were found (warnings are allowed)
+ * - `valid: false` if there are validation errors that must be fixed
+ * - A list of errors (issues that must be fixed)
+ * - A list of warnings (potential issues that should be reviewed)
+ *
+ * @param params - Config validate parameters containing:
+ *   - `root`: Workspace root directory path (required)
+ *   - `configPath`: Optional custom config file path
+ *
+ * @returns `Promise<ConfigValidateApiResponse>` containing:
+ *   - On success: `{ success: true, data: ConfigValidateData }`
+ *   - On failure: `{ success: false, error: ErrorInfo }`
+ *
+ * @example Basic usage
+ * ```typescript
+ * const result = await configValidate({ root: '/path/to/project' });
+ * if (result.success) {
+ *   if (result.data.valid) {
+ *     console.log('Configuration is valid!');
+ *   } else {
+ *     console.error(`Found ${result.data.errors.length} errors`);
+ *     for (const error of result.data.errors) {
+ *       console.error(`  [${error.field}]: ${error.message}`);
+ *       if (error.suggestion) {
+ *         console.log(`    Suggestion: ${error.suggestion}`);
+ *       }
+ *     }
+ *   }
+ *
+ *   if (result.data.warnings.length > 0) {
+ *     console.warn(`Found ${result.data.warnings.length} warnings`);
+ *     for (const warning of result.data.warnings) {
+ *       console.warn(`  [${warning.field}]: ${warning.message}`);
+ *     }
+ *   }
+ * } else {
+ *   console.error(`Error: ${result.error.code} - ${result.error.message}`);
+ * }
+ * ```
+ *
+ * @example With custom config path
+ * ```typescript
+ * const result = await configValidate({
+ *   root: '/path/to/project',
+ *   configPath: 'custom/repo.config.json'
+ * });
+ * ```
+ *
+ * @example CI/CD pipeline validation
+ * ```typescript
+ * const result = await configValidate({ root: '.' });
+ * if (!result.success) {
+ *   console.error('Failed to load configuration');
+ *   process.exit(1);
+ * }
+ *
+ * if (!result.data.valid) {
+ *   console.error('Configuration validation failed:');
+ *   for (const error of result.data.errors) {
+ *     console.error(`  - ${error.field}: ${error.message}`);
+ *   }
+ *   process.exit(1);
+ * }
+ *
+ * // Optionally fail on warnings in strict mode
+ * if (process.env.STRICT_CONFIG && result.data.warnings.length > 0) {
+ *   console.error('Configuration has warnings (strict mode):');
+ *   for (const warning of result.data.warnings) {
+ *     console.error(`  - ${warning.field}: ${warning.message}`);
+ *   }
+ *   process.exit(1);
+ * }
+ *
+ * console.log('Configuration is valid');
+ * ```
+ *
+ * @example Error handling
+ * ```typescript
+ * const result = await configValidate({ root: '/nonexistent' });
+ * if (!result.success) {
+ *   if (result.error.code === 'ENOENT') {
+ *     console.error('Path not found');
+ *   } else if (result.error.code === 'ECONFIG') {
+ *     console.error('Configuration error:', result.error.message);
+ *   }
+ * }
+ * ```
+ */
+export declare function configValidate(params: ConfigValidateParams): Promise<ConfigValidateApiResponse>
+
+/**
  * API response wrapper for the `configValidate` command.
  *
  * This structure wraps the `configValidate` response with success/failure status

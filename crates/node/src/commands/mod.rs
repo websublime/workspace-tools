@@ -91,6 +91,8 @@ pub(crate) mod config;
 // Re-export config functions for lib.rs
 // Story 7.2: configShow
 pub use config::config_show;
+// Story 7.3: configValidate
+pub use config::config_validate;
 
 // Bump commands - Story 5.2-5.4
 pub(crate) mod bump;
