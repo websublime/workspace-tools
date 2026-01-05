@@ -3354,6 +3354,81 @@ export interface ConfigData {
 }
 
 /**
+ * Show the current workspace configuration.
+ *
+ * Loads and returns the workspace configuration from the `repo.config` file
+ * (in JSON, TOML, or YAML format). This command provides access to all
+ * configuration sections including changeset, version, dependency, upgrade,
+ * changelog, audit, git, and execute settings.
+ *
+ * @param params - Config show parameters containing:
+ *   - `root`: Workspace root directory path (required)
+ *   - `configPath`: Optional custom config file path
+ *
+ * @returns `Promise<ConfigShowApiResponse>` containing:
+ *   - On success: `{ success: true, data: ConfigShowData }`
+ *   - On failure: `{ success: false, error: ErrorInfo }`
+ *
+ * @example Basic usage
+ * ```typescript
+ * const result = await configShow({ root: '/path/to/project' });
+ * if (result.success) {
+ *   console.log(`Config path: ${result.data.configPath}`);
+ *   console.log(`Format: ${result.data.configFormat}`);
+ *   console.log(`Strategy: ${result.data.config.version.strategy}`);
+ *   console.log(`Default bump: ${result.data.config.version.defaultBump}`);
+ * } else {
+ *   console.error(`Error: ${result.error.code} - ${result.error.message}`);
+ * }
+ * ```
+ *
+ * @example With custom config path
+ * ```typescript
+ * const result = await configShow({
+ *   root: '/path/to/project',
+ *   configPath: 'custom/repo.config.json'
+ * });
+ * ```
+ *
+ * @example Accessing all configuration sections
+ * ```typescript
+ * const result = await configShow({ root: '.' });
+ * if (result.success) {
+ *   const { config } = result.data;
+ *
+ *   // Changeset settings
+ *   console.log(`Changeset path: ${config.changeset.path}`);
+ *   console.log(`History path: ${config.changeset.historyPath}`);
+ *
+ *   // Version settings
+ *   console.log(`Strategy: ${config.version.strategy}`);
+ *   console.log(`Snapshot format: ${config.version.snapshotFormat}`);
+ *
+ *   // Dependency propagation settings
+ *   console.log(`Propagate deps: ${config.dependency.propagateDependencies}`);
+ *   console.log(`Max depth: ${config.dependency.maxDepth}`);
+ *
+ *   // Execute settings
+ *   console.log(`Timeout: ${config.execute.timeoutSecs}s`);
+ *   console.log(`Max parallel: ${config.execute.maxParallel}`);
+ * }
+ * ```
+ *
+ * @example Error handling
+ * ```typescript
+ * const result = await configShow({ root: '/nonexistent' });
+ * if (!result.success) {
+ *   if (result.error.code === 'ENOENT') {
+ *     console.error('Path not found');
+ *   } else if (result.error.code === 'ECONFIG') {
+ *     console.error('Configuration error:', result.error.message);
+ *   }
+ * }
+ * ```
+ */
+export declare function configShow(params: ConfigShowParams): Promise<ConfigShowApiResponse>
+
+/**
  * API response wrapper for the `configShow` command.
  *
  * This structure wraps the `configShow` response with success/failure status
