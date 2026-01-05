@@ -21,6 +21,7 @@
  * - `bumpApply()` - Apply version bumps with Git integration and prerelease support (Story 5.3)
  * - `bumpSnapshot()` - Generate snapshot versions for testing and CI (Story 5.4)
  * - `execute()` - Execute commands across workspace packages with timeout support (Story 6.3)
+ * - `configShow()` - Show current workspace configuration (Story 7.2)
  *
  * Config types (Story 7.1):
  * - `ConfigShowParams`, `ConfigShowData`, `ConfigShowApiResponse`
@@ -67,6 +68,7 @@ import {
   changesetRemove,
   changesetShow,
   changesetUpdate,
+  configShow,
   execute,
   getVersion,
   init,
@@ -84,6 +86,7 @@ export {
   changesetRemove,
   changesetShow,
   changesetUpdate,
+  configShow,
   execute,
   getVersion,
   init,
