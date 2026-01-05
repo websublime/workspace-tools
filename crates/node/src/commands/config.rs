@@ -106,12 +106,8 @@ use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
 // ============================================================================
 
 /// Standard configuration file names to search for.
-const CONFIG_FILE_NAMES: [&str; 4] = [
-    "repo.config.toml",
-    "repo.config.json",
-    "repo.config.yaml",
-    "repo.config.yml",
-];
+const CONFIG_FILE_NAMES: [&str; 4] =
+    ["repo.config.toml", "repo.config.json", "repo.config.yaml", "repo.config.yml"];
 
 // ============================================================================
 // Configuration Loading
@@ -149,11 +145,8 @@ async fn discover_config_file(
 ) -> Result<ConfigFileInfo, ErrorInfo> {
     // Use provided config path or search for default files
     let found_config = if let Some(config) = config_path {
-        let config_file = if Path::new(config).is_absolute() {
-            PathBuf::from(config)
-        } else {
-            root.join(config)
-        };
+        let config_file =
+            if Path::new(config).is_absolute() { PathBuf::from(config) } else { root.join(config) };
 
         if fs.exists(&config_file).await {
             Some(config_file)
@@ -200,10 +193,7 @@ async fn discover_config_file(
     // Read the file content
     let content = fs.read_file_string(&config_file_path).await.map_err(|e| {
         ErrorInfo::io(
-            format!(
-                "Failed to read configuration file '{}': {e}",
-                config_file_path.display()
-            ),
+            format!("Failed to read configuration file '{}': {e}", config_file_path.display()),
             Some(config_file_path.to_string_lossy().to_string()),
         )
     })?;
@@ -270,7 +260,9 @@ pub(crate) fn convert_changeset_config(
 }
 
 /// Converts version configuration.
-pub(crate) fn convert_version_config(config: &sublime_pkg_tools::config::VersionConfig) -> VersionConfigInfo {
+pub(crate) fn convert_version_config(
+    config: &sublime_pkg_tools::config::VersionConfig,
+) -> VersionConfigInfo {
     let strategy = match config.strategy {
         sublime_pkg_tools::types::VersioningStrategy::Independent => "independent".to_string(),
         sublime_pkg_tools::types::VersioningStrategy::Unified => "unified".to_string(),
@@ -302,7 +294,9 @@ pub(crate) fn convert_dependency_config(
 }
 
 /// Converts upgrade configuration.
-pub(crate) fn convert_upgrade_config(config: &sublime_pkg_tools::config::UpgradeConfig) -> UpgradeConfigInfo {
+pub(crate) fn convert_upgrade_config(
+    config: &sublime_pkg_tools::config::UpgradeConfig,
+) -> UpgradeConfigInfo {
     UpgradeConfigInfo {
         auto_changeset: config.auto_changeset,
         changeset_bump: config.changeset_bump.clone(),
@@ -334,7 +328,9 @@ pub(crate) fn convert_registry_config(
 }
 
 /// Converts backup configuration.
-pub(crate) fn convert_backup_config(config: &sublime_pkg_tools::config::BackupConfig) -> BackupConfigInfo {
+pub(crate) fn convert_backup_config(
+    config: &sublime_pkg_tools::config::BackupConfig,
+) -> BackupConfigInfo {
     BackupConfigInfo {
         enabled: config.enabled,
         path: config.backup_dir.clone(),
@@ -383,7 +379,9 @@ pub(crate) fn convert_changelog_config(
 }
 
 /// Converts audit configuration.
-pub(crate) fn convert_audit_config(config: &sublime_pkg_tools::config::AuditConfig) -> AuditConfigInfo {
+pub(crate) fn convert_audit_config(
+    config: &sublime_pkg_tools::config::AuditConfig,
+) -> AuditConfigInfo {
     AuditConfigInfo {
         enabled: config.enabled,
         min_severity: config.min_severity.clone(),
@@ -451,17 +449,17 @@ pub(crate) fn convert_git_config(_config: &sublime_pkg_tools::config::GitConfig)
     // These are conceptually different, so we provide sensible defaults.
     // The branch_base and detect_affected_packages are typically configured
     // via environment or command-line options rather than config file.
-    GitConfigInfo {
-        branch_base: "main".to_string(),
-        detect_affected_packages: true,
-    }
+    GitConfigInfo { branch_base: "main".to_string(), detect_affected_packages: true }
 }
 
 /// Converts execute configuration.
-pub(crate) fn convert_execute_config(config: &sublime_pkg_tools::config::ExecuteConfig) -> ExecuteConfigInfo {
+pub(crate) fn convert_execute_config(
+    config: &sublime_pkg_tools::config::ExecuteConfig,
+) -> ExecuteConfigInfo {
     ExecuteConfigInfo {
         timeout_secs: u32::try_from(config.timeout_secs).unwrap_or(u32::MAX),
-        per_package_timeout_secs: u32::try_from(config.per_package_timeout_secs).unwrap_or(u32::MAX),
+        per_package_timeout_secs: u32::try_from(config.per_package_timeout_secs)
+            .unwrap_or(u32::MAX),
         max_parallel: u32::try_from(config.max_parallel).unwrap_or(u32::MAX),
     }
 }
@@ -595,15 +593,13 @@ pub async fn config_show(params: ConfigShowParams) -> ConfigShowApiResponse {
                 discover_config_file(&root_path, config_path_owned.as_deref(), &fs).await?;
 
             // Parse the configuration
-            let config =
-                PackageToolsConfig::from_str(&config_info.content, config_info.format).map_err(
-                    |e| {
-                        ErrorInfo::configuration(format!(
-                            "Failed to parse configuration file '{}': {e}",
-                            config_info.path.display()
-                        ))
-                    },
-                )?;
+            let config = PackageToolsConfig::from_str(&config_info.content, config_info.format)
+                .map_err(|e| {
+                    ErrorInfo::configuration(format!(
+                        "Failed to parse configuration file '{}': {e}",
+                        config_info.path.display()
+                    ))
+                })?;
 
             // Convert to NAPI types
             let napi_config = convert_to_napi_config(&config);
