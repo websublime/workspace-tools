@@ -1542,7 +1542,7 @@ Implement the `configShow` NAPI function.
    - **Effort**: Medium
 
 **Acceptance Criteria**:
-- [ ] Returns current config
+- [x] Returns current config
 
 **Dependencies**: Story 7.1
 
