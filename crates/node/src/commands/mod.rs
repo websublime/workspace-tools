@@ -85,8 +85,12 @@ pub use changeset::changeset_check;
 #[cfg(test)]
 mod tests;
 
-// TODO: will be implemented on story 7.2-7.3 (config commands)
+// Config commands - Story 7.2-7.3
 pub(crate) mod config;
+
+// Re-export config functions for lib.rs
+// Story 7.2: configShow
+pub use config::config_show;
 
 // Bump commands - Story 5.2-5.4
 pub(crate) mod bump;
