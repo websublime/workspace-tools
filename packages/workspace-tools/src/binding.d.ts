@@ -7071,6 +7071,87 @@ export interface UpgradeApplyParams {
 }
 
 /**
+ * Check for available dependency upgrades.
+ *
+ * Detects which dependencies in the workspace have newer versions available
+ * from the npm registry. This is a read-only operation that does not modify
+ * any files.
+ *
+ * The function checks all packages in the workspace and returns a comprehensive
+ * list of available upgrades along with summary statistics.
+ *
+ * @param params - Upgrade check parameters containing:
+ *   - `root`: Workspace root directory path (required)
+ *   - `configPath`: Optional custom configuration file path
+ *   - `includeMajor`: Whether to include major version upgrades (default: true)
+ *   - `includeMinor`: Whether to include minor version upgrades (default: true)
+ *   - `includePatch`: Whether to include patch version upgrades (default: true)
+ *   - `includeDevDependencies`: Whether to check devDependencies (default: true)
+ *   - `includePeerDependencies`: Whether to check peerDependencies (default: false)
+ *   - `packages`: Optional list of packages to check (checks all if not specified)
+ *
+ * @returns `Promise<UpgradeCheckApiResponse>` containing:
+ *   - On success: `{ success: true, data: UpgradeCheckData }`
+ *   - On failure: `{ success: false, error: ErrorInfo }`
+ *
+ * @example Basic usage
+ * ```typescript
+ * const result = await upgradeCheck({ root: '.' });
+ * if (result.success) {
+ *   console.log(`Found ${result.data.summary.totalUpgrades} upgrades`);
+ *   for (const pkg of result.data.packages) {
+ *     console.log(`${pkg.packageName}:`);
+ *     for (const dep of pkg.dependencies) {
+ *       console.log(`  ${dep.name}: ${dep.currentVersion} -> ${dep.latestVersion}`);
+ *     }
+ *   }
+ * }
+ * ```
+ *
+ * @example Safe upgrades only (no major version changes)
+ * ```typescript
+ * const result = await upgradeCheck({
+ *   root: '/path/to/workspace',
+ *   includeMajor: false,
+ *   includeMinor: true,
+ *   includePatch: true
+ * });
+ * if (result.success) {
+ *   console.log(`Safe upgrades: ${result.data.summary.minorUpgrades + result.data.summary.patchUpgrades}`);
+ * }
+ * ```
+ *
+ * @example Check specific packages
+ * ```typescript
+ * const result = await upgradeCheck({
+ *   root: '.',
+ *   packages: ['@scope/pkg1', '@scope/pkg2']
+ * });
+ * ```
+ *
+ * @example Error handling
+ * ```typescript
+ * const result = await upgradeCheck({ root: '/invalid/path' });
+ * if (!result.success) {
+ *   switch (result.error.code) {
+ *     case 'ENOENT':
+ *       console.error('Path not found');
+ *       break;
+ *     case 'EVALIDATION':
+ *       console.error('Invalid parameters:', result.error.message);
+ *       break;
+ *     case 'ENETWORK':
+ *       console.error('Network error - registry unreachable');
+ *       break;
+ *     default:
+ *       console.error(`Error: ${result.error.message}`);
+ *   }
+ * }
+ * ```
+ */
+export declare function upgradeCheck(params: UpgradeCheckParams): Promise<UpgradeCheckApiResponse>
+
+/**
  * API response for the upgrade check command.
  *
  * This structure wraps `UpgradeCheckData` in the standard `ApiResponse`

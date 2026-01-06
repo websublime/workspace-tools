@@ -105,8 +105,14 @@ pub use bump::bump_apply;
 // Story 5.4: bumpSnapshot
 pub use bump::bump_snapshot;
 
-// TODO: will be implemented on story 8.2-8.4 (upgrade commands)
+// Upgrade commands - Story 8.2-8.4
 pub(crate) mod upgrade;
+
+// Re-export upgrade functions for lib.rs
+// Story 8.2: upgradeCheck
+pub use upgrade::upgrade_check;
+// TODO: Story 8.3: upgradeApply
+// TODO: Story 8.4: backupList, backupRestore, backupClean
 
 // TODO: will be implemented on story 9.1 (audit command)
 pub(crate) mod audit;

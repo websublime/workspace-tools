@@ -8022,3 +8022,636 @@ mod config_validate_tests {
         }
     }
 }
+
+// ============================================================================
+// Upgrade Check Command Tests (Story 8.2)
+// ============================================================================
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod upgrade_check_tests {
+    use std::io::Write;
+
+    use crate::commands::upgrade::{
+        CliDependencyUpgradeInfo, CliPackageUpgradeInfo, CliUpgradeCheckData, CliUpgradeSummary,
+        SharedBuffer, convert_params_to_args, convert_to_napi_upgrade_check,
+        parse_upgrade_check_response, validate_upgrade_check_params,
+    };
+    use crate::types::upgrade::UpgradeCheckParams;
+
+    // -------------------------------------------------------------------------
+    // SharedBuffer Tests
+    // -------------------------------------------------------------------------
+
+    mod shared_buffer_tests {
+        use super::*;
+
+        #[test]
+        fn test_shared_buffer_new() {
+            let buffer = SharedBuffer::new();
+            assert!(buffer.take_bytes().is_empty());
+        }
+
+        #[test]
+        fn test_shared_buffer_write() {
+            let mut buffer = SharedBuffer::new();
+            let bytes_written = buffer.write(b"hello").unwrap();
+            assert_eq!(bytes_written, 5);
+            assert_eq!(buffer.take_bytes(), b"hello");
+        }
+
+        #[test]
+        fn test_shared_buffer_multiple_writes() {
+            let mut buffer = SharedBuffer::new();
+            buffer.write_all(b"hello ").unwrap();
+            buffer.write_all(b"world").unwrap();
+            assert_eq!(buffer.take_bytes(), b"hello world");
+        }
+
+        #[test]
+        fn test_shared_buffer_clone_shares_data() {
+            let mut buffer = SharedBuffer::new();
+            let buffer2 = buffer.clone();
+            buffer.write_all(b"shared data").unwrap();
+            assert_eq!(buffer2.take_bytes(), b"shared data");
+        }
+
+        #[test]
+        fn test_shared_buffer_flush() {
+            let mut buffer = SharedBuffer::new();
+            assert!(buffer.flush().is_ok());
+        }
+
+        #[test]
+        fn test_shared_buffer_take_bytes_preserves_data() {
+            let mut buffer = SharedBuffer::new();
+            buffer.write_all(b"preserved").unwrap();
+            let bytes1 = buffer.take_bytes();
+            let bytes2 = buffer.take_bytes();
+            assert_eq!(bytes1, bytes2);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Parse Response Tests
+    // -------------------------------------------------------------------------
+
+    mod parse_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_upgrade_check_response_success() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "packages": [
+                        {
+                            "name": "@scope/pkg1",
+                            "path": "packages/pkg1",
+                            "upgrades": [
+                                {
+                                    "package": "lodash",
+                                    "currentVersion": "4.17.20",
+                                    "latestVersion": "4.17.21",
+                                    "type": "patch",
+                                    "breaking": false
+                                }
+                            ]
+                        }
+                    ],
+                    "summary": {
+                        "totalPackages": 1,
+                        "packagesWithUpgrades": 1,
+                        "totalUpgrades": 1,
+                        "major": 0,
+                        "minor": 0,
+                        "patch": 1
+                    }
+                }
+            }"#;
+
+            let result = parse_upgrade_check_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert_eq!(data.packages.len(), 1);
+            assert_eq!(data.packages[0].package_name, "@scope/pkg1");
+            assert_eq!(data.packages[0].package_path, "packages/pkg1");
+            assert_eq!(data.packages[0].dependencies.len(), 1);
+            assert_eq!(data.packages[0].dependencies[0].name, "lodash");
+            assert_eq!(data.packages[0].dependencies[0].current_version, "4.17.20");
+            assert_eq!(data.packages[0].dependencies[0].latest_version, "4.17.21");
+            assert_eq!(data.packages[0].dependencies[0].upgrade_type, "patch");
+            assert_eq!(data.summary.packages_analyzed, 1);
+            assert_eq!(data.summary.total_upgrades, 1);
+            assert_eq!(data.summary.patch_upgrades, 1);
+        }
+
+        #[test]
+        fn test_parse_upgrade_check_response_empty_upgrades() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "packages": [],
+                    "summary": {
+                        "totalPackages": 5,
+                        "packagesWithUpgrades": 0,
+                        "totalUpgrades": 0,
+                        "major": 0,
+                        "minor": 0,
+                        "patch": 0
+                    }
+                }
+            }"#;
+
+            let result = parse_upgrade_check_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert!(data.packages.is_empty());
+            assert_eq!(data.summary.packages_analyzed, 5);
+            assert_eq!(data.summary.total_upgrades, 0);
+        }
+
+        #[test]
+        fn test_parse_upgrade_check_response_multiple_packages() {
+            let json = r#"{
+                "success": true,
+                "data": {
+                    "packages": [
+                        {
+                            "name": "pkg1",
+                            "path": "packages/pkg1",
+                            "upgrades": [
+                                {
+                                    "package": "typescript",
+                                    "currentVersion": "5.0.0",
+                                    "latestVersion": "5.3.3",
+                                    "type": "minor",
+                                    "breaking": false
+                                }
+                            ]
+                        },
+                        {
+                            "name": "pkg2",
+                            "path": "packages/pkg2",
+                            "upgrades": [
+                                {
+                                    "package": "eslint",
+                                    "currentVersion": "8.0.0",
+                                    "latestVersion": "9.0.0",
+                                    "type": "major",
+                                    "breaking": true
+                                }
+                            ]
+                        }
+                    ],
+                    "summary": {
+                        "totalPackages": 2,
+                        "packagesWithUpgrades": 2,
+                        "totalUpgrades": 2,
+                        "major": 1,
+                        "minor": 1,
+                        "patch": 0
+                    }
+                }
+            }"#;
+
+            let result = parse_upgrade_check_response(json.as_bytes());
+            assert!(result.is_ok());
+
+            let data = result.unwrap();
+            assert_eq!(data.packages.len(), 2);
+            assert_eq!(data.summary.major_upgrades, 1);
+            assert_eq!(data.summary.minor_upgrades, 1);
+        }
+
+        #[test]
+        fn test_parse_upgrade_check_response_cli_error() {
+            let json = r#"{"success": false, "error": "Workspace not initialized"}"#;
+
+            let result = parse_upgrade_check_response(json.as_bytes());
+            assert!(result.is_err());
+
+            let error = result.unwrap_err();
+            assert!(error.message.contains("Workspace not initialized"));
+        }
+
+        #[test]
+        fn test_parse_upgrade_check_response_empty() {
+            let result = parse_upgrade_check_response(b"");
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("empty response"));
+        }
+
+        #[test]
+        fn test_parse_upgrade_check_response_whitespace_only() {
+            let result = parse_upgrade_check_response(b"   \n\t  ");
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("empty response"));
+        }
+
+        #[test]
+        fn test_parse_upgrade_check_response_invalid_json() {
+            let result = parse_upgrade_check_response(b"not json");
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("Failed to parse"));
+        }
+
+        #[test]
+        fn test_parse_upgrade_check_response_invalid_utf8() {
+            let invalid_utf8 = vec![0xFF, 0xFE];
+            let result = parse_upgrade_check_response(&invalid_utf8);
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("Invalid UTF-8"));
+        }
+
+        #[test]
+        fn test_parse_upgrade_check_response_success_no_data() {
+            let json = r#"{"success": true}"#;
+            let result = parse_upgrade_check_response(json.as_bytes());
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("success but no data"));
+        }
+
+        #[test]
+        fn test_parse_upgrade_check_response_cli_error_no_message() {
+            let json = r#"{"success": false}"#;
+            let result = parse_upgrade_check_response(json.as_bytes());
+            assert!(result.is_err());
+            assert!(result.unwrap_err().message.contains("Unknown CLI error"));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Conversion Tests
+    // -------------------------------------------------------------------------
+
+    mod conversion_tests {
+        use super::*;
+
+        #[test]
+        fn test_convert_to_napi_upgrade_check_full() {
+            let cli_data = CliUpgradeCheckData {
+                packages: vec![CliPackageUpgradeInfo {
+                    name: "@scope/core".to_string(),
+                    path: "packages/core".to_string(),
+                    upgrades: vec![
+                        CliDependencyUpgradeInfo {
+                            package: "lodash".to_string(),
+                            current_version: "4.17.20".to_string(),
+                            latest_version: "4.17.21".to_string(),
+                            upgrade_type: "patch".to_string(),
+                            breaking: false,
+                        },
+                        CliDependencyUpgradeInfo {
+                            package: "typescript".to_string(),
+                            current_version: "5.0.0".to_string(),
+                            latest_version: "5.3.3".to_string(),
+                            upgrade_type: "minor".to_string(),
+                            breaking: false,
+                        },
+                    ],
+                }],
+                summary: CliUpgradeSummary {
+                    total_packages: 3,
+                    packages_with_upgrades: 1,
+                    total_upgrades: 2,
+                    major_upgrades: 0,
+                    minor_upgrades: 1,
+                    patch_upgrades: 1,
+                },
+            };
+
+            let napi_data = convert_to_napi_upgrade_check(cli_data);
+
+            assert_eq!(napi_data.packages.len(), 1);
+            assert_eq!(napi_data.packages[0].package_name, "@scope/core");
+            assert_eq!(napi_data.packages[0].package_path, "packages/core");
+            assert_eq!(napi_data.packages[0].dependencies.len(), 2);
+            assert_eq!(napi_data.packages[0].dependencies[0].name, "lodash");
+            assert_eq!(napi_data.packages[0].dependencies[0].upgrade_type, "patch");
+            assert_eq!(napi_data.packages[0].dependencies[1].name, "typescript");
+            assert_eq!(napi_data.packages[0].dependencies[1].upgrade_type, "minor");
+            assert_eq!(napi_data.summary.packages_analyzed, 3);
+            assert_eq!(napi_data.summary.total_upgrades, 2);
+            assert_eq!(napi_data.summary.major_upgrades, 0);
+            assert_eq!(napi_data.summary.minor_upgrades, 1);
+            assert_eq!(napi_data.summary.patch_upgrades, 1);
+        }
+
+        #[test]
+        fn test_convert_to_napi_upgrade_check_empty() {
+            let cli_data = CliUpgradeCheckData {
+                packages: vec![],
+                summary: CliUpgradeSummary {
+                    total_packages: 5,
+                    packages_with_upgrades: 0,
+                    total_upgrades: 0,
+                    major_upgrades: 0,
+                    minor_upgrades: 0,
+                    patch_upgrades: 0,
+                },
+            };
+
+            let napi_data = convert_to_napi_upgrade_check(cli_data);
+
+            assert!(napi_data.packages.is_empty());
+            assert_eq!(napi_data.summary.packages_analyzed, 5);
+            assert_eq!(napi_data.summary.total_upgrades, 0);
+        }
+
+        #[test]
+        fn test_convert_params_to_args_defaults() {
+            let params = UpgradeCheckParams {
+                root: ".".to_string(),
+                config_path: None,
+                include_major: None,
+                include_minor: None,
+                include_patch: None,
+                include_dev_dependencies: None,
+                include_peer_dependencies: None,
+                packages: None,
+            };
+
+            let args = convert_params_to_args(&params);
+
+            // Default behavior: include all (so no_* is false)
+            assert!(!args.no_major);
+            assert!(!args.no_minor);
+            assert!(!args.no_patch);
+            assert!(!args.no_dev);
+            assert!(!args.peer);
+            assert!(args.packages.is_none());
+            assert!(args.registry.is_none());
+        }
+
+        #[test]
+        fn test_convert_params_to_args_exclude_major() {
+            let params = UpgradeCheckParams {
+                root: ".".to_string(),
+                config_path: None,
+                include_major: Some(false),
+                include_minor: Some(true),
+                include_patch: Some(true),
+                include_dev_dependencies: None,
+                include_peer_dependencies: None,
+                packages: None,
+            };
+
+            let args = convert_params_to_args(&params);
+
+            assert!(args.no_major);
+            assert!(!args.no_minor);
+            assert!(!args.no_patch);
+        }
+
+        #[test]
+        fn test_convert_params_to_args_with_packages() {
+            let params = UpgradeCheckParams {
+                root: ".".to_string(),
+                config_path: None,
+                include_major: None,
+                include_minor: None,
+                include_patch: None,
+                include_dev_dependencies: None,
+                include_peer_dependencies: None,
+                packages: Some(vec!["@scope/pkg1".to_string(), "@scope/pkg2".to_string()]),
+            };
+
+            let args = convert_params_to_args(&params);
+
+            assert!(args.packages.is_some());
+            let packages = args.packages.unwrap();
+            assert_eq!(packages.len(), 2);
+            assert_eq!(packages[0], "@scope/pkg1");
+            assert_eq!(packages[1], "@scope/pkg2");
+        }
+
+        #[test]
+        fn test_convert_params_to_args_include_peer() {
+            let params = UpgradeCheckParams {
+                root: ".".to_string(),
+                config_path: None,
+                include_major: None,
+                include_minor: None,
+                include_patch: None,
+                include_dev_dependencies: None,
+                include_peer_dependencies: Some(true),
+                packages: None,
+            };
+
+            let args = convert_params_to_args(&params);
+
+            assert!(args.peer);
+        }
+
+        #[test]
+        fn test_convert_params_to_args_exclude_dev() {
+            let params = UpgradeCheckParams {
+                root: ".".to_string(),
+                config_path: None,
+                include_major: None,
+                include_minor: None,
+                include_patch: None,
+                include_dev_dependencies: Some(false),
+                include_peer_dependencies: None,
+                packages: None,
+            };
+
+            let args = convert_params_to_args(&params);
+
+            assert!(args.no_dev);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Validation Tests
+    // -------------------------------------------------------------------------
+
+    mod validation_tests {
+        use super::*;
+
+        #[test]
+        fn test_validate_params_valid_directory() {
+            let params = UpgradeCheckParams {
+                root: ".".to_string(),
+                config_path: None,
+                include_major: None,
+                include_minor: None,
+                include_patch: None,
+                include_dev_dependencies: None,
+                include_peer_dependencies: None,
+                packages: None,
+            };
+
+            let result = validate_upgrade_check_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_params_nonexistent_path() {
+            let params = UpgradeCheckParams {
+                root: "/nonexistent/path/to/workspace".to_string(),
+                config_path: None,
+                include_major: None,
+                include_minor: None,
+                include_patch: None,
+                include_dev_dependencies: None,
+                include_peer_dependencies: None,
+                packages: None,
+            };
+
+            let result = validate_upgrade_check_params(&params);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code, "ENOENT");
+        }
+
+        #[test]
+        fn test_validate_params_empty_root() {
+            let params = UpgradeCheckParams {
+                root: String::new(),
+                config_path: None,
+                include_major: None,
+                include_minor: None,
+                include_patch: None,
+                include_dev_dependencies: None,
+                include_peer_dependencies: None,
+                packages: None,
+            };
+
+            let result = validate_upgrade_check_params(&params);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code, "EVALIDATION");
+        }
+
+        #[test]
+        fn test_validate_params_all_upgrade_types_disabled() {
+            let params = UpgradeCheckParams {
+                root: ".".to_string(),
+                config_path: None,
+                include_major: Some(false),
+                include_minor: Some(false),
+                include_patch: Some(false),
+                include_dev_dependencies: None,
+                include_peer_dependencies: None,
+                packages: None,
+            };
+
+            let result = validate_upgrade_check_params(&params);
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "EVALIDATION");
+            assert!(error.message.contains("At least one upgrade type"));
+        }
+
+        #[test]
+        fn test_validate_params_one_upgrade_type_enabled() {
+            let params = UpgradeCheckParams {
+                root: ".".to_string(),
+                config_path: None,
+                include_major: Some(false),
+                include_minor: Some(false),
+                include_patch: Some(true),
+                include_dev_dependencies: None,
+                include_peer_dependencies: None,
+                packages: None,
+            };
+
+            let result = validate_upgrade_check_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_params_with_packages() {
+            let params = UpgradeCheckParams {
+                root: ".".to_string(),
+                config_path: None,
+                include_major: None,
+                include_minor: None,
+                include_patch: None,
+                include_dev_dependencies: None,
+                include_peer_dependencies: None,
+                packages: Some(vec!["@scope/pkg1".to_string()]),
+            };
+
+            let result = validate_upgrade_check_params(&params);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_params_returns_correct_path() {
+            let params = UpgradeCheckParams {
+                root: ".".to_string(),
+                config_path: None,
+                include_major: None,
+                include_minor: None,
+                include_patch: None,
+                include_dev_dependencies: None,
+                include_peer_dependencies: None,
+                packages: None,
+            };
+
+            let result = validate_upgrade_check_params(&params);
+            assert!(result.is_ok());
+
+            let path = result.unwrap();
+            assert_eq!(path.to_str().unwrap(), ".");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Params Builder Tests
+    // -------------------------------------------------------------------------
+
+    mod params_builder_tests {
+        use super::*;
+
+        #[test]
+        fn test_upgrade_check_params_new() {
+            let params = UpgradeCheckParams::new(".");
+            assert_eq!(params.root, ".");
+            assert!(params.config_path.is_none());
+            assert!(params.include_major.is_none());
+            assert!(params.include_minor.is_none());
+            assert!(params.include_patch.is_none());
+        }
+
+        #[test]
+        fn test_upgrade_check_params_builder_chain() {
+            let params = UpgradeCheckParams::new(".")
+                .with_include_major(false)
+                .with_include_minor(true)
+                .with_include_patch(true);
+
+            assert_eq!(params.include_major, Some(false));
+            assert_eq!(params.include_minor, Some(true));
+            assert_eq!(params.include_patch, Some(true));
+        }
+
+        #[test]
+        fn test_upgrade_check_params_with_packages() {
+            let packages = vec!["@scope/pkg1".to_string(), "@scope/pkg2".to_string()];
+            let params = UpgradeCheckParams::new(".").with_packages(packages.clone());
+
+            assert_eq!(params.packages, Some(packages));
+        }
+
+        #[test]
+        fn test_upgrade_check_params_with_config_path() {
+            let params =
+                UpgradeCheckParams::new(".").with_config_path("custom.config.json".to_string());
+
+            assert_eq!(params.config_path, Some("custom.config.json".to_string()));
+        }
+
+        #[test]
+        fn test_upgrade_check_params_with_upgrade_levels() {
+            let params = UpgradeCheckParams::new(".").with_upgrade_levels(false, true, true);
+
+            assert_eq!(params.include_major, Some(false));
+            assert_eq!(params.include_minor, Some(true));
+            assert_eq!(params.include_patch, Some(true));
+        }
+    }
+}

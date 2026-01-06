@@ -23,6 +23,7 @@
  * - `execute()` - Execute commands across workspace packages with timeout support (Story 6.3)
  * - `configShow()` - Show current workspace configuration (Story 7.2)
  * - `configValidate()` - Validate workspace configuration (Story 7.3)
+ * - `upgradeCheck()` - Check for available dependency upgrades (Story 8.2)
  *
  * Config types (Story 7.1):
  * - `ConfigShowParams`, `ConfigShowData`, `ConfigShowApiResponse`
@@ -84,6 +85,7 @@ import {
   getVersion,
   init,
   status,
+  upgradeCheck,
 } from './binding'
 
 export {
@@ -103,6 +105,7 @@ export {
   getVersion,
   init,
   status,
+  upgradeCheck,
 }
 
 // Re-export all types from bindings

@@ -168,7 +168,12 @@ pub use commands::execute;
 pub use commands::config_show;
 // Story 7.3: configValidate
 pub use commands::config_validate;
-// TODO: will be implemented on story 8.2-8.4 (upgrade commands)
+
+// Upgrade commands (Story 8.2-8.4)
+// Story 8.2: upgradeCheck
+pub use commands::upgrade_check;
+// TODO: will be implemented on story 8.3 (upgradeApply)
+// TODO: will be implemented on story 8.4 (backupList, backupRestore, backupClean)
 // TODO: will be implemented on story 9.1-9.3 (remaining commands)
 
 /// Version of the crate.
