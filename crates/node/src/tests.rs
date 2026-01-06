@@ -5718,3 +5718,986 @@ mod config_scenario_tests {
         assert_eq!(error.code, "ECONFIG");
     }
 }
+
+// ============================================================================
+// Upgrade Types Tests (Story 8.1)
+// ============================================================================
+
+/// Tests for upgrade command type definitions.
+#[cfg(test)]
+mod upgrade_types_tests {
+    use crate::error::ErrorInfo;
+    use crate::types::upgrade::{
+        AppliedUpgradeInfo, ApplySummaryInfo, BackupCleanApiResponse, BackupCleanData,
+        BackupCleanParams, BackupInfo, BackupListApiResponse, BackupListData, BackupListParams,
+        BackupRestoreApiResponse, BackupRestoreData, BackupRestoreParams, DEFAULT_KEEP_COUNT,
+        DependencyUpgradeInfo, FailedUpgradeInfo, PackageUpgradeInfo, SkippedUpgradeInfo,
+        UpgradeApplyApiResponse, UpgradeApplyData, UpgradeApplyParams, UpgradeCheckApiResponse,
+        UpgradeCheckData, UpgradeCheckParams, UpgradeSelectionInfo, UpgradeSummaryInfo,
+        VALID_DEPENDENCY_TYPES, VALID_UPGRADE_TYPES,
+    };
+
+    // ========================================================================
+    // Constants Tests
+    // ========================================================================
+
+    #[test]
+    fn test_valid_upgrade_types() {
+        assert!(VALID_UPGRADE_TYPES.contains(&"major"));
+        assert!(VALID_UPGRADE_TYPES.contains(&"minor"));
+        assert!(VALID_UPGRADE_TYPES.contains(&"patch"));
+        assert_eq!(VALID_UPGRADE_TYPES.len(), 3);
+    }
+
+    #[test]
+    fn test_valid_dependency_types() {
+        assert!(VALID_DEPENDENCY_TYPES.contains(&"regular"));
+        assert!(VALID_DEPENDENCY_TYPES.contains(&"dev"));
+        assert!(VALID_DEPENDENCY_TYPES.contains(&"peer"));
+        assert!(VALID_DEPENDENCY_TYPES.contains(&"optional"));
+        assert_eq!(VALID_DEPENDENCY_TYPES.len(), 4);
+    }
+
+    #[test]
+    fn test_default_keep_count() {
+        assert_eq!(DEFAULT_KEEP_COUNT, 5);
+    }
+
+    // ========================================================================
+    // UpgradeCheckParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_upgrade_check_params_new() {
+        let params = UpgradeCheckParams::new("/workspace");
+
+        assert_eq!(params.root, "/workspace");
+        assert!(params.config_path.is_none());
+        assert!(params.include_major.is_none());
+        assert!(params.include_minor.is_none());
+        assert!(params.include_patch.is_none());
+        assert!(params.include_dev_dependencies.is_none());
+        assert!(params.include_peer_dependencies.is_none());
+        assert!(params.packages.is_none());
+    }
+
+    #[test]
+    fn test_upgrade_check_params_builder_chain() {
+        let params = UpgradeCheckParams::new("/workspace")
+            .with_config_path("/workspace/repo.config.json")
+            .with_include_major(false)
+            .with_include_minor(true)
+            .with_include_patch(true)
+            .with_include_dev_dependencies(true)
+            .with_include_peer_dependencies(false)
+            .with_packages(vec!["@scope/core".to_string()]);
+
+        assert_eq!(params.root, "/workspace");
+        assert_eq!(params.config_path, Some("/workspace/repo.config.json".to_string()));
+        assert_eq!(params.include_major, Some(false));
+        assert_eq!(params.include_minor, Some(true));
+        assert_eq!(params.include_patch, Some(true));
+        assert_eq!(params.include_dev_dependencies, Some(true));
+        assert_eq!(params.include_peer_dependencies, Some(false));
+        assert_eq!(params.packages, Some(vec!["@scope/core".to_string()]));
+    }
+
+    #[test]
+    fn test_upgrade_check_params_with_upgrade_levels() {
+        let params = UpgradeCheckParams::new(".").with_upgrade_levels(false, true, true);
+
+        assert_eq!(params.include_major, Some(false));
+        assert_eq!(params.include_minor, Some(true));
+        assert_eq!(params.include_patch, Some(true));
+    }
+
+    #[test]
+    fn test_upgrade_check_params_clone() {
+        let params =
+            UpgradeCheckParams::new("/workspace").with_include_major(true).with_include_minor(true);
+        let cloned = params.clone();
+
+        assert_eq!(cloned.root, params.root);
+        assert_eq!(cloned.include_major, params.include_major);
+        assert_eq!(cloned.include_minor, params.include_minor);
+    }
+
+    #[test]
+    fn test_upgrade_check_params_serialize() {
+        let params = UpgradeCheckParams::new("/workspace").with_include_patch(true);
+        let json = serde_json::to_string(&params).unwrap_or_default();
+
+        assert!(json.contains("\"root\":\"/workspace\""));
+        assert!(json.contains("\"include_patch\":true"));
+        assert!(!json.contains("\"config_path\""));
+    }
+
+    // ========================================================================
+    // UpgradeApplyParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_upgrade_apply_params_new() {
+        let params = UpgradeApplyParams::new("/workspace");
+
+        assert_eq!(params.root, "/workspace");
+        assert!(params.config_path.is_none());
+        assert!(params.create_backup.is_none());
+        assert!(params.create_changeset.is_none());
+        assert!(params.selection.is_none());
+        assert!(params.dry_run.is_none());
+        assert!(params.packages.is_none());
+    }
+
+    #[test]
+    fn test_upgrade_apply_params_builder_chain() {
+        let params = UpgradeApplyParams::new("/workspace")
+            .with_config_path("/workspace/repo.config.json")
+            .with_create_backup(true)
+            .with_create_changeset(true)
+            .with_selection(UpgradeSelectionInfo::patch_only())
+            .with_dry_run(false)
+            .with_packages(vec!["@scope/core".to_string()]);
+
+        assert_eq!(params.root, "/workspace");
+        assert_eq!(params.config_path, Some("/workspace/repo.config.json".to_string()));
+        assert_eq!(params.create_backup, Some(true));
+        assert_eq!(params.create_changeset, Some(true));
+        assert!(params.selection.is_some());
+        assert_eq!(params.dry_run, Some(false));
+        assert_eq!(params.packages, Some(vec!["@scope/core".to_string()]));
+    }
+
+    #[test]
+    fn test_upgrade_apply_params_clone() {
+        let params = UpgradeApplyParams::new("/workspace").with_create_backup(true);
+        let cloned = params.clone();
+
+        assert_eq!(cloned.root, params.root);
+        assert_eq!(cloned.create_backup, params.create_backup);
+    }
+
+    // ========================================================================
+    // BackupListParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_backup_list_params_new() {
+        let params = BackupListParams::new("/workspace");
+
+        assert_eq!(params.root, "/workspace");
+        assert!(params.config_path.is_none());
+    }
+
+    #[test]
+    fn test_backup_list_params_with_config() {
+        let params = BackupListParams::new("/workspace").with_config_path("/config.json");
+
+        assert_eq!(params.config_path, Some("/config.json".to_string()));
+    }
+
+    // ========================================================================
+    // BackupRestoreParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_backup_restore_params_new() {
+        let params = BackupRestoreParams::new("/workspace", "backup-2024-01-15-123456");
+
+        assert_eq!(params.root, "/workspace");
+        assert_eq!(params.backup_id, "backup-2024-01-15-123456");
+        assert!(params.config_path.is_none());
+    }
+
+    #[test]
+    fn test_backup_restore_params_with_config() {
+        let params =
+            BackupRestoreParams::new("/workspace", "backup-id").with_config_path("/config.json");
+
+        assert_eq!(params.config_path, Some("/config.json".to_string()));
+    }
+
+    // ========================================================================
+    // BackupCleanParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_backup_clean_params_new() {
+        let params = BackupCleanParams::new("/workspace");
+
+        assert_eq!(params.root, "/workspace");
+        assert!(params.config_path.is_none());
+        assert!(params.keep_count.is_none());
+    }
+
+    #[test]
+    fn test_backup_clean_params_with_keep_count() {
+        let params = BackupCleanParams::new("/workspace").with_keep_count(3);
+
+        assert_eq!(params.keep_count, Some(3));
+    }
+
+    // ========================================================================
+    // UpgradeSelectionInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_upgrade_selection_info_all() {
+        let selection = UpgradeSelectionInfo::all();
+
+        assert_eq!(selection.major, Some(true));
+        assert_eq!(selection.minor, Some(true));
+        assert_eq!(selection.patch, Some(true));
+        assert!(selection.packages.is_none());
+        assert!(selection.dependencies.is_none());
+    }
+
+    #[test]
+    fn test_upgrade_selection_info_patch_only() {
+        let selection = UpgradeSelectionInfo::patch_only();
+
+        assert_eq!(selection.major, Some(false));
+        assert_eq!(selection.minor, Some(false));
+        assert_eq!(selection.patch, Some(true));
+    }
+
+    #[test]
+    fn test_upgrade_selection_info_minor_and_patch() {
+        let selection = UpgradeSelectionInfo::minor_and_patch();
+
+        assert_eq!(selection.major, Some(false));
+        assert_eq!(selection.minor, Some(true));
+        assert_eq!(selection.patch, Some(true));
+    }
+
+    #[test]
+    fn test_upgrade_selection_info_for_packages() {
+        let selection = UpgradeSelectionInfo::for_packages(vec!["@scope/core".to_string()]);
+
+        assert_eq!(selection.packages, Some(vec!["@scope/core".to_string()]));
+        assert!(selection.dependencies.is_none());
+    }
+
+    #[test]
+    fn test_upgrade_selection_info_for_dependencies() {
+        let selection = UpgradeSelectionInfo::for_dependencies(vec!["lodash".to_string()]);
+
+        assert!(selection.packages.is_none());
+        assert_eq!(selection.dependencies, Some(vec!["lodash".to_string()]));
+    }
+
+    #[test]
+    fn test_upgrade_selection_info_default() {
+        let selection = UpgradeSelectionInfo::default();
+
+        assert_eq!(selection.major, Some(true));
+        assert_eq!(selection.minor, Some(true));
+        assert_eq!(selection.patch, Some(true));
+    }
+
+    #[test]
+    fn test_upgrade_selection_info_with_packages() {
+        let selection = UpgradeSelectionInfo::patch_only().with_packages(vec!["pkg".to_string()]);
+
+        assert_eq!(selection.patch, Some(true));
+        assert_eq!(selection.packages, Some(vec!["pkg".to_string()]));
+    }
+
+    #[test]
+    fn test_upgrade_selection_info_with_dependencies() {
+        let selection =
+            UpgradeSelectionInfo::minor_and_patch().with_dependencies(vec!["lodash".to_string()]);
+
+        assert_eq!(selection.dependencies, Some(vec!["lodash".to_string()]));
+    }
+
+    // ========================================================================
+    // DependencyUpgradeInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_dependency_upgrade_info_new() {
+        let info = DependencyUpgradeInfo::new("lodash", "4.17.20", "4.17.21", "patch", "regular");
+
+        assert_eq!(info.name, "lodash");
+        assert_eq!(info.current_version, "4.17.20");
+        assert_eq!(info.latest_version, "4.17.21");
+        assert_eq!(info.upgrade_type, "patch");
+        assert_eq!(info.dependency_type, "regular");
+    }
+
+    #[test]
+    fn test_dependency_upgrade_info_patch() {
+        let info = DependencyUpgradeInfo::patch("lodash", "4.17.20", "4.17.21");
+
+        assert_eq!(info.upgrade_type, "patch");
+        assert_eq!(info.dependency_type, "regular");
+        assert!(info.is_patch());
+        assert!(!info.is_minor());
+        assert!(!info.is_major());
+    }
+
+    #[test]
+    fn test_dependency_upgrade_info_minor() {
+        let info = DependencyUpgradeInfo::minor("lodash", "4.16.0", "4.17.0");
+
+        assert_eq!(info.upgrade_type, "minor");
+        assert!(info.is_minor());
+    }
+
+    #[test]
+    fn test_dependency_upgrade_info_major() {
+        let info = DependencyUpgradeInfo::major("react", "17.0.0", "18.0.0");
+
+        assert_eq!(info.upgrade_type, "major");
+        assert!(info.is_major());
+    }
+
+    #[test]
+    fn test_dependency_upgrade_info_dev() {
+        let info = DependencyUpgradeInfo::dev("typescript", "4.9.0", "5.0.0", "major");
+
+        assert_eq!(info.dependency_type, "dev");
+        assert!(info.is_dev_dependency());
+    }
+
+    #[test]
+    fn test_dependency_upgrade_info_clone() {
+        let info = DependencyUpgradeInfo::patch("lodash", "4.17.20", "4.17.21");
+        let cloned = info.clone();
+
+        assert_eq!(cloned.name, info.name);
+        assert_eq!(cloned.current_version, info.current_version);
+        assert_eq!(cloned.latest_version, info.latest_version);
+    }
+
+    // ========================================================================
+    // PackageUpgradeInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_package_upgrade_info_new() {
+        let info = PackageUpgradeInfo::new("@scope/core", "packages/core");
+
+        assert_eq!(info.package_name, "@scope/core");
+        assert_eq!(info.package_path, "packages/core");
+        assert!(info.dependencies.is_empty());
+        assert_eq!(info.upgrade_count(), 0);
+    }
+
+    #[test]
+    fn test_package_upgrade_info_with_dependencies() {
+        let deps = vec![
+            DependencyUpgradeInfo::patch("lodash", "4.17.20", "4.17.21"),
+            DependencyUpgradeInfo::minor("axios", "0.27.0", "0.28.0"),
+        ];
+        let info = PackageUpgradeInfo::with_dependencies("@scope/core", "packages/core", deps);
+
+        assert_eq!(info.upgrade_count(), 2);
+        assert_eq!(info.patch_count(), 1);
+        assert_eq!(info.minor_count(), 1);
+        assert_eq!(info.major_count(), 0);
+    }
+
+    #[test]
+    fn test_package_upgrade_info_with_dependency() {
+        let info = PackageUpgradeInfo::new("@scope/core", "packages/core")
+            .with_dependency(DependencyUpgradeInfo::major("react", "17.0.0", "18.0.0"));
+
+        assert_eq!(info.upgrade_count(), 1);
+        assert!(info.has_major_upgrades());
+    }
+
+    #[test]
+    fn test_package_upgrade_info_counts() {
+        let info = PackageUpgradeInfo::new("@scope/core", "packages/core")
+            .with_dependency(DependencyUpgradeInfo::major("react", "17.0.0", "18.0.0"))
+            .with_dependency(DependencyUpgradeInfo::minor("axios", "0.27.0", "0.28.0"))
+            .with_dependency(DependencyUpgradeInfo::patch("lodash", "4.17.20", "4.17.21"));
+
+        assert_eq!(info.major_count(), 1);
+        assert_eq!(info.minor_count(), 1);
+        assert_eq!(info.patch_count(), 1);
+        assert!(info.has_major_upgrades());
+    }
+
+    // ========================================================================
+    // UpgradeSummaryInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_upgrade_summary_info_new() {
+        let summary = UpgradeSummaryInfo::new(10, 15, 2, 5, 8);
+
+        assert_eq!(summary.packages_analyzed, 10);
+        assert_eq!(summary.total_upgrades, 15);
+        assert_eq!(summary.major_upgrades, 2);
+        assert_eq!(summary.minor_upgrades, 5);
+        assert_eq!(summary.patch_upgrades, 8);
+    }
+
+    #[test]
+    fn test_upgrade_summary_info_empty() {
+        let summary = UpgradeSummaryInfo::empty(10);
+
+        assert_eq!(summary.packages_analyzed, 10);
+        assert_eq!(summary.total_upgrades, 0);
+        assert!(summary.is_empty());
+        assert!(!summary.has_breaking_changes());
+    }
+
+    #[test]
+    fn test_upgrade_summary_info_from_packages() {
+        let packages = vec![
+            PackageUpgradeInfo::new("@scope/core", "packages/core")
+                .with_dependency(DependencyUpgradeInfo::major("react", "17.0.0", "18.0.0"))
+                .with_dependency(DependencyUpgradeInfo::patch("lodash", "4.17.20", "4.17.21")),
+            PackageUpgradeInfo::new("@scope/utils", "packages/utils")
+                .with_dependency(DependencyUpgradeInfo::minor("axios", "0.27.0", "0.28.0")),
+        ];
+
+        let summary = UpgradeSummaryInfo::from_packages(&packages);
+
+        assert_eq!(summary.packages_analyzed, 2);
+        assert_eq!(summary.total_upgrades, 3);
+        assert_eq!(summary.major_upgrades, 1);
+        assert_eq!(summary.minor_upgrades, 1);
+        assert_eq!(summary.patch_upgrades, 1);
+        assert!(summary.has_breaking_changes());
+    }
+
+    #[test]
+    fn test_upgrade_summary_info_default() {
+        let summary = UpgradeSummaryInfo::default();
+
+        assert_eq!(summary.packages_analyzed, 0);
+        assert!(summary.is_empty());
+    }
+
+    // ========================================================================
+    // AppliedUpgradeInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_applied_upgrade_info_new() {
+        let info = AppliedUpgradeInfo::new("@scope/core", "lodash", "4.17.20", "4.17.21", "patch");
+
+        assert_eq!(info.package_name, "@scope/core");
+        assert_eq!(info.dependency_name, "lodash");
+        assert_eq!(info.old_version, "4.17.20");
+        assert_eq!(info.new_version, "4.17.21");
+        assert_eq!(info.upgrade_type, "patch");
+    }
+
+    #[test]
+    fn test_applied_upgrade_info_from_dependency_upgrade() {
+        let dep = DependencyUpgradeInfo::minor("axios", "0.27.0", "0.28.0");
+        let info = AppliedUpgradeInfo::from_dependency_upgrade("@scope/core", &dep);
+
+        assert_eq!(info.package_name, "@scope/core");
+        assert_eq!(info.dependency_name, "axios");
+        assert_eq!(info.old_version, "0.27.0");
+        assert_eq!(info.new_version, "0.28.0");
+        assert_eq!(info.upgrade_type, "minor");
+    }
+
+    // ========================================================================
+    // SkippedUpgradeInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_skipped_upgrade_info_new() {
+        let info = SkippedUpgradeInfo::new(
+            "@scope/core",
+            "react",
+            "17.0.0",
+            "18.0.0",
+            "Major upgrade excluded by selection",
+        );
+
+        assert_eq!(info.package_name, "@scope/core");
+        assert_eq!(info.dependency_name, "react");
+        assert_eq!(info.current_version, "17.0.0");
+        assert_eq!(info.available_version, "18.0.0");
+        assert!(info.reason.contains("Major upgrade"));
+    }
+
+    #[test]
+    fn test_skipped_upgrade_info_filtered() {
+        let info = SkippedUpgradeInfo::filtered("@scope/core", "react", "17.0.0", "18.0.0");
+
+        assert!(info.reason.contains("Filtered"));
+    }
+
+    // ========================================================================
+    // FailedUpgradeInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_failed_upgrade_info_new() {
+        let info = FailedUpgradeInfo::new(
+            "@scope/core",
+            "lodash",
+            "4.17.20",
+            "4.17.21",
+            "Failed to write package.json",
+        );
+
+        assert_eq!(info.package_name, "@scope/core");
+        assert_eq!(info.dependency_name, "lodash");
+        assert_eq!(info.current_version, "4.17.20");
+        assert_eq!(info.target_version, "4.17.21");
+        assert!(info.error.contains("Failed to write"));
+    }
+
+    // ========================================================================
+    // ApplySummaryInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_apply_summary_info_new() {
+        let summary = ApplySummaryInfo::new(
+            10,
+            5,
+            2,
+            vec!["@scope/core".to_string(), "@scope/utils".to_string()],
+        );
+
+        assert_eq!(summary.total_applied, 10);
+        assert_eq!(summary.total_skipped, 5);
+        assert_eq!(summary.total_failed, 2);
+        assert_eq!(summary.packages_modified.len(), 2);
+        assert_eq!(summary.total_processed(), 17);
+    }
+
+    #[test]
+    fn test_apply_summary_info_empty() {
+        let summary = ApplySummaryInfo::empty();
+
+        assert_eq!(summary.total_applied, 0);
+        assert_eq!(summary.total_skipped, 0);
+        assert_eq!(summary.total_failed, 0);
+        assert!(summary.packages_modified.is_empty());
+    }
+
+    #[test]
+    fn test_apply_summary_info_all_succeeded() {
+        let summary = ApplySummaryInfo::new(10, 0, 0, vec!["@scope/core".to_string()]);
+
+        assert!(summary.all_succeeded());
+        assert!(!summary.has_failures());
+    }
+
+    #[test]
+    fn test_apply_summary_info_has_failures() {
+        let summary = ApplySummaryInfo::new(8, 0, 2, vec!["@scope/core".to_string()]);
+
+        assert!(!summary.all_succeeded());
+        assert!(summary.has_failures());
+    }
+
+    #[test]
+    fn test_apply_summary_info_default() {
+        let summary = ApplySummaryInfo::default();
+
+        assert_eq!(summary.total_processed(), 0);
+    }
+
+    // ========================================================================
+    // BackupInfo Tests
+    // ========================================================================
+
+    #[test]
+    fn test_backup_info_new() {
+        let info = BackupInfo::new(
+            "backup-2024-01-15-123456",
+            "2024-01-15T12:34:56Z",
+            vec!["@scope/core".to_string(), "@scope/utils".to_string()],
+            1024,
+        );
+
+        assert_eq!(info.id, "backup-2024-01-15-123456");
+        assert_eq!(info.created_at, "2024-01-15T12:34:56Z");
+        assert_eq!(info.packages.len(), 2);
+        assert!((info.size_bytes - 1024.0).abs() < f64::EPSILON);
+        assert_eq!(info.package_count(), 2);
+    }
+
+    // ========================================================================
+    // UpgradeCheckData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_upgrade_check_data_new() {
+        let packages = vec![
+            PackageUpgradeInfo::new("@scope/core", "packages/core")
+                .with_dependency(DependencyUpgradeInfo::patch("lodash", "4.17.20", "4.17.21")),
+        ];
+        let summary = UpgradeSummaryInfo::new(1, 1, 0, 0, 1);
+
+        let data = UpgradeCheckData::new(packages, summary);
+
+        assert_eq!(data.packages.len(), 1);
+        assert_eq!(data.summary.total_upgrades, 1);
+        assert!(data.has_upgrades());
+        assert!(!data.has_breaking_changes());
+    }
+
+    #[test]
+    fn test_upgrade_check_data_empty() {
+        let data = UpgradeCheckData::empty(10);
+
+        assert!(data.packages.is_empty());
+        assert_eq!(data.summary.packages_analyzed, 10);
+        assert!(!data.has_upgrades());
+    }
+
+    #[test]
+    fn test_upgrade_check_data_from_packages() {
+        let packages = vec![
+            PackageUpgradeInfo::new("@scope/core", "packages/core")
+                .with_dependency(DependencyUpgradeInfo::major("react", "17.0.0", "18.0.0")),
+        ];
+
+        let data = UpgradeCheckData::from_packages(packages);
+
+        assert_eq!(data.packages.len(), 1);
+        assert_eq!(data.summary.major_upgrades, 1);
+        assert!(data.has_breaking_changes());
+    }
+
+    // ========================================================================
+    // UpgradeApplyData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_upgrade_apply_data_new() {
+        let applied =
+            vec![AppliedUpgradeInfo::new("@scope/core", "lodash", "4.17.20", "4.17.21", "patch")];
+        let summary = ApplySummaryInfo::new(1, 0, 0, vec!["@scope/core".to_string()]);
+
+        let data = UpgradeApplyData::new(applied, vec![], vec![], summary);
+
+        assert_eq!(data.applied.len(), 1);
+        assert!(data.skipped.is_empty());
+        assert!(data.failed.is_empty());
+        assert!(data.all_succeeded());
+        assert!(!data.has_backup());
+        assert!(!data.has_changeset());
+    }
+
+    #[test]
+    fn test_upgrade_apply_data_empty() {
+        let data = UpgradeApplyData::empty();
+
+        assert!(data.applied.is_empty());
+        assert!(data.skipped.is_empty());
+        assert!(data.failed.is_empty());
+        assert!(data.backup_id.is_none());
+        assert!(data.changeset_id.is_none());
+    }
+
+    #[test]
+    fn test_upgrade_apply_data_with_backup() {
+        let data = UpgradeApplyData::empty().with_backup_id("backup-2024-01-15-123456");
+
+        assert!(data.has_backup());
+        assert_eq!(data.backup_id, Some("backup-2024-01-15-123456".to_string()));
+    }
+
+    #[test]
+    fn test_upgrade_apply_data_with_changeset() {
+        let data = UpgradeApplyData::empty().with_changeset_id("feature/upgrades");
+
+        assert!(data.has_changeset());
+        assert_eq!(data.changeset_id, Some("feature/upgrades".to_string()));
+    }
+
+    // ========================================================================
+    // BackupListData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_backup_list_data_new() {
+        let backups = vec![BackupInfo::new(
+            "backup-2024-01-15-123456",
+            "2024-01-15T12:34:56Z",
+            vec!["@scope/core".to_string()],
+            1024,
+        )];
+
+        let data = BackupListData::new(backups);
+
+        assert_eq!(data.count(), 1);
+        assert!(!data.is_empty());
+    }
+
+    #[test]
+    fn test_backup_list_data_empty() {
+        let data = BackupListData::empty();
+
+        assert!(data.is_empty());
+        assert_eq!(data.count(), 0);
+    }
+
+    // ========================================================================
+    // BackupRestoreData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_backup_restore_data_new() {
+        let data = BackupRestoreData::new(
+            "backup-2024-01-15-123456",
+            vec!["@scope/core".to_string(), "@scope/utils".to_string()],
+        );
+
+        assert_eq!(data.backup_id, "backup-2024-01-15-123456");
+        assert_eq!(data.packages_restored, 2);
+        assert_eq!(data.packages.len(), 2);
+    }
+
+    // ========================================================================
+    // BackupCleanData Tests
+    // ========================================================================
+
+    #[test]
+    fn test_backup_clean_data_new() {
+        let data = BackupCleanData::new(3, 5, 10240);
+
+        assert_eq!(data.backups_removed, 3);
+        assert_eq!(data.backups_kept, 5);
+        assert!((data.bytes_freed - 10240.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_backup_clean_data_nothing_to_clean() {
+        let data = BackupCleanData::nothing_to_clean(5);
+
+        assert_eq!(data.backups_removed, 0);
+        assert_eq!(data.backups_kept, 5);
+        assert!((data.bytes_freed - 0.0).abs() < f64::EPSILON);
+    }
+
+    // ========================================================================
+    // API Response Tests
+    // ========================================================================
+
+    #[test]
+    fn test_upgrade_check_api_response_success() {
+        let data = UpgradeCheckData::empty(10);
+        let response = UpgradeCheckApiResponse::success(data);
+
+        assert!(response.success);
+        assert!(response.is_success());
+        assert!(!response.is_failure());
+        assert!(response.data.is_some());
+        assert!(response.error.is_none());
+    }
+
+    #[test]
+    fn test_upgrade_check_api_response_failure() {
+        let error = ErrorInfo::network("Registry unreachable");
+        let response = UpgradeCheckApiResponse::failure(error);
+
+        assert!(!response.success);
+        assert!(response.is_failure());
+        assert!(response.data.is_none());
+        assert!(response.error.is_some());
+        assert_eq!(response.error.as_ref().map(|e| e.code.as_str()), Some("ENETWORK"));
+    }
+
+    #[test]
+    fn test_upgrade_apply_api_response_success() {
+        let data = UpgradeApplyData::empty();
+        let response = UpgradeApplyApiResponse::success(data);
+
+        assert!(response.is_success());
+        assert!(response.data.is_some());
+    }
+
+    #[test]
+    fn test_upgrade_apply_api_response_failure() {
+        let error = ErrorInfo::io("Failed to write file", Some("package.json"));
+        let response = UpgradeApplyApiResponse::failure(error);
+
+        assert!(response.is_failure());
+        assert!(response.error.is_some());
+    }
+
+    #[test]
+    fn test_backup_list_api_response_success() {
+        let data = BackupListData::empty();
+        let response = BackupListApiResponse::success(data);
+
+        assert!(response.is_success());
+    }
+
+    #[test]
+    fn test_backup_list_api_response_failure() {
+        let error = ErrorInfo::not_found("Backup directory not found", Some("backups"));
+        let response = BackupListApiResponse::failure(error);
+
+        assert!(response.is_failure());
+        assert_eq!(response.error.as_ref().map(|e| e.code.as_str()), Some("ENOENT"));
+    }
+
+    #[test]
+    fn test_backup_restore_api_response_success() {
+        let data = BackupRestoreData::new("backup-id", vec!["@scope/core".to_string()]);
+        let response = BackupRestoreApiResponse::success(data);
+
+        assert!(response.is_success());
+    }
+
+    #[test]
+    fn test_backup_restore_api_response_failure() {
+        let error = ErrorInfo::not_found("Backup not found", Some("backup-id"));
+        let response = BackupRestoreApiResponse::failure(error);
+
+        assert!(response.is_failure());
+    }
+
+    #[test]
+    fn test_backup_clean_api_response_success() {
+        let data = BackupCleanData::new(2, 3, 5120);
+        let response = BackupCleanApiResponse::success(data);
+
+        assert!(response.is_success());
+    }
+
+    #[test]
+    fn test_backup_clean_api_response_failure() {
+        let error = ErrorInfo::io("Permission denied", Some("backups"));
+        let response = BackupCleanApiResponse::failure(error);
+
+        assert!(response.is_failure());
+    }
+
+    // ========================================================================
+    // Serialization Tests
+    // ========================================================================
+
+    #[test]
+    fn test_dependency_upgrade_info_serialize() {
+        let info = DependencyUpgradeInfo::patch("lodash", "4.17.20", "4.17.21");
+        let json = serde_json::to_string(&info).unwrap_or_default();
+
+        assert!(json.contains("\"name\":\"lodash\""));
+        assert!(json.contains("\"current_version\":\"4.17.20\""));
+        assert!(json.contains("\"latest_version\":\"4.17.21\""));
+        assert!(json.contains("\"upgrade_type\":\"patch\""));
+    }
+
+    #[test]
+    fn test_upgrade_check_data_serialize() {
+        let data = UpgradeCheckData::empty(10);
+        let json = serde_json::to_string(&data).unwrap_or_default();
+
+        assert!(json.contains("\"packages\":[]"));
+        assert!(json.contains("\"packages_analyzed\":10"));
+    }
+
+    #[test]
+    fn test_upgrade_apply_data_serialize() {
+        let data = UpgradeApplyData::empty().with_backup_id("backup-123");
+        let json = serde_json::to_string(&data).unwrap_or_default();
+
+        assert!(json.contains("\"backup_id\":\"backup-123\""));
+        assert!(json.contains("\"applied\":[]"));
+    }
+
+    // ========================================================================
+    // Complete Scenario Tests
+    // ========================================================================
+
+    #[test]
+    fn test_complete_upgrade_check_scenario() {
+        // Simulate checking for upgrades
+        let packages = vec![
+            PackageUpgradeInfo::new("@scope/core", "packages/core")
+                .with_dependency(DependencyUpgradeInfo::major("react", "17.0.2", "18.2.0"))
+                .with_dependency(DependencyUpgradeInfo::patch("lodash", "4.17.20", "4.17.21")),
+            PackageUpgradeInfo::new("@scope/utils", "packages/utils")
+                .with_dependency(DependencyUpgradeInfo::minor("axios", "0.27.2", "0.28.0")),
+        ];
+
+        let data = UpgradeCheckData::from_packages(packages);
+        let response = UpgradeCheckApiResponse::success(data);
+
+        assert!(response.is_success());
+        let data = response.data.unwrap();
+        assert_eq!(data.packages.len(), 2);
+        assert_eq!(data.summary.total_upgrades, 3);
+        assert_eq!(data.summary.major_upgrades, 1);
+        assert_eq!(data.summary.minor_upgrades, 1);
+        assert_eq!(data.summary.patch_upgrades, 1);
+        assert!(data.has_breaking_changes());
+    }
+
+    #[test]
+    fn test_complete_upgrade_apply_scenario() {
+        // Simulate applying upgrades with backup
+        let applied = vec![
+            AppliedUpgradeInfo::new("@scope/core", "lodash", "4.17.20", "4.17.21", "patch"),
+            AppliedUpgradeInfo::new("@scope/utils", "axios", "0.27.2", "0.28.0", "minor"),
+        ];
+        let skipped =
+            vec![SkippedUpgradeInfo::filtered("@scope/core", "react", "17.0.2", "18.2.0")];
+        let summary = ApplySummaryInfo::new(
+            2,
+            1,
+            0,
+            vec!["@scope/core".to_string(), "@scope/utils".to_string()],
+        );
+
+        let data = UpgradeApplyData::new(applied, skipped, vec![], summary)
+            .with_backup_id("backup-2024-01-15-123456");
+
+        let response = UpgradeApplyApiResponse::success(data);
+
+        assert!(response.is_success());
+        let data = response.data.unwrap();
+        assert_eq!(data.applied.len(), 2);
+        assert_eq!(data.skipped.len(), 1);
+        assert!(data.failed.is_empty());
+        assert!(data.has_backup());
+        assert!(data.all_succeeded());
+    }
+
+    #[test]
+    fn test_complete_backup_workflow_scenario() {
+        // List backups
+        let backups = vec![
+            BackupInfo::new(
+                "backup-2024-01-15-123456",
+                "2024-01-15T12:34:56Z",
+                vec!["@scope/core".to_string()],
+                2048,
+            ),
+            BackupInfo::new(
+                "backup-2024-01-14-112233",
+                "2024-01-14T11:22:33Z",
+                vec!["@scope/core".to_string(), "@scope/utils".to_string()],
+                4096,
+            ),
+        ];
+
+        let list_data = BackupListData::new(backups);
+        let list_response = BackupListApiResponse::success(list_data);
+        assert!(list_response.is_success());
+        assert_eq!(list_response.data.as_ref().map(BackupListData::count), Some(2));
+
+        // Restore from backup
+        let restore_data =
+            BackupRestoreData::new("backup-2024-01-15-123456", vec!["@scope/core".to_string()]);
+        let restore_response = BackupRestoreApiResponse::success(restore_data);
+        assert!(restore_response.is_success());
+        assert_eq!(restore_response.data.as_ref().map(|d| d.packages_restored), Some(1));
+
+        // Clean old backups
+        let clean_data = BackupCleanData::new(1, 1, 4096);
+        let clean_response = BackupCleanApiResponse::success(clean_data);
+        assert!(clean_response.is_success());
+        assert_eq!(clean_response.data.as_ref().map(|d| d.backups_removed), Some(1));
+    }
+}
