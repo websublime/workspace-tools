@@ -40,6 +40,15 @@
  * - `ExecuteParams`, `ExecuteData`, `ExecuteApiResponse`
  * - `PackageExecutionResult`, `ExecuteSummary`
  *
+ * Upgrade types (Story 8.1):
+ * - `UpgradeCheckParams`, `UpgradeCheckData`, `UpgradeCheckApiResponse`
+ * - `UpgradeApplyParams`, `UpgradeApplyData`, `UpgradeApplyApiResponse`
+ * - `BackupListParams`, `BackupListData`, `BackupListApiResponse`
+ * - `BackupRestoreParams`, `BackupRestoreData`, `BackupRestoreApiResponse`
+ * - `BackupCleanParams`, `BackupCleanData`, `BackupCleanApiResponse`
+ * - `UpgradeSelectionInfo`, `DependencyUpgradeInfo`, `PackageUpgradeInfo`, `UpgradeSummaryInfo`
+ * - `AppliedUpgradeInfo`, `SkippedUpgradeInfo`, `FailedUpgradeInfo`, `ApplySummaryInfo`, `BackupInfo`
+ *
  * ## How
  *
  * The native bindings are compiled from Rust using napi-rs and exposed through
@@ -223,4 +232,37 @@ export type {
   HealthScoreWeightsInfo,
   GitConfigInfo,
   ExecuteConfigInfo,
+
+  // Upgrade command types (Story 8.1)
+  // Input parameters
+  UpgradeCheckParams,
+  UpgradeApplyParams,
+  BackupListParams,
+  BackupRestoreParams,
+  BackupCleanParams,
+
+  // Response data
+  UpgradeCheckData,
+  UpgradeApplyData,
+  BackupListData,
+  BackupRestoreData,
+  BackupCleanData,
+
+  // API responses
+  UpgradeCheckApiResponse,
+  UpgradeApplyApiResponse,
+  BackupListApiResponse,
+  BackupRestoreApiResponse,
+  BackupCleanApiResponse,
+
+  // Supporting types
+  UpgradeSelectionInfo,
+  DependencyUpgradeInfo,
+  PackageUpgradeInfo,
+  UpgradeSummaryInfo,
+  AppliedUpgradeInfo,
+  SkippedUpgradeInfo,
+  FailedUpgradeInfo,
+  ApplySummaryInfo,
+  BackupInfo,
 } from './binding'

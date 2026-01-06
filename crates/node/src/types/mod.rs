@@ -186,8 +186,46 @@ pub(crate) use bump::{
     VALID_DEPENDENCY_TYPES,
 };
 
-// TODO: will be implemented on story 8.1 (upgrade types)
+// Upgrade types (Story 8.1 - Implemented)
 pub(crate) mod upgrade;
+
+// Re-export upgrade types for easier access
+// Allow unused imports - these will be used by upgrade commands (Stories 8.2-8.4)
+#[allow(unused_imports)]
+pub(crate) use upgrade::{
+    // Supporting Types
+    AppliedUpgradeInfo,
+    ApplySummaryInfo,
+    // API Responses
+    BackupCleanApiResponse,
+    // Response Data
+    BackupCleanData,
+    // Input Parameters
+    BackupCleanParams,
+    BackupInfo,
+    BackupListApiResponse,
+    BackupListData,
+    BackupListParams,
+    BackupRestoreApiResponse,
+    BackupRestoreData,
+    BackupRestoreParams,
+    // Constants
+    DEFAULT_KEEP_COUNT,
+    DependencyUpgradeInfo,
+    FailedUpgradeInfo,
+    PackageUpgradeInfo,
+    SkippedUpgradeInfo,
+    UpgradeApplyApiResponse,
+    UpgradeApplyData,
+    UpgradeApplyParams,
+    UpgradeCheckApiResponse,
+    UpgradeCheckData,
+    UpgradeCheckParams,
+    UpgradeSelectionInfo,
+    UpgradeSummaryInfo,
+    VALID_DEPENDENCY_TYPES as UPGRADE_VALID_DEPENDENCY_TYPES,
+    VALID_UPGRADE_TYPES,
+};
 
 // TODO: will be implemented on story 9.1 (audit types)
 pub(crate) mod audit;
