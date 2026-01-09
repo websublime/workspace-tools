@@ -564,9 +564,12 @@ where
         // Convert git changed files to paths
         let changed_paths: Vec<PathBuf> = status.iter().map(|f| PathBuf::from(&f.path)).collect();
 
-        // Create package mapper
-        let mut package_mapper =
-            PackageMapper::with_filesystem(self.workspace_root.clone(), self.fs.clone());
+        // Create package mapper with config to use correct workspace patterns
+        let mut package_mapper = PackageMapper::with_filesystem_and_config(
+            self.workspace_root.clone(),
+            self.fs.clone(),
+            &self.config,
+        );
 
         // Map files to packages (not used directly but ensures cache is populated)
         let _files_by_package = package_mapper.map_files_to_packages(&changed_paths).await?;
@@ -745,9 +748,12 @@ where
         let changed_paths: Vec<PathBuf> =
             changed_files.iter().map(|f| PathBuf::from(&f.path)).collect();
 
-        // Create package mapper
-        let mut package_mapper =
-            PackageMapper::with_filesystem(self.workspace_root.clone(), self.fs.clone());
+        // Create package mapper with config to use correct workspace patterns
+        let mut package_mapper = PackageMapper::with_filesystem_and_config(
+            self.workspace_root.clone(),
+            self.fs.clone(),
+            &self.config,
+        );
 
         // Map files to packages
         let files_by_package = package_mapper.map_files_to_packages(&changed_paths).await?;

@@ -68,11 +68,13 @@
 //! # }
 //! ```
 
+use crate::config::PackageToolsConfig;
 use crate::error::{ChangesError, ChangesResult};
 use crate::types::PackageInfo;
 use package_json::PackageJson;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use sublime_standard_tools::config::MonorepoConfig;
 use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
 use sublime_standard_tools::monorepo::{
     MonorepoDescriptor, MonorepoDetector, MonorepoDetectorTrait,
@@ -172,6 +174,80 @@ impl PackageMapper<FileSystemManager> {
             file_cache: HashMap::new(),
         }
     }
+
+    /// Creates a new `PackageMapper` with the default filesystem and custom config.
+    ///
+    /// This constructor uses workspace patterns from the provided configuration,
+    /// ensuring that packages in directories like `playground/*` are discovered
+    /// correctly when specified in `repo.config.toml`.
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace_root` - Root directory of the workspace
+    /// * `fs` - Filesystem instance for file operations
+    /// * `config` - Package tools configuration containing workspace patterns
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::changes::mapping::PackageMapper;
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// use std::path::PathBuf;
+    ///
+    /// let workspace_root = PathBuf::from(".");
+    /// let fs = FileSystemManager::new();
+    /// let config = PackageToolsConfig::default();
+    /// let mapper = PackageMapper::new_with_config(workspace_root, fs, &config);
+    /// ```
+    #[must_use]
+    pub fn new_with_config(
+        workspace_root: PathBuf,
+        fs: FileSystemManager,
+        config: &PackageToolsConfig,
+    ) -> Self {
+        let monorepo_config = Self::build_monorepo_config(config);
+        let monorepo_detector =
+            MonorepoDetector::with_filesystem_and_config(fs.clone(), monorepo_config);
+
+        Self {
+            workspace_root,
+            fs,
+            monorepo_detector,
+            cached_monorepo: None,
+            file_cache: HashMap::new(),
+        }
+    }
+
+    /// Builds a `MonorepoConfig` from the `PackageToolsConfig`.
+    ///
+    /// This method creates a `MonorepoConfig` that includes workspace patterns from
+    /// the `repo.config.toml` file, ensuring all workspace directories are discovered.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The package tools configuration containing workspace patterns
+    ///
+    /// # Returns
+    ///
+    /// Returns a `MonorepoConfig` with merged workspace patterns.
+    #[must_use]
+    fn build_monorepo_config(config: &PackageToolsConfig) -> MonorepoConfig {
+        let mut monorepo_config = config.standard_config.monorepo.clone();
+
+        // Merge workspace patterns from repo.config.toml if available
+        if let Some(ref workspace) = config.workspace
+            && !workspace.patterns.is_empty()
+        {
+            for pattern in &workspace.patterns {
+                if !monorepo_config.workspace_patterns.contains(pattern) {
+                    monorepo_config.workspace_patterns.push(pattern.clone());
+                }
+            }
+        }
+
+        monorepo_config
+    }
 }
 
 impl<F> PackageMapper<F>
@@ -212,6 +288,81 @@ where
             cached_monorepo: None,
             file_cache: HashMap::new(),
         }
+    }
+
+    /// Creates a new `PackageMapper` with a custom filesystem and config.
+    ///
+    /// This constructor uses workspace patterns from the provided configuration,
+    /// ensuring that packages in all configured directories are discovered correctly.
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace_root` - Root directory of the workspace
+    /// * `fs` - Custom filesystem implementation
+    /// * `config` - Package tools configuration containing workspace patterns
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::changes::mapping::PackageMapper;
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use std::path::PathBuf;
+    ///
+    /// # async fn example<F>(fs: F, config: &PackageToolsConfig) -> Result<(), Box<dyn std::error::Error>>
+    /// # where F: AsyncFileSystem + Clone + Send + Sync + 'static
+    /// # {
+    /// let workspace_root = PathBuf::from(".");
+    /// let mapper = PackageMapper::with_filesystem_and_config(workspace_root, fs, config);
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn with_filesystem_and_config(
+        workspace_root: PathBuf,
+        fs: F,
+        config: &PackageToolsConfig,
+    ) -> Self {
+        let monorepo_config = Self::build_monorepo_config_generic(config);
+        let monorepo_detector =
+            MonorepoDetector::with_filesystem_and_config(fs.clone(), monorepo_config);
+
+        Self {
+            workspace_root,
+            fs,
+            monorepo_detector,
+            cached_monorepo: None,
+            file_cache: HashMap::new(),
+        }
+    }
+
+    /// Builds a `MonorepoConfig` from the `PackageToolsConfig` (generic version).
+    ///
+    /// This method creates a `MonorepoConfig` that includes workspace patterns from
+    /// the `repo.config.toml` file, ensuring all workspace directories are discovered.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The package tools configuration containing workspace patterns
+    ///
+    /// # Returns
+    ///
+    /// Returns a `MonorepoConfig` with merged workspace patterns.
+    #[must_use]
+    fn build_monorepo_config_generic(config: &PackageToolsConfig) -> MonorepoConfig {
+        let mut monorepo_config = config.standard_config.monorepo.clone();
+
+        // Merge workspace patterns from repo.config.toml if available
+        if let Some(ref workspace) = config.workspace
+            && !workspace.patterns.is_empty()
+        {
+            for pattern in &workspace.patterns {
+                if !monorepo_config.workspace_patterns.contains(pattern) {
+                    monorepo_config.workspace_patterns.push(pattern.clone());
+                }
+            }
+        }
+
+        monorepo_config
     }
 
     /// Maps a list of files to their containing packages.

@@ -6,7 +6,7 @@
 use super::applier::{apply_with_changeset, extract_affected_packages};
 use super::creator::create_changeset_for_upgrades;
 use crate::changeset::{ChangesetManager, FileBasedChangesetStorage};
-use crate::config::{ChangesetConfig, UpgradeConfig};
+use crate::config::UpgradeConfig;
 use crate::error::UpgradeError;
 use crate::types::{DependencyType, VersionBump};
 use crate::upgrade::UpgradeSelection;
@@ -84,14 +84,14 @@ async fn setup_changeset_manager(
     workspace_root: &PathBuf,
 ) -> ChangesetManager<FileBasedChangesetStorage<FileSystemManager>> {
     let fs = FileSystemManager::new();
-    let config = ChangesetConfig::default();
+    let config = crate::config::PackageToolsConfig::default();
     let repo_path_str = workspace_root.to_str().expect("Invalid path");
     let repo = Repo::open(repo_path_str).ok();
 
     let storage = FileBasedChangesetStorage::new(
         workspace_root.clone(),
-        config.path.clone(),
-        config.history_path.clone(),
+        config.changeset.path.clone(),
+        config.changeset.history_path.clone(),
         fs,
     );
     ChangesetManager::with_storage(storage, workspace_root, repo, config)

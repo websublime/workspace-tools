@@ -21,6 +21,7 @@
 #![allow(clippy::expect_used)]
 #![allow(clippy::panic)]
 #![allow(clippy::unwrap_used)]
+#![allow(clippy::large_futures)]
 
 mod common;
 

@@ -223,7 +223,7 @@ pub async fn execute_add(
     // Detect affected packages from git if not provided
     let detected_packages = if args.packages.is_none() && !all_packages.is_empty() {
         debug!("Detecting affected packages from git changes");
-        detect_affected_packages(&workspace_root, &repo, &fs, &all_packages).await
+        detect_affected_packages(&workspace_root, &repo, &fs, &all_packages, &config).await
     } else {
         vec![]
     };
@@ -520,13 +520,14 @@ pub(crate) async fn detect_affected_packages(
     repo: &Repo,
     fs: &FileSystemManager,
     all_packages: &[String],
+    config: &sublime_pkg_tools::config::PackageToolsConfig,
 ) -> Vec<String> {
     use sublime_pkg_tools::changeset::PackageDetector;
 
     debug!("Detecting affected packages from git changes");
 
-    // Create PackageDetector
-    let detector = PackageDetector::new(workspace_root, repo, fs.clone());
+    // Create PackageDetector with config to use correct workspace patterns
+    let detector = PackageDetector::new_with_config(workspace_root, repo, fs.clone(), config);
 
     // Get commits by comparing current branch against base branch (main/master)
     // This ensures we only analyze commits that are part of the current feature branch

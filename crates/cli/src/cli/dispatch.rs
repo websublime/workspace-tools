@@ -255,8 +255,13 @@ pub async fn dispatch_command(cli: &Cli) -> Result<()> {
         },
 
         Commands::Audit(args) => {
-            audit::execute_audit(args, &output, root, config_path.as_ref().map(|p| p.as_path()))
-                .await?;
+            Box::pin(audit::execute_audit(
+                args,
+                &output,
+                root,
+                config_path.as_ref().map(|p| p.as_path()),
+            ))
+            .await?;
         }
 
         Commands::Changes(args) => {

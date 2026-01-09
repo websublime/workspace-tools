@@ -23,6 +23,7 @@ use crate::version::resolution::{PackageUpdate, VersionResolution, resolve_versi
 use package_json::PackageJson;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use sublime_standard_tools::config::MonorepoConfig;
 use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
 use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait, WorkspacePackage};
 
@@ -195,9 +196,12 @@ impl<F: AsyncFileSystem + Clone + Send + Sync + 'static> VersionResolver<F> {
             });
         }
 
+        // Build monorepo config with workspace patterns from repo.config.toml
+        let monorepo_config = Self::build_monorepo_config(&config);
+
         // Detect if monorepo or single package
         // This will also validate that the workspace root is a valid directory
-        let is_monorepo = Self::detect_monorepo(&workspace_root, &fs).await?;
+        let is_monorepo = Self::detect_monorepo(&workspace_root, &fs, &monorepo_config).await?;
 
         // Extract strategy from config
         let strategy = match config.version.strategy {
@@ -366,6 +370,51 @@ impl<F: AsyncFileSystem + Clone + Send + Sync + 'static> VersionResolver<F> {
         }
     }
 
+    /// Builds a `MonorepoConfig` from the `PackageToolsConfig`.
+    ///
+    /// This method creates a `MonorepoConfig` that includes workspace patterns from
+    /// the `repo.config.toml` file. It merges the project-specific patterns with
+    /// the standard configuration patterns to ensure all workspace directories
+    /// are discovered correctly.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The package tools configuration containing workspace patterns
+    ///
+    /// # Returns
+    ///
+    /// Returns a `MonorepoConfig` with merged workspace patterns.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use sublime_pkg_tools::version::VersionResolver;
+    ///
+    /// let config = PackageToolsConfig::default();
+    /// let monorepo_config = VersionResolver::<FileSystemManager>::build_monorepo_config(&config);
+    /// ```
+    #[must_use]
+    pub fn build_monorepo_config(config: &PackageToolsConfig) -> MonorepoConfig {
+        let mut monorepo_config = config.standard_config.monorepo.clone();
+
+        // Merge workspace patterns from repo.config.toml if available
+        // These patterns are project-specific and take precedence
+        if let Some(ref workspace) = config.workspace
+            && !workspace.patterns.is_empty()
+        {
+            // Add project-specific patterns to the config
+            // We add them to ensure they're included in package discovery
+            for pattern in &workspace.patterns {
+                if !monorepo_config.workspace_patterns.contains(pattern) {
+                    monorepo_config.workspace_patterns.push(pattern.clone());
+                }
+            }
+        }
+
+        monorepo_config
+    }
+
     /// Detects whether the workspace is a monorepo.
     ///
     /// This method uses `MonorepoDetector` from `sublime_standard_tools` to determine
@@ -375,6 +424,7 @@ impl<F: AsyncFileSystem + Clone + Send + Sync + 'static> VersionResolver<F> {
     ///
     /// * `workspace_root` - Root directory to check
     /// * `fs` - Filesystem implementation
+    /// * `monorepo_config` - Configuration containing workspace patterns
     ///
     /// # Returns
     ///
@@ -383,8 +433,13 @@ impl<F: AsyncFileSystem + Clone + Send + Sync + 'static> VersionResolver<F> {
     /// # Errors
     ///
     /// Returns `VersionError::FileSystemError` if detection fails.
-    async fn detect_monorepo(workspace_root: &Path, fs: &F) -> VersionResult<bool> {
-        let detector = MonorepoDetector::with_filesystem(fs.clone());
+    async fn detect_monorepo(
+        workspace_root: &Path,
+        fs: &F,
+        monorepo_config: &MonorepoConfig,
+    ) -> VersionResult<bool> {
+        let detector =
+            MonorepoDetector::with_filesystem_and_config(fs.clone(), monorepo_config.clone());
 
         // Check if this is a monorepo root
         let monorepo_kind = detector.is_monorepo_root(workspace_root).await.map_err(|e| {
@@ -411,7 +466,10 @@ impl<F: AsyncFileSystem + Clone + Send + Sync + 'static> VersionResolver<F> {
     /// Returns `VersionError::PackageNotFound` if no packages are found.
     /// Returns `VersionError::PackageJsonError` if package.json files cannot be read or parsed.
     async fn discover_monorepo_packages(&self) -> VersionResult<Vec<PackageInfo>> {
-        let detector = MonorepoDetector::with_filesystem(self.fs.clone());
+        // Build monorepo config with workspace patterns from repo.config.toml
+        let monorepo_config = Self::build_monorepo_config(&self.config);
+        let detector =
+            MonorepoDetector::with_filesystem_and_config(self.fs.clone(), monorepo_config);
 
         // Detect the monorepo structure
         let monorepo = detector.detect_monorepo(&self.workspace_root).await.map_err(|e| {
