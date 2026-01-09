@@ -1138,16 +1138,19 @@ mod manager_tests {
         }
     }
 
-    fn create_test_config() -> ChangesetConfig {
-        ChangesetConfig {
-            path: ".changesets".into(),
-            history_path: ".changesets/history".into(),
-            available_environments: vec![
-                "development".to_string(),
-                "staging".to_string(),
-                "production".to_string(),
-            ],
-            default_environments: vec!["production".to_string()],
+    fn create_test_config() -> crate::config::PackageToolsConfig {
+        crate::config::PackageToolsConfig {
+            changeset: ChangesetConfig {
+                path: ".changesets".into(),
+                history_path: ".changesets/history".into(),
+                available_environments: vec![
+                    "development".to_string(),
+                    "staging".to_string(),
+                    "production".to_string(),
+                ],
+                default_environments: vec!["production".to_string()],
+            },
+            ..Default::default()
         }
     }
 
@@ -1464,10 +1467,7 @@ mod manager_tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let fs = FileSystemManager::new();
 
-        let config = crate::config::PackageToolsConfig {
-            changeset: create_test_config(),
-            ..Default::default()
-        };
+        let config = create_test_config();
 
         let manager =
             ChangesetManager::new(temp_dir.path().to_path_buf(), fs, config).await.unwrap();
@@ -2123,11 +2123,14 @@ mod git_integration_tests {
             FileSystemManager::new(),
         );
 
-        let config = ChangesetConfig {
-            path: ".changesets".into(),
-            history_path: ".changesets/history".into(),
-            available_environments: vec!["production".to_string()],
-            default_environments: vec!["production".to_string()],
+        let config = crate::config::PackageToolsConfig {
+            changeset: ChangesetConfig {
+                path: ".changesets".into(),
+                history_path: ".changesets/history".into(),
+                available_environments: vec!["production".to_string()],
+                default_environments: vec!["production".to_string()],
+            },
+            ..Default::default()
         };
 
         let manager = ChangesetManager::with_storage(
@@ -2205,11 +2208,14 @@ mod git_integration_tests {
             FileSystemManager::new(),
         );
 
-        let config = ChangesetConfig {
-            path: ".changesets".into(),
-            history_path: ".changesets/history".into(),
-            available_environments: vec!["production".to_string()],
-            default_environments: vec!["production".to_string()],
+        let config = crate::config::PackageToolsConfig {
+            changeset: ChangesetConfig {
+                path: ".changesets".into(),
+                history_path: ".changesets/history".into(),
+                available_environments: vec!["production".to_string()],
+                default_environments: vec!["production".to_string()],
+            },
+            ..Default::default()
         };
 
         let manager = ChangesetManager::with_storage(
@@ -2271,11 +2277,14 @@ mod git_integration_tests {
             FileSystemManager::new(),
         );
 
-        let config = ChangesetConfig {
-            path: ".changesets".into(),
-            history_path: ".changesets/history".into(),
-            available_environments: vec!["production".to_string()],
-            default_environments: vec!["production".to_string()],
+        let config = crate::config::PackageToolsConfig {
+            changeset: ChangesetConfig {
+                path: ".changesets".into(),
+                history_path: ".changesets/history".into(),
+                available_environments: vec!["production".to_string()],
+                default_environments: vec!["production".to_string()],
+            },
+            ..Default::default()
         };
 
         // Create manager without Git repo

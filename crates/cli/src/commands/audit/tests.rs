@@ -30,6 +30,7 @@
 //! - 100% test coverage goal is met
 
 #[cfg(test)]
+#[allow(clippy::large_futures)]
 mod comprehensive_tests {
     use crate::cli::commands::AuditArgs;
     use crate::commands::audit::comprehensive::execute_audit;
@@ -766,6 +767,7 @@ mod upgrade_report_formatting_tests {
 }
 
 #[cfg(test)]
+#[allow(clippy::large_futures)]
 mod dependency_audit_tests {
     use crate::commands::audit::dependencies::execute_dependency_audit;
     use crate::commands::audit::types::MinSeverity;

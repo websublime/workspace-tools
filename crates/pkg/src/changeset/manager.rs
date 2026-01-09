@@ -11,7 +11,7 @@
 //! error handling, and storage coordination, making it easy to work with changesets throughout
 //! the application.
 
-use crate::config::ChangesetConfig;
+use crate::config::{ChangesetConfig, PackageToolsConfig};
 use crate::error::{ChangesetError, ChangesetResult};
 use crate::types::{Changeset, UpdateSummary, VersionBump};
 use std::path::PathBuf;
@@ -77,6 +77,11 @@ pub struct ChangesetManager<S: ChangesetStorage> {
     git_repo: Option<Repo>,
     /// Configuration for changeset validation and behavior.
     config: ChangesetConfig,
+    /// Full package tools configuration for workspace patterns.
+    ///
+    /// This is needed to pass workspace patterns to `PackageDetector` when
+    /// detecting packages affected by Git commits.
+    full_config: PackageToolsConfig,
 }
 
 impl ChangesetManager<FileBasedChangesetStorage<FileSystemManager>> {
@@ -124,7 +129,7 @@ impl ChangesetManager<FileBasedChangesetStorage<FileSystemManager>> {
         config: crate::config::PackageToolsConfig,
     ) -> ChangesetResult<Self> {
         let workspace_root = workspace_root.into();
-        let changeset_config = config.changeset;
+        let changeset_config = config.changeset.clone();
 
         // Create storage with configured paths
         let storage = FileBasedChangesetStorage::new(
@@ -137,7 +142,13 @@ impl ChangesetManager<FileBasedChangesetStorage<FileSystemManager>> {
         // Attempt to open Git repository (non-fatal if it fails)
         let git_repo = Repo::open(workspace_root.to_string_lossy().as_ref()).ok();
 
-        Ok(Self { storage, workspace_root, git_repo, config: changeset_config })
+        Ok(Self {
+            storage,
+            workspace_root,
+            git_repo,
+            config: changeset_config,
+            full_config: config,
+        })
     }
 }
 
@@ -151,8 +162,9 @@ impl<S: ChangesetStorage> ChangesetManager<S> {
     /// # Parameters
     ///
     /// * `storage` - The storage implementation to use
+    /// * `workspace_root` - The root directory of the workspace
     /// * `git_repo` - Optional Git repository for commit integration
-    /// * `config` - Changeset configuration for validation
+    /// * `full_config` - Full package tools configuration (includes workspace patterns)
     ///
     /// # Returns
     ///
@@ -162,11 +174,12 @@ impl<S: ChangesetStorage> ChangesetManager<S> {
     ///
     /// ```rust,ignore
     /// use sublime_pkg_tools::changeset::{ChangesetManager, FileBasedChangesetStorage};
-    /// use sublime_pkg_tools::config::ChangesetConfig;
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
     /// use sublime_standard_tools::filesystem::FileSystemManager;
     /// use std::path::PathBuf;
     ///
     /// # fn example() {
+    /// let config = PackageToolsConfig::default();
     /// let storage = FileBasedChangesetStorage::new(
     ///     PathBuf::from("."),
     ///     ".changesets",
@@ -176,8 +189,9 @@ impl<S: ChangesetStorage> ChangesetManager<S> {
     ///
     /// let manager = ChangesetManager::with_storage(
     ///     storage,
+    ///     PathBuf::from("."),
     ///     None,
-    ///     ChangesetConfig::default()
+    ///     config
     /// );
     /// # }
     /// ```
@@ -186,9 +200,16 @@ impl<S: ChangesetStorage> ChangesetManager<S> {
         storage: S,
         workspace_root: impl Into<PathBuf>,
         git_repo: Option<Repo>,
-        config: ChangesetConfig,
+        full_config: PackageToolsConfig,
     ) -> Self {
-        Self { storage, workspace_root: workspace_root.into(), git_repo, config }
+        let changeset_config = full_config.changeset.clone();
+        Self {
+            storage,
+            workspace_root: workspace_root.into(),
+            git_repo,
+            config: changeset_config,
+            full_config,
+        }
     }
 
     /// Creates a new changeset.
@@ -645,8 +666,12 @@ impl<S: ChangesetStorage> ChangesetManager<S> {
         let since_commit = changeset.changes.last().cloned();
 
         // Get new commits from Git
-        let detector =
-            PackageDetector::new(self.workspace_root.clone(), repo, FileSystemManager::new());
+        let detector = PackageDetector::new_with_config(
+            self.workspace_root.clone(),
+            repo,
+            FileSystemManager::new(),
+            &self.full_config,
+        );
 
         let new_commits = detector.get_commits_since(since_commit)?;
 

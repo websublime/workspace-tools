@@ -12,10 +12,12 @@
 //! developers to quickly identify which packages need version bumps and should be included
 //! in a changeset, reducing manual work and potential errors in the release process.
 
+use crate::config::PackageToolsConfig;
 use crate::error::{ChangesetError, ChangesetResult};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use sublime_git_tools::{Repo, RepoCommit};
+use sublime_standard_tools::config::MonorepoConfig;
 use sublime_standard_tools::filesystem::{AsyncFileSystem, FileSystemManager};
 use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait, WorkspacePackage};
 
@@ -91,6 +93,83 @@ impl<'a> PackageDetector<'a> {
         let workspace_root = workspace_root.into();
         let monorepo_detector = MonorepoDetector::with_filesystem(fs.clone());
         Self { workspace_root, repo, fs, monorepo_detector }
+    }
+
+    /// Creates a new `PackageDetector` with workspace patterns from configuration.
+    ///
+    /// This constructor uses workspace patterns from the provided configuration,
+    /// ensuring that packages in directories like `playground/*` are discovered
+    /// correctly when specified in `repo.config.toml`.
+    ///
+    /// # Parameters
+    ///
+    /// * `workspace_root` - The root directory of the workspace
+    /// * `repo` - Git repository instance
+    /// * `fs` - Filesystem manager
+    /// * `config` - Package tools configuration containing workspace patterns
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use sublime_pkg_tools::changeset::PackageDetector;
+    /// use sublime_pkg_tools::config::PackageToolsConfig;
+    /// use sublime_git_tools::Repo;
+    /// use sublime_standard_tools::filesystem::FileSystemManager;
+    /// use std::path::PathBuf;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let config = PackageToolsConfig::default();
+    /// let detector = PackageDetector::new_with_config(
+    ///     PathBuf::from("."),
+    ///     Repo::open(".")?,
+    ///     FileSystemManager::new(),
+    ///     &config,
+    /// );
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn new_with_config(
+        workspace_root: impl Into<PathBuf>,
+        repo: &'a Repo,
+        fs: FileSystemManager,
+        config: &PackageToolsConfig,
+    ) -> Self {
+        let workspace_root = workspace_root.into();
+        let monorepo_config = Self::build_monorepo_config(config);
+        let monorepo_detector =
+            MonorepoDetector::with_filesystem_and_config(fs.clone(), monorepo_config);
+        Self { workspace_root, repo, fs, monorepo_detector }
+    }
+
+    /// Builds a `MonorepoConfig` from the `PackageToolsConfig`.
+    ///
+    /// This method creates a `MonorepoConfig` that includes workspace patterns from
+    /// the `repo.config.toml` file, ensuring all workspace directories are discovered.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The package tools configuration containing workspace patterns
+    ///
+    /// # Returns
+    ///
+    /// Returns a `MonorepoConfig` with merged workspace patterns.
+    #[must_use]
+    fn build_monorepo_config(config: &PackageToolsConfig) -> MonorepoConfig {
+        let mut monorepo_config = config.standard_config.monorepo.clone();
+
+        // Merge workspace patterns from repo.config.toml if available
+        if let Some(ref workspace) = config.workspace
+            && !workspace.patterns.is_empty()
+        {
+            for pattern in &workspace.patterns {
+                if !monorepo_config.workspace_patterns.contains(pattern) {
+                    monorepo_config.workspace_patterns.push(pattern.clone());
+                }
+            }
+        }
+
+        monorepo_config
     }
 
     /// Detects packages affected by the given commits.
