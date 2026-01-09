@@ -64,6 +64,7 @@ use std::collections::HashMap;
 use std::fs::canonicalize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use url::Url;
 
 use crate::{GitChangedFile, GitFileStatus, Repo, RepoCommit, RepoError, RepoTags};
 
@@ -2568,9 +2569,18 @@ impl Repo {
         // Create callbacks for credentials, progress reporting, etc.
         let mut callbacks = RemoteCallbacks::new();
 
-        // Setup SSH authentication with default key paths
-        callbacks.credentials(|url, username_from_url, allowed_types| {
-            self.create_ssh_credentials(url, username_from_url, allowed_types, None)
+        // Get the remote URL for credential extraction
+        let remote_url = remote.url().map(std::string::ToString::to_string);
+
+        // Setup authentication with support for both SSH and HTTPS
+        callbacks.credentials(move |url, username_from_url, allowed_types| {
+            Self::create_credentials(
+                url,
+                username_from_url,
+                allowed_types,
+                None,
+                remote_url.as_deref(),
+            )
         });
 
         // Add progress reporting
@@ -2657,9 +2667,18 @@ impl Repo {
         // Configure authentication
         let mut callbacks = RemoteCallbacks::new();
 
-        // Setup SSH authentication with default key paths
-        callbacks.credentials(|url, username_from_url, allowed_types| {
-            self.create_ssh_credentials(url, username_from_url, allowed_types, None)
+        // Get the remote URL for credential extraction
+        let remote_url = remote.url().map(std::string::ToString::to_string);
+
+        // Setup authentication with support for both SSH and HTTPS
+        callbacks.credentials(move |url, username_from_url, allowed_types| {
+            Self::create_credentials(
+                url,
+                username_from_url,
+                allowed_types,
+                None,
+                remote_url.as_deref(),
+            )
         });
 
         // Apply the callbacks
@@ -2905,8 +2924,17 @@ impl Repo {
         let mut callbacks = RemoteCallbacks::new();
         let key_paths = ssh_key_paths.clone(); // Clone for the closure
 
+        // Get the remote URL for credential extraction
+        let remote_url = remote.url().map(std::string::ToString::to_string);
+
         callbacks.credentials(move |url, username_from_url, allowed_types| {
-            self.create_ssh_credentials(url, username_from_url, allowed_types, Some(&key_paths))
+            Self::create_credentials(
+                url,
+                username_from_url,
+                allowed_types,
+                Some(&key_paths),
+                remote_url.as_deref(),
+            )
         });
 
         // Rest of push implementation is the same...
@@ -3573,26 +3601,180 @@ impl Repo {
         }
     }
 
-    /// Creates SSH credentials for Git operations
+    /// Creates credentials for Git operations (SSH or HTTPS)
     ///
-    /// This is an internal helper method used by push, fetch, etc.
+    /// This is an internal helper method used by push, fetch, etc. It automatically
+    /// detects whether SSH or HTTPS authentication is needed based on the `allowed_types`
+    /// parameter and attempts to provide appropriate credentials.
+    ///
+    /// # Authentication Methods
+    ///
+    /// ## HTTPS Authentication
+    ///
+    /// For HTTPS remotes, credentials are resolved in the following order:
+    ///
+    /// 1. **URL-embedded credentials**: Extracts username and password from the remote URL
+    ///    (e.g., `https://user:token@github.com/repo.git`)
+    /// 2. **Environment variables**: Checks for tokens in order:
+    ///    - `GH_TOKEN` - GitHub token (commonly used in GitHub Actions)
+    ///    - `GITHUB_TOKEN` - GitHub token (alternative)
+    ///    - `GIT_TOKEN` - Generic Git token
+    ///    - `GIT_USERNAME` + `GIT_PASSWORD` - Explicit username/password pair
+    ///
+    /// ## SSH Authentication
+    ///
+    /// For SSH remotes, credentials are resolved in the following order:
+    ///
+    /// 1. **Custom key paths**: If provided, tries each path in order
+    /// 2. **Default key paths**: Tries common SSH key locations:
+    ///    - `~/.ssh/id_ed25519` (preferred by GitHub)
+    ///    - `~/.ssh/id_rsa` (widely used)
+    ///    - `~/.ssh/id_ecdsa`
+    ///    - `~/.ssh/id_dsa` (legacy)
+    /// 3. **SSH agent**: Falls back to the SSH agent if available
     ///
     /// # Arguments
     ///
-    /// * `_url` - The remote URL
+    /// * `url` - The remote URL being accessed
+    /// * `username_from_url` - Optional username extracted from the URL by libgit2
+    /// * `allowed_types` - Types of credentials allowed by the remote
+    /// * `custom_key_paths` - Optional custom SSH key paths to try
+    /// * `remote_url` - Optional full remote URL for extracting embedded credentials
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Cred, Git2Error>` - Credentials or an error if authentication fails
+    ///
+    /// # Examples
+    ///
+    /// ## GitHub Actions with HTTPS
+    ///
+    /// In a GitHub Actions workflow, set up the remote with a token:
+    ///
+    /// ```yaml
+    /// # Configure git with token-based authentication
+    /// git remote set-url origin https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/${{ github.repository }}.git
+    /// ```
+    ///
+    /// Or use environment variables:
+    ///
+    /// ```yaml
+    /// env:
+    ///   GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    /// run: workspace bump --execute --git-tag --git-push
+    /// ```
+    pub(crate) fn create_credentials(
+        url: &str,
+        username_from_url: Option<&str>,
+        allowed_types: CredentialType,
+        custom_key_paths: Option<&Vec<PathBuf>>,
+        remote_url: Option<&str>,
+    ) -> Result<Cred, Git2Error> {
+        // Check if HTTPS authentication is requested (username/password or plaintext)
+        if allowed_types.contains(CredentialType::USER_PASS_PLAINTEXT) {
+            return Self::create_https_credentials(url, username_from_url, remote_url);
+        }
+
+        // Check if SSH key authentication is requested
+        if allowed_types.contains(CredentialType::SSH_KEY) {
+            return Self::create_ssh_key_credentials(username_from_url, custom_key_paths);
+        }
+
+        // Check if only username is requested (some remotes query username first)
+        if allowed_types.contains(CredentialType::USERNAME) {
+            let username = username_from_url
+                .map(std::string::ToString::to_string)
+                .or_else(|| std::env::var("USER").ok())
+                .or_else(|| std::env::var("USERNAME").ok())
+                .unwrap_or_else(|| "git".to_string());
+            return Cred::username(&username);
+        }
+
+        // If default credentials are allowed, try that
+        if allowed_types.contains(CredentialType::DEFAULT) {
+            return Cred::default();
+        }
+
+        Err(Git2Error::from_str(
+            "No suitable authentication method available for the requested credential types",
+        ))
+    }
+
+    /// Creates HTTPS credentials for Git operations
+    ///
+    /// Attempts to create credentials for HTTPS authentication by checking:
+    /// 1. Embedded credentials in the remote URL
+    /// 2. Environment variables (GH_TOKEN, GITHUB_TOKEN, GIT_TOKEN)
+    /// 3. GIT_USERNAME and GIT_PASSWORD environment variables
+    ///
+    /// # Arguments
+    ///
+    /// * `_url` - The URL being accessed (from the credential callback)
+    /// * `username_from_url` - Optional username extracted from the URL by libgit2
+    /// * `remote_url` - Optional full remote URL for extracting embedded credentials
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Cred, Git2Error>` - HTTPS credentials or an error
+    fn create_https_credentials(
+        _url: &str,
+        username_from_url: Option<&str>,
+        remote_url: Option<&str>,
+    ) -> Result<Cred, Git2Error> {
+        // First, try to extract credentials from the remote URL
+        if let Some(url_str) = remote_url
+            && let Ok(parsed_url) = Url::parse(url_str)
+        {
+            let username = parsed_url.username();
+            if !username.is_empty() {
+                let password = parsed_url.password().unwrap_or("");
+                return Cred::userpass_plaintext(username, password);
+            }
+        }
+
+        // Try environment variables for GitHub-style token authentication
+        // These are commonly used in CI/CD environments
+        let token_result = std::env::var("GH_TOKEN")
+            .or_else(|_| std::env::var("GITHUB_TOKEN"))
+            .or_else(|_| std::env::var("GIT_TOKEN"));
+
+        if let Ok(token) = token_result {
+            // Use the username from URL if available, otherwise use "x-access-token"
+            // which is the standard username for GitHub token authentication
+            let username = username_from_url.unwrap_or("x-access-token");
+            return Cred::userpass_plaintext(username, &token);
+        }
+
+        // Try explicit username/password environment variables
+        if let (Ok(username), Ok(password)) =
+            (std::env::var("GIT_USERNAME"), std::env::var("GIT_PASSWORD"))
+        {
+            return Cred::userpass_plaintext(&username, &password);
+        }
+
+        Err(Git2Error::from_str(
+            "No HTTPS credentials available. Set GH_TOKEN, GITHUB_TOKEN, GIT_TOKEN, \
+             or GIT_USERNAME/GIT_PASSWORD environment variables, or embed credentials in the remote URL.",
+        ))
+    }
+
+    /// Creates SSH key credentials for Git operations
+    ///
+    /// Attempts to create SSH credentials by trying:
+    /// 1. Custom key paths if provided
+    /// 2. Default SSH key locations (~/.ssh/id_ed25519, ~/.ssh/id_rsa, etc.)
+    /// 3. SSH agent as a fallback
+    ///
+    /// # Arguments
+    ///
     /// * `username_from_url` - Optional username extracted from the URL
-    /// * `_allowed_types` - Types of credentials allowed by the remote
     /// * `custom_key_paths` - Optional custom SSH key paths to try
     ///
     /// # Returns
     ///
     /// * `Result<Cred, Git2Error>` - SSH credentials or an error
-    #[allow(clippy::unused_self)]
-    fn create_ssh_credentials(
-        &self,
-        _url: &str,
+    fn create_ssh_key_credentials(
         username_from_url: Option<&str>,
-        _allowed_types: CredentialType,
         custom_key_paths: Option<&Vec<PathBuf>>,
     ) -> Result<Cred, Git2Error> {
         // Get the list of key paths to try
@@ -3608,10 +3790,8 @@ impl Repo {
                         home_dir.join(".ssh").join("id_dsa"),     // DSA (legacy)
                     ]
                 } else {
-                    // Fallback if we can't find home directory
-                    return Err(Git2Error::from_str(
-                        "Could not determine home directory for SSH keys",
-                    ));
+                    // Try SSH agent as last resort if we can't find home directory
+                    return Cred::ssh_key_from_agent(username_from_url.unwrap_or("git"));
                 }
             }
         };

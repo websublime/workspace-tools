@@ -1042,6 +1042,52 @@ for file in package_changes {
 
 ## Remote Operations
 
+### Authentication
+
+Remote operations (push, pull, fetch) support both SSH and HTTPS authentication methods.
+The library automatically detects the appropriate authentication method based on the
+remote URL and available credentials.
+
+#### HTTPS Authentication
+
+For HTTPS remotes, credentials are resolved in the following priority order:
+
+1. **URL-embedded credentials**: Credentials embedded in the remote URL
+   (e.g., `https://user:token@github.com/repo.git`)
+
+2. **Environment variables** (checked in order):
+   - `GH_TOKEN` - GitHub token (commonly used in GitHub Actions)
+   - `GITHUB_TOKEN` - GitHub token (alternative)
+   - `GIT_TOKEN` - Generic Git token
+   - `GIT_USERNAME` + `GIT_PASSWORD` - Explicit username/password pair
+
+**GitHub Actions Example:**
+
+```yaml
+# Option 1: Configure git with token in URL
+- name: Configure Git
+  run: |
+    git remote set-url origin https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/${{ github.repository }}.git
+
+# Option 2: Use environment variable (recommended)
+- name: Push changes
+  env:
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  run: workspace bump --execute --git-tag --git-push
+```
+
+#### SSH Authentication
+
+For SSH remotes, credentials are resolved in the following order:
+
+1. **Custom key paths**: If provided via `push_with_ssh_config`
+2. **Default key paths** (tried in order):
+   - `~/.ssh/id_ed25519` (preferred by GitHub)
+   - `~/.ssh/id_rsa` (widely used)
+   - `~/.ssh/id_ecdsa`
+   - `~/.ssh/id_dsa` (legacy)
+3. **SSH agent**: Falls back to the SSH agent if available
+
 ### Pushing and Pulling
 
 #### `Repo::push`
@@ -1059,6 +1105,11 @@ pub fn push(&self, remote_name: &str, follow_tags: Option<bool>) -> Result<bool,
 **Returns:**
 - `Result<bool, RepoError>`: True if push was successful, or an error
 
+**Authentication:**
+
+This method automatically handles authentication for both SSH and HTTPS remotes.
+See the [Authentication](#authentication) section for configuration details.
+
 **Example:**
 ```rust
 // Push without tags
@@ -1071,7 +1122,7 @@ repo.push("origin", Some(true))?;
 **Possible errors:**
 - `HeadError`: Failed to get repository HEAD
 - `BranchNameError`: Failed to get branch name
-- `RemoteError`: Failed to find or access remote
+- `RemoteError`: Failed to find or access remote (including authentication failures)
 - `PushError`: Failed to push to remote
 
 #### `Repo::pull`
