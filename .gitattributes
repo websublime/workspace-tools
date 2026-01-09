@@ -5,3 +5,6 @@
 *.jpg binary
 *.gif binary
 *.svg binary
+
+# Use bd merge for beads JSONL files
+.beads/issues.jsonl merge=beads
