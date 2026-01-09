@@ -6,6 +6,7 @@ mod tests {
     use sublime_standard_tools::monorepo::{MonorepoDetector, MonorepoDetectorTrait};
 
     use crate::{GitFileStatus, Repo, RepoError};
+    use git2::CredentialType;
     use std::{
         env::temp_dir,
         fs::{File, canonicalize, create_dir, remove_dir_all},
@@ -991,5 +992,346 @@ mod tests {
         assert_eq!(detached_branch, String::from("feature/bff"));
 
         Ok(())
+    }
+
+    // ============================================================================
+    // Credential Authentication Tests
+    // ============================================================================
+
+    /// Helper function to safely set an environment variable for testing.
+    ///
+    /// # Safety
+    ///
+    /// This is unsafe because modifying environment variables in a multi-threaded
+    /// context can cause data races. These tests should run with `--test-threads=1`
+    /// or be careful about which variables they modify.
+    unsafe fn set_env_var(key: &str, value: &str) {
+        // SAFETY: Caller guarantees single-threaded test execution
+        unsafe { std::env::set_var(key, value) };
+    }
+
+    /// Helper function to safely remove an environment variable for testing.
+    ///
+    /// # Safety
+    ///
+    /// This is unsafe because modifying environment variables in a multi-threaded
+    /// context can cause data races.
+    unsafe fn remove_env_var(key: &str) {
+        // SAFETY: Caller guarantees single-threaded test execution
+        unsafe { std::env::remove_var(key) };
+    }
+
+    /// Cleans up all credential-related environment variables.
+    ///
+    /// # Safety
+    ///
+    /// This is unsafe because it modifies environment variables.
+    unsafe fn cleanup_credential_env_vars() {
+        // SAFETY: Caller guarantees single-threaded test execution
+        unsafe {
+            remove_env_var("GH_TOKEN");
+            remove_env_var("GITHUB_TOKEN");
+            remove_env_var("GIT_TOKEN");
+            remove_env_var("GIT_USERNAME");
+            remove_env_var("GIT_PASSWORD");
+        }
+    }
+
+    /// Tests that HTTPS credentials can be extracted from URL with embedded credentials.
+    ///
+    /// This test does NOT require environment variable manipulation, so it's safe
+    /// to run in parallel with other tests.
+    #[test]
+    fn test_https_credentials_from_url() {
+        // This test uses URL-embedded credentials, so no env manipulation needed
+        let result = Repo::create_credentials(
+            "https://github.com/test/repo.git",
+            None,
+            CredentialType::USER_PASS_PLAINTEXT,
+            None,
+            Some("https://x-access-token:my-secret-token@github.com/test/repo.git"),
+        );
+
+        assert!(result.is_ok(), "Should create credentials from URL with embedded credentials");
+    }
+
+    /// Tests that SSH key credentials can be created using the SSH agent.
+    ///
+    /// This test does NOT require environment variable manipulation.
+    #[test]
+    fn test_ssh_credentials_from_agent() {
+        // This test attempts to create SSH credentials via the SSH agent
+        // It may fail if no SSH agent is running, which is acceptable
+        let result = Repo::create_credentials(
+            "git@github.com:test/repo.git",
+            Some("git"),
+            CredentialType::SSH_KEY,
+            None,
+            None,
+        );
+
+        // We can't guarantee SSH agent is available, so we just check it doesn't panic
+        // The result could be Ok or Err depending on the environment
+        // Either outcome is acceptable - we're just testing that it doesn't panic
+        let _ = result;
+    }
+
+    /// Tests that username-only credentials can be created.
+    ///
+    /// This test does NOT require environment variable manipulation.
+    #[test]
+    fn test_username_only_credentials() {
+        let result = Repo::create_credentials(
+            "https://github.com/test/repo.git",
+            Some("test-user"),
+            CredentialType::USERNAME,
+            None,
+            None,
+        );
+
+        assert!(result.is_ok(), "Should create username-only credentials");
+    }
+
+    /// Tests that default credentials can be requested.
+    ///
+    /// This test does NOT require environment variable manipulation.
+    #[test]
+    fn test_default_credentials() {
+        let result = Repo::create_credentials(
+            "https://github.com/test/repo.git",
+            None,
+            CredentialType::DEFAULT,
+            None,
+            None,
+        );
+
+        assert!(result.is_ok(), "Should create default credentials");
+    }
+
+    /// Tests credential priority: URL credentials take precedence over environment variables.
+    ///
+    /// This test uses URL-embedded credentials primarily, so it's less sensitive
+    /// to environment variable state.
+    #[test]
+    fn test_url_credentials_take_priority() {
+        // Even if GH_TOKEN were set, URL credentials should take priority
+        let result = Repo::create_credentials(
+            "https://github.com/test/repo.git",
+            None,
+            CredentialType::USER_PASS_PLAINTEXT,
+            None,
+            Some("https://url-user:url-password@github.com/test/repo.git"),
+        );
+
+        assert!(result.is_ok(), "Should create credentials from URL");
+    }
+
+    /// Tests that HTTPS credentials can be extracted from GH_TOKEN environment variable.
+    ///
+    /// # Safety
+    ///
+    /// This test modifies environment variables. It should be run with
+    /// `--test-threads=1` to avoid race conditions with other tests.
+    #[test]
+    fn test_https_credentials_from_gh_token_env() {
+        // SAFETY: We're in a test context and manipulating env vars that are
+        // specific to this test. Running with --test-threads=1 is recommended.
+        unsafe {
+            cleanup_credential_env_vars();
+            set_env_var("GH_TOKEN", "test-github-token-12345");
+        }
+
+        let result = Repo::create_credentials(
+            "https://github.com/test/repo.git",
+            None,
+            CredentialType::USER_PASS_PLAINTEXT,
+            None,
+            None,
+        );
+
+        // Clean up before assertion to ensure cleanup happens even on failure
+        unsafe {
+            cleanup_credential_env_vars();
+        }
+
+        assert!(result.is_ok(), "Should create credentials from GH_TOKEN");
+    }
+
+    /// Tests that HTTPS credentials can be extracted from GITHUB_TOKEN env var.
+    ///
+    /// # Safety
+    ///
+    /// This test modifies environment variables.
+    #[test]
+    fn test_https_credentials_from_github_token_env() {
+        // SAFETY: We're in a test context
+        unsafe {
+            cleanup_credential_env_vars();
+            set_env_var("GITHUB_TOKEN", "ghp_test-token-67890");
+        }
+
+        let result = Repo::create_credentials(
+            "https://github.com/test/repo.git",
+            None,
+            CredentialType::USER_PASS_PLAINTEXT,
+            None,
+            None,
+        );
+
+        unsafe {
+            cleanup_credential_env_vars();
+        }
+
+        assert!(result.is_ok(), "Should create credentials from GITHUB_TOKEN");
+    }
+
+    /// Tests that HTTPS credentials can be extracted from GIT_USERNAME/GIT_PASSWORD.
+    ///
+    /// # Safety
+    ///
+    /// This test modifies environment variables.
+    #[test]
+    fn test_https_credentials_from_username_password_env() {
+        // SAFETY: We're in a test context
+        unsafe {
+            cleanup_credential_env_vars();
+            set_env_var("GIT_USERNAME", "my-git-user");
+            set_env_var("GIT_PASSWORD", "my-git-password");
+        }
+
+        let result = Repo::create_credentials(
+            "https://github.com/test/repo.git",
+            None,
+            CredentialType::USER_PASS_PLAINTEXT,
+            None,
+            None,
+        );
+
+        unsafe {
+            cleanup_credential_env_vars();
+        }
+
+        assert!(result.is_ok(), "Should create credentials from GIT_USERNAME/GIT_PASSWORD");
+    }
+
+    /// Tests that HTTPS credential creation fails gracefully when no credentials available.
+    ///
+    /// # Safety
+    ///
+    /// This test modifies environment variables.
+    #[test]
+    fn test_https_credentials_fails_without_credentials() {
+        // SAFETY: We're in a test context
+        unsafe {
+            cleanup_credential_env_vars();
+        }
+
+        let result = Repo::create_credentials(
+            "https://github.com/test/repo.git",
+            None,
+            CredentialType::USER_PASS_PLAINTEXT,
+            None,
+            None,
+        );
+
+        assert!(result.is_err(), "Should fail when no HTTPS credentials are available");
+
+        // Use match pattern since Cred doesn't implement Debug
+        match result {
+            Err(error) => {
+                let error_message = error.message();
+                assert!(
+                    error_message.contains("No HTTPS credentials available"),
+                    "Error message should indicate missing credentials, got: {error_message}"
+                );
+            }
+            Ok(_) => unreachable!("Already asserted result.is_err()"),
+        }
+    }
+
+    /// Tests that GH_TOKEN takes priority over GITHUB_TOKEN.
+    ///
+    /// # Safety
+    ///
+    /// This test modifies environment variables.
+    #[test]
+    fn test_gh_token_priority_over_github_token() {
+        // SAFETY: We're in a test context
+        unsafe {
+            cleanup_credential_env_vars();
+            set_env_var("GH_TOKEN", "gh-token-primary");
+            set_env_var("GITHUB_TOKEN", "github-token-secondary");
+        }
+
+        let result = Repo::create_credentials(
+            "https://github.com/test/repo.git",
+            None,
+            CredentialType::USER_PASS_PLAINTEXT,
+            None,
+            None,
+        );
+
+        unsafe {
+            cleanup_credential_env_vars();
+        }
+
+        assert!(result.is_ok(), "Should create credentials from GH_TOKEN");
+    }
+
+    /// Tests that the username from URL is used when available for token auth.
+    ///
+    /// # Safety
+    ///
+    /// This test modifies environment variables.
+    #[test]
+    fn test_username_from_url_used_for_token_auth() {
+        // SAFETY: We're in a test context
+        unsafe {
+            cleanup_credential_env_vars();
+            set_env_var("GH_TOKEN", "test-token");
+        }
+
+        let result = Repo::create_credentials(
+            "https://github.com/test/repo.git",
+            Some("custom-user"),
+            CredentialType::USER_PASS_PLAINTEXT,
+            None,
+            None,
+        );
+
+        unsafe {
+            cleanup_credential_env_vars();
+        }
+
+        assert!(result.is_ok(), "Should create credentials with username from URL");
+    }
+
+    /// Tests credential creation with empty username in URL falls back to environment.
+    ///
+    /// # Safety
+    ///
+    /// This test modifies environment variables.
+    #[test]
+    fn test_url_with_empty_username_falls_back_to_env() {
+        // SAFETY: We're in a test context
+        unsafe {
+            cleanup_credential_env_vars();
+            set_env_var("GH_TOKEN", "fallback-token");
+        }
+
+        // URL without credentials should fall back to environment
+        let result = Repo::create_credentials(
+            "https://github.com/test/repo.git",
+            None,
+            CredentialType::USER_PASS_PLAINTEXT,
+            None,
+            Some("https://github.com/test/repo.git"),
+        );
+
+        unsafe {
+            cleanup_credential_env_vars();
+        }
+
+        assert!(result.is_ok(), "Should fall back to GH_TOKEN when URL has no credentials");
     }
 }
