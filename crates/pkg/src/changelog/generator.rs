@@ -836,19 +836,74 @@ impl ChangelogGenerator {
         Ok(changelog)
     }
 
-    /// Builds Git references for changelog generation.
+    /// Checks if a Git reference (tag, branch, or commit) exists in the repository.
     ///
-    /// Creates the from and to references based on the configured tag format.
+    /// This method attempts to resolve a Git reference using `revparse_single`.
+    /// If the reference can be resolved, it exists; otherwise, it does not.
     ///
     /// # Arguments
     ///
-    /// * `package_name` - Optional package name
-    /// * `previous_version` - Optional previous version
-    /// * `current_version` - Current version
+    /// * `git_ref` - The Git reference to check (tag name, branch name, or commit SHA)
     ///
     /// # Returns
     ///
-    /// A tuple of (from_ref, to_ref) strings.
+    /// Returns `true` if the reference exists and can be resolved, `false` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// # use sublime_pkg_tools::changelog::ChangelogGenerator;
+    /// # use sublime_pkg_tools::config::PackageToolsConfig;
+    /// # use sublime_git_tools::Repo;
+    /// # use sublime_standard_tools::filesystem::FileSystemManager;
+    /// # use std::path::PathBuf;
+    /// #
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let workspace_root = PathBuf::from(".");
+    /// # let git_repo = Repo::open(".")?;
+    /// # let fs = FileSystemManager::new();
+    /// # let config = PackageToolsConfig::default();
+    /// #
+    /// let generator = ChangelogGenerator::new(
+    ///     workspace_root,
+    ///     git_repo,
+    ///     fs,
+    ///     config.changelog,
+    /// ).await?;
+    ///
+    /// // Check if a tag exists
+    /// if generator.reference_exists("v1.0.0") {
+    ///     println!("Tag v1.0.0 exists");
+    /// }
+    ///
+    /// // HEAD always exists
+    /// assert!(generator.reference_exists("HEAD"));
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    fn reference_exists(&self, git_ref: &str) -> bool {
+        // Use the git_repo's internal repo to check if reference exists
+        // This is a simple check - if revparse_single succeeds, the reference exists
+        self.git_repo.get_diverged_commit(git_ref).is_ok()
+    }
+
+    /// Builds Git references for changelog generation.
+    ///
+    /// Creates the from and to references based on the configured tag format.
+    /// When the target version tag does not exist yet (common during changelog
+    /// generation before tags are created), this method automatically falls back
+    /// to using `HEAD` as the `to_ref`.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_name` - Optional package name for scoped packages
+    /// * `previous_version` - Optional previous version string
+    /// * `current_version` - Current version string
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (from_ref, to_ref) strings representing Git references.
     ///
     /// # Errors
     ///
@@ -866,11 +921,16 @@ impl ChangelogGenerator {
         };
 
         // Build to_ref (current version tag)
-        let to_ref = if let Some(pkg_name) = package_name {
+        let to_ref_tag = if let Some(pkg_name) = package_name {
             format.replace("{name}", pkg_name).replace("{version}", current_version)
         } else {
             format.replace("{version}", current_version)
         };
+
+        // Check if the to_ref tag exists; if not, use HEAD
+        // This handles the case where changelog is generated before tags are created
+        let to_ref =
+            if self.reference_exists(&to_ref_tag) { to_ref_tag } else { "HEAD".to_string() };
 
         // Build from_ref (previous version tag or HEAD)
         let from_ref = if let Some(prev_version) = previous_version {
