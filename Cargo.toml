@@ -33,9 +33,9 @@ repository = "https://github.com/websublime/workspace-tools"
 [workspace.dependencies]
 # Internal crates
 sublime_standard_tools = { version = "0.0.15", path = "crates/standard" }
-sublime_git_tools = { version = "0.0.16", path = "crates/git" }
-sublime_pkg_tools = { version = "0.0.25", path = "crates/pkg" }
-sublime_cli_tools = { version = "0.0.34", path = "crates/cli" }
+sublime_git_tools = { version = "0.0.17", path = "crates/git" }
+sublime_pkg_tools = { version = "0.0.26", path = "crates/pkg" }
+sublime_cli_tools = { version = "0.0.35", path = "crates/cli" }
 
 # Core dependencies
 async-trait = "0.1.74"
