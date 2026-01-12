@@ -1,27 +1,7 @@
 [workspace]
-members = [
-    "crates/cli",
-    "crates/git",
-    "crates/pkg",
-    "crates/standard",
-]
-exclude = ["crates/node"]
-resolver = "2"
+members = []
 
-# IMPORTANT: The `crates/node` directory (sublime_node_tools) is intentionally
-# excluded from workspace members because:
-#
-# 1. It uses `crate-type = ["cdylib"]` which is NOT supported on musl targets
-#    (e.g., x86_64-unknown-linux-musl). Including it causes cargo-dist to fail
-#    with: "cannot produce cdylib for sublime_node_tools as the target does not
-#    support these crate types"
-#
-# 2. The Node.js bindings are built separately via napi-rs in the workflow at
-#    `packages/workspace-tools/.github/workflows/CI.yml` which uses zig for
-#    cross-compilation to musl targets with the `-x` flag.
-#
-# 3. The crate can still be built explicitly when needed:
-#    `cargo build --manifest-path crates/node/Cargo.toml`
+resolver = "2"
 
 [workspace.package]
 authors = ["WebSublime"]
@@ -32,26 +12,22 @@ repository = "https://github.com/websublime/workspace-tools"
 
 [workspace.dependencies]
 # Internal crates
-sublime_standard_tools = { version = "0.0.15", path = "crates/standard" }
-sublime_git_tools = { version = "0.0.17", path = "crates/git" }
-sublime_pkg_tools = { version = "0.0.26", path = "crates/pkg" }
-sublime_cli_tools = { version = "0.0.35", path = "crates/cli" }
+
 
 # Core dependencies
-async-trait = "0.1.74"
-chrono = { version = "0.4.31", features = ["serde"] }
-derive_more = { version = "2.0.1", features = ["debug"] }
+async-trait = "0.1.89"
+chrono = { version = "0.4.42", features = ["serde"] }
 dirs = "6.0.0"
-log = "0.4.20"
-mimalloc = "0.1.42"
-regex = "1.11.0"
-serde = { version = "1.0.203", features = ["derive"] }
-serde_json = "1.0.117"
-tempfile = "3.8.1"
-thiserror = "1.0.64"
-tokio = { version = "1.38.0", default-features = false }
-toml = "0.5.0"
-walkdir = "2.4.0"
+log = "0.4.29"
+mimalloc = "0.1.48"
+regex = "1.12.2"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+tempfile = "3.24.0"
+tokio = { version = "1.49.0", default-features = false }
+toml = "0.9.11"
+walkdir = "2.5.0"
+snafu = "0.8.9"
 
 [workspace.lints.rust]
 # Will be expanded as needed
