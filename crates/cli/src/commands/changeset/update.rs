@@ -1,5 +1,13 @@
 //! Changeset update command implementation.
 //!
+//! **What**: Implements the `workspace changeset update` command for modifying existing changesets.
+//!
+//! **How**: Loads an existing changeset, validates any new packages against the workspace,
+//! and updates the changeset with the provided changes.
+//!
+//! **Why**: To provide a user-friendly interface for updating changesets that properly validates
+//! package names against the workspace to prevent errors during version bumping.
+//!
 //! This module implements the `changeset update` command for modifying existing changesets.
 //!
 //! # What
@@ -62,6 +70,7 @@
 //! # }
 //! ```
 
+use super::common::load_workspace_packages;
 use crate::cli::commands::ChangesetUpdateArgs;
 use crate::error::{CliError, Result};
 use crate::output::styling::{Section, StatusSymbol, TextStyle, print_item};
@@ -213,6 +222,9 @@ pub async fn execute_update(
     let config = load_config(workspace_root, config_path).await?;
     info!("Configuration loaded successfully");
 
+    // Load available packages from workspace for validation
+    let available_packages = load_workspace_packages(workspace_root, &config).await;
+
     // Determine which changeset to update
     let branch = if let Some(id) = &args.id {
         debug!("Using provided changeset ID: {}", id);
@@ -251,6 +263,10 @@ pub async fn execute_update(
     // Update packages
     if let Some(packages) = &args.packages {
         debug!("Adding packages: {:?}", packages);
+
+        // Validate that all provided package names exist in the workspace
+        crate::commands::validate_package_names(packages, &available_packages)?;
+
         for package in packages {
             if changeset.has_package(package) {
                 debug!("Package '{}' already in changeset, skipping", package);

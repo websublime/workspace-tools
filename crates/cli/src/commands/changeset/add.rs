@@ -1,4 +1,12 @@
-//! Changeset add command implementation.
+//! Changeset add/create command implementation.
+//!
+//! **What**: Implements the `workspace changeset create` command for creating new changesets.
+//!
+//! **How**: Validates input, detects affected packages from git changes, and creates a changeset
+//! file with the specified bump type, packages, and environments.
+//!
+//! **Why**: To provide a user-friendly interface for creating changesets that properly validates
+//! package names against the workspace to prevent errors during version bumping.
 //!
 //! This module implements the `changeset add` command for creating new changesets.
 //!
@@ -72,13 +80,15 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 use sublime_git_tools::Repo;
 use sublime_pkg_tools::changeset::ChangesetManager;
-use sublime_pkg_tools::config::PackageToolsConfig;
 use sublime_pkg_tools::types::Changeset;
 use sublime_standard_tools::filesystem::FileSystemManager;
 use tracing::{debug, info, warn};
 
 // Import shared functionality
-use super::common::{load_config, parse_bump_type, validate_bump_type, validate_environments};
+use super::common::{
+    load_config, load_workspace_packages, parse_bump_type, validate_bump_type,
+    validate_environments,
+};
 use super::types::ChangesetInfo;
 
 /// Response data for changeset add command (JSON output).
@@ -231,6 +241,10 @@ pub async fn execute_add(
     // Determine packages
     let packages = if let Some(pkg_list) = &args.packages {
         debug!("Using provided packages: {:?}", pkg_list);
+
+        // Validate that all provided package names exist in the workspace
+        crate::commands::validate_package_names(pkg_list, &all_packages)?;
+
         pkg_list.clone()
     } else if args.non_interactive {
         if detected_packages.is_empty() {
@@ -348,45 +362,6 @@ pub async fn execute_add(
     output_results(output, &changeset, message.as_ref())?;
 
     Ok(())
-}
-
-/// Loads all packages from the workspace.
-///
-/// Uses the `VersionResolver` to discover all packages in the workspace,
-/// whether it's a monorepo or single package project.
-///
-/// Returns a list of all available package names in the workspace.
-async fn load_workspace_packages(
-    workspace_root: &Path,
-    config: &PackageToolsConfig,
-) -> Vec<String> {
-    use sublime_pkg_tools::version::VersionResolver;
-
-    debug!("Loading workspace packages");
-
-    // Create a VersionResolver to discover packages
-    let resolver = match VersionResolver::new(workspace_root.to_path_buf(), config.clone()).await {
-        Ok(r) => r,
-        Err(e) => {
-            warn!("Failed to create version resolver: {}", e);
-            return vec![];
-        }
-    };
-
-    // Discover all packages in the workspace
-    match resolver.discover_packages().await {
-        Ok(packages) => {
-            let package_names: Vec<String> =
-                packages.iter().map(|p| p.name().to_string()).collect();
-
-            debug!("Found {} package(s): {:?}", package_names.len(), package_names);
-            package_names
-        }
-        Err(e) => {
-            warn!("Failed to discover packages: {}", e);
-            vec![]
-        }
-    }
 }
 
 /// Gets commits that are unique to the current branch compared to the base branch.

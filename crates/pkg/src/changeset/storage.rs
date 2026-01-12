@@ -36,7 +36,7 @@
 //!
 //! ```rust
 //! use sublime_pkg_tools::changeset::ChangesetStorage;
-//! use sublime_pkg_tools::types::{Changeset, ArchivedChangeset, ReleaseInfo};
+//! use sublime_pkg_tools::types::{ArchiveResult, Changeset, ArchivedChangeset, ReleaseInfo};
 //! use sublime_pkg_tools::error::ChangesetResult;
 //! use async_trait::async_trait;
 //! use std::collections::HashMap;
@@ -95,7 +95,7 @@
 //!         &self,
 //!         changeset: &Changeset,
 //!         release_info: ReleaseInfo,
-//!     ) -> ChangesetResult<()> {
+//!     ) -> ChangesetResult<ArchiveResult> {
 //!         let mut pending = self.pending.write().await;
 //!         let mut archived = self.archived.write().await;
 //!
@@ -105,7 +105,11 @@
 //!             release_info,
 //!         );
 //!         archived.insert(changeset.branch.clone(), archived_changeset);
-//!         Ok(())
+//!         // In-memory storage doesn't have real paths, return dummy paths
+//!         Ok(ArchiveResult::new(
+//!             std::path::PathBuf::from(format!(".changesets/{}.json", changeset.branch)),
+//!             std::path::PathBuf::from(format!(".changesets/history/{}.json", changeset.branch)),
+//!         ))
 //!     }
 //!
 //!     async fn load_archived(&self, branch: &str) -> ChangesetResult<ArchivedChangeset> {
@@ -187,7 +191,7 @@
 //! clear error messages with context.
 
 use crate::error::{ChangesetError, ChangesetResult};
-use crate::types::{ArchivedChangeset, Changeset, ReleaseInfo};
+use crate::types::{ArchiveResult, ArchivedChangeset, Changeset, ReleaseInfo};
 use async_trait::async_trait;
 
 /// Trait for changeset storage operations.
@@ -410,8 +414,9 @@ pub trait ChangesetStorage: Send + Sync {
     ///
     /// # Returns
     ///
-    /// Returns `Ok(())` if the changeset was successfully archived, or a `ChangesetError`
-    /// if the operation failed.
+    /// Returns `Ok(ArchiveResult)` containing the paths of the deleted original file
+    /// and the newly created archive file. This information is essential for Git
+    /// staging operations to include the changeset changes in version bump commits.
     ///
     /// # Errors
     ///
@@ -436,14 +441,14 @@ pub trait ChangesetStorage: Send + Sync {
     ///     ],
     /// );
     ///
-    /// storage.archive(&changeset, release_info).await?;
-    /// println!("Changeset archived successfully");
+    /// let result = storage.archive(&changeset, release_info).await?;
+    /// println!("Archived: {} -> {}", result.original_path.display(), result.archive_path.display());
     /// ```
     async fn archive(
         &self,
         changeset: &Changeset,
         release_info: ReleaseInfo,
-    ) -> ChangesetResult<()>;
+    ) -> ChangesetResult<ArchiveResult>;
 
     /// Loads an archived changeset by branch name.
     ///
@@ -857,7 +862,7 @@ where
         &self,
         changeset: &Changeset,
         release_info: ReleaseInfo,
-    ) -> ChangesetResult<()> {
+    ) -> ChangesetResult<ArchiveResult> {
         let pending_path = self.changeset_path(&changeset.branch);
         let archive_path = self.archive_path(&changeset.branch);
 
@@ -908,7 +913,7 @@ where
             })?;
         }
 
-        Ok(())
+        Ok(ArchiveResult::new(pending_path, archive_path))
     }
 
     async fn load_archived(&self, branch: &str) -> ChangesetResult<ArchivedChangeset> {

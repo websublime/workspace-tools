@@ -12,6 +12,7 @@
 //! - Environment validation
 //! - Changeset file path management
 //! - Branch name sanitization
+//! - Workspace package discovery
 //!
 //! # How
 //!
@@ -45,7 +46,8 @@ use std::path::{Path, PathBuf};
 use sublime_git_tools::Repo;
 use sublime_pkg_tools::config::PackageToolsConfig;
 use sublime_pkg_tools::types::VersionBump;
-use tracing::debug;
+use sublime_pkg_tools::version::VersionResolver;
+use tracing::{debug, warn};
 
 /// Loads workspace configuration from file or defaults.
 ///
@@ -356,4 +358,64 @@ pub(crate) fn validate_environments(provided: &[String], available: &[String]) -
     }
 
     Ok(())
+}
+
+/// Loads all packages from the workspace.
+///
+/// Uses the `VersionResolver` to discover all packages in the workspace,
+/// whether it's a monorepo or single package project. This function is used
+/// for validating package names provided by the user.
+///
+/// # Arguments
+///
+/// * `workspace_root` - The workspace root directory
+/// * `config` - The package tools configuration
+///
+/// # Returns
+///
+/// Returns a list of all available package names in the workspace.
+/// Returns an empty vector if package discovery fails (with a warning logged).
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use super::common::load_workspace_packages;
+/// use std::path::Path;
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let config = load_config(Path::new("."), None).await?;
+/// let packages = load_workspace_packages(Path::new("."), &config).await;
+/// println!("Available packages: {:?}", packages);
+/// # Ok(())
+/// # }
+/// ```
+pub(crate) async fn load_workspace_packages(
+    workspace_root: &Path,
+    config: &PackageToolsConfig,
+) -> Vec<String> {
+    debug!("Loading workspace packages from: {}", workspace_root.display());
+
+    // Create a VersionResolver to discover packages
+    let resolver = match VersionResolver::new(workspace_root.to_path_buf(), config.clone()).await {
+        Ok(r) => r,
+        Err(e) => {
+            warn!("Failed to create version resolver: {}", e);
+            return vec![];
+        }
+    };
+
+    // Discover all packages in the workspace
+    match resolver.discover_packages().await {
+        Ok(packages) => {
+            let package_names: Vec<String> =
+                packages.iter().map(|p| p.name().to_string()).collect();
+
+            debug!("Found {} package(s): {:?}", package_names.len(), package_names);
+            package_names
+        }
+        Err(e) => {
+            warn!("Failed to discover packages: {}", e);
+            vec![]
+        }
+    }
 }

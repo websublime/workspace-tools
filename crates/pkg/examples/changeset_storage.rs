@@ -124,8 +124,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("    {} -> {}", pkg, version);
     }
 
-    storage.archive(&release_changeset, release_info).await?;
-    println!("  ✓ Archived successfully\n");
+    let archive_result = storage.archive(&release_changeset, release_info).await?;
+    println!("  ✓ Archived successfully");
+    println!("  Original path: {}", archive_result.original_path.display());
+    println!("  Archive path: {}\n", archive_result.archive_path.display());
 
     // Verify the changeset is no longer pending
     let still_pending = storage.exists("fix/memory-leak").await?;

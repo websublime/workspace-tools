@@ -1622,6 +1622,50 @@ impl Repo {
         Ok(self)
     }
 
+    /// Removes a file from the Git index (stages a deletion).
+    ///
+    /// This method stages a file deletion in the Git index. The file should
+    /// already be deleted from the working directory. This is the equivalent
+    /// of `git rm --cached <file>` or staging a deleted file with `git add`.
+    ///
+    /// # Arguments
+    ///
+    /// * `file_path` - The path to the file to remove from the index (relative to repo root)
+    ///
+    /// # Returns
+    ///
+    /// * `Result<&Self, RepoError>` - A reference to self for method chaining, or an error
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The Git index cannot be accessed or modified
+    /// - The file path is not valid
+    /// - The index cannot be written to disk
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use sublime_git_tools::Repo;
+    ///
+    /// let repo = Repo::open("./my-repo").expect("Failed to open repository");
+    /// // After deleting a file from disk, stage the deletion:
+    /// repo.remove("src/obsolete.rs").expect("Failed to stage deletion");
+    /// ```
+    pub fn remove(&self, file_path: &str) -> Result<&Self, RepoError> {
+        let mut index = self.repo.index().map_err(RepoError::IndexError)?;
+        let path = Path::new(file_path);
+        // Get the relative path of the file_path
+        let relative_path = path.strip_prefix(self.local_path.as_path()).unwrap_or(path);
+        // Remove the file from the index
+        index.remove_path(relative_path).map_err(RepoError::IndexError)?;
+
+        // Write the index to disk
+        index.write().map_err(RepoError::IndexError)?;
+
+        Ok(self)
+    }
+
     /// Gets the name of the last tag in the repository
     ///
     /// # Returns
