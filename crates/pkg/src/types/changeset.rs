@@ -976,3 +976,82 @@ impl UpdateSummary {
         self.commits_added > 0
     }
 }
+
+/// Result of archiving a changeset, containing the paths affected.
+///
+/// **What**: Represents the outcome of a changeset archive operation, including
+/// the paths of the original (now deleted) changeset file and the newly created
+/// archived changeset file.
+///
+/// **How**: When a changeset is archived, it is moved from the active changesets
+/// directory to the history directory. This struct captures both paths so that
+/// callers (such as Git integration) can properly track these filesystem changes.
+///
+/// **Why**: Git operations need to know which files were created and deleted
+/// during archiving to properly stage them for commit. Without this information,
+/// archived changesets would not be included in version bump commits, leaving
+/// stale changeset files in the repository.
+///
+/// # Examples
+///
+/// ```rust
+/// use sublime_pkg_tools::types::ArchiveResult;
+/// use std::path::PathBuf;
+///
+/// let result = ArchiveResult {
+///     original_path: PathBuf::from(".changesets/feature-branch.json"),
+///     archive_path: PathBuf::from(".changesets/history/feature-branch.json"),
+/// };
+///
+/// // Use paths for git staging
+/// println!("Deleted: {}", result.original_path.display());
+/// println!("Created: {}", result.archive_path.display());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchiveResult {
+    /// The path of the original changeset file that was deleted.
+    ///
+    /// This file was located in the active changesets directory (e.g., `.changesets/`)
+    /// and has been removed after successful archiving.
+    pub original_path: std::path::PathBuf,
+
+    /// The path of the newly created archived changeset file.
+    ///
+    /// This file is located in the history directory (e.g., `.changesets/history/`)
+    /// and contains the original changeset data plus release metadata.
+    pub archive_path: std::path::PathBuf,
+}
+
+impl ArchiveResult {
+    /// Creates a new `ArchiveResult` with the specified paths.
+    ///
+    /// # Arguments
+    ///
+    /// * `original_path` - The path of the deleted original changeset file
+    /// * `archive_path` - The path of the newly created archived changeset file
+    ///
+    /// # Returns
+    ///
+    /// A new `ArchiveResult` instance.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sublime_pkg_tools::types::ArchiveResult;
+    /// use std::path::PathBuf;
+    ///
+    /// let result = ArchiveResult::new(
+    ///     PathBuf::from(".changesets/feature-branch.json"),
+    ///     PathBuf::from(".changesets/history/feature-branch.json"),
+    /// );
+    ///
+    /// assert_eq!(
+    ///     result.original_path,
+    ///     PathBuf::from(".changesets/feature-branch.json")
+    /// );
+    /// ```
+    #[must_use]
+    pub fn new(original_path: std::path::PathBuf, archive_path: std::path::PathBuf) -> Self {
+        Self { original_path, archive_path }
+    }
+}

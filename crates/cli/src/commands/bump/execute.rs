@@ -506,13 +506,25 @@ pub async fn execute_bump_apply(
         for changeset in &changesets_to_process {
             debug!("Archiving changeset: {}", changeset.branch);
 
-            manager.archive(&changeset.branch, release_info.clone()).await.map_err(|e| {
-                error!("Failed to archive changeset '{}': {}", changeset.branch, e);
-                CliError::execution(format!(
-                    "Failed to archive changeset '{}': {}",
-                    changeset.branch, e
-                ))
-            })?;
+            let archive_result =
+                manager.archive(&changeset.branch, release_info.clone()).await.map_err(|e| {
+                    error!("Failed to archive changeset '{}': {}", changeset.branch, e);
+                    CliError::execution(format!(
+                        "Failed to archive changeset '{}': {}",
+                        changeset.branch, e
+                    ))
+                })?;
+
+            // Add the archived changeset paths to modified_files for git staging
+            // The original_path was deleted (needs to be staged as deletion)
+            // The archive_path was created (needs to be staged as addition)
+            debug!(
+                "Archive paths - deleted: {}, created: {}",
+                archive_result.original_path.display(),
+                archive_result.archive_path.display()
+            );
+            modified_files.push(archive_result.original_path);
+            modified_files.push(archive_result.archive_path);
 
             archived_count += 1;
         }

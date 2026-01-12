@@ -120,36 +120,62 @@ pub fn commit_version_changes(
         let file_path = file.as_ref();
         debug!("Staging file: {}", file_path.display());
 
+        // Check if the file exists on disk to determine if it's a deletion or addition/modification
+        let file_exists = file_path.exists();
+
         // Convert absolute path to relative path from repository root
         let relative_path_str = if file_path.is_absolute() {
-            // Canonicalize file path to handle symlinks
-            let canonical_file_path = file_path.canonicalize().map_err(|e| {
-                CliError::execution(format!(
-                    "Failed to canonicalize file path {}: {}",
-                    file_path.display(),
-                    e
-                ))
-            })?;
+            if file_exists {
+                // For existing files, canonicalize to handle symlinks
+                let canonical_file_path = file_path.canonicalize().map_err(|e| {
+                    CliError::execution(format!(
+                        "Failed to canonicalize file path {}: {}",
+                        file_path.display(),
+                        e
+                    ))
+                })?;
 
-            let relative_path =
-                canonical_file_path.strip_prefix(&canonical_repo_root).map_err(|e| {
+                let relative_path =
+                    canonical_file_path.strip_prefix(&canonical_repo_root).map_err(|e| {
+                        CliError::execution(format!(
+                            "File path {} is not within repository root {}: {}",
+                            canonical_file_path.display(),
+                            canonical_repo_root.display(),
+                            e
+                        ))
+                    })?;
+
+                relative_path
+                    .to_str()
+                    .ok_or_else(|| {
+                        CliError::execution(format!(
+                            "File path contains invalid UTF-8: {}",
+                            relative_path.display()
+                        ))
+                    })?
+                    .to_string()
+            } else {
+                // For deleted files, strip prefix without canonicalization
+                // since the file no longer exists on disk
+                let relative_path = file_path.strip_prefix(&canonical_repo_root).map_err(|e| {
                     CliError::execution(format!(
                         "File path {} is not within repository root {}: {}",
-                        canonical_file_path.display(),
+                        file_path.display(),
                         canonical_repo_root.display(),
                         e
                     ))
                 })?;
 
-            relative_path
-                .to_str()
-                .ok_or_else(|| {
-                    CliError::execution(format!(
-                        "File path contains invalid UTF-8: {}",
-                        relative_path.display()
-                    ))
-                })?
-                .to_string()
+                relative_path
+                    .to_str()
+                    .ok_or_else(|| {
+                        CliError::execution(format!(
+                            "File path contains invalid UTF-8: {}",
+                            relative_path.display()
+                        ))
+                    })?
+                    .to_string()
+            }
         } else {
             file_path
                 .to_str()
@@ -162,11 +188,23 @@ pub fn commit_version_changes(
                 .to_string()
         };
 
-        debug!("Staging relative path: {}", relative_path_str);
+        debug!("Staging relative path: {} (exists: {})", relative_path_str, file_exists);
 
-        repo.add(&relative_path_str).map_err(|e| {
-            CliError::execution(format!("Failed to stage file {}: {e}", file_path.display()))
-        })?;
+        if file_exists {
+            // File exists - stage as addition or modification
+            repo.add(&relative_path_str).map_err(|e| {
+                CliError::execution(format!("Failed to stage file {}: {e}", file_path.display()))
+            })?;
+        } else {
+            // File was deleted - stage the deletion
+            debug!("File deleted, staging removal: {}", relative_path_str);
+            repo.remove(&relative_path_str).map_err(|e| {
+                CliError::execution(format!(
+                    "Failed to stage file deletion {}: {e}",
+                    file_path.display()
+                ))
+            })?;
+        }
     }
 
     info!("Staged {} files", modified_files.len());

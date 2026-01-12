@@ -17,7 +17,7 @@
 
 use crate::changeset::ChangesetStorage;
 use crate::error::{ChangesetError, ChangesetResult};
-use crate::types::{ArchivedChangeset, Changeset, ReleaseInfo, VersionBump};
+use crate::types::{ArchiveResult, ArchivedChangeset, Changeset, ReleaseInfo, VersionBump};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -83,7 +83,7 @@ impl ChangesetStorage for MockStorage {
         &self,
         changeset: &Changeset,
         release_info: ReleaseInfo,
-    ) -> ChangesetResult<()> {
+    ) -> ChangesetResult<ArchiveResult> {
         let mut pending = self.pending.write().await;
         let mut archived = self.archived.write().await;
 
@@ -94,7 +94,11 @@ impl ChangesetStorage for MockStorage {
         let archived_changeset = ArchivedChangeset::new(changeset.clone(), release_info);
         archived.insert(changeset.branch.clone(), archived_changeset);
 
-        Ok(())
+        // Return mock paths for testing
+        Ok(ArchiveResult::new(
+            std::path::PathBuf::from(format!(".changesets/{}.json", changeset.branch)),
+            std::path::PathBuf::from(format!(".changesets/history/{}.json", changeset.branch)),
+        ))
     }
 
     async fn load_archived(&self, branch: &str) -> ChangesetResult<ArchivedChangeset> {
@@ -1113,7 +1117,7 @@ mod manager_tests {
             &self,
             changeset: &Changeset,
             release_info: ReleaseInfo,
-        ) -> ChangesetResult<()> {
+        ) -> ChangesetResult<ArchiveResult> {
             // Remove from pending
             self.changesets.lock().unwrap().remove(&changeset.branch);
 
@@ -1121,7 +1125,11 @@ mod manager_tests {
             let archived_changeset = ArchivedChangeset::new(changeset.clone(), release_info);
             self.archived.lock().unwrap().insert(changeset.branch.clone(), archived_changeset);
 
-            Ok(())
+            // Return mock paths for testing
+            Ok(ArchiveResult::new(
+                std::path::PathBuf::from(format!(".changesets/{}.json", changeset.branch)),
+                std::path::PathBuf::from(format!(".changesets/history/{}.json", changeset.branch)),
+            ))
         }
 
         async fn load_archived(&self, branch: &str) -> ChangesetResult<ArchivedChangeset> {

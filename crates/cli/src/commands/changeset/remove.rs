@@ -247,7 +247,7 @@ pub async fn execute_remove(
     // Use a special ReleaseInfo to indicate manual deletion (not a release)
     let release_info = create_deletion_release_info();
 
-    manager.archive(&args.branch, release_info).await.map_err(|e| {
+    let _archive_result = manager.archive(&args.branch, release_info).await.map_err(|e| {
         CliError::Execution(format!(
             "Failed to archive changeset '{}' before deletion: {e}",
             args.branch

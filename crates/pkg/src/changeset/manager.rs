@@ -762,9 +762,9 @@ impl<S: ChangesetStorage> ChangesetManager<S> {
     /// );
     ///
     /// // Archive the changeset
-    /// manager.archive("feature/new-api", release_info).await?;
+    /// let result = manager.archive("feature/new-api", release_info).await?;
     ///
-    /// println!("Changeset archived successfully");
+    /// println!("Archived: {} -> {}", result.original_path.display(), result.archive_path.display());
     /// # Ok(())
     /// # }
     /// ```
@@ -772,7 +772,7 @@ impl<S: ChangesetStorage> ChangesetManager<S> {
         &self,
         branch: &str,
         release_info: crate::types::ReleaseInfo,
-    ) -> ChangesetResult<()> {
+    ) -> ChangesetResult<crate::types::ArchiveResult> {
         // Load the changeset to ensure it exists
         let changeset = self.load(branch).await?;
 

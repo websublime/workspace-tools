@@ -183,7 +183,7 @@ pub use package::{DependencyType, PackageInfo};
 
 // Changeset types (Story 4.3)
 mod changeset;
-pub use changeset::{ArchivedChangeset, Changeset, ReleaseInfo, UpdateSummary};
+pub use changeset::{ArchiveResult, ArchivedChangeset, Changeset, ReleaseInfo, UpdateSummary};
 
 // Dependency types (Story 4.4)
 pub mod dependency;
