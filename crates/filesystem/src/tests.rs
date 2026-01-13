@@ -402,7 +402,158 @@ mod config {
 #[cfg(test)]
 mod types {
     //! Tests for the types module.
-    // TODO: will be implemented on epic workspace-node-tools-3q8 (Types Module)
+    //!
+    //! This module contains unit tests for:
+    //! - `FileType` enum and its methods
+    //! - `Metadata` struct and its methods
+    //! - `DirEntry` struct and its methods
+
+    use crate::types::FileType;
+
+    // =========================================================================
+    // FileType Enum Tests (FR-5.2.1 - FR-5.2.5)
+    // =========================================================================
+
+    // -------------------------------------------------------------------------
+    // Variant Creation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_file_type_file_variant() {
+        let ft = FileType::File;
+        assert!(ft.is_file());
+        assert!(!ft.is_dir());
+        assert!(!ft.is_symlink());
+    }
+
+    #[test]
+    fn test_file_type_dir_variant() {
+        let ft = FileType::Dir;
+        assert!(!ft.is_file());
+        assert!(ft.is_dir());
+        assert!(!ft.is_symlink());
+    }
+
+    #[test]
+    fn test_file_type_symlink_variant() {
+        let ft = FileType::Symlink;
+        assert!(!ft.is_file());
+        assert!(!ft.is_dir());
+        assert!(ft.is_symlink());
+    }
+
+    // -------------------------------------------------------------------------
+    // Method Tests (FR-5.2.2 - FR-5.2.4)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_is_file_returns_true_only_for_file() {
+        assert!(FileType::File.is_file());
+        assert!(!FileType::Dir.is_file());
+        assert!(!FileType::Symlink.is_file());
+    }
+
+    #[test]
+    fn test_is_dir_returns_true_only_for_dir() {
+        assert!(!FileType::File.is_dir());
+        assert!(FileType::Dir.is_dir());
+        assert!(!FileType::Symlink.is_dir());
+    }
+
+    #[test]
+    fn test_is_symlink_returns_true_only_for_symlink() {
+        assert!(!FileType::File.is_symlink());
+        assert!(!FileType::Dir.is_symlink());
+        assert!(FileType::Symlink.is_symlink());
+    }
+
+    // -------------------------------------------------------------------------
+    // Trait Implementation Tests (FR-5.2.5)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_file_type_debug() {
+        let file = FileType::File;
+        let debug_str = format!("{file:?}");
+        assert_eq!(debug_str, "File");
+
+        let dir = FileType::Dir;
+        let debug_str = format!("{dir:?}");
+        assert_eq!(debug_str, "Dir");
+
+        let symlink = FileType::Symlink;
+        let debug_str = format!("{symlink:?}");
+        assert_eq!(debug_str, "Symlink");
+    }
+
+    #[test]
+    fn test_file_type_clone() {
+        fn assert_clone<T: Clone>() {}
+        assert_clone::<FileType>();
+
+        // For Copy types, clone is equivalent to copy
+        let original = FileType::File;
+        let cloned: FileType = Clone::clone(&original);
+        assert_eq!(original, cloned);
+    }
+
+    #[test]
+    fn test_file_type_copy() {
+        let original = FileType::Dir;
+        let copied = original; // Copy, not move
+        assert_eq!(original, copied);
+        // Both can still be used (proving Copy works)
+        assert!(original.is_dir());
+        assert!(copied.is_dir());
+    }
+
+    #[test]
+    fn test_file_type_partial_eq() {
+        assert_eq!(FileType::File, FileType::File);
+        assert_eq!(FileType::Dir, FileType::Dir);
+        assert_eq!(FileType::Symlink, FileType::Symlink);
+
+        assert_ne!(FileType::File, FileType::Dir);
+        assert_ne!(FileType::File, FileType::Symlink);
+        assert_ne!(FileType::Dir, FileType::Symlink);
+    }
+
+    #[test]
+    fn test_file_type_eq() {
+        // Eq is a marker trait, we just verify it's implemented
+        fn assert_eq_impl<T: Eq>() {}
+        assert_eq_impl::<FileType>();
+    }
+
+    // -------------------------------------------------------------------------
+    // Trait Bound Verification Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_file_type_is_send() {
+        fn assert_send<T: Send>() {}
+        assert_send::<FileType>();
+    }
+
+    #[test]
+    fn test_file_type_is_sync() {
+        fn assert_sync<T: Sync>() {}
+        assert_sync::<FileType>();
+    }
+
+    // -------------------------------------------------------------------------
+    // From<std::fs::FileType> Tests
+    // -------------------------------------------------------------------------
+
+    // Note: Testing From<std::fs::FileType> directly requires actual filesystem
+    // access to obtain a std::fs::FileType instance. These tests are covered
+    // in integration tests. Here we verify the trait is implemented.
+
+    #[test]
+    fn test_file_type_from_trait_is_implemented() {
+        fn assert_from<T: From<std::fs::FileType>>() {}
+        assert_from::<FileType>();
+    }
 }
 
 #[cfg(test)]
