@@ -68,9 +68,9 @@
 
 /// Error types for filesystem operations.
 ///
-/// Provides a unified [`Error`](error) enum that captures all possible error
+/// Provides a unified [`Error`](error::Error) enum that captures all possible error
 /// conditions with path context for debugging.
-pub(crate) mod error;
+pub mod error;
 
 /// Configuration types for filesystem behavior.
 ///
@@ -116,9 +116,11 @@ mod tests;
 // Public Re-exports
 // =============================================================================
 
+// Error types
+pub use error::{Error, Result};
+
 // TODO: Re-exports will be added as modules are implemented
 // pub use config::{FileSystemConfig, FileSystemConfigBuilder};
-// pub use error::{Error, Result};
 // pub use mock::MockFileSystem;
 // pub use path_ext::PathExt;
 // pub use real::RealFileSystem;
