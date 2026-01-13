@@ -175,7 +175,7 @@ walkdir = "2.0"
 glob = "0.3"
 
 # Internal dependency (PRD §1.4.1)
-workspace-fs = { path = "../fs" }
+workspace-fs = { path = "../filesystem" }
 
 [dev-dependencies]
 # PRD §1.4.3
@@ -1765,6 +1765,6 @@ mod tests {
 ## 8. References
 
 - [PRD.md](./PRD.md) - Product Requirements Document
-- [workspace-fs](../fs/README.md) - Filesystem abstraction crate
+- [workspace-fs](../filesystem/README.md) - Filesystem abstraction crate
 - [snafu documentation](https://docs.rs/snafu/0.8.9/snafu/)
 - [package-json crate](https://docs.rs/package-json/0.5.0/package_json/)
