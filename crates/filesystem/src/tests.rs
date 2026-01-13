@@ -396,7 +396,359 @@ mod error {
 #[cfg(test)]
 mod config {
     //! Tests for the config module.
-    // TODO: will be implemented on epic workspace-node-tools-g2t (Configuration Module)
+    //!
+    //! This module contains unit tests that verify:
+    //! - Default timeout values
+    //! - Getter methods return correct values
+    //! - Debug and Clone implementations
+    //! - Thread safety (Send + Sync)
+    //! - Builder pattern functionality
+
+    use crate::config::{FileSystemConfig, FileSystemConfigBuilder};
+    use std::time::Duration;
+
+    // =========================================================================
+    // FileSystemConfig Default Tests
+    // =========================================================================
+
+    /// Tests that the default read timeout is 30 seconds.
+    #[test]
+    fn test_default_read_timeout_is_30_seconds() {
+        let config = FileSystemConfig::default();
+        assert_eq!(config.read_timeout(), Duration::from_secs(30));
+    }
+
+    /// Tests that the default write timeout is 30 seconds.
+    #[test]
+    fn test_default_write_timeout_is_30_seconds() {
+        let config = FileSystemConfig::default();
+        assert_eq!(config.write_timeout(), Duration::from_secs(30));
+    }
+
+    /// Tests that the default operation timeout is 60 seconds.
+    #[test]
+    fn test_default_operation_timeout_is_60_seconds() {
+        let config = FileSystemConfig::default();
+        assert_eq!(config.operation_timeout(), Duration::from_secs(60));
+    }
+
+    /// Tests that all default values match PRD specification.
+    #[test]
+    fn test_default_values_match_prd_specification() {
+        let config = FileSystemConfig::default();
+
+        // PRD §5.2 FR-2.2.1: read_timeout default is 30 seconds
+        assert_eq!(config.read_timeout(), Duration::from_secs(30));
+
+        // PRD §5.2 FR-2.2.2: write_timeout default is 30 seconds
+        assert_eq!(config.write_timeout(), Duration::from_secs(30));
+
+        // PRD §5.2 FR-2.2.3: operation_timeout default is 60 seconds
+        assert_eq!(config.operation_timeout(), Duration::from_secs(60));
+    }
+
+    // =========================================================================
+    // FileSystemConfig Getter Tests
+    // =========================================================================
+
+    /// Tests that read_timeout getter returns the configured value.
+    #[test]
+    fn test_read_timeout_getter_returns_value() {
+        let config =
+            FileSystemConfig::builder().with_read_timeout(Duration::from_millis(100)).build();
+
+        assert_eq!(config.read_timeout(), Duration::from_millis(100));
+    }
+
+    /// Tests that write_timeout getter returns the configured value.
+    #[test]
+    fn test_write_timeout_getter_returns_value() {
+        let config =
+            FileSystemConfig::builder().with_write_timeout(Duration::from_millis(200)).build();
+
+        assert_eq!(config.write_timeout(), Duration::from_millis(200));
+    }
+
+    /// Tests that operation_timeout getter returns the configured value.
+    #[test]
+    fn test_operation_timeout_getter_returns_value() {
+        let config =
+            FileSystemConfig::builder().with_operation_timeout(Duration::from_millis(300)).build();
+
+        assert_eq!(config.operation_timeout(), Duration::from_millis(300));
+    }
+
+    /// Tests that getters work with zero duration.
+    #[test]
+    fn test_getters_work_with_zero_duration() {
+        let config = FileSystemConfig::builder()
+            .with_read_timeout(Duration::ZERO)
+            .with_write_timeout(Duration::ZERO)
+            .with_operation_timeout(Duration::ZERO)
+            .build();
+
+        assert_eq!(config.read_timeout(), Duration::ZERO);
+        assert_eq!(config.write_timeout(), Duration::ZERO);
+        assert_eq!(config.operation_timeout(), Duration::ZERO);
+    }
+
+    /// Tests that getters work with very large duration values.
+    #[test]
+    fn test_getters_work_with_large_duration() {
+        let large_duration = Duration::from_secs(86400); // 24 hours
+
+        let config = FileSystemConfig::builder()
+            .with_read_timeout(large_duration)
+            .with_write_timeout(large_duration)
+            .with_operation_timeout(large_duration)
+            .build();
+
+        assert_eq!(config.read_timeout(), large_duration);
+        assert_eq!(config.write_timeout(), large_duration);
+        assert_eq!(config.operation_timeout(), large_duration);
+    }
+
+    // =========================================================================
+    // FileSystemConfig Trait Implementation Tests
+    // =========================================================================
+
+    /// Tests that FileSystemConfig implements Debug.
+    #[test]
+    fn test_config_debug_format() {
+        let config = FileSystemConfig::default();
+        let debug_str = format!("{:?}", config);
+
+        // Debug output should contain struct name and field values
+        assert!(debug_str.contains("FileSystemConfig"));
+        assert!(debug_str.contains("read_timeout"));
+        assert!(debug_str.contains("write_timeout"));
+        assert!(debug_str.contains("operation_timeout"));
+    }
+
+    /// Tests that FileSystemConfig implements Clone.
+    #[test]
+    fn test_config_clone() {
+        fn assert_clone<T: Clone>() {}
+        assert_clone::<FileSystemConfig>();
+
+        let config = FileSystemConfig::builder().with_read_timeout(Duration::from_secs(5)).build();
+
+        let cloned = config.clone();
+
+        assert_eq!(config.read_timeout(), cloned.read_timeout());
+        assert_eq!(config.write_timeout(), cloned.write_timeout());
+        assert_eq!(config.operation_timeout(), cloned.operation_timeout());
+    }
+
+    /// Tests that cloned config is independent from original.
+    #[test]
+    fn test_config_clone_independence() {
+        let original =
+            FileSystemConfig::builder().with_read_timeout(Duration::from_secs(10)).build();
+
+        let cloned = original.clone();
+
+        // Both should have the same values
+        assert_eq!(original.read_timeout(), cloned.read_timeout());
+
+        // Modifying through a new builder doesn't affect either
+        let _new = FileSystemConfig::builder().with_read_timeout(Duration::from_secs(99)).build();
+
+        // Original and cloned are unaffected
+        assert_eq!(original.read_timeout(), Duration::from_secs(10));
+        assert_eq!(cloned.read_timeout(), Duration::from_secs(10));
+    }
+
+    /// Tests that FileSystemConfig is Send.
+    #[test]
+    fn test_config_is_send() {
+        fn assert_send<T: Send>() {}
+        assert_send::<FileSystemConfig>();
+    }
+
+    /// Tests that FileSystemConfig is Sync.
+    #[test]
+    fn test_config_is_sync() {
+        fn assert_sync<T: Sync>() {}
+        assert_sync::<FileSystemConfig>();
+    }
+
+    // =========================================================================
+    // FileSystemConfigBuilder Tests
+    // =========================================================================
+
+    /// Tests that builder() method returns a builder.
+    #[test]
+    fn test_builder_method_returns_builder() {
+        let builder = FileSystemConfig::builder();
+        let config = builder.build();
+
+        // Should have default values
+        assert_eq!(config.read_timeout(), Duration::from_secs(30));
+    }
+
+    /// Tests that FileSystemConfigBuilder::default() returns builder with defaults.
+    #[test]
+    fn test_builder_default_creates_default_config() {
+        let builder = FileSystemConfigBuilder::default();
+        let config = builder.build();
+
+        assert_eq!(config.read_timeout(), Duration::from_secs(30));
+        assert_eq!(config.write_timeout(), Duration::from_secs(30));
+        assert_eq!(config.operation_timeout(), Duration::from_secs(60));
+    }
+
+    /// Tests that with_read_timeout sets only read timeout.
+    #[test]
+    fn test_with_read_timeout_sets_only_read() {
+        let config = FileSystemConfig::builder().with_read_timeout(Duration::from_secs(5)).build();
+
+        assert_eq!(config.read_timeout(), Duration::from_secs(5));
+        assert_eq!(config.write_timeout(), Duration::from_secs(30)); // default
+        assert_eq!(config.operation_timeout(), Duration::from_secs(60)); // default
+    }
+
+    /// Tests that with_write_timeout sets only write timeout.
+    #[test]
+    fn test_with_write_timeout_sets_only_write() {
+        let config =
+            FileSystemConfig::builder().with_write_timeout(Duration::from_secs(15)).build();
+
+        assert_eq!(config.read_timeout(), Duration::from_secs(30)); // default
+        assert_eq!(config.write_timeout(), Duration::from_secs(15));
+        assert_eq!(config.operation_timeout(), Duration::from_secs(60)); // default
+    }
+
+    /// Tests that with_operation_timeout sets only operation timeout.
+    #[test]
+    fn test_with_operation_timeout_sets_only_operation() {
+        let config =
+            FileSystemConfig::builder().with_operation_timeout(Duration::from_secs(120)).build();
+
+        assert_eq!(config.read_timeout(), Duration::from_secs(30)); // default
+        assert_eq!(config.write_timeout(), Duration::from_secs(30)); // default
+        assert_eq!(config.operation_timeout(), Duration::from_secs(120));
+    }
+
+    /// Tests that builder methods can be chained.
+    #[test]
+    fn test_builder_method_chaining() {
+        let config = FileSystemConfig::builder()
+            .with_read_timeout(Duration::from_secs(1))
+            .with_write_timeout(Duration::from_secs(2))
+            .with_operation_timeout(Duration::from_secs(3))
+            .build();
+
+        assert_eq!(config.read_timeout(), Duration::from_secs(1));
+        assert_eq!(config.write_timeout(), Duration::from_secs(2));
+        assert_eq!(config.operation_timeout(), Duration::from_secs(3));
+    }
+
+    /// Tests that builder methods can be called in any order.
+    #[test]
+    fn test_builder_method_order_independence() {
+        let config1 = FileSystemConfig::builder()
+            .with_read_timeout(Duration::from_secs(1))
+            .with_write_timeout(Duration::from_secs(2))
+            .with_operation_timeout(Duration::from_secs(3))
+            .build();
+
+        let config2 = FileSystemConfig::builder()
+            .with_operation_timeout(Duration::from_secs(3))
+            .with_read_timeout(Duration::from_secs(1))
+            .with_write_timeout(Duration::from_secs(2))
+            .build();
+
+        assert_eq!(config1.read_timeout(), config2.read_timeout());
+        assert_eq!(config1.write_timeout(), config2.write_timeout());
+        assert_eq!(config1.operation_timeout(), config2.operation_timeout());
+    }
+
+    /// Tests that builder methods can be called multiple times (last wins).
+    #[test]
+    fn test_builder_last_value_wins() {
+        let config = FileSystemConfig::builder()
+            .with_read_timeout(Duration::from_secs(10))
+            .with_read_timeout(Duration::from_secs(20))
+            .with_read_timeout(Duration::from_secs(30))
+            .build();
+
+        assert_eq!(config.read_timeout(), Duration::from_secs(30));
+    }
+
+    /// Tests that builder implements Debug.
+    #[test]
+    fn test_builder_debug_format() {
+        let builder = FileSystemConfig::builder();
+        let debug_str = format!("{:?}", builder);
+
+        assert!(debug_str.contains("FileSystemConfigBuilder"));
+    }
+
+    /// Tests that builder implements Clone.
+    #[test]
+    fn test_builder_clone() {
+        fn assert_clone<T: Clone>() {}
+        assert_clone::<FileSystemConfigBuilder>();
+
+        let builder = FileSystemConfig::builder().with_read_timeout(Duration::from_secs(5));
+
+        let cloned_builder = builder.clone();
+        let config1 = builder.build();
+        let config2 = cloned_builder.build();
+
+        assert_eq!(config1.read_timeout(), config2.read_timeout());
+    }
+
+    /// Tests that builder is Send.
+    #[test]
+    fn test_builder_is_send() {
+        fn assert_send<T: Send>() {}
+        assert_send::<FileSystemConfigBuilder>();
+    }
+
+    /// Tests that builder is Sync.
+    #[test]
+    fn test_builder_is_sync() {
+        fn assert_sync<T: Sync>() {}
+        assert_sync::<FileSystemConfigBuilder>();
+    }
+
+    /// Tests that build() consumes the builder.
+    #[test]
+    fn test_build_consumes_builder() {
+        let builder = FileSystemConfig::builder();
+        let _config = builder.build();
+        // builder is consumed and cannot be used again (enforced at compile time)
+    }
+
+    // =========================================================================
+    // Duration Edge Cases
+    // =========================================================================
+
+    /// Tests configuration with subsecond durations.
+    #[test]
+    fn test_subsecond_durations() {
+        let config = FileSystemConfig::builder()
+            .with_read_timeout(Duration::from_millis(500))
+            .with_write_timeout(Duration::from_micros(1500))
+            .with_operation_timeout(Duration::from_nanos(2_000_000))
+            .build();
+
+        assert_eq!(config.read_timeout(), Duration::from_millis(500));
+        assert_eq!(config.write_timeout(), Duration::from_micros(1500));
+        assert_eq!(config.operation_timeout(), Duration::from_nanos(2_000_000));
+    }
+
+    /// Tests configuration with maximum duration.
+    #[test]
+    fn test_max_duration() {
+        let max_duration = Duration::MAX;
+
+        let config = FileSystemConfig::builder().with_read_timeout(max_duration).build();
+
+        assert_eq!(config.read_timeout(), Duration::MAX);
+    }
 }
 
 #[cfg(test)]

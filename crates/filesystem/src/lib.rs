@@ -74,9 +74,9 @@ pub mod error;
 
 /// Configuration types for filesystem behavior.
 ///
-/// Provides [`FileSystemConfig`](config) with timeout settings and a builder
-/// pattern for customization.
-pub(crate) mod config;
+/// Provides [`FileSystemConfig`](config::FileSystemConfig) with timeout settings
+/// and a builder pattern for customization.
+pub mod config;
 
 /// Core data types for filesystem entries.
 ///
@@ -119,11 +119,13 @@ mod tests;
 // Error types
 pub use error::{Error, Result};
 
+// Configuration types
+pub use config::{FileSystemConfig, FileSystemConfigBuilder};
+
 // Types
 pub use types::{DirEntry, FileType, Metadata};
 
 // TODO: Re-exports will be added as modules are implemented
-// pub use config::{FileSystemConfig, FileSystemConfigBuilder};
 // pub use mock::MockFileSystem;
 // pub use path_ext::PathExt;
 // pub use real::RealFileSystem;
