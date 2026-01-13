@@ -1,0 +1,25 @@
+[package]
+name = "workspace-fs"
+version = "0.1.0"
+description = "Unified filesystem abstraction layer for workspace-node-tools ecosystem"
+keywords = ["filesystem", "async", "mock", "testing", "workspace"]
+categories = ["filesystem", "asynchronous", "development-tools"]
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+
+[dependencies]
+async-trait.workspace = true
+log.workspace = true
+snafu.workspace = true
+tokio = { workspace = true, features = ["fs", "sync", "io-util"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true
