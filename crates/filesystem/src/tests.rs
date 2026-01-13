@@ -554,6 +554,236 @@ mod types {
         fn assert_from<T: From<std::fs::FileType>>() {}
         assert_from::<FileType>();
     }
+
+    // =========================================================================
+    // Metadata Struct Tests (FR-5.3.1 - FR-5.3.6)
+    // =========================================================================
+
+    use crate::types::Metadata;
+
+    // -------------------------------------------------------------------------
+    // Constructor Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_metadata_new_file() {
+        let metadata = Metadata::new(FileType::File, 1024);
+        assert!(metadata.is_file());
+        assert_eq!(metadata.len(), 1024);
+    }
+
+    #[test]
+    fn test_metadata_new_dir() {
+        let metadata = Metadata::new(FileType::Dir, 0);
+        assert!(metadata.is_dir());
+        assert_eq!(metadata.len(), 0);
+    }
+
+    #[test]
+    fn test_metadata_new_symlink() {
+        let metadata = Metadata::new(FileType::Symlink, 42);
+        assert!(metadata.is_symlink());
+        assert_eq!(metadata.len(), 42);
+    }
+
+    // -------------------------------------------------------------------------
+    // len() Method Tests (FR-5.3.1)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_metadata_len_zero() {
+        let metadata = Metadata::new(FileType::File, 0);
+        assert_eq!(metadata.len(), 0);
+    }
+
+    #[test]
+    fn test_metadata_len_small_file() {
+        let metadata = Metadata::new(FileType::File, 100);
+        assert_eq!(metadata.len(), 100);
+    }
+
+    #[test]
+    fn test_metadata_len_large_file() {
+        let large_size: u64 = 10 * 1024 * 1024 * 1024; // 10 GB
+        let metadata = Metadata::new(FileType::File, large_size);
+        assert_eq!(metadata.len(), large_size);
+    }
+
+    #[test]
+    fn test_metadata_len_max_u64() {
+        let metadata = Metadata::new(FileType::File, u64::MAX);
+        assert_eq!(metadata.len(), u64::MAX);
+    }
+
+    // -------------------------------------------------------------------------
+    // is_empty() Method Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_metadata_is_empty_true() {
+        let metadata = Metadata::new(FileType::File, 0);
+        assert!(metadata.is_empty());
+    }
+
+    #[test]
+    fn test_metadata_is_empty_false() {
+        let metadata = Metadata::new(FileType::File, 1);
+        assert!(!metadata.is_empty());
+    }
+
+    #[test]
+    fn test_metadata_is_empty_large_file() {
+        let metadata = Metadata::new(FileType::File, 1_000_000);
+        assert!(!metadata.is_empty());
+    }
+
+    // -------------------------------------------------------------------------
+    // file_type() Method Tests (FR-5.3.5)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_metadata_file_type_file() {
+        let metadata = Metadata::new(FileType::File, 100);
+        assert_eq!(metadata.file_type(), FileType::File);
+    }
+
+    #[test]
+    fn test_metadata_file_type_dir() {
+        let metadata = Metadata::new(FileType::Dir, 0);
+        assert_eq!(metadata.file_type(), FileType::Dir);
+    }
+
+    #[test]
+    fn test_metadata_file_type_symlink() {
+        let metadata = Metadata::new(FileType::Symlink, 0);
+        assert_eq!(metadata.file_type(), FileType::Symlink);
+    }
+
+    // -------------------------------------------------------------------------
+    // is_file() Method Tests (FR-5.3.2)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_metadata_is_file_true() {
+        let metadata = Metadata::new(FileType::File, 100);
+        assert!(metadata.is_file());
+    }
+
+    #[test]
+    fn test_metadata_is_file_false_for_dir() {
+        let metadata = Metadata::new(FileType::Dir, 0);
+        assert!(!metadata.is_file());
+    }
+
+    #[test]
+    fn test_metadata_is_file_false_for_symlink() {
+        let metadata = Metadata::new(FileType::Symlink, 0);
+        assert!(!metadata.is_file());
+    }
+
+    // -------------------------------------------------------------------------
+    // is_dir() Method Tests (FR-5.3.3)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_metadata_is_dir_true() {
+        let metadata = Metadata::new(FileType::Dir, 0);
+        assert!(metadata.is_dir());
+    }
+
+    #[test]
+    fn test_metadata_is_dir_false_for_file() {
+        let metadata = Metadata::new(FileType::File, 100);
+        assert!(!metadata.is_dir());
+    }
+
+    #[test]
+    fn test_metadata_is_dir_false_for_symlink() {
+        let metadata = Metadata::new(FileType::Symlink, 0);
+        assert!(!metadata.is_dir());
+    }
+
+    // -------------------------------------------------------------------------
+    // is_symlink() Method Tests (FR-5.3.4)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_metadata_is_symlink_true() {
+        let metadata = Metadata::new(FileType::Symlink, 0);
+        assert!(metadata.is_symlink());
+    }
+
+    #[test]
+    fn test_metadata_is_symlink_false_for_file() {
+        let metadata = Metadata::new(FileType::File, 100);
+        assert!(!metadata.is_symlink());
+    }
+
+    #[test]
+    fn test_metadata_is_symlink_false_for_dir() {
+        let metadata = Metadata::new(FileType::Dir, 0);
+        assert!(!metadata.is_symlink());
+    }
+
+    // -------------------------------------------------------------------------
+    // Trait Implementation Tests (FR-5.3.6)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_metadata_debug() {
+        let metadata = Metadata::new(FileType::File, 1024);
+        let debug_str = format!("{metadata:?}");
+        assert!(debug_str.contains("Metadata"));
+        assert!(debug_str.contains("File"));
+        assert!(debug_str.contains("1024"));
+    }
+
+    #[test]
+    fn test_metadata_clone() {
+        let original = Metadata::new(FileType::File, 2048);
+        let cloned = original.clone();
+        assert_eq!(original.file_type(), cloned.file_type());
+        assert_eq!(original.len(), cloned.len());
+    }
+
+    #[test]
+    fn test_metadata_clone_independence() {
+        let original = Metadata::new(FileType::Dir, 0);
+        let cloned = original.clone();
+        // Both can be used independently
+        assert!(original.is_dir());
+        assert!(cloned.is_dir());
+    }
+
+    // -------------------------------------------------------------------------
+    // Trait Bound Verification Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_metadata_is_send() {
+        fn assert_send<T: Send>() {}
+        assert_send::<Metadata>();
+    }
+
+    #[test]
+    fn test_metadata_is_sync() {
+        fn assert_sync<T: Sync>() {}
+        assert_sync::<Metadata>();
+    }
+
+    // -------------------------------------------------------------------------
+    // From<std::fs::Metadata> Tests
+    // -------------------------------------------------------------------------
+
+    // Note: Testing From<std::fs::Metadata> directly requires actual filesystem
+    // access to obtain a std::fs::Metadata instance. These tests are covered
+    // in integration tests. Here we verify the trait is implemented.
+
+    #[test]
+    fn test_metadata_from_trait_is_implemented() {
+        fn assert_from<T: From<std::fs::Metadata>>() {}
+        assert_from::<Metadata>();
+    }
 }
 
 #[cfg(test)]
