@@ -125,8 +125,10 @@ pub use config::{FileSystemConfig, FileSystemConfigBuilder};
 // Types
 pub use types::{DirEntry, FileType, Metadata};
 
+// Path extension utilities
+pub use path_ext::PathExt;
+
 // TODO: Re-exports will be added as modules are implemented
 // pub use mock::MockFileSystem;
-// pub use path_ext::PathExt;
 // pub use real::RealFileSystem;
 // pub use traits::FileSystem;

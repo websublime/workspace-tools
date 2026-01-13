@@ -1360,7 +1360,384 @@ mod types {
 #[cfg(test)]
 mod path_ext {
     //! Tests for the path_ext module.
-    // TODO: will be implemented on epic workspace-node-tools-60y (PathExt Module)
+    //!
+    //! This module contains comprehensive unit tests for the [`PathExt`] trait,
+    //! which provides path normalization utilities without I/O operations.
+    //!
+    //! Test categories:
+    //! - Basic absolute path normalization
+    //! - Basic relative path normalization
+    //! - Edge cases from task requirements
+    //! - Additional edge cases (empty, dots only, etc.)
+    //! - Unicode and special characters
+    //! - PathBuf implementation
+    //! - Trait usage patterns
+    //! - Complex scenarios
+    //! - Platform-specific tests (Windows)
+
+    use crate::PathExt;
+    use std::path::{Path, PathBuf};
+
+    // =========================================================================
+    // Basic Absolute Path Tests
+    // =========================================================================
+
+    #[test]
+    fn test_normalize_absolute_with_parent_dir() {
+        let path = Path::new("/a/b/../c");
+        assert_eq!(path.normalize(), PathBuf::from("/a/c"));
+    }
+
+    #[test]
+    fn test_normalize_absolute_with_current_dir() {
+        let path = Path::new("/a/./b/./c");
+        assert_eq!(path.normalize(), PathBuf::from("/a/b/c"));
+    }
+
+    #[test]
+    fn test_normalize_absolute_with_multiple_parent_dirs() {
+        let path = Path::new("/a/b/c/../../d");
+        assert_eq!(path.normalize(), PathBuf::from("/a/d"));
+    }
+
+    #[test]
+    fn test_normalize_absolute_parent_at_root() {
+        let path = Path::new("/../a");
+        assert_eq!(path.normalize(), PathBuf::from("/a"));
+    }
+
+    #[test]
+    fn test_normalize_root_only() {
+        let path = Path::new("/");
+        assert_eq!(path.normalize(), PathBuf::from("/"));
+    }
+
+    #[test]
+    fn test_normalize_absolute_complex() {
+        let path = Path::new("/foo/bar/../baz/./qux");
+        assert_eq!(path.normalize(), PathBuf::from("/foo/baz/qux"));
+    }
+
+    #[test]
+    fn test_normalize_absolute_more_parents_than_depth() {
+        let path = Path::new("/a/b/../../../c");
+        assert_eq!(path.normalize(), PathBuf::from("/c"));
+    }
+
+    // =========================================================================
+    // Basic Relative Path Tests
+    // =========================================================================
+
+    #[test]
+    fn test_normalize_relative_with_current_dir_at_start() {
+        let path = Path::new("./a/./b");
+        assert_eq!(path.normalize(), PathBuf::from("a/b"));
+    }
+
+    #[test]
+    fn test_normalize_relative_with_parent_resolution() {
+        let path = Path::new("a/b/../../c");
+        assert_eq!(path.normalize(), PathBuf::from("c"));
+    }
+
+    #[test]
+    fn test_normalize_relative_preserves_single_parent() {
+        let path = Path::new("../a");
+        assert_eq!(path.normalize(), PathBuf::from("../a"));
+    }
+
+    #[test]
+    fn test_normalize_relative_preserves_multiple_parents() {
+        let path = Path::new("../../a/b");
+        assert_eq!(path.normalize(), PathBuf::from("../../a/b"));
+    }
+
+    #[test]
+    fn test_normalize_relative_going_above_start() {
+        let path = Path::new("a/../../b");
+        assert_eq!(path.normalize(), PathBuf::from("../b"));
+    }
+
+    #[test]
+    fn test_normalize_relative_simple() {
+        let path = Path::new("a/b/c");
+        assert_eq!(path.normalize(), PathBuf::from("a/b/c"));
+    }
+
+    #[test]
+    fn test_normalize_relative_more_parents_than_depth() {
+        let path = Path::new("a/b/../../../c");
+        assert_eq!(path.normalize(), PathBuf::from("../c"));
+    }
+
+    // =========================================================================
+    // Edge Cases from Task Requirements
+    // =========================================================================
+
+    #[test]
+    fn test_normalize_task_case_1() {
+        // /a/b/../c -> /a/c
+        let path = Path::new("/a/b/../c");
+        assert_eq!(path.normalize(), PathBuf::from("/a/c"));
+    }
+
+    #[test]
+    fn test_normalize_task_case_2() {
+        // ./a/./b -> a/b
+        let path = Path::new("./a/./b");
+        assert_eq!(path.normalize(), PathBuf::from("a/b"));
+    }
+
+    #[test]
+    fn test_normalize_task_case_3() {
+        // a/b/../../c -> c
+        let path = Path::new("a/b/../../c");
+        assert_eq!(path.normalize(), PathBuf::from("c"));
+    }
+
+    #[test]
+    fn test_normalize_task_case_4() {
+        // Empty path -> .
+        let path = Path::new("");
+        assert_eq!(path.normalize(), PathBuf::from("."));
+    }
+
+    // =========================================================================
+    // Additional Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_normalize_just_current_dir() {
+        let path = Path::new(".");
+        assert_eq!(path.normalize(), PathBuf::from("."));
+    }
+
+    #[test]
+    fn test_normalize_just_parent_dir() {
+        let path = Path::new("..");
+        assert_eq!(path.normalize(), PathBuf::from(".."));
+    }
+
+    #[test]
+    fn test_normalize_multiple_parent_dirs_only() {
+        let path = Path::new("../..");
+        assert_eq!(path.normalize(), PathBuf::from("../.."));
+    }
+
+    #[test]
+    fn test_normalize_three_parent_dirs() {
+        let path = Path::new("../../..");
+        assert_eq!(path.normalize(), PathBuf::from("../../.."));
+    }
+
+    #[test]
+    fn test_normalize_mixed_current_and_parent() {
+        let path = Path::new("./../.");
+        assert_eq!(path.normalize(), PathBuf::from(".."));
+    }
+
+    #[test]
+    fn test_normalize_deeply_nested_then_up() {
+        let path = Path::new("a/b/c/d/../../../../e");
+        assert_eq!(path.normalize(), PathBuf::from("e"));
+    }
+
+    #[test]
+    fn test_normalize_empty_path_returns_current_dir() {
+        let path = Path::new("");
+        assert_eq!(path.normalize(), PathBuf::from("."));
+    }
+
+    // =========================================================================
+    // Unicode and Special Characters
+    // =========================================================================
+
+    #[test]
+    fn test_normalize_unicode_path() {
+        let path = Path::new("/日本語/パス/../テスト");
+        assert_eq!(path.normalize(), PathBuf::from("/日本語/テスト"));
+    }
+
+    #[test]
+    fn test_normalize_emoji_path() {
+        let path = Path::new("./🎉/./🎊/../🎁");
+        assert_eq!(path.normalize(), PathBuf::from("🎉/🎁"));
+    }
+
+    #[test]
+    fn test_normalize_spaces_in_path() {
+        let path = Path::new("/path with spaces/../other dir");
+        assert_eq!(path.normalize(), PathBuf::from("/other dir"));
+    }
+
+    #[test]
+    fn test_normalize_dots_in_filename() {
+        // Files with dots in names (not . or ..)
+        let path = Path::new("/a/file.txt/../b/config.json");
+        assert_eq!(path.normalize(), PathBuf::from("/a/b/config.json"));
+    }
+
+    #[test]
+    fn test_normalize_dotfiles() {
+        let path = Path::new("/home/.config/../.bashrc");
+        assert_eq!(path.normalize(), PathBuf::from("/home/.bashrc"));
+    }
+
+    // =========================================================================
+    // PathBuf Implementation Tests
+    // =========================================================================
+
+    #[test]
+    fn test_normalize_pathbuf() {
+        let path = PathBuf::from("/a/b/../c");
+        assert_eq!(path.normalize(), PathBuf::from("/a/c"));
+    }
+
+    #[test]
+    fn test_normalize_pathbuf_relative() {
+        let path = PathBuf::from("./a/./b");
+        assert_eq!(path.normalize(), PathBuf::from("a/b"));
+    }
+
+    // =========================================================================
+    // Trait Usage Pattern Tests
+    // =========================================================================
+
+    #[test]
+    fn test_pathext_trait_is_publicly_accessible() {
+        // Verify that PathExt can be used through the public API
+        let path = Path::new("/a/b/../c");
+        let result = path.normalize();
+        assert_eq!(result, PathBuf::from("/a/c"));
+    }
+
+    #[test]
+    fn test_pathext_works_with_path_references() {
+        let path: &Path = Path::new("./a/./b");
+        let result = path.normalize();
+        assert_eq!(result, PathBuf::from("a/b"));
+    }
+
+    #[test]
+    fn test_pathext_works_with_pathbuf() {
+        let path = PathBuf::from("a/b/../../c");
+        let result = path.normalize();
+        assert_eq!(result, PathBuf::from("c"));
+    }
+
+    #[test]
+    fn test_pathext_works_with_generics() {
+        // This test ensures PathExt can be used with generic bounds
+        fn use_pathext<P: PathExt + ?Sized>(p: &P) -> PathBuf {
+            p.normalize()
+        }
+
+        let path = Path::new("/a/b/../c");
+        assert_eq!(use_pathext(path), PathBuf::from("/a/c"));
+
+        let pathbuf = PathBuf::from("./a/./b");
+        assert_eq!(use_pathext(&pathbuf), PathBuf::from("a/b"));
+    }
+
+    #[test]
+    fn test_normalize_returns_new_pathbuf() {
+        let path = Path::new("/a/b/c");
+        let normalized = path.normalize();
+        // Should be a new PathBuf, not a reference
+        assert_eq!(normalized, PathBuf::from("/a/b/c"));
+    }
+
+    #[test]
+    fn test_normalize_is_idempotent() {
+        // Normalizing a normalized path should yield the same result
+        let path = Path::new("/a/b/../c/./d");
+        let first = path.normalize();
+        let second = first.normalize();
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn test_normalize_preserves_absolute_nature() {
+        let abs_path = Path::new("/a/b/../c");
+        let result = abs_path.normalize();
+        assert!(result.is_absolute());
+    }
+
+    #[test]
+    fn test_normalize_relative_stays_relative() {
+        let rel_path = Path::new("a/b/../c");
+        let result = rel_path.normalize();
+        assert!(result.is_relative());
+    }
+
+    // =========================================================================
+    // Complex Scenarios
+    // =========================================================================
+
+    #[test]
+    fn test_normalize_alternating_up_and_down() {
+        let path = Path::new("a/../b/../c/../d");
+        assert_eq!(path.normalize(), PathBuf::from("d"));
+    }
+
+    #[test]
+    fn test_normalize_current_dir_everywhere() {
+        let path = Path::new("./././a/./b/./c/./");
+        assert_eq!(path.normalize(), PathBuf::from("a/b/c"));
+    }
+
+    #[test]
+    fn test_normalize_trailing_parent() {
+        let path = Path::new("a/b/..");
+        assert_eq!(path.normalize(), PathBuf::from("a"));
+    }
+
+    #[test]
+    fn test_normalize_trailing_current() {
+        let path = Path::new("a/b/.");
+        assert_eq!(path.normalize(), PathBuf::from("a/b"));
+    }
+
+    #[test]
+    fn test_normalize_all_cancel_out() {
+        let path = Path::new("a/b/../..");
+        assert_eq!(path.normalize(), PathBuf::from("."));
+    }
+
+    #[test]
+    fn test_normalize_root_with_trailing_components() {
+        let path = Path::new("/./..");
+        assert_eq!(path.normalize(), PathBuf::from("/"));
+    }
+
+    // =========================================================================
+    // Platform-Specific Tests (Windows paths on Windows only)
+    // =========================================================================
+
+    #[cfg(windows)]
+    mod windows_tests {
+        use super::*;
+
+        #[test]
+        fn test_normalize_windows_drive() {
+            let path = Path::new(r"C:\Users\test\..\admin");
+            assert_eq!(path.normalize(), PathBuf::from(r"C:\Users\admin"));
+        }
+
+        #[test]
+        fn test_normalize_windows_drive_parent_at_root() {
+            let path = Path::new(r"C:\..\Users");
+            assert_eq!(path.normalize(), PathBuf::from(r"C:\Users"));
+        }
+
+        #[test]
+        fn test_normalize_windows_forward_slashes() {
+            let path = Path::new("C:/Users/test/../admin");
+            let normalized = path.normalize();
+            // The result should resolve the parent correctly
+            assert!(normalized.ends_with("admin"));
+        }
+    }
 }
 
 #[cfg(test)]
