@@ -1,3 +1,16 @@
+# Release Crates Workflow
+#
+# This workflow manages automated releases of Rust crates to crates.io using release-plz.
+#
+# What: Automates versioning, changelog generation, and crates.io publishing
+# How: Uses release-plz to detect changes, bump versions, and publish crates
+# Why: Ensures consistent, automated releases with proper changelogs
+#
+# Triggers:
+# - On push to main: Creates release PRs and publishes approved releases
+#
+# Configuration: See release-plz.toml in the repository root
+
 name: Release Crates (crates.io)
 
 on:
@@ -6,7 +19,7 @@ on:
       - main
 
 jobs:
-  # Release unpublished packages.
+  # Release unpublished packages to crates.io
   release-plz-release:
     name: Release crates
     runs-on: ubuntu-latest
@@ -14,16 +27,16 @@ jobs:
     permissions:
       contents: write
     steps:
-      - &checkout
-        name: Checkout repository
-        uses: actions/checkout@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
-      - &install-rust
-        name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Run release-plz
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+
+      - name: Run release-plz release
         uses: release-plz/action@v0.5
         with:
           command: release
@@ -31,10 +44,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-  # Create a PR with the new versions and changelog, preparing the next release.
+  # Create a PR with new versions and changelogs, preparing the next release
   release-plz-pr:
     name: Create release pull request
     runs-on: ubuntu-latest
+    if: ${{ github.repository_owner == 'websublime' }}
     permissions:
       contents: write
       pull-requests: write
@@ -42,9 +56,16 @@ jobs:
       group: release-plz-${{ github.ref }}
       cancel-in-progress: false
     steps:
-      - *checkout
-      - *install-rust
-      - name: Run release-plz
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+
+      - name: Run release-plz release-pr
         uses: release-plz/action@v0.5
         with:
           command: release-pr

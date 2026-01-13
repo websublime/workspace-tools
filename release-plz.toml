@@ -1,0 +1,49 @@
+# Release-plz configuration for workspace-node-tools
+#
+# This configuration manages automated releases for Rust crates in this workspace.
+# Release-plz handles version bumping, changelog generation, and crates.io publishing.
+#
+# Documentation: https://release-plz.dev/docs/config
+
+[workspace]
+# Enable changelog updates for each package
+changelog_update = true
+
+# Update dependencies with `cargo update`
+dependencies_update = true
+
+# Create git tags for releases
+git_tag_enable = true
+
+# Disable GitHub releases (we use crates.io releases only)
+git_release_enable = false
+
+# Labels for the release PR
+pr_labels = ["release"]
+
+# Disallow updating repositories with uncommitted changes
+allow_dirty = false
+
+# Disallow packaging with uncommitted changes
+publish_allow_dirty = false
+
+# Disable running `cargo-semver-checks` (can be enabled later if needed)
+semver_check = false
+
+# Only bump packages when they have actual code changes
+# This prevents cascade bumps due to workspace dependencies
+release_commits = "^(feat|fix|perf|refactor|docs|test|chore)[(:]"
+
+# Publish order based on dependencies:
+# 1. workspace-fs (no internal deps - foundational crate)
+# 2. workspace-core (depends on workspace-fs)
+
+[[package]]
+name = "workspace-fs"
+changelog_path = "crates/filesystem/CHANGELOG.md"
+changelog_update = true
+
+[[package]]
+name = "workspace-core"
+changelog_path = "crates/core/CHANGELOG.md"
+changelog_update = true
