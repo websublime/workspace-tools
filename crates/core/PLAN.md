@@ -132,14 +132,22 @@ End-to-end tests, documentation review, and optimization.
 [package]
 name = "workspace-core"
 version = "0.1.0"
-edition = "2024"
-rust-version = "1.90"
 description = "Core detection and abstractions for JavaScript/TypeScript projects"
-license = "MIT"
-repository = "https://github.com/user/workspace-node-tools"
 keywords = ["nodejs", "monorepo", "workspace", "package-manager"]
 categories = ["development-tools"]
 
+# Inherit from workspace (see root Cargo.toml [workspace.package])
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+# Inherit lints from workspace (see root Cargo.toml [workspace.lints])
+workspace = true
+
+# Additional crate-specific lints
 [lints.rust]
 missing_docs = "warn"
 rustdoc-missing-crate-level-docs = "warn"
@@ -153,33 +161,35 @@ unimplemented = "deny"
 panic = "deny"
 
 [dependencies]
+# Inherit versions from workspace (see root Cargo.toml [workspace.dependencies])
+
 # Error handling (PRD §1.4.2)
-snafu = "0.8.9"
+snafu.workspace = true
 
 # Serialization (PRD §1.4.2)
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-serde_yaml_ng = "0.10.0"
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml_ng.workspace = true
 
 # Logging (PRD §1.4.2, §6.5)
-log = "0.4"
+log.workspace = true
 
 # Versioning (PRD §1.4.2)
-semver = "1.0"
+semver.workspace = true
 
 # Package.json parsing (PRD §1.4.2)
-package-json = "0.5.0"
+package-json.workspace = true
 
 # Filesystem traversal (PRD §1.4.2)
-walkdir = "2.0"
-glob = "0.3"
+walkdir.workspace = true
+glob.workspace = true
 
 # Internal dependency (PRD §1.4.1)
 workspace-fs = { path = "../filesystem" }
 
 [dev-dependencies]
 # PRD §1.4.3
-tempfile = "3.0"
+tempfile.workspace = true
 ```
 
 **Files to Create**:

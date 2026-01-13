@@ -124,14 +124,22 @@ End-to-end tests, documentation review, and optimization.
 [package]
 name = "workspace-fs"
 version = "0.1.0"
-edition = "2024"
-rust-version = "1.90"
 description = "Async filesystem abstraction for workspace-node-tools"
-license = "MIT"
-repository = "https://github.com/user/workspace-node-tools"
 keywords = ["filesystem", "async", "tokio", "mock"]
 categories = ["filesystem", "asynchronous"]
 
+# Inherit from workspace (see root Cargo.toml [workspace.package])
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+# Inherit lints from workspace (see root Cargo.toml [workspace.lints])
+workspace = true
+
+# Additional crate-specific lints
 [lints.rust]
 missing_docs = "warn"
 rustdoc-missing-crate-level-docs = "warn"
@@ -145,20 +153,22 @@ unimplemented = "deny"
 panic = "deny"
 
 [dependencies]
+# Inherit versions from workspace (see root Cargo.toml [workspace.dependencies])
+
 # Error handling (PRD §1.4.2)
-snafu = "0.8.9"
+snafu.workspace = true
 
 # Async runtime and filesystem (PRD §1.4.2)
-tokio = { version = "1.49.0", features = ["fs", "sync", "time"] }
-async-trait = "0.1.89"
+tokio = { workspace = true, features = ["fs", "sync", "time"] }
+async-trait.workspace = true
 
 # Logging (PRD §1.4.2)
-log = "0.4"
+log.workspace = true
 
 [dev-dependencies]
 # PRD §1.4.3
-tempfile = "3.24.0"
-tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 ```
 
 **Files to Create**:
