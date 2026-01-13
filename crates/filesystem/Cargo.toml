@@ -15,7 +15,7 @@ readme = "README.md"
 async-trait.workspace = true
 log.workspace = true
 snafu.workspace = true
-tokio = { workspace = true, features = ["fs", "sync", "io-util"] }
+tokio = { workspace = true, features = ["fs", "sync", "io-util", "time"] }
 
 [dev-dependencies]
 tempfile.workspace = true
