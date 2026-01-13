@@ -224,3 +224,254 @@ impl From<std::fs::FileType> for FileType {
         }
     }
 }
+
+// =============================================================================
+// Metadata Struct
+// =============================================================================
+
+/// Metadata information about a filesystem entry.
+///
+/// This struct provides a platform-agnostic representation of file metadata,
+/// including the file type and size. It abstracts over the differences between
+/// how various operating systems report file metadata.
+///
+/// # Fields
+///
+/// The struct contains the following private fields, accessible through getter methods:
+/// - `file_type`: The type of the filesystem entry ([`FileType`])
+/// - `len`: The size of the file in bytes (always 0 for directories)
+///
+/// # Trait Implementations
+///
+/// - [`Debug`]: Formats the metadata for debugging
+/// - [`Clone`]: Allows cloning the metadata
+/// - [`From<std::fs::Metadata>`]: Converts from the standard library type
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use workspace_fs::{Metadata, FileType};
+///
+/// // Create metadata for a 1024-byte file
+/// let metadata = Metadata::new(FileType::File, 1024);
+/// assert!(metadata.is_file());
+/// assert_eq!(metadata.len(), 1024);
+/// assert!(!metadata.is_empty());
+///
+/// // Create metadata for an empty directory
+/// let dir_metadata = Metadata::new(FileType::Dir, 0);
+/// assert!(dir_metadata.is_dir());
+/// assert!(dir_metadata.is_empty());
+/// ```
+#[derive(Debug, Clone)]
+pub struct Metadata {
+    /// The type of the filesystem entry.
+    file_type: FileType,
+    /// The size of the file in bytes.
+    ///
+    /// For directories, this value is typically 0 or represents the
+    /// directory's metadata size (platform-dependent).
+    len: u64,
+}
+
+impl Metadata {
+    /// Creates a new `Metadata` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `file_type` - The type of the filesystem entry
+    /// * `len` - The size of the file in bytes
+    ///
+    /// # Returns
+    ///
+    /// A new `Metadata` instance with the specified file type and length.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use workspace_fs::{Metadata, FileType};
+    ///
+    /// let metadata = Metadata::new(FileType::File, 2048);
+    /// assert!(metadata.is_file());
+    /// assert_eq!(metadata.len(), 2048);
+    /// ```
+    #[must_use]
+    pub fn new(file_type: FileType, len: u64) -> Self {
+        Self { file_type, len }
+    }
+
+    /// Returns the size of the file in bytes.
+    ///
+    /// For regular files, this returns the actual file size. For directories,
+    /// the value is platform-dependent and typically represents the directory
+    /// metadata size (often 0).
+    ///
+    /// # Returns
+    ///
+    /// The size of the file in bytes as a `u64`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use workspace_fs::{Metadata, FileType};
+    ///
+    /// let metadata = Metadata::new(FileType::File, 1024);
+    /// assert_eq!(metadata.len(), 1024);
+    ///
+    /// let empty_file = Metadata::new(FileType::File, 0);
+    /// assert_eq!(empty_file.len(), 0);
+    /// ```
+    #[must_use]
+    pub fn len(&self) -> u64 {
+        self.len
+    }
+
+    /// Returns `true` if the file size is zero.
+    ///
+    /// This is useful for quickly checking if a file is empty without
+    /// reading its contents.
+    ///
+    /// # Returns
+    ///
+    /// - `true` if the file size is 0
+    /// - `false` otherwise
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use workspace_fs::{Metadata, FileType};
+    ///
+    /// let empty = Metadata::new(FileType::File, 0);
+    /// assert!(empty.is_empty());
+    ///
+    /// let not_empty = Metadata::new(FileType::File, 100);
+    /// assert!(!not_empty.is_empty());
+    /// ```
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Returns the file type.
+    ///
+    /// # Returns
+    ///
+    /// The [`FileType`] of this filesystem entry.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use workspace_fs::{Metadata, FileType};
+    ///
+    /// let metadata = Metadata::new(FileType::Dir, 0);
+    /// assert_eq!(metadata.file_type(), FileType::Dir);
+    /// ```
+    #[must_use]
+    pub fn file_type(&self) -> FileType {
+        self.file_type
+    }
+
+    /// Returns `true` if this is a regular file.
+    ///
+    /// This is a convenience method equivalent to calling
+    /// `self.file_type().is_file()`.
+    ///
+    /// # Returns
+    ///
+    /// - `true` if the entry is a regular file
+    /// - `false` otherwise
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use workspace_fs::{Metadata, FileType};
+    ///
+    /// let file_meta = Metadata::new(FileType::File, 1024);
+    /// assert!(file_meta.is_file());
+    ///
+    /// let dir_meta = Metadata::new(FileType::Dir, 0);
+    /// assert!(!dir_meta.is_file());
+    /// ```
+    #[must_use]
+    pub fn is_file(&self) -> bool {
+        self.file_type.is_file()
+    }
+
+    /// Returns `true` if this is a directory.
+    ///
+    /// This is a convenience method equivalent to calling
+    /// `self.file_type().is_dir()`.
+    ///
+    /// # Returns
+    ///
+    /// - `true` if the entry is a directory
+    /// - `false` otherwise
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use workspace_fs::{Metadata, FileType};
+    ///
+    /// let dir_meta = Metadata::new(FileType::Dir, 0);
+    /// assert!(dir_meta.is_dir());
+    ///
+    /// let file_meta = Metadata::new(FileType::File, 1024);
+    /// assert!(!file_meta.is_dir());
+    /// ```
+    #[must_use]
+    pub fn is_dir(&self) -> bool {
+        self.file_type.is_dir()
+    }
+
+    /// Returns `true` if this is a symbolic link.
+    ///
+    /// This is a convenience method equivalent to calling
+    /// `self.file_type().is_symlink()`.
+    ///
+    /// # Returns
+    ///
+    /// - `true` if the entry is a symbolic link
+    /// - `false` otherwise
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use workspace_fs::{Metadata, FileType};
+    ///
+    /// let symlink_meta = Metadata::new(FileType::Symlink, 0);
+    /// assert!(symlink_meta.is_symlink());
+    ///
+    /// let file_meta = Metadata::new(FileType::File, 1024);
+    /// assert!(!file_meta.is_symlink());
+    /// ```
+    #[must_use]
+    pub fn is_symlink(&self) -> bool {
+        self.file_type.is_symlink()
+    }
+}
+
+/// Converts from [`std::fs::Metadata`] to [`Metadata`].
+///
+/// This implementation allows seamless conversion from the standard library's
+/// metadata type to this crate's abstraction.
+///
+/// # Conversion Details
+///
+/// - `file_type`: Converted using the `From<std::fs::FileType>` implementation
+/// - `len`: Obtained from [`std::fs::Metadata::len()`]
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use workspace_fs::Metadata;
+/// use std::fs;
+///
+/// let std_metadata = fs::metadata("some_file.txt")?;
+/// let metadata: Metadata = std_metadata.into();
+/// println!("File size: {} bytes", metadata.len());
+/// ```
+impl From<std::fs::Metadata> for Metadata {
+    fn from(meta: std::fs::Metadata) -> Self {
+        Self { file_type: meta.file_type().into(), len: meta.len() }
+    }
+}
