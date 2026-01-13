@@ -333,7 +333,6 @@ Closes: <issue-id>
 5. **Descriptive close reasons** - Document what was accomplished
 6. **Sync bd frequently** - After every subtask completion
 7. **Read the PLAN** - Always load context from PLAN.md before implementation
-8. **Create changeset early** - Run `workspace changeset create` right after creating the feature branch
 
 ---
 
