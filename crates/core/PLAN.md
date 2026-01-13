@@ -48,6 +48,17 @@ From PRD §1.4.2:
 | `walkdir` | `2.0` | Directory traversal |
 | `glob` | `0.3` | Glob pattern matching |
 
+### 1.3 Standard Acceptance Criteria
+
+**All tasks MUST meet these criteria before completion:**
+
+- [ ] **Clippy**: `cargo clippy` passes with zero warnings
+- [ ] **Fmt**: `cargo fmt --check` passes
+- [ ] **Docs**: All public items documented, `cargo doc` generates without warnings
+- [ ] **Tests**: Unit tests written and passing (`cargo test`)
+- [ ] **Build**: `cargo build` succeeds
+- [ ] **Review**: Request implementation review in a new session for robust code and quality solution
+
 ---
 
 ## 2. Implementation Phases
@@ -108,6 +119,11 @@ End-to-end tests, documentation review, and optimization.
 - [ ] `Cargo.toml` created with proper metadata and all dependencies from PRD §1.4
 - [ ] `src/lib.rs` created with clippy lints and crate-level documentation
 - [ ] Crate compiles with `cargo check`
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
 
 **Implementation Details**:
 
@@ -186,6 +202,11 @@ tempfile = "3.0"
 - [ ] All module directories created matching PRD §7.1
 - [ ] All `mod.rs` files created with module declarations
 - [ ] Crate compiles with empty modules
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
 
 **Module Structure** (from PRD §7.1):
 
@@ -285,7 +306,12 @@ src/
 - [ ] `std::error::Error` implemented via snafu
 - [ ] `AsRef<str>` implemented returning `"Error::VariantName"`
 - [ ] `Result<T>` type alias defined
-- [ ] Unit tests for error creation, display, and AsRef<str>
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
 
 **Implementation Details**:
 
@@ -406,56 +432,13 @@ impl AsRef<str> for Error {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    mod error_display {
-        use super::*;
-
-        #[test]
-        fn package_manager_not_found_displays_path() {
-            let err = Error::PackageManagerNotFound {
-                path: PathBuf::from("/project"),
-            };
-            assert_eq!(
-                err.to_string(),
-                "no package manager found at '/project'"
-            );
-        }
-
-        // Additional display tests...
-    }
-
-    mod error_as_ref {
-        use super::*;
-
-        #[test]
-        fn returns_qualified_variant_name() {
-            let err = Error::PackageManagerNotFound {
-                path: PathBuf::from("/project"),
-            };
-            assert_eq!(err.as_ref(), "Error::PackageManagerNotFound");
-        }
-
-        #[test]
-        fn all_variants_return_qualified_names() {
-            // Test each variant returns "Error::VariantName"
-            let errors = vec![
-                Error::RepoTypeUnknown { path: PathBuf::new() },
-                Error::PackageManagerNotFound { path: PathBuf::new() },
-                Error::ConfigInvalid { reason: String::new() },
-                // ... other variants
-            ];
-            for err in errors {
-                let name = err.as_ref();
-                assert!(name.starts_with("Error::"));
-            }
-        }
-    }
-}
 ```
+
+**Test Requirements**:
+- Test `Display` output for each variant
+- Test `AsRef<str>` returns correct qualified name for each variant
+- Test error creation with context
+- Test `std::error::Error` trait implementation
 
 **Files to Create/Modify**:
 - `crates/core/src/error.rs`
@@ -509,7 +492,12 @@ mod tests {
 - [ ] All fields private with getter methods
 - [ ] `Serialize`/`Deserialize` derived
 - [ ] `Default` implemented with values from PRD table
-- [ ] Unit tests for defaults
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
 
 **Implementation Details**:
 
@@ -593,6 +581,11 @@ impl Default for DetectionConfig {
 }
 ```
 
+**Test Requirements**:
+- Test default values match PRD specification
+- Test all getter methods return correct values
+- Test serialization/deserialization roundtrip
+
 **Files to Create/Modify**:
 - `crates/core/src/config/detection.rs`
 - `crates/core/src/config/mod.rs`
@@ -618,7 +611,12 @@ impl Default for DetectionConfig {
 - [ ] `Default` implementation
 - [ ] Fluent setter methods for each field
 - [ ] `build()` method returning `DetectionConfig`
-- [ ] Unit tests matching PRD §5.7 FR-7.5 example
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
 
 **Implementation Details**:
 
@@ -632,7 +630,7 @@ use crate::package_manager::PackageManagerKind;
 ///
 /// # Example (from PRD §5.7 FR-7.5)
 ///
-/// ```
+/// ```ignore
 /// use workspace_core::config::DetectionConfig;
 /// use workspace_core::package_manager::PackageManagerKind;
 ///
@@ -694,6 +692,12 @@ impl DetectionConfigBuilder {
 }
 ```
 
+**Test Requirements**:
+- Test builder with all defaults
+- Test builder with custom values for each field
+- Test fluent API chaining
+- Test example from PRD §5.7 FR-7.5
+
 **Files to Create/Modify**:
 - `crates/core/src/config/builder.rs`
 - `crates/core/src/config/mod.rs` (add re-export)
@@ -739,7 +743,12 @@ impl DetectionConfigBuilder {
 - [ ] Derive `Debug`, `Clone`, `Copy`, `PartialEq`, `Eq`, `Hash`, `Serialize`, `Deserialize`
 - [ ] Detection function following priority order from PRD §3.3
 - [ ] Helper methods (e.g., `characteristic_files()`)
-- [ ] Unit tests for detection priority
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
 
 **Implementation Details**:
 
@@ -776,6 +785,11 @@ impl RepoType {
 }
 ```
 
+**Test Requirements**:
+- Test characteristic_files() for each variant
+- Test detection priority order
+- Test serialization/deserialization
+
 **Files to Create/Modify**:
 - `crates/core/src/repo/repo_type.rs`
 - `crates/core/src/repo/mod.rs`
@@ -805,7 +819,16 @@ impl RepoType {
 - [ ] `RepoKind` enum with `Simple`, `Monorepo` variants
 - [ ] Derive `Debug`, `Clone`, `Copy`, `PartialEq`, `Eq`, `Hash`, `Serialize`, `Deserialize`
 - [ ] Helper methods (e.g., `is_monorepo()`)
-- [ ] Unit tests
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
+
+**Test Requirements**:
+- Test is_monorepo() returns correct value
+- Test serialization/deserialization
 
 **Files to Create/Modify**:
 - `crates/core/src/repo/repo_kind.rs`
@@ -856,7 +879,12 @@ impl RepoType {
 - [ ] `lock_file() -> &'static str` method
 - [ ] `supports_workspaces() -> bool` method
 - [ ] `workspace_config_file() -> Option<&'static str>` method
-- [ ] Unit tests
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
 
 **Implementation Details**:
 
@@ -916,6 +944,12 @@ impl PackageManagerKind {
 }
 ```
 
+**Test Requirements**:
+- Test command_name() for each variant
+- Test lock_file() matches PRD §3.3 table
+- Test supports_workspaces() for each variant
+- Test workspace_config_file() for each variant
+
 **Files to Create/Modify**:
 - `crates/core/src/package_manager/kind.rs`
 - `crates/core/src/package_manager/mod.rs`
@@ -959,7 +993,12 @@ impl PackageManagerKind {
 - [ ] Return `Error::PackageManagerMismatch` if field conflicts with lock file
 - [ ] Return `Error::PackageManagerNotFound` if nothing detected (no fallback!)
 - [ ] Log at appropriate levels (PRD §6.5)
-- [ ] Unit tests including mismatch and not-found scenarios
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
 
 **Implementation Details**:
 
@@ -1035,6 +1074,14 @@ pub fn detect_package_manager(
 }
 ```
 
+**Test Requirements**:
+- Test detection from packageManager field
+- Test detection from lock file
+- Test detection from environment variable
+- Test mismatch returns Error::PackageManagerMismatch
+- Test not found returns Error::PackageManagerNotFound (no fallback)
+- Test priority order is respected
+
 **Files to Create/Modify**:
 - `crates/core/src/package_manager/detector.rs`
 - `crates/core/src/package_manager/mod.rs`
@@ -1087,7 +1134,17 @@ struct PackageDependencies {
 - [ ] `PackageDependencies::all()` iterator
 - [ ] `PackageDependencies::internal()` iterator
 - [ ] `PackageDependencies::external()` iterator
-- [ ] Unit tests
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
+
+**Test Requirements**:
+- Test Dependency construction
+- Test PackageDependencies iterators (all, internal, external)
+- Test is_internal flag behavior
 
 **Files to Create/Modify**:
 - `crates/core/src/dependency/types.rs`
@@ -1113,7 +1170,18 @@ struct PackageDependencies {
 - [ ] Use `semver` crate for `VersionReq` parsing
 - [ ] Preserve raw version spec strings
 - [ ] Detect `workspace:*`, `workspace:^`, `workspace:~` protocols
-- [ ] Unit tests for various version specs
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
+
+**Test Requirements**:
+- Test parsing standard version specs (^, ~, *, ranges)
+- Test parsing workspace protocol versions
+- Test parsing from package-json crate types
+- Test raw version string preservation
 
 **Files to Create/Modify**:
 - `crates/core/src/dependency/parser.rs`
@@ -1136,7 +1204,17 @@ struct PackageDependencies {
 - [ ] Detect workspace protocol as internal
 - [ ] Match dependency names against workspace package list
 - [ ] Handle edge cases (self-reference, etc.)
-- [ ] Unit tests
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
+
+**Test Requirements**:
+- Test workspace protocol detection
+- Test name matching against package list
+- Test self-reference handling
 
 **Files to Create/Modify**:
 - `crates/core/src/dependency/categorizer.rs`
@@ -1190,7 +1268,17 @@ struct Package {
 - [ ] All getter methods implemented
 - [ ] `depends_on()` method
 - [ ] `internal_dependencies()` / `external_dependencies()` iterators
-- [ ] Unit tests
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
+
+**Test Requirements**:
+- Test all getter methods
+- Test depends_on() logic
+- Test internal/external dependency iterators
 
 **Files to Create/Modify**:
 - `crates/core/src/package/package.rs`
@@ -1224,7 +1312,18 @@ struct Package {
 - [ ] Parse `workspaces` field from `package.json` (string array or object with `packages` field)
 - [ ] Parse `packages` from `pnpm-workspace.yaml`
 - [ ] Parse `workspace`/`workspaces` from `deno.json`
-- [ ] Unit tests for each format
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
+
+**Test Requirements**:
+- Test package.json array format
+- Test package.json object format with packages field
+- Test pnpm-workspace.yaml parsing
+- Test deno.json workspace/workspaces parsing
 
 **Files to Create/Modify**:
 - `crates/core/src/monorepo/workspace.rs`
@@ -1253,7 +1352,18 @@ struct Package {
 - [ ] Respect `exclude_patterns` from config
 - [ ] Respect `max_search_depth` from config
 - [ ] Return `Package` for each discovered workspace package
-- [ ] Unit tests with various pattern combinations
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
+
+**Test Requirements**:
+- Test pattern matching with various glob patterns
+- Test pattern merging and deduplication
+- Test exclusion pattern filtering
+- Test max search depth limit
 
 **Files to Create/Modify**:
 - `crates/core/src/monorepo/detector.rs`
@@ -1277,7 +1387,17 @@ struct Package {
 - [ ] Build dependency graph between packages
 - [ ] `dependents_of(package_name)` returns packages that depend on given package
 - [ ] Detect circular dependencies (return `Error::CircularDependency`)
-- [ ] Unit tests including circular dependency detection
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
+
+**Test Requirements**:
+- Test dependency graph construction
+- Test dependents_of() with various graph structures
+- Test circular dependency detection
 
 **Files to Create/Modify**:
 - `crates/core/src/monorepo/detector.rs` (extend)
@@ -1328,7 +1448,17 @@ struct Project {
 - [ ] All accessor methods
 - [ ] All package access methods
 - [ ] `dependents_of(package_name)` method
-- [ ] Unit tests
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
+
+**Test Requirements**:
+- Test all accessor methods
+- Test package lookup methods
+- Test dependents_of() integration
 
 **Files to Create/Modify**:
 - `crates/core/src/project/project.rs`
@@ -1361,7 +1491,19 @@ struct Project {
 - [ ] Build `Package` for root
 - [ ] Discover workspace packages if monorepo
 - [ ] **NO fallback to current directory** (PRD §8.2)
-- [ ] Unit tests
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
+
+**Test Requirements**:
+- Test detection from project root
+- Test detection from subdirectory (walk up)
+- Test simple repo detection
+- Test monorepo detection
+- Test no fallback to cwd behavior
 
 **Files to Create/Modify**:
 - `crates/core/src/project/detector.rs`
@@ -1404,6 +1546,12 @@ struct Project {
 - [ ] Integration test for each major use case
 - [ ] Test fixtures created
 - [ ] All tests passing on CI
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
 
 **Files to Create/Modify**:
 - `crates/core/tests/integration/*.rs`
@@ -1433,6 +1581,12 @@ struct Project {
 - [ ] Benchmark tests created
 - [ ] Performance meets targets
 - [ ] Performance documented
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
 
 **Files to Create/Modify**:
 - `crates/core/benches/detection.rs`
@@ -1455,6 +1609,12 @@ struct Project {
 - [ ] Examples for all public functions
 - [ ] Cross-references between related items
 - [ ] `cargo doc` generates without warnings
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
 
 **Files to Modify**:
 - All `*.rs` files (add/improve documentation)
@@ -1482,6 +1642,12 @@ struct Project {
 - [ ] Code coverage > 80%
 - [ ] PR reviewed and approved
 - [ ] CI passes on all platforms
+- [ ] Clippy 100%
+- [ ] Fmt 100%
+- [ ] Docs 100%
+- [ ] Unit tests 100%
+- [ ] Build success
+- [ ] Ask for review implementation in a new session
 
 **Estimated Effort**: 2 hours
 
