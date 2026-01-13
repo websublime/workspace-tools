@@ -161,34 +161,23 @@ unimplemented = "deny"
 panic = "deny"
 
 [dependencies]
-# Inherit versions from workspace (see root Cargo.toml [workspace.dependencies])
-
-# Error handling (PRD §1.4.2)
+# Shared dependencies - inherit from workspace (see root Cargo.toml [workspace.dependencies])
 snafu.workspace = true
-
-# Serialization (PRD §1.4.2)
 serde.workspace = true
 serde_json.workspace = true
-serde_yaml_ng.workspace = true
-
-# Logging (PRD §1.4.2, §6.5)
 log.workspace = true
-
-# Versioning (PRD §1.4.2)
-semver.workspace = true
-
-# Package.json parsing (PRD §1.4.2)
-package-json.workspace = true
-
-# Filesystem traversal (PRD §1.4.2)
 walkdir.workspace = true
-glob.workspace = true
+
+# Crate-specific dependencies (not shared yet, explicit versions)
+serde_yaml_ng = "0.10.0"    # YAML parsing for pnpm-workspace.yaml
+semver = "1.0"               # Semantic versioning
+package-json = "0.5.0"       # Type-safe package.json parsing
+glob = "0.3"                 # Glob pattern matching
 
 # Internal dependency (PRD §1.4.1)
-workspace-fs = { path = "../filesystem" }
+workspace-fs.workspace = true
 
 [dev-dependencies]
-# PRD §1.4.3
 tempfile.workspace = true
 ```
 
