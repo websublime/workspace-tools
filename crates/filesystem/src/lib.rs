@@ -61,3 +61,66 @@
 #![deny(clippy::todo)]
 #![deny(clippy::unimplemented)]
 #![deny(clippy::panic)]
+
+// =============================================================================
+// Module Declarations
+// =============================================================================
+
+/// Error types for filesystem operations.
+///
+/// Provides a unified [`Error`](error) enum that captures all possible error
+/// conditions with path context for debugging.
+pub(crate) mod error;
+
+/// Configuration types for filesystem behavior.
+///
+/// Provides [`FileSystemConfig`](config) with timeout settings and a builder
+/// pattern for customization.
+pub(crate) mod config;
+
+/// Core data types for filesystem entries.
+///
+/// Provides [`FileType`](types), [`DirEntry`](types), and [`Metadata`](types)
+/// types used throughout the crate.
+pub(crate) mod types;
+
+/// The core filesystem trait definition.
+///
+/// Defines the [`FileSystem`](traits) trait that abstracts all filesystem
+/// operations for dependency injection and testing.
+pub(crate) mod traits;
+
+/// Path utility extensions.
+///
+/// Provides the [`PathExt`](path_ext) trait with synchronous path manipulation
+/// utilities that don't perform I/O.
+pub(crate) mod path_ext;
+
+/// Real filesystem implementation using tokio::fs.
+///
+/// Provides [`RealFileSystem`](real) for production use with async I/O
+/// and configurable timeout support.
+pub(crate) mod real;
+
+/// Mock filesystem implementation for testing.
+///
+/// Provides [`MockFileSystem`](mock) for fast, deterministic unit tests
+/// without touching the disk.
+pub(crate) mod mock;
+
+/// Unit tests organized by module.
+#[cfg(test)]
+mod tests;
+
+// =============================================================================
+// Public Re-exports
+// =============================================================================
+
+// TODO: Re-exports will be added as modules are implemented
+// pub use config::{FileSystemConfig, FileSystemConfigBuilder};
+// pub use error::{Error, Result};
+// pub use mock::MockFileSystem;
+// pub use path_ext::PathExt;
+// pub use real::RealFileSystem;
+// pub use traits::FileSystem;
+// pub use types::{DirEntry, FileType, Metadata};
