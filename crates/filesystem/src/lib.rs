@@ -119,10 +119,13 @@ mod tests;
 // Error types
 pub use error::{Error, Result};
 
+// Types
+pub use types::FileType;
+
 // TODO: Re-exports will be added as modules are implemented
 // pub use config::{FileSystemConfig, FileSystemConfigBuilder};
 // pub use mock::MockFileSystem;
 // pub use path_ext::PathExt;
 // pub use real::RealFileSystem;
 // pub use traits::FileSystem;
-// pub use types::{DirEntry, FileType, Metadata};
+// pub use types::{DirEntry, Metadata};
