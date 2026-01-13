@@ -91,8 +91,8 @@ git status
 
 ```bash
 # Switch to main and update
-git checkout main
-git pull origin main
+git checkout feat/next-evolution
+git pull origin feat/next-evolution
 bd sync
 
 # Find next ready task
