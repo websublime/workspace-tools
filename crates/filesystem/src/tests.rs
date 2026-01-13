@@ -516,7 +516,7 @@ mod config {
     #[test]
     fn test_config_debug_format() {
         let config = FileSystemConfig::default();
-        let debug_str = format!("{:?}", config);
+        let debug_str = format!("{config:?}");
 
         // Debug output should contain struct name and field values
         assert!(debug_str.contains("FileSystemConfig"));
@@ -680,7 +680,7 @@ mod config {
     #[test]
     fn test_builder_debug_format() {
         let builder = FileSystemConfig::builder();
-        let debug_str = format!("{:?}", builder);
+        let debug_str = format!("{builder:?}");
 
         assert!(debug_str.contains("FileSystemConfigBuilder"));
     }
