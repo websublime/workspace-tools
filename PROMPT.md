@@ -348,7 +348,7 @@ bd sync
 ### Git conflicts
 ```bash
 git stash
-git pull origin main
+git pull origin feat/next-evolution
 git stash pop
 # Resolve conflicts manually
 ```
