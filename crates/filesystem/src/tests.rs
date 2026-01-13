@@ -784,6 +784,225 @@ mod types {
         fn assert_from<T: From<std::fs::Metadata>>() {}
         assert_from::<Metadata>();
     }
+
+    // =========================================================================
+    // DirEntry Struct Tests (FR-5.1.1 - FR-5.1.4)
+    // =========================================================================
+
+    use crate::types::DirEntry;
+    use std::ffi::OsStr;
+    use std::path::PathBuf;
+
+    // -------------------------------------------------------------------------
+    // Constructor Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_dir_entry_new_file() {
+        let path = PathBuf::from("/home/user/file.txt");
+        let entry = DirEntry::new(path.clone(), FileType::File);
+        assert_eq!(entry.path(), path.as_path());
+        assert!(entry.file_type().is_file());
+    }
+
+    #[test]
+    fn test_dir_entry_new_dir() {
+        let path = PathBuf::from("/home/user/documents");
+        let entry = DirEntry::new(path.clone(), FileType::Dir);
+        assert_eq!(entry.path(), path.as_path());
+        assert!(entry.file_type().is_dir());
+    }
+
+    #[test]
+    fn test_dir_entry_new_symlink() {
+        let path = PathBuf::from("/home/user/link");
+        let entry = DirEntry::new(path.clone(), FileType::Symlink);
+        assert_eq!(entry.path(), path.as_path());
+        assert!(entry.file_type().is_symlink());
+    }
+
+    // -------------------------------------------------------------------------
+    // path() Method Tests (FR-5.1.1)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_dir_entry_path_absolute() {
+        let path = PathBuf::from("/absolute/path/to/file.txt");
+        let entry = DirEntry::new(path.clone(), FileType::File);
+        assert_eq!(entry.path(), path.as_path());
+    }
+
+    #[test]
+    fn test_dir_entry_path_relative() {
+        let path = PathBuf::from("relative/path/file.txt");
+        let entry = DirEntry::new(path.clone(), FileType::File);
+        assert_eq!(entry.path(), path.as_path());
+    }
+
+    #[test]
+    fn test_dir_entry_path_with_special_chars() {
+        let path = PathBuf::from("/path/with spaces/and-dashes/file_name.txt");
+        let entry = DirEntry::new(path.clone(), FileType::File);
+        assert_eq!(entry.path(), path.as_path());
+    }
+
+    #[test]
+    fn test_dir_entry_path_unicode() {
+        let path = PathBuf::from("/путь/文件/αρχείο.txt");
+        let entry = DirEntry::new(path.clone(), FileType::File);
+        assert_eq!(entry.path(), path.as_path());
+    }
+
+    // -------------------------------------------------------------------------
+    // file_name() Method Tests (FR-5.1.2)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_dir_entry_file_name_simple() {
+        let entry = DirEntry::new(PathBuf::from("/home/user/document.pdf"), FileType::File);
+        assert_eq!(entry.file_name(), OsStr::new("document.pdf"));
+    }
+
+    #[test]
+    fn test_dir_entry_file_name_directory() {
+        let entry = DirEntry::new(PathBuf::from("/var/log"), FileType::Dir);
+        assert_eq!(entry.file_name(), OsStr::new("log"));
+    }
+
+    #[test]
+    fn test_dir_entry_file_name_with_extension() {
+        let entry = DirEntry::new(PathBuf::from("/path/to/archive.tar.gz"), FileType::File);
+        assert_eq!(entry.file_name(), OsStr::new("archive.tar.gz"));
+    }
+
+    #[test]
+    fn test_dir_entry_file_name_hidden_file() {
+        let entry = DirEntry::new(PathBuf::from("/home/user/.bashrc"), FileType::File);
+        assert_eq!(entry.file_name(), OsStr::new(".bashrc"));
+    }
+
+    #[test]
+    fn test_dir_entry_file_name_root_path() {
+        // Root path has no file name, should return empty OsStr
+        let entry = DirEntry::new(PathBuf::from("/"), FileType::Dir);
+        assert_eq!(entry.file_name(), OsStr::new(""));
+    }
+
+    #[test]
+    fn test_dir_entry_file_name_dot_dot() {
+        // Parent directory reference has no file name
+        let entry = DirEntry::new(PathBuf::from(".."), FileType::Dir);
+        assert_eq!(entry.file_name(), OsStr::new(""));
+    }
+
+    #[test]
+    fn test_dir_entry_file_name_relative() {
+        let entry = DirEntry::new(PathBuf::from("relative/path/file.txt"), FileType::File);
+        assert_eq!(entry.file_name(), OsStr::new("file.txt"));
+    }
+
+    // -------------------------------------------------------------------------
+    // file_type() Method Tests (FR-5.1.3)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_dir_entry_file_type_file() {
+        let entry = DirEntry::new(PathBuf::from("/tmp/file.txt"), FileType::File);
+        assert_eq!(entry.file_type(), FileType::File);
+        assert!(entry.file_type().is_file());
+        assert!(!entry.file_type().is_dir());
+        assert!(!entry.file_type().is_symlink());
+    }
+
+    #[test]
+    fn test_dir_entry_file_type_dir() {
+        let entry = DirEntry::new(PathBuf::from("/tmp/subdir"), FileType::Dir);
+        assert_eq!(entry.file_type(), FileType::Dir);
+        assert!(!entry.file_type().is_file());
+        assert!(entry.file_type().is_dir());
+        assert!(!entry.file_type().is_symlink());
+    }
+
+    #[test]
+    fn test_dir_entry_file_type_symlink() {
+        let entry = DirEntry::new(PathBuf::from("/tmp/link"), FileType::Symlink);
+        assert_eq!(entry.file_type(), FileType::Symlink);
+        assert!(!entry.file_type().is_file());
+        assert!(!entry.file_type().is_dir());
+        assert!(entry.file_type().is_symlink());
+    }
+
+    // -------------------------------------------------------------------------
+    // Trait Implementation Tests (FR-5.1.4)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_dir_entry_debug() {
+        let entry = DirEntry::new(PathBuf::from("/test/path.txt"), FileType::File);
+        let debug_str = format!("{entry:?}");
+        assert!(debug_str.contains("DirEntry"));
+        assert!(debug_str.contains("path"));
+        assert!(debug_str.contains("file_type"));
+    }
+
+    #[test]
+    fn test_dir_entry_clone() {
+        let original = DirEntry::new(PathBuf::from("/original/path.txt"), FileType::File);
+        let cloned = original.clone();
+        assert_eq!(original.path(), cloned.path());
+        assert_eq!(original.file_type(), cloned.file_type());
+    }
+
+    #[test]
+    fn test_dir_entry_clone_independence() {
+        let original = DirEntry::new(PathBuf::from("/some/path"), FileType::Dir);
+        let cloned = original.clone();
+        // Both can be used independently
+        assert!(original.file_type().is_dir());
+        assert!(cloned.file_type().is_dir());
+        assert_eq!(original.file_name(), cloned.file_name());
+    }
+
+    // -------------------------------------------------------------------------
+    // Trait Bound Verification Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_dir_entry_is_send() {
+        fn assert_send<T: Send>() {}
+        assert_send::<DirEntry>();
+    }
+
+    #[test]
+    fn test_dir_entry_is_sync() {
+        fn assert_sync<T: Sync>() {}
+        assert_sync::<DirEntry>();
+    }
+
+    // -------------------------------------------------------------------------
+    // Edge Case Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_dir_entry_empty_path() {
+        let entry = DirEntry::new(PathBuf::new(), FileType::File);
+        assert_eq!(entry.path(), PathBuf::new().as_path());
+        assert_eq!(entry.file_name(), OsStr::new(""));
+    }
+
+    #[test]
+    fn test_dir_entry_single_component() {
+        let entry = DirEntry::new(PathBuf::from("filename.txt"), FileType::File);
+        assert_eq!(entry.file_name(), OsStr::new("filename.txt"));
+    }
+
+    #[test]
+    fn test_dir_entry_trailing_slash() {
+        // PathBuf normalizes trailing slashes
+        let entry = DirEntry::new(PathBuf::from("/path/to/dir/"), FileType::Dir);
+        // Note: PathBuf may preserve or remove trailing slash depending on platform
+        assert!(entry.file_type().is_dir());
+    }
 }
 
 #[cfg(test)]

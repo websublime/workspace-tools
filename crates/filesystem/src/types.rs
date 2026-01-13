@@ -475,3 +475,155 @@ impl From<std::fs::Metadata> for Metadata {
         Self { file_type: meta.file_type().into(), len: meta.len() }
     }
 }
+
+// =============================================================================
+// DirEntry Struct
+// =============================================================================
+
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
+
+/// Represents an entry in a directory.
+///
+/// This struct provides a unified representation of directory entries across
+/// all platforms. It contains the full path to the entry and its file type,
+/// which are the essential pieces of information needed when listing directory
+/// contents.
+///
+/// # Fields
+///
+/// The struct contains the following private fields, accessible through getter methods:
+/// - `path`: The full path to the filesystem entry ([`PathBuf`])
+/// - `file_type`: The type of the entry ([`FileType`])
+///
+/// # Trait Implementations
+///
+/// - [`Debug`]: Formats the entry for debugging
+/// - [`Clone`]: Allows cloning the entry
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use workspace_fs::{DirEntry, FileType};
+/// use std::path::PathBuf;
+///
+/// // Create a directory entry for a file
+/// let entry = DirEntry::new(PathBuf::from("/home/user/file.txt"), FileType::File);
+/// assert_eq!(entry.path().to_str(), Some("/home/user/file.txt"));
+/// assert_eq!(entry.file_name().to_str(), Some("file.txt"));
+/// assert!(entry.file_type().is_file());
+///
+/// // Create a directory entry for a directory
+/// let dir_entry = DirEntry::new(PathBuf::from("/home/user/docs"), FileType::Dir);
+/// assert!(dir_entry.file_type().is_dir());
+/// ```
+#[derive(Debug, Clone)]
+pub struct DirEntry {
+    /// The full path to this filesystem entry.
+    path: PathBuf,
+    /// The type of this filesystem entry.
+    file_type: FileType,
+}
+
+impl DirEntry {
+    /// Creates a new `DirEntry` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The full path to the filesystem entry
+    /// * `file_type` - The type of the entry (file, directory, or symlink)
+    ///
+    /// # Returns
+    ///
+    /// A new `DirEntry` instance with the specified path and file type.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use workspace_fs::{DirEntry, FileType};
+    /// use std::path::PathBuf;
+    ///
+    /// let entry = DirEntry::new(PathBuf::from("/tmp/test.txt"), FileType::File);
+    /// assert!(entry.file_type().is_file());
+    /// ```
+    #[must_use]
+    pub fn new(path: PathBuf, file_type: FileType) -> Self {
+        Self { path, file_type }
+    }
+
+    /// Returns the full path of this entry.
+    ///
+    /// This returns a reference to the complete path, including all parent
+    /// directories and the file name.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the [`Path`] of this entry.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use workspace_fs::{DirEntry, FileType};
+    /// use std::path::PathBuf;
+    ///
+    /// let entry = DirEntry::new(PathBuf::from("/home/user/docs/file.txt"), FileType::File);
+    /// assert_eq!(entry.path().to_str(), Some("/home/user/docs/file.txt"));
+    /// ```
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Returns the file name of this entry.
+    ///
+    /// This extracts just the final component of the path (the file or directory
+    /// name without the parent path). For paths that don't have a file name
+    /// component (like `/` or `..`), this returns an empty [`OsStr`].
+    ///
+    /// # Returns
+    ///
+    /// A reference to the file name as an [`OsStr`]. Returns an empty `OsStr`
+    /// if the path has no file name component.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use workspace_fs::{DirEntry, FileType};
+    /// use std::path::PathBuf;
+    ///
+    /// let entry = DirEntry::new(PathBuf::from("/home/user/document.pdf"), FileType::File);
+    /// assert_eq!(entry.file_name().to_str(), Some("document.pdf"));
+    ///
+    /// let dir_entry = DirEntry::new(PathBuf::from("/var/log"), FileType::Dir);
+    /// assert_eq!(dir_entry.file_name().to_str(), Some("log"));
+    /// ```
+    #[must_use]
+    pub fn file_name(&self) -> &OsStr {
+        self.path.file_name().unwrap_or_else(|| OsStr::new(""))
+    }
+
+    /// Returns the file type of this entry.
+    ///
+    /// # Returns
+    ///
+    /// The [`FileType`] of this entry (file, directory, or symlink).
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use workspace_fs::{DirEntry, FileType};
+    /// use std::path::PathBuf;
+    ///
+    /// let file_entry = DirEntry::new(PathBuf::from("/tmp/file.txt"), FileType::File);
+    /// assert_eq!(file_entry.file_type(), FileType::File);
+    /// assert!(file_entry.file_type().is_file());
+    ///
+    /// let dir_entry = DirEntry::new(PathBuf::from("/tmp/subdir"), FileType::Dir);
+    /// assert_eq!(dir_entry.file_type(), FileType::Dir);
+    /// assert!(dir_entry.file_type().is_dir());
+    /// ```
+    #[must_use]
+    pub fn file_type(&self) -> FileType {
+        self.file_type
+    }
+}
