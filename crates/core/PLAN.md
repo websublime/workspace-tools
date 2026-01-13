@@ -6,15 +6,47 @@
 |-------|-------|
 | **Crate Name** | `workspace-core` |
 | **PRD Reference** | [PRD.md](./PRD.md) |
-| **Status** | Draft |
+| **Status** | Ready |
 | **Created** | 2026-01-12 |
-| **Last Updated** | 2026-01-12 |
+| **Last Updated** | 2026-01-13 |
 
 ---
 
 ## 1. Overview
 
 This document details the implementation plan for the `workspace-core` crate. The implementation is divided into epics, each containing multiple tasks. Tasks are designed to be atomic units of work that can be completed and committed independently.
+
+### 1.1 Key Architectural Decisions
+
+The following decisions were finalized during PRD development and must be followed during implementation:
+
+| Decision | Choice | PRD Reference |
+|----------|--------|---------------|
+| Error handling | Single unified `Error` enum using `snafu` | §5.8, §8.3 |
+| Logging | `log` crate facade, consumer initializes impl | §6.5 |
+| Configuration | `DetectionConfig` with builder pattern | §5.7 |
+| Path handling | Explicit `&Path` required, NO fallback to cwd | §8.2 |
+| Filesystem | All ops via `workspace-fs` crate | §1.4.1 |
+| Symlinks | Always follow (not configurable) | §5.7 FR-7.3.2 |
+| Package Manager fallback | None - error if not detected | §5.7 FR-7.3.1 |
+| packageManager vs lockfile mismatch | Error (not warning) | §3.4 |
+| Module separation | Separate `package/` and `dependency/` modules | §7.1 |
+
+### 1.2 External Dependencies
+
+From PRD §1.4.2:
+
+| Crate | Version | Purpose |
+|-------|---------|---------|
+| `snafu` | `0.8.9` | Error handling with context |
+| `serde` | `1.0` | Serialization (with `derive` feature) |
+| `serde_json` | `1.0` | JSON parsing |
+| `serde_yaml_ng` | `0.10.0` | YAML parsing (note: `serde_yaml` is deprecated) |
+| `log` | `0.4` | Logging facade |
+| `semver` | `1.0` | Semantic versioning |
+| `package-json` | `0.5.0` | Type-safe `package.json` parsing |
+| `walkdir` | `2.0` | Directory traversal |
+| `glob` | `0.3` | Glob pattern matching |
 
 ---
 
@@ -24,21 +56,27 @@ This document details the implementation plan for the `workspace-core` crate. Th
 Foundation and scaffolding for the crate.
 
 ### Phase 1: Error Module
-Core error types that all other modules depend on.
+Single unified error type using `snafu` (PRD §5.8).
 
 ### Phase 2: Configuration Module
-Configuration types for detection behavior.
+`DetectionConfig` with builder pattern (PRD §5.7).
 
-### Phase 3: Node Module
-Package manager abstractions and repository types.
+### Phase 3: Repository Module
+`RepoType` and `RepoKind` enums (PRD §5.1).
 
-### Phase 4: Monorepo Module
-Monorepo types, detection, and workspace analysis.
+### Phase 4: Package Manager Module
+`PackageManagerKind` and detection logic (PRD §5.2).
 
-### Phase 5: Project Module
-Unified project detection and management.
+### Phase 5: Package & Dependency Modules
+Package representation and dependency analysis (PRD §5.3, §5.4).
 
-### Phase 6: Integration & Polish
+### Phase 6: Monorepo Module
+Workspace detection and package discovery (PRD §5.6).
+
+### Phase 7: Project Module
+Unified project detection and representation (PRD §5.5).
+
+### Phase 8: Integration & Polish
 End-to-end tests, documentation review, and optimization.
 
 ---
@@ -51,12 +89,23 @@ End-to-end tests, documentation review, and optimization.
 
 **Goal**: Establish the crate structure, dependencies, and development configuration.
 
+**PRD Context**: §1.4 Dependencies, §6.3 Compatibility (MSRV 1.90+, edition 2024), §6.4 Code Quality
+
+---
+
 #### Task 0.1: Create Crate Skeleton
 
-**Description**: Initialize the crate with Cargo.toml and basic structure.
+**Description**: Initialize the crate with `Cargo.toml` and basic structure following the external dependencies defined in PRD §1.4.2.
+
+**PRD References**:
+- §1.4.1: Internal dependency on `workspace-fs`
+- §1.4.2: External dependencies list (snafu, serde, etc.)
+- §1.4.3: Development dependencies (tempfile)
+- §6.3: Compatibility requirements (MSRV 1.90+, edition 2024)
+- §6.4: Code quality requirements (clippy, docs)
 
 **Acceptance Criteria**:
-- [ ] `Cargo.toml` created with proper metadata
+- [ ] `Cargo.toml` created with proper metadata and all dependencies from PRD §1.4
 - [ ] `src/lib.rs` created with clippy lints and crate-level documentation
 - [ ] Crate compiles with `cargo check`
 
@@ -68,7 +117,7 @@ End-to-end tests, documentation review, and optimization.
 name = "workspace-core"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.90"
 description = "Core detection and abstractions for JavaScript/TypeScript projects"
 license = "MIT"
 repository = "https://github.com/user/workspace-node-tools"
@@ -88,15 +137,33 @@ unimplemented = "deny"
 panic = "deny"
 
 [dependencies]
-thiserror = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-serde_yaml = "0.9"
-walkdir = "2"
+# Error handling (PRD §1.4.2)
+snafu = "0.8.9"
+
+# Serialization (PRD §1.4.2)
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml_ng = "0.10.0"
+
+# Logging (PRD §1.4.2, §6.5)
+log = "0.4"
+
+# Versioning (PRD §1.4.2)
+semver = "1.0"
+
+# Package.json parsing (PRD §1.4.2)
+package-json = "0.5.0"
+
+# Filesystem traversal (PRD §1.4.2)
+walkdir = "2.0"
 glob = "0.3"
 
+# Internal dependency (PRD §1.4.1)
+workspace-fs = { path = "../fs" }
+
 [dev-dependencies]
-tempfile = "3"
+# PRD §1.4.3
+tempfile = "3.0"
 ```
 
 **Files to Create**:
@@ -109,19 +176,61 @@ tempfile = "3"
 
 #### Task 0.2: Create Module Structure
 
-**Description**: Create the directory structure and empty module files.
+**Description**: Create the directory structure and empty module files matching the architecture defined in PRD §7.1.
+
+**PRD References**:
+- §7.1: Module Structure (complete directory layout)
+- §7.2: Dependency Graph (module dependencies)
 
 **Acceptance Criteria**:
-- [ ] All module directories created
+- [ ] All module directories created matching PRD §7.1
 - [ ] All `mod.rs` files created with module declarations
 - [ ] Crate compiles with empty modules
 
-**Files to Create**:
-- `crates/core/src/error/mod.rs`
-- `crates/core/src/config/mod.rs`
-- `crates/core/src/node/mod.rs`
-- `crates/core/src/project/mod.rs`
-- `crates/core/src/monorepo/mod.rs`
+**Module Structure** (from PRD §7.1):
+
+```
+src/
+├── lib.rs
+├── error.rs              # Single unified Error enum (§5.8)
+├── repo/                 # §5.1
+│   ├── mod.rs
+│   ├── repo_type.rs
+│   ├── repo_kind.rs
+│   └── tests.rs
+├── package_manager/      # §5.2
+│   ├── mod.rs
+│   ├── kind.rs
+│   ├── detector.rs
+│   └── tests.rs
+├── package/              # §5.3
+│   ├── mod.rs
+│   ├── package.rs
+│   └── tests.rs
+├── dependency/           # §5.4
+│   ├── mod.rs
+│   ├── types.rs
+│   ├── parser.rs
+│   ├── categorizer.rs
+│   └── tests.rs
+├── project/              # §5.5
+│   ├── mod.rs
+│   ├── detector.rs
+│   ├── project.rs
+│   └── tests.rs
+├── monorepo/             # §5.6
+│   ├── mod.rs
+│   ├── detector.rs
+│   ├── workspace.rs
+│   └── tests.rs
+└── config/               # §5.7
+    ├── mod.rs
+    ├── detection.rs
+    ├── builder.rs
+    └── tests.rs
+```
+
+**Files to Create**: All directories and `mod.rs` files as listed above.
 
 **Estimated Effort**: 30 minutes
 
@@ -129,587 +238,649 @@ tempfile = "3"
 
 ### Epic 1: Error Module
 
-**Goal**: Implement comprehensive error types for all modules.
+**Goal**: Implement a single unified `Error` enum using `snafu` with all error variants.
 
-#### Task 1.1: Define Core Error Enum
+**PRD Context**: 
+- §5.8: Error Handling requirements
+- §8.3: Error Handling design principles
+- FR-8.1.1 through FR-8.1.6: Specific requirements
 
-**Description**: Create the main `Error` enum that aggregates all error types.
+**Key Requirements**:
+- Single unified `Error` enum (one crate = one error type)
+- Uses `snafu` for derive and context
+- Implements `std::error::Error`, `Display`
+- Implements `AsRef<str>` returning qualified variant name (e.g., `"Error::PackageManagerNotFound"`)
+- Provides `Result<T>` type alias
+
+---
+
+#### Task 1.1: Define Unified Error Enum
+
+**Description**: Create the single unified `Error` enum with all variants defined in PRD §5.8 FR-8.2.
+
+**PRD References**:
+- §5.8 FR-8.1.1: Single unified `Error` enum using `snafu`
+- §5.8 FR-8.1.2: Context information (paths, reasons) in variants
+- §5.8 FR-8.1.3: Implement `std::error::Error`
+- §5.8 FR-8.1.4: Implement `AsRef<str>` returning qualified variant name
+- §5.8 FR-8.1.5: Actionable error messages via `Display`
+- §5.8 FR-8.1.6: `Result<T>` type alias
+- §5.8 FR-8.2: Error variants table
+
+**Error Variants** (from PRD §5.8 FR-8.2):
+
+| Category | Variants |
+|----------|----------|
+| Repository | `RepoTypeDetection`, `RepoTypeUnknown` |
+| Package Manager | `PackageManagerNotFound`, `PackageManagerMismatch` |
+| Configuration | `ConfigParse`, `ConfigInvalid` |
+| Project | `ProjectRootNotFound`, `ProjectNotFound` |
+| Monorepo | `MonorepoNotDetected`, `WorkspacePackageNotFound`, `CircularDependency` |
+| I/O | `Io` (wrapping errors from `workspace-fs`) |
 
 **Acceptance Criteria**:
-- [ ] `Error` enum defined with variants for each module
-- [ ] `std::error::Error` implemented
-- [ ] `Display` implemented with descriptive messages
-- [ ] Unit tests for error creation and display
+- [ ] `Error` enum defined with all variants from PRD §5.8 FR-8.2
+- [ ] Uses `snafu` derive macros with `#[snafu(display("..."))]`
+- [ ] All variants include context information (paths, reasons)
+- [ ] `std::error::Error` implemented via snafu
+- [ ] `AsRef<str>` implemented returning `"Error::VariantName"`
+- [ ] `Result<T>` type alias defined
+- [ ] Unit tests for error creation, display, and AsRef<str>
 
 **Implementation Details**:
 
 ```rust
-// src/error/mod.rs
+// src/error.rs
 
 //! # Error Module
 //!
 //! ## What
-//! Comprehensive error types for the workspace-core crate.
+//! Single unified error type for the workspace-core crate.
 //!
 //! ## How
-//! Uses thiserror for derive macros and provides specific error
-//! types for each failure mode.
+//! Uses `snafu` for ergonomic error handling with context.
+//! Implements `AsRef<str>` for variant name introspection.
 //!
 //! ## Why
-//! Structured errors enable proper error handling and provide
-//! actionable information to users.
+//! Rust idiom: one crate = one error type. Structured errors
+//! enable proper error handling and provide actionable information.
 
-mod types;
-
-pub use types::*;
+use snafu::Snafu;
+use std::path::PathBuf;
 
 /// Result type alias for workspace-core operations.
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Unified error type for all workspace-core operations.
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub))]
+pub enum Error {
+    // Repository errors
+    #[snafu(display("failed to detect repository type at '{path}': {reason}"))]
+    RepoTypeDetection {
+        path: PathBuf,
+        reason: String,
+    },
+
+    #[snafu(display("unknown repository type at '{path}'"))]
+    RepoTypeUnknown {
+        path: PathBuf,
+    },
+
+    // Package Manager errors
+    #[snafu(display("no package manager found at '{path}'"))]
+    PackageManagerNotFound {
+        path: PathBuf,
+    },
+
+    #[snafu(display("package manager mismatch at '{path}': declared '{declared}' but found lock file for '{detected}'"))]
+    PackageManagerMismatch {
+        path: PathBuf,
+        declared: String,
+        detected: String,
+    },
+
+    // Configuration errors
+    #[snafu(display("failed to parse configuration at '{path}': {reason}"))]
+    ConfigParse {
+        path: PathBuf,
+        reason: String,
+    },
+
+    #[snafu(display("invalid configuration: {reason}"))]
+    ConfigInvalid {
+        reason: String,
+    },
+
+    // Project errors
+    #[snafu(display("project root not found starting from '{start_path}'"))]
+    ProjectRootNotFound {
+        start_path: PathBuf,
+    },
+
+    #[snafu(display("no project found at '{path}'"))]
+    ProjectNotFound {
+        path: PathBuf,
+    },
+
+    // Monorepo errors
+    #[snafu(display("'{path}' is not a monorepo"))]
+    MonorepoNotDetected {
+        path: PathBuf,
+    },
+
+    #[snafu(display("workspace package '{name}' not found"))]
+    WorkspacePackageNotFound {
+        name: String,
+    },
+
+    #[snafu(display("circular dependency detected: {}", packages.join(" -> ")))]
+    CircularDependency {
+        packages: Vec<String>,
+    },
+
+    // I/O errors (wrapping workspace-fs errors)
+    #[snafu(display("{operation} failed for '{path}': {source}"))]
+    Io {
+        path: PathBuf,
+        operation: String,
+        source: std::io::Error,
+    },
+}
+
+impl AsRef<str> for Error {
+    fn as_ref(&self) -> &str {
+        match self {
+            Error::RepoTypeDetection { .. } => "Error::RepoTypeDetection",
+            Error::RepoTypeUnknown { .. } => "Error::RepoTypeUnknown",
+            Error::PackageManagerNotFound { .. } => "Error::PackageManagerNotFound",
+            Error::PackageManagerMismatch { .. } => "Error::PackageManagerMismatch",
+            Error::ConfigParse { .. } => "Error::ConfigParse",
+            Error::ConfigInvalid { .. } => "Error::ConfigInvalid",
+            Error::ProjectRootNotFound { .. } => "Error::ProjectRootNotFound",
+            Error::ProjectNotFound { .. } => "Error::ProjectNotFound",
+            Error::MonorepoNotDetected { .. } => "Error::MonorepoNotDetected",
+            Error::WorkspacePackageNotFound { .. } => "Error::WorkspacePackageNotFound",
+            Error::CircularDependency { .. } => "Error::CircularDependency",
+            Error::Io { .. } => "Error::Io",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod error_display {
+        use super::*;
+
+        #[test]
+        fn package_manager_not_found_displays_path() {
+            let err = Error::PackageManagerNotFound {
+                path: PathBuf::from("/project"),
+            };
+            assert_eq!(
+                err.to_string(),
+                "no package manager found at '/project'"
+            );
+        }
+
+        // Additional display tests...
+    }
+
+    mod error_as_ref {
+        use super::*;
+
+        #[test]
+        fn returns_qualified_variant_name() {
+            let err = Error::PackageManagerNotFound {
+                path: PathBuf::from("/project"),
+            };
+            assert_eq!(err.as_ref(), "Error::PackageManagerNotFound");
+        }
+
+        #[test]
+        fn all_variants_return_qualified_names() {
+            // Test each variant returns "Error::VariantName"
+            let errors = vec![
+                Error::RepoTypeUnknown { path: PathBuf::new() },
+                Error::PackageManagerNotFound { path: PathBuf::new() },
+                Error::ConfigInvalid { reason: String::new() },
+                // ... other variants
+            ];
+            for err in errors {
+                let name = err.as_ref();
+                assert!(name.starts_with("Error::"));
+            }
+        }
+    }
+}
 ```
 
 **Files to Create/Modify**:
-- `crates/core/src/error/mod.rs`
-- `crates/core/src/error/types.rs`
-- `crates/core/src/error/tests.rs`
+- `crates/core/src/error.rs`
 
 **Estimated Effort**: 2 hours
 
 ---
 
-#### Task 1.2: Define PackageManagerError
-
-**Description**: Create error types specific to package manager operations.
-
-**Acceptance Criteria**:
-- [ ] `PackageManagerError` enum defined
-- [ ] Variants: `NotFound`, `DetectionFailed`, `InvalidConfiguration`
-- [ ] Context information included (path, reason)
-- [ ] Unit tests for each variant
-
-**Implementation Details**:
-
-```rust
-/// Errors related to package manager detection and operations.
-#[derive(Debug, thiserror::Error)]
-pub enum PackageManagerError {
-    /// No package manager could be detected at the given path.
-    #[error("no package manager found at '{path}'")]
-    NotFound {
-        /// The path where detection was attempted.
-        path: PathBuf,
-    },
-
-    /// Package manager detection failed due to an error.
-    #[error("package manager detection failed at '{path}': {reason}")]
-    DetectionFailed {
-        /// The path where detection was attempted.
-        path: PathBuf,
-        /// The reason for the failure.
-        reason: String,
-    },
-
-    /// Invalid package manager configuration.
-    #[error("invalid package manager configuration: {reason}")]
-    InvalidConfiguration {
-        /// The reason the configuration is invalid.
-        reason: String,
-    },
-}
-```
-
-**Estimated Effort**: 1 hour
-
----
-
-#### Task 1.3: Define MonorepoError
-
-**Description**: Create error types specific to monorepo operations.
-
-**Acceptance Criteria**:
-- [ ] `MonorepoError` enum defined
-- [ ] Variants for detection, config parsing, package discovery
-- [ ] Context information included
-- [ ] Unit tests for each variant
-
-**Implementation Details**:
-
-```rust
-/// Errors related to monorepo detection and analysis.
-#[derive(Debug, thiserror::Error)]
-pub enum MonorepoError {
-    /// Not a monorepo root.
-    #[error("'{path}' is not a monorepo root")]
-    NotMonorepo {
-        /// The path that was checked.
-        path: PathBuf,
-    },
-
-    /// Failed to detect monorepo type.
-    #[error("failed to detect monorepo type at '{path}': {reason}")]
-    DetectionFailed {
-        /// The path where detection was attempted.
-        path: PathBuf,
-        /// The reason for the failure.
-        reason: String,
-    },
-
-    /// Failed to parse workspace configuration.
-    #[error("failed to parse workspace config at '{path}': {source}")]
-    ConfigParseFailed {
-        /// The path to the configuration file.
-        path: PathBuf,
-        /// The underlying parse error.
-        #[source]
-        source: Box<dyn std::error::Error + Send + Sync>,
-    },
-
-    /// Workspace package not found.
-    #[error("package '{name}' not found in workspace")]
-    PackageNotFound {
-        /// The name of the missing package.
-        name: String,
-    },
-
-    /// Circular dependency detected.
-    #[error("circular dependency detected: {}", packages.join(" -> "))]
-    CircularDependency {
-        /// The packages involved in the cycle.
-        packages: Vec<String>,
-    },
-}
-```
-
-**Estimated Effort**: 1 hour
-
----
-
-#### Task 1.4: Define ProjectError
-
-**Description**: Create error types specific to project operations.
-
-**Acceptance Criteria**:
-- [ ] `ProjectError` enum defined
-- [ ] Variants for detection, validation, missing files
-- [ ] Context information included
-- [ ] Unit tests for each variant
-
-**Implementation Details**:
-
-```rust
-/// Errors related to project detection and management.
-#[derive(Debug, thiserror::Error)]
-pub enum ProjectError {
-    /// No project found at the given path.
-    #[error("no project found at '{path}'")]
-    NotFound {
-        /// The path where detection was attempted.
-        path: PathBuf,
-    },
-
-    /// Project root could not be determined.
-    #[error("could not find project root from '{start_path}'")]
-    RootNotFound {
-        /// The starting path for the search.
-        start_path: PathBuf,
-    },
-
-    /// Missing package.json file.
-    #[error("package.json not found at '{path}'")]
-    MissingPackageJson {
-        /// The expected path of the package.json.
-        path: PathBuf,
-    },
-
-    /// Invalid package.json content.
-    #[error("invalid package.json at '{path}': {reason}")]
-    InvalidPackageJson {
-        /// The path to the package.json.
-        path: PathBuf,
-        /// The reason it's invalid.
-        reason: String,
-    },
-
-    /// Project validation failed.
-    #[error("project validation failed: {}", errors.join(", "))]
-    ValidationFailed {
-        /// List of validation errors.
-        errors: Vec<String>,
-    },
-}
-```
-
-**Estimated Effort**: 1 hour
-
----
-
-#### Task 1.5: Define IoError Wrapper
-
-**Description**: Create wrapper for std::io::Error with path context.
-
-**Acceptance Criteria**:
-- [ ] `IoError` struct defined with path and operation context
-- [ ] Conversion from std::io::Error implemented
-- [ ] Unit tests for error wrapping
-
-**Implementation Details**:
-
-```rust
-/// I/O error with path context.
-#[derive(Debug, thiserror::Error)]
-#[error("{operation} failed for '{path}': {source}")]
-pub struct IoError {
-    /// The path involved in the operation.
-    pub path: PathBuf,
-    /// The operation that failed.
-    pub operation: &'static str,
-    /// The underlying I/O error.
-    #[source]
-    pub source: std::io::Error,
-}
-
-impl IoError {
-    /// Creates a new IoError for a read operation.
-    pub fn read(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
-        Self {
-            path: path.into(),
-            operation: "read",
-            source,
-        }
-    }
-
-    /// Creates a new IoError for a directory listing operation.
-    pub fn read_dir(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
-        Self {
-            path: path.into(),
-            operation: "read directory",
-            source,
-        }
-    }
-}
-```
-
-**Estimated Effort**: 1 hour
-
----
-
 ### Epic 2: Configuration Module
 
-**Goal**: Implement configuration types for detection behavior.
+**Goal**: Implement `DetectionConfig` with builder pattern.
 
-#### Task 2.1: Define PackageManagerConfig
+**PRD Context**:
+- §5.7: Configuration Module requirements
+- FR-7.1 through FR-7.5: Specific requirements
 
-**Description**: Create configuration for package manager detection.
+**Key Requirements**:
+- Builder pattern for construction (FR-7.1.2)
+- Private fields with getter methods (FR-7.1.6)
+- `Serialize`/`Deserialize` support (FR-7.1.4)
+- Sensible defaults (FR-7.1.3)
+- No fallback package manager (FR-7.3.1)
+
+---
+
+#### Task 2.1: Define DetectionConfig Struct
+
+**Description**: Create the `DetectionConfig` struct with private fields, getter methods, and serde support.
+
+**PRD References**:
+- §5.7 FR-7.1.1: Provide `DetectionConfig` struct
+- §5.7 FR-7.1.3: Sensible defaults
+- §5.7 FR-7.1.4: `Serialize`/`Deserialize`
+- §5.7 FR-7.1.5: Passed programmatically (no file reading)
+- §5.7 FR-7.1.6: Private fields with getter methods
+- §5.7 FR-7.2: Configuration fields table
+
+**Configuration Fields** (from PRD §5.7 FR-7.2):
+
+| Field | Type | Default |
+|-------|------|---------|
+| `detection_order` | `Vec<PackageManagerKind>` | `[Pnpm, Yarn, Bun, Deno, Npm]` |
+| `detect_from_env` | `bool` | `false` |
+| `env_var_name` | `String` | `"WORKSPACE_PACKAGE_MANAGER"` |
+| `additional_workspace_patterns` | `Vec<String>` | `[]` |
+| `exclude_patterns` | `Vec<String>` | `["**/node_modules/**", ...]` |
+| `max_search_depth` | `usize` | `5` |
 
 **Acceptance Criteria**:
-- [ ] `PackageManagerConfig` struct defined
-- [ ] Sensible defaults implemented
-- [ ] Serialization/deserialization support
-- [ ] Unit tests for defaults and custom config
+- [ ] `DetectionConfig` struct with all fields from PRD §5.7 FR-7.2
+- [ ] All fields private with getter methods
+- [ ] `Serialize`/`Deserialize` derived
+- [ ] `Default` implemented with values from PRD table
+- [ ] Unit tests for defaults
 
 **Implementation Details**:
-
-```rust
-// src/config/mod.rs
-
-//! # Configuration Module
-//!
-//! ## What
-//! Configuration types for controlling detection behavior.
-//!
-//! ## How
-//! Provides structs with serde support and Default implementations.
-//!
-//! ## Why
-//! Allows customization of detection logic without code changes.
-
-mod detection;
-#[cfg(test)]
-mod tests;
-
-pub use detection::*;
-```
 
 ```rust
 // src/config/detection.rs
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use crate::package_manager::PackageManagerKind;
 
-/// Configuration for package manager detection.
+/// Configuration for project detection operations.
+///
+/// Use [`DetectionConfig::builder()`] to construct with custom values,
+/// or [`DetectionConfig::default()`] for sensible defaults.
+///
+/// # PRD Reference
+/// See PRD §5.7 for configuration requirements.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PackageManagerConfig {
-    /// Order in which to check for package managers.
-    /// First match wins.
-    #[serde(default = "PackageManagerConfig::default_detection_order")]
-    pub detection_order: Vec<String>,
-
-    /// Custom lock file names for each package manager.
-    #[serde(default)]
-    pub custom_lock_files: HashMap<String, String>,
-
-    /// Whether to check environment variables for package manager hint.
-    #[serde(default)]
-    pub detect_from_env: bool,
-
-    /// Environment variable name to check for package manager hint.
-    #[serde(default = "PackageManagerConfig::default_env_var")]
-    pub env_var_name: String,
-
-    /// Fallback package manager if none detected.
-    #[serde(default)]
-    pub fallback: Option<String>,
+pub struct DetectionConfig {
+    detection_order: Vec<PackageManagerKind>,
+    detect_from_env: bool,
+    env_var_name: String,
+    additional_workspace_patterns: Vec<String>,
+    exclude_patterns: Vec<String>,
+    max_search_depth: usize,
 }
 
-impl PackageManagerConfig {
-    fn default_detection_order() -> Vec<String> {
-        vec![
-            "pnpm".to_string(),
-            "yarn".to_string(),
-            "bun".to_string(),
-            "deno".to_string(),
-            "npm".to_string(),
-        ]
+impl DetectionConfig {
+    /// Returns a new builder for constructing `DetectionConfig`.
+    pub fn builder() -> DetectionConfigBuilder {
+        DetectionConfigBuilder::default()
     }
 
-    fn default_env_var() -> String {
-        "WORKSPACE_PACKAGE_MANAGER".to_string()
+    // Getter methods
+    pub fn detection_order(&self) -> &[PackageManagerKind] {
+        &self.detection_order
+    }
+
+    pub fn detect_from_env(&self) -> bool {
+        self.detect_from_env
+    }
+
+    pub fn env_var_name(&self) -> &str {
+        &self.env_var_name
+    }
+
+    pub fn additional_workspace_patterns(&self) -> &[String] {
+        &self.additional_workspace_patterns
+    }
+
+    pub fn exclude_patterns(&self) -> &[String] {
+        &self.exclude_patterns
+    }
+
+    pub fn max_search_depth(&self) -> usize {
+        self.max_search_depth
     }
 }
 
-impl Default for PackageManagerConfig {
+impl Default for DetectionConfig {
     fn default() -> Self {
         Self {
-            detection_order: Self::default_detection_order(),
-            custom_lock_files: HashMap::new(),
+            detection_order: vec![
+                PackageManagerKind::Pnpm,
+                PackageManagerKind::Yarn,
+                PackageManagerKind::Bun,
+                PackageManagerKind::Deno,
+                PackageManagerKind::Npm,
+            ],
             detect_from_env: false,
-            env_var_name: Self::default_env_var(),
-            fallback: None,
+            env_var_name: "WORKSPACE_PACKAGE_MANAGER".to_string(),
+            additional_workspace_patterns: vec![],
+            exclude_patterns: vec![
+                "**/node_modules/**".to_string(),
+                "**/.*/**".to_string(),
+                "**/dist/**".to_string(),
+                "**/build/**".to_string(),
+            ],
+            max_search_depth: 5,
         }
     }
 }
 ```
 
 **Files to Create/Modify**:
-- `crates/core/src/config/mod.rs`
 - `crates/core/src/config/detection.rs`
-- `crates/core/src/config/tests.rs`
+- `crates/core/src/config/mod.rs`
 
 **Estimated Effort**: 1.5 hours
 
 ---
 
-#### Task 2.2: Define MonorepoConfig
+#### Task 2.2: Implement DetectionConfigBuilder
 
-**Description**: Create configuration for monorepo detection.
+**Description**: Create the builder for `DetectionConfig` with fluent API.
+
+**PRD References**:
+- §5.7 FR-7.1.2: Builder Pattern
+- §5.7 FR-7.4.1: `DetectionConfig::builder()` method
+- §5.7 FR-7.4.2: Fluent setter methods
+- §5.7 FR-7.4.3: `build()` method
+- §5.7 FR-7.4.4: Builder implements `Default`
+- §5.7 FR-7.5: Builder usage example
 
 **Acceptance Criteria**:
-- [ ] `MonorepoConfig` struct defined
-- [ ] Workspace patterns configurable
-- [ ] Exclusion patterns configurable
-- [ ] Search depth configurable
-- [ ] Unit tests for configuration
+- [ ] `DetectionConfigBuilder` struct
+- [ ] `Default` implementation
+- [ ] Fluent setter methods for each field
+- [ ] `build()` method returning `DetectionConfig`
+- [ ] Unit tests matching PRD §5.7 FR-7.5 example
 
 **Implementation Details**:
 
 ```rust
-/// Configuration for monorepo detection and analysis.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MonorepoConfig {
-    /// Additional workspace directory patterns to search.
-    #[serde(default)]
-    pub workspace_patterns: Vec<String>,
+// src/config/builder.rs
 
-    /// Additional directories to check for packages.
-    #[serde(default)]
-    pub package_directories: Vec<String>,
+use super::DetectionConfig;
+use crate::package_manager::PackageManagerKind;
 
-    /// Patterns to exclude from package detection.
-    #[serde(default = "MonorepoConfig::default_exclude")]
-    pub exclude_patterns: Vec<String>,
-
-    /// Maximum depth for recursive package search.
-    #[serde(default = "MonorepoConfig::default_search_depth")]
-    pub max_search_depth: usize,
-
-    /// Whether to follow symlinks during search.
-    #[serde(default)]
-    pub follow_symlinks: bool,
-}
-
-impl MonorepoConfig {
-    /// Default search depth.
-    pub const DEFAULT_SEARCH_DEPTH: usize = 5;
-
-    fn default_exclude() -> Vec<String> {
-        vec![
-            "**/node_modules/**".to_string(),
-            "**/.*/**".to_string(),
-            "**/dist/**".to_string(),
-            "**/build/**".to_string(),
-        ]
-    }
-
-    fn default_search_depth() -> usize {
-        Self::DEFAULT_SEARCH_DEPTH
-    }
-}
-
-impl Default for MonorepoConfig {
-    fn default() -> Self {
-        Self {
-            workspace_patterns: Vec::new(),
-            package_directories: Vec::new(),
-            exclude_patterns: Self::default_exclude(),
-            max_search_depth: Self::DEFAULT_SEARCH_DEPTH,
-            follow_symlinks: false,
-        }
-    }
-}
-```
-
-**Estimated Effort**: 1 hour
-
----
-
-#### Task 2.3: Define DetectionConfig
-
-**Description**: Create unified detection configuration.
-
-**Acceptance Criteria**:
-- [ ] `DetectionConfig` struct combining all configs
-- [ ] Builder pattern for ergonomic construction
-- [ ] Unit tests for builder and defaults
-
-**Implementation Details**:
-
-```rust
-/// Unified configuration for all detection operations.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct DetectionConfig {
-    /// Package manager detection configuration.
-    #[serde(default)]
-    pub package_manager: PackageManagerConfig,
-
-    /// Monorepo detection configuration.
-    #[serde(default)]
-    pub monorepo: MonorepoConfig,
-}
-
-impl DetectionConfig {
-    /// Creates a new builder for DetectionConfig.
-    pub fn builder() -> DetectionConfigBuilder {
-        DetectionConfigBuilder::default()
-    }
-}
-
-/// Builder for DetectionConfig.
+/// Builder for [`DetectionConfig`].
+///
+/// # Example (from PRD §5.7 FR-7.5)
+///
+/// ```
+/// use workspace_core::config::DetectionConfig;
+/// use workspace_core::package_manager::PackageManagerKind;
+///
+/// // All defaults
+/// let config = DetectionConfig::builder().build();
+///
+/// // Custom configuration
+/// let config = DetectionConfig::builder()
+///     .detection_order(vec![
+///         PackageManagerKind::Yarn,
+///         PackageManagerKind::Npm,
+///     ])
+///     .exclude_patterns(vec![
+///         "**/node_modules/**".to_string(),
+///         "**/vendor/**".to_string(),
+///     ])
+///     .max_search_depth(10)
+///     .build();
+/// ```
 #[derive(Debug, Default)]
 pub struct DetectionConfigBuilder {
     config: DetectionConfig,
 }
 
 impl DetectionConfigBuilder {
-    /// Sets the package manager configuration.
-    pub fn package_manager(mut self, config: PackageManagerConfig) -> Self {
-        self.config.package_manager = config;
+    pub fn detection_order(mut self, order: Vec<PackageManagerKind>) -> Self {
+        self.config.detection_order = order;
         self
     }
 
-    /// Sets the monorepo configuration.
-    pub fn monorepo(mut self, config: MonorepoConfig) -> Self {
-        self.config.monorepo = config;
+    pub fn detect_from_env(mut self, enabled: bool) -> Self {
+        self.config.detect_from_env = enabled;
         self
     }
 
-    /// Builds the configuration.
+    pub fn env_var_name(mut self, name: impl Into<String>) -> Self {
+        self.config.env_var_name = name.into();
+        self
+    }
+
+    pub fn additional_workspace_patterns(mut self, patterns: Vec<String>) -> Self {
+        self.config.additional_workspace_patterns = patterns;
+        self
+    }
+
+    pub fn exclude_patterns(mut self, patterns: Vec<String>) -> Self {
+        self.config.exclude_patterns = patterns;
+        self
+    }
+
+    pub fn max_search_depth(mut self, depth: usize) -> Self {
+        self.config.max_search_depth = depth;
+        self
+    }
+
     pub fn build(self) -> DetectionConfig {
         self.config
     }
 }
 ```
 
+**Files to Create/Modify**:
+- `crates/core/src/config/builder.rs`
+- `crates/core/src/config/mod.rs` (add re-export)
+
 **Estimated Effort**: 1 hour
 
 ---
 
-### Epic 3: Node Module
+### Epic 3: Repository Module
 
-**Goal**: Implement package manager abstractions and repository types.
+**Goal**: Implement `RepoType` and `RepoKind` enums with detection logic.
 
-#### Task 3.1: Define PackageManagerKind Enum
+**PRD Context**:
+- §3.1: Core Concepts diagram
+- §3.2: Concept Definitions table
+- §3.3: Detection Rules
+- §5.1: Repository Type Module requirements
 
-**Description**: Create the enumeration for package manager types.
+---
+
+#### Task 3.1: Define RepoType Enum
+
+**Description**: Create the `RepoType` enum representing runtime ecosystems (Node, Deno, Bun).
+
+**PRD References**:
+- §3.2: Concept Definitions - RepoType
+- §3.3: RepoType Detection (Priority Order) table
+- §5.1 FR-1.1.1: Node support
+- §5.1 FR-1.1.2: Deno support
+- §5.1 FR-1.1.3: Bun support
+- §5.1 FR-1.1.4: Detection priority order (Deno > Bun > Node)
+
+**Detection Priority** (from PRD §3.3):
+
+| Priority | RepoType | Detection Criteria |
+|----------|----------|-------------------|
+| 1 | **Deno** | Presence of `deno.json` or `deno.jsonc` |
+| 2 | **Bun** | Presence of `bunfig.toml` **OR** `bun.lockb` |
+| 3 | **Node** | Presence of `package.json` (fallback) |
 
 **Acceptance Criteria**:
-- [ ] `PackageManagerKind` enum with Npm, Yarn, Pnpm, Bun, Deno variants
-- [ ] Methods: `command()`, `lock_file()`, `name()`, `supports_workspaces()`
-- [ ] `FromStr` and `Display` implementations
-- [ ] Serialization support
-- [ ] Comprehensive unit tests
+- [ ] `RepoType` enum with `Node`, `Deno`, `Bun` variants
+- [ ] Derive `Debug`, `Clone`, `Copy`, `PartialEq`, `Eq`, `Hash`, `Serialize`, `Deserialize`
+- [ ] Detection function following priority order from PRD §3.3
+- [ ] Helper methods (e.g., `characteristic_files()`)
+- [ ] Unit tests for detection priority
 
 **Implementation Details**:
 
 ```rust
-// src/node/mod.rs
-
-//! # Node Module
-//!
-//! ## What
-//! Abstractions for Node.js package managers and repository types.
-//!
-//! ## How
-//! Provides enums and structs that model the Node.js ecosystem.
-//!
-//! ## Why
-//! Creates a type-safe foundation for working with Node.js projects.
-
-mod package_manager;
-mod repository;
-mod types;
-#[cfg(test)]
-mod tests;
-
-pub use package_manager::*;
-pub use repository::*;
-pub use types::*;
-```
-
-```rust
-// src/node/types.rs
+// src/repo/repo_type.rs
 
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::str::FromStr;
 
-/// Represents the type of package manager used in a Node.js project.
+/// The runtime ecosystem type of a repository.
+///
+/// Detection follows strict priority order (PRD §3.3):
+/// 1. Deno (if `deno.json` or `deno.jsonc` present)
+/// 2. Bun (if `bunfig.toml` or `bun.lockb` present)
+/// 3. Node (if `package.json` present - fallback)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum PackageManagerKind {
-    /// npm - the default Node.js package manager.
-    Npm,
-    /// Yarn - fast, reliable package manager.
-    Yarn,
-    /// pnpm - efficient disk space package manager.
-    Pnpm,
-    /// Bun - fast all-in-one runtime and package manager.
+pub enum RepoType {
+    /// Node.js runtime (detected via `package.json`)
+    Node,
+    /// Deno runtime (detected via `deno.json` or `deno.jsonc`)
+    Deno,
+    /// Bun runtime (detected via `bunfig.toml` or `bun.lockb`)
     Bun,
-    /// Deno - secure runtime with built-in tooling.
+}
+
+impl RepoType {
+    /// Returns the characteristic files used to detect this repo type.
+    pub fn characteristic_files(&self) -> &'static [&'static str] {
+        match self {
+            RepoType::Node => &["package.json"],
+            RepoType::Deno => &["deno.json", "deno.jsonc"],
+            RepoType::Bun => &["bunfig.toml", "bun.lockb"],
+        }
+    }
+}
+```
+
+**Files to Create/Modify**:
+- `crates/core/src/repo/repo_type.rs`
+- `crates/core/src/repo/mod.rs`
+
+**Estimated Effort**: 1.5 hours
+
+---
+
+#### Task 3.2: Define RepoKind Enum
+
+**Description**: Create the `RepoKind` enum representing repository structure (Simple, Monorepo).
+
+**PRD References**:
+- §3.2: Concept Definitions - RepoKind
+- §3.3: RepoKind Detection table
+- §5.1 FR-1.2.1: Distinguish Simple/Monorepo
+- §5.1 FR-1.2.2: Query methods
+
+**Detection Criteria** (from PRD §3.3):
+
+| RepoKind | Detection Criteria |
+|----------|-------------------|
+| Monorepo | `workspaces` in `package.json`, or `pnpm-workspace.yaml`, or `workspace`/`workspaces` in `deno.json` |
+| Simple | No workspace configuration found |
+
+**Acceptance Criteria**:
+- [ ] `RepoKind` enum with `Simple`, `Monorepo` variants
+- [ ] Derive `Debug`, `Clone`, `Copy`, `PartialEq`, `Eq`, `Hash`, `Serialize`, `Deserialize`
+- [ ] Helper methods (e.g., `is_monorepo()`)
+- [ ] Unit tests
+
+**Files to Create/Modify**:
+- `crates/core/src/repo/repo_kind.rs`
+- `crates/core/src/repo/mod.rs`
+
+**Estimated Effort**: 1 hour
+
+---
+
+### Epic 4: Package Manager Module
+
+**Goal**: Implement `PackageManagerKind` enum and detection logic.
+
+**PRD Context**:
+- §3.2: Concept Definitions
+- §3.3: PackageManagerKind Detection (Priority Order)
+- §3.3: Lock File Mapping table
+- §3.4: Validation Rules
+- §5.2: Package Manager Module requirements
+
+---
+
+#### Task 4.1: Define PackageManagerKind Enum
+
+**Description**: Create the `PackageManagerKind` enum with metadata methods.
+
+**PRD References**:
+- §5.2 FR-2.1.1-5: Support for npm, yarn, pnpm, bun, deno
+- §5.2 FR-2.3.1: Command name for each PM
+- §5.2 FR-2.3.2: Lock file name for each PM
+- §5.2 FR-2.3.3: Workspace support indication
+- §5.2 FR-2.3.4: Workspace config file path
+- §3.3: Lock File Mapping table
+
+**Lock File Mapping** (from PRD §3.3):
+
+| PackageManagerKind | Lock File |
+|--------------------|-----------|
+| Npm | `package-lock.json` |
+| Yarn | `yarn.lock` |
+| Pnpm | `pnpm-lock.yaml` |
+| Bun | `bun.lockb` |
+| Deno | `deno.lock` |
+
+**Acceptance Criteria**:
+- [ ] `PackageManagerKind` enum with `Npm`, `Yarn`, `Pnpm`, `Bun`, `Deno` variants
+- [ ] `command_name() -> &'static str` method
+- [ ] `lock_file() -> &'static str` method
+- [ ] `supports_workspaces() -> bool` method
+- [ ] `workspace_config_file() -> Option<&'static str>` method
+- [ ] Unit tests
+
+**Implementation Details**:
+
+```rust
+// src/package_manager/kind.rs
+
+use serde::{Deserialize, Serialize};
+
+/// The package manager used for dependency management.
+///
+/// # PRD Reference
+/// See PRD §5.2 for package manager requirements and §3.3 for lock file mapping.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PackageManagerKind {
+    Npm,
+    Yarn,
+    Pnpm,
+    Bun,
     Deno,
 }
 
 impl PackageManagerKind {
-    /// Returns the command name for this package manager.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use workspace_core::node::PackageManagerKind;
-    ///
-    /// assert_eq!(PackageManagerKind::Npm.command(), "npm");
-    /// assert_eq!(PackageManagerKind::Pnpm.command(), "pnpm");
-    /// ```
-    #[must_use]
-    pub const fn command(self) -> &'static str {
+    /// Returns the CLI command name for this package manager.
+    pub fn command_name(&self) -> &'static str {
         match self {
             Self::Npm => "npm",
             Self::Yarn => "yarn",
@@ -719,18 +890,8 @@ impl PackageManagerKind {
         }
     }
 
-    /// Returns the lock file name for this package manager.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use workspace_core::node::PackageManagerKind;
-    ///
-    /// assert_eq!(PackageManagerKind::Npm.lock_file(), "package-lock.json");
-    /// assert_eq!(PackageManagerKind::Yarn.lock_file(), "yarn.lock");
-    /// ```
-    #[must_use]
-    pub const fn lock_file(self) -> &'static str {
+    /// Returns the lock file name for this package manager (PRD §3.3).
+    pub fn lock_file(&self) -> &'static str {
         match self {
             Self::Npm => "package-lock.json",
             Self::Yarn => "yarn.lock",
@@ -740,1911 +901,467 @@ impl PackageManagerKind {
         }
     }
 
-    /// Returns a human-readable name for this package manager.
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Npm => "npm",
-            Self::Yarn => "yarn",
-            Self::Pnpm => "pnpm",
-            Self::Bun => "bun",
-            Self::Deno => "deno",
-        }
-    }
-
-    /// Returns whether this package manager supports workspaces natively.
-    #[must_use]
-    pub const fn supports_workspaces(self) -> bool {
-        match self {
-            Self::Npm => true,
-            Self::Yarn => true,
-            Self::Pnpm => true,
-            Self::Bun => true,
-            Self::Deno => true,
-        }
-    }
-
-    /// Returns the workspace config file for this package manager, if any.
-    #[must_use]
-    pub const fn workspace_config_file(self) -> Option<&'static str> {
-        match self {
-            Self::Npm => None, // Uses package.json workspaces field
-            Self::Yarn => None, // Uses package.json workspaces field
-            Self::Pnpm => Some("pnpm-workspace.yaml"),
-            Self::Bun => None, // Uses package.json workspaces field
-            Self::Deno => Some("deno.json"),
-        }
-    }
-
-    /// Returns all available package manager kinds.
-    #[must_use]
-    pub const fn all() -> &'static [PackageManagerKind] {
-        &[
-            Self::Npm,
-            Self::Yarn,
-            Self::Pnpm,
-            Self::Bun,
-            Self::Deno,
-        ]
-    }
-}
-
-impl fmt::Display for PackageManagerKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name())
-    }
-}
-
-impl FromStr for PackageManagerKind {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "npm" => Ok(Self::Npm),
-            "yarn" => Ok(Self::Yarn),
-            "pnpm" => Ok(Self::Pnpm),
-            "bun" => Ok(Self::Bun),
-            "deno" => Ok(Self::Deno),
-            _ => Err(format!("unknown package manager: {s}")),
-        }
-    }
-}
-```
-
-**Files to Create/Modify**:
-- `crates/core/src/node/mod.rs`
-- `crates/core/src/node/types.rs`
-- `crates/core/src/node/tests.rs`
-
-**Estimated Effort**: 2 hours
-
----
-
-#### Task 3.2: Define PackageManager Struct
-
-**Description**: Create the struct representing a detected package manager.
-
-**Acceptance Criteria**:
-- [ ] `PackageManager` struct with kind and root path
-- [ ] Constructor and accessor methods
-- [ ] Derived paths (lock file, workspace config)
-- [ ] Unit tests
-
-**Implementation Details**:
-
-```rust
-// src/node/package_manager.rs
-
-use std::path::{Path, PathBuf};
-use crate::error::{PackageManagerError, Result};
-use crate::config::PackageManagerConfig;
-use super::PackageManagerKind;
-
-/// Represents a detected package manager in a Node.js project.
-///
-/// # Examples
-///
-/// ```
-/// use workspace_core::node::{PackageManager, PackageManagerKind};
-/// use std::path::Path;
-///
-/// let pm = PackageManager::new(PackageManagerKind::Pnpm, "/path/to/project");
-/// assert_eq!(pm.kind(), PackageManagerKind::Pnpm);
-/// assert_eq!(pm.command(), "pnpm");
-/// ```
-#[derive(Debug, Clone)]
-pub struct PackageManager {
-    kind: PackageManagerKind,
-    root: PathBuf,
-}
-
-impl PackageManager {
-    /// Creates a new PackageManager instance.
-    ///
-    /// # Arguments
-    ///
-    /// * `kind` - The type of package manager
-    /// * `root` - The root directory where the package manager was detected
-    pub fn new(kind: PackageManagerKind, root: impl Into<PathBuf>) -> Self {
-        Self {
-            kind,
-            root: root.into(),
-        }
-    }
-
-    /// Detects the package manager at the given path using default configuration.
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - The path to search for a package manager
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if no package manager could be detected.
-    pub fn detect(path: impl AsRef<Path>) -> Result<Self> {
-        Self::detect_with_config(path, &PackageManagerConfig::default())
-    }
-
-    /// Detects the package manager at the given path using custom configuration.
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - The path to search for a package manager
-    /// * `config` - Configuration for detection behavior
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if no package manager could be detected.
-    pub fn detect_with_config(
-        path: impl AsRef<Path>,
-        config: &PackageManagerConfig,
-    ) -> Result<Self> {
-        let path = path.as_ref();
-
-        // Check environment variable first if enabled
-        if config.detect_from_env {
-            if let Ok(env_pm) = std::env::var(&config.env_var_name) {
-                if let Ok(kind) = env_pm.parse::<PackageManagerKind>() {
-                    return Ok(Self::new(kind, path));
-                }
-            }
-        }
-
-        // Check for lock files in configured order
-        for pm_name in &config.detection_order {
-            let kind: PackageManagerKind = match pm_name.parse() {
-                Ok(k) => k,
-                Err(_) => continue,
-            };
-
-            let lock_file = config
-                .custom_lock_files
-                .get(pm_name)
-                .map(String::as_str)
-                .unwrap_or_else(|| kind.lock_file());
-
-            if path.join(lock_file).exists() {
-                return Ok(Self::new(kind, path));
-            }
-        }
-
-        // Try fallback if configured
-        if let Some(fallback) = &config.fallback {
-            if let Ok(kind) = fallback.parse::<PackageManagerKind>() {
-                return Ok(Self::new(kind, path));
-            }
-        }
-
-        Err(PackageManagerError::NotFound {
-            path: path.to_path_buf(),
-        }.into())
-    }
-
-    /// Returns the kind of package manager.
-    #[must_use]
-    pub fn kind(&self) -> PackageManagerKind {
-        self.kind
-    }
-
-    /// Returns the root directory path.
-    #[must_use]
-    pub fn root(&self) -> &Path {
-        &self.root
-    }
-
-    /// Returns the command name for this package manager.
-    #[must_use]
-    pub fn command(&self) -> &'static str {
-        self.kind.command()
-    }
-
-    /// Returns the lock file name for this package manager.
-    #[must_use]
-    pub fn lock_file(&self) -> &'static str {
-        self.kind.lock_file()
-    }
-
-    /// Returns the full path to the lock file.
-    #[must_use]
-    pub fn lock_file_path(&self) -> PathBuf {
-        self.root.join(self.lock_file())
-    }
-
-    /// Returns whether this package manager supports workspaces.
-    #[must_use]
+    /// Returns true if this package manager supports workspaces.
     pub fn supports_workspaces(&self) -> bool {
-        self.kind.supports_workspaces()
+        true // All supported PMs have workspace support
     }
 
-    /// Returns the workspace config file path if applicable.
-    #[must_use]
-    pub fn workspace_config_path(&self) -> Option<PathBuf> {
-        self.kind
-            .workspace_config_file()
-            .map(|f| self.root.join(f))
+    /// Returns the workspace config file path, if any.
+    pub fn workspace_config_file(&self) -> Option<&'static str> {
+        match self {
+            Self::Pnpm => Some("pnpm-workspace.yaml"),
+            _ => None, // Others use package.json workspaces field
+        }
     }
 }
 ```
 
 **Files to Create/Modify**:
-- `crates/core/src/node/package_manager.rs`
-
-**Estimated Effort**: 2 hours
-
----
-
-#### Task 3.3: Define RepoKind Enum
-
-**Description**: Create the enumeration for repository types.
-
-**Acceptance Criteria**:
-- [ ] `RepoKind` enum with Simple and Monorepo variants
-- [ ] Methods: `is_monorepo()`, `monorepo_kind()`, `name()`
-- [ ] Unit tests for all methods
-
-**Implementation Details**:
-
-```rust
-// Add to src/node/types.rs
-
-use crate::monorepo::MonorepoKind;
-
-/// Represents the type of Node.js repository.
-///
-/// # Examples
-///
-/// ```
-/// use workspace_core::node::RepoKind;
-/// use workspace_core::monorepo::MonorepoKind;
-///
-/// let simple = RepoKind::Simple;
-/// assert!(!simple.is_monorepo());
-///
-/// let mono = RepoKind::Monorepo(MonorepoKind::Pnpm);
-/// assert!(mono.is_monorepo());
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RepoKind {
-    /// Simple repository with a single package.json.
-    Simple,
-    /// Monorepo with multiple packages.
-    Monorepo(MonorepoKind),
-}
-
-impl RepoKind {
-    /// Returns a human-readable name for the repository kind.
-    #[must_use]
-    pub fn name(&self) -> String {
-        match self {
-            Self::Simple => "simple".to_string(),
-            Self::Monorepo(kind) => format!("{} monorepo", kind.name()),
-        }
-    }
-
-    /// Returns whether this is a monorepo.
-    #[must_use]
-    pub fn is_monorepo(&self) -> bool {
-        matches!(self, Self::Monorepo(_))
-    }
-
-    /// Returns the monorepo kind if this is a monorepo.
-    #[must_use]
-    pub fn monorepo_kind(&self) -> Option<&MonorepoKind> {
-        match self {
-            Self::Simple => None,
-            Self::Monorepo(kind) => Some(kind),
-        }
-    }
-
-    /// Checks if this matches a specific monorepo kind.
-    #[must_use]
-    pub fn is_monorepo_kind(&self, kind: &MonorepoKind) -> bool {
-        match self {
-            Self::Simple => false,
-            Self::Monorepo(k) => k == kind,
-        }
-    }
-}
-
-impl fmt::Display for RepoKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name())
-    }
-}
-```
+- `crates/core/src/package_manager/kind.rs`
+- `crates/core/src/package_manager/mod.rs`
 
 **Estimated Effort**: 1 hour
 
 ---
 
-#### Task 3.4: Define RepositoryInfo Trait
+#### Task 4.2: Implement Package Manager Detection
 
-**Description**: Create the trait for repository information.
+**Description**: Implement detection logic following PRD priority order with mismatch validation.
+
+**PRD References**:
+- §3.3: PackageManagerKind Detection (Priority Order)
+- §3.4: Validation Rules
+- §5.2 FR-2.2.1: Detect from `packageManager` field (name only)
+- §5.2 FR-2.2.2: Detect by lock file presence
+- §5.2 FR-2.2.3: **Error if `packageManager` field conflicts with lock file**
+- §5.2 FR-2.2.4: Configurable detection order
+- §5.2 FR-2.2.5: Environment variable override
+- §5.7 FR-7.3.1: **No fallback package manager (error if not found)**
+
+**Detection Priority** (from PRD §3.3):
+
+| Priority | Method | Description |
+|----------|--------|-------------|
+| 1 | `packageManager` field | Parse field, extract name only |
+| 2 | Lock file | Detect by lock file presence |
+| 3 | Environment variable | Optional, configurable |
+| 4 | **Error** | No fallback - return error |
+
+**Critical Validation** (from PRD §3.4):
+- `packageManager` field ≠ detected lock file → **Error** (not warning)
+- No lock file and no `packageManager` field → **Error** (no fallback)
 
 **Acceptance Criteria**:
-- [ ] `RepositoryInfo` trait defined
-- [ ] Methods: `repo_kind()`, `name()`, `is_monorepo()`, `root()`
-- [ ] Unit tests with mock implementation
+- [ ] `detect_package_manager(path: &Path, config: &DetectionConfig) -> Result<PackageManagerKind>`
+- [ ] Priority 1: Check `packageManager` field in `package.json`
+- [ ] Priority 2: Check lock files in configured order
+- [ ] Priority 3: Check environment variable if enabled
+- [ ] Return `Error::PackageManagerMismatch` if field conflicts with lock file
+- [ ] Return `Error::PackageManagerNotFound` if nothing detected (no fallback!)
+- [ ] Log at appropriate levels (PRD §6.5)
+- [ ] Unit tests including mismatch and not-found scenarios
 
 **Implementation Details**:
 
 ```rust
-// src/node/repository.rs
+// src/package_manager/detector.rs
 
 use std::path::Path;
-use super::RepoKind;
+use crate::config::DetectionConfig;
+use crate::error::{Result, Error};
+use super::PackageManagerKind;
 
-/// Trait providing information about repository characteristics.
+/// Detects the package manager for a project.
 ///
-/// This trait enables polymorphic access to repository information
-/// regardless of the concrete project type.
-pub trait RepositoryInfo {
-    /// Returns the repository kind.
-    fn repo_kind(&self) -> &RepoKind;
-
-    /// Returns the repository name.
-    fn name(&self) -> String;
-
-    /// Returns whether this is a monorepo.
-    fn is_monorepo(&self) -> bool {
-        self.repo_kind().is_monorepo()
-    }
-
-    /// Returns the root directory of the repository.
-    fn root(&self) -> &Path;
-}
-```
-
-**Estimated Effort**: 1 hour
-
----
-
-### Epic 4: Monorepo Module
-
-**Goal**: Implement monorepo types, detection, and workspace analysis.
-
-#### Task 4.1: Define MonorepoKind Enum
-
-**Description**: Create the enumeration for monorepo types.
-
-**Acceptance Criteria**:
-- [ ] `MonorepoKind` enum with Npm, Yarn, Pnpm, Bun, Deno, Custom variants
-- [ ] Methods: `name()`, `config_file()`
-- [ ] Serialization support
-- [ ] Unit tests
-
-**Implementation Details**:
-
-```rust
-// src/monorepo/mod.rs
-
-//! # Monorepo Module
-//!
-//! ## What
-//! Types and detection for monorepo structures.
-//!
-//! ## How
-//! Provides enums and structs for representing monorepo configurations
-//! and detecting workspace packages.
-//!
-//! ## Why
-//! Enables comprehensive monorepo analysis and package discovery.
-
-mod types;
-mod detector;
-mod descriptor;
-mod workspace;
-#[cfg(test)]
-mod tests;
-
-pub use types::*;
-pub use detector::*;
-pub use descriptor::*;
-pub use workspace::*;
-```
-
-```rust
-// src/monorepo/types.rs
-
-use serde::{Deserialize, Serialize};
-use std::fmt;
-
-/// Represents the type of monorepo system being used.
+/// # Detection Order (PRD §3.3)
+/// 1. `packageManager` field in `package.json`
+/// 2. Lock file presence (in config-specified order)
+/// 3. Environment variable (if enabled)
+/// 4. **Error** (no fallback!)
 ///
-/// # Examples
+/// # Errors
+/// - `PackageManagerMismatch`: `packageManager` field conflicts with lock file
+/// - `PackageManagerNotFound`: No package manager could be detected
 ///
-/// ```
-/// use workspace_core::monorepo::MonorepoKind;
-///
-/// let pnpm = MonorepoKind::Pnpm;
-/// assert_eq!(pnpm.name(), "pnpm");
-/// assert_eq!(pnpm.config_file(), "pnpm-workspace.yaml");
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
-pub enum MonorepoKind {
-    /// npm workspaces (package.json workspaces field).
-    Npm,
-    /// Yarn workspaces (package.json workspaces field).
-    Yarn,
-    /// pnpm workspaces (pnpm-workspace.yaml).
-    Pnpm,
-    /// Bun workspaces (package.json workspaces field).
-    Bun,
-    /// Deno workspaces (deno.json).
-    Deno,
-    /// Custom monorepo configuration.
-    Custom {
-        /// Name of the custom monorepo system.
-        name: String,
-        /// Configuration file for the system.
-        config_file: String,
-    },
-}
+/// # PRD Reference
+/// See PRD §5.2 FR-2.2 and §3.4 for validation rules.
+pub fn detect_package_manager(
+    path: &Path,
+    config: &DetectionConfig,
+) -> Result<PackageManagerKind> {
+    log::debug!("Detecting package manager at '{}'", path.display());
 
-impl MonorepoKind {
-    /// Returns a human-readable name for this monorepo kind.
-    #[must_use]
-    pub fn name(&self) -> &str {
-        match self {
-            Self::Npm => "npm",
-            Self::Yarn => "yarn",
-            Self::Pnpm => "pnpm",
-            Self::Bun => "bun",
-            Self::Deno => "deno",
-            Self::Custom { name, .. } => name,
+    // Priority 1: Check packageManager field
+    let declared = detect_from_package_manager_field(path)?;
+    
+    // Priority 2: Check lock files
+    let from_lock = detect_from_lock_file(path, config)?;
+
+    // Validate consistency (PRD §3.4: mismatch = ERROR)
+    if let (Some(decl), Some(lock)) = (&declared, &from_lock) {
+        if decl != lock {
+            log::warn!(
+                "packageManager field '{}' conflicts with lock file '{}'",
+                decl.command_name(),
+                lock.command_name()
+            );
+            return Err(Error::PackageManagerMismatch {
+                path: path.to_path_buf(),
+                declared: decl.command_name().to_string(),
+                detected: lock.command_name().to_string(),
+            });
         }
     }
 
-    /// Returns the primary configuration file for this monorepo kind.
-    #[must_use]
-    pub fn config_file(&self) -> &str {
-        match self {
-            Self::Npm | Self::Yarn | Self::Bun => "package.json",
-            Self::Pnpm => "pnpm-workspace.yaml",
-            Self::Deno => "deno.json",
-            Self::Custom { config_file, .. } => config_file,
+    // Return first detected (priority order)
+    if let Some(pm) = declared.or(from_lock) {
+        log::info!("Package manager detected: {}", pm.command_name());
+        return Ok(pm);
+    }
+
+    // Priority 3: Check environment variable
+    if config.detect_from_env() {
+        if let Some(pm) = detect_from_env(config.env_var_name())? {
+            log::info!("Package manager from env: {}", pm.command_name());
+            return Ok(pm);
         }
     }
 
-    /// Creates a custom monorepo kind.
-    #[must_use]
-    pub fn custom(name: impl Into<String>, config_file: impl Into<String>) -> Self {
-        Self::Custom {
-            name: name.into(),
-            config_file: config_file.into(),
-        }
-    }
-
-    /// Returns all standard monorepo kinds.
-    #[must_use]
-    pub const fn all_standard() -> &'static [MonorepoKind] {
-        &[
-            Self::Npm,
-            Self::Yarn,
-            Self::Pnpm,
-            Self::Bun,
-            Self::Deno,
-        ]
-    }
-}
-
-impl fmt::Display for MonorepoKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name())
-    }
+    // NO FALLBACK (PRD §5.7 FR-7.3.1)
+    log::error!("No package manager found at '{}'", path.display());
+    Err(Error::PackageManagerNotFound {
+        path: path.to_path_buf(),
+    })
 }
 ```
 
 **Files to Create/Modify**:
-- `crates/core/src/monorepo/mod.rs`
-- `crates/core/src/monorepo/types.rs`
+- `crates/core/src/package_manager/detector.rs`
+- `crates/core/src/package_manager/mod.rs`
 
-**Estimated Effort**: 1.5 hours
+**Estimated Effort**: 3 hours
 
 ---
 
-#### Task 4.2: Define WorkspacePackage Struct
+### Epic 5: Package & Dependency Modules
 
-**Description**: Create the struct representing a package in a workspace.
+**Goal**: Implement `Package`, `Dependency`, and `PackageDependencies` types.
 
-**Acceptance Criteria**:
-- [ ] `WorkspacePackage` struct with name, version, location, dependencies
-- [ ] Methods for workspace dependency queries
-- [ ] Serialization support
-- [ ] Unit tests
+**PRD Context**:
+- §5.3: Package Module requirements
+- §5.4: Dependency Module requirements
 
-**Implementation Details**:
+---
+
+#### Task 5.1: Define Dependency Types
+
+**Description**: Create `Dependency` and `PackageDependencies` structs.
+
+**PRD References**:
+- §5.4 FR-4.1: Dependency Parsing (all dep types)
+- §5.4 FR-4.2: Dependency Version Handling (semver, workspace protocol)
+- §5.4 FR-4.3: Dependency Categorization (internal vs external)
+- §5.4 FR-4.4: Dependency Data Model (structs)
+
+**Data Model** (from PRD §5.4 FR-4.4):
 
 ```rust
-// Add to src/monorepo/types.rs
-
-use std::path::PathBuf;
-use std::collections::HashSet;
-
-/// Represents a single package within a monorepo workspace.
-///
-/// # Examples
-///
-/// ```
-/// use workspace_core::monorepo::WorkspacePackage;
-/// use std::path::PathBuf;
-///
-/// let pkg = WorkspacePackage::new(
-///     "my-package",
-///     "1.0.0",
-///     PathBuf::from("packages/my-package"),
-///     PathBuf::from("/repo/packages/my-package"),
-/// );
-/// assert_eq!(pkg.name(), "my-package");
-/// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkspacePackage {
-    /// Name of the package.
+struct Dependency {
     name: String,
-    /// Version of the package.
-    version: String,
-    /// Location relative to the monorepo root.
-    location: PathBuf,
-    /// Absolute path to the package.
-    absolute_path: PathBuf,
-    /// Names of workspace packages this depends on.
-    workspace_dependencies: HashSet<String>,
-    /// Names of workspace packages this dev-depends on.
-    workspace_dev_dependencies: HashSet<String>,
+    version_spec: String,              // Raw: "^4.17.21", "workspace:*"
+    parsed_version: Option<VersionReq>, // Parsed semver (None for workspace protocol)
+    is_internal: bool,                  // True if workspace protocol or matches workspace package
 }
 
-impl WorkspacePackage {
-    /// Creates a new WorkspacePackage.
-    pub fn new(
-        name: impl Into<String>,
-        version: impl Into<String>,
-        location: PathBuf,
-        absolute_path: PathBuf,
-    ) -> Self {
-        Self {
-            name: name.into(),
-            version: version.into(),
-            location,
-            absolute_path,
-            workspace_dependencies: HashSet::new(),
-            workspace_dev_dependencies: HashSet::new(),
-        }
-    }
-
-    /// Returns the package name.
-    #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// Returns the package version.
-    #[must_use]
-    pub fn version(&self) -> &str {
-        &self.version
-    }
-
-    /// Returns the location relative to the monorepo root.
-    #[must_use]
-    pub fn location(&self) -> &Path {
-        &self.location
-    }
-
-    /// Returns the absolute path.
-    #[must_use]
-    pub fn absolute_path(&self) -> &Path {
-        &self.absolute_path
-    }
-
-    /// Returns the workspace dependencies.
-    #[must_use]
-    pub fn workspace_dependencies(&self) -> &HashSet<String> {
-        &self.workspace_dependencies
-    }
-
-    /// Returns the workspace dev dependencies.
-    #[must_use]
-    pub fn workspace_dev_dependencies(&self) -> &HashSet<String> {
-        &self.workspace_dev_dependencies
-    }
-
-    /// Adds a workspace dependency.
-    pub fn add_workspace_dependency(&mut self, name: impl Into<String>) {
-        self.workspace_dependencies.insert(name.into());
-    }
-
-    /// Adds a workspace dev dependency.
-    pub fn add_workspace_dev_dependency(&mut self, name: impl Into<String>) {
-        self.workspace_dev_dependencies.insert(name.into());
-    }
-
-    /// Checks if this package depends on another workspace package.
-    #[must_use]
-    pub fn depends_on(&self, package_name: &str) -> bool {
-        self.workspace_dependencies.contains(package_name)
-            || self.workspace_dev_dependencies.contains(package_name)
-    }
-
-    /// Returns all workspace dependencies (prod and dev).
-    #[must_use]
-    pub fn all_workspace_dependencies(&self) -> HashSet<&str> {
-        self.workspace_dependencies
-            .iter()
-            .chain(self.workspace_dev_dependencies.iter())
-            .map(String::as_str)
-            .collect()
-    }
+struct PackageDependencies {
+    dependencies: Vec<Dependency>,
+    dev_dependencies: Vec<Dependency>,
+    peer_dependencies: Vec<Dependency>,
+    optional_dependencies: Vec<Dependency>,
 }
 ```
-
-**Estimated Effort**: 1.5 hours
-
----
-
-#### Task 4.3: Define MonorepoDescriptor Struct
-
-**Description**: Create the struct representing a complete monorepo.
 
 **Acceptance Criteria**:
-- [ ] `MonorepoDescriptor` struct with kind, root, packages
-- [ ] Methods for package lookup and dependency graph
-- [ ] Implements `RepositoryInfo` trait
+- [ ] `Dependency` struct with fields from PRD §5.4 FR-4.4
+- [ ] `PackageDependencies` struct with all dependency types
+- [ ] `PackageDependencies::all()` iterator
+- [ ] `PackageDependencies::internal()` iterator
+- [ ] `PackageDependencies::external()` iterator
 - [ ] Unit tests
 
-**Implementation Details**:
-
-```rust
-// src/monorepo/descriptor.rs
-
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use serde_json::Value as JsonValue;
-use crate::node::{PackageManager, RepositoryInfo, RepoKind};
-use super::{MonorepoKind, WorkspacePackage};
-
-/// Describes a complete monorepo structure.
-///
-/// # Examples
-///
-/// ```ignore
-/// use workspace_core::monorepo::{MonorepoDescriptor, MonorepoKind};
-///
-/// let descriptor = MonorepoDescriptor::new(
-///     MonorepoKind::Pnpm,
-///     PathBuf::from("/path/to/repo"),
-///     vec![/* packages */],
-///     None,
-///     None,
-/// );
-/// assert_eq!(descriptor.kind(), &MonorepoKind::Pnpm);
-/// ```
-#[derive(Debug)]
-pub struct MonorepoDescriptor {
-    kind: MonorepoKind,
-    root: PathBuf,
-    packages: Vec<WorkspacePackage>,
-    package_index: HashMap<String, usize>,
-    package_manager: Option<PackageManager>,
-    package_json: Option<JsonValue>,
-}
-
-impl MonorepoDescriptor {
-    /// Creates a new MonorepoDescriptor.
-    pub fn new(
-        kind: MonorepoKind,
-        root: PathBuf,
-        packages: Vec<WorkspacePackage>,
-        package_manager: Option<PackageManager>,
-        package_json: Option<JsonValue>,
-    ) -> Self {
-        let package_index = packages
-            .iter()
-            .enumerate()
-            .map(|(i, p)| (p.name().to_string(), i))
-            .collect();
-
-        Self {
-            kind,
-            root,
-            packages,
-            package_index,
-            package_manager,
-            package_json,
-        }
-    }
-
-    /// Returns the monorepo kind.
-    #[must_use]
-    pub fn kind(&self) -> &MonorepoKind {
-        &self.kind
-    }
-
-    /// Returns the root path.
-    #[must_use]
-    pub fn root_path(&self) -> &Path {
-        &self.root
-    }
-
-    /// Returns all packages.
-    #[must_use]
-    pub fn packages(&self) -> &[WorkspacePackage] {
-        &self.packages
-    }
-
-    /// Returns the number of packages.
-    #[must_use]
-    pub fn package_count(&self) -> usize {
-        self.packages.len()
-    }
-
-    /// Gets a package by name.
-    #[must_use]
-    pub fn get_package(&self, name: &str) -> Option<&WorkspacePackage> {
-        self.package_index.get(name).map(|&i| &self.packages[i])
-    }
-
-    /// Returns the package manager if detected.
-    #[must_use]
-    pub fn package_manager(&self) -> Option<&PackageManager> {
-        self.package_manager.as_ref()
-    }
-
-    /// Returns the root package.json content if available.
-    #[must_use]
-    pub fn package_json(&self) -> Option<&JsonValue> {
-        self.package_json.as_ref()
-    }
-
-    /// Generates a dependency graph.
-    ///
-    /// Returns a map where keys are package names and values are
-    /// lists of packages that depend on them.
-    #[must_use]
-    pub fn dependency_graph(&self) -> HashMap<&str, Vec<&WorkspacePackage>> {
-        let mut graph: HashMap<&str, Vec<&WorkspacePackage>> = HashMap::new();
-
-        for package in &self.packages {
-            for dep in package.all_workspace_dependencies() {
-                graph.entry(dep).or_default().push(package);
-            }
-        }
-
-        graph
-    }
-
-    /// Finds packages that depend on a given package.
-    #[must_use]
-    pub fn dependents_of(&self, package_name: &str) -> Vec<&WorkspacePackage> {
-        self.packages
-            .iter()
-            .filter(|p| p.depends_on(package_name))
-            .collect()
-    }
-
-    /// Finds the package containing a given path.
-    #[must_use]
-    pub fn find_package_for_path(&self, path: &Path) -> Option<&WorkspacePackage> {
-        // Normalize the path
-        let path = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            self.root.join(path)
-        };
-
-        self.packages.iter().find(|p| path.starts_with(p.absolute_path()))
-    }
-
-    /// Returns an iterator over package names.
-    pub fn package_names(&self) -> impl Iterator<Item = &str> {
-        self.packages.iter().map(|p| p.name())
-    }
-}
-
-impl RepositoryInfo for MonorepoDescriptor {
-    fn repo_kind(&self) -> &RepoKind {
-        // Note: This requires storing RepoKind or computing it
-        // For now, we'll need to adjust the design
-        todo!("Will be implemented with project integration")
-    }
-
-    fn name(&self) -> String {
-        self.package_json
-            .as_ref()
-            .and_then(|pj| pj.get("name"))
-            .and_then(|n| n.as_str())
-            .unwrap_or("unnamed")
-            .to_string()
-    }
-
-    fn root(&self) -> &Path {
-        &self.root
-    }
-}
-```
+**Files to Create/Modify**:
+- `crates/core/src/dependency/types.rs`
+- `crates/core/src/dependency/mod.rs`
 
 **Estimated Effort**: 2 hours
 
 ---
 
-#### Task 4.4: Implement MonorepoDetector
+#### Task 5.2: Implement Dependency Parser
 
-**Description**: Create the detector for monorepo structures.
+**Description**: Parse dependencies from `package.json` using `package-json` crate.
+
+**PRD References**:
+- §5.4 FR-4.1: Parse all dependency types
+- §5.4 FR-4.2.1: Use `semver` crate
+- §5.4 FR-4.2.2: Preserve raw version strings
+- §5.4 FR-4.2.3: Detect workspace protocol
+- §1.4.2: Use `package-json` crate
 
 **Acceptance Criteria**:
-- [ ] `MonorepoDetector` struct with detection methods
-- [ ] Detects npm/yarn/bun workspaces from package.json
-- [ ] Detects pnpm workspaces from pnpm-workspace.yaml
-- [ ] Detects deno workspaces from deno.json
-- [ ] Unit tests for each monorepo type
+- [ ] Parse `dependencies`, `devDependencies`, `peerDependencies`, `optionalDependencies`
+- [ ] Use `semver` crate for `VersionReq` parsing
+- [ ] Preserve raw version spec strings
+- [ ] Detect `workspace:*`, `workspace:^`, `workspace:~` protocols
+- [ ] Unit tests for various version specs
 
-**Implementation Details**:
+**Files to Create/Modify**:
+- `crates/core/src/dependency/parser.rs`
+
+**Estimated Effort**: 2 hours
+
+---
+
+#### Task 5.3: Implement Dependency Categorizer
+
+**Description**: Categorize dependencies as internal or external.
+
+**PRD References**:
+- §5.4 FR-4.3.1: Categorize internal vs external
+- §5.4 FR-4.3.2: Match names against workspace package list
+- §5.4 FR-4.2.4: Flag workspace protocol as internal
+- §5.4 FR-4.3.5: Direct dependencies only (no transitive)
+
+**Acceptance Criteria**:
+- [ ] Detect workspace protocol as internal
+- [ ] Match dependency names against workspace package list
+- [ ] Handle edge cases (self-reference, etc.)
+- [ ] Unit tests
+
+**Files to Create/Modify**:
+- `crates/core/src/dependency/categorizer.rs`
+
+**Estimated Effort**: 1.5 hours
+
+---
+
+#### Task 5.4: Define Package Struct
+
+**Description**: Create the unified `Package` struct.
+
+**PRD References**:
+- §5.3 FR-3.1: Package Representation requirements
+- §5.3 FR-3.2: Package Data Model
+- §1.4.2: Use `package-json` crate for manifest
+
+**Data Model** (from PRD §5.3 FR-3.2):
 
 ```rust
-// src/monorepo/detector.rs
-
-use std::path::{Path, PathBuf};
-use std::fs;
-use serde_json::Value as JsonValue;
-use crate::config::MonorepoConfig;
-use crate::error::{MonorepoError, Result, IoError};
-use crate::node::{PackageManager, PackageManagerKind};
-use super::{MonorepoKind, MonorepoDescriptor, WorkspacePackage};
-
-/// Detects and analyzes monorepo structures.
-///
-/// # Examples
-///
-/// ```ignore
-/// use workspace_core::monorepo::MonorepoDetector;
-/// use std::path::Path;
-///
-/// let detector = MonorepoDetector::new();
-/// if let Some(kind) = detector.detect_kind(Path::new("."))? {
-///     println!("Found {} monorepo", kind);
-/// }
-/// ```
-#[derive(Debug, Clone)]
-pub struct MonorepoDetector {
-    config: MonorepoConfig,
-}
-
-impl MonorepoDetector {
-    /// Creates a new detector with default configuration.
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            config: MonorepoConfig::default(),
-        }
-    }
-
-    /// Creates a new detector with custom configuration.
-    #[must_use]
-    pub fn with_config(config: MonorepoConfig) -> Self {
-        Self { config }
-    }
-
-    /// Detects the monorepo kind at a path.
-    ///
-    /// Returns `None` if the path is not a monorepo root.
-    pub fn detect_kind(&self, path: impl AsRef<Path>) -> Result<Option<MonorepoKind>> {
-        let path = path.as_ref();
-
-        // Check for pnpm-workspace.yaml first (most specific)
-        if path.join("pnpm-workspace.yaml").exists() {
-            return Ok(Some(MonorepoKind::Pnpm));
-        }
-
-        // Check for deno.json with workspace config
-        if let Some(kind) = self.check_deno_workspace(path)? {
-            return Ok(Some(kind));
-        }
-
-        // Check for package.json workspaces field
-        if let Some(kind) = self.check_package_json_workspaces(path)? {
-            return Ok(Some(kind));
-        }
-
-        Ok(None)
-    }
-
-    /// Checks if a path is a monorepo root.
-    pub fn is_monorepo_root(&self, path: impl AsRef<Path>) -> Result<bool> {
-        Ok(self.detect_kind(path)?.is_some())
-    }
-
-    /// Detects and analyzes a complete monorepo structure.
-    pub fn detect(&self, path: impl AsRef<Path>) -> Result<MonorepoDescriptor> {
-        let path = path.as_ref();
-
-        let kind = self.detect_kind(path)?.ok_or_else(|| MonorepoError::NotMonorepo {
-            path: path.to_path_buf(),
-        })?;
-
-        let package_manager = PackageManager::detect(path).ok();
-
-        let package_json = self.read_package_json(path)?;
-
-        let workspace_patterns = self.get_workspace_patterns(path, &kind)?;
-        let packages = self.discover_packages(path, &workspace_patterns)?;
-
-        Ok(MonorepoDescriptor::new(
-            kind,
-            path.to_path_buf(),
-            packages,
-            package_manager,
-            package_json,
-        ))
-    }
-
-    /// Finds the monorepo root by walking up from a path.
-    pub fn find_root(&self, start: impl AsRef<Path>) -> Result<Option<(PathBuf, MonorepoKind)>> {
-        let start = start.as_ref();
-        let mut current = if start.is_absolute() {
-            start.to_path_buf()
-        } else {
-            std::env::current_dir()
-                .map_err(|e| IoError::read_dir(start, e))?
-                .join(start)
-        };
-
-        loop {
-            if let Some(kind) = self.detect_kind(&current)? {
-                return Ok(Some((current, kind)));
-            }
-
-            match current.parent() {
-                Some(parent) => current = parent.to_path_buf(),
-                None => return Ok(None),
-            }
-        }
-    }
-
-    // Private helper methods
-
-    fn check_deno_workspace(&self, path: &Path) -> Result<Option<MonorepoKind>> {
-        let deno_json = path.join("deno.json");
-        if !deno_json.exists() {
-            return Ok(None);
-        }
-
-        let content = fs::read_to_string(&deno_json)
-            .map_err(|e| IoError::read(&deno_json, e))?;
-
-        let json: JsonValue = serde_json::from_str(&content)
-            .map_err(|e| MonorepoError::ConfigParseFailed {
-                path: deno_json.clone(),
-                source: Box::new(e),
-            })?;
-
-        if json.get("workspace").is_some() || json.get("workspaces").is_some() {
-            return Ok(Some(MonorepoKind::Deno));
-        }
-
-        Ok(None)
-    }
-
-    fn check_package_json_workspaces(&self, path: &Path) -> Result<Option<MonorepoKind>> {
-        let package_json_path = path.join("package.json");
-        if !package_json_path.exists() {
-            return Ok(None);
-        }
-
-        let json = self.read_package_json(path)?;
-        let json = match json {
-            Some(j) => j,
-            None => return Ok(None),
-        };
-
-        // Check for workspaces field
-        if json.get("workspaces").is_none() {
-            return Ok(None);
-        }
-
-        // Determine specific kind based on lock file
-        if path.join("pnpm-lock.yaml").exists() {
-            return Ok(Some(MonorepoKind::Pnpm));
-        }
-        if path.join("yarn.lock").exists() {
-            return Ok(Some(MonorepoKind::Yarn));
-        }
-        if path.join("bun.lockb").exists() {
-            return Ok(Some(MonorepoKind::Bun));
-        }
-
-        // Default to npm workspaces
-        Ok(Some(MonorepoKind::Npm))
-    }
-
-    fn read_package_json(&self, path: &Path) -> Result<Option<JsonValue>> {
-        let package_json_path = path.join("package.json");
-        if !package_json_path.exists() {
-            return Ok(None);
-        }
-
-        let content = fs::read_to_string(&package_json_path)
-            .map_err(|e| IoError::read(&package_json_path, e))?;
-
-        let json: JsonValue = serde_json::from_str(&content)
-            .map_err(|e| MonorepoError::ConfigParseFailed {
-                path: package_json_path,
-                source: Box::new(e),
-            })?;
-
-        Ok(Some(json))
-    }
-
-    fn get_workspace_patterns(
-        &self,
-        root: &Path,
-        kind: &MonorepoKind,
-    ) -> Result<Vec<String>> {
-        match kind {
-            MonorepoKind::Pnpm => self.get_pnpm_patterns(root),
-            MonorepoKind::Deno => self.get_deno_patterns(root),
-            MonorepoKind::Npm | MonorepoKind::Yarn | MonorepoKind::Bun => {
-                self.get_package_json_patterns(root)
-            }
-            MonorepoKind::Custom { .. } => {
-                // Use configured patterns for custom monorepos
-                Ok(self.config.workspace_patterns.clone())
-            }
-        }
-    }
-
-    fn get_pnpm_patterns(&self, root: &Path) -> Result<Vec<String>> {
-        let config_path = root.join("pnpm-workspace.yaml");
-        let content = fs::read_to_string(&config_path)
-            .map_err(|e| IoError::read(&config_path, e))?;
-
-        #[derive(serde::Deserialize)]
-        struct PnpmWorkspace {
-            packages: Vec<String>,
-        }
-
-        let config: PnpmWorkspace = serde_yaml::from_str(&content)
-            .map_err(|e| MonorepoError::ConfigParseFailed {
-                path: config_path,
-                source: Box::new(e),
-            })?;
-
-        Ok(config.packages)
-    }
-
-    fn get_deno_patterns(&self, root: &Path) -> Result<Vec<String>> {
-        let config_path = root.join("deno.json");
-        let content = fs::read_to_string(&config_path)
-            .map_err(|e| IoError::read(&config_path, e))?;
-
-        let json: JsonValue = serde_json::from_str(&content)
-            .map_err(|e| MonorepoError::ConfigParseFailed {
-                path: config_path.clone(),
-                source: Box::new(e),
-            })?;
-
-        // Deno supports both "workspace" and "workspaces"
-        let patterns = json
-            .get("workspace")
-            .or_else(|| json.get("workspaces"))
-            .and_then(|w| w.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str())
-                    .map(String::from)
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        Ok(patterns)
-    }
-
-    fn get_package_json_patterns(&self, root: &Path) -> Result<Vec<String>> {
-        let json = self.read_package_json(root)?
-            .ok_or_else(|| MonorepoError::NotMonorepo { path: root.to_path_buf() })?;
-
-        let workspaces = json.get("workspaces");
-
-        let patterns = match workspaces {
-            // Array format: ["packages/*", "apps/*"]
-            Some(JsonValue::Array(arr)) => {
-                arr.iter()
-                    .filter_map(|v| v.as_str())
-                    .map(String::from)
-                    .collect()
-            }
-            // Object format: { "packages": ["packages/*"] }
-            Some(JsonValue::Object(obj)) => {
-                obj.get("packages")
-                    .and_then(|p| p.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|v| v.as_str())
-                            .map(String::from)
-                            .collect()
-                    })
-                    .unwrap_or_default()
-            }
-            _ => Vec::new(),
-        };
-
-        Ok(patterns)
-    }
-
-    fn discover_packages(
-        &self,
-        root: &Path,
-        patterns: &[String],
-    ) -> Result<Vec<WorkspacePackage>> {
-        let mut packages = Vec::new();
-        let all_package_names: std::collections::HashSet<String>;
-
-        // First pass: discover all packages
-        for pattern in patterns {
-            // Skip exclusion patterns
-            if pattern.starts_with('!') {
-                continue;
-            }
-
-            let package_dirs = self.expand_pattern(root, pattern)?;
-            for dir in package_dirs {
-                if let Some(pkg) = self.read_workspace_package(root, &dir)? {
-                    packages.push(pkg);
-                }
-            }
-        }
-
-        // Collect all package names for dependency resolution
-        all_package_names = packages.iter().map(|p| p.name().to_string()).collect();
-
-        // Second pass: resolve workspace dependencies
-        for package in &mut packages {
-            self.resolve_workspace_dependencies(package, &all_package_names)?;
-        }
-
-        Ok(packages)
-    }
-
-    fn expand_pattern(&self, root: &Path, pattern: &str) -> Result<Vec<PathBuf>> {
-        let full_pattern = root.join(pattern);
-        let pattern_str = full_pattern.to_string_lossy();
-
-        let mut dirs = Vec::new();
-
-        for entry in glob::glob(&pattern_str).map_err(|e| MonorepoError::DetectionFailed {
-            path: root.to_path_buf(),
-            reason: format!("invalid glob pattern: {e}"),
-        })? {
-            match entry {
-                Ok(path) => {
-                    if path.is_dir() && path.join("package.json").exists() {
-                        dirs.push(path);
-                    }
-                }
-                Err(e) => {
-                    // Log but continue - some paths may be inaccessible
-                    log::warn!("Failed to access path in glob: {e}");
-                }
-            }
-        }
-
-        Ok(dirs)
-    }
-
-    fn read_workspace_package(
-        &self,
-        root: &Path,
-        package_dir: &Path,
-    ) -> Result<Option<WorkspacePackage>> {
-        let package_json_path = package_dir.join("package.json");
-        if !package_json_path.exists() {
-            return Ok(None);
-        }
-
-        let content = fs::read_to_string(&package_json_path)
-            .map_err(|e| IoError::read(&package_json_path, e))?;
-
-        let json: JsonValue = serde_json::from_str(&content)
-            .map_err(|e| MonorepoError::ConfigParseFailed {
-                path: package_json_path,
-                source: Box::new(e),
-            })?;
-
-        let name = json
-            .get("name")
-            .and_then(|n| n.as_str())
-            .unwrap_or("unnamed")
-            .to_string();
-
-        let version = json
-            .get("version")
-            .and_then(|v| v.as_str())
-            .unwrap_or("0.0.0")
-            .to_string();
-
-        let location = package_dir
-            .strip_prefix(root)
-            .unwrap_or(package_dir)
-            .to_path_buf();
-
-        Ok(Some(WorkspacePackage::new(
-            name,
-            version,
-            location,
-            package_dir.to_path_buf(),
-        )))
-    }
-
-    fn resolve_workspace_dependencies(
-        &self,
-        package: &mut WorkspacePackage,
-        all_package_names: &std::collections::HashSet<String>,
-    ) -> Result<()> {
-        let package_json_path = package.absolute_path().join("package.json");
-        let content = fs::read_to_string(&package_json_path)
-            .map_err(|e| IoError::read(&package_json_path, e))?;
-
-        let json: JsonValue = serde_json::from_str(&content)
-            .map_err(|e| MonorepoError::ConfigParseFailed {
-                path: package_json_path,
-                source: Box::new(e),
-            })?;
-
-        // Check dependencies
-        if let Some(deps) = json.get("dependencies").and_then(|d| d.as_object()) {
-            for dep_name in deps.keys() {
-                if all_package_names.contains(dep_name) {
-                    package.add_workspace_dependency(dep_name.clone());
-                }
-            }
-        }
-
-        // Check devDependencies
-        if let Some(deps) = json.get("devDependencies").and_then(|d| d.as_object()) {
-            for dep_name in deps.keys() {
-                if all_package_names.contains(dep_name) {
-                    package.add_workspace_dev_dependency(dep_name.clone());
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
-
-impl Default for MonorepoDetector {
-    fn default() -> Self {
-        Self::new()
-    }
+struct Package {
+    // Identity
+    name: String,
+    version: Version,
+    
+    // Location
+    relative_path: PathBuf,    // "." for root, "packages/utils" for workspace
+    absolute_path: PathBuf,
+    
+    // Manifest
+    manifest: PackageJson,     // From package-json crate
+    
+    // Dependencies
+    dependencies: PackageDependencies,
 }
 ```
+
+**Methods** (from PRD §5.3 FR-3.2):
+- `name() -> &str`
+- `version() -> &Version`
+- `relative_path() -> &Path`
+- `absolute_path() -> &Path`
+- `manifest() -> &PackageJson`
+- `dependencies() -> &PackageDependencies`
+- `internal_dependencies() -> impl Iterator<Item = &Dependency>`
+- `external_dependencies() -> impl Iterator<Item = &Dependency>`
+- `depends_on(package_name: &str) -> bool`
+
+**Acceptance Criteria**:
+- [ ] `Package` struct with all fields from PRD §5.3 FR-3.2
+- [ ] All getter methods implemented
+- [ ] `depends_on()` method
+- [ ] `internal_dependencies()` / `external_dependencies()` iterators
+- [ ] Unit tests
+
+**Files to Create/Modify**:
+- `crates/core/src/package/package.rs`
+- `crates/core/src/package/mod.rs`
+
+**Estimated Effort**: 2 hours
+
+---
+
+### Epic 6: Monorepo Module
+
+**Goal**: Implement monorepo detection and workspace package discovery.
+
+**PRD Context**:
+- §5.6: Monorepo Module requirements
+- §3.3: RepoKind Detection
+
+---
+
+#### Task 6.1: Implement Workspace Config Parsing
+
+**Description**: Parse workspace configuration from various sources.
+
+**PRD References**:
+- §5.6 FR-6.1.1: npm/yarn/bun workspaces from `package.json`
+- §5.6 FR-6.1.2: pnpm workspaces from `pnpm-workspace.yaml`
+- §5.6 FR-6.1.3: deno workspaces from `deno.json`
+- §1.4.2: Use `serde_yaml_ng` for YAML
+
+**Acceptance Criteria**:
+- [ ] Parse `workspaces` field from `package.json` (string array or object with `packages` field)
+- [ ] Parse `packages` from `pnpm-workspace.yaml`
+- [ ] Parse `workspace`/`workspaces` from `deno.json`
+- [ ] Unit tests for each format
+
+**Files to Create/Modify**:
+- `crates/core/src/monorepo/workspace.rs`
+
+**Estimated Effort**: 2.5 hours
+
+---
+
+#### Task 6.2: Implement Workspace Package Discovery
+
+**Description**: Discover all packages matching workspace patterns.
+
+**PRD References**:
+- §5.6 FR-6.2.1: Discover packages matching patterns
+- §5.6 FR-6.2.2: Respect exclusion patterns
+- §5.6 FR-6.2.3: Provide name and version
+- §5.6 FR-6.2.4: Provide relative and absolute paths
+- §5.6 FR-6.2.5: Configurable search depth
+- §5.7 FR-7.3.3: Merge `additional_workspace_patterns` with config
+- §5.7 FR-7.3.4: Deduplicate merged patterns
+
+**Acceptance Criteria**:
+- [ ] Discover packages using glob patterns
+- [ ] Merge `additional_workspace_patterns` with patterns from files
+- [ ] Remove duplicates from merged patterns
+- [ ] Respect `exclude_patterns` from config
+- [ ] Respect `max_search_depth` from config
+- [ ] Return `Package` for each discovered workspace package
+- [ ] Unit tests with various pattern combinations
 
 **Files to Create/Modify**:
 - `crates/core/src/monorepo/detector.rs`
 
-**Estimated Effort**: 4 hours
+**Estimated Effort**: 3 hours
 
 ---
 
-#### Task 4.5: Implement Workspace Configuration Parsing
+#### Task 6.3: Implement Dependency Graph Analysis
 
-**Description**: Create parsers for different workspace configuration formats.
+**Description**: Analyze dependencies between workspace packages.
 
-**Acceptance Criteria**:
-- [ ] Parse npm/yarn/bun workspaces from package.json
-- [ ] Parse pnpm workspaces from pnpm-workspace.yaml
-- [ ] Parse deno workspaces from deno.json
-- [ ] Handle both array and object workspace formats
-- [ ] Unit tests for each format
-
-**Implementation Details**:
-
-```rust
-// src/monorepo/workspace.rs
-
-use serde::{Deserialize, Serialize};
-use std::path::Path;
-
-/// Workspace configuration from package.json.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum PackageJsonWorkspaces {
-    /// Simple array of patterns.
-    Array(Vec<String>),
-    /// Object with packages and optional nohoist.
-    Object {
-        /// Package patterns.
-        packages: Vec<String>,
-        /// Patterns to exclude from hoisting (yarn specific).
-        #[serde(default)]
-        nohoist: Vec<String>,
-    },
-}
-
-impl PackageJsonWorkspaces {
-    /// Returns the package patterns.
-    #[must_use]
-    pub fn patterns(&self) -> &[String] {
-        match self {
-            Self::Array(patterns) => patterns,
-            Self::Object { packages, .. } => packages,
-        }
-    }
-}
-
-/// PNPM workspace configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PnpmWorkspaceConfig {
-    /// Package patterns.
-    pub packages: Vec<String>,
-}
-
-/// Deno workspace configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DenoWorkspaceConfig {
-    /// Workspace members (can be "workspace" or "workspaces" field).
-    #[serde(alias = "workspaces")]
-    pub workspace: Option<Vec<String>>,
-}
-```
-
-**Estimated Effort**: 2 hours
-
----
-
-### Epic 5: Project Module
-
-**Goal**: Implement unified project detection and management.
-
-#### Task 5.1: Define ProjectKind Enum
-
-**Description**: Create the enumeration for project types.
+**PRD References**:
+- §5.6 FR-6.3.1: Identify internal workspace dependencies
+- §5.6 FR-6.3.2: Identify internal dev dependencies
+- §5.6 FR-6.3.3: Generate dependency graph (P1)
+- §5.6 FR-6.3.4: Detect circular dependencies (P2)
+- §5.5 FR-5.2.7: `dependents_of(package_name)` method
 
 **Acceptance Criteria**:
-- [ ] `ProjectKind` enum wrapping `RepoKind`
-- [ ] Methods: `is_monorepo()`, `repo_kind()`, `name()`
-- [ ] Unit tests
-
-**Implementation Details**:
-
-```rust
-// src/project/mod.rs
-
-//! # Project Module
-//!
-//! ## What
-//! Unified project detection and management for Node.js projects.
-//!
-//! ## How
-//! Provides a single entry point for detecting and working with
-//! any type of Node.js project.
-//!
-//! ## Why
-//! Simplifies project detection by providing a unified API
-//! regardless of project structure.
-
-mod types;
-mod detector;
-mod project;
-#[cfg(test)]
-mod tests;
-
-pub use types::*;
-pub use detector::*;
-pub use project::*;
-```
-
-```rust
-// src/project/types.rs
-
-use crate::node::RepoKind;
-use crate::monorepo::MonorepoKind;
-use std::fmt;
-
-/// Represents the type of Node.js project.
-///
-/// # Examples
-///
-/// ```
-/// use workspace_core::project::ProjectKind;
-/// use workspace_core::node::RepoKind;
-///
-/// let kind = ProjectKind::from(RepoKind::Simple);
-/// assert!(!kind.is_monorepo());
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ProjectKind {
-    /// A repository-based project.
-    Repository(RepoKind),
-}
-
-impl ProjectKind {
-    /// Returns a human-readable name for the project kind.
-    #[must_use]
-    pub fn name(&self) -> String {
-        match self {
-            Self::Repository(repo) => repo.name(),
-        }
-    }
-
-    /// Returns whether this is a monorepo project.
-    #[must_use]
-    pub fn is_monorepo(&self) -> bool {
-        match self {
-            Self::Repository(repo) => repo.is_monorepo(),
-        }
-    }
-
-    /// Returns the repository kind.
-    #[must_use]
-    pub fn repo_kind(&self) -> &RepoKind {
-        match self {
-            Self::Repository(repo) => repo,
-        }
-    }
-
-    /// Returns the monorepo kind if this is a monorepo.
-    #[must_use]
-    pub fn monorepo_kind(&self) -> Option<&MonorepoKind> {
-        self.repo_kind().monorepo_kind()
-    }
-}
-
-impl From<RepoKind> for ProjectKind {
-    fn from(repo: RepoKind) -> Self {
-        Self::Repository(repo)
-    }
-}
-
-impl fmt::Display for ProjectKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name())
-    }
-}
-
-/// Status of project validation.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum ValidationStatus {
-    /// Project has not been validated.
-    #[default]
-    NotValidated,
-    /// Project is valid.
-    Valid,
-    /// Project has warnings but is valid.
-    Warning(Vec<String>),
-    /// Project has errors and is invalid.
-    Error(Vec<String>),
-}
-
-impl ValidationStatus {
-    /// Returns whether the project is valid (no errors).
-    #[must_use]
-    pub fn is_valid(&self) -> bool {
-        !matches!(self, Self::Error(_))
-    }
-
-    /// Returns whether there are warnings.
-    #[must_use]
-    pub fn has_warnings(&self) -> bool {
-        matches!(self, Self::Warning(_))
-    }
-
-    /// Returns whether there are errors.
-    #[must_use]
-    pub fn has_errors(&self) -> bool {
-        matches!(self, Self::Error(_))
-    }
-}
-```
+- [ ] Build dependency graph between packages
+- [ ] `dependents_of(package_name)` returns packages that depend on given package
+- [ ] Detect circular dependencies (return `Error::CircularDependency`)
+- [ ] Unit tests including circular dependency detection
 
 **Files to Create/Modify**:
-- `crates/core/src/project/mod.rs`
-- `crates/core/src/project/types.rs`
+- `crates/core/src/monorepo/detector.rs` (extend)
 
-**Estimated Effort**: 1.5 hours
+**Estimated Effort**: 2.5 hours
 
 ---
 
-#### Task 5.2: Define Project Struct
+### Epic 7: Project Module
 
-**Description**: Create the struct representing a detected project.
+**Goal**: Implement unified `Project` detection and representation.
 
-**Acceptance Criteria**:
-- [ ] `Project` struct with kind, root, package manager, package.json
-- [ ] Implements `ProjectInfo` trait
-- [ ] Access to dependencies
-- [ ] Unit tests
+**PRD Context**:
+- §5.5: Project Module requirements
 
-**Implementation Details**:
+---
+
+#### Task 7.1: Define Project Struct
+
+**Description**: Create the unified `Project` struct.
+
+**PRD References**:
+- §5.5 FR-5.1: Project Detection requirements
+- §5.5 FR-5.2: Project Information requirements
+- §5.5 FR-5.3: Project Data Model
+
+**Data Model** (from PRD §5.5 FR-5.3):
 
 ```rust
-// src/project/project.rs
-
-use std::path::{Path, PathBuf};
-use std::collections::HashMap;
-use serde_json::Value as JsonValue;
-use crate::node::{PackageManager, RepoKind, RepositoryInfo};
-use super::{ProjectKind, ValidationStatus};
-
-/// Trait providing information about a project.
-pub trait ProjectInfo {
-    /// Returns the project root path.
-    fn root(&self) -> &Path;
-
-    /// Returns the package manager if detected.
-    fn package_manager(&self) -> Option<&PackageManager>;
-
-    /// Returns the package.json content if available.
-    fn package_json(&self) -> Option<&JsonValue>;
-
-    /// Returns the validation status.
-    fn validation_status(&self) -> &ValidationStatus;
-
-    /// Returns the project kind.
-    fn kind(&self) -> &ProjectKind;
-}
-
-/// Represents a detected Node.js project.
-///
-/// # Examples
-///
-/// ```ignore
-/// use workspace_core::project::Project;
-///
-/// let project = Project::detect(".")?;
-/// println!("Project root: {}", project.root().display());
-/// ```
-#[derive(Debug)]
-pub struct Project {
-    root: PathBuf,
-    kind: ProjectKind,
-    package_manager: Option<PackageManager>,
-    package_json: Option<JsonValue>,
-    validation_status: ValidationStatus,
-}
-
-impl Project {
-    /// Creates a new Project.
-    pub(crate) fn new(
-        root: PathBuf,
-        kind: ProjectKind,
-        package_manager: Option<PackageManager>,
-        package_json: Option<JsonValue>,
-    ) -> Self {
-        Self {
-            root,
-            kind,
-            package_manager,
-            package_json,
-            validation_status: ValidationStatus::NotValidated,
-        }
-    }
-
-    /// Returns the project name from package.json.
-    #[must_use]
-    pub fn name(&self) -> Option<&str> {
-        self.package_json
-            .as_ref()
-            .and_then(|pj| pj.get("name"))
-            .and_then(|n| n.as_str())
-    }
-
-    /// Returns the project version from package.json.
-    #[must_use]
-    pub fn version(&self) -> Option<&str> {
-        self.package_json
-            .as_ref()
-            .and_then(|pj| pj.get("version"))
-            .and_then(|v| v.as_str())
-    }
-
-    /// Returns whether this is a monorepo.
-    #[must_use]
-    pub fn is_monorepo(&self) -> bool {
-        self.kind.is_monorepo()
-    }
-
-    /// Returns dependencies from package.json.
-    #[must_use]
-    pub fn dependencies(&self) -> HashMap<String, String> {
-        self.extract_deps("dependencies")
-    }
-
-    /// Returns dev dependencies from package.json.
-    #[must_use]
-    pub fn dev_dependencies(&self) -> HashMap<String, String> {
-        self.extract_deps("devDependencies")
-    }
-
-    /// Returns optional dependencies from package.json.
-    #[must_use]
-    pub fn optional_dependencies(&self) -> HashMap<String, String> {
-        self.extract_deps("optionalDependencies")
-    }
-
-    /// Returns peer dependencies from package.json.
-    #[must_use]
-    pub fn peer_dependencies(&self) -> HashMap<String, String> {
-        self.extract_deps("peerDependencies")
-    }
-
-    fn extract_deps(&self, field: &str) -> HashMap<String, String> {
-        self.package_json
-            .as_ref()
-            .and_then(|pj| pj.get(field))
-            .and_then(|d| d.as_object())
-            .map(|obj| {
-                obj.iter()
-                    .filter_map(|(k, v)| {
-                        v.as_str().map(|s| (k.clone(), s.to_string()))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
-    /// Sets the validation status.
-    pub fn set_validation_status(&mut self, status: ValidationStatus) {
-        self.validation_status = status;
-    }
-}
-
-impl ProjectInfo for Project {
-    fn root(&self) -> &Path {
-        &self.root
-    }
-
-    fn package_manager(&self) -> Option<&PackageManager> {
-        self.package_manager.as_ref()
-    }
-
-    fn package_json(&self) -> Option<&JsonValue> {
-        self.package_json.as_ref()
-    }
-
-    fn validation_status(&self) -> &ValidationStatus {
-        &self.validation_status
-    }
-
-    fn kind(&self) -> &ProjectKind {
-        &self.kind
-    }
-}
-
-impl RepositoryInfo for Project {
-    fn repo_kind(&self) -> &RepoKind {
-        self.kind.repo_kind()
-    }
-
-    fn name(&self) -> String {
-        self.name().unwrap_or("unnamed").to_string()
-    }
-
-    fn root(&self) -> &Path {
-        &self.root
-    }
+struct Project {
+    root_path: PathBuf,
+    repo_type: RepoType,
+    package_manager: PackageManagerKind,
+    repo_kind: RepoKind,
+    root_package: Package,
+    workspace_packages: Vec<Package>,  // Empty for single-repo
+    package_index: HashMap<String, usize>,  // Fast lookup by name
 }
 ```
+
+**Methods** (from PRD §5.5 FR-5.3):
+- Accessors: `root_path()`, `repo_type()`, `package_manager()`, `repo_kind()`, `is_monorepo()`
+- Package access: `root_package()`, `workspace_packages()`, `all_packages()`, `get_package(name)`, `find_package_for_path(path)`
+- Dependency queries: `dependents_of(package_name) -> Vec<&Package>`
+
+**Acceptance Criteria**:
+- [ ] `Project` struct with all fields from PRD §5.5 FR-5.3
+- [ ] All accessor methods
+- [ ] All package access methods
+- [ ] `dependents_of(package_name)` method
+- [ ] Unit tests
+
+**Files to Create/Modify**:
+- `crates/core/src/project/project.rs`
+- `crates/core/src/project/mod.rs`
 
 **Estimated Effort**: 2 hours
 
 ---
 
-#### Task 5.3: Implement ProjectDetector
+#### Task 7.2: Implement Project Detection
 
-**Description**: Create the unified project detector.
+**Description**: Implement unified project detection from any path.
+
+**PRD References**:
+- §5.5 FR-5.1.1: Detect from any valid project path
+- §5.5 FR-5.1.2: Find project root from subdirectory
+- §5.5 FR-5.1.3: Validate project structure
+- §5.5 FR-5.1.4: Support custom configuration
+- §8.2: **Explicit `&Path` required, NO fallback to cwd**
+
+**Use Case UC-5** (from PRD §4.2):
+1. Caller provides explicit starting path (required)
+2. System walks up directory tree
+3. System returns project root and type
 
 **Acceptance Criteria**:
-- [ ] `ProjectDetector` struct with detection methods
-- [ ] Detects simple and monorepo projects
-- [ ] Finds project root from subdirectories
-- [ ] Configurable detection behavior
+- [ ] `detect_project(path: &Path, config: &DetectionConfig) -> Result<Project>`
+- [ ] Walk up directory tree to find project root
+- [ ] Detect `RepoType`, `PackageManagerKind`, `RepoKind`
+- [ ] Build `Package` for root
+- [ ] Discover workspace packages if monorepo
+- [ ] **NO fallback to current directory** (PRD §8.2)
 - [ ] Unit tests
-
-**Implementation Details**:
-
-```rust
-// src/project/detector.rs
-
-use std::path::{Path, PathBuf};
-use std::fs;
-use serde_json::Value as JsonValue;
-use crate::config::DetectionConfig;
-use crate::error::{ProjectError, Result, IoError};
-use crate::node::{PackageManager, RepoKind};
-use crate::monorepo::MonorepoDetector;
-use super::{Project, ProjectKind};
-
-/// Detects Node.js projects.
-///
-/// # Examples
-///
-/// ```ignore
-/// use workspace_core::project::ProjectDetector;
-///
-/// let detector = ProjectDetector::new();
-/// let project = detector.detect(".")?;
-/// println!("Found {} project", project.kind());
-/// ```
-#[derive(Debug, Clone)]
-pub struct ProjectDetector {
-    config: DetectionConfig,
-    monorepo_detector: MonorepoDetector,
-}
-
-impl ProjectDetector {
-    /// Creates a new detector with default configuration.
-    #[must_use]
-    pub fn new() -> Self {
-        let config = DetectionConfig::default();
-        Self {
-            monorepo_detector: MonorepoDetector::with_config(config.monorepo.clone()),
-            config,
-        }
-    }
-
-    /// Creates a new detector with custom configuration.
-    #[must_use]
-    pub fn with_config(config: DetectionConfig) -> Self {
-        Self {
-            monorepo_detector: MonorepoDetector::with_config(config.monorepo.clone()),
-            config,
-        }
-    }
-
-    /// Detects a project at the given path.
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - The path to detect the project at
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if no valid project is found.
-    pub fn detect(&self, path: impl AsRef<Path>) -> Result<Project> {
-        let path = path.as_ref();
-
-        // Check for package.json
-        let package_json_path = path.join("package.json");
-        if !package_json_path.exists() {
-            return Err(ProjectError::MissingPackageJson {
-                path: package_json_path,
-            }.into());
-        }
-
-        // Read package.json
-        let package_json = self.read_package_json(path)?;
-
-        // Detect package manager
-        let package_manager = PackageManager::detect_with_config(
-            path,
-            &self.config.package_manager,
-        ).ok();
-
-        // Check if it's a monorepo
-        let kind = if self.monorepo_detector.is_monorepo_root(path)? {
-            let monorepo_kind = self.monorepo_detector
-                .detect_kind(path)?
-                .ok_or_else(|| ProjectError::NotFound {
-                    path: path.to_path_buf(),
-                })?;
-            ProjectKind::Repository(RepoKind::Monorepo(monorepo_kind))
-        } else {
-            ProjectKind::Repository(RepoKind::Simple)
-        };
-
-        Ok(Project::new(
-            path.to_path_buf(),
-            kind,
-            package_manager,
-            package_json,
-        ))
-    }
-
-    /// Detects the project kind at a path.
-    ///
-    /// This is faster than full detection as it doesn't parse package.json.
-    pub fn detect_kind(&self, path: impl AsRef<Path>) -> Result<ProjectKind> {
-        let path = path.as_ref();
-
-        if !path.join("package.json").exists() {
-            return Err(ProjectError::MissingPackageJson {
-                path: path.join("package.json"),
-            }.into());
-        }
-
-        if self.monorepo_detector.is_monorepo_root(path)? {
-            let monorepo_kind = self.monorepo_detector
-                .detect_kind(path)?
-                .ok_or_else(|| ProjectError::NotFound {
-                    path: path.to_path_buf(),
-                })?;
-            Ok(ProjectKind::Repository(RepoKind::Monorepo(monorepo_kind)))
-        } else {
-            Ok(ProjectKind::Repository(RepoKind::Simple))
-        }
-    }
-
-    /// Finds the project root by walking up from a starting path.
-    ///
-    /// # Arguments
-    ///
-    /// * `start` - The starting path to search from
-    ///
-    /// # Returns
-    ///
-    /// The project root path and kind, or None if no project found.
-    pub fn find_root(&self, start: impl AsRef<Path>) -> Result<Option<(PathBuf, ProjectKind)>> {
-        let start = start.as_ref();
-        let mut current = if start.is_absolute() {
-            start.to_path_buf()
-        } else {
-            std::env::current_dir()
-                .map_err(|e| IoError::read_dir(start, e))?
-                .join(start)
-        };
-
-        loop {
-            if current.join("package.json").exists() {
-                let kind = self.detect_kind(&current)?;
-                return Ok(Some((current, kind)));
-            }
-
-            match current.parent() {
-                Some(parent) => current = parent.to_path_buf(),
-                None => return Ok(None),
-            }
-        }
-    }
-
-    /// Checks if a path is a valid project root.
-    pub fn is_valid_project(&self, path: impl AsRef<Path>) -> bool {
-        path.as_ref().join("package.json").exists()
-    }
-
-    fn read_package_json(&self, path: &Path) -> Result<Option<JsonValue>> {
-        let package_json_path = path.join("package.json");
-        if !package_json_path.exists() {
-            return Ok(None);
-        }
-
-        let content = fs::read_to_string(&package_json_path)
-            .map_err(|e| IoError::read(&package_json_path, e))?;
-
-        let json: JsonValue = serde_json::from_str(&content)
-            .map_err(|e| ProjectError::InvalidPackageJson {
-                path: package_json_path,
-                reason: e.to_string(),
-            })?;
-
-        Ok(Some(json))
-    }
-}
-
-impl Default for ProjectDetector {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-```
 
 **Files to Create/Modify**:
 - `crates/core/src/project/detector.rs`
@@ -2653,193 +1370,235 @@ impl Default for ProjectDetector {
 
 ---
 
-### Epic 6: Integration & Polish
+### Epic 8: Integration & Polish
 
-**Goal**: End-to-end tests, documentation review, and final polish.
+**Goal**: End-to-end tests, documentation, and optimization.
 
-#### Task 6.1: Create Integration Tests
+**PRD Context**:
+- §6.1: Performance requirements
+- §6.4: Code Quality requirements
+- §8.4: Documentation Standards
+- §9: Success Criteria
 
-**Description**: Create comprehensive E2E tests for the crate.
+---
+
+#### Task 8.1: Create Integration Tests
+
+**Description**: Create end-to-end tests for common scenarios.
+
+**PRD References**:
+- §4.2: Use Cases (UC-1 through UC-5)
+- §9.1: Acceptance Criteria
+
+**Test Scenarios**:
+- Single-repo Node.js project
+- Single-repo Deno project
+- Single-repo Bun project
+- npm monorepo
+- yarn monorepo
+- pnpm monorepo
+- Mixed scenarios (packageManager field + lock file mismatch)
+- Edge cases (symlinks, deep nesting, circular deps)
 
 **Acceptance Criteria**:
-- [ ] Test fixtures for simple project
-- [ ] Test fixtures for npm/yarn/pnpm/bun/deno monorepos
-- [ ] E2E tests for project detection
-- [ ] E2E tests for monorepo analysis
-- [ ] All tests pass on CI
+- [ ] Integration test for each major use case
+- [ ] Test fixtures created
+- [ ] All tests passing on CI
 
-**Test Fixtures Structure**:
-
-```
-tests/
-├── fixtures/
-│   ├── simple_npm/
-│   │   ├── package.json
-│   │   └── package-lock.json
-│   ├── simple_yarn/
-│   │   ├── package.json
-│   │   └── yarn.lock
-│   ├── simple_pnpm/
-│   │   ├── package.json
-│   │   └── pnpm-lock.yaml
-│   ├── monorepo_npm/
-│   │   ├── package.json
-│   │   ├── package-lock.json
-│   │   └── packages/
-│   │       ├── pkg-a/package.json
-│   │       └── pkg-b/package.json
-│   ├── monorepo_pnpm/
-│   │   ├── package.json
-│   │   ├── pnpm-lock.yaml
-│   │   ├── pnpm-workspace.yaml
-│   │   └── packages/
-│   │       ├── pkg-a/package.json
-│   │       └── pkg-b/package.json
-│   └── monorepo_deno/
-│       ├── deno.json
-│       └── packages/
-│           ├── pkg-a/deno.json
-│           └── pkg-b/deno.json
-└── integration/
-    ├── package_manager_e2e.rs
-    ├── project_detection_e2e.rs
-    └── monorepo_analysis_e2e.rs
-```
+**Files to Create/Modify**:
+- `crates/core/tests/integration/*.rs`
 
 **Estimated Effort**: 4 hours
 
 ---
 
-#### Task 6.2: Documentation Review
+#### Task 8.2: Performance Validation
 
-**Description**: Review and complete all documentation.
+**Description**: Validate performance meets NFR targets.
+
+**PRD References**:
+- §6.1: Performance requirements
+
+**Performance Targets** (from PRD §6.1):
+
+| Operation | Target |
+|-----------|--------|
+| Repository type detection | < 5ms |
+| Package manager detection | < 10ms |
+| Project type detection | < 50ms |
+| Full monorepo analysis (100 packages) | < 500ms |
+| Memory usage (100 packages) | < 50MB |
 
 **Acceptance Criteria**:
-- [ ] Crate-level documentation complete
-- [ ] All public items documented
-- [ ] Examples compile and run
-- [ ] README.md created for crate
-- [ ] CHANGELOG.md initialized
+- [ ] Benchmark tests created
+- [ ] Performance meets targets
+- [ ] Performance documented
+
+**Files to Create/Modify**:
+- `crates/core/benches/detection.rs`
 
 **Estimated Effort**: 2 hours
 
 ---
 
-#### Task 6.3: Final Cleanup and Release Preparation
+#### Task 8.3: Documentation Review
 
-**Description**: Final code review and release preparation.
+**Description**: Ensure all documentation meets standards.
+
+**PRD References**:
+- §8.4: Documentation Standards
+- §9.1: Acceptance Criteria
 
 **Acceptance Criteria**:
-- [ ] All clippy warnings addressed
-- [ ] All tests pass
-- [ ] Documentation builds without warnings
-- [ ] Version set correctly
-- [ ] License file in place
+- [ ] All public items documented
+- [ ] Module-level docs with What/How/Why pattern
+- [ ] Examples for all public functions
+- [ ] Cross-references between related items
+- [ ] `cargo doc` generates without warnings
 
-**Estimated Effort**: 1 hour
+**Files to Modify**:
+- All `*.rs` files (add/improve documentation)
 
----
-
-## 4. Timeline Summary
-
-| Epic | Description | Estimated Hours |
-|------|-------------|-----------------|
-| Epic 0 | Project Setup | 1.5 |
-| Epic 1 | Error Module | 6 |
-| Epic 2 | Configuration Module | 3.5 |
-| Epic 3 | Node Module | 6 |
-| Epic 4 | Monorepo Module | 11 |
-| Epic 5 | Project Module | 6.5 |
-| Epic 6 | Integration & Polish | 7 |
-| **Total** | | **41.5 hours** |
+**Estimated Effort**: 2 hours
 
 ---
 
-## 5. Dependencies Between Tasks
+#### Task 8.4: Final Quality Gates
+
+**Description**: Verify all quality gates pass.
+
+**PRD References**:
+- §9.2: Quality Gates
+
+**Quality Gates** (from PRD §9.2):
+1. Code review by at least one developer
+2. All tests pass on Windows, macOS, Linux
+3. Generated docs reviewed for completeness
+4. Benchmarks meet NFR targets
+
+**Acceptance Criteria**:
+- [ ] `cargo clippy` passes with zero warnings
+- [ ] `cargo test` passes
+- [ ] Code coverage > 80%
+- [ ] PR reviewed and approved
+- [ ] CI passes on all platforms
+
+**Estimated Effort**: 2 hours
+
+---
+
+## 4. Task Dependency Graph
 
 ```
-Epic 0 (Setup)
-    └── Epic 1 (Error)
-        └── Epic 2 (Config)
-            └── Epic 3 (Node)
-                ├── Task 3.1-3.2 (PackageManager)
-                │   └── Epic 4 (Monorepo)
-                │       └── Epic 5 (Project)
-                │           └── Epic 6 (Polish)
-                └── Task 3.3-3.4 (RepoKind)
-                    └── Epic 4 (Monorepo)
+Epic 0: Setup
+  ├── Task 0.1: Crate Skeleton
+  └── Task 0.2: Module Structure
+        │
+        ▼
+Epic 1: Error Module
+  └── Task 1.1: Unified Error Enum
+        │
+        ├───────────────────┐
+        ▼                   ▼
+Epic 2: Config         Epic 3: Repo
+  ├── Task 2.1: Config   ├── Task 3.1: RepoType
+  └── Task 2.2: Builder  └── Task 3.2: RepoKind
+        │                       │
+        └───────────┬───────────┘
+                    ▼
+             Epic 4: Package Manager
+               ├── Task 4.1: Kind Enum
+               └── Task 4.2: Detection
+                       │
+                       ▼
+             Epic 5: Package & Dependency
+               ├── Task 5.1: Dep Types
+               ├── Task 5.2: Dep Parser
+               ├── Task 5.3: Categorizer
+               └── Task 5.4: Package Struct
+                       │
+                       ▼
+             Epic 6: Monorepo
+               ├── Task 6.1: Workspace Config
+               ├── Task 6.2: Package Discovery
+               └── Task 6.3: Dep Graph
+                       │
+                       ▼
+             Epic 7: Project
+               ├── Task 7.1: Project Struct
+               └── Task 7.2: Detection
+                       │
+                       ▼
+             Epic 8: Integration
+               ├── Task 8.1: Integration Tests
+               ├── Task 8.2: Performance
+               ├── Task 8.3: Documentation
+               └── Task 8.4: Quality Gates
 ```
 
 ---
 
-## 6. Risk Assessment
+## 5. Estimated Effort Summary
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Glob pattern edge cases | Medium | Medium | Comprehensive tests with real-world examples |
-| Cross-platform path handling | Low | High | Use Path/PathBuf consistently, test on all OSes |
-| Performance with large monorepos | Low | Medium | Benchmark early, optimize if needed |
-| Deno workspace format changes | Medium | Low | Abstract format parsing, version check |
-
----
-
-## 7. Success Metrics
-
-| Metric | Target |
-|--------|--------|
-| Code coverage | > 80% |
-| All P0 requirements | 100% implemented |
-| All P1 requirements | 100% implemented |
-| E2E tests | All passing |
-| Documentation | All public items |
-| Clippy | Zero warnings |
-| Build time | < 30 seconds |
+| Epic | Estimated Hours |
+|------|-----------------|
+| Epic 0: Setup | 1.5 |
+| Epic 1: Error | 2 |
+| Epic 2: Config | 2.5 |
+| Epic 3: Repo | 2.5 |
+| Epic 4: Package Manager | 4 |
+| Epic 5: Package & Dependency | 7.5 |
+| Epic 6: Monorepo | 8 |
+| Epic 7: Project | 5 |
+| Epic 8: Integration | 10 |
+| **Total** | **~43 hours** |
 
 ---
 
-## 8. Appendix: File Structure
+## 6. Logging Guidelines
 
+All tasks should implement logging following PRD §6.5:
+
+| Level | What to Log |
+|-------|-------------|
+| **Error** | Fatal errors preventing operation completion |
+| **Warn** | Ambiguities, inconsistencies (e.g., multiple lock files) |
+| **Info** | High-level operations (e.g., "Detecting repository type at X") |
+| **Debug** | Detection decisions (e.g., "Lock file pnpm-lock.yaml found") |
+| **Trace** | Detailed traces (e.g., file access patterns) |
+
+---
+
+## 7. Testing Guidelines
+
+Each module should include `tests.rs` following PRD testing convention:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod feature_a {
+        use super::*;
+        
+        #[test]
+        fn test_specific_behavior() { ... }
+    }
+
+    mod feature_b {
+        use super::*;
+        
+        #[test]
+        fn test_another_behavior() { ... }
+    }
+}
 ```
-crates/core/
-├── Cargo.toml
-├── README.md
-├── CHANGELOG.md
-├── PRD.md
-├── PLAN.md
-├── src/
-│   ├── lib.rs
-│   ├── error/
-│   │   ├── mod.rs
-│   │   ├── types.rs
-│   │   └── tests.rs
-│   ├── config/
-│   │   ├── mod.rs
-│   │   ├── detection.rs
-│   │   └── tests.rs
-│   ├── node/
-│   │   ├── mod.rs
-│   │   ├── types.rs
-│   │   ├── package_manager.rs
-│   │   ├── repository.rs
-│   │   └── tests.rs
-│   ├── monorepo/
-│   │   ├── mod.rs
-│   │   ├── types.rs
-│   │   ├── detector.rs
-│   │   ├── descriptor.rs
-│   │   ├── workspace.rs
-│   │   └── tests.rs
-│   └── project/
-│       ├── mod.rs
-│       ├── types.rs
-│       ├── project.rs
-│       ├── detector.rs
-│       └── tests.rs
-└── tests/
-    ├── fixtures/
-    │   └── (test project fixtures)
-    └── integration/
-        ├── package_manager_e2e.rs
-        ├── project_detection_e2e.rs
-        └── monorepo_analysis_e2e.rs
-```
+
+---
+
+## 8. References
+
+- [PRD.md](./PRD.md) - Product Requirements Document
+- [workspace-fs](../fs/README.md) - Filesystem abstraction crate
+- [snafu documentation](https://docs.rs/snafu/0.8.9/snafu/)
+- [package-json crate](https://docs.rs/package-json/0.5.0/package_json/)
