@@ -1657,8 +1657,20 @@ mod path_ext {
     }
 
     #[test]
-    fn test_normalize_preserves_absolute_nature() {
+    #[cfg(unix)]
+    fn test_normalize_preserves_absolute_nature_unix() {
+        // On Unix, paths starting with / are absolute
         let abs_path = Path::new("/a/b/../c");
+        let result = abs_path.normalize();
+        assert!(result.is_absolute());
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_normalize_preserves_absolute_nature_windows() {
+        // On Windows, absolute paths require a drive prefix (e.g., C:\)
+        // Paths starting with / are "rooted" but not absolute
+        let abs_path = Path::new(r"C:\a\b\..\c");
         let result = abs_path.normalize();
         assert!(result.is_absolute());
     }
