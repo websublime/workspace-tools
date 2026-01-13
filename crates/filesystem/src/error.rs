@@ -397,6 +397,39 @@ pub enum Error {
 // Trait Implementations
 // =============================================================================
 
+/// Provides variant name introspection for error handling and logging.
+///
+/// This implementation returns the qualified variant name as a static string,
+/// which is useful for:
+/// - Error categorization in logging systems
+/// - Metrics and telemetry
+/// - Pattern matching on error types without accessing fields
+///
+/// # Example
+///
+/// ```rust
+/// use workspace_fs::Error;
+/// use std::path::PathBuf;
+///
+/// let err = Error::NotFound { path: PathBuf::from("/test") };
+/// assert_eq!(err.as_ref(), "Error::NotFound");
+/// ```
+impl AsRef<str> for Error {
+    fn as_ref(&self) -> &str {
+        match self {
+            Error::NotFound { .. } => "Error::NotFound",
+            Error::PermissionDenied { .. } => "Error::PermissionDenied",
+            Error::AlreadyExists { .. } => "Error::AlreadyExists",
+            Error::NotAFile { .. } => "Error::NotAFile",
+            Error::NotADirectory { .. } => "Error::NotADirectory",
+            Error::NotEmpty { .. } => "Error::NotEmpty",
+            Error::InvalidUtf8 { .. } => "Error::InvalidUtf8",
+            Error::Io { .. } => "Error::Io",
+            Error::Timeout { .. } => "Error::Timeout",
+        }
+    }
+}
+
 // Static assertions to ensure Error is Send + Sync (FR-6.1.4)
 // These will fail to compile if Error is not Send + Sync
 const _: () = {

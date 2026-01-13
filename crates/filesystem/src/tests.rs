@@ -224,6 +224,81 @@ mod error {
     }
 
     // =========================================================================
+    // AsRef<str> Trait Tests (Variant Name Introspection)
+    // =========================================================================
+
+    #[test]
+    fn test_as_ref_not_found() {
+        let err = Error::NotFound { path: PathBuf::from("/test") };
+        assert_eq!(err.as_ref(), "Error::NotFound");
+    }
+
+    #[test]
+    fn test_as_ref_permission_denied() {
+        let err = Error::PermissionDenied { path: PathBuf::from("/test") };
+        assert_eq!(err.as_ref(), "Error::PermissionDenied");
+    }
+
+    #[test]
+    fn test_as_ref_already_exists() {
+        let err = Error::AlreadyExists { path: PathBuf::from("/test") };
+        assert_eq!(err.as_ref(), "Error::AlreadyExists");
+    }
+
+    #[test]
+    fn test_as_ref_not_a_file() {
+        let err = Error::NotAFile { path: PathBuf::from("/test") };
+        assert_eq!(err.as_ref(), "Error::NotAFile");
+    }
+
+    #[test]
+    fn test_as_ref_not_a_directory() {
+        let err = Error::NotADirectory { path: PathBuf::from("/test") };
+        assert_eq!(err.as_ref(), "Error::NotADirectory");
+    }
+
+    #[test]
+    fn test_as_ref_not_empty() {
+        let err = Error::NotEmpty { path: PathBuf::from("/test") };
+        assert_eq!(err.as_ref(), "Error::NotEmpty");
+    }
+
+    #[test]
+    fn test_as_ref_invalid_utf8() {
+        let err = Error::InvalidUtf8 { path: PathBuf::from("/test") };
+        assert_eq!(err.as_ref(), "Error::InvalidUtf8");
+    }
+
+    #[test]
+    fn test_as_ref_io() {
+        let io_error = io::Error::other("test");
+        let err = Error::Io {
+            path: PathBuf::from("/test"),
+            operation: "read".to_string(),
+            source: io_error,
+        };
+        assert_eq!(err.as_ref(), "Error::Io");
+    }
+
+    #[test]
+    fn test_as_ref_timeout() {
+        let err = Error::Timeout {
+            path: PathBuf::from("/test"),
+            operation: "read".to_string(),
+            duration: Duration::from_secs(30),
+        };
+        assert_eq!(err.as_ref(), "Error::Timeout");
+    }
+
+    #[test]
+    fn test_as_ref_returns_static_str() {
+        // Verify that as_ref returns a &str that can be used for pattern matching
+        let err = Error::NotFound { path: PathBuf::from("/test") };
+        let variant_name: &str = err.as_ref();
+        assert!(variant_name.starts_with("Error::"));
+    }
+
+    // =========================================================================
     // Debug Trait Tests
     // =========================================================================
 
