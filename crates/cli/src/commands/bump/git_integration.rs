@@ -177,15 +177,18 @@ pub fn commit_version_changes(
                     .to_string()
             }
         } else {
-            file_path
-                .to_str()
-                .ok_or_else(|| {
-                    CliError::execution(format!(
-                        "File path contains invalid UTF-8: {}",
-                        file_path.display()
-                    ))
-                })?
-                .to_string()
+            // For relative paths, we need to normalize them to remove ./ prefix
+            // and ensure they're relative to the repo root
+            let path_str = file_path.to_str().ok_or_else(|| {
+                CliError::execution(format!(
+                    "File path contains invalid UTF-8: {}",
+                    file_path.display()
+                ))
+            })?;
+
+            // Remove leading ./ if present (git2 doesn't accept paths starting with .)
+            let normalized = path_str.strip_prefix("./").unwrap_or(path_str);
+            normalized.to_string()
         };
 
         debug!("Staging relative path: {} (exists: {})", relative_path_str, file_exists);

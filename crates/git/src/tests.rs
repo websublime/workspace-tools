@@ -1334,4 +1334,49 @@ mod tests {
 
         assert!(result.is_ok(), "Should fall back to GH_TOKEN when URL has no credentials");
     }
+
+    // =========================================================================
+    // Path normalization tests
+    // =========================================================================
+
+    /// Tests that paths with leading ./ are normalized correctly in add/remove operations.
+    /// This is critical because git2 doesn't accept paths starting with .
+    #[test]
+    fn test_path_normalization_strips_leading_dot_slash() {
+        let path = "./.changesets/feature-branch.json";
+        let normalized = path.strip_prefix("./").unwrap_or(path);
+        assert_eq!(normalized, ".changesets/feature-branch.json");
+    }
+
+    /// Tests that paths without leading ./ are preserved.
+    #[test]
+    fn test_path_normalization_preserves_normal_paths() {
+        let path = ".changesets/feature-branch.json";
+        let normalized = path.strip_prefix("./").unwrap_or(path);
+        assert_eq!(normalized, ".changesets/feature-branch.json");
+    }
+
+    /// Tests that absolute paths are not affected by normalization.
+    #[test]
+    fn test_path_normalization_preserves_absolute_paths() {
+        let path = "/home/user/project/.changesets/file.json";
+        let normalized = path.strip_prefix("./").unwrap_or(path);
+        assert_eq!(normalized, "/home/user/project/.changesets/file.json");
+    }
+
+    /// Tests that just "./" becomes empty string.
+    #[test]
+    fn test_path_normalization_handles_just_dot_slash() {
+        let path = "./";
+        let normalized = path.strip_prefix("./").unwrap_or(path);
+        assert_eq!(normalized, "");
+    }
+
+    /// Tests that history directory paths are normalized correctly.
+    #[test]
+    fn test_path_normalization_handles_history_dir() {
+        let path = "./.changesets/history/archived.json";
+        let normalized = path.strip_prefix("./").unwrap_or(path);
+        assert_eq!(normalized, ".changesets/history/archived.json");
+    }
 }

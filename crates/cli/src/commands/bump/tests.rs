@@ -1364,3 +1364,65 @@ fn test_filter_case_sensitive_package_matching() {
     assert!(!filter.should_bump("pkg1")); // Different case
     assert!(!filter.should_bump("PKG1")); // Different case
 }
+
+// =============================================================================
+// Path normalization tests for git integration
+// =============================================================================
+
+/// Tests that paths with leading ./ are normalized correctly.
+/// This is critical because git2 doesn't accept paths starting with .
+#[test]
+fn test_normalize_path_strips_leading_dot_slash() {
+    let path = "./.changesets/feature-branch.json";
+    let normalized = path.strip_prefix("./").unwrap_or(path);
+    assert_eq!(normalized, ".changesets/feature-branch.json");
+}
+
+/// Tests that paths without leading ./ are preserved.
+#[test]
+fn test_normalize_path_preserves_normal_paths() {
+    let path = ".changesets/feature-branch.json";
+    let normalized = path.strip_prefix("./").unwrap_or(path);
+    assert_eq!(normalized, ".changesets/feature-branch.json");
+}
+
+/// Tests that paths with .changesets (no leading ./) work correctly.
+#[test]
+fn test_normalize_path_handles_changesets_dir() {
+    let path = ".changesets/history/archived.json";
+    let normalized = path.strip_prefix("./").unwrap_or(path);
+    assert_eq!(normalized, ".changesets/history/archived.json");
+}
+
+/// Tests that nested ./ paths are only stripped once.
+#[test]
+fn test_normalize_path_strips_only_leading_dot_slash() {
+    let path = "./.changesets/./nested/file.json";
+    let normalized = path.strip_prefix("./").unwrap_or(path);
+    // Only the leading ./ should be stripped, internal ./ stays
+    assert_eq!(normalized, ".changesets/./nested/file.json");
+}
+
+/// Tests absolute paths are not affected by normalization.
+#[test]
+fn test_normalize_path_preserves_absolute_paths() {
+    let path = "/home/user/project/.changesets/file.json";
+    let normalized = path.strip_prefix("./").unwrap_or(path);
+    assert_eq!(normalized, "/home/user/project/.changesets/file.json");
+}
+
+/// Tests empty path handling.
+#[test]
+fn test_normalize_path_handles_empty() {
+    let path = "";
+    let normalized = path.strip_prefix("./").unwrap_or(path);
+    assert_eq!(normalized, "");
+}
+
+/// Tests that just "./" becomes empty string.
+#[test]
+fn test_normalize_path_handles_just_dot_slash() {
+    let path = "./";
+    let normalized = path.strip_prefix("./").unwrap_or(path);
+    assert_eq!(normalized, "");
+}

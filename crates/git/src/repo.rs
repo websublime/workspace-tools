@@ -1574,7 +1574,9 @@ impl Repo {
     /// ```
     pub fn add(&self, file_path: &str) -> Result<&Self, RepoError> {
         let mut index = self.repo.index().map_err(RepoError::IndexError)?;
-        let path = Path::new(file_path);
+        // Normalize path: remove leading ./ if present (git2 doesn't accept paths starting with .)
+        let normalized_path = file_path.strip_prefix("./").unwrap_or(file_path);
+        let path = Path::new(normalized_path);
         // get the relative path of the file_path
         let relative_path = path.strip_prefix(self.local_path.as_path()).unwrap_or(path);
         // Add the file to the index
@@ -1654,7 +1656,9 @@ impl Repo {
     /// ```
     pub fn remove(&self, file_path: &str) -> Result<&Self, RepoError> {
         let mut index = self.repo.index().map_err(RepoError::IndexError)?;
-        let path = Path::new(file_path);
+        // Normalize path: remove leading ./ if present (git2 doesn't accept paths starting with .)
+        let normalized_path = file_path.strip_prefix("./").unwrap_or(file_path);
+        let path = Path::new(normalized_path);
         // Get the relative path of the file_path
         let relative_path = path.strip_prefix(self.local_path.as_path()).unwrap_or(path);
         // Remove the file from the index
