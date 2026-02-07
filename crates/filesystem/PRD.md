@@ -698,3 +698,42 @@ The current design supports future extensions:
 - [snafu crate](https://docs.rs/snafu/)
 - [workspace-core PRD](../core/PRD.md)
 - [Legacy filesystem implementation](../../temp/wnt-stable/crates/standard/src/filesystem/)
+- [Product PRD v2](../../docs/PRODUCT_PRD.md)
+
+---
+
+## Appendix: v2 Revision Notes
+
+> Added 2026-02-07 as part of workspace-node-tools v2 Product PRD. See [PRODUCT_PRD.md](../../docs/PRODUCT_PRD.md) Section 5.1 for full context.
+
+### R1: Drop `async-trait` Dependency
+
+**Change**: Remove `async-trait` crate. Use native `async fn` in trait definitions (Rust edition 2024).
+
+**Impact on this PRD**:
+- FR-1.1.2 (`#[async_trait]` for async method support) is **superseded**: use native async fn instead.
+- External dependency table: remove `async-trait` row.
+- `traits.rs`: replace `#[async_trait]` macro with direct `async fn` syntax.
+
+### R2: Object Safety Assessment
+
+**Change**: Native async traits may not support `dyn FileSystem` (FR-1.1.3).
+
+**Action required during Phase 1 implementation**:
+1. Attempt to define `FileSystem` trait with native async fn.
+2. Test if `dyn FileSystem` compiles. If not:
+   - Prefer `impl FileSystem` generics throughout consuming crates.
+   - If `dyn` is truly needed, evaluate the `trait-variant` crate or manual boxing wrapper.
+3. Document the chosen approach in CLAUDE.md.
+
+**If object safety is not achievable**: FR-1.1.3 is modified from "SHALL be object-safe" to "SHALL use `impl FileSystem` pattern for polymorphism."
+
+### R3: Edition 2024
+
+**Change**: MSRV updated to Rust 1.90+, edition 2024.
+
+**Impact**: Update `Cargo.toml` edition field from `2021` to `2024`.
+
+### R4: No Other Changes
+
+All other functional requirements (FR-1.2 through FR-7.1), non-functional requirements, architecture, and testing strategy remain valid as specified.

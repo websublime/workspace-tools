@@ -918,3 +918,55 @@ The crate is designed to eventually replace the functionality in `temp/wnt-stabl
 - [Node.js Corepack - packageManager field](https://nodejs.org/api/corepack.html)
 - [snafu Error Handling](https://docs.rs/snafu/0.8.9/snafu/)
 - [Original Crate Specification](../../temp/wnt-stable/crates/standard/SPEC.md)
+- [Product PRD v2](../../docs/PRODUCT_PRD.md)
+
+---
+
+## Appendix: v2 Revision Notes
+
+> Added 2026-02-07 as part of workspace-node-tools v2 Product PRD. See [PRODUCT_PRD.md](../../docs/PRODUCT_PRD.md) Section 5.2 for full context.
+
+### R1: Switch from Sync-First to Async-First
+
+**Change**: The existing PRD specifies sync-first detection (Section 7.3, Principle 1: "Sync-First API"). Since `workspace-fs` is async-first with `tokio::fs`, detection APIs SHALL be async.
+
+**Impact on this PRD**:
+- Section 7.3 Principle 1: Replace "Sync-First API" with "Async-First API: Detection operations use async I/O via workspace-fs."
+- All detection functions (`detect_repo_type`, `detect_package_manager`, `detect_project`, `find_workspace_packages`) become `async fn`.
+- Section 10.2 Migration Path: Remove "Sync-first APIs (vs async-first in the old crate)" -- both are now async.
+
+### R2: Remove Configuration Loading Responsibility
+
+**Change**: Configuration loading is delegated to `workspace-config` crate (new in v2).
+
+**Impact on this PRD**:
+- Section 5.7 (Configuration Module) remains as `DetectionConfig` -- this is **detection-specific configuration**, not file/TOML loading.
+- This crate receives `DetectionConfig` programmatically from callers. It does NOT read `repo.config.toml`.
+- The old `config/` module in `sublime_standard_tools` moves to `workspace-config`, NOT to this crate.
+
+### R3: Package Manager Kind Simplification
+
+**Change**: Old product had 9 PM kinds (`Npm`, `Yarn`, `YarnBerry`, `Pnpm`, `Bun`, `Lerna`, `Nx`, `Turbo`, `Rush`). New product simplifies to 5: `Npm`, `Yarn`, `Pnpm`, `Bun`, `Deno`.
+
+**Rationale**: Lerna, Nx, Turbo, and Rush are meta-tools/task runners, not package managers. YarnBerry is merged into `Yarn` (version detection handled internally). Deno added as first-class PM.
+
+**Impact on this PRD**:
+- FR-2.1 (PackageManagerKind): 5 variants instead of 9.
+- FR-2.2 (Detection): Simplified detection matrix.
+
+### R4: Evaluate `package-json` Crate
+
+**Action required during Phase 1 implementation**: Check if the `package-json` crate (v0.5.0, listed in dependencies) is still actively maintained. If not, implement a minimal `PackageJson` parser using `serde` + `serde_json` with only the fields needed:
+- `name`, `version`, `private`, `workspaces`
+- `dependencies`, `devDependencies`, `peerDependencies`, `optionalDependencies`
+- `packageManager`
+
+### R5: Edition 2024
+
+**Change**: MSRV updated to Rust 1.90+, edition 2024.
+
+**Impact**: Update `Cargo.toml` edition field. NFR-3.3 and NFR-3.4 already specify this.
+
+### R6: No Other Changes
+
+All other functional requirements (FR-1 through FR-8), non-functional requirements, architecture, and testing strategy remain valid as specified.
