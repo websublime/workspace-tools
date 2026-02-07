@@ -4,3 +4,7 @@ target
 .idea
 temp/
 node_modules/
+
+# Beads task tracking (ephemeral)
+.beads/
+.mcp.json
