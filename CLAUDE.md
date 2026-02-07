@@ -2,12 +2,17 @@
 
 ## Project Overview
 
-<!-- UPDATE THIS: 1-2 sentences describing what this project does and why it exists -->
+Rust library ecosystem for JS/TS workspace management: changeset-based versioning, monorepo detection, changelog generation, dependency upgrades, and health auditing. Library-first architecture consumed via NAPI bindings and a Bun+Ink CLI.
+
+Full product specification: [`docs/PRODUCT_PRD.md`](docs/PRODUCT_PRD.md)
 
 ## Tech Stack
 
-- **Languages**: Rust (2021 edition)
-- **Backend**: Rust async (tokio), serde/serde_json, snafu (error handling), walkdir
+- **Languages**: Rust (2024 edition, MSRV 1.90+)
+- **Async**: tokio (native async traits, no `async-trait` crate)
+- **Libraries**: snafu (errors), serde/serde_json (serialization), git2 (git ops), semver, reqwest
+- **NAPI**: napi-rs (cdylib bridge to Node.js/Bun/Deno)
+- **CLI**: Bun + Ink (TypeScript, `packages/workspace-cli/`)
 - **Infrastructure**: GitHub Actions CI/CD, cargo-audit, release-plz (crates.io automation)
 
 ## Your Identity
@@ -148,11 +153,51 @@ Log learnings: `bd comment {ID} "LEARNED: [insight]"` — captured automatically
 - rust-supervisor
 - merge-supervisor
 
+## Project Work Structure
+
+### Beads = Global View, PLAN.md = Per-Crate Detail
+
+- **Beads** track ALL work: 1 epic per implementation phase, child tasks per crate
+- **`crates/{name}/PLAN.md`** has detailed implementation steps per crate
+- **`crates/{name}/PRD.md`** has formal requirements per crate
+- **`docs/PRODUCT_PRD.md`** is the product-level architecture and requirements
+
+Use `bd ready` to find what to work on. Use `bd show <id>` to get full context.
+
+### Bead Creation Protocol
+
+Every task bead MUST contain:
+
+1. **Self-sufficient description** — scope, key types/methods, acceptance criteria. A supervisor must understand what to build from the description alone.
+2. **INVESTIGATION comment** — `bd comment {ID} "INVESTIGATION: ..."` with `file:line` references to PRD and PLAN. Example: `"Requirements at crates/filesystem/PRD.md:230-316 (FR-1.1 through FR-1.9). Steps at crates/filesystem/PLAN.md:794-922 (Task 5.1)."`
+3. **Dependencies** — `bd dep add` linking to blocking tasks
+
+A supervisor reads `bd show <id>`, then reads ONLY the referenced line ranges from PRD/PLAN — never the full file.
+
+### Implementation Phases (Beads Epics)
+
+| Phase | Crates | Blocked By |
+|-------|--------|------------|
+| 1 | workspace-fs (remaining: trait, RealFS, MockFS, E2E), workspace-core | Nothing |
+| 2 | workspace-config, workspace-git | Phase 1 |
+| 3 | workspace-changeset, workspace-version | Phase 2 |
+| 4 | workspace-changelog, workspace-upgrade, workspace-audit | Phases 2-3 |
+| 5 | workspace-napi + packages/workspace-tools | Phases 1-4 |
+| 6 | packages/workspace-cli (Bun + Ink) | Phase 5 |
+
 ## Current State
 
-<!--
-ORCHESTRATOR: Update this section as the project evolves.
-Include: active work, recent decisions, known issues, architectural notes.
-Keep it concise — pointers to files are better than duplicated content.
--->
+### workspace-fs (`crates/filesystem/`)
+- **DONE**: error.rs, config.rs, types.rs (FileType, Metadata, DirEntry), path_ext.rs (PathExt::normalize), tests.rs, lib.rs
+- **REMAINING**: traits.rs (FileSystem trait), real.rs (RealFileSystem), mock.rs (MockFileSystem), E2E tests
+- **PRD**: `crates/filesystem/PRD.md` — solid, revision appendix added for native async traits
+- **PLAN**: `crates/filesystem/PLAN.md` — Tasks 0-4 done, Tasks 5-8 remaining
 
+### workspace-core (`crates/core/`)
+- **DONE**: lib.rs stub only
+- **REMAINING**: Full implementation (detection, packages, project, monorepo)
+- **PRD**: `crates/core/PRD.md` — solid, revision appendix added for async-first + PM simplification
+- **PLAN**: `crates/core/PLAN.md` — exists, needs review for async-first revision
+
+### Other crates
+Not yet started. PRDs needed (derive from `docs/PRODUCT_PRD.md` Sections 5.3-5.9).
