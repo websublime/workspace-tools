@@ -59,8 +59,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::types::{DirEntry, Metadata};
 use crate::Result;
+use crate::types::{DirEntry, Metadata};
 
 // =============================================================================
 // FileSystem Trait
