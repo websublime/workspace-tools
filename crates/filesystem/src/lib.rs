@@ -128,7 +128,7 @@ pub use types::{DirEntry, FileType, Metadata};
 // Path extension utilities
 pub use path_ext::PathExt;
 
-// TODO: Re-exports will be added as modules are implemented
+// Trait re-export
 // pub use mock::MockFileSystem;
 // pub use real::RealFileSystem;
-// pub use traits::FileSystem;
+pub use traits::FileSystem;
