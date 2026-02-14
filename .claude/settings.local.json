@@ -40,7 +40,8 @@
       "Bash(cloc:*)",
       "Bash(git rm:*)",
       "Bash(cargo:*)",
-      "Bash(timeout 30s cargo run --example real_example_usage)"
+      "Bash(timeout 30s cargo run --example real_example_usage)",
+      "mcp__acp__Edit"
     ],
     "deny": []
   },
