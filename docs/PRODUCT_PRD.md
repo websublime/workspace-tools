@@ -46,7 +46,7 @@ The library-first architecture enables multiple consumers from a single codebase
 | Async traits | Native (Rust 2024 edition) | Drop `async-trait` crate |
 | Crate granularity | Fine-grained (9 Rust crates) | Each concern standalone |
 | Git library | `git2` (libgit2) | Battle-tested, same as old product |
-| Changeset storage | Git-backed (worktree + orphan branch) | Eliminates JSON merge conflicts |
+| Changeset storage | Git tree-object (orphan branch, no worktree) | Eliminates JSON merge conflicts, zero FS footprint |
 | Configuration format | TOML only | Simpler, Rust ecosystem standard |
 | workspace-core scope | Detection only | Config loading deferred to `workspace-config` |
 | Error handling | `snafu` per-crate | Each crate owns its Error enum |
@@ -133,7 +133,7 @@ Layer 1 -- Core:
   workspace-config       crates/config/       TOML config loading, per-crate config sections
 
 Layer 2 -- Operations:
-  workspace-git          crates/git/          Git operations via git2 (repo, commits, tags, diff, worktrees)
+  workspace-git          crates/git/          Git operations via git2 (repo, commits, tags, diff, plumbing)
 
 Layer 3 -- Features:
   workspace-changeset    crates/changeset/    Git-backed changeset management
@@ -394,6 +394,7 @@ min_severity = "info"  # "critical" | "high" | "medium" | "low" | "info"
 | `GitChangedFile` | Changed file with path and status |
 | `GitFileStatus` | Enum: `Added`, `Modified`, `Deleted`, `Untracked` |
 | `GitDiffStats` | Diff statistics (lines added/deleted) |
+| `GitTreeEntry` | Tree entry: name, OID, kind (blob/tree) |
 
 #### Functional Requirements
 
@@ -407,11 +408,16 @@ min_severity = "info"  # "critical" | "high" | "medium" | "low" | "info"
 | GIT-FR-6 | SHALL provide remote operations: push, push tags, pull | P0 |
 | GIT-FR-7 | SHALL provide status operations: is clean, has staged changes | P0 |
 | GIT-FR-8 | SHALL provide diff statistics (lines added/deleted) | P0 |
-| GIT-FR-9 | SHALL provide worktree operations: add, remove, list (required for git-backed changesets) | P0 |
-| GIT-FR-10 | SHALL provide orphan branch operations: create orphan branch, checkout orphan (required for `_changesets` branch) | P0 |
+| GIT-FR-9 | SHALL provide blob operations: create blob from byte buffer, read blob content by OID | P0 |
+| GIT-FR-10 | SHALL provide tree operations: build/write trees programmatically via `TreeBuilder` (insert, remove, write) | P0 |
 | GIT-FR-11 | All operations SHALL use `git2` (libgit2) | P0 |
 | GIT-FR-12 | Change detection SHALL differentiate staged vs unstaged changes | P0 |
 | GIT-FR-13 | Change detection SHALL support package-specific filtering | P0 |
+| GIT-FR-14 | SHALL provide commit-on-ref: create commits on arbitrary refs without touching the working tree | P0 |
+| GIT-FR-15 | SHALL provide object reading: read blob content from arbitrary refs/trees by path | P0 |
+| GIT-FR-16 | SHALL provide orphan ref creation: create a commit with zero parents and point a new ref to it | P0 |
+| GIT-FR-17 | SHALL provide tree listing: enumerate entries of a subtree within a ref | P0 |
+| GIT-FR-18 | SHALL provide ref-level push/fetch: push and fetch arbitrary refs (e.g., `refs/heads/_changesets`) to/from remotes | P0 |
 
 #### Old API Surface (to migrate)
 
@@ -431,10 +437,17 @@ From the old `sublime_git_tools`:
 
 | Operation | Purpose |
 |-----------|---------|
-| `worktree_add` | Add a git worktree (for changeset storage) |
-| `worktree_remove` | Remove a git worktree |
-| `worktree_list` | List all worktrees |
-| `create_orphan_branch` | Create an orphan branch (for `_changesets`) |
+| `create_blob` | Create a blob object from a byte buffer |
+| `read_blob` | Read blob content by OID |
+| `read_blob_at_path` | Read blob content from a ref by path (e.g., `_changesets:pending/feat.json`) |
+| `tree_upsert` | Insert or update an entry in a tree (handles nested paths via subtree construction) |
+| `tree_remove` | Remove an entry from a tree |
+| `list_tree_entries` | List entries of a subtree within a ref |
+| `commit_on_ref` | Create a commit on an arbitrary ref without touching the working tree |
+| `create_orphan_ref` | Create a new ref with a commit that has zero parents |
+| `walk_ref` | Walk commit history on an arbitrary ref |
+| `push_ref` | Push an arbitrary ref to a remote |
+| `fetch_ref` | Fetch an arbitrary ref from a remote |
 
 ---
 
@@ -449,104 +462,121 @@ From the old `sublime_git_tools`:
 
 | Type | Purpose |
 |------|---------|
-| `Changeset` | Core changeset: branch, bump, environments, packages, changes, timestamps |
-| `ArchivedChangeset` | Released changeset with `ReleaseInfo` |
-| `ReleaseInfo` | Release metadata: timestamp, applier, git commit, version map |
-| `ChangesetManager` | High-level operations (create, update, list, show, delete, archive, history) |
-| `GitWorktreeStorage` | Git-backed storage using worktree + orphan branch `_changesets` |
-| `UpdateSummary` | Result of adding commits to a changeset |
-| `ArchiveResult` | Result of archiving a changeset |
+| `Changeset` | Core changeset data: branch, bump, packages, environments |
+| `ChangesetFile` | Wrapper: `{ changeset: Changeset, release: Option<HashMap<String, Version>> }` |
+| `ChangesetManager` | High-level operations (create, update, list, show, delete, archive, search, history) |
+| `GitTreeStorage` | Git tree-object storage via plumbing on orphan branch `_changesets` (no worktree, no FS footprint) |
+| `ChangesetFilter` | Filter criteria: package, bump, environment |
+| `HistoryFilter` | Archive query: package, bump, date range, limit |
 
 #### Functional Requirements
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| CS-FR-1 | SHALL store changesets as JSON files in a git worktree backed by orphan branch `_changesets` | P0 |
-| CS-FR-2 | `create` SHALL create a new changeset with branch, bump type, environments, packages, and commit references | P0 |
-| CS-FR-3 | `update` SHALL add commits, packages, or modify bump type of an existing changeset | P0 |
-| CS-FR-4 | `list` SHALL return all pending changesets with filtering (by package, bump, environment) and sorting (date, bump, branch) | P0 |
-| CS-FR-5 | `show` SHALL return full details of a specific changeset by branch name or ID | P0 |
+| CS-FR-1 | SHALL store changesets as JSON blobs in git tree objects on orphan branch `_changesets` (no worktree, no filesystem footprint) | P0 |
+| CS-FR-2 | `create` SHALL create a new changeset with branch, bump type, environments, and packages | P0 |
+| CS-FR-3 | `update` SHALL modify packages, bump type, or environments of an existing changeset | P0 |
+| CS-FR-4 | `list` SHALL return all pending changesets with filtering (by package, bump, environment) and sorting (branch) | P0 |
+| CS-FR-5 | `show` SHALL return full details of a specific changeset by branch name | P0 |
 | CS-FR-6 | `delete` SHALL remove a pending changeset | P0 |
-| CS-FR-7 | `archive` SHALL move a changeset from `pending/` to `archived/` with `ReleaseInfo`, committing to `_changesets` branch | P0 |
+| CS-FR-7 | `archive` SHALL move a changeset from `pending/` to `archived/` adding a `release` version map, committing to `_changesets` branch | P0 |
 | CS-FR-8 | `history` SHALL query archived changesets with filtering (package, env, bump, date range) and limiting | P0 |
 | CS-FR-9 | `check` SHALL verify if a changeset exists for a given branch (for git hooks) | P0 |
-| CS-FR-10 | All storage operations SHALL commit to the `_changesets` orphan branch | P0 |
-| CS-FR-11 | Branch names SHALL be sanitized for use as filenames (replace `/\:*?"<>\|` with `-`) | P0 |
-| CS-FR-12 | SHALL provide initialization: create orphan branch, add worktree, create `pending/` and `archived/` dirs | P0 |
-| CS-FR-13 | SHALL provide migration tool to convert old file-based `.changesets/` to git-backed storage | P1 |
+| CS-FR-10 | All storage operations SHALL use `git2` plumbing (blob, TreeBuilder, commit on ref) on the `_changesets` branch | P0 |
+| CS-FR-11 | Branch names SHALL be sanitized for use as blob filenames (replace `/\:*?"<>\|` with `-`) | P0 |
+| CS-FR-12 | SHALL provide initialization: create orphan ref with empty `pending/` and `archived/` subtrees | P0 |
+| CS-FR-13 | SHALL provide migration tool to convert old file-based `.changesets/` to git tree-object storage | P1 |
+| CS-FR-14 | SHALL provide search/filter across pending and archived changesets by package, bump, and environment | P0 |
 
-#### Git-Backed Changeset Architecture
+#### Git Tree-Object Changeset Architecture
+
+All changeset storage uses `git2` plumbing operations on the orphan branch `_changesets`.
+No files are written to the working tree. No worktree is created.
 
 ```
-Initialization:
-  git checkout --orphan _changesets
-  git reset --hard
-  mkdir -p pending archived
-  git add . && git commit -m "Initialize changeset storage"
-  git checkout <original-branch>
-  git worktree add .changesets _changesets
+Initialization (via git2 plumbing):
+  1. repo.blob(b"")                           -- empty blob
+  2. treebuilder: pending/ (empty), archived/ (empty)  -- root tree
+  3. repo.commit(None, ..., &[])              -- orphan commit (0 parents)
+  4. repo.reference("refs/heads/_changesets", commit_oid)
 
-Runtime structure:
-  .changesets/              <-- worktree (branch: _changesets)
-  +-- pending/
-  |   +-- feat-oauth.json   <-- active changeset
+Git object structure (branch: _changesets):
+  _changesets (tree)
+  +-- pending/                <-- subtree
+  |   +-- feat-oauth.json    <-- blob (JSON)
   +-- archived/
-      +-- 2026-01-15-v1.2.0.json  <-- released changeset
+      +-- 2026-01-15-feat-oauth.json  <-- blob (JSON with release map)
 
-Operations:
-  - Create: write JSON to pending/, commit to _changesets
-  - Update: modify JSON, commit
-  - Archive: move pending -> archived, commit
-  - History: git log on _changesets branch
-  - Sync: git push origin _changesets
+Operations (all via git2, no FS writes):
+  - Create: repo.blob(json) -> treebuilder.insert("pending/X.json") -> commit on ref
+  - Read:   tree.get_path("pending/X.json") -> blob.content() -> deserialize
+  - Update: read -> modify -> new blob -> treebuilder.insert -> commit
+  - Delete: treebuilder.remove("pending/X.json") -> commit
+  - Archive: remove from pending/ subtree, insert into archived/ subtree -> commit
+  - List:   tree.get_name("pending") -> iter entries -> read each blob
+  - Search: iter blobs -> deserialize -> filter by criteria
+  - History: revwalk on _changesets ref, or iter archived/ subtree
+  - Sync:   remote.push(&["refs/heads/_changesets"])
 ```
 
 **Benefits over old file-based approach**:
 
-| Aspect | Old (file-based) | New (git-backed) |
-|--------|-------------------|-------------------|
-| Merge conflicts | JSON conflicts in main branch | No conflicts -- separate branch |
+| Aspect | Old (file-based) | New (git tree-object) |
+|--------|-------------------|----------------------|
+| Merge conflicts | JSON conflicts in main branch | No conflicts -- separate orphan branch |
 | Audit trail | File timestamps only | Full `git log _changesets` |
 | Visibility | Hidden in working tree | Branch visible in GitHub/GitLab UI |
 | Sync | Manual copy/commit | Native `git push origin _changesets` |
 | Parallel work | Conflict-prone | Isolated by branch |
+| FS footprint | `.changesets/` directory on disk | None -- all in git object store |
+| Setup required | Worktree setup on clone | None -- reads objects directly |
+| CI-friendly | Worktree cleanup needed | No cleanup -- pure git operations |
 
 #### Changeset Data Format
+
+Both pending and archived changesets share the same wrapper structure.
+Timestamps and authorship are derived from the `_changesets` branch commit history.
 
 **Pending changeset** (`pending/feat-oauth.json`):
 ```json
 {
-  "branch": "feature/oauth-integration",
-  "bump": "Minor",
-  "environments": ["production", "staging"],
-  "packages": ["@myorg/auth", "@myorg/core"],
-  "changes": ["abc123def456", "789ghijklm"],
-  "created_at": "2026-01-15T10:30:45Z",
-  "updated_at": "2026-01-15T14:22:10Z"
+  "changeset": {
+    "branch": "feature/oauth-integration",
+    "bump": "minor",
+    "packages": ["@myorg/auth", "@myorg/core"],
+    "environments": ["production"]
+  }
 }
 ```
 
-**Archived changeset** (`archived/2026-01-15-v2.0.0.json`):
+**Archived changeset** (`archived/2026-01-15-feat-oauth.json`):
 ```json
 {
   "changeset": {
-    "branch": "feature/oauth",
-    "bump": "Minor",
-    "environments": ["production"],
-    "packages": ["@myorg/auth"],
-    "changes": ["abc123"],
-    "created_at": "2026-01-15T10:30:45Z",
-    "updated_at": "2026-01-15T14:22:10Z"
+    "branch": "feature/oauth-integration",
+    "bump": "minor",
+    "packages": ["@myorg/auth", "@myorg/core"],
+    "environments": ["production"]
   },
-  "release_info": {
-    "applied_at": "2026-01-15T15:00:00Z",
-    "applied_by": "ci-bot@example.com",
-    "git_commit": "def456ghi789",
-    "versions": {
-      "@myorg/auth": "2.0.0",
-      "@myorg/core": "1.5.0"
-    }
+  "release": {
+    "@myorg/auth": "2.0.0",
+    "@myorg/core": "1.5.0"
   }
+}
+```
+
+**Rust type mapping**:
+```rust
+struct Changeset {
+    branch: String,
+    bump: BumpType,
+    packages: Vec<String>,
+    environments: Vec<String>,
+}
+
+struct ChangesetFile {
+    changeset: Changeset,
+    release: Option<HashMap<String, Version>>,  // None = pending, Some = archived
 }
 ```
 
@@ -1090,7 +1120,7 @@ packages/workspace-tools/
 | Old Module | New Crate | What Migrates |
 |------------|-----------|---------------|
 | `changeset/` | **workspace-changeset** | ChangesetManager, storage (rewritten as git-backed), history |
-| `types/changeset.rs` | **workspace-changeset** | Changeset, ArchivedChangeset, ReleaseInfo |
+| `types/changeset.rs` | **workspace-changeset** | Changeset, ChangesetFile (replaces ArchivedChangeset + ReleaseInfo) |
 | `version/` | **workspace-version** | VersionResolver, resolution, application |
 | `types/version.rs` | **workspace-version** | Version, VersionBump, VersioningStrategy |
 | `types/prerelease.rs` | **workspace-version** | PrereleaseMode, PrereleaseConfig |
@@ -1164,7 +1194,7 @@ packages/workspace-tools/
 
 **workspace-git**:
 - Full git2 wrapper (migrate from old sublime_git_tools)
-- New worktree and orphan branch operations
+- Git2 plumbing operations for tree-object storage (blob, tree, commit on refs)
 - Change detection with package filtering
 
 ### 11.4 Phase 3: Core Features
@@ -1172,9 +1202,10 @@ packages/workspace-tools/
 **Crates**: workspace-changeset, workspace-version
 
 **workspace-changeset**:
-- Git-backed storage implementation (worktree + orphan branch)
+- Git tree-object storage on orphan branch `_changesets` (no worktree, no FS footprint)
 - All changeset CRUD operations
-- Archive and history
+- Archive with release version map
+- Search/filter across pending and archived changesets
 - Migration tool from old file-based format
 
 **workspace-version**:
