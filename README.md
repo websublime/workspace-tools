@@ -361,7 +361,7 @@ For complete documentation, see [Git Hooks Documentation](./scripts/git-hooks/RE
 **Changesets**: Track intended version bumps across feature branches with full commit history and affected packages.
 
 **Versioning Strategies**:
-- **Independent**: Each package evolves at its own pace (only packages in changesets bump)
+- **Independent**: Each package evolves at its own pace (packages in changesets bump, plus workspace dependents via dependency propagation when enabled)
 - **Unified**: All packages share the same version (coordinated releases across workspace)
 
 **Environments**: Define deployment targets (dev, staging, production) for changesets.

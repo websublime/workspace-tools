@@ -38,8 +38,8 @@
 //! 2. Loads workspace configuration to determine versioning strategy
 //! 3. Loads all pending changesets
 //! 4. If no changesets exist, reports "nothing to snapshot"
-//! 5. Determines which packages to snapshot based on strategy:
-//!    - Independent: Only packages in changesets
+//! 5. Resolves versions exactly as `bump --execute` would and picks packages by strategy:
+//!    - Independent: Packages in changesets plus dependents bumped by dependency propagation
 //!    - Unified: All workspace packages
 //! 6. For each package, generates snapshot version using `SnapshotGenerator`
 //! 7. Outputs snapshot versions in table or JSON format
@@ -128,7 +128,7 @@
 //! ```
 
 use crate::cli::commands::BumpArgs;
-use crate::commands::bump::preview::{load_config, merge_changesets};
+use crate::commands::bump::preview::{load_config, resolve_bump};
 use crate::error::{CliError, Result};
 use crate::output::styling::{StatusSymbol, print_item};
 use crate::output::table::{ColumnAlignment, TableBuilder, TableTheme};
@@ -139,7 +139,9 @@ use std::path::Path;
 use sublime_git_tools::Repo;
 use sublime_pkg_tools::changeset::ChangesetManager;
 use sublime_pkg_tools::types::{Changeset, PackageInfo, VersionBump};
-use sublime_pkg_tools::version::{SnapshotContext, SnapshotGenerator, VersionResolver};
+use sublime_pkg_tools::version::{
+    SnapshotContext, SnapshotGenerator, VersionResolution, VersionResolver,
+};
 use sublime_standard_tools::filesystem::FileSystemManager;
 use tracing::{debug, info, warn};
 
@@ -201,15 +203,15 @@ pub struct BumpSnapshot {
 ///     reason: "direct change from changeset".to_string(),
 /// };
 ///
-/// // Example: Package with dependency update but not bumping (Independent mode)
+/// // Example: Dependent bumped through dependency propagation (Independent mode)
 /// let info2 = PackageBumpInfo {
 ///     name: "@org/utils".to_string(),
 ///     path: "packages/utils".to_string(),
 ///     current_version: "2.0.0".to_string(),
-///     next_version: "2.0.0".to_string(),
-///     bump_type: VersionBump::None,
-///     will_bump: false,
-///     reason: "dependency updated (not bumping in independent mode)".to_string(),
+///     next_version: "2.0.1".to_string(),
+///     bump_type: VersionBump::Patch,
+///     will_bump: true,
+///     reason: "dependency propagation (triggered by @org/core, depth 1)".to_string(),
 /// };
 /// ```
 #[derive(Debug, Clone, Serialize)]
@@ -236,7 +238,8 @@ pub struct PackageBumpInfo {
 
     /// Whether this package will actually be bumped.
     ///
-    /// - Independent strategy: true only if package is in a changeset
+    /// - Independent strategy: true if the package is in a changeset or is bumped through
+    ///   dependency propagation
     /// - Unified strategy: true for all packages if any changeset exists
     pub will_bump: bool,
 
@@ -246,7 +249,7 @@ pub struct PackageBumpInfo {
     /// - **Independent strategy**:
     ///   - "direct change from changeset" - Package is in a changeset and will bump
     ///   - "in changeset but version unchanged" - Package in changeset but no version change needed
-    ///   - "dependency updated (not bumping in independent mode)" - Dependency changed but package not in changeset
+    ///   - "dependency propagation (triggered by X, depth N)" - Dependent bumped because a workspace dependency bumped
     ///   - "not in any changeset" - Package not affected by any changeset
     /// - **Unified strategy**:
     ///   - "unified bump (package in changeset)" - Package is in a changeset causing unified bump
@@ -514,30 +517,33 @@ pub async fn execute_bump_snapshot(
 
     debug!("Discovered {} workspace package(s)", all_packages.len());
 
-    // Step 8: Generate snapshots based on strategy
+    // Step 8: Resolve versions exactly as `bump --execute` would (snapshot excludes --prerelease)
+    let resolution = resolve_bump(&resolver, &changesets, None).await?;
+
+    debug!("Resolved {} package updates", resolution.updates.len());
+
+    // Step 9: Generate snapshots based on strategy
     let snapshot =
         if config.version.strategy == sublime_pkg_tools::config::VersioningStrategy::Independent {
             build_independent_snapshots(
-                &resolver,
+                &resolution,
                 &generator,
                 &changesets,
                 &all_packages,
                 workspace_root,
                 &current_commit,
                 &current_branch,
-            )
-            .await?
+            )?
         } else {
             build_unified_snapshots(
-                &resolver,
+                &resolution,
                 &generator,
                 &changesets,
                 &all_packages,
                 workspace_root,
                 &current_commit,
                 &current_branch,
-            )
-            .await?
+            )?
         };
 
     debug!("Generated snapshot versions for {} packages", snapshot.packages.len());
@@ -555,11 +561,11 @@ pub async fn execute_bump_snapshot(
 
 /// Builds snapshot versions for Independent versioning strategy.
 ///
-/// In Independent mode, only packages explicitly listed in changesets receive
-/// snapshot versions. Each package gets its own snapshot version based on its
-/// current version and the changeset bump type.
-async fn build_independent_snapshots(
-    resolver: &VersionResolver,
+/// Packages listed in changesets and workspace dependents bumped through dependency
+/// propagation receive snapshot versions, matching the packages `bump --execute` bumps.
+/// Each snapshot is based on the version that package would be released with.
+fn build_independent_snapshots(
+    resolution: &VersionResolution,
     generator: &SnapshotGenerator,
     changesets: &[Changeset],
     all_packages: &[PackageInfo],
@@ -577,17 +583,6 @@ async fn build_independent_snapshots(
 
     debug!("Packages in changesets: {:?}", changeset_packages);
 
-    // Merge all changesets to get the combined bump requirements
-    let merged_changeset = merge_changesets(changesets)?;
-
-    // Resolve versions using the merged changeset
-    let resolution = resolver
-        .resolve_versions(&merged_changeset)
-        .await
-        .map_err(|e| CliError::execution(format!("Failed to resolve versions: {e}")))?;
-
-    debug!("Resolved {} package updates", resolution.updates.len());
-
     // Get current timestamp
     // Allow cast_possible_wrap: i64 is required by SnapshotContext and can represent timestamps
     // until year 292 billion, which is practically infinite for our use case
@@ -597,48 +592,52 @@ async fn build_independent_snapshots(
         .map_err(|e| CliError::execution(format!("Failed to get current timestamp: {e}")))?
         .as_secs() as i64;
 
-    // Build snapshot versions for packages in changesets
+    // Build snapshot versions for every package the release would bump
     let mut packages_info = Vec::new();
     let mut packages_with_snapshots = 0;
 
     for update in &resolution.updates {
-        let is_in_changeset = changeset_packages.contains(&update.name);
+        let reason = if changeset_packages.contains(&update.name) {
+            "snapshot from changeset".to_string()
+        } else if update.current_version != update.next_version {
+            // Dependency propagation: `bump --execute` bumps it, so it needs a snapshot too
+            format!("snapshot from {}", update.reason)
+        } else {
+            continue;
+        };
 
-        if is_in_changeset {
-            // Generate snapshot version
-            let context = SnapshotContext {
-                version: update.next_version.clone(),
-                branch: sanitize_branch_name(current_branch),
-                commit: current_commit.to_string(),
-                timestamp,
-            };
+        let context = SnapshotContext {
+            version: update.next_version.clone(),
+            branch: sanitize_branch_name(current_branch),
+            commit: current_commit.to_string(),
+            timestamp,
+        };
 
-            let snapshot_version = generator.generate(&context).map_err(|e| {
-                CliError::execution(format!(
-                    "Failed to generate snapshot version for {}: {}",
-                    update.name, e
-                ))
-            })?;
+        let snapshot_version = generator.generate(&context).map_err(|e| {
+            CliError::execution(format!(
+                "Failed to generate snapshot version for {}: {}",
+                update.name, e
+            ))
+        })?;
 
-            let bump_type = calculate_bump_type(&update.current_version, &update.next_version);
+        let bump_type = calculate_bump_type(&update.current_version, &update.next_version);
 
-            packages_info.push(PackageBumpInfo {
-                name: update.name.clone(),
-                path: update
-                    .path
-                    .strip_prefix(workspace_root)
-                    .unwrap_or(&update.path)
-                    .display()
-                    .to_string(),
-                current_version: update.current_version.to_string(),
-                next_version: snapshot_version,
-                bump_type,
-                will_bump: true,
-                reason: "snapshot from changeset".to_string(),
-            });
+        packages_info.push(PackageBumpInfo {
+            name: update.name.clone(),
+            path: update
+                .path
+                .strip_prefix(workspace_root)
+                .unwrap_or(&update.path)
+                .display()
+                .to_string(),
+            current_version: update.current_version.to_string(),
+            next_version: snapshot_version,
+            bump_type,
+            will_bump: true,
+            reason,
+        });
 
-            packages_with_snapshots += 1;
-        }
+        packages_with_snapshots += 1;
     }
 
     // Build changeset info
@@ -677,8 +676,8 @@ async fn build_independent_snapshots(
 /// In Unified mode, ALL workspace packages receive snapshot versions when
 /// any changeset exists. All packages get the same snapshot version based
 /// on the highest bump type from all changesets.
-async fn build_unified_snapshots(
-    resolver: &VersionResolver,
+fn build_unified_snapshots(
+    resolution: &VersionResolution,
     generator: &SnapshotGenerator,
     changesets: &[Changeset],
     all_packages: &[PackageInfo],
@@ -687,17 +686,6 @@ async fn build_unified_snapshots(
     current_branch: &str,
 ) -> Result<BumpSnapshot> {
     debug!("Building snapshot versions for Unified versioning strategy");
-
-    // Merge all changesets to get the combined bump requirements
-    let merged_changeset = merge_changesets(changesets)?;
-
-    // Resolve versions using the merged changeset
-    let resolution = resolver
-        .resolve_versions(&merged_changeset)
-        .await
-        .map_err(|e| CliError::execution(format!("Failed to resolve versions: {e}")))?;
-
-    debug!("Resolved {} package updates", resolution.updates.len());
 
     // Get current timestamp
     // Allow cast_possible_wrap: i64 is required by SnapshotContext and can represent timestamps

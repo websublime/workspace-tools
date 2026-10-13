@@ -22,7 +22,8 @@
 //! 4. Combines all changesets into a single merged changeset for version resolution
 //! 5. Uses VersionResolver to calculate all version bumps
 //! 6. Determines which packages will actually bump based on strategy:
-//!    - Independent: Only packages in changeset.packages
+//!    - Independent: Packages in changeset.packages, plus dependents bumped by
+//!      dependency propagation (exactly what `bump --execute` applies)
 //!    - Unified: All workspace packages
 //! 7. Builds BumpSnapshot with all package information
 //! 8. Outputs as formatted table (human mode) or JSON (automation mode)
@@ -30,9 +31,10 @@
 //! ## Strategy Handling
 //!
 //! ### Independent Strategy
-//! - Packages ONLY bump if listed in changeset packages
-//! - Other packages remain unchanged even if they're dependencies
-//! - Preview shows "no changes" reason for non-changeset packages
+//! - Packages listed in changeset packages bump with the changeset bump type
+//! - With `dependency.propagate_dependencies` enabled, workspace dependents also bump
+//!   (using `dependency.propagation_bump`) and their dependency ranges are updated
+//! - Preview reports every update `bump --execute` will apply, with the reason
 //!
 //! ### Unified Strategy
 //! - ALL packages bump when ANY changeset exists
@@ -81,6 +83,7 @@
 //! ```
 
 use crate::cli::commands::BumpArgs;
+use crate::commands::bump::execute::parse_prerelease_args;
 use crate::commands::bump::filter::PackageFilter;
 use crate::commands::bump::snapshot::{BumpSnapshot, BumpSummary, ChangesetInfo, PackageBumpInfo};
 use crate::error::{CliError, Result};
@@ -93,7 +96,7 @@ use std::path::Path;
 use sublime_pkg_tools::changeset::ChangesetManager;
 use sublime_pkg_tools::config::PackageToolsConfig;
 use sublime_pkg_tools::types::{Changeset, PackageInfo, Version, VersionBump};
-use sublime_pkg_tools::version::VersionResolver;
+use sublime_pkg_tools::version::{VersionResolution, VersionResolver};
 use sublime_standard_tools::filesystem::FileSystemManager;
 use tracing::{debug, info, warn};
 
@@ -233,22 +236,25 @@ pub async fn execute_bump_preview(
         changesets
     };
 
-    // Step 7: Resolve versions based on strategy (using filtered changesets)
-    // For Independent: Only packages in changesets bump
-    // For Unified: All packages bump with the highest bump type
+    // Step 7: Resolve versions exactly as `bump --execute` would (prerelease + propagation)
+    let prerelease_tag = parse_prerelease_args(args)?;
+    let resolution =
+        resolve_bump(&resolver, &filtered_changesets, prerelease_tag.as_deref()).await?;
+
+    debug!("Resolved {} package updates", resolution.updates.len());
+
+    // Step 8: Classify updates per strategy for display
     let snapshot = if config.version.strategy
         == sublime_pkg_tools::config::VersioningStrategy::Independent
     {
-        build_independent_snapshot(&resolver, &filtered_changesets, &all_packages, workspace_root)
-            .await?
+        build_independent_snapshot(&resolution, &filtered_changesets, &all_packages, workspace_root)
     } else {
-        build_unified_snapshot(&resolver, &filtered_changesets, &all_packages, workspace_root)
-            .await?
+        build_unified_snapshot(&resolution, &filtered_changesets, &all_packages, workspace_root)
     };
 
     debug!("Built bump snapshot with {} packages", snapshot.packages.len());
 
-    // Step 8: Output results
+    // Step 9: Output results
     if output.format().is_json() {
         let response: JsonResponse<BumpSnapshot> = JsonResponse::success(snapshot);
         output.json(&response)?;
@@ -261,14 +267,14 @@ pub async fn execute_bump_preview(
 
 /// Builds a bump snapshot for Independent versioning strategy.
 ///
-/// In Independent mode, only packages explicitly listed in changesets receive
-/// version bumps. Other packages remain unchanged.
-async fn build_independent_snapshot(
-    resolver: &VersionResolver,
+/// Packages listed in changesets bump directly; workspace dependents bump through
+/// dependency propagation when enabled. Reports exactly the updates `bump --execute` applies.
+fn build_independent_snapshot(
+    resolution: &VersionResolution,
     changesets: &[Changeset],
     all_packages: &[PackageInfo],
     workspace_root: &Path,
-) -> Result<BumpSnapshot> {
+) -> BumpSnapshot {
     debug!("Building snapshot for Independent versioning strategy");
 
     // Collect all packages that are in changesets
@@ -276,17 +282,6 @@ async fn build_independent_snapshot(
     for changeset in changesets {
         changeset_packages.extend(changeset.packages.iter().cloned());
     }
-
-    // Merge all changesets to get the combined bump requirements
-    let merged_changeset = merge_changesets(changesets)?;
-
-    // Resolve versions using the merged changeset
-    let resolution = resolver
-        .resolve_versions(&merged_changeset)
-        .await
-        .map_err(|e| CliError::execution(format!("Failed to resolve versions: {e}")))?;
-
-    debug!("Resolved {} package updates", resolution.updates.len());
 
     // Build package bump info
     let mut packages_info = Vec::new();
@@ -313,10 +308,10 @@ async fn build_independent_snapshot(
                     (false, "in changeset but version unchanged".to_string())
                 }
             } else if version_changed {
-                // Package not in changeset but version changed - must be dependency propagation
-                // In Independent mode, we don't bump packages that aren't in changesets
-                // even if their dependencies changed
-                (false, "dependency updated (not bumping in independent mode)".to_string())
+                // Not in a changeset but resolved to a new version: dependency propagation.
+                // `bump --execute` applies every resolved update, so preview must report it.
+                packages_to_bump += 1;
+                (true, update.reason.to_string())
             } else {
                 // Package not in changeset and no version change
                 (false, "not in any changeset".to_string())
@@ -372,36 +367,25 @@ async fn build_independent_snapshot(
         warn!("Detected {} circular dependencies", resolution.circular_dependencies.len());
     }
 
-    Ok(BumpSnapshot {
+    BumpSnapshot {
         strategy: "independent".to_string(),
         packages: packages_info,
         changesets: changeset_infos,
         summary,
-    })
+    }
 }
 
 /// Builds a bump snapshot for Unified versioning strategy.
 ///
 /// In Unified mode, ALL workspace packages receive the same version bump
 /// when any changeset exists. The highest bump type from all changesets is used.
-async fn build_unified_snapshot(
-    resolver: &VersionResolver,
+fn build_unified_snapshot(
+    resolution: &VersionResolution,
     changesets: &[Changeset],
     all_packages: &[PackageInfo],
     workspace_root: &Path,
-) -> Result<BumpSnapshot> {
+) -> BumpSnapshot {
     debug!("Building snapshot for Unified versioning strategy");
-
-    // Merge all changesets to get the combined bump requirements
-    let merged_changeset = merge_changesets(changesets)?;
-
-    // Resolve versions using the merged changeset
-    let resolution = resolver
-        .resolve_versions(&merged_changeset)
-        .await
-        .map_err(|e| CliError::execution(format!("Failed to resolve versions: {e}")))?;
-
-    debug!("Resolved {} package updates", resolution.updates.len());
 
     // In unified mode, ALL packages bump (since changesets exist)
     let packages_to_bump = all_packages.len();
@@ -471,19 +455,41 @@ async fn build_unified_snapshot(
         warn!("Detected {} circular dependencies", resolution.circular_dependencies.len());
     }
 
-    Ok(BumpSnapshot {
+    BumpSnapshot {
         strategy: "unified".to_string(),
         packages: packages_info,
         changesets: changeset_infos,
         summary,
-    })
+    }
+}
+
+/// Resolves the version updates a bump applies.
+///
+/// Single source of truth for preview, snapshot and execute: merges the changesets and
+/// resolves them with the same prerelease inference and dependency propagation that
+/// `bump --execute` writes, so every mode reports identical versions.
+///
+/// # Errors
+///
+/// Returns an error if there are no changesets or version resolution fails.
+pub(crate) async fn resolve_bump(
+    resolver: &VersionResolver,
+    changesets: &[Changeset],
+    prerelease_tag: Option<&str>,
+) -> Result<VersionResolution> {
+    let merged_changeset = merge_changesets(changesets)?;
+
+    resolver
+        .resolve_versions_with_prerelease_auto(&merged_changeset, prerelease_tag)
+        .await
+        .map_err(|e| CliError::execution(format!("Failed to resolve versions: {e}")))
 }
 
 /// Merges multiple changesets into a single changeset for version resolution.
 ///
 /// Combines packages, commits, and environments from all changesets.
 /// Uses the highest bump type across all changesets.
-pub(crate) fn merge_changesets(changesets: &[Changeset]) -> Result<Changeset> {
+fn merge_changesets(changesets: &[Changeset]) -> Result<Changeset> {
     if changesets.is_empty() {
         return Err(CliError::execution("No changesets to merge"));
     }
