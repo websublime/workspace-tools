@@ -18,7 +18,8 @@ mod common;
 
 use common::fixtures::{ChangesetBuilder, WorkspaceFixture};
 use common::helpers::{
-    create_json_output, create_quiet_output, create_shared_json_output, get_package_version,
+    create_json_output, create_quiet_output, create_shared_json_output, get_latest_commit_sha,
+    get_package_version,
 };
 use sublime_cli_tools::cli::commands::BumpArgs;
 use sublime_cli_tools::commands::bump::{execute_bump_apply, execute_bump_preview};
@@ -1270,8 +1271,10 @@ async fn test_bump_snapshot_includes_propagated_dependents() {
             .to_string()
     };
 
-    assert!(next_version("@test/pkg-a").starts_with("1.1.0-snapshot."));
-    assert!(next_version("@test/pkg-b").starts_with("1.0.1-snapshot."));
+    let head = get_latest_commit_sha(workspace.root());
+    let short_commit = &head[..7];
+    assert_eq!(next_version("@test/pkg-a"), format!("1.1.0-snapshot.{short_commit}"));
+    assert_eq!(next_version("@test/pkg-b"), format!("1.0.1-snapshot.{short_commit}"));
     assert_eq!(json["data"]["summary"]["packagesToBump"], 2);
 }
 
