@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.0.37 - 2026-10-13
+
+### Bug Fixes
+
+#### Bump
+
+- Make dry-run and snapshot report what execute applies
+
+### Testing
+
+#### Bump
+
+- Assert full snapshot versions for propagated dependents
+
+<!-- Made with ❤️ by WebSublime -->
+
 ## 0.0.36 - 2026-01-14
 
 ### Bug Fixes
