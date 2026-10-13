@@ -20,10 +20,11 @@
 //! ## Versioning Strategy Behavior
 //!
 //! ### Independent Strategy
-//! - Only packages listed in `changeset.packages` receive version bumps
-//! - Packages not in any active changeset remain at their current version
-//! - Dependency propagation: Package A's dependencies are updated, but A's version
-//!   only bumps if A is also in a changeset
+//! - Packages listed in `changeset.packages` bump with the changeset bump type
+//! - Dependency propagation (`dependency.propagate_dependencies`, on by default): when B
+//!   bumps, each workspace package A depending on B gets its range updated and its own
+//!   version bumped by `dependency.propagation_bump`, even if A is in no changeset
+//! - Preview and execute share one resolution, so preview shows exactly what execute applies
 //!
 //! ### Unified Strategy
 //! - ALL workspace packages receive the same version bump

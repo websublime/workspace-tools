@@ -36,8 +36,8 @@
 //! ## Strategy Handling
 //!
 //! ### Independent Strategy
-//! - Only packages listed in changeset.packages receive version bumps
-//! - Other packages remain unchanged even if they're dependencies
+//! - Packages listed in changeset.packages bump with the changeset bump type
+//! - Workspace dependents bump via dependency propagation when enabled
 //! - Each package gets its own tag: `<package>@<version>`
 //!
 //! ### Unified Strategy
@@ -120,7 +120,7 @@ use crate::commands::bump::git_integration::{
     commit_version_changes, create_release_tags, get_current_commit_sha, push_tags_to_remote,
     validate_repository_state,
 };
-use crate::commands::bump::preview::{load_config, merge_changesets};
+use crate::commands::bump::preview::{load_config, resolve_bump};
 use crate::commands::bump::snapshot::{BumpSnapshot, BumpSummary, ChangesetInfo, PackageBumpInfo};
 use crate::error::{CliError, Result};
 use crate::interactive::prompts::prompt_confirm;
@@ -326,14 +326,9 @@ pub async fn execute_bump_apply(
         .await
         .map_err(|e| CliError::execution(format!("Failed to create version resolver: {e}")))?;
 
-    // Merge all changesets for resolution (using changesets to process)
-    let merged_changeset = merge_changesets(&changesets_to_process)?;
-
-    // Resolve versions with automatic prerelease mode inference
-    let resolution = resolver
-        .resolve_versions_with_prerelease_auto(&merged_changeset, prerelease_tag.as_deref())
-        .await
-        .map_err(|e| CliError::execution(format!("Failed to resolve versions: {e}")))?;
+    // Resolve versions with automatic prerelease mode inference (shared with preview/snapshot)
+    let resolution =
+        resolve_bump(&resolver, &changesets_to_process, prerelease_tag.as_deref()).await?;
 
     debug!("Resolved {} package updates", resolution.updates.len());
 

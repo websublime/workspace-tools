@@ -17,7 +17,9 @@
 mod common;
 
 use common::fixtures::{ChangesetBuilder, WorkspaceFixture};
-use common::helpers::{create_json_output, get_package_version};
+use common::helpers::{
+    create_json_output, create_quiet_output, create_shared_json_output, get_package_version,
+};
 use sublime_cli_tools::cli::commands::BumpArgs;
 use sublime_cli_tools::commands::bump::{execute_bump_apply, execute_bump_preview};
 
@@ -503,6 +505,113 @@ async fn test_bump_execute_cascading_bumps() {
     // Note: In current implementation, dependent packages may also be bumped (cascading)
     // Verify pkg-b was also bumped due to dependency on pkg-a
     workspace.assert_package_version("@test/pkg-b", "1.0.1");
+}
+
+/// Builds non-interactive `BumpArgs` for preview (`execute = false`) or execute mode.
+fn parity_args(execute: bool, prerelease: Option<&str>) -> BumpArgs {
+    BumpArgs {
+        dry_run: !execute,
+        execute,
+        snapshot: false,
+        snapshot_format: None,
+        prerelease: prerelease.map(String::from),
+        packages: None,
+        git_tag: false,
+        git_push: false,
+        git_commit: false,
+        no_changelog: true,
+        no_archive: true,
+        always_archive: false,
+        force: true,
+        show_diff: false,
+    }
+}
+
+/// Runs preview, then execute, and asserts every package version execute wrote is exactly
+/// what preview announced. Returns the preview `data` payload for scenario assertions.
+async fn assert_preview_matches_execute(
+    workspace: &WorkspaceFixture,
+    prerelease: Option<&str>,
+) -> serde_json::Value {
+    let (output, buffer) = create_shared_json_output();
+    let result =
+        execute_bump_preview(&parity_args(false, prerelease), &output, workspace.root(), None)
+            .await;
+    assert!(result.is_ok(), "Preview should succeed: {:?}", result.err());
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&buffer.lock().unwrap()).expect("Preview output should be JSON");
+    let preview = json["data"].clone();
+
+    let result = execute_bump_apply(
+        &parity_args(true, prerelease),
+        &create_quiet_output(),
+        workspace.root(),
+        None,
+    )
+    .await;
+    assert!(result.is_ok(), "Execute should succeed: {:?}", result.err());
+
+    for package in preview["packages"].as_array().expect("Preview should list packages") {
+        let name = package["name"].as_str().expect("Package name should be a string");
+        let expected = if package["willBump"] == true {
+            package["nextVersion"].as_str()
+        } else {
+            package["currentVersion"].as_str()
+        };
+        workspace.assert_package_version(name, expected.expect("Version should be a string"));
+    }
+
+    preview
+}
+
+/// Test: Preview reports dependency-propagated bumps exactly as execute applies them
+///
+/// Regression: in independent mode the preview forced `willBump = false` for packages bumped
+/// only through dependency propagation, while execute applied those same bumps.
+#[tokio::test]
+async fn test_bump_preview_matches_execute_for_propagated_dependents() {
+    // Package B depends on Package A; only A has a changeset
+    let workspace = WorkspaceFixture::monorepo_with_internal_deps()
+        .add_changeset(ChangesetBuilder::minor().branch("feature/cascade").package("@test/pkg-a"))
+        .with_default_config()
+        .finalize();
+
+    let preview = assert_preview_matches_execute(&workspace, None).await;
+
+    let packages = preview["packages"].as_array().expect("Preview should list packages");
+    let pkg_b = packages
+        .iter()
+        .find(|p| p["name"] == "@test/pkg-b")
+        .expect("Propagated dependent should appear in preview");
+    assert_eq!(pkg_b["willBump"], true, "Propagated dependent should be marked to bump");
+    assert_eq!(pkg_b["nextVersion"], "1.0.1");
+    assert_eq!(pkg_b["bumpType"], "patch");
+    assert_eq!(preview["summary"]["packagesToBump"], 2);
+    workspace.assert_package_version("@test/pkg-b", "1.0.1");
+}
+
+/// Test: Preview honors `--prerelease` exactly as execute does
+///
+/// Regression: preview resolved versions without the prerelease tag, announcing `1.1.0`
+/// while execute wrote `1.1.0-beta.0`.
+#[tokio::test]
+async fn test_bump_preview_matches_execute_with_prerelease() {
+    let workspace = WorkspaceFixture::monorepo_with_internal_deps()
+        .add_changeset(ChangesetBuilder::minor().branch("feature/beta").package("@test/pkg-a"))
+        .with_default_config()
+        .finalize();
+
+    let preview = assert_preview_matches_execute(&workspace, Some("beta")).await;
+
+    let pkg_a = preview["packages"]
+        .as_array()
+        .expect("Preview should list packages")
+        .iter()
+        .find(|p| p["name"] == "@test/pkg-a")
+        .expect("Changeset package should appear in preview");
+    assert_eq!(pkg_a["nextVersion"], "1.1.0-beta.0");
+    workspace.assert_package_version("@test/pkg-a", "1.1.0-beta.0");
 }
 
 /// Test: Execute with dry-run flag (same as preview)
@@ -1121,6 +1230,49 @@ async fn test_bump_snapshot_independent_strategy() {
         "Snapshot with independent strategy should succeed: {:?}",
         result.err()
     );
+}
+
+/// Test: Snapshot covers dependents bumped by dependency propagation
+///
+/// Regression: in independent mode the snapshot only versioned changeset packages, while
+/// `bump --execute` also bumps their workspace dependents.
+#[tokio::test]
+async fn test_bump_snapshot_includes_propagated_dependents() {
+    use sublime_cli_tools::commands::bump::execute_bump_snapshot;
+
+    // Package B depends on Package A; only A has a changeset
+    let workspace = WorkspaceFixture::monorepo_with_internal_deps()
+        .with_git()
+        .with_commits(1)
+        .add_changeset(ChangesetBuilder::minor().branch("feature/cascade").package("@test/pkg-a"))
+        .with_default_config()
+        .finalize();
+
+    let mut args = parity_args(false, None);
+    args.dry_run = false;
+    args.snapshot = true;
+    args.snapshot_format = Some("{version}-snapshot.{short_commit}".to_string());
+
+    let (output, buffer) = create_shared_json_output();
+    let result = execute_bump_snapshot(&args, &output, workspace.root(), None).await;
+    assert!(result.is_ok(), "Snapshot should succeed: {:?}", result.err());
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&buffer.lock().unwrap()).expect("Snapshot output should be JSON");
+    let next_version = |name: &str| {
+        json["data"]["packages"]
+            .as_array()
+            .expect("Snapshot should list packages")
+            .iter()
+            .find(|p| p["name"] == name)
+            .and_then(|p| p["nextVersion"].as_str())
+            .unwrap_or_else(|| panic!("{name} should have a snapshot version"))
+            .to_string()
+    };
+
+    assert!(next_version("@test/pkg-a").starts_with("1.1.0-snapshot."));
+    assert!(next_version("@test/pkg-b").starts_with("1.0.1-snapshot."));
+    assert_eq!(json["data"]["summary"]["packagesToBump"], 2);
 }
 
 /// Test: Snapshot respects unified strategy
